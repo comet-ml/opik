@@ -2,6 +2,7 @@ package com.comet.opik.infrastructure.llm.gemini;
 
 import com.comet.opik.api.ChunkedResponseHandler;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.infrastructure.llm.GeminiMaxOutputTokens;
 import com.comet.opik.infrastructure.llm.StreamingResponseLogger;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.UserMessage;
@@ -71,7 +72,7 @@ class LlmProviderGeminiTest {
     void emptyStreamUnderALimitEndsWithLength() throws Exception {
         stubStream("");
 
-        var outcome = stream(request(20, null));
+        var outcome = stream(request(20, null, null));
 
         assertThat(outcome.errors()).isEmpty();
         assertThat(outcome.content()).isEmpty();
@@ -84,7 +85,7 @@ class LlmProviderGeminiTest {
     void answeredStreamKeepsItsFinishReason() throws Exception {
         stubStream("data: " + ANSWER_CHUNK.replace("\n", " ") + "\n\n");
 
-        var outcome = stream(request(20, null));
+        var outcome = stream(request(20, null, null));
 
         assertThat(outcome.errors()).isEmpty();
         assertThat(outcome.content()).isEqualTo("Hello");
@@ -94,31 +95,35 @@ class LlmProviderGeminiTest {
     private static Stream<Arguments> finishReasonCases() {
         var empty = response(null, null, null);
         return Stream.of(
-                Arguments.of("empty under a limit", 20, null, empty, FinishReason.LENGTH),
-                Arguments.of("empty under a limit, thinking level auto", 20,
+                Arguments.of("empty under a limit", 20, null, null, empty, FinishReason.LENGTH),
+                Arguments.of("empty under a limit, thinking level auto", 20, null,
                         Map.of("thinking", Map.of("level", "auto")), empty, FinishReason.LENGTH),
-                Arguments.of("empty without a limit", null, null, empty, null),
-                Arguments.of("empty with a limit of 0", 0, null, empty, null),
-                Arguments.of("empty with thinking off by a zero budget", 20,
+                Arguments.of("empty under a max_tokens limit", null, 20, null, empty, FinishReason.LENGTH),
+                Arguments.of("empty under max_tokens when max_completion_tokens is 0", 0, 20, null, empty,
+                        FinishReason.LENGTH),
+                Arguments.of("empty without a limit", null, null, null, empty, null),
+                Arguments.of("empty with a limit of 0", 0, null, null, empty, null),
+                Arguments.of("empty with both limits 0", 0, 0, null, empty, null),
+                Arguments.of("empty with thinking off by a zero budget", 20, null,
                         Map.of("thinking", Map.of("budget_tokens", 0)), empty, null),
-                Arguments.of("empty with thinking level off", 20,
+                Arguments.of("empty with thinking level off", 20, null,
                         Map.of("thinking", Map.of("level", "off")), empty, null),
-                Arguments.of("text without a finish reason", 20, null, response("Hello", null, null), null),
-                Arguments.of("usage without a finish reason", 20, null,
+                Arguments.of("text without a finish reason", 20, null, null, response("Hello", null, null), null),
+                Arguments.of("usage without a finish reason", 20, null, null,
                         response(null, null, new TokenUsage(22, 0, 38)), null),
-                Arguments.of("Google's own stop", 20, null,
+                Arguments.of("Google's own stop", 20, null, null,
                         response("Hello", FinishReason.STOP, new TokenUsage(3, 1, 40)), FinishReason.STOP),
-                Arguments.of("Google's own length", 20, null,
+                Arguments.of("Google's own length", 20, null, null,
                         response(null, FinishReason.LENGTH, new TokenUsage(22, 0, 38)), FinishReason.LENGTH));
     }
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("finishReasonCases")
     @DisplayName("keeps each finish reason, except an empty stream under an output limit with thinking not turned off, which gets length")
-    void addsLengthOnlyToAnEmptyStreamUnderALimit(String name, Integer maxCompletionTokens,
+    void addsLengthOnlyToAnEmptyStreamUnderALimit(String name, Integer maxCompletionTokens, Integer maxTokens,
             Map<String, Object> customParameters, ChatResponse response, FinishReason expected) {
-        var result = LlmProviderGemini.withCutOffWhileThinking(request(maxCompletionTokens, customParameters),
-                response);
+        var result = LlmProviderGemini.withCutOffWhileThinking(
+                request(maxCompletionTokens, maxTokens, customParameters), response);
 
         assertThat(result.finishReason()).as("[%s] finish reason", name).isEqualTo(expected);
         assertThat(result.aiMessage()).as("[%s] message", name).isEqualTo(response.aiMessage());
@@ -133,11 +138,13 @@ class LlmProviderGeminiTest {
                 .build();
     }
 
-    private static ChatCompletionRequest request(Integer maxCompletionTokens, Map<String, Object> customParameters) {
+    private static ChatCompletionRequest request(Integer maxCompletionTokens, Integer maxTokens,
+            Map<String, Object> customParameters) {
         return ChatCompletionRequest.builder()
                 .model(MODEL)
                 .addUserMessage("hello")
                 .maxCompletionTokens(maxCompletionTokens)
+                .maxTokens(maxTokens)
                 .customParameters(customParameters)
                 .build();
     }
@@ -176,7 +183,7 @@ class LlmProviderGeminiTest {
                 .baseUrl("http://localhost:%d/v1beta".formatted(wireMock.server().port()))
                 .apiKey("test-api-key")
                 .modelName(MODEL)
-                .maxOutputTokens(request.maxCompletionTokens())
+                .maxOutputTokens(GeminiMaxOutputTokens.firstPositive(request).orElse(null))
                 .returnThinking(false)
                 .build()
                 .chat(List.of(UserMessage.from("hello")),

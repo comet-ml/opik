@@ -4,6 +4,7 @@ interface UsePlaygroundDatasetReturn {
   datasetId: string | null; // "id" or "id::versionId" format
   versionName?: string;
   versionHash?: string;
+  itemsTotal?: number;
   setDatasetId: (v: string | null) => void;
 }
 
@@ -12,6 +13,7 @@ export const usePlaygroundDataset = (): UsePlaygroundDatasetReturn => {
     storedKey: versionedDatasetId,
     versionName,
     versionHash,
+    itemsTotal,
     setVersionKey: setVersionedDatasetId,
   } = useValidatedDatasetVersion();
 
@@ -19,6 +21,7 @@ export const usePlaygroundDataset = (): UsePlaygroundDatasetReturn => {
     datasetId: versionedDatasetId,
     versionName,
     versionHash,
+    itemsTotal,
     setDatasetId: setVersionedDatasetId,
   };
 };

@@ -42,6 +42,20 @@ public class AgentInsightsReportConfig implements StreamConfiguration {
     @Valid @JsonProperty
     @Min(1) @Max(1_000) private int autoFirstRunMaxPerRun = 10;
 
+    // How long after its claim an automatic run with neither a scan nor a failure still counts as live.
+    // Matches the frontend's AUTO_RUN_MAX_DURATION_MS. It is only a guess that the run died: nothing stops the
+    // original, and its result is accepted whenever it lands, so a run still going past this is run a second time
+    // on the free pool. Must comfortably exceed Ollie's longest run, including its 402 retry backoff.
+    @Valid @JsonProperty
+    @NotNull @MinDuration(value = 1, unit = TimeUnit.MINUTES)
+    @MaxDuration(value = 24, unit = TimeUnit.HOURS)
+    private Duration autoFirstRunTimeout = Duration.minutes(40);
+
+    // Times an automatic run that timed out is run again before giving up. 0 records the timeout but never
+    // retries.
+    @Valid @JsonProperty
+    @Min(0) @Max(10) private int autoFirstRunMaxRetries = 3;
+
     @Valid @JsonProperty
     @NotNull @MinDuration(value = 1, unit = TimeUnit.MINUTES)
     @MaxDuration(value = 1, unit = TimeUnit.HOURS)

@@ -464,6 +464,100 @@ export interface PythonSdkClient {
      */
     conversation: Array<Record<string, unknown>>;
   }>;
+  /**
+   * Drive `opik.integrations.ollama.track_ollama` through a sequence of
+   * `chat()` calls against a mock `/api/chat` the bridge serves itself.
+   *
+   * One call rather than one per `chat()`, because the facts under test do not
+   * survive being split: the `opik_tracked` guard needs two `track_ollama`
+   * calls on the SAME client object, and the nested case needs an
+   * `@opik.track` frame around one of the calls. See the route's own header.
+   *
+   * Returns only what lives in the bridge's process — what each call returned,
+   * and whether the double-wrap was a no-op. The spans the tracker wrote are
+   * the caller's to read back over REST, which is where a wrong provider,
+   * model, usage key or parent is observable.
+   */
+  trackedOllamaChats(args: {
+    project_name: string;
+    /** Echoed by the mock onto every chunk, so the span's `model` is this value. */
+    model: string;
+    prompt: string;
+    calls: Array<{
+      /** Echoed back, so a result is matched to its call and not to its position. */
+      label: string;
+      stream?: boolean;
+      use_async?: boolean;
+      /** Overrides the `ollama` default `track_ollama` records on the span. */
+      provider?: string;
+      /** Makes the call from inside an `@opik.track` function of this name. */
+      parent_name?: string;
+    }>;
+    workspace?: string;
+  }): Promise<{
+    double_track_is_noop: boolean;
+    calls: Array<{
+      label: string;
+      content: string;
+      model: string;
+      /**
+       * Chunks a streamed call yielded; 0 for a non-streamed one. Asserted, not
+       * decoration: "the streamed call produced one span" only means
+       * aggregation happened if the stream really arrived in pieces.
+       */
+      chunk_count: number;
+    }>;
+  }>;
+  /**
+   * Drive `@opik.track` over a GENERATOR that the consumer stops reading early,
+   * in every shape a user stops one in.
+   *
+   * One call rather than one per shape, for the reason the route's header gives:
+   * the two controls (`exhaust`, `plain_function`) are only worth anything
+   * beside the early-exit shapes in the SAME run, because a trace missing from
+   * a run where the controls also went missing says nothing about generators.
+   *
+   * Returns only what lives in the bridge's process — what each consumer
+   * actually received before it stopped, and whether the `consumer_raises`
+   * shape really raised. The traces and spans the decorator wrote are the
+   * caller's to read back over REST, which is where "the whole trace was
+   * dropped" (the pre-opik#8518 behaviour) is observable.
+   */
+  trackedGeneratorCalls(args: {
+    project_name: string;
+    /**
+     * What the generator yields, in order. Passed in rather than fixed in the
+     * bridge so the caller can derive the span output it expects — the
+     * decorator records the consumed items joined with no separator.
+     */
+    items: string[];
+    calls: Array<{
+      /** Also the tracked function's name, so the trace is addressable by it. */
+      label: string;
+      shape:
+        | 'break_after'
+        | 'bare_next'
+        | 'islice'
+        | 'consumer_raises'
+        | 'exhaust'
+        | 'plain_function';
+      /** Items the consumer takes before stopping; ignored by the two controls. */
+      take?: number;
+    }>;
+    workspace?: string;
+  }): Promise<{
+    calls: Array<{
+      label: string;
+      /**
+       * What the consumer received before it stopped — the fact that exists
+       * only inside the bridge, and what makes the span's recorded output
+       * assertable rather than merely present.
+       */
+      consumed: string[];
+      /** The exception type the consumer caught, for `consumer_raises`; null otherwise. */
+      caught: string | null;
+    }>;
+  }>;
 }
 
 export class PythonSdkBridgeError extends Error {
@@ -799,6 +893,34 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
         scores: Array<{ name: string; value: number; reason: string | null }>;
         conversation: Array<Record<string, unknown>>;
       }>('POST', '/threads/evaluate', args, { timeoutMs: 150_000 });
+    },
+    async trackedOllamaChats(args) {
+      // One request makes every call in the sequence and then flushes the
+      // tracker, so the budget covers all of them plus the upload — which is
+      // rate-limited on a shared cloud workspace, where a 429 makes the SDK
+      // back off. The provider itself is local and instant.
+      return request<{
+        double_track_is_noop: boolean;
+        calls: Array<{
+          label: string;
+          content: string;
+          model: string;
+          chunk_count: number;
+        }>;
+      }>('POST', '/integrations/ollama/chat', args, { timeoutMs: 150_000 });
+    },
+    async trackedGeneratorCalls(args) {
+      // One request makes every call in the sequence, collects the dropped
+      // generators and then flushes — so the budget covers all of them plus the
+      // upload, which is rate-limited on a shared cloud workspace where a 429
+      // makes the SDK back off. The generators themselves are local and instant.
+      return request<{
+        calls: Array<{
+          label: string;
+          consumed: string[];
+          caught: string | null;
+        }>;
+      }>('POST', '/traces/track-generator', args, { timeoutMs: 150_000 });
     },
   };
 }

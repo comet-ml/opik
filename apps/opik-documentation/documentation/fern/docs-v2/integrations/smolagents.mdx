@@ -25,7 +25,7 @@ The framework provides a simple way to build agents that can perform tasks like 
 
 To use the Smolagents integration with Opik, you will need to have Smolagents and the required OpenTelemetry packages installed:
 
-```bash
+```bash wordWrap
 pip install --upgrade opik 'smolagents[telemetry,toolkit]' opentelemetry-sdk opentelemetry-exporter-otlp
 ```
 
@@ -35,13 +35,13 @@ In order to use Smolagents, you will need to configure your LLM provider API key
 
 You can set them as environment variables:
 
-```bash
+```bash wordWrap
 export OPENAI_API_KEY="YOUR_API_KEY"
 ```
 
 Or set them programmatically:
 
-```python
+```python wordWrap
 import os
 import getpass
 
@@ -103,7 +103,7 @@ You will need to set the following environment variables to configure OpenTeleme
     If you are self-hosting Opik, you will need to set the following environment
     variables:
 
-    ```bash
+    ```bash wordWrap
     export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
     ```
 
@@ -111,7 +111,7 @@ You will need to set the following environment variables to configure OpenTeleme
         To log the traces to a specific project, you can add the `projectName`
         parameter to the `OTEL_EXPORTER_OTLP_HEADERS` environment variable:
 
-        ```bash
+        ```bash wordWrap
         export OTEL_EXPORTER_OTLP_HEADERS='projectName=<your-project-name>'
         ```
 
@@ -124,7 +124,7 @@ You will need to set the following environment variables to configure OpenTeleme
 
 To track your Smolagents applications, you will need to configure OpenTelemetry to instrument the framework:
 
-```python
+```python wordWrap
 # Import telemetry components
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor

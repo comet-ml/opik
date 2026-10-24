@@ -30,6 +30,7 @@ import RedirectProjects from "@/v2/redirect/RedirectProjects";
 import RedirectDatasets from "@/v2/redirect/RedirectDatasets";
 import { createV1RedirectRoutes } from "@/v2/redirect/v1RedirectConfig";
 import usePluginsStore from "@/store/PluginsStore";
+import RouteErrorFallback from "@/v2/layout/RouteErrorFallback/RouteErrorFallback";
 const PlaygroundPage = lazy(
   () => import("@/v2/pages/PlaygroundPage/PlaygroundPage"),
 );
@@ -264,9 +265,9 @@ const diagnosticsRoute = createRoute({
 const diagnosticsResolvedRoute = createRoute({
   path: "/diagnostics/resolved",
   getParentRoute: () => projectScopedRoute,
-  component: () => <SignalsPage showResolved />,
+  component: () => <SignalsPage showClosed />,
   staticData: {
-    title: "Resolved issues",
+    title: "Closed issues",
   },
 });
 
@@ -718,6 +719,7 @@ const routeTree = rootRoute.addChildren([
 export const router = createRouter({
   basepath: import.meta.env.VITE_BASE_URL || "/",
   routeTree,
+  defaultErrorComponent: RouteErrorFallback,
 });
 
 export type AppRouter = typeof router;

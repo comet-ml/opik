@@ -33,6 +33,39 @@ export interface BridgeContext {
 }
 
 // An Ollie chart widget opened for editing ("Edit in Ollie"). The dashboard is the bridge context's `dashboard`.
+// The host button that started a chat, reported to BI with the new session.
+export type ConversationOrigin = "describe_widget" | "annotator_view";
+
+export interface ConversationStartOptions {
+  origin?: ConversationOrigin;
+  // Id of the click, so BI matches it to the session it opens.
+  entryId?: string;
+  // What the chat should produce for the host; Ollie reads `context` into hidden context and answers with `artifact:proposed`.
+  artifact?: ArtifactRequest;
+}
+
+export interface ArtifactRequest {
+  kind: string;
+  context: unknown;
+}
+
+// Something Ollie made for the host. `target` names what it is for; the handler registered for `kind` validates both.
+export interface ArtifactProposal {
+  proposalId: string;
+  kind: string;
+  target: unknown;
+  payload: unknown;
+  summary: string;
+}
+
+export type ArtifactRejection = "no_handler" | "target_mismatch" | "invalid";
+
+export interface ArtifactResult {
+  proposalId: string;
+  applied: boolean;
+  reason?: ArtifactRejection;
+}
+
 export interface ChartEditRequest {
   widgetId: string;
   title: string;
@@ -42,6 +75,8 @@ export interface ChartEditRequest {
   query: { id: string };
   // The rows the widget shows now, so the chat can show the chart being edited without re-running it.
   rows?: Record<string, unknown>[] | null;
+  // Id of the click, so BI matches it to the session it opens.
+  entryId?: string;
 }
 
 export interface BridgeDashboard {
@@ -112,19 +147,24 @@ export interface ExplainButtonProps {
  * 3 = Ollie charts: `charts` and `dashboard` in the context, `chart:edit`
  * (host → shell), `dashboard:updated` (shell → host), and the `charts`
  * capability in `console:ready`.
+ * 4 = `origin` and `entryId` on `conversation:start`, and `entryId` on
+ * `chart:edit`, so BI can match a host click to the session it opens.
+ * 5 = `artifact` on `conversation:start`, `artifact:proposed` (shell → host)
+ * carrying something Ollie made for the host, `artifact:result` (host → shell)
+ * saying whether it was applied, and the `artifacts` capability.
  *
  * ⚠️ MUST move in lockstep with `ollie-console/src/bridge.ts`; the console's
  * VER-4 assertions guard the event-shape contract. Bump here AND there together
  * whenever a bridge event is added/removed/reshaped.
  */
-export const BRIDGE_PROTOCOL_VERSION = 3;
+export const BRIDGE_PROTOCOL_VERSION = 5;
 
 /** Host → Sidebar events */
 export interface HostEventMap {
   "context:changed": BridgeContext;
   "visibility:changed": { isOpen: boolean };
   "runner:state-changed": RunnerBridgeState;
-  "conversation:start": { message: string };
+  "conversation:start": { message: string } & ConversationStartOptions;
   // Open Ollie on an existing chart widget so the user can change it, then save or duplicate it.
   "chart:edit": ChartEditRequest;
   // Explain (host → shell). `explainId` correlates concurrent explains over
@@ -133,6 +173,7 @@ export interface HostEventMap {
   "explain:run": { explainId: string; target: ExplainTarget };
   "explain:cancel": { explainId: string };
   "chat:continue": { question: string; answer: string; target: ExplainTarget };
+  "artifact:result": ArtifactResult;
 }
 
 /** Sidebar → Host events */
@@ -154,6 +195,7 @@ export interface SidebarEventMap {
   "console:ready": { bridgeVersion: number; capabilities: string[] };
   // A chart was added to this dashboard from the console; refetch so an open dashboard shows it.
   "dashboard:updated": BridgeDashboard;
+  "artifact:proposed": ArtifactProposal;
   "explain:chunk": { explainId: string; delta: string };
   "explain:done": { explainId: string };
   // `code` is an optional, machine-readable reason (e.g. "unavailable",
@@ -174,11 +216,15 @@ export interface AssistantSidebarBridge {
     event: E,
     data: SidebarEventMap[E],
   ): void;
-  startConversation(message: string): void;
+  startConversation(message: string, options?: ConversationStartOptions): void;
   // Opens the sidebar and hands it the widget; replayed if the console is not listening yet.
   editChart?(request: ChartEditRequest): void;
   // Whether the console announced the `charts` capability; an older console never handles `chart:edit`.
   canEditChart?(): boolean;
+  // Whether the console announced the `artifacts` capability; an older console never sends `artifact:proposed`.
+  canProposeArtifacts?(): boolean;
+  // Calls back when the console announces its capabilities, so hosts that read them can update.
+  subscribeCapabilities?(listener: () => void): () => void;
 }
 
 declare global {

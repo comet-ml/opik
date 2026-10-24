@@ -49,6 +49,16 @@ export const OpikEvent = {
   MCP_BANNER_SHOWN: "opik_mcp_banner_shown",
   MCP_BANNER_CTA_CLICKED: "opik_mcp_banner_cta_clicked",
   MCP_BANNER_DISMISSED: "opik_mcp_banner_dismissed",
+  // Ollie charts on dashboards. The adds and saves happen in Ollie, which reports them itself.
+  DASHBOARD_ASK_OLLIE_CLICKED: "opik_dashboard_ask_ollie_clicked",
+  DASHBOARD_EDIT_IN_OLLIE_CLICKED: "opik_dashboard_edit_in_ollie_clicked",
+  DASHBOARD_OLLIE_WIDGET_REMOVED: "opik_dashboard_ollie_widget_removed",
+  DASHBOARD_OLLIE_WIDGET_LOAD_FAILED: "opik_dashboard_ollie_widget_load_failed",
+  DASHBOARD_WITH_OLLIE_WIDGETS_OPENED:
+    "opik_dashboard_with_ollie_widgets_opened",
+  ANNOTATION_QUEUE_VIEW_OLLIE_CLICKED:
+    "opik_annotation_queue_view_ollie_clicked",
+  ANNOTATION_QUEUE_VIEW_FAILED: "opik_annotation_queue_view_failed",
 } as const;
 
 type OpikEventValues = (typeof OpikEvent)[keyof typeof OpikEvent];

@@ -10,7 +10,9 @@ from ..core.jsonable_encoder import jsonable_encoder
 from ..core.pydantic_utilities import parse_obj_as
 from ..core.request_options import RequestOptions
 from ..errors.conflict_error import ConflictError
+from ..errors.forbidden_error import ForbiddenError
 from ..errors.not_found_error import NotFoundError
+from ..errors.unprocessable_entity_error import UnprocessableEntityError
 from ..types.agent_insights_job import AgentInsightsJob
 from .types.agent_insights_job_update_status import AgentInsightsJobUpdateStatus
 
@@ -235,6 +237,87 @@ class RawAgentInsightsJobsClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
+    def update_agent_insights_guidance(
+        self, project_id: str, *, guidance: str, request_options: typing.Optional[RequestOptions] = None
+    ) -> HttpResponse[AgentInsightsJob]:
+        """
+        Saves the project guidance sent to every Agent Insights run, creating the job (disabled) if the project has none. Empty or whitespace-only clears it. The guidance version is bumped only when the text changes. 404 while guidance is not enabled.
+
+        Parameters
+        ----------
+        project_id : str
+
+        guidance : str
+            Project guidance for Agent Insights runs. Empty or whitespace-only clears it
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[AgentInsightsJob]
+            Job with the saved guidance
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            f"v1/private/agent-insights/jobs/{jsonable_encoder(project_id)}/guidance",
+            method="PUT",
+            json={
+                "guidance": guidance,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    AgentInsightsJob,
+                    parse_obj_as(
+                        type_=AgentInsightsJob,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            if _response.status_code == 403:
+                raise ForbiddenError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 404:
+                raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 422:
+                raise UnprocessableEntityError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
 
 class AsyncRawAgentInsightsJobsClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
@@ -439,6 +522,87 @@ class AsyncRawAgentInsightsJobsClient:
                 return AsyncHttpResponse(response=_response, data=None)
             if _response.status_code == 404:
                 raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def update_agent_insights_guidance(
+        self, project_id: str, *, guidance: str, request_options: typing.Optional[RequestOptions] = None
+    ) -> AsyncHttpResponse[AgentInsightsJob]:
+        """
+        Saves the project guidance sent to every Agent Insights run, creating the job (disabled) if the project has none. Empty or whitespace-only clears it. The guidance version is bumped only when the text changes. 404 while guidance is not enabled.
+
+        Parameters
+        ----------
+        project_id : str
+
+        guidance : str
+            Project guidance for Agent Insights runs. Empty or whitespace-only clears it
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[AgentInsightsJob]
+            Job with the saved guidance
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            f"v1/private/agent-insights/jobs/{jsonable_encoder(project_id)}/guidance",
+            method="PUT",
+            json={
+                "guidance": guidance,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    AgentInsightsJob,
+                    parse_obj_as(
+                        type_=AgentInsightsJob,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            if _response.status_code == 403:
+                raise ForbiddenError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 404:
+                raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 422:
+                raise UnprocessableEntityError(
                     headers=dict(_response.headers),
                     body=typing.cast(
                         typing.Optional[typing.Any],

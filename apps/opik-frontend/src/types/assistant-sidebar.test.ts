@@ -10,6 +10,6 @@ import { BRIDGE_PROTOCOL_VERSION } from "./assistant-sidebar";
 // together, then update the expectation below.
 describe("bridge protocol", () => {
   it("is pinned to the version both sides must agree on", () => {
-    expect(BRIDGE_PROTOCOL_VERSION).toBe(3);
+    expect(BRIDGE_PROTOCOL_VERSION).toBe(5);
   });
 });

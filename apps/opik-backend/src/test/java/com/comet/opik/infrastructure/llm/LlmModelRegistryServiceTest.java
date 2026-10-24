@@ -5,6 +5,7 @@ import com.comet.opik.api.LlmProvider;
 import com.comet.opik.infrastructure.LlmModelRegistryConfig;
 import com.comet.opik.infrastructure.llm.LlmModelRegistryService.ModelEntry;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.client.Invocation;
 import jakarta.ws.rs.client.WebTarget;
@@ -13,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -167,6 +169,37 @@ class LlmModelRegistryServiceTest {
         assertThat(result.get().model().reasoning()).isEqualTo(reasoning);
     }
 
+    @ParameterizedTest
+    @CsvSource({
+            "claude-mythos-preview, ANTHROPIC, claude-mythos-preview,",
+            "claude-3-7-sonnet-20250219, ANTHROPIC, claude-3-7-sonnet-20250219,",
+            "claude-opus-4-20250514, ANTHROPIC, claude-opus-4-20250514,",
+            "claude-opus-4-1-20250805, ANTHROPIC, claude-opus-4-1-20250805,",
+            "claude-sonnet-4-20250514, ANTHROPIC, claude-sonnet-4-20250514,",
+            "gemini-flash-latest-high-res-exp, GEMINI, gemini-flash-latest-high-res-exp,",
+            "gemini-3-pro-preview, GEMINI, gemini-3-pro-preview,",
+            "vertex_ai/gemini-robotics-er-2, VERTEX_AI, gemini-robotics-er-2, vertex_ai/gemini-robotics-er-2",
+            "vertex_ai/gemini-2.0-flash-001, VERTEX_AI, gemini-2.0-flash-001, vertex_ai/gemini-2.0-flash-001",
+            "vertex_ai/gemini-2.0-flash-lite-001, VERTEX_AI, gemini-2.0-flash-lite-001, vertex_ai/gemini-2.0-flash-lite-001",
+            "vertex_ai/gemini-3-pro-preview, VERTEX_AI, gemini-3-pro-preview, vertex_ai/gemini-3-pro-preview",
+            "vertex_ai/gemini-3.1-flash-lite-preview, VERTEX_AI, gemini-3.1-flash-lite-preview, vertex_ai/gemini-3.1-flash-lite-preview"
+    })
+    void defaultResourceHidesModelsThatCannotRunButStillResolvesThem(String model, LlmProvider provider, String id,
+            String qualifiedName) {
+        var service = new LlmModelRegistryService(new LlmModelRegistryConfig());
+
+        var result = service.findModel(model);
+
+        var expected = new LlmModelRegistryService.ModelLookupResult(provider,
+                LlmModelDefinition.builder().id(id).qualifiedName(qualifiedName).build());
+        // The capability flags come from the sync and the params from the catalog, and both have their own tests;
+        // this one is about hiding the model.
+        assertThat(result).get()
+                .usingRecursiveComparison()
+                .ignoringFields("model.structuredOutput", "model.reasoning", "model.params")
+                .isEqualTo(expected);
+    }
+
     @Test
     void missingClasspathResourceThrows() {
         var config = new LlmModelRegistryConfig();
@@ -200,6 +233,90 @@ class LlmModelRegistryServiceTest {
         assertThat(merged.get("openai").get(2).id()).isEqualTo("new-model");
 
         assertThat(merged.get("anthropic")).hasSize(1);
+    }
+
+    @Test
+    void mergeUsesTheOverrideCapabilitiesEvenEmptyAndKeepsTheDefaultsWhenUnset() {
+        var defaults = Map.of(
+                "openrouter", List.of(
+                        ModelEntry.builder().id("openai/gpt-5-nano")
+                                .supportedParameters(List.of("max_tokens", "reasoning_effort"))
+                                .reasoningEfforts(List.of("high", "low"))
+                                .build(),
+                        ModelEntry.builder().id("openai/gpt-4o-mini")
+                                .supportedParameters(List.of("temperature"))
+                                .build(),
+                        ModelEntry.builder().id("openai/o3")
+                                .supportedParameters(List.of("max_tokens", "reasoning"))
+                                .reasoningEfforts(List.of("high"))
+                                .build()));
+
+        var overrides = Map.of(
+                "openrouter", List.of(
+                        ModelEntry.builder().id("openai/gpt-5-nano").label("openai/gpt-5-nano").build(),
+                        ModelEntry.builder().id("openai/gpt-4o-mini")
+                                .supportedParameters(List.of("temperature", "top_p"))
+                                .build(),
+                        ModelEntry.builder().id("openai/o3")
+                                .supportedParameters(List.of())
+                                .reasoningEfforts(List.of())
+                                .build()));
+
+        var merged = LlmModelRegistryService.merge(defaults, overrides);
+
+        assertThat(merged.get("openrouter")).containsExactly(
+                ModelEntry.builder().id("openai/gpt-5-nano").label("openai/gpt-5-nano")
+                        .supportedParameters(List.of("max_tokens", "reasoning_effort"))
+                        .reasoningEfforts(List.of("high", "low"))
+                        .build(),
+                ModelEntry.builder().id("openai/gpt-4o-mini")
+                        .supportedParameters(List.of("temperature", "top_p"))
+                        .build(),
+                ModelEntry.builder().id("openai/o3")
+                        .supportedParameters(List.of())
+                        .reasoningEfforts(List.of())
+                        .build());
+    }
+
+    @Test
+    void defaultResourceCarriesOpenRouterCapabilities() {
+        var service = new LlmModelRegistryService(new LlmModelRegistryConfig());
+
+        var result = service.findModel("openai/gpt-5-nano");
+
+        assertThat(result).isPresent();
+        assertThat(result.get().provider()).isEqualTo(LlmProvider.OPEN_ROUTER);
+        assertThat(result.get().model().supportedParameters()).contains("reasoning_effort").doesNotContain("top_k");
+        assertThat(result.get().model().reasoningEfforts()).isNotEmpty();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "google/lyria-3-clip-preview",
+            "google/lyria-3-pro-preview",
+            "openai/gpt-audio",
+            "openai/gpt-audio-mini",
+            "openai/gpt-3.5-turbo-instruct",
+            "openai/gpt-5-image",
+            "openai/gpt-5-image-mini",
+            "relace/relace-apply-3",
+            "thinkingmachines/inkling:free",
+            "thinkingmachines/inkling-small:free",
+            "openai/gpt-5.2-chat",
+            "minimax/minimax-m1",
+            "amazon/nova-premier-v1",
+            "inclusionai/ling-3.0-flash-fin",
+            "nousresearch/hermes-3-llama-3.1-70b"
+    })
+    void defaultResourceHidesOpenRouterModelsThatCannotRunButStillResolvesThem(String model) {
+        var service = new LlmModelRegistryService(new LlmModelRegistryConfig());
+
+        var result = service.findModel(model);
+
+        assertThat(result).isPresent();
+        assertThat(result.get().provider()).isEqualTo(LlmProvider.OPEN_ROUTER);
+        assertThat(result.get().model().id()).isEqualTo(model);
+        assertThat(result.get().model().label()).isNull();
     }
 
     @ParameterizedTest
@@ -302,10 +419,13 @@ class LlmModelRegistryServiceTest {
     void registryJsonHasBothFlagsWhenTheYamlLeavesThemOut() {
         var config = new LlmModelRegistryConfig();
         config.setDefaultResource("llm-models-test.yaml");
+        config.setCuratedResource(null);
 
         var service = new LlmModelRegistryService(config);
 
-        assertThat(JsonUtils.valueToTree(service.getRegistry().get("openai").get(1)))
+        var json = (ObjectNode) JsonUtils.valueToTree(service.getRegistry().get("openai").get(1));
+        json.remove("params");
+        assertThat(json)
                 .isEqualTo(JsonUtils.getJsonNodeFromString("""
                         {"id": "gpt-3.5-turbo", "structured_output": false, "reasoning": false}"""));
     }
@@ -421,6 +541,7 @@ class LlmModelRegistryServiceTest {
 
         var config = new LlmModelRegistryConfig();
         config.setDefaultResource("llm-models-test.yaml");
+        config.setCuratedResource(null);
         config.setRemoteEnabled(true);
         config.setRemoteUrl("https://cdn.example.com/models.yaml");
 
@@ -428,6 +549,8 @@ class LlmModelRegistryServiceTest {
 
         assertThat(service.findModel("o3")).get()
                 .extracting(LlmModelRegistryService.ModelLookupResult::model)
+                .usingRecursiveComparison()
+                .ignoringFields("params")
                 .isEqualTo(LlmModelDefinition.builder().id("o3").label("O3 from remote").structuredOutput(true)
                         .reasoning(true).build());
         assertThat(service.findModel("gpt-4o")).get()

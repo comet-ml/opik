@@ -264,9 +264,9 @@ public class SpanDAO {
                     :type as type,
                     parseDateTime64BestEffort(:start_time, 9) as start_time,
                     parseDateTime64BestEffort(:end_time, 9) as end_time,
-                    :input as input,
-                    :output as output,
-                    :metadata as metadata,
+                    payload.input as input,
+                    payload.output as output,
+                    payload.metadata as metadata,
                     :model as model,
                     :provider as provider,
                     toDecimal128(:total_estimated_cost, 12) as total_estimated_cost,
@@ -278,11 +278,12 @@ public class SpanDAO {
                     :user_name as created_by,
                     :user_name as last_updated_by,
                     :truncation_threshold as truncation_threshold,
-                    :input_slim as input_slim,
-                    :output_slim as output_slim,
+                    payload.input_slim as input_slim,
+                    payload.output_slim as output_slim,
                     :ttft as ttft,
                     :source as source,
                     :environment as environment
+                FROM input('input String, output String, metadata String, input_slim String, output_slim String') AS payload
             ) as new_span
             LEFT JOIN (
                 SELECT
@@ -296,7 +297,7 @@ public class SpanDAO {
             ) as old_span
             ON new_span.id = old_span.id
             SETTINGS log_comment = '<log_comment>'
-            ;
+            FORMAT Values (:input, :output, :metadata, :input_slim, :output_slim)
             """;
 
     /***
@@ -336,42 +337,46 @@ public class SpanDAO {
             	environment
             )
             SELECT
-            	id,
-            	project_id,
-            	workspace_id,
-            	trace_id,
-            	parent_span_id,
-                <if(name)> :name <else> name <endif> as name,
-            	<if(type)> :type <else> type <endif> as type,
-            	start_time,
-            	<if(end_time)> parseDateTime64BestEffort(:end_time, 9) <else> end_time <endif> as end_time,
-            	<if(input)> :input <else> input <endif> as input,
-            	<if(output)> :output <else> output <endif> as output,
-            	<if(metadata)> :metadata <else> metadata <endif> as metadata,
-            	<if(model)> :model <else> model <endif> as model,
-            	<if(provider)> :provider <else> provider <endif> as provider,
-            	<if(total_estimated_cost)> toDecimal128(:total_estimated_cost, 12) <else> total_estimated_cost <endif> as total_estimated_cost,
-            	<if(total_estimated_cost_version)> :total_estimated_cost_version <else> total_estimated_cost_version <endif> as total_estimated_cost_version,
-            	<if(tags)> :tags <else> tags <endif> as tags,
-            	<if(usage)> CAST((:usage_keys, :usage_values), 'Map(String, Int64)') <else> usage <endif> as usage,
-            	<if(error_info)> :error_info <else> error_info <endif> as error_info,
-            	created_at,
-            	created_by,
+            	stored_span.id,
+            	stored_span.project_id,
+            	stored_span.workspace_id,
+            	stored_span.trace_id,
+            	stored_span.parent_span_id,
+                <if(name)> :name <else> stored_span.name <endif> as name,
+            	<if(type)> :type <else> stored_span.type <endif> as type,
+            	stored_span.start_time,
+            	<if(end_time)> parseDateTime64BestEffort(:end_time, 9) <else> stored_span.end_time <endif> as end_time,
+            	<if(input)> payload.input <else> stored_span.input <endif> as input,
+            	<if(output)> payload.output <else> stored_span.output <endif> as output,
+            	<if(metadata)> payload.metadata <else> stored_span.metadata <endif> as metadata,
+            	<if(model)> :model <else> stored_span.model <endif> as model,
+            	<if(provider)> :provider <else> stored_span.provider <endif> as provider,
+            	<if(total_estimated_cost)> toDecimal128(:total_estimated_cost, 12) <else> stored_span.total_estimated_cost <endif> as total_estimated_cost,
+            	<if(total_estimated_cost_version)> :total_estimated_cost_version <else> stored_span.total_estimated_cost_version <endif> as total_estimated_cost_version,
+            	<if(tags)> :tags <else> stored_span.tags <endif> as tags,
+            	<if(usage)> CAST((:usage_keys, :usage_values), 'Map(String, Int64)') <else> stored_span.usage <endif> as usage,
+            	<if(error_info)> :error_info <else> stored_span.error_info <endif> as error_info,
+            	stored_span.created_at,
+            	stored_span.created_by,
                 :user_name as last_updated_by,
                 :truncation_threshold,
-                <if(input)> :input_slim <else> input_slim <endif> as input_slim,
-                <if(output)> :output_slim <else> output_slim <endif> as output_slim,
-                <if(ttft)> :ttft <else> ttft <endif> as ttft,
-                <if(source)> :source <else> source <endif> as source,
-                <if(environment)> :environment <else> environment <endif> as environment
-            FROM spans
-            WHERE id = :id
-            AND workspace_id = :workspace_id
-            <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
-            ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
-            LIMIT 1
+                <if(input)> payload.input_slim <else> stored_span.input_slim <endif> as input_slim,
+                <if(output)> payload.output_slim <else> stored_span.output_slim <endif> as output_slim,
+                <if(ttft)> :ttft <else> stored_span.ttft <endif> as ttft,
+                <if(source)> :source <else> stored_span.source <endif> as source,
+                <if(environment)> :environment <else> stored_span.environment <endif> as environment
+            FROM input('input String, output String, metadata String, input_slim String, output_slim String') AS payload
+            CROSS JOIN (
+                SELECT *
+                FROM spans
+                WHERE id = :id
+                AND workspace_id = :workspace_id
+                <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
+                ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
+                LIMIT 1
+            ) AS stored_span
             SETTINGS log_comment = '<log_comment>'
-            ;
+            FORMAT Values (:input, :output, :metadata, :input_slim, :output_slim)
             """;
 
     /**
@@ -522,9 +527,9 @@ public class SpanDAO {
                     <if(type)> :type <else> 'unknown' <endif> as type,
                     toDateTime64('1970-01-01 00:00:00.000', 9) as start_time,
                     parseDateTime64BestEffort(:end_time, 9) as end_time,
-                    <if(input)> :input <else> '' <endif> as input,
-                    <if(output)> :output <else> '' <endif> as output,
-                    <if(metadata)> :metadata <else> '' <endif> as metadata,
+                    <if(input)> payload.input <else> '' <endif> as input,
+                    <if(output)> payload.output <else> '' <endif> as output,
+                    <if(metadata)> payload.metadata <else> '' <endif> as metadata,
                     <if(model)> :model <else> '' <endif> as model,
                     <if(provider)> :provider <else> '' <endif> as provider,
                     <if(total_estimated_cost)> toDecimal128(:total_estimated_cost, 12) <else> toDecimal128(0, 12) <endif> as total_estimated_cost,
@@ -536,11 +541,12 @@ public class SpanDAO {
                     :user_name as created_by,
                     :user_name as last_updated_by,
                     :truncation_threshold as truncation_threshold,
-                    <if(input)> :input_slim <else> '' <endif> as input_slim,
-                    <if(output)> :output_slim <else> '' <endif> as output_slim,
+                    <if(input)> payload.input_slim <else> '' <endif> as input_slim,
+                    <if(output)> payload.output_slim <else> '' <endif> as output_slim,
                     :ttft as ttft,
                     :source as source,
                     <if(environment)> :environment <else> '' <endif> as environment
+                FROM input('input String, output String, metadata String, input_slim String, output_slim String') AS payload
             ) as new_span
             LEFT JOIN (
                 SELECT
@@ -554,7 +560,7 @@ public class SpanDAO {
             ) as old_span
             ON new_span.id = old_span.id
             SETTINGS log_comment = '<log_comment>'
-            ;
+            FORMAT Values (:input, :output, :metadata, :input_slim, :output_slim)
             """;
 
     /**
@@ -761,12 +767,21 @@ public class SpanDAO {
             ;
             """;
 
+    /**
+     * With {@code <span_weeks_bound>}, both {@code spans} accesses are bound to the weeks the {@code span_weeks} index
+     * holds for the traces (OPIK-8837). A trace-id predicate prunes no weekly partition, and in nearly every partition
+     * a boundary granule straddles the key range and has to be read, so the unbounded read pays for every week. The
+     * read has no project, so the {@code span_weeks.trace_id} skip indexes serve the lookup. The other trace-keyed
+     * reads carry the same bound and point here; the trace-delete cascade deliberately does not, see
+     * {@link #SELECT_SPAN_IDS_BY_TRACE_ID}.
+     */
     private static final String SELECT_BY_TRACE_IDS = """
             WITH target_projects AS (
                 SELECT DISTINCT project_id
                 FROM spans
                 WHERE workspace_id = :workspace_id
                 AND trace_id IN :trace_ids
+                <if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT id_week FROM span_weeks WHERE workspace_id = :workspace_id AND trace_id IN :trace_ids)<endif>
             )
             SELECT
                 s.*,
@@ -775,6 +790,7 @@ public class SpanDAO {
             WHERE workspace_id = :workspace_id
             AND project_id IN (SELECT project_id FROM target_projects)
             AND trace_id IN :trace_ids
+            <if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT id_week FROM span_weeks WHERE workspace_id = :workspace_id AND trace_id IN :trace_ids)<endif>
             ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
             LIMIT 1 BY workspace_id, project_id, id
             SETTINGS log_comment = '<log_comment>'
@@ -789,6 +805,8 @@ public class SpanDAO {
      * version of each span is taken with {@code argMax(..., last_updated_at)} grouped by {@code id} —
      * a hash aggregation that dedups the {@code ReplacingMergeTree} versions without the full-row
      * {@code ORDER BY} + {@code LIMIT 1 BY workspace_id, project_id, id} sort that {@link #SELECT_BY_TRACE_IDS} pays. See OPIK-7454.
+     * <p>
+     * Both {@code spans} accesses carry the {@code <span_weeks_bound>} — see {@link #SELECT_BY_TRACE_IDS}.
      */
     private static final String SELECT_SPANS_SIZE_BY_TRACE_IDS = """
             WITH target_projects AS (
@@ -796,6 +814,7 @@ public class SpanDAO {
                 FROM spans
                 WHERE workspace_id = :workspace_id
                 AND trace_id IN :trace_ids
+                <if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT id_week FROM span_weeks WHERE workspace_id = :workspace_id AND trace_id IN :trace_ids)<endif>
             )
             SELECT sum(span_size) AS size_bytes
             FROM (
@@ -804,6 +823,7 @@ public class SpanDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id IN (SELECT project_id FROM target_projects)
                 AND trace_id IN :trace_ids
+                <if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT id_week FROM span_weeks WHERE workspace_id = :workspace_id AND trace_id IN :trace_ids)<endif>
                 GROUP BY id
             )
             SETTINGS log_comment = '<log_comment>'
@@ -821,10 +841,24 @@ public class SpanDAO {
      * immaterial since it is id-bounded and {@code LIMIT 1 BY id}. Field exclusion ({@code exclude_fields}) and
      * truncation are layered on top without dropping the sort key.
      * <p>
+     * <b>When the page order is the dedup order</b> ({@code page_in_dedup_order}: the stream, and the list with no
+     * custom sort), {@code page_ids} dedups and paginates in the level that reads {@code spans}, and
+     * {@code spans_deduped} is not rendered. When {@code spans} is a {@code Distributed} table, each subquery reading it
+     * runs on the shard, so a page {@code LIMIT} one level above the dedup would make the shard dedup and ship the whole
+     * project to the initiator (OPIK-8833). The page is the same either way, since {@code LIMIT BY} applies before
+     * {@code LIMIT} within a level, and it stays correct across shards: rows shard by {@code project_id}, so every
+     * version of a span is on one shard, and the initiator merges the shards' top rows. A custom sort orders differently
+     * from the dedup, so it keeps both levels and reads the whole project either way.
+     * <p>
      * Each {@code spans} id-range bound carries a parallel week-start bound: a strict consequence of the
      * id-range — and, unlike a {@code created_at} predicate, safe against late-arriving rows since it derives from
      * {@code id} — that lets the planner prune partitions once {@code spans} is partitioned. The {@code page_wide}
      * re-read carries the same week bounds via the window it re-reads.
+     * <p>
+     * When the request is scoped to a trace, {@code page_wide} also repeats the {@code trace_id} predicate. The page
+     * ids already belong to that trace, so the result is unchanged, but {@code id} follows {@code trace_id} in the
+     * {@code spans} sort key: without it the re-read can't use the primary key past {@code project_id} and scans the
+     * whole project.
      * <p>
      * <b>Both</b> operands are the partition expression of 000115, {@code toDate32(E) -
      * toIntervalDay(toDayOfWeek(E, 1))}, and never {@code toMonday(E)} (OPIK-8241): {@code toMonday} returns a 16-bit
@@ -857,6 +891,20 @@ public class SpanDAO {
      * so each aggregate scans only the page's spans instead of the full filtered project. The aggregate CTEs
      * referencing {@code page_ids} before its definition is fine — CTE names resolve independently of
      * declaration order.
+     * <p>
+     * Scoped to a trace, every {@code spans} access carries the span_weeks bound
+     * ({@code <trace_span_weeks_bound>}, see {@link #SELECT_BY_TRACE_IDS}), {@code page_wide} included: its page-id
+     * predicate prunes no partition either. The lookup takes the project, so it is served by the {@code span_weeks}
+     * primary key. A search then skips its week pre-pass: the bound already prunes, and the pre-pass reads the trace's
+     * keys in every partition.
+     * <p>
+     * Not scoped to a trace, every {@code spans} access carries the project's span weeks instead
+     * ({@code <project_span_weeks_bound>}, OPIK-8910), and a search skips its week pre-pass too. Unbounded, a project
+     * read lands on a boundary granule of the project's key range in nearly every weekly partition, which dominates
+     * the cost of a small project's read. The lookup is served by the {@code prj_project_weeks} projection of
+     * {@code span_weeks}, which only a {@code DISTINCT} read uses. Its id-range bounds become the week range each access
+     * already applies to {@code id_at}, so the set holds every week the access can return a row from; a week left by a
+     * deleted span only widens it.
      */
     private static final String SELECT_BY_PROJECT_ID = """
             WITH <if(span_id_prefilter)>span_id_prefilter AS (
@@ -873,10 +921,19 @@ public class SpanDAO {
                     AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                         \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                 <if(trace_id)> AND trace_id = :trace_id <endif>
+                <if(trace_span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT id_week FROM span_weeks
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id AND trace_id = :trace_id)<endif>
+                <if(project_span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT DISTINCT id_week FROM span_weeks
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id
+                    <if(uuid_from_time)> AND id_week >= toYYYYMMDD(toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))<endif>
+                    <if(uuid_to_time)> AND id_week \\<= toYYYYMMDD(toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))<endif>
+                    <if(last_received_span_id)> AND id_week \\<= toYYYYMMDD(toDate32(UUIDv7ToDateTime(toUUID(:last_received_span_id), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:last_received_span_id), 'UTC'), 1)))<endif>)<endif>
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
-                <if(spans_partitioned && search_text)>
+                <if(spans_partitioned && search_text && !trace_span_weeks_bound && !project_span_weeks_bound)>
                 AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
                     SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                     FROM spans
@@ -1045,12 +1102,15 @@ public class SpanDAO {
                  HAVING <feedback_scores_empty_filters>
             )
             <endif>
-            <endif>, spans_deduped AS (
+            <endif>, <if(page_in_dedup_order)>page_ids AS (
+                SELECT id
+            <else>spans_deduped AS (
                 SELECT
                       s.* EXCEPT (input_slim, output_slim<if(!sort_needs_wide)><if(!exclude_input)>, input<endif><if(!exclude_output)>, output<endif><if(!exclude_metadata)>, metadata<endif><endif>) <if(exclude_fields)>EXCEPT (<exclude_fields>) <endif>,
                       input_length,
                       output_length,
                       duration
+            <endif>
                 FROM spans s
                 WHERE project_id = :project_id
                 AND workspace_id = :workspace_id
@@ -1064,10 +1124,19 @@ public class SpanDAO {
                     AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                         \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                 <if(trace_id)> AND trace_id = :trace_id <endif>
+                <if(trace_span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT id_week FROM span_weeks
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id AND trace_id = :trace_id)<endif>
+                <if(project_span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT DISTINCT id_week FROM span_weeks
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id
+                    <if(uuid_from_time)> AND id_week >= toYYYYMMDD(toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))<endif>
+                    <if(uuid_to_time)> AND id_week \\<= toYYYYMMDD(toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))<endif>
+                    <if(last_received_span_id)> AND id_week \\<= toYYYYMMDD(toDate32(UUIDv7ToDateTime(toUUID(:last_received_span_id), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:last_received_span_id), 'UTC'), 1)))<endif>)<endif>
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
-                <if(spans_partitioned && search_text)>
+                <if(spans_partitioned && search_text && !trace_span_weeks_bound && !project_span_weeks_bound)>
                 AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
                     SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                     FROM spans
@@ -1095,6 +1164,9 @@ public class SpanDAO {
                 ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                 <endif>
                 LIMIT 1 BY id
+            <if(page_in_dedup_order)>
+                LIMIT :limit <if(offset)>OFFSET :offset <endif>
+            <else>
             ), page_ids AS (
                 SELECT sd.id
                 FROM spans_deduped sd
@@ -1107,6 +1179,7 @@ public class SpanDAO {
                 ORDER BY <if(sort_fields)> <sort_fields>, <endif>(workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                 <endif>
                 LIMIT :limit <if(offset)>OFFSET :offset <endif>
+            <endif>
             ), page_wide AS (
                 SELECT
                     s.* EXCEPT (input_slim, output_slim)<if(exclude_fields)> EXCEPT (<exclude_fields>)<endif>,
@@ -1118,6 +1191,16 @@ public class SpanDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 AND id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))
+                <if(trace_id)> AND trace_id = :trace_id <endif>
+                <if(trace_span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT id_week FROM span_weeks
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id AND trace_id = :trace_id)<endif>
+                <if(project_span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT DISTINCT id_week FROM span_weeks
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id
+                    <if(uuid_from_time)> AND id_week >= toYYYYMMDD(toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))<endif>
+                    <if(uuid_to_time)> AND id_week \\<= toYYYYMMDD(toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))<endif>
+                    <if(last_received_span_id)> AND id_week \\<= toYYYYMMDD(toDate32(UUIDv7ToDateTime(toUUID(:last_received_span_id), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:last_received_span_id), 'UTC'), 1)))<endif>)<endif>
                 <if(uuid_from_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                     >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
                 <if(uuid_to_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
@@ -1171,6 +1254,18 @@ public class SpanDAO {
             SETTINGS log_comment = '<log_comment>'
             """;
 
+    /**
+     * The total of the spans list: the distinct spans with at least one version matching the filters, the set
+     * {@link #SELECT_BY_PROJECT_ID} pages through.
+     * <p>
+     * It counts in the level that reads {@code spans}. When {@code spans} is a {@code Distributed} table, each subquery
+     * reading it runs on the shard, so a count one level up would make the shard ship every id of the project to the
+     * initiator; this one comes back from the shard as one finished row, as {@link #SELECT_SPANS_STATS} does
+     * (OPIK-8833).
+     * <p>
+     * Carries the span_weeks bound of the trace, or else of the project, and skips the search week pre-pass, as
+     * {@link #SELECT_BY_PROJECT_ID} does.
+     */
     private static final String COUNT_BY_PROJECT_ID = """
             <if(feedback_scores_filters || feedback_scores_empty_filters)>
             WITH <if(span_id_prefilter)>span_id_prefilter AS (
@@ -1185,10 +1280,18 @@ public class SpanDAO {
                     AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                         \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                 <if(trace_id)> AND trace_id = :trace_id <endif>
+                <if(trace_span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT id_week FROM span_weeks
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id AND trace_id = :trace_id)<endif>
+                <if(project_span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT DISTINCT id_week FROM span_weeks
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id
+                    <if(uuid_from_time)> AND id_week >= toYYYYMMDD(toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))<endif>
+                    <if(uuid_to_time)> AND id_week \\<= toYYYYMMDD(toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))<endif>)<endif>
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
-                <if(spans_partitioned && search_text)>
+                <if(spans_partitioned && search_text && !trace_span_weeks_bound && !project_span_weeks_bound)>
                 AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
                     SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                     FROM spans
@@ -1261,53 +1364,52 @@ public class SpanDAO {
                  HAVING <feedback_scores_empty_filters>
             )
             <endif>
-            SELECT
-                count(id) as count
-            FROM
-            (
-               SELECT
-                    id,
-                    duration
+            SELECT count(DISTINCT id) AS count
+            FROM spans
+            <if(feedback_scores_empty_filters)>
+                LEFT JOIN fsc ON fsc.entity_id = spans.id
+            <endif>
+            WHERE project_id = :project_id
+            AND workspace_id = :workspace_id
+            <if(uuid_from_time)> AND id >= :uuid_from_time
+                AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                    >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
+            <if(uuid_to_time)> AND id \\<= :uuid_to_time
+                AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                    \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
+            <if(trace_id)> AND trace_id = :trace_id <endif>
+            <if(trace_span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                SELECT id_week FROM span_weeks
+                WHERE workspace_id = :workspace_id AND project_id = :project_id AND trace_id = :trace_id)<endif>
+            <if(project_span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                SELECT DISTINCT id_week FROM span_weeks
+                WHERE workspace_id = :workspace_id AND project_id = :project_id
+                <if(uuid_from_time)> AND id_week >= toYYYYMMDD(toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))<endif>
+                <if(uuid_to_time)> AND id_week \\<= toYYYYMMDD(toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))<endif>)<endif>
+            <if(type)> AND type = :type <endif>
+            <if(filters)> AND <filters> <endif>
+            <if(search_text)> AND <search_text> <endif>
+            <if(spans_partitioned && search_text && !trace_span_weeks_bound && !project_span_weeks_bound)>
+            AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                 FROM spans
-                <if(feedback_scores_empty_filters)>
-                    LEFT JOIN fsc ON fsc.entity_id = spans.id
-                <endif>
-                WHERE project_id = :project_id
-                AND workspace_id = :workspace_id
-                <if(uuid_from_time)> AND id >= :uuid_from_time
-                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                        >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
-                <if(uuid_to_time)> AND id \\<= :uuid_to_time
-                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                        \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
-                <if(trace_id)> AND trace_id = :trace_id <endif>
-                <if(type)> AND type = :type <endif>
-                <if(filters)> AND <filters> <endif>
-                <if(search_text)> AND <search_text> <endif>
-                <if(spans_partitioned && search_text)>
-                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
-                    SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                    FROM spans
-                    WHERE workspace_id = :workspace_id AND project_id = :project_id
-                    <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
-                    <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
-                    <if(trace_id)> AND trace_id = :trace_id<endif>)
-                <endif>
-                <if(feedback_scores_filters)>
-                AND id in (
-                    SELECT
-                        entity_id
-                    FROM feedback_scores_final
-                    GROUP BY entity_id
-                    HAVING <feedback_scores_filters>
-                )
-                <endif>
-                <if(feedback_scores_empty_filters)>
-                AND fsc.feedback_scores_count = 0
-                <endif>
-                ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY id
-            ) AS latest_rows
+                WHERE workspace_id = :workspace_id AND project_id = :project_id
+                <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
+                <if(trace_id)> AND trace_id = :trace_id<endif>)
+            <endif>
+            <if(feedback_scores_filters)>
+            AND id in (
+                SELECT
+                    entity_id
+                FROM feedback_scores_final
+                GROUP BY entity_id
+                HAVING <feedback_scores_filters>
+            )
+            <endif>
+            <if(feedback_scores_empty_filters)>
+            AND fsc.feedback_scores_count = 0
+            <endif>
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -1475,6 +1577,23 @@ public class SpanDAO {
             ;
             """;
 
+    /**
+     * Split-A of the span stats: the per-project span aggregates, computed in the level that reads {@code spans FINAL}
+     * ({@code spans_stats}). When {@code spans} is a {@code Distributed} table, each subquery reading it runs on the
+     * shard, so an aggregate one level up would make the shard ship every row of the project to the initiator. Here
+     * the shard returns the finished row instead (OPIK-8833): a read filtered on {@code project_id}, the sharding key,
+     * reaches only the project's shard ({@code optimize_skip_unused_shards}, which the app sets), and ClickHouse
+     * completes a single-shard read on that shard.
+     * <p>
+     * The aggregates get their output names one level up, because ClickHouse resolves a {@code WHERE} identifier to a
+     * same-named {@code SELECT} alias first: an alias such as {@code duration}, {@code tags}, {@code usage},
+     * {@code input}, {@code output} or {@code metadata} at the reading level would turn a user filter on that column
+     * into an aggregate in {@code WHERE}, and the query would fail.
+     * <p>
+     * On partitioned spans the read is bound to the weeks of the project's (or the trace's) spans. Under a span_weeks
+     * bound they come from the index, as in {@link #SELECT_BY_PROJECT_ID}; otherwise from a pre-pass over
+     * {@code spans}, which has no week bound of its own and so reads a boundary granule in nearly every partition.
+     */
     private static final String SELECT_SPANS_STATS = """
             WITH feedback_scores_deduped AS (
                 SELECT workspace_id,
@@ -1571,19 +1690,20 @@ public class SpanDAO {
                  HAVING <feedback_scores_empty_filters>
             )
             <endif>
-            , spans_final AS (
+            , spans_stats AS (
                 SELECT
-                     workspace_id,
                      project_id,
-                     id,
-                     duration,
-                     if(input_length > 0, 1, 0) as input_count,
-                     if(output_length > 0, 1, 0) as output_count,
-                     if(metadata_length > 0, 1, 0) as metadata_count,
-                     length(tags) as tags_count,
-                     usage,
-                     total_estimated_cost,
-                     error_info
+                     count(DISTINCT id) AS span_count,
+                     quantiles(0.5, 0.9, 0.99)(duration) AS duration_quantiles,
+                     sum(if(input_length > 0, 1, 0)) AS input_count,
+                     sum(if(output_length > 0, 1, 0)) AS output_count,
+                     sum(if(metadata_length > 0, 1, 0)) AS metadata_count,
+                     avg(length(tags)) AS tags_avg,
+                     avgMap(usage) AS usage_avg,
+                     sumMap(usage) AS usage_total,
+                     avgIf(total_estimated_cost, total_estimated_cost > 0) AS cost_avg,
+                     sumIf(total_estimated_cost, total_estimated_cost > 0) AS cost_sum,
+                     countIf(error_info, error_info != '') AS error_count
                 FROM spans final
                 <if(feedback_scores_empty_filters)>
                     LEFT JOIN fsc ON fsc.entity_id = spans.id
@@ -1600,7 +1720,14 @@ public class SpanDAO {
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
-                <if(spans_partitioned)>
+                <if(trace_span_weeks_bound || project_span_weeks_bound)>
+                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT DISTINCT id_week FROM span_weeks
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id
+                    <if(uuid_from_time)> AND id_week >= toYYYYMMDD(toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))<endif>
+                    <if(uuid_to_time)> AND id_week \\<= toYYYYMMDD(toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))<endif>
+                    <if(trace_id)> AND trace_id = :trace_id<endif>)
+                <elseif(spans_partitioned)>
                 AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
                     SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                     FROM spans
@@ -1621,10 +1748,11 @@ public class SpanDAO {
                 <if(feedback_scores_empty_filters)>
                 AND fsc.feedback_scores_count = 0
                 <endif>
+                GROUP BY project_id
             )
             SELECT
-                project_id as project_id,
-                count(DISTINCT id) as span_count,
+                project_id,
+                span_count,
                 arrayMap(
                   v -> toDecimal64(
                          greatest(
@@ -1633,31 +1761,34 @@ public class SpanDAO {
                          ),
                          9
                        ),
-                  quantiles(0.5, 0.9, 0.99)(duration)
+                  duration_quantiles
                 ) AS duration,
-                sum(input_count) as input,
-                sum(output_count) as output,
-                sum(metadata_count) as metadata,
-                avg(tags_count) as tags,
-                avgMap(s.usage) as usage,
-                sumMap(s.usage) as usage_sum,
-                avgIf(total_estimated_cost, total_estimated_cost > 0) AS total_estimated_cost_,
-                toDecimal128(if(isNaN(total_estimated_cost_), 0, total_estimated_cost_), 12) AS total_estimated_cost_avg,
-                sumIf(total_estimated_cost, total_estimated_cost > 0) AS total_estimated_cost_sum_,
-                toDecimal128(total_estimated_cost_sum_, 12) AS total_estimated_cost_sum,
-                countIf(error_info, error_info != '') AS error_count
-            FROM spans_final s
-            GROUP BY project_id
+                input_count AS input,
+                output_count AS output,
+                metadata_count AS metadata,
+                tags_avg AS tags,
+                usage_avg AS usage,
+                usage_total AS usage_sum,
+                toDecimal128(if(isNaN(cost_avg), 0, cost_avg), 12) AS total_estimated_cost_avg,
+                toDecimal128(cost_sum, 12) AS total_estimated_cost_sum,
+                error_count
+            FROM spans_stats
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
-    // Split-B: per-project span-feedback-score aggregates.
-    // - Mirrors the trace-side SELECT_FEEDBACK_SCORES_STATS pattern but at span granularity.
-    // - filters_present gates an embedded spans_final filter resolution (must stay in sync with
-    //   the spans_final CTE inside SELECT_SPANS_STATS).
-    // - has_legacy_scores gates the legacy feedback_scores table UNION branch.
-    // - Skips the rich tuple groupArray of the listing CTEs — only `value` is projected.
+    /**
+     * Split-B of the span stats: the per-project feedback-score averages, run alongside {@link #SELECT_SPANS_STATS}
+     * (split-A) and merged with it by {@code StatsMerger}, as {@code TraceDAO.SELECT_FEEDBACK_SCORES_STATS} is for
+     * traces.
+     * <ul>
+     * <li>{@code filters_present} adds a {@code spans_final} CTE that narrows the scores to the filtered spans. It must
+     * select the same spans as {@link #SELECT_SPANS_STATS}; only its week-pruning hint may differ. Under a span_weeks
+     * bound it carries the same index lookup; otherwise only a search adds the spans pre-pass.</li>
+     * <li>{@code has_legacy_scores} adds the legacy {@code feedback_scores} table as a {@code UNION ALL} branch.</li>
+     * <li>Only {@code value} is projected, not the per-score tuples the listing queries build.</li>
+     * </ul>
+     */
     private static final String SELECT_SPAN_FEEDBACK_SCORES_STATS = """
             <if(filters_present)>
             WITH feedback_scores_deduped AS (
@@ -1737,7 +1868,6 @@ public class SpanDAO {
             )
             <endif>
             , spans_final AS (
-                -- IMPORTANT: keep this WHERE clause in sync with SELECT_SPANS_STATS.spans_final.
                 SELECT id, project_id
                 FROM spans final
                 <if(feedback_scores_empty_filters)>
@@ -1755,7 +1885,14 @@ public class SpanDAO {
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
-                <if(spans_partitioned && search_text)>
+                <if(trace_span_weeks_bound || project_span_weeks_bound)>
+                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT DISTINCT id_week FROM span_weeks
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id
+                    <if(uuid_from_time)> AND id_week >= toYYYYMMDD(toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))<endif>
+                    <if(uuid_to_time)> AND id_week \\<= toYYYYMMDD(toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))<endif>
+                    <if(trace_id)> AND trace_id = :trace_id<endif>)
+                <elseif(spans_partitioned && search_text)>
                 AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
                     SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                     FROM spans
@@ -1815,6 +1952,12 @@ public class SpanDAO {
             ;
             """;
 
+    /**
+     * Deliberately not bound by {@code span_weeks}, unlike the other trace-keyed reads (see
+     * {@link #SELECT_BY_TRACE_IDS}). Its ids feed the trace-delete cascade, and the index has no fallback, so a span
+     * whose week is not indexed, as after a partition import, which bypasses {@code span_weeks_mv} until a backfill,
+     * would be left behind by the delete. Correctness wins on a write path that is not user-latency critical.
+     */
     public static final String SELECT_SPAN_IDS_BY_TRACE_ID = """
             SELECT
                   DISTINCT id
@@ -1920,44 +2063,48 @@ public class SpanDAO {
                 environment
             )
             SELECT
-                s.id,
-                s.project_id,
-                s.workspace_id,
-                s.trace_id,
-                s.parent_span_id,
-                <if(name)> :name <else> s.name <endif> as name,
-                <if(type)> :type <else> s.type <endif> as type,
-                s.start_time,
-                <if(end_time)> parseDateTime64BestEffort(:end_time, 9) <else> s.end_time <endif> as end_time,
-                <if(input)> :input <else> s.input <endif> as input,
-                <if(output)> :output <else> s.output <endif> as output,
-                <if(metadata)> :metadata <else> s.metadata <endif> as metadata,
-                <if(model)> :model <else> s.model <endif> as model,
-                <if(provider)> :provider <else> s.provider <endif> as provider,
-                <if(total_estimated_cost)> toDecimal128(:total_estimated_cost, 12) <else> s.total_estimated_cost <endif> as total_estimated_cost,
-                <if(total_estimated_cost_version)> :total_estimated_cost_version <else> s.total_estimated_cost_version <endif> as total_estimated_cost_version,
+                stored_span.id,
+                stored_span.project_id,
+                stored_span.workspace_id,
+                stored_span.trace_id,
+                stored_span.parent_span_id,
+                <if(name)> :name <else> stored_span.name <endif> as name,
+                <if(type)> :type <else> stored_span.type <endif> as type,
+                stored_span.start_time,
+                <if(end_time)> parseDateTime64BestEffort(:end_time, 9) <else> stored_span.end_time <endif> as end_time,
+                <if(input)> payload.input <else> stored_span.input <endif> as input,
+                <if(output)> payload.output <else> stored_span.output <endif> as output,
+                <if(metadata)> payload.metadata <else> stored_span.metadata <endif> as metadata,
+                <if(model)> :model <else> stored_span.model <endif> as model,
+                <if(provider)> :provider <else> stored_span.provider <endif> as provider,
+                <if(total_estimated_cost)> toDecimal128(:total_estimated_cost, 12) <else> stored_span.total_estimated_cost <endif> as total_estimated_cost,
+                <if(total_estimated_cost_version)> :total_estimated_cost_version <else> stored_span.total_estimated_cost_version <endif> as total_estimated_cost_version,
                 """
-            + TagOperations.tagUpdateFragment("s.tags")
+            + TagOperations.tagUpdateFragment("stored_span.tags")
             + """
                         as tags,
-                        <if(usage)> CAST((:usage_keys, :usage_values), 'Map(String, Int64)') <else> s.usage <endif> as usage,
-                        <if(error_info)> :error_info <else> s.error_info <endif> as error_info,
-                        s.created_at,
-                        s.created_by,
+                        <if(usage)> CAST((:usage_keys, :usage_values), 'Map(String, Int64)') <else> stored_span.usage <endif> as usage,
+                        <if(error_info)> :error_info <else> stored_span.error_info <endif> as error_info,
+                        stored_span.created_at,
+                        stored_span.created_by,
                         :user_name as last_updated_by,
                         :truncation_threshold,
-                        <if(input)> :input_slim <else> s.input_slim <endif> as input_slim,
-                        <if(output)> :output_slim <else> s.output_slim <endif> as output_slim,
-                        <if(ttft)> :ttft <else> s.ttft <endif> as ttft,
-                        s.source,
-                        <if(environment)> :environment <else> s.environment <endif> as environment
-                    FROM spans s
-                    WHERE s.id IN :ids AND s.workspace_id = :workspace_id
-                    <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
-                    ORDER BY (s.workspace_id, s.project_id, s.trace_id, s.id) DESC, s.last_updated_at DESC
-                    LIMIT 1 BY s.id
+                        <if(input)> payload.input_slim <else> stored_span.input_slim <endif> as input_slim,
+                        <if(output)> payload.output_slim <else> stored_span.output_slim <endif> as output_slim,
+                        <if(ttft)> :ttft <else> stored_span.ttft <endif> as ttft,
+                        stored_span.source,
+                        <if(environment)> :environment <else> stored_span.environment <endif> as environment
+                    FROM input('input String, output String, metadata String, input_slim String, output_slim String') AS payload
+                    CROSS JOIN (
+                        SELECT *
+                        FROM spans
+                        WHERE id IN :ids AND workspace_id = :workspace_id
+                        <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
+                        ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
+                        LIMIT 1 BY id
+                    ) AS stored_span
                     SETTINGS log_comment = '<log_comment>', short_circuit_function_evaluation = 'force_enable'
-                    ;
+                    FORMAT Values (:input, :output, :metadata, :input_slim, :output_slim)
                     """;
 
     // ESTIMATED COST CHANGE
@@ -2033,8 +2180,6 @@ public class SpanDAO {
             var template = newInsertTemplate(workspaceId, userName);
             var idWeeks = idWeeks(Set.of(span.id()));
             idWeeks.ifPresent(_ -> template.add("id_weeks", true));
-            String inputValue = TruncationUtils.toJsonString(span.input());
-            String outputValue = TruncationUtils.toJsonString(span.output());
             var statement = connection.createStatement(template.render())
                     .bind("id", span.id())
                     .bind("project_id", span.projectId())
@@ -2042,13 +2187,12 @@ public class SpanDAO {
                     .bind("name", StringUtils.defaultIfBlank(span.name(), ""))
                     .bind("type", Objects.toString(span.type(), SpanType.UNKNOWN_VALUE))
                     .bind("start_time", span.startTime().toString())
-                    .bind("input", inputValue)
-                    .bind("output", outputValue)
-                    .bind("metadata", Objects.toString(span.metadata(), ""))
                     .bind("model", StringUtils.defaultIfBlank(span.model(), ""))
-                    .bind("provider", StringUtils.defaultIfBlank(span.provider(), ""))
-                    .bind("input_slim", TruncationUtils.createSlimJsonString(inputValue))
-                    .bind("output_slim", TruncationUtils.createSlimJsonString(outputValue));
+                    .bind("provider", StringUtils.defaultIfBlank(span.provider(), ""));
+            StreamedPayload.bind(statement,
+                    TruncationUtils.toJsonString(span.input()),
+                    TruncationUtils.toJsonString(span.output()),
+                    Objects.toString(span.metadata(), ""));
             if (span.parentSpanId() != null) {
                 statement.bind("parent_span_id", span.parentSpanId());
             } else {
@@ -2287,26 +2431,13 @@ public class SpanDAO {
         }
         Optional.ofNullable(spanUpdate.type())
                 .ifPresent(type -> statement.bind("type", type.toString()));
-        Optional.ofNullable(spanUpdate.input())
-                .ifPresent(input -> {
-                    String inputValue = input.toString();
-                    statement.bind("input", inputValue);
-                    statement.bind("input_slim", TruncationUtils.createSlimJsonString(inputValue));
-                });
-        Optional.ofNullable(spanUpdate.output())
-                .ifPresent(output -> {
-                    String outputValue = output.toString();
-                    statement.bind("output", outputValue);
-                    statement.bind("output_slim", TruncationUtils.createSlimJsonString(outputValue));
-                });
+        bindStreamedPayload(spanUpdate, statement);
         Optional.ofNullable(spanUpdate.tags())
                 .ifPresent(tags -> statement.bind("tags", tags.toArray(String[]::new)));
         Optional.ofNullable(spanUpdate.usage())
                 .ifPresent(usage -> bindUsage(statement, usage));
         Optional.ofNullable(spanUpdate.endTime())
                 .ifPresent(endTime -> statement.bind("end_time", endTime.toString()));
-        Optional.ofNullable(spanUpdate.metadata())
-                .ifPresent(metadata -> statement.bind("metadata", metadata.toString()));
         if (StringUtils.isNotBlank(spanUpdate.model())) {
             statement.bind("model", spanUpdate.model());
         }
@@ -2339,6 +2470,13 @@ public class SpanDAO {
 
         Optional.ofNullable(spanUpdate.environment())
                 .ifPresent(environment -> statement.bind("environment", environment));
+    }
+
+    private static void bindStreamedPayload(SpanUpdate spanUpdate, Statement statement) {
+        StreamedPayload.bind(statement,
+                Objects.toString(spanUpdate.input(), null),
+                Objects.toString(spanUpdate.output(), null),
+                Objects.toString(spanUpdate.metadata(), null));
     }
 
     private ST newUpdateTemplate(SpanUpdate spanUpdate, String sql, boolean isManualCostExist, String queryName,
@@ -2454,6 +2592,7 @@ public class SpanDAO {
                     var template = getSTWithLogComment(SELECT_BY_TRACE_IDS, "get_spans_by_trace_ids", workspaceId,
                             userName,
                             traceIds.size());
+                    addSpanWeeksBound(template);
                     var statement = connection.createStatement(template.render())
                             .bind("trace_ids", traceIds.toArray(new UUID[0]))
                             .bind("workspace_id", workspaceId);
@@ -2482,6 +2621,7 @@ public class SpanDAO {
                 .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
                     var template = getSTWithLogComment(SELECT_SPANS_SIZE_BY_TRACE_IDS, "get_spans_size_by_trace_ids",
                             workspaceId, userName, "traces_size=%s".formatted(traceIds.size()));
+                    addSpanWeeksBound(template);
                     var statement = connection.createStatement(template.render())
                             .bind("trace_ids", traceIds.toArray(new UUID[0]))
                             .bind("workspace_id", workspaceId);
@@ -2867,6 +3007,7 @@ public class SpanDAO {
             template = template.add("truncationSize", configuration.getResponseFormatting().getTruncationSize());
 
             template = template.add("stream", true);
+            template = template.add("page_in_dedup_order", true);
 
             var statement = connection.createStatement(template.render())
                     .bind("project_id", criteria.projectId())
@@ -2909,12 +3050,12 @@ public class SpanDAO {
 
             var finalTemplate = template;
             Optional.ofNullable(orderBySql)
-                    .ifPresent(sortFields -> {
+                    .ifPresentOrElse(sortFields -> {
                         if (sortHasFeedbackScores) {
                             finalTemplate.add("sort_has_feedback_scores", true);
                         }
                         finalTemplate.add("sort_fields", sortFields);
-                    });
+                    }, () -> finalTemplate.add("page_in_dedup_order", true));
 
             var hasDynamicKeys = sortingQueryBuilder.hasDynamicKeys(spanSearchCriteria.sortingFields());
 
@@ -3035,11 +3176,22 @@ public class SpanDAO {
                 .ifPresent(uuid_to_time -> template.add("uuid_to_time", uuid_to_time));
         Optional.ofNullable(spanSearchCriteria.searchText())
                 .ifPresent(searchText -> template.add("search_text", SPAN_SEARCH_CLAUSE));
-        // Bounds a search scan to the weeks of the project's own spans; pure cost on the unpartitioned legacy table.
+        // Enables the spans pre-pass that bounds these reads to their weeks when no span_weeks bound applies; pure cost
+        // on the unpartitioned legacy table.
         if (spanColumnsNonNullable()) {
             template.add("spans_partitioned", true);
         }
+        if (configuration.getDatabaseAnalyticsDataModel().spanWeeksReadBounded()) {
+            template.add(spanSearchCriteria.traceId() != null ? "trace_span_weeks_bound" : "project_span_weeks_bound",
+                    true);
+        }
         return template;
+    }
+
+    private void addSpanWeeksBound(ST template) {
+        if (configuration.getDatabaseAnalyticsDataModel().spanWeeksReadBounded()) {
+            template.add("span_weeks_bound", true);
+        }
     }
 
     /**
@@ -3439,18 +3591,7 @@ public class SpanDAO {
         }
         Optional.ofNullable(spanUpdate.type())
                 .ifPresent(type -> statement.bind("type", type.toString()));
-        Optional.ofNullable(spanUpdate.input())
-                .ifPresent(input -> {
-                    String inputValue = input.toString();
-                    statement.bind("input", inputValue);
-                    statement.bind("input_slim", TruncationUtils.createSlimJsonString(inputValue));
-                });
-        Optional.ofNullable(spanUpdate.output())
-                .ifPresent(output -> {
-                    String outputValue = output.toString();
-                    statement.bind("output", outputValue);
-                    statement.bind("output_slim", TruncationUtils.createSlimJsonString(outputValue));
-                });
+        bindStreamedPayload(spanUpdate, statement);
 
         TagOperations.bindTagParams(statement, spanUpdate);
 
@@ -3458,8 +3599,6 @@ public class SpanDAO {
                 .ifPresent(usage -> bindUsage(statement, usage));
         Optional.ofNullable(spanUpdate.endTime())
                 .ifPresent(endTime -> statement.bind("end_time", endTime.toString()));
-        Optional.ofNullable(spanUpdate.metadata())
-                .ifPresent(metadata -> statement.bind("metadata", metadata.toString()));
         if (StringUtils.isNotBlank(spanUpdate.model())) {
             statement.bind("model", spanUpdate.model());
         }

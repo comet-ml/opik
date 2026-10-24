@@ -10,6 +10,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import java.util.Set;
 import java.util.stream.Stream;
 
+import static com.comet.opik.infrastructure.llm.LlmModelRegistryTestUtils.bundledRegistry;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ModelCapabilitiesTest {
@@ -69,6 +70,8 @@ class ModelCapabilitiesTest {
                 Arguments.of("deepinfra/Qwen/Qwen2.5-VL-32B-Instruct", true, "Deepinfra Qwen VL supports vision"),
                 Arguments.of("openrouter/qwen/qwen-2.5-coder-32b-instruct", false,
                         "Qwen Coder does not support vision"),
+                Arguments.of("openrouter/meta-llama/llama-4-maverick", true,
+                        "OpenRouter model whose only row is in the OpenRouter price file supports vision"),
 
                 // Case insensitivity
                 Arguments.of("GPT-4-TURBO", true, "Uppercase vision model should work"),
@@ -123,8 +126,13 @@ class ModelCapabilitiesTest {
         var newest = ModelCapabilities.newestInFamily(AnthropicModelName.allModelIds(), family).orElseThrow();
         var alias = "~anthropic/" + family + "-latest";
 
-        assertThat(ModelCapabilities.rejectsSamplingParams(alias))
-                .isEqualTo(ModelCapabilities.rejectsSamplingParams(newest));
-        assertThat(ModelCapabilities.thinksByDefault(alias)).isEqualTo(ModelCapabilities.thinksByDefault(newest));
+        var registry = bundledRegistry();
+
+        assertThat(ModelCapabilities.rejectsTemperature(alias, registry))
+                .isEqualTo(ModelCapabilities.rejectsTemperature(newest, registry));
+        assertThat(ModelCapabilities.rejectsTopP(alias, registry))
+                .isEqualTo(ModelCapabilities.rejectsTopP(newest, registry));
+        assertThat(ModelCapabilities.thinksByDefault(alias, registry))
+                .isEqualTo(ModelCapabilities.thinksByDefault(newest, registry));
     }
 }

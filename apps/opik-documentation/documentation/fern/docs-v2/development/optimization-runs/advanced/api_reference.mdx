@@ -36,7 +36,7 @@ The SDK provides several optimizer classes that all inherit from `BaseOptimizer`
 All optimizers implement these core methods with identical signatures:
 
 ### optimize_prompt()
-```python
+```python wordWrap
 def optimize_prompt(
     self,
     prompt: ChatPrompt | dict[str, ChatPrompt],
@@ -65,7 +65,7 @@ The following parameters are deprecated and will be removed in future versions:
 
 ### Example Migration
 
-```python
+```python wordWrap
 # ❌ Deprecated
 optimizer = FewShotBayesianOptimizer(
     model="gpt-4o-mini",
@@ -81,7 +81,7 @@ optimizer = FewShotBayesianOptimizer(
 
 ## FewShotBayesianOptimizer
 
-```python
+```python wordWrap
 FewShotBayesianOptimizer(
     model: str = 'openai/gpt-5-nano',
     model_parameters: dict[str, typing.Any] | None = None,
@@ -122,7 +122,7 @@ FewShotBayesianOptimizer(
 
 ### Methods
 #### begin_round
-```python
+```python wordWrap
 begin_round(
     context: OptimizationContext,
     extras: Any
@@ -136,13 +136,13 @@ begin_round(
 <ParamField path="extras" type="Any" />
 
 #### cleanup
-```python
+```python wordWrap
 cleanup()
 ```
 
 
 #### evaluate
-```python
+```python wordWrap
 evaluate(
     context: OptimizationContext,
     prompts: dict,
@@ -160,7 +160,7 @@ evaluate(
 <ParamField path="sampling_tag" type="str | None" optional={true}>Optional sampling tag for deterministic subsampling per candidate.</ParamField>
 
 #### evaluate_prompt
-```python
+```python wordWrap
 evaluate_prompt(
     prompt: opik_optimizer.api_objects.chat_prompt.ChatPrompt | dict[str, opik_optimizer.api_objects.chat_prompt.ChatPrompt],
     dataset: Dataset,
@@ -200,7 +200,7 @@ evaluate_prompt(
 <ParamField path="sampling_tag" type="str | None" optional={true} />
 
 #### evaluate_with_result
-```python
+```python wordWrap
 evaluate_with_result(
     context: OptimizationContext,
     prompts: dict,
@@ -224,7 +224,7 @@ evaluate_with_result(
 <ParamField path="sampling_tag" type="str | None" optional={true} />
 
 #### finish_candidate
-```python
+```python wordWrap
 finish_candidate(
     context: OptimizationContext,
     candidate_handle: Any,
@@ -256,7 +256,7 @@ finish_candidate(
 <ParamField path="round_handle" type="typing.Any | None" optional={true} />
 
 #### finish_round
-```python
+```python wordWrap
 finish_round(
     round_handle: Any,
     context: opik_optimizer.core.state.OptimizationContext | None = None,
@@ -290,7 +290,7 @@ finish_round(
 <ParamField path="selection_meta" type="dict[str, typing.Any] | None" optional={true} />
 
 #### get_config
-```python
+```python wordWrap
 get_config(
     context: OptimizationContext
 )
@@ -302,7 +302,7 @@ get_config(
 <ParamField path="context" type="OptimizationContext" />
 
 #### get_default_prompt
-```python
+```python wordWrap
 get_default_prompt(
     key: str
 )
@@ -314,19 +314,19 @@ get_default_prompt(
 <ParamField path="key" type="str">The prompt key to retrieve</ParamField>
 
 #### get_history_entries
-```python
+```python wordWrap
 get_history_entries()
 ```
 
 
 #### get_history_rounds
-```python
+```python wordWrap
 get_history_rounds()
 ```
 
 
 #### get_metadata
-```python
+```python wordWrap
 get_metadata(
     context: OptimizationContext
 )
@@ -338,13 +338,13 @@ get_metadata(
 <ParamField path="context" type="OptimizationContext" />
 
 #### get_optimizer_metadata
-```python
+```python wordWrap
 get_optimizer_metadata()
 ```
 
 
 #### get_prompt
-```python
+```python wordWrap
 get_prompt(
     key: str,
     fmt: Any
@@ -358,13 +358,13 @@ get_prompt(
 <ParamField path="fmt" type="Any" />
 
 #### list_prompts
-```python
+```python wordWrap
 list_prompts()
 ```
 
 
 #### on_trial
-```python
+```python wordWrap
 on_trial(
     context: OptimizationContext,
     prompts: dict,
@@ -382,7 +382,7 @@ on_trial(
 <ParamField path="prev_best_score" type="float | None" optional={true} />
 
 #### optimize_mcp
-```python
+```python wordWrap
 optimize_mcp(
     args: Any,
     kwargs: Any
@@ -396,7 +396,7 @@ optimize_mcp(
 <ParamField path="kwargs" type="Any" />
 
 #### optimize_prompt
-```python
+```python wordWrap
 optimize_prompt(
     prompt: opik_optimizer.api_objects.chat_prompt.ChatPrompt | dict[str, opik_optimizer.api_objects.chat_prompt.ChatPrompt],
     dataset: Dataset,
@@ -442,7 +442,7 @@ optimize_prompt(
 <ParamField path="kwargs" type="Any" />
 
 #### post_baseline
-```python
+```python wordWrap
 post_baseline(
     context: OptimizationContext,
     score: float
@@ -456,7 +456,7 @@ post_baseline(
 <ParamField path="score" type="float" />
 
 #### post_optimize
-```python
+```python wordWrap
 post_optimize(
     context: OptimizationContext,
     result: OptimizationResult
@@ -470,7 +470,7 @@ post_optimize(
 <ParamField path="result" type="OptimizationResult" />
 
 #### post_round
-```python
+```python wordWrap
 post_round(
     round_handle: Any,
     context: opik_optimizer.core.state.OptimizationContext | None = None,
@@ -504,7 +504,7 @@ post_round(
 <ParamField path="selection_meta" type="dict[str, typing.Any] | None" optional={true} />
 
 #### post_trial
-```python
+```python wordWrap
 post_trial(
     context: OptimizationContext,
     candidate_handle: Any,
@@ -536,7 +536,7 @@ post_trial(
 <ParamField path="round_handle" type="typing.Any | None" optional={true} />
 
 #### pre_baseline
-```python
+```python wordWrap
 pre_baseline(
     context: OptimizationContext
 )
@@ -548,7 +548,7 @@ pre_baseline(
 <ParamField path="context" type="OptimizationContext" />
 
 #### pre_optimize
-```python
+```python wordWrap
 pre_optimize(
     context: OptimizationContext
 )
@@ -560,7 +560,7 @@ pre_optimize(
 <ParamField path="context" type="OptimizationContext">The optimization context</ParamField>
 
 #### pre_round
-```python
+```python wordWrap
 pre_round(
     context: OptimizationContext,
     extras: Any
@@ -574,7 +574,7 @@ pre_round(
 <ParamField path="extras" type="Any" />
 
 #### pre_trial
-```python
+```python wordWrap
 pre_trial(
     context: OptimizationContext,
     candidate: Any,
@@ -590,7 +590,7 @@ pre_trial(
 <ParamField path="round_handle" type="typing.Any | None" optional={true} />
 
 #### record_candidate_entry
-```python
+```python wordWrap
 record_candidate_entry(
     prompt_or_payload: Any,
     score: float | None = None,
@@ -614,7 +614,7 @@ record_candidate_entry(
 <ParamField path="context" type="opik_optimizer.core.state.OptimizationContext | None" optional={true} />
 
 #### run_optimization
-```python
+```python wordWrap
 run_optimization(
     context: OptimizationContext
 )
@@ -626,7 +626,7 @@ run_optimization(
 <ParamField path="context" type="OptimizationContext">The optimization context with prompts, dataset, metric, etc.</ParamField>
 
 #### set_default_dataset_split
-```python
+```python wordWrap
 set_default_dataset_split(
     dataset_split: str | None
 )
@@ -638,7 +638,7 @@ set_default_dataset_split(
 <ParamField path="dataset_split" type="str | None" />
 
 #### set_pareto_front
-```python
+```python wordWrap
 set_pareto_front(
     pareto_front: list[dict[str, typing.Any]] | None
 )
@@ -650,7 +650,7 @@ set_pareto_front(
 <ParamField path="pareto_front" type="list[dict[str, typing.Any]] | None" />
 
 #### set_selection_meta
-```python
+```python wordWrap
 set_selection_meta(
     selection_meta: dict[str, typing.Any] | None
 )
@@ -662,7 +662,7 @@ set_selection_meta(
 <ParamField path="selection_meta" type="dict[str, typing.Any] | None" />
 
 #### start_candidate
-```python
+```python wordWrap
 start_candidate(
     context: OptimizationContext,
     candidate: Any,
@@ -678,7 +678,7 @@ start_candidate(
 <ParamField path="round_handle" type="typing.Any | None" optional={true} />
 
 #### with_dataset_split
-```python
+```python wordWrap
 with_dataset_split(
     dataset_split: str | None
 )
@@ -691,7 +691,7 @@ with_dataset_split(
 
 ## GepaOptimizer
 
-```python
+```python wordWrap
 GepaOptimizer(
     model: str = 'openai/gpt-5-nano',
     model_parameters: dict[str, typing.Any] | None = None,
@@ -720,7 +720,7 @@ GepaOptimizer(
 
 ### Methods
 #### begin_round
-```python
+```python wordWrap
 begin_round(
     context: OptimizationContext,
     extras: Any
@@ -734,13 +734,13 @@ begin_round(
 <ParamField path="extras" type="Any" />
 
 #### cleanup
-```python
+```python wordWrap
 cleanup()
 ```
 
 
 #### evaluate
-```python
+```python wordWrap
 evaluate(
     context: OptimizationContext,
     prompts: dict,
@@ -758,7 +758,7 @@ evaluate(
 <ParamField path="sampling_tag" type="str | None" optional={true}>Optional sampling tag for deterministic subsampling per candidate.</ParamField>
 
 #### evaluate_prompt
-```python
+```python wordWrap
 evaluate_prompt(
     prompt: opik_optimizer.api_objects.chat_prompt.ChatPrompt | dict[str, opik_optimizer.api_objects.chat_prompt.ChatPrompt],
     dataset: Dataset,
@@ -798,7 +798,7 @@ evaluate_prompt(
 <ParamField path="sampling_tag" type="str | None" optional={true} />
 
 #### evaluate_with_result
-```python
+```python wordWrap
 evaluate_with_result(
     context: OptimizationContext,
     prompts: dict,
@@ -822,7 +822,7 @@ evaluate_with_result(
 <ParamField path="sampling_tag" type="str | None" optional={true} />
 
 #### finish_candidate
-```python
+```python wordWrap
 finish_candidate(
     context: OptimizationContext,
     candidate_handle: Any,
@@ -854,7 +854,7 @@ finish_candidate(
 <ParamField path="round_handle" type="typing.Any | None" optional={true} />
 
 #### finish_round
-```python
+```python wordWrap
 finish_round(
     round_handle: Any,
     context: opik_optimizer.core.state.OptimizationContext | None = None,
@@ -888,7 +888,7 @@ finish_round(
 <ParamField path="selection_meta" type="dict[str, typing.Any] | None" optional={true} />
 
 #### get_config
-```python
+```python wordWrap
 get_config(
     context: OptimizationContext
 )
@@ -900,7 +900,7 @@ get_config(
 <ParamField path="context" type="OptimizationContext" />
 
 #### get_default_prompt
-```python
+```python wordWrap
 get_default_prompt(
     key: str
 )
@@ -912,19 +912,19 @@ get_default_prompt(
 <ParamField path="key" type="str">The prompt key to retrieve</ParamField>
 
 #### get_history_entries
-```python
+```python wordWrap
 get_history_entries()
 ```
 
 
 #### get_history_rounds
-```python
+```python wordWrap
 get_history_rounds()
 ```
 
 
 #### get_metadata
-```python
+```python wordWrap
 get_metadata(
     context: OptimizationContext
 )
@@ -936,13 +936,13 @@ get_metadata(
 <ParamField path="context" type="OptimizationContext" />
 
 #### get_optimizer_metadata
-```python
+```python wordWrap
 get_optimizer_metadata()
 ```
 
 
 #### get_prompt
-```python
+```python wordWrap
 get_prompt(
     key: str,
     fmt: Any
@@ -956,13 +956,13 @@ get_prompt(
 <ParamField path="fmt" type="Any" />
 
 #### list_prompts
-```python
+```python wordWrap
 list_prompts()
 ```
 
 
 #### on_trial
-```python
+```python wordWrap
 on_trial(
     context: OptimizationContext,
     prompts: dict,
@@ -980,7 +980,7 @@ on_trial(
 <ParamField path="prev_best_score" type="float | None" optional={true} />
 
 #### optimize_mcp
-```python
+```python wordWrap
 optimize_mcp(
     args: Any,
     kwargs: Any
@@ -994,7 +994,7 @@ optimize_mcp(
 <ParamField path="kwargs" type="Any" />
 
 #### optimize_prompt
-```python
+```python wordWrap
 optimize_prompt(
     prompt: opik_optimizer.api_objects.chat_prompt.ChatPrompt | dict[str, opik_optimizer.api_objects.chat_prompt.ChatPrompt],
     dataset: Dataset,
@@ -1040,7 +1040,7 @@ optimize_prompt(
 <ParamField path="kwargs" type="Any" />
 
 #### post_baseline
-```python
+```python wordWrap
 post_baseline(
     context: OptimizationContext,
     score: float
@@ -1054,7 +1054,7 @@ post_baseline(
 <ParamField path="score" type="float" />
 
 #### post_optimize
-```python
+```python wordWrap
 post_optimize(
     context: OptimizationContext,
     result: OptimizationResult
@@ -1068,7 +1068,7 @@ post_optimize(
 <ParamField path="result" type="OptimizationResult" />
 
 #### post_round
-```python
+```python wordWrap
 post_round(
     round_handle: Any,
     context: opik_optimizer.core.state.OptimizationContext | None = None,
@@ -1102,7 +1102,7 @@ post_round(
 <ParamField path="selection_meta" type="dict[str, typing.Any] | None" optional={true} />
 
 #### post_trial
-```python
+```python wordWrap
 post_trial(
     context: OptimizationContext,
     candidate_handle: Any,
@@ -1134,7 +1134,7 @@ post_trial(
 <ParamField path="round_handle" type="typing.Any | None" optional={true} />
 
 #### pre_baseline
-```python
+```python wordWrap
 pre_baseline(
     context: OptimizationContext
 )
@@ -1146,7 +1146,7 @@ pre_baseline(
 <ParamField path="context" type="OptimizationContext" />
 
 #### pre_optimize
-```python
+```python wordWrap
 pre_optimize(
     context: OptimizationContext
 )
@@ -1158,7 +1158,7 @@ pre_optimize(
 <ParamField path="context" type="OptimizationContext" />
 
 #### pre_round
-```python
+```python wordWrap
 pre_round(
     context: OptimizationContext,
     extras: Any
@@ -1172,7 +1172,7 @@ pre_round(
 <ParamField path="extras" type="Any" />
 
 #### pre_trial
-```python
+```python wordWrap
 pre_trial(
     context: OptimizationContext,
     candidate: Any,
@@ -1188,7 +1188,7 @@ pre_trial(
 <ParamField path="round_handle" type="typing.Any | None" optional={true} />
 
 #### record_candidate_entry
-```python
+```python wordWrap
 record_candidate_entry(
     prompt_or_payload: Any,
     score: float | None = None,
@@ -1212,7 +1212,7 @@ record_candidate_entry(
 <ParamField path="context" type="opik_optimizer.core.state.OptimizationContext | None" optional={true} />
 
 #### run_optimization
-```python
+```python wordWrap
 run_optimization(
     context: OptimizationContext
 )
@@ -1224,7 +1224,7 @@ run_optimization(
 <ParamField path="context" type="OptimizationContext">The optimization context with prompts, dataset, metric, etc.</ParamField>
 
 #### set_default_dataset_split
-```python
+```python wordWrap
 set_default_dataset_split(
     dataset_split: str | None
 )
@@ -1236,7 +1236,7 @@ set_default_dataset_split(
 <ParamField path="dataset_split" type="str | None" />
 
 #### set_pareto_front
-```python
+```python wordWrap
 set_pareto_front(
     pareto_front: list[dict[str, typing.Any]] | None
 )
@@ -1248,7 +1248,7 @@ set_pareto_front(
 <ParamField path="pareto_front" type="list[dict[str, typing.Any]] | None" />
 
 #### set_selection_meta
-```python
+```python wordWrap
 set_selection_meta(
     selection_meta: dict[str, typing.Any] | None
 )
@@ -1260,7 +1260,7 @@ set_selection_meta(
 <ParamField path="selection_meta" type="dict[str, typing.Any] | None" />
 
 #### start_candidate
-```python
+```python wordWrap
 start_candidate(
     context: OptimizationContext,
     candidate: Any,
@@ -1276,7 +1276,7 @@ start_candidate(
 <ParamField path="round_handle" type="typing.Any | None" optional={true} />
 
 #### with_dataset_split
-```python
+```python wordWrap
 with_dataset_split(
     dataset_split: str | None
 )
@@ -1289,7 +1289,7 @@ with_dataset_split(
 
 ## MetaPromptOptimizer
 
-```python
+```python wordWrap
 MetaPromptOptimizer(
     model: str = 'openai/gpt-5-nano',
     model_parameters: dict[str, typing.Any] | None = None,
@@ -1328,7 +1328,7 @@ MetaPromptOptimizer(
 
 ### Methods
 #### begin_round
-```python
+```python wordWrap
 begin_round(
     context: OptimizationContext,
     extras: Any
@@ -1342,13 +1342,13 @@ begin_round(
 <ParamField path="extras" type="Any" />
 
 #### cleanup
-```python
+```python wordWrap
 cleanup()
 ```
 
 
 #### evaluate
-```python
+```python wordWrap
 evaluate(
     context: OptimizationContext,
     prompts: dict,
@@ -1366,7 +1366,7 @@ evaluate(
 <ParamField path="sampling_tag" type="str | None" optional={true}>Optional sampling tag for deterministic subsampling per candidate.</ParamField>
 
 #### evaluate_prompt
-```python
+```python wordWrap
 evaluate_prompt(
     prompt: opik_optimizer.api_objects.chat_prompt.ChatPrompt | dict[str, opik_optimizer.api_objects.chat_prompt.ChatPrompt],
     dataset: Dataset,
@@ -1406,7 +1406,7 @@ evaluate_prompt(
 <ParamField path="sampling_tag" type="str | None" optional={true} />
 
 #### evaluate_with_result
-```python
+```python wordWrap
 evaluate_with_result(
     context: OptimizationContext,
     prompts: dict,
@@ -1430,7 +1430,7 @@ evaluate_with_result(
 <ParamField path="sampling_tag" type="str | None" optional={true} />
 
 #### finish_candidate
-```python
+```python wordWrap
 finish_candidate(
     context: OptimizationContext,
     candidate_handle: Any,
@@ -1462,7 +1462,7 @@ finish_candidate(
 <ParamField path="round_handle" type="typing.Any | None" optional={true} />
 
 #### finish_round
-```python
+```python wordWrap
 finish_round(
     round_handle: Any,
     context: opik_optimizer.core.state.OptimizationContext | None = None,
@@ -1496,7 +1496,7 @@ finish_round(
 <ParamField path="selection_meta" type="dict[str, typing.Any] | None" optional={true} />
 
 #### get_config
-```python
+```python wordWrap
 get_config(
     context: OptimizationContext
 )
@@ -1508,7 +1508,7 @@ get_config(
 <ParamField path="context" type="OptimizationContext" />
 
 #### get_default_prompt
-```python
+```python wordWrap
 get_default_prompt(
     key: str
 )
@@ -1520,19 +1520,19 @@ get_default_prompt(
 <ParamField path="key" type="str">The prompt key to retrieve</ParamField>
 
 #### get_history_entries
-```python
+```python wordWrap
 get_history_entries()
 ```
 
 
 #### get_history_rounds
-```python
+```python wordWrap
 get_history_rounds()
 ```
 
 
 #### get_metadata
-```python
+```python wordWrap
 get_metadata(
     context: OptimizationContext
 )
@@ -1544,13 +1544,13 @@ get_metadata(
 <ParamField path="context" type="OptimizationContext" />
 
 #### get_optimizer_metadata
-```python
+```python wordWrap
 get_optimizer_metadata()
 ```
 
 
 #### get_prompt
-```python
+```python wordWrap
 get_prompt(
     key: str,
     fmt: Any
@@ -1564,13 +1564,13 @@ get_prompt(
 <ParamField path="fmt" type="Any" />
 
 #### list_prompts
-```python
+```python wordWrap
 list_prompts()
 ```
 
 
 #### on_trial
-```python
+```python wordWrap
 on_trial(
     context: OptimizationContext,
     prompts: dict,
@@ -1588,7 +1588,7 @@ on_trial(
 <ParamField path="prev_best_score" type="float | None" optional={true} />
 
 #### optimize_mcp
-```python
+```python wordWrap
 optimize_mcp(
     args: Any,
     kwargs: Any
@@ -1602,7 +1602,7 @@ optimize_mcp(
 <ParamField path="kwargs" type="Any" />
 
 #### optimize_prompt
-```python
+```python wordWrap
 optimize_prompt(
     prompt: opik_optimizer.api_objects.chat_prompt.ChatPrompt | dict[str, opik_optimizer.api_objects.chat_prompt.ChatPrompt],
     dataset: Dataset,
@@ -1648,7 +1648,7 @@ optimize_prompt(
 <ParamField path="kwargs" type="Any" />
 
 #### post_baseline
-```python
+```python wordWrap
 post_baseline(
     context: OptimizationContext,
     score: float
@@ -1662,7 +1662,7 @@ post_baseline(
 <ParamField path="score" type="float" />
 
 #### post_optimize
-```python
+```python wordWrap
 post_optimize(
     context: OptimizationContext,
     result: OptimizationResult
@@ -1676,7 +1676,7 @@ post_optimize(
 <ParamField path="result" type="OptimizationResult" />
 
 #### post_round
-```python
+```python wordWrap
 post_round(
     round_handle: Any,
     context: opik_optimizer.core.state.OptimizationContext | None = None,
@@ -1710,7 +1710,7 @@ post_round(
 <ParamField path="selection_meta" type="dict[str, typing.Any] | None" optional={true} />
 
 #### post_trial
-```python
+```python wordWrap
 post_trial(
     context: OptimizationContext,
     candidate_handle: Any,
@@ -1742,7 +1742,7 @@ post_trial(
 <ParamField path="round_handle" type="typing.Any | None" optional={true} />
 
 #### pre_baseline
-```python
+```python wordWrap
 pre_baseline(
     context: OptimizationContext
 )
@@ -1754,7 +1754,7 @@ pre_baseline(
 <ParamField path="context" type="OptimizationContext" />
 
 #### pre_optimize
-```python
+```python wordWrap
 pre_optimize(
     context: OptimizationContext
 )
@@ -1766,7 +1766,7 @@ pre_optimize(
 <ParamField path="context" type="OptimizationContext">The optimization context</ParamField>
 
 #### pre_round
-```python
+```python wordWrap
 pre_round(
     context: OptimizationContext,
     extras: Any
@@ -1780,7 +1780,7 @@ pre_round(
 <ParamField path="extras" type="Any" />
 
 #### pre_trial
-```python
+```python wordWrap
 pre_trial(
     context: OptimizationContext,
     candidate: Any,
@@ -1796,7 +1796,7 @@ pre_trial(
 <ParamField path="round_handle" type="typing.Any | None" optional={true} />
 
 #### record_candidate_entry
-```python
+```python wordWrap
 record_candidate_entry(
     prompt_or_payload: Any,
     score: float | None = None,
@@ -1820,7 +1820,7 @@ record_candidate_entry(
 <ParamField path="context" type="opik_optimizer.core.state.OptimizationContext | None" optional={true} />
 
 #### run_optimization
-```python
+```python wordWrap
 run_optimization(
     context: OptimizationContext
 )
@@ -1832,7 +1832,7 @@ run_optimization(
 <ParamField path="context" type="OptimizationContext">The optimization context with prompts, dataset, metric, etc.</ParamField>
 
 #### set_default_dataset_split
-```python
+```python wordWrap
 set_default_dataset_split(
     dataset_split: str | None
 )
@@ -1844,7 +1844,7 @@ set_default_dataset_split(
 <ParamField path="dataset_split" type="str | None" />
 
 #### set_pareto_front
-```python
+```python wordWrap
 set_pareto_front(
     pareto_front: list[dict[str, typing.Any]] | None
 )
@@ -1856,7 +1856,7 @@ set_pareto_front(
 <ParamField path="pareto_front" type="list[dict[str, typing.Any]] | None" />
 
 #### set_selection_meta
-```python
+```python wordWrap
 set_selection_meta(
     selection_meta: dict[str, typing.Any] | None
 )
@@ -1868,7 +1868,7 @@ set_selection_meta(
 <ParamField path="selection_meta" type="dict[str, typing.Any] | None" />
 
 #### start_candidate
-```python
+```python wordWrap
 start_candidate(
     context: OptimizationContext,
     candidate: Any,
@@ -1884,7 +1884,7 @@ start_candidate(
 <ParamField path="round_handle" type="typing.Any | None" optional={true} />
 
 #### with_dataset_split
-```python
+```python wordWrap
 with_dataset_split(
     dataset_split: str | None
 )
@@ -1897,7 +1897,7 @@ with_dataset_split(
 
 ## EvolutionaryOptimizer
 
-```python
+```python wordWrap
 EvolutionaryOptimizer(
     model: str = 'openai/gpt-5-nano',
     model_parameters: dict[str, typing.Any] | None = None,
@@ -1950,7 +1950,7 @@ EvolutionaryOptimizer(
 
 ### Methods
 #### begin_round
-```python
+```python wordWrap
 begin_round(
     context: OptimizationContext,
     extras: Any
@@ -1964,13 +1964,13 @@ begin_round(
 <ParamField path="extras" type="Any" />
 
 #### cleanup
-```python
+```python wordWrap
 cleanup()
 ```
 
 
 #### evaluate
-```python
+```python wordWrap
 evaluate(
     context: OptimizationContext,
     prompts: dict,
@@ -1988,7 +1988,7 @@ evaluate(
 <ParamField path="sampling_tag" type="str | None" optional={true}>Optional sampling tag for deterministic subsampling per candidate.</ParamField>
 
 #### evaluate_prompt
-```python
+```python wordWrap
 evaluate_prompt(
     prompt: opik_optimizer.api_objects.chat_prompt.ChatPrompt | dict[str, opik_optimizer.api_objects.chat_prompt.ChatPrompt],
     dataset: Dataset,
@@ -2028,7 +2028,7 @@ evaluate_prompt(
 <ParamField path="sampling_tag" type="str | None" optional={true} />
 
 #### evaluate_with_result
-```python
+```python wordWrap
 evaluate_with_result(
     context: OptimizationContext,
     prompts: dict,
@@ -2052,7 +2052,7 @@ evaluate_with_result(
 <ParamField path="sampling_tag" type="str | None" optional={true} />
 
 #### finish_candidate
-```python
+```python wordWrap
 finish_candidate(
     context: OptimizationContext,
     candidate_handle: Any,
@@ -2084,7 +2084,7 @@ finish_candidate(
 <ParamField path="round_handle" type="typing.Any | None" optional={true} />
 
 #### finish_round
-```python
+```python wordWrap
 finish_round(
     round_handle: Any,
     context: opik_optimizer.core.state.OptimizationContext | None = None,
@@ -2118,7 +2118,7 @@ finish_round(
 <ParamField path="selection_meta" type="dict[str, typing.Any] | None" optional={true} />
 
 #### get_config
-```python
+```python wordWrap
 get_config(
     context: OptimizationContext
 )
@@ -2130,7 +2130,7 @@ get_config(
 <ParamField path="context" type="OptimizationContext" />
 
 #### get_default_prompt
-```python
+```python wordWrap
 get_default_prompt(
     key: str
 )
@@ -2142,19 +2142,19 @@ get_default_prompt(
 <ParamField path="key" type="str">The prompt key to retrieve</ParamField>
 
 #### get_history_entries
-```python
+```python wordWrap
 get_history_entries()
 ```
 
 
 #### get_history_rounds
-```python
+```python wordWrap
 get_history_rounds()
 ```
 
 
 #### get_metadata
-```python
+```python wordWrap
 get_metadata(
     context: OptimizationContext
 )
@@ -2166,13 +2166,13 @@ get_metadata(
 <ParamField path="context" type="OptimizationContext" />
 
 #### get_optimizer_metadata
-```python
+```python wordWrap
 get_optimizer_metadata()
 ```
 
 
 #### get_prompt
-```python
+```python wordWrap
 get_prompt(
     key: str,
     fmt: Any
@@ -2186,13 +2186,13 @@ get_prompt(
 <ParamField path="fmt" type="Any" />
 
 #### list_prompts
-```python
+```python wordWrap
 list_prompts()
 ```
 
 
 #### on_trial
-```python
+```python wordWrap
 on_trial(
     context: OptimizationContext,
     prompts: dict,
@@ -2210,7 +2210,7 @@ on_trial(
 <ParamField path="prev_best_score" type="float | None" optional={true} />
 
 #### optimize_mcp
-```python
+```python wordWrap
 optimize_mcp(
     args: Any,
     kwargs: Any
@@ -2224,7 +2224,7 @@ optimize_mcp(
 <ParamField path="kwargs" type="Any" />
 
 #### optimize_prompt
-```python
+```python wordWrap
 optimize_prompt(
     prompt: opik_optimizer.api_objects.chat_prompt.ChatPrompt | dict[str, opik_optimizer.api_objects.chat_prompt.ChatPrompt],
     dataset: Dataset,
@@ -2270,7 +2270,7 @@ optimize_prompt(
 <ParamField path="kwargs" type="Any" />
 
 #### post_baseline
-```python
+```python wordWrap
 post_baseline(
     context: OptimizationContext,
     score: float
@@ -2284,7 +2284,7 @@ post_baseline(
 <ParamField path="score" type="float" />
 
 #### post_optimize
-```python
+```python wordWrap
 post_optimize(
     context: OptimizationContext,
     result: OptimizationResult
@@ -2298,7 +2298,7 @@ post_optimize(
 <ParamField path="result" type="OptimizationResult" />
 
 #### post_round
-```python
+```python wordWrap
 post_round(
     round_handle: Any,
     context: opik_optimizer.core.state.OptimizationContext | None = None,
@@ -2332,7 +2332,7 @@ post_round(
 <ParamField path="selection_meta" type="dict[str, typing.Any] | None" optional={true} />
 
 #### post_trial
-```python
+```python wordWrap
 post_trial(
     context: OptimizationContext,
     candidate_handle: Any,
@@ -2364,7 +2364,7 @@ post_trial(
 <ParamField path="round_handle" type="typing.Any | None" optional={true} />
 
 #### pre_baseline
-```python
+```python wordWrap
 pre_baseline(
     context: OptimizationContext
 )
@@ -2376,7 +2376,7 @@ pre_baseline(
 <ParamField path="context" type="OptimizationContext" />
 
 #### pre_optimize
-```python
+```python wordWrap
 pre_optimize(
     context: OptimizationContext
 )
@@ -2388,7 +2388,7 @@ pre_optimize(
 <ParamField path="context" type="OptimizationContext" />
 
 #### pre_round
-```python
+```python wordWrap
 pre_round(
     context: OptimizationContext,
     extras: Any
@@ -2402,7 +2402,7 @@ pre_round(
 <ParamField path="extras" type="Any" />
 
 #### pre_trial
-```python
+```python wordWrap
 pre_trial(
     context: OptimizationContext,
     candidate: Any,
@@ -2418,7 +2418,7 @@ pre_trial(
 <ParamField path="round_handle" type="typing.Any | None" optional={true} />
 
 #### record_candidate_entry
-```python
+```python wordWrap
 record_candidate_entry(
     prompt_or_payload: Any,
     score: float | None = None,
@@ -2442,7 +2442,7 @@ record_candidate_entry(
 <ParamField path="context" type="opik_optimizer.core.state.OptimizationContext | None" optional={true} />
 
 #### run_optimization
-```python
+```python wordWrap
 run_optimization(
     context: OptimizationContext
 )
@@ -2454,7 +2454,7 @@ run_optimization(
 <ParamField path="context" type="OptimizationContext">The optimization context with prompts, dataset, metric, etc.</ParamField>
 
 #### set_default_dataset_split
-```python
+```python wordWrap
 set_default_dataset_split(
     dataset_split: str | None
 )
@@ -2466,7 +2466,7 @@ set_default_dataset_split(
 <ParamField path="dataset_split" type="str | None" />
 
 #### set_pareto_front
-```python
+```python wordWrap
 set_pareto_front(
     pareto_front: list[dict[str, typing.Any]] | None
 )
@@ -2478,7 +2478,7 @@ set_pareto_front(
 <ParamField path="pareto_front" type="list[dict[str, typing.Any]] | None" />
 
 #### set_selection_meta
-```python
+```python wordWrap
 set_selection_meta(
     selection_meta: dict[str, typing.Any] | None
 )
@@ -2490,7 +2490,7 @@ set_selection_meta(
 <ParamField path="selection_meta" type="dict[str, typing.Any] | None" />
 
 #### start_candidate
-```python
+```python wordWrap
 start_candidate(
     context: OptimizationContext,
     candidate: Any,
@@ -2506,7 +2506,7 @@ start_candidate(
 <ParamField path="round_handle" type="typing.Any | None" optional={true} />
 
 #### with_dataset_split
-```python
+```python wordWrap
 with_dataset_split(
     dataset_split: str | None
 )
@@ -2519,7 +2519,7 @@ with_dataset_split(
 
 ## HierarchicalReflectiveOptimizer
 
-```python
+```python wordWrap
 HierarchicalReflectiveOptimizer(
     model: str = 'openai/gpt-5-nano',
     model_parameters: dict[str, typing.Any] | None = None,
@@ -2558,7 +2558,7 @@ HierarchicalReflectiveOptimizer(
 
 ### Methods
 #### begin_round
-```python
+```python wordWrap
 begin_round(
     context: OptimizationContext,
     extras: Any
@@ -2572,13 +2572,13 @@ begin_round(
 <ParamField path="extras" type="Any" />
 
 #### cleanup
-```python
+```python wordWrap
 cleanup()
 ```
 
 
 #### evaluate
-```python
+```python wordWrap
 evaluate(
     context: OptimizationContext,
     prompts: dict,
@@ -2596,7 +2596,7 @@ evaluate(
 <ParamField path="sampling_tag" type="str | None" optional={true}>Optional sampling tag for deterministic subsampling per candidate.</ParamField>
 
 #### evaluate_prompt
-```python
+```python wordWrap
 evaluate_prompt(
     prompt: opik_optimizer.api_objects.chat_prompt.ChatPrompt | dict[str, opik_optimizer.api_objects.chat_prompt.ChatPrompt],
     dataset: Dataset,
@@ -2636,7 +2636,7 @@ evaluate_prompt(
 <ParamField path="sampling_tag" type="str | None" optional={true} />
 
 #### evaluate_with_result
-```python
+```python wordWrap
 evaluate_with_result(
     context: OptimizationContext,
     prompts: dict,
@@ -2660,7 +2660,7 @@ evaluate_with_result(
 <ParamField path="sampling_tag" type="str | None" optional={true} />
 
 #### finish_candidate
-```python
+```python wordWrap
 finish_candidate(
     context: OptimizationContext,
     candidate_handle: Any,
@@ -2692,7 +2692,7 @@ finish_candidate(
 <ParamField path="round_handle" type="typing.Any | None" optional={true} />
 
 #### finish_round
-```python
+```python wordWrap
 finish_round(
     round_handle: Any,
     context: opik_optimizer.core.state.OptimizationContext | None = None,
@@ -2726,7 +2726,7 @@ finish_round(
 <ParamField path="selection_meta" type="dict[str, typing.Any] | None" optional={true} />
 
 #### get_config
-```python
+```python wordWrap
 get_config(
     context: OptimizationContext
 )
@@ -2738,7 +2738,7 @@ get_config(
 <ParamField path="context" type="OptimizationContext" />
 
 #### get_default_prompt
-```python
+```python wordWrap
 get_default_prompt(
     key: str
 )
@@ -2750,19 +2750,19 @@ get_default_prompt(
 <ParamField path="key" type="str">The prompt key to retrieve</ParamField>
 
 #### get_history_entries
-```python
+```python wordWrap
 get_history_entries()
 ```
 
 
 #### get_history_rounds
-```python
+```python wordWrap
 get_history_rounds()
 ```
 
 
 #### get_metadata
-```python
+```python wordWrap
 get_metadata(
     context: OptimizationContext
 )
@@ -2774,13 +2774,13 @@ get_metadata(
 <ParamField path="context" type="OptimizationContext" />
 
 #### get_optimizer_metadata
-```python
+```python wordWrap
 get_optimizer_metadata()
 ```
 
 
 #### get_prompt
-```python
+```python wordWrap
 get_prompt(
     key: str,
     fmt: Any
@@ -2794,13 +2794,13 @@ get_prompt(
 <ParamField path="fmt" type="Any" />
 
 #### list_prompts
-```python
+```python wordWrap
 list_prompts()
 ```
 
 
 #### on_trial
-```python
+```python wordWrap
 on_trial(
     context: OptimizationContext,
     prompts: dict,
@@ -2818,7 +2818,7 @@ on_trial(
 <ParamField path="prev_best_score" type="float | None" optional={true} />
 
 #### optimize_mcp
-```python
+```python wordWrap
 optimize_mcp(
     args: Any,
     kwargs: Any
@@ -2832,7 +2832,7 @@ optimize_mcp(
 <ParamField path="kwargs" type="Any" />
 
 #### optimize_prompt
-```python
+```python wordWrap
 optimize_prompt(
     prompt: opik_optimizer.api_objects.chat_prompt.ChatPrompt | dict[str, opik_optimizer.api_objects.chat_prompt.ChatPrompt],
     dataset: Dataset,
@@ -2878,7 +2878,7 @@ optimize_prompt(
 <ParamField path="kwargs" type="Any" />
 
 #### post_baseline
-```python
+```python wordWrap
 post_baseline(
     context: OptimizationContext,
     score: float
@@ -2892,7 +2892,7 @@ post_baseline(
 <ParamField path="score" type="float" />
 
 #### post_optimize
-```python
+```python wordWrap
 post_optimize(
     context: OptimizationContext,
     result: OptimizationResult
@@ -2906,7 +2906,7 @@ post_optimize(
 <ParamField path="result" type="OptimizationResult" />
 
 #### post_round
-```python
+```python wordWrap
 post_round(
     round_handle: Any,
     context: opik_optimizer.core.state.OptimizationContext | None = None,
@@ -2940,7 +2940,7 @@ post_round(
 <ParamField path="selection_meta" type="dict[str, typing.Any] | None" optional={true} />
 
 #### post_trial
-```python
+```python wordWrap
 post_trial(
     context: OptimizationContext,
     candidate_handle: Any,
@@ -2972,7 +2972,7 @@ post_trial(
 <ParamField path="round_handle" type="typing.Any | None" optional={true} />
 
 #### pre_baseline
-```python
+```python wordWrap
 pre_baseline(
     context: OptimizationContext
 )
@@ -2984,7 +2984,7 @@ pre_baseline(
 <ParamField path="context" type="OptimizationContext" />
 
 #### pre_optimize
-```python
+```python wordWrap
 pre_optimize(
     context: OptimizationContext
 )
@@ -2996,7 +2996,7 @@ pre_optimize(
 <ParamField path="context" type="OptimizationContext">The optimization context</ParamField>
 
 #### pre_round
-```python
+```python wordWrap
 pre_round(
     context: OptimizationContext,
     extras: Any
@@ -3010,7 +3010,7 @@ pre_round(
 <ParamField path="extras" type="Any" />
 
 #### pre_trial
-```python
+```python wordWrap
 pre_trial(
     context: OptimizationContext,
     candidate: Any,
@@ -3026,7 +3026,7 @@ pre_trial(
 <ParamField path="round_handle" type="typing.Any | None" optional={true} />
 
 #### record_candidate_entry
-```python
+```python wordWrap
 record_candidate_entry(
     prompt_or_payload: Any,
     score: float | None = None,
@@ -3050,7 +3050,7 @@ record_candidate_entry(
 <ParamField path="context" type="opik_optimizer.core.state.OptimizationContext | None" optional={true} />
 
 #### run_optimization
-```python
+```python wordWrap
 run_optimization(
     context: OptimizationContext
 )
@@ -3062,7 +3062,7 @@ run_optimization(
 <ParamField path="context" type="OptimizationContext">The optimization context with prompts, dataset, metric, etc.</ParamField>
 
 #### set_default_dataset_split
-```python
+```python wordWrap
 set_default_dataset_split(
     dataset_split: str | None
 )
@@ -3074,7 +3074,7 @@ set_default_dataset_split(
 <ParamField path="dataset_split" type="str | None" />
 
 #### set_pareto_front
-```python
+```python wordWrap
 set_pareto_front(
     pareto_front: list[dict[str, typing.Any]] | None
 )
@@ -3086,7 +3086,7 @@ set_pareto_front(
 <ParamField path="pareto_front" type="list[dict[str, typing.Any]] | None" />
 
 #### set_selection_meta
-```python
+```python wordWrap
 set_selection_meta(
     selection_meta: dict[str, typing.Any] | None
 )
@@ -3098,7 +3098,7 @@ set_selection_meta(
 <ParamField path="selection_meta" type="dict[str, typing.Any] | None" />
 
 #### start_candidate
-```python
+```python wordWrap
 start_candidate(
     context: OptimizationContext,
     candidate: Any,
@@ -3114,7 +3114,7 @@ start_candidate(
 <ParamField path="round_handle" type="typing.Any | None" optional={true} />
 
 #### with_dataset_split
-```python
+```python wordWrap
 with_dataset_split(
     dataset_split: str | None
 )
@@ -3127,7 +3127,7 @@ with_dataset_split(
 
 ## ParameterOptimizer
 
-```python
+```python wordWrap
 ParameterOptimizer(
     model: str = 'openai/gpt-5-nano',
     model_parameters: dict[str, typing.Any] | None = None,
@@ -3160,7 +3160,7 @@ ParameterOptimizer(
 
 ### Methods
 #### begin_round
-```python
+```python wordWrap
 begin_round(
     context: OptimizationContext,
     extras: Any
@@ -3174,13 +3174,13 @@ begin_round(
 <ParamField path="extras" type="Any" />
 
 #### cleanup
-```python
+```python wordWrap
 cleanup()
 ```
 
 
 #### evaluate
-```python
+```python wordWrap
 evaluate(
     context: OptimizationContext,
     prompts: dict,
@@ -3198,7 +3198,7 @@ evaluate(
 <ParamField path="sampling_tag" type="str | None" optional={true}>Optional sampling tag for deterministic subsampling per candidate.</ParamField>
 
 #### evaluate_prompt
-```python
+```python wordWrap
 evaluate_prompt(
     prompt: opik_optimizer.api_objects.chat_prompt.ChatPrompt | dict[str, opik_optimizer.api_objects.chat_prompt.ChatPrompt],
     dataset: Dataset,
@@ -3238,7 +3238,7 @@ evaluate_prompt(
 <ParamField path="sampling_tag" type="str | None" optional={true} />
 
 #### evaluate_with_result
-```python
+```python wordWrap
 evaluate_with_result(
     context: OptimizationContext,
     prompts: dict,
@@ -3262,7 +3262,7 @@ evaluate_with_result(
 <ParamField path="sampling_tag" type="str | None" optional={true} />
 
 #### finish_candidate
-```python
+```python wordWrap
 finish_candidate(
     context: OptimizationContext,
     candidate_handle: Any,
@@ -3294,7 +3294,7 @@ finish_candidate(
 <ParamField path="round_handle" type="typing.Any | None" optional={true} />
 
 #### finish_round
-```python
+```python wordWrap
 finish_round(
     round_handle: Any,
     context: opik_optimizer.core.state.OptimizationContext | None = None,
@@ -3328,7 +3328,7 @@ finish_round(
 <ParamField path="selection_meta" type="dict[str, typing.Any] | None" optional={true} />
 
 #### get_config
-```python
+```python wordWrap
 get_config(
     context: OptimizationContext
 )
@@ -3340,7 +3340,7 @@ get_config(
 <ParamField path="context" type="OptimizationContext" />
 
 #### get_default_prompt
-```python
+```python wordWrap
 get_default_prompt(
     key: str
 )
@@ -3352,19 +3352,19 @@ get_default_prompt(
 <ParamField path="key" type="str">The prompt key to retrieve</ParamField>
 
 #### get_history_entries
-```python
+```python wordWrap
 get_history_entries()
 ```
 
 
 #### get_history_rounds
-```python
+```python wordWrap
 get_history_rounds()
 ```
 
 
 #### get_metadata
-```python
+```python wordWrap
 get_metadata(
     context: OptimizationContext
 )
@@ -3376,13 +3376,13 @@ get_metadata(
 <ParamField path="context" type="OptimizationContext" />
 
 #### get_optimizer_metadata
-```python
+```python wordWrap
 get_optimizer_metadata()
 ```
 
 
 #### get_prompt
-```python
+```python wordWrap
 get_prompt(
     key: str,
     fmt: Any
@@ -3396,13 +3396,13 @@ get_prompt(
 <ParamField path="fmt" type="Any" />
 
 #### list_prompts
-```python
+```python wordWrap
 list_prompts()
 ```
 
 
 #### on_trial
-```python
+```python wordWrap
 on_trial(
     context: OptimizationContext,
     prompts: dict,
@@ -3420,7 +3420,7 @@ on_trial(
 <ParamField path="prev_best_score" type="float | None" optional={true} />
 
 #### optimize_mcp
-```python
+```python wordWrap
 optimize_mcp(
     args: Any,
     kwargs: Any
@@ -3434,7 +3434,7 @@ optimize_mcp(
 <ParamField path="kwargs" type="Any" />
 
 #### optimize_parameter
-```python
+```python wordWrap
 optimize_parameter(
     prompt: opik_optimizer.api_objects.chat_prompt.ChatPrompt | dict[str, opik_optimizer.api_objects.chat_prompt.ChatPrompt],
     dataset: Dataset,
@@ -3480,7 +3480,7 @@ optimize_parameter(
 <ParamField path="optimization_id" type="str | None" optional={true}>Optional ID to use when creating the Opik optimization run; when provided it must be a valid UUIDv7 string.</ParamField>
 
 #### post_baseline
-```python
+```python wordWrap
 post_baseline(
     context: OptimizationContext,
     score: float
@@ -3494,7 +3494,7 @@ post_baseline(
 <ParamField path="score" type="float" />
 
 #### post_optimize
-```python
+```python wordWrap
 post_optimize(
     context: OptimizationContext,
     result: OptimizationResult
@@ -3508,7 +3508,7 @@ post_optimize(
 <ParamField path="result" type="OptimizationResult" />
 
 #### post_round
-```python
+```python wordWrap
 post_round(
     round_handle: Any,
     context: opik_optimizer.core.state.OptimizationContext | None = None,
@@ -3542,7 +3542,7 @@ post_round(
 <ParamField path="selection_meta" type="dict[str, typing.Any] | None" optional={true} />
 
 #### post_trial
-```python
+```python wordWrap
 post_trial(
     context: OptimizationContext,
     candidate_handle: Any,
@@ -3574,7 +3574,7 @@ post_trial(
 <ParamField path="round_handle" type="typing.Any | None" optional={true} />
 
 #### pre_baseline
-```python
+```python wordWrap
 pre_baseline(
     context: OptimizationContext
 )
@@ -3586,7 +3586,7 @@ pre_baseline(
 <ParamField path="context" type="OptimizationContext" />
 
 #### pre_optimize
-```python
+```python wordWrap
 pre_optimize(
     context: OptimizationContext
 )
@@ -3598,7 +3598,7 @@ pre_optimize(
 <ParamField path="context" type="OptimizationContext">The optimization context</ParamField>
 
 #### pre_round
-```python
+```python wordWrap
 pre_round(
     context: OptimizationContext,
     extras: Any
@@ -3612,7 +3612,7 @@ pre_round(
 <ParamField path="extras" type="Any" />
 
 #### pre_trial
-```python
+```python wordWrap
 pre_trial(
     context: OptimizationContext,
     candidate: Any,
@@ -3628,7 +3628,7 @@ pre_trial(
 <ParamField path="round_handle" type="typing.Any | None" optional={true} />
 
 #### record_candidate_entry
-```python
+```python wordWrap
 record_candidate_entry(
     prompt_or_payload: Any,
     score: float | None = None,
@@ -3652,7 +3652,7 @@ record_candidate_entry(
 <ParamField path="context" type="opik_optimizer.core.state.OptimizationContext | None" optional={true} />
 
 #### set_default_dataset_split
-```python
+```python wordWrap
 set_default_dataset_split(
     dataset_split: str | None
 )
@@ -3664,7 +3664,7 @@ set_default_dataset_split(
 <ParamField path="dataset_split" type="str | None" />
 
 #### set_pareto_front
-```python
+```python wordWrap
 set_pareto_front(
     pareto_front: list[dict[str, typing.Any]] | None
 )
@@ -3676,7 +3676,7 @@ set_pareto_front(
 <ParamField path="pareto_front" type="list[dict[str, typing.Any]] | None" />
 
 #### set_selection_meta
-```python
+```python wordWrap
 set_selection_meta(
     selection_meta: dict[str, typing.Any] | None
 )
@@ -3688,7 +3688,7 @@ set_selection_meta(
 <ParamField path="selection_meta" type="dict[str, typing.Any] | None" />
 
 #### start_candidate
-```python
+```python wordWrap
 start_candidate(
     context: OptimizationContext,
     candidate: Any,
@@ -3704,7 +3704,7 @@ start_candidate(
 <ParamField path="round_handle" type="typing.Any | None" optional={true} />
 
 #### with_dataset_split
-```python
+```python wordWrap
 with_dataset_split(
     dataset_split: str | None
 )
@@ -3717,7 +3717,7 @@ with_dataset_split(
 
 ## ParameterSearchSpace
 
-```python
+```python wordWrap
 ParameterSearchSpace(
     parameters: list[opik_optimizer.algorithms.parameter_optimizer.ops.search_ops.ParameterSpec] = PydanticUndefined
 )
@@ -3730,7 +3730,7 @@ ParameterSearchSpace(
 
 ## ParameterSpec
 
-```python
+```python wordWrap
 ParameterSpec(
     name: <class 'str'>,
     description: str | None = None,
@@ -3761,7 +3761,7 @@ ParameterSpec(
 
 ## ParameterType
 
-```python
+```python wordWrap
 ParameterType(
     args: Any,
     kwds: Any
@@ -3776,7 +3776,7 @@ ParameterType(
 
 ## BaseOptimizer
 
-```python
+```python wordWrap
 BaseOptimizer(
     model: str,
     verbose: int = 1,
@@ -3809,7 +3809,7 @@ BaseOptimizer(
 
 ### Methods
 #### begin_round
-```python
+```python wordWrap
 begin_round(
     context: OptimizationContext,
     extras: Any
@@ -3823,13 +3823,13 @@ begin_round(
 <ParamField path="extras" type="Any" />
 
 #### cleanup
-```python
+```python wordWrap
 cleanup()
 ```
 
 
 #### evaluate
-```python
+```python wordWrap
 evaluate(
     context: OptimizationContext,
     prompts: dict,
@@ -3847,7 +3847,7 @@ evaluate(
 <ParamField path="sampling_tag" type="str | None" optional={true}>Optional sampling tag for deterministic subsampling per candidate.</ParamField>
 
 #### evaluate_prompt
-```python
+```python wordWrap
 evaluate_prompt(
     prompt: opik_optimizer.api_objects.chat_prompt.ChatPrompt | dict[str, opik_optimizer.api_objects.chat_prompt.ChatPrompt],
     dataset: Dataset,
@@ -3887,7 +3887,7 @@ evaluate_prompt(
 <ParamField path="sampling_tag" type="str | None" optional={true} />
 
 #### evaluate_with_result
-```python
+```python wordWrap
 evaluate_with_result(
     context: OptimizationContext,
     prompts: dict,
@@ -3911,7 +3911,7 @@ evaluate_with_result(
 <ParamField path="sampling_tag" type="str | None" optional={true} />
 
 #### finish_candidate
-```python
+```python wordWrap
 finish_candidate(
     context: OptimizationContext,
     candidate_handle: Any,
@@ -3943,7 +3943,7 @@ finish_candidate(
 <ParamField path="round_handle" type="typing.Any | None" optional={true} />
 
 #### finish_round
-```python
+```python wordWrap
 finish_round(
     round_handle: Any,
     context: opik_optimizer.core.state.OptimizationContext | None = None,
@@ -3977,7 +3977,7 @@ finish_round(
 <ParamField path="selection_meta" type="dict[str, typing.Any] | None" optional={true} />
 
 #### get_config
-```python
+```python wordWrap
 get_config(
     context: OptimizationContext
 )
@@ -3989,7 +3989,7 @@ get_config(
 <ParamField path="context" type="OptimizationContext" />
 
 #### get_default_prompt
-```python
+```python wordWrap
 get_default_prompt(
     key: str
 )
@@ -4001,19 +4001,19 @@ get_default_prompt(
 <ParamField path="key" type="str">The prompt key to retrieve</ParamField>
 
 #### get_history_entries
-```python
+```python wordWrap
 get_history_entries()
 ```
 
 
 #### get_history_rounds
-```python
+```python wordWrap
 get_history_rounds()
 ```
 
 
 #### get_metadata
-```python
+```python wordWrap
 get_metadata(
     context: OptimizationContext
 )
@@ -4025,7 +4025,7 @@ get_metadata(
 <ParamField path="context" type="OptimizationContext" />
 
 #### get_prompt
-```python
+```python wordWrap
 get_prompt(
     key: str,
     fmt: Any
@@ -4039,13 +4039,13 @@ get_prompt(
 <ParamField path="fmt" type="Any" />
 
 #### list_prompts
-```python
+```python wordWrap
 list_prompts()
 ```
 
 
 #### on_trial
-```python
+```python wordWrap
 on_trial(
     context: OptimizationContext,
     prompts: dict,
@@ -4063,7 +4063,7 @@ on_trial(
 <ParamField path="prev_best_score" type="float | None" optional={true} />
 
 #### optimize_mcp
-```python
+```python wordWrap
 optimize_mcp(
     args: Any,
     kwargs: Any
@@ -4077,7 +4077,7 @@ optimize_mcp(
 <ParamField path="kwargs" type="Any" />
 
 #### optimize_prompt
-```python
+```python wordWrap
 optimize_prompt(
     prompt: opik_optimizer.api_objects.chat_prompt.ChatPrompt | dict[str, opik_optimizer.api_objects.chat_prompt.ChatPrompt],
     dataset: Dataset,
@@ -4123,7 +4123,7 @@ optimize_prompt(
 <ParamField path="kwargs" type="Any" />
 
 #### post_baseline
-```python
+```python wordWrap
 post_baseline(
     context: OptimizationContext,
     score: float
@@ -4137,7 +4137,7 @@ post_baseline(
 <ParamField path="score" type="float" />
 
 #### post_optimize
-```python
+```python wordWrap
 post_optimize(
     context: OptimizationContext,
     result: OptimizationResult
@@ -4151,7 +4151,7 @@ post_optimize(
 <ParamField path="result" type="OptimizationResult" />
 
 #### post_round
-```python
+```python wordWrap
 post_round(
     round_handle: Any,
     context: opik_optimizer.core.state.OptimizationContext | None = None,
@@ -4185,7 +4185,7 @@ post_round(
 <ParamField path="selection_meta" type="dict[str, typing.Any] | None" optional={true} />
 
 #### post_trial
-```python
+```python wordWrap
 post_trial(
     context: OptimizationContext,
     candidate_handle: Any,
@@ -4217,7 +4217,7 @@ post_trial(
 <ParamField path="round_handle" type="typing.Any | None" optional={true} />
 
 #### pre_baseline
-```python
+```python wordWrap
 pre_baseline(
     context: OptimizationContext
 )
@@ -4229,7 +4229,7 @@ pre_baseline(
 <ParamField path="context" type="OptimizationContext" />
 
 #### pre_optimize
-```python
+```python wordWrap
 pre_optimize(
     context: OptimizationContext
 )
@@ -4241,7 +4241,7 @@ pre_optimize(
 <ParamField path="context" type="OptimizationContext">The optimization context</ParamField>
 
 #### pre_round
-```python
+```python wordWrap
 pre_round(
     context: OptimizationContext,
     extras: Any
@@ -4255,7 +4255,7 @@ pre_round(
 <ParamField path="extras" type="Any" />
 
 #### pre_trial
-```python
+```python wordWrap
 pre_trial(
     context: OptimizationContext,
     candidate: Any,
@@ -4271,7 +4271,7 @@ pre_trial(
 <ParamField path="round_handle" type="typing.Any | None" optional={true} />
 
 #### record_candidate_entry
-```python
+```python wordWrap
 record_candidate_entry(
     prompt_or_payload: Any,
     score: float | None = None,
@@ -4295,7 +4295,7 @@ record_candidate_entry(
 <ParamField path="context" type="opik_optimizer.core.state.OptimizationContext | None" optional={true} />
 
 #### run_optimization
-```python
+```python wordWrap
 run_optimization(
     context: OptimizationContext
 )
@@ -4307,7 +4307,7 @@ run_optimization(
 <ParamField path="context" type="OptimizationContext">The optimization context with prompts, dataset, metric, etc.</ParamField>
 
 #### set_default_dataset_split
-```python
+```python wordWrap
 set_default_dataset_split(
     dataset_split: str | None
 )
@@ -4319,7 +4319,7 @@ set_default_dataset_split(
 <ParamField path="dataset_split" type="str | None" />
 
 #### set_pareto_front
-```python
+```python wordWrap
 set_pareto_front(
     pareto_front: list[dict[str, typing.Any]] | None
 )
@@ -4331,7 +4331,7 @@ set_pareto_front(
 <ParamField path="pareto_front" type="list[dict[str, typing.Any]] | None" />
 
 #### set_selection_meta
-```python
+```python wordWrap
 set_selection_meta(
     selection_meta: dict[str, typing.Any] | None
 )
@@ -4343,7 +4343,7 @@ set_selection_meta(
 <ParamField path="selection_meta" type="dict[str, typing.Any] | None" />
 
 #### start_candidate
-```python
+```python wordWrap
 start_candidate(
     context: OptimizationContext,
     candidate: Any,
@@ -4359,7 +4359,7 @@ start_candidate(
 <ParamField path="round_handle" type="typing.Any | None" optional={true} />
 
 #### with_dataset_split
-```python
+```python wordWrap
 with_dataset_split(
     dataset_split: str | None
 )
@@ -4372,7 +4372,7 @@ with_dataset_split(
 
 ## ChatPrompt
 
-```python
+```python wordWrap
 ChatPrompt(
     name: str = 'chat-prompt',
     system: str | None = None,
@@ -4403,13 +4403,13 @@ ChatPrompt(
 
 ### Methods
 #### copy
-```python
+```python wordWrap
 copy()
 ```
 
 
 #### get_messages
-```python
+```python wordWrap
 get_messages(
     dataset_item: dict[str, typing.Any] | None = None
 )
@@ -4421,7 +4421,7 @@ get_messages(
 <ParamField path="dataset_item" type="dict[str, typing.Any] | None" optional={true} />
 
 #### replace_in_messages
-```python
+```python wordWrap
 replace_in_messages(
     messages: list,
     label: str,
@@ -4437,7 +4437,7 @@ replace_in_messages(
 <ParamField path="value" type="str" />
 
 #### set_messages
-```python
+```python wordWrap
 set_messages(
     messages: list
 )
@@ -4449,14 +4449,14 @@ set_messages(
 <ParamField path="messages" type="list" />
 
 #### to_dict
-```python
+```python wordWrap
 to_dict()
 ```
 
 
 ## AlgorithmResult
 
-```python
+```python wordWrap
 AlgorithmResult(
     best_prompts: dict,
     best_score: float,
@@ -4475,7 +4475,7 @@ AlgorithmResult(
 
 ## OptimizationResult
 
-```python
+```python wordWrap
 OptimizationResult(
     schema_version: <class 'str'> = 'v1',
     details_version: <class 'str'> = 'v1',
@@ -4518,7 +4518,7 @@ OptimizationResult(
 
 ## OptimizationContext
 
-```python
+```python wordWrap
 OptimizationContext(
     prompts: dict,
     initial_prompts: dict,
@@ -4581,7 +4581,7 @@ OptimizationContext(
 
 ## OptimizationHistoryState
 
-```python
+```python wordWrap
 OptimizationHistoryState(
     context: Any = None
 )
@@ -4594,13 +4594,13 @@ OptimizationHistoryState(
 
 ### Methods
 #### clear
-```python
+```python wordWrap
 clear()
 ```
 
 
 #### end_round
-```python
+```python wordWrap
 end_round(
     round_handle: Any,
     best_score: float | None = None,
@@ -4632,7 +4632,7 @@ end_round(
 <ParamField path="dataset_split" type="str | None" optional={true} />
 
 #### finalize_stop
-```python
+```python wordWrap
 finalize_stop(
     stop_reason: str | None = None
 )
@@ -4644,19 +4644,19 @@ finalize_stop(
 <ParamField path="stop_reason" type="str | None" optional={true} />
 
 #### get_entries
-```python
+```python wordWrap
 get_entries()
 ```
 
 
 #### get_rounds
-```python
+```python wordWrap
 get_rounds()
 ```
 
 
 #### record_trial
-```python
+```python wordWrap
 record_trial(
     round_handle: Any,
     score: float | None,
@@ -4690,7 +4690,7 @@ record_trial(
 <ParamField path="candidate_id_prefix" type="str | None" optional={true} />
 
 #### set_context
-```python
+```python wordWrap
 set_context(
     context: Any
 )
@@ -4702,7 +4702,7 @@ set_context(
 <ParamField path="context" type="Any" />
 
 #### set_default_dataset_split
-```python
+```python wordWrap
 set_default_dataset_split(
     dataset_split: str | None
 )
@@ -4714,7 +4714,7 @@ set_default_dataset_split(
 <ParamField path="dataset_split" type="str | None" />
 
 #### set_pareto_front
-```python
+```python wordWrap
 set_pareto_front(
     pareto_front: list[dict[str, typing.Any]] | None
 )
@@ -4726,7 +4726,7 @@ set_pareto_front(
 <ParamField path="pareto_front" type="list[dict[str, typing.Any]] | None" />
 
 #### set_selection_meta
-```python
+```python wordWrap
 set_selection_meta(
     selection_meta: dict[str, typing.Any] | None
 )
@@ -4738,7 +4738,7 @@ set_selection_meta(
 <ParamField path="selection_meta" type="dict[str, typing.Any] | None" />
 
 #### start_round
-```python
+```python wordWrap
 start_round(
     round_index: int | None = None,
     extras: dict[str, typing.Any] | None = None,
@@ -4754,7 +4754,7 @@ start_round(
 <ParamField path="timestamp" type="str | None" optional={true} />
 
 #### with_dataset_split
-```python
+```python wordWrap
 with_dataset_split(
     dataset_split: str | None
 )
@@ -4767,7 +4767,7 @@ with_dataset_split(
 
 ## OptimizationRound
 
-```python
+```python wordWrap
 OptimizationRound(
     round_index: int,
     trials: list = <factory>,
@@ -4804,14 +4804,14 @@ OptimizationRound(
 
 ### Methods
 #### to_dict
-```python
+```python wordWrap
 to_dict()
 ```
 
 
 ## OptimizationTrial
 
-```python
+```python wordWrap
 OptimizationTrial(
     trial_index: int | None,
     score: float | None,
@@ -4840,14 +4840,14 @@ OptimizationTrial(
 
 ### Methods
 #### to_dict
-```python
+```python wordWrap
 to_dict()
 ```
 
 
 ## OptimizableAgent
 
-```python
+```python wordWrap
 OptimizableAgent(
     prompt: Any = None,
     project_name: Any = None,
@@ -4864,7 +4864,7 @@ OptimizableAgent(
 
 ### Methods
 #### init_agent
-```python
+```python wordWrap
 init_agent(
     prompt: Any
 )
@@ -4876,13 +4876,13 @@ init_agent(
 <ParamField path="prompt" type="Any" />
 
 #### init_llm
-```python
+```python wordWrap
 init_llm()
 ```
 
 
 #### invoke
-```python
+```python wordWrap
 invoke(
     messages: list,
     seed: int | None = None
@@ -4896,7 +4896,7 @@ invoke(
 <ParamField path="seed" type="int | None" optional={true}>Optional seed for reproducibility</ParamField>
 
 #### invoke_agent
-```python
+```python wordWrap
 invoke_agent(
     prompts: Any,
     dataset_item: Any,
@@ -4914,7 +4914,7 @@ invoke_agent(
 <ParamField path="seed" type="Any" optional={true} />
 
 #### invoke_agent_candidates
-```python
+```python wordWrap
 invoke_agent_candidates(
     prompts: Any,
     dataset_item: Any,
@@ -4932,7 +4932,7 @@ invoke_agent_candidates(
 <ParamField path="seed" type="Any" optional={true}>Optional seed for reproducibility.</ParamField>
 
 #### invoke_dataset_item
-```python
+```python wordWrap
 invoke_dataset_item(
     dataset_item: dict
 )
@@ -4944,7 +4944,7 @@ invoke_dataset_item(
 <ParamField path="dataset_item" type="dict" />
 
 #### invoke_prompt
-```python
+```python wordWrap
 invoke_prompt(
     prompt: Any,
     dataset_item: Any,
@@ -4962,7 +4962,7 @@ invoke_prompt(
 <ParamField path="seed" type="Any" optional={true} />
 
 #### llm_invoke
-```python
+```python wordWrap
 llm_invoke(
     query: str | None = None,
     messages: list[dict[str, str]] | None = None,
@@ -4981,7 +4981,7 @@ llm_invoke(
 
 ## MultiMetricObjective
 
-```python
+```python wordWrap
 MultiMetricObjective(
     metrics: list,
     weights: list[float] | None = None,
@@ -5002,7 +5002,7 @@ MultiMetricObjective(
 
 ## ScoringFailedError
 
-```python
+```python wordWrap
 ScoringFailedError(
     failed: int,
     total: int,
@@ -5021,7 +5021,7 @@ ScoringFailedError(
 
 ## PromptLibrary
 
-```python
+```python wordWrap
 PromptLibrary(
     defaults: dict,
     overrides: dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None = None
@@ -5036,7 +5036,7 @@ PromptLibrary(
 
 ### Methods
 #### get
-```python
+```python wordWrap
 get(
     key: str,
     fmt: object
@@ -5050,7 +5050,7 @@ get(
 <ParamField path="fmt" type="object" />
 
 #### get_default
-```python
+```python wordWrap
 get_default(
     key: str
 )
@@ -5062,13 +5062,13 @@ get_default(
 <ParamField path="key" type="str">The prompt key to retrieve</ParamField>
 
 #### keys
-```python
+```python wordWrap
 keys()
 ```
 
 
 #### set
-```python
+```python wordWrap
 set(
     key: str,
     value: str
@@ -5082,7 +5082,7 @@ set(
 <ParamField path="value" type="str">The new prompt template</ParamField>
 
 #### update
-```python
+```python wordWrap
 update(
     overrides: dict
 )

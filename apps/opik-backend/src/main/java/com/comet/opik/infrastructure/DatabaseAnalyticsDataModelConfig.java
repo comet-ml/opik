@@ -96,6 +96,14 @@ import lombok.Builder;
  * time. Turn it on only once {@code spanWeeksWriteEnabled} is live on every instance: the backfill covers the
  * spans written until its first run, and live registration everything after. Its tuning lives in
  * {@code spanWeeksBackfill}.</p>
+ *
+ * <p>{@code spanWeeksReadEnabled}: when {@code true}, the spans reads keyed by traces or by a project bound
+ * {@code spans} to the weeks the {@code span_weeks} index holds for them. Effective only while
+ * {@code spanColumnsNonNullable} is also on: the legacy {@code spans} keeps {@code id_at} as a 32-bit {@code DateTime}
+ * that wraps far-future ids, so a week bound there would drop rows. {@code span_weeks_mv} registers each span's week in
+ * the spans insert itself, so a new span is indexed by the time its insert returns; older spans are indexed by the
+ * backfill, so turn this on once the backfill logs that it is complete, as unindexed spans would be skipped. Partition
+ * imports bypass the view and need a backfill of the moved range.</p>
  */
 @Builder(toBuilder = true)
 public record DatabaseAnalyticsDataModelConfig(
@@ -107,5 +115,10 @@ public record DatabaseAnalyticsDataModelConfig(
         boolean tracesDistributedWrapEnabled,
         boolean spansDistributedWrapEnabled,
         boolean spanWeeksWriteEnabled,
-        boolean spanWeeksBackfillEnabled) {
+        boolean spanWeeksBackfillEnabled,
+        boolean spanWeeksReadEnabled) {
+
+    public boolean spanWeeksReadBounded() {
+        return spanWeeksReadEnabled && spanColumnsNonNullable;
+    }
 }

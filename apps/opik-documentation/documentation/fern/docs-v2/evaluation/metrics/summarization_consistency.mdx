@@ -14,7 +14,7 @@ title: Summarization consistency
 
 Use it when you automatically summarise support tickets, research reports, or call transcripts and want to catch hallucinations before they reach end users.
 
-```python title="Checking summary faithfulness"
+```python title="Checking summary faithfulness" wordWrap
 from opik.evaluation.metrics import SummarizationConsistencyJudge
 
 metric = SummarizationConsistencyJudge(model="gpt-4o")
@@ -34,8 +34,9 @@ print(score.reason)
 
 | Argument | Type | Required | Description |
 | --- | --- | --- | --- |
-| `input` | `str` | Optional | Source document or context. |
-| `output` | `str` | **Yes** | Payload combining the source material and the candidate summary. |
+| `output` | `str` | **Yes** | Payload combining the source material and the candidate summary. The judge only sees this string. |
+
+`input` and any other keyword arguments are accepted but ignored: they never reach the judge prompt, so the source document must be included in `output`.
 
 ## Configuration
 

@@ -131,6 +131,7 @@ const PromptModelConfigs = ({
         <CustomModelConfigs
           configs={configs as LLMCustomConfigsType}
           model={model}
+          provider={provider}
           unsupportedParams={unsupportedParams}
           onChange={onChange}
         />

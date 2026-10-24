@@ -33,6 +33,36 @@ export interface ProviderKeyRef {
   provider_name?: string;
   base_url?: string;
   auth_config?: ProviderAuthConfig;
+  /**
+   * The provider's own settings, as stored. `models` is a COMMA-SEPARATED
+   * string of fully-qualified ids (`custom-llm/<provider>/<model>`), not an
+   * array — see `providerModelNames` for reading it as a list.
+   */
+  configuration?: { models?: string };
+}
+
+/**
+ * The model display names a Custom provider offers, in stored order.
+ *
+ * For a spec to prove its own seed landed before it opens a browser: a model
+ * picker asserted over a provider that silently kept fewer models than the test
+ * asked for is a test that cannot fail, and it reads as coverage forever.
+ *
+ * The stored value is one comma-separated string of qualified ids; the picker
+ * renders only the model segment, so that is what comes back here — the names a
+ * caller can match against what is on screen.
+ */
+export async function providerModelNames(providerName: string): Promise<string[]> {
+  const key = await findProviderKeyByName(providerName);
+  if (!key) throw new Error(`providerModelNames: no provider key named '${providerName}'`);
+  const models = key.configuration?.models;
+  if (typeof models !== 'string' || models.trim() === '') {
+    throw new Error(
+      `providerModelNames: provider '${providerName}' stored no models — ` +
+        `configuration was ${JSON.stringify(key.configuration)}`,
+    );
+  }
+  return models.split(',').map((id) => id.trim().split('/').pop() ?? '');
 }
 
 function restHeaders(): Record<string, string> {

@@ -212,6 +212,12 @@ component:
       LLM_MODEL_REGISTRY_REMOTE_ENABLED: "false"
       LLM_MODEL_REGISTRY_REMOTE_URL: ""
       LLM_MODEL_REGISTRY_REFRESH_INTERVAL_SECONDS: "300"
+      # ai-labels (apps/opik-backend config.yml aiLabels): AI-generated trace labels, computed by
+      # opik-inference. Off by default; Comet-hosted deployments turn it on, set the URL, and pass the
+      # credential as AI_LABELS_INFERENCE_CREDENTIAL from a secret (secretRefs). Requires the cut-over
+      # traces table. See apps/opik-backend/docs/ai-labels-runbook.md.
+      AI_LABELS_ENABLED: "false"
+      AI_LABELS_INFERENCE_URL: ""
     envFrom:
       - configMapRef:
           name: opik-backend
@@ -824,6 +830,10 @@ databaseAnalyticsDataModel:
   spanWeeksWriteEnabled: false
   # Run the span weeks backfill job. Turn true only once spanWeeksWriteEnabled is live on every backend instance.
   spanWeeksBackfillEnabled: false
+  # Bound span reads by trace id with the span_weeks index. Effective only with spanWeeksWriteEnabled and
+  # spanColumnsNonNullable; turn true
+  # once the span weeks backfill logs that it is complete.
+  spanWeeksReadEnabled: false
 
 # ClickHouse partition-health observability (OPIK-6904). Polls system.parts plus the
 # lightweight-delete mask and publishes opik.clickhouse.partition.* gauges; a distributed lock keeps
