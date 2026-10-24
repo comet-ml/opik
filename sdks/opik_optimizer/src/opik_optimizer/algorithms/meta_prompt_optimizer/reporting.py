@@ -1,4 +1,8 @@
 from contextlib import contextmanager
+from ...utils.display.generation import (
+    CandidateGenerationReporter,
+    display_candidate_generation_report as start_candidate_generation,
+)
 from typing import Any
 from collections.abc import Iterator
 import logging
@@ -20,40 +24,11 @@ from ...utils.logging import compact_debug_text, debug_log
 logger = logging.getLogger(__name__)
 
 
-class CandidateGenerationReporter:
-    def __init__(self, num_prompts: int, selection_summary: str | None = None):
-        self.num_prompts = num_prompts
-        self.selection_summary = selection_summary
-
-    def set_generated_prompts(self, generated_count: int) -> None:
-        summary = f" ({self.selection_summary})" if self.selection_summary else ""
-        cap_text = (
-            f" (cap {self.num_prompts})" if generated_count > self.num_prompts else ""
-        )
-        display_text_block(
-            f"│      Successfully generated {generated_count} candidate prompt{'' if generated_count == 1 else 's'}{cap_text}{summary}",
-            style="dim",
-        )
-        display_text_block("│")
-
-
 @contextmanager
 def display_candidate_generation_report(
     num_prompts: int, verbose: int = 1, selection_summary: str | None = None
 ) -> Iterator[CandidateGenerationReporter]:
-    if verbose >= 1:
-        display_text_block(
-            f"│    Generating up to {num_prompts} candidate prompt{'' if num_prompts == 1 else 's'}:",
-        )
-        if selection_summary:
-            display_text_block(
-                f"│      Evaluation settings: {selection_summary}", style="dim"
-            )
-
-    try:
-        yield CandidateGenerationReporter(num_prompts, selection_summary)
-    finally:
-        pass
+    yield start_candidate_generation(num_prompts, verbose, selection_summary)
 
 
 def log_generation_start(
@@ -181,9 +156,6 @@ def display_prompt_candidate_scoring_report(
                 display_text_block("│")
                 display_text_block("│")
 
-    try:
-        with suppress_opik_logs():
-            with convert_tqdm_to_rich("│         Evaluation", verbose=verbose):
-                yield Reporter()
-    finally:
-        pass
+    with suppress_opik_logs():
+        with convert_tqdm_to_rich("│         Evaluation", verbose=verbose):
+            yield Reporter()

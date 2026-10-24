@@ -441,3 +441,22 @@ We encourage you to explore the existing [optimizer algorithms](/development/opt
 - [Custom optimizer prompts](/development/optimization-runs/advanced/prompt_customization) - Customize internal prompts
 - [Custom metrics](/development/optimization-runs/advanced/custom_metrics) - Build evaluation metrics
 - [API Reference](/development/optimization-runs/advanced/api_reference) - Full parameter documentation
+
+
+## Evaluation and accounting hooks
+
+Implement `run_optimization(context)` and score candidates with `self.evaluate(context, prompts)`. Use `evaluate_with_result` when the algorithm also needs individual test results. Both methods share candidate accounting, scoring health, and stop checks. Check `context.should_stop` after each candidate.
+
+Use `pre_round` / `post_round` and `pre_trial` / `on_trial` / `post_trial` for lifecycle hooks. The older `begin_round`, `finish_round`, `start_candidate`, and `finish_candidate` aliases emit `DeprecationWarning` and remain available for compatibility.
+
+The inherited `optimize_prompt` entrypoint binds LLM call accounting to the active optimizer run. Custom entrypoints that bypass it can bind the same scope explicitly:
+
+```python
+from opik_optimizer.core import llm_calls
+
+with llm_calls.optimizer_scope(optimizer):
+    # Internal reasoning calls are attributed to this optimizer's run.
+    response = llm_calls.call_model(messages=messages, model=optimizer.model)
+```
+
+The scope restores the enclosing run on exit, including when a call raises. Custom agents should continue to use the optimizer ownership attached by the base setup when reporting LLM usage from evaluation worker threads.

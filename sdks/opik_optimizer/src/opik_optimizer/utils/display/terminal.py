@@ -517,10 +517,7 @@ def display_evaluation(
 
     with suppress_opik_logs():
         with convert_tqdm_to_rich("  Evaluation", verbose=verbose):
-            try:
-                yield Reporter()
-            finally:
-                pass
+            yield Reporter()
 
 
 def display_evaluation_progress(

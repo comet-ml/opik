@@ -37,10 +37,7 @@ def infer_output_style(verbose: int = 1) -> Any:
                 )
                 display_text_block("")
 
-    try:
-        yield Reporter()
-    finally:
-        pass
+    yield Reporter()
 
 
 @contextmanager
@@ -104,10 +101,7 @@ def initializing_population(verbose: int = 1) -> Any:
                 )
                 display_text_block("")
 
-    try:
-        yield Reporter()
-    finally:
-        pass
+    yield Reporter()
 
 
 @contextmanager

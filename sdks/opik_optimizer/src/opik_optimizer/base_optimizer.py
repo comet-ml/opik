@@ -1224,6 +1224,11 @@ class BaseOptimizer(ABC):
     # Candidate-first aliases
     def begin_round(self, context: OptimizationContext, **extras: Any) -> Any:
         """Alias for pre_round."""
+        warnings.warn(
+            "begin_round is deprecated; use pre_round.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return self.pre_round(context, **extras)
 
     def start_candidate(
@@ -1234,6 +1239,11 @@ class BaseOptimizer(ABC):
         round_handle: Any | None = None,
     ) -> Any:
         """Alias for pre_trial."""
+        warnings.warn(
+            "start_candidate is deprecated; use pre_trial.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return self.pre_trial(context, candidate, round_handle=round_handle)
 
     def finish_candidate(
@@ -1252,6 +1262,11 @@ class BaseOptimizer(ABC):
         round_handle: Any | None = None,
     ) -> None:
         """Alias for post_trial."""
+        warnings.warn(
+            "finish_candidate is deprecated; use post_trial.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.post_trial(
             context,
             candidate_handle,
@@ -1863,6 +1878,11 @@ class BaseOptimizer(ABC):
         selection_meta: dict[str, Any] | None = None,
     ) -> None:
         """Alias for post_round."""
+        warnings.warn(
+            "finish_round is deprecated; use post_round.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.post_round(
             round_handle,
             context=context,

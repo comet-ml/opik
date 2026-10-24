@@ -94,12 +94,9 @@ def display_root_cause_analysis(verbose: int = 1) -> Iterator[Any]:
                 )
                 display_text_block("│   ")
 
-    try:
-        with suppress_opik_logs():
-            with convert_tqdm_to_rich("│            Batch analysis", verbose=verbose):
-                yield Reporter()
-    finally:
-        pass
+    with suppress_opik_logs():
+        with convert_tqdm_to_rich("│            Batch analysis", verbose=verbose):
+            yield Reporter()
 
 
 @contextmanager
@@ -196,14 +193,9 @@ def display_prompt_improvement(
 
         display_text_block(message, style="bold bright_cyan")
 
-    try:
-        with suppress_opik_logs():
-            with convert_tqdm_to_rich(
-                "│     Generating improved prompt", verbose=verbose
-            ):
-                yield object()
-    finally:
-        pass
+    with suppress_opik_logs():
+        with convert_tqdm_to_rich("│     Generating improved prompt", verbose=verbose):
+            yield object()
 
 
 def display_iteration_improvement(
