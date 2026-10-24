@@ -14,7 +14,6 @@ from ...core.state import prepare_experiment_config
 from ...base_optimizer import _OPTIMIZER_VERSION
 from ...core import evaluation as task_evaluator
 from ...utils.toolcalling.core import metadata as tool_metadata
-from ...utils.scoring import improves_over
 from ...core import runtime
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
@@ -401,21 +400,18 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
                 _failed_items.add(dataset_item.get("id", ""))
                 return {"llm_output": ""}
 
-            best_output = candidates[0]
-            best_score = float("-inf")
-            for candidate in candidates:
-                metric_result = self._metric(dataset_item, candidate)
-                if hasattr(metric_result, "value"):
-                    score = float(metric_result.value)  # type: ignore[arg-type]
-                elif hasattr(metric_result, "score"):
-                    score = float(metric_result.score)  # type: ignore[arg-type]
-                else:
-                    score = float(metric_result)  # type: ignore[arg-type]
-                if improves_over(score, best_score):
-                    best_score = score
-                    best_output = candidate
-
-            return {"llm_output": best_output}
+            # Opik scores the returned output itself; only pass@k needs the metric here.
+            if len(candidates) == 1:
+                return {"llm_output": candidates[0]}
+            selection = select_candidate(
+                candidates=candidates,
+                policy="best_by_metric",
+                metric=self._metric,
+                dataset_item=dataset_item,
+                candidate_logprobs=None,
+                rng=random.Random(0),
+            )
+            return {"llm_output": selection.output}
 
         try:
             _, eval_result = task_evaluator.evaluate_with_result(

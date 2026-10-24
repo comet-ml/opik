@@ -471,3 +471,70 @@ def test_gepa_adapter_whitespace_only_candidates_filtered() -> None:
 
     result = adapter._collect_candidates(context.prompts, STANDARD_DATASET_ITEMS[0])
     assert result == []
+
+
+@pytest.mark.parametrize(
+    "candidates,expected_output,expected_metric_calls",
+    [
+        # n=1: Opik scores the output itself, so no extra metric call per item.
+        (["only"], "only", 0),
+        # n>1: pass@k picks the best candidate by metric.
+        (["bad", "good"], "good", 2),
+    ],
+)
+def test_gepa_adapter_llm_task_scores_candidates_only_for_pass_at_k(
+    monkeypatch: pytest.MonkeyPatch,
+    candidates: list[str],
+    expected_output: str,
+    expected_metric_calls: int,
+) -> None:
+    from opik_optimizer.algorithms.gepa_optimizer import adapter as adapter_module
+    from opik_optimizer.algorithms.gepa_optimizer.types import OpikDataInst
+
+    item = {"id": "t1", "question": "q", "answer": "a"}
+    dataset = make_mock_dataset([item], name="test-dataset", dataset_id="ds-1")
+    metric_calls: list[str] = []
+
+    def metric_fn(dataset_item: dict[str, Any], llm_output: str) -> float:
+        metric_calls.append(llm_output)
+        return 1.0 if llm_output == "good" else 0.0
+
+    metric_fn.__name__ = "metric_fn"
+
+    class CandidateAgent:
+        def invoke_agent_candidates(self, **_kwargs: Any) -> list[str]:
+            return list(candidates)
+
+    context = make_optimization_context(
+        make_baseline_prompt(), dataset=dataset, metric=metric_fn
+    )
+    adapter = OpikGEPAAdapter(
+        base_prompts=context.prompts,
+        agent=CandidateAgent(),  # type: ignore[arg-type]
+        optimizer=GepaOptimizer(model="gpt-4o-mini", verbose=0, seed=42),
+        context=context,
+        metric=metric_fn,
+        dataset=dataset,
+        experiment_config=None,
+    )
+    seen: dict[str, Any] = {}
+
+    def fake_evaluate_with_result(**kwargs: Any) -> tuple[float, Any]:
+        seen["output"] = kwargs["evaluated_task"](item)["llm_output"]
+        seen["metric_calls"] = len(metric_calls)
+        eval_result = MagicMock()
+        eval_result.test_results = []
+        return 1.0, eval_result
+
+    monkeypatch.setattr(
+        adapter_module.task_evaluator, "evaluate_with_result", fake_evaluate_with_result
+    )
+    batch = [
+        OpikDataInst(input_text="q", answer="a", additional_context={}, opik_item=item)
+    ]
+    adapter.evaluate(batch, candidate={}, capture_traces=False)
+
+    assert seen == {
+        "output": expected_output,
+        "metric_calls": expected_metric_calls,
+    }
