@@ -302,24 +302,22 @@ class IsolatedSubprocessExecutor:
                 # Real-time streaming: start log collector threads, then wait for process
                 self._log_collectors[process.pid].start_stream_from_process(process)
                 
-                # Send input to the process. A child that exits without reading
-                # stdin closes the pipe; ignore that like communicate() does and
-                # judge the run by its exit code and stdout.
-                stdin_error = None
-                try:
-                    process.stdin.write(input_json)
-                except BrokenPipeError as e:
-                    stdin_error = e
-                try:
-                    process.stdin.close()  # Signal EOF so process knows input is done
-                except BrokenPipeError as e:
-                    stdin_error = stdin_error or e
-                if stdin_error:
-                    self.logger.warning(
-                        f"Subprocess closed stdin before reading its input: pid={process.pid}, "
-                        f"optimization_id={optimization_id}, job_id={job_id}, "
-                        f"input_chars={len(input_json)}, error={stdin_error}"
-                    )
+                # Send input, then close to signal EOF. A child that exits without
+                # reading stdin closes the pipe; tolerate that like communicate() does
+                # and judge the run by its exit code and stdout. Each stage is logged
+                # on its own, since close can fail differently from write.
+                for stage, send in (
+                    ("write", lambda: process.stdin.write(input_json)),
+                    ("close", process.stdin.close),
+                ):
+                    try:
+                        send()
+                    except BrokenPipeError as e:
+                        self.logger.warning(
+                            f"Subprocess closed stdin before reading its input: stage={stage}, "
+                            f"pid={process.pid}, optimization_id={optimization_id}, job_id={job_id}, "
+                            f"input_chars={len(input_json)}, error={e}"
+                        )
 
                 # Wait for process to complete
                 process.wait(timeout=timeout_secs)

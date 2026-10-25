@@ -658,7 +658,9 @@ print(json.dumps({"status": "ok"}))
             for r in caplog.records
             if "closed stdin before reading its input" in r.getMessage()
         ]
-        assert len(warnings) == 1
-        assert "job_id=job_pipe" in warnings[0]
-        assert "optimization_id=opt_pipe" in warnings[0]
-        assert "pipe_key" not in warnings[0]
+        # close() may or may not fail too, depending on what write() left buffered.
+        assert any("stage=write" in w for w in warnings)
+        for w in warnings:
+            assert "job_id=job_pipe" in w
+            assert "optimization_id=opt_pipe" in w
+            assert "pipe_key" not in w
