@@ -1,5 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+  vi,
+} from "vitest";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 
 // The custom panel embeds the real CodeMirror editor for custom_parameters, which does not mount
 // under this environment (a duplicate @codemirror/state breaks its instanceof checks).
@@ -166,4 +174,44 @@ describe("PromptModelConfigs for Gemini and Vertex AI", () => {
       expect(screen.getByTestId("maxOutputTokens-input")).toHaveValue(shown);
     },
   );
+});
+
+describe("PromptModelConfigs panel and the rest of the page", () => {
+  const renderOpenPanelBesideAButton = () => {
+    renderTrigger(PROVIDER_TYPE.OPEN_AI, PROVIDER_MODEL_TYPE.GPT_4O);
+    const outside = document.createElement("div");
+    outside.tabIndex = 0;
+    document.body.appendChild(outside);
+    onTestFinished(() => outside.remove());
+    openPanel();
+    return outside;
+  };
+
+  const panelHeading = () =>
+    screen.queryByRole("heading", { name: "Model parameters" });
+
+  it("leaves the page clickable while open, so the first click outside reaches its target", () => {
+    renderOpenPanelBesideAButton();
+
+    expect(panelHeading()).toBeVisible();
+    expect(document.body.style.pointerEvents).not.toBe("none");
+  });
+
+  it("closes on a pointer down outside", async () => {
+    const outside = renderOpenPanelBesideAButton();
+    // Radix starts listening for outside pointer downs on the next tick.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+
+    fireEvent.pointerDown(outside);
+
+    expect(panelHeading()).not.toBeInTheDocument();
+  });
+
+  it("stays open when focus moves outside it, as into the thinking effort list", () => {
+    const outside = renderOpenPanelBesideAButton();
+
+    act(() => outside.focus());
+
+    expect(panelHeading()).toBeVisible();
+  });
 });
