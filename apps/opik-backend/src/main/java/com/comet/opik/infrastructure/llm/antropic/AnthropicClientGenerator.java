@@ -8,7 +8,6 @@ import com.comet.opik.infrastructure.llm.AnthropicClientConfig;
 import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
-import com.comet.opik.infrastructure.llm.OpenAiClientConfig;
 import com.fasterxml.jackson.databind.JsonNode;
 import dev.langchain4j.model.anthropic.AnthropicChatModel;
 import dev.langchain4j.model.anthropic.internal.client.AnthropicClient;
@@ -82,14 +81,19 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
         Optional.ofNullable(llmProviderClientConfig.getConnectTimeout())
                 .ifPresent(connectTimeout -> builder.timeout(connectTimeout.toJavaDuration()));
 
-        Optional.ofNullable(llmProviderClientConfig.getOpenAiClient())
-                .map(OpenAiClientConfig::url)
-                .filter(StringUtils::isNotBlank)
+        Optional.ofNullable(llmProviderClientConfig.getAnthropicClient())
+                .map(AnthropicClientConfig::url)
+                .filter(StringUtils::isNotEmpty)
                 .ifPresent(builder::baseUrl);
 
         if (StringUtils.isNotEmpty(config.baseUrl())) {
             builder.baseUrl(config.baseUrl());
         }
+
+        Optional.ofNullable(llmProviderClientConfig.getAnthropicClient())
+                .map(AnthropicClientConfig::version)
+                .filter(StringUtils::isNotBlank)
+                .ifPresent(builder::version);
 
         var customParameters = modelParameters.customParameters();
         var thinking = SamplingParamsNormalizer.effortTurnsOnThinking(modelParameters.name(), customParameters)

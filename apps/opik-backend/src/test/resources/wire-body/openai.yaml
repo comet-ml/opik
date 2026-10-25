@@ -179,6 +179,12 @@ rows:
     body: {seed: 42}
   - name: a judge sends custom_parameters as top-level fields
     path: judge
-    model: gpt-4.1
+    model: gpt-5-nano
     request: {custom_parameters: {max_completion_tokens: 300, reasoning_effort: low, service_tier: flex}}
     body: {max_completion_tokens: 300, reasoning_effort: low, service_tier: flex}
+  # A rule made through the API can carry an effort its model has no levels for.
+  - name: a judge leaves out a custom_parameters effort its model refuses
+    path: judge
+    model: gpt-4.1
+    request: {custom_parameters: {max_completion_tokens: 300, reasoning_effort: low, service_tier: flex}}
+    body: {max_completion_tokens: 300, service_tier: flex}

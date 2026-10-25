@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.io.IOException;
@@ -418,6 +419,31 @@ class LlmModelCatalogTest {
                     Arguments.of("gemini", "gemini-2.5-flash-lite"),
                     Arguments.of("vertex-ai", "gemini-2.5-flash"),
                     Arguments.of("vertex-ai", "gemini-2.5-flash-lite-preview-06-17"));
+        }
+
+        @ParameterizedTest(name = "{0} -> {1}")
+        @CsvSource(value = {"gpt-5.2, null", "gpt-5.4, EFFORT_NONE_ONLY", "gpt-6-luna, EFFORT_NONE_ONLY",
+                "gpt-6-astra, REFUSED", "gpt-6.1-sol, REFUSED", "gpt-4o, null"}, nullValues = "null")
+        void theListedOpenAiModelsCarryHowChatCompletionsTakesTheirTools(String id,
+                ModelParams.ChatCompletionsTools expected) {
+            var model = registry.get("openai").stream().filter(listed -> listed.id().equals(id)).findFirst()
+                    .orElseThrow();
+
+            assertThat(model.params().tools() == null ? null : model.params().tools().chatCompletions())
+                    .isEqualTo(expected);
+        }
+
+        // A judge whose key has its own base URL calls tools on these models with reasoning_effort "none".
+        @Test
+        void everyOpenAiModelThatTakesToolsOnlyWithoutReasoningCanTurnReasoningOff() {
+            var cannotTurnItOff = registry.getOrDefault("openai", List.of()).stream()
+                    .filter(model -> model.params().tools() != null && model.params().tools()
+                            .chatCompletions() == ModelParams.ChatCompletionsTools.EFFORT_NONE_ONLY)
+                    .filter(model -> !model.params().effort().levels().contains("none"))
+                    .map(LlmModelDefinition::id)
+                    .toList();
+
+            assertThat(cannotTurnItOff).isEmpty();
         }
 
         private static Stream<ModelParams> allVariants(ModelParams params) {
