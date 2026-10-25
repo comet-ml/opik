@@ -53,6 +53,16 @@ export const REGISTRY_MODEL = {
   openAiReasoning: 'GPT 5 Mini',
   /** OpenAI non-reasoning: the control that proves the strip is conditional. */
   openAiStandard: 'GPT 4o Mini',
+  /**
+   * An OpenAI model the bundled pricing artifact carries NO `max_output_tokens`
+   * for (`gpt-live-1`), so its Max output tokens cap can only come from
+   * `MAX_COMPLETION_TOKENS_FALLBACK` — the one model that takes that branch
+   * (opik#8847).
+   *
+   * Cheap by the same rule as the rest of this list, and never reached: the
+   * specs using it short-circuit the completion in the browser.
+   */
+  openAiWithoutPricingCap: 'GPT Live 1',
   /** Gemini 3 generation: drops temperature and top_p. Offered by Gemini AND Vertex AI. */
   gemini3: 'Gemini 3 Flash Preview',
   /** Gemini 2.x control: keeps both. Offered by Gemini AND Vertex AI. */
@@ -79,8 +89,53 @@ export const REGISTRY_MODEL = {
   openAiEffortWithoutMax: 'GPT 5.5',
   /** A Claude model with `supportsSamplingParams: false` — nothing a rule can set. */
   claudeWithoutSampling: 'Claude Sonnet 5',
-  /** A Claude model that still offers the sampling choice. */
+  /**
+   * A Claude model that still offers the sampling choice — and the only one
+   * offering BOTH halves of the Anthropic panel under test: `thinksOnlyWhenAsked`,
+   * so its effort control gains the Off choice and defaults to it, and
+   * `supportsSamplingParams`, so Temperature/Top P are there to be unmounted
+   * when a level turns thinking on.
+   */
   claudeWithSampling: 'Claude Sonnet 4.6',
+  /**
+   * A Claude model whose `ANTHROPIC_MODEL_CAPABILITIES` row EXISTS but lists no
+   * `thinkingEffortOptions` at all, so the Thinking effort control is not
+   * rendered for it and a stored effort is dropped rather than refitted.
+   *
+   * The row existing is the whole point, and the reason this is not just "a
+   * Claude model": a model with NO row is treated as one we cannot place, and
+   * keeps whatever effort was stored for it. The two states look identical in
+   * the picker and behave oppositely.
+   */
+  claudeWithoutEffort: 'Claude Haiku 4.5',
+  /**
+   * The other side of the model-switch reconciler: offers low…max INCLUDING
+   * xHigh, has no Off (it always thinks), and defaults to Medium rather than
+   * the `high` fallback.
+   *
+   * Paired with `claudeWithSampling` deliberately. "The new model's default"
+   * and "the nearest level the new model offers" give the same answer for most
+   * pairs — Claude Opus 4.5's default High is also the nearest to Max among
+   * low/medium/high — so such a pair cannot tell the two rules apart. Across
+   * this pair they differ: an untouched Medium becomes Off, a picked xHigh
+   * becomes High.
+   */
+  claudeEffortDefaultMedium: 'Claude Opus 5.5',
+  /**
+   * The one model declaring `effortWithoutThinking`: its control is labelled
+   * "Effort" rather than "Thinking effort", it offers low/medium/high with no
+   * Off, and it keeps the sampling pair at every level because the effort does
+   * not turn thinking on.
+   */
+  claudeEffortWithoutThinking: 'Claude Opus 4.5',
+  /**
+   * A Gemini 2.x model whose thinking levels EXCLUDE off — Google answers a
+   * zero budget with "Budget 0 is invalid. This model only works in thinking
+   * mode." Its sibling `gemini2` (2.5 Flash) accepts off, which makes the pair
+   * the Gemini half of the same reconciler: an `off` carried onto this model
+   * is a level the provider rejects outright.
+   */
+  geminiWithoutThinkingOff: 'Gemini 2.5 Pro',
 } as const;
 
 export interface ModelRegistryProvidersRef {

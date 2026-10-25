@@ -39,6 +39,7 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 
 import java.util.List;
 import java.util.Map;
+import java.util.function.UnaryOperator;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -220,6 +221,17 @@ class FreeFormSqlRowPolicyConformanceTest {
         }
     }
 
+    @Test
+    @DisplayName("the extended account's scalar subqueries keep its scope: its project, its workspace under '*'")
+    void extendedScalarSubqueryIsScoped() {
+        // Read only inside a scalar subquery, a table is in neither the plan nor used_row_policies, so the post-run
+        // check cannot show its policy; this pins that ClickHouse applies it there anyway.
+        try (var extended = client(EXTENDED)) {
+            Stream.concat(readTables(), EXTENDED_PROJECT_BOUND_TABLES.stream())
+                    .forEach(table -> assertExtendedScope(extended, table, query -> "SELECT (%s)".formatted(query)));
+        }
+    }
+
     @ParameterizedTest
     @MethodSource("extendedProjectBoundTables")
     @DisplayName("the extended account's other project-bound tables: its project, or its workspace under '*'")
@@ -254,13 +266,19 @@ class FreeFormSqlRowPolicyConformanceTest {
 
     /** A project-bound table as the extended account: its project, its workspace under '*', never another. */
     private void assertExtendedScope(Client extended, String table) {
+        assertExtendedScope(extended, table, UnaryOperator.identity());
+    }
+
+    /** As above, with each count query wrapped by {@code shape}. */
+    private void assertExtendedScope(Client extended, String table, UnaryOperator<String> shape) {
         var project = data.a1();
         String countQuery = "SELECT count() FROM %s.%s".formatted(DATABASE_NAME, table);
-        assertThat(single(extended, countQuery, project.workspace().id(), project.id().toString())).as(table)
-                .isEqualTo(expected(table, false));
-        assertThat(single(extended, countQuery, project.workspace().id(), "*")).as(table)
+        assertThat(single(extended, shape.apply(countQuery), project.workspace().id(), project.id().toString()))
+                .as(table).isEqualTo(expected(table, false));
+        assertThat(single(extended, shape.apply(countQuery), project.workspace().id(), "*")).as(table)
                 .isEqualTo(expected(table, true));
-        assertThat(single(extended, "%s WHERE workspace_id = '%s'".formatted(countQuery, data.b().id()),
+        assertThat(single(extended,
+                shape.apply("%s WHERE workspace_id = '%s'".formatted(countQuery, data.b().id())),
                 project.workspace().id(), "*")).as(table).isEqualTo("0");
     }
 

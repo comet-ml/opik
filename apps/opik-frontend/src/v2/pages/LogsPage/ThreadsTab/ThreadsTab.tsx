@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   JsonParam,
   NumberParam,
@@ -23,6 +23,9 @@ import {
   DATE_RANGE_PRESET_ALLTIME,
 } from "@/v2/pages-shared/traces/MetricDateRangeSelect";
 import MetricDateRangeSelect from "@/v2/pages-shared/traces/MetricDateRangeSelect/MetricDateRangeSelect";
+import EnvironmentFilterSelect from "@/v2/pages-shared/traces/EnvironmentFilterSelect/EnvironmentFilterSelect";
+import { useLogsEnvironment } from "@/v2/pages/LogsPage/TracesSpansTab/useLogsEnvironment";
+import { generateEnvironmentFilter } from "@/lib/filters";
 import { ProjectDateRangeConfig } from "@/v2/pages-shared/traces/resolveProjectDateRangeConfig";
 
 import {
@@ -555,6 +558,18 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     persistKey: getLogsFiltersMemoryKey(projectId, THREADS_FILTERS_URL_KEY),
   });
 
+  const { environment, envIsValid, changeEnvironment } =
+    useLogsEnvironment(projectId);
+
+  useEffect(() => {
+    if (envIsValid === false) setPage(1);
+  }, [envIsValid, setPage]);
+
+  const effectiveFilters = useMemo(() => {
+    if (!environment || envIsValid === false) return threadChipFilters;
+    return [...threadChipFilters, ...generateEnvironmentFilter(environment)];
+  }, [threadChipFilters, environment, envIsValid]);
+
   const { addTag: addThreadTagFilter } = useTagsChipActions({
     chipId: "tags",
     values: threadChipValues,
@@ -613,7 +628,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
       {
         projectId,
         sorting: sortedColumns,
-        filters: threadChipFilters,
+        filters: effectiveFilters,
         page: page as number,
         size: size as number,
         search: trimmedSearch,
@@ -635,7 +650,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     {
       projectId,
       sorting: sortedColumns,
-      filters: threadChipFilters,
+      filters: effectiveFilters,
       page: page as number,
       size: size as number,
       search: trimmedSearch,
@@ -655,7 +670,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     useThreadsStatistic(
       {
         projectId,
-        filters: threadChipFilters,
+        filters: effectiveFilters,
         search: trimmedSearch,
         fromTime: intervalStart,
         toTime: intervalEnd,
@@ -685,8 +700,9 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
   const handleClearFilters = useCallback(() => {
     setSearch("");
     clearAllThreadChips();
+    changeEnvironment("");
     setPage(1);
-  }, [setSearch, clearAllThreadChips, setPage]);
+  }, [setSearch, clearAllThreadChips, changeEnvironment, setPage]);
 
   const dynamicScoresColumns = useMemo(() => {
     return (feedbackScoresNames?.scores ?? [])
@@ -907,6 +923,13 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
             size="xs"
           />
           <Separator orientation="vertical" className="mx-2 h-6" />
+          <EnvironmentFilterSelect
+            value={environment ?? ""}
+            onChange={(next) => {
+              changeEnvironment(next);
+              setPage(1);
+            }}
+          />
           <MetricDateRangeSelect
             value={dateRange}
             onChangeValue={handleDateRangeChange}
@@ -935,7 +958,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
           projectId={projectId}
           entityType="threads"
           countLabel="Threads"
-          filters={threadChipFilters}
+          filters={effectiveFilters}
           intervalStart={intervalStart}
           intervalEnd={intervalEnd}
           dateRange={dateRange}
@@ -1039,7 +1062,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
           noData={
             <DataTableNoMatchingData
               onClearFilters={
-                search || threadChipFilters.length > 0
+                search || threadChipFilters.length > 0 || environment
                   ? handleClearFilters
                   : undefined
               }
