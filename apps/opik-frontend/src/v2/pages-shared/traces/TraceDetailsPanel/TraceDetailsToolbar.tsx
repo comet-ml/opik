@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useRef } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
 import { FoldVertical, UnfoldVertical } from "lucide-react";
 import uniq from "lodash/uniq";
@@ -19,6 +19,7 @@ import { TRACE_TYPE_FOR_TREE } from "@/constants/traces";
 import { Button } from "@/ui/button";
 import { Separator } from "@/ui/separator";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import { isKeyForLayerAbovePanel } from "@/shared/ResizableSidePanel/panelHotkeys";
 import BaseTraceDataTypeIcon from "@/shared/BaseTraceDataTypeIcon/BaseTraceDataTypeIcon";
 import ExpandableSearchInput from "@/shared/ExpandableSearchInput/ExpandableSearchInput";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
@@ -275,6 +276,7 @@ export const TraceDataToolbar: React.FC<TraceDataToolbarProps> = ({
   const {
     permissions: { canAnnotateTraceSpanThread },
   } = usePermissions();
+  const toolbarRef = useRef<HTMLDivElement>(null);
 
   useHotkeys(
     "a",
@@ -282,7 +284,11 @@ export const TraceDataToolbar: React.FC<TraceDataToolbarProps> = ({
       e.preventDefault();
       setActiveSection(DetailsActionSection.Annotate);
     },
-    { enableOnFormTags: false, enabled: canAnnotateTraceSpanThread },
+    {
+      enableOnFormTags: false,
+      enabled: canAnnotateTraceSpanThread,
+      ignoreEventWhen: (e) => isKeyForLayerAbovePanel(e, toolbarRef.current),
+    },
     [setActiveSection, canAnnotateTraceSpanThread],
   );
 
@@ -295,7 +301,10 @@ export const TraceDataToolbar: React.FC<TraceDataToolbarProps> = ({
     : TRACE_TYPE_FOR_TREE;
 
   return (
-    <div className="flex h-10 shrink-0 items-center gap-2 border-b bg-muted/50 px-4">
+    <div
+      ref={toolbarRef}
+      className="flex h-10 shrink-0 items-center gap-2 border-b bg-muted/50 px-4"
+    >
       {isLoading || !dataToView ? (
         <Skeleton className="h-4 w-32" />
       ) : (

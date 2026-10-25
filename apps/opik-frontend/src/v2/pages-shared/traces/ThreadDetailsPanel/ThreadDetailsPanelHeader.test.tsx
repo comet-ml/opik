@@ -132,3 +132,29 @@ describe("ThreadDetailsPanel header", () => {
     expect(screen.getAllByRole("menuitem")).toHaveLength(3);
   });
 });
+
+describe("ThreadDetailsPanel Annotate hotkey", () => {
+  const A_KEY = { key: "a", code: "KeyA" };
+  const annotateParam = () =>
+    new URLSearchParams(window.location.search).get("lastThreadSection");
+
+  beforeEach(() => {
+    window.history.replaceState(null, "", "/");
+  });
+
+  it("opens Annotate on A while the panel is open", () => {
+    renderPanel();
+
+    fireEvent.keyDown(document.body, A_KEY);
+
+    expect(annotateParam()).toBe("annotate");
+  });
+
+  it("ignores A while the panel is closed", () => {
+    renderPanel({ open: false });
+
+    fireEvent.keyDown(document.body, A_KEY);
+
+    expect(annotateParam()).toBeNull();
+  });
+});

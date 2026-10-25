@@ -366,6 +366,7 @@ const OptimizationPage: React.FC = () => {
         trialNumber={trialSidebar.trialNumber}
         isBaseline={activeTrialCandidate?.trialNumber === null}
         trialExperiments={trialExperiments}
+        ignoreHotkeys={trialSidebar.isTraceOpen}
       >
         <TrialSidebarContent
           optimization={optimization}
