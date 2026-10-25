@@ -22,7 +22,6 @@ import isArray from "lodash/isArray";
 import isPlainObject from "lodash/isPlainObject";
 import isString from "lodash/isString";
 import get from "lodash/get";
-import lodashSet from "lodash/set";
 
 interface PlaygroundOutput {
   isLoading: boolean;
