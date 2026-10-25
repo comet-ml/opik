@@ -22,14 +22,40 @@ export const getModelParams = (
   if (!hasLatestModelList(provider)) {
     return undefined;
   }
-  const params =
-    getLatestListedModelParams(provider, model) ??
-    getLatestProviderProfile(provider);
-  return (route ? params?.routes?.[route] : undefined) ?? params;
+  const profile = getLatestProviderProfile(provider);
+  const params = getLatestListedModelParams(provider, model) ?? profile;
+  const routed = (route ? params?.routes?.[route] : undefined) ?? params;
+  return routed && withSamplingRangesAtEffortNone(routed, profile);
 };
+
+// A refused param is served without its range, but a model whose sampling comes back at effort none
+// still needs one for the slider it shows then, so it borrows the provider profile's.
+const withSamplingRangesAtEffortNone = (
+  params: ModelParams,
+  profile?: ModelParams,
+): ModelParams =>
+  params.sampling_at_effort_none && profile
+    ? {
+        ...params,
+        temperature: params.temperature && {
+          ...profile.temperature,
+          ...params.temperature,
+        },
+        top_p: params.top_p && { ...profile.top_p, ...params.top_p },
+      }
+    : params;
 
 export const isAccepted = (param?: { accepted?: boolean }): boolean =>
   param?.accepted === true;
+
+// OpenAI: "When reasoning effort is not none, remove temperature, top_p, and top_logprobs". So both come
+// back when the request runs at none, sent or as the model's default, as ParamResolver does.
+export const samplingComesBackAtEffortNone = (
+  params: ModelParams,
+  storedEffort: unknown,
+): boolean =>
+  params.sampling_at_effort_none === true &&
+  resolveEffortLevel(params.effort, [storedEffort]) === "none";
 
 const EFFORT_ORDER = [
   "none",
@@ -119,13 +145,24 @@ export type SamplingValues = { temperature?: number; topP?: number };
 
 export const resolveSampling = (
   params: ModelParams,
-  configs: { temperature?: number | null; topP?: number | null },
+  configs: {
+    temperature?: number | null;
+    topP?: number | null;
+    reasoningEffort?: unknown;
+  },
 ): SamplingValues => {
-  const takesTemperature = isAccepted(params.temperature);
+  const atEffortNone = samplingComesBackAtEffortNone(
+    params,
+    configs.reasoningEffort,
+  );
+  const takesTemperature = isAccepted(params.temperature) || atEffortNone;
   const temperature = takesTemperature
     ? configs.temperature ?? undefined
     : undefined;
-  const topP = isAccepted(params.top_p) ? configs.topP ?? undefined : undefined;
+  const topP =
+    isAccepted(params.top_p) || atEffortNone
+      ? configs.topP ?? undefined
+      : undefined;
 
   if (!params.sampling_exclusive) {
     return {
@@ -217,10 +254,13 @@ export const getParamControls = (
   const numberControl = (param: NumberParamName): NumberControl | undefined => {
     const configKey = shownKey(param);
     const spec = params[param];
+    const backAtEffortNone =
+      params.sampling_at_effort_none === true &&
+      (param === "temperature" || param === "top_p");
     if (
       !configKey ||
       !spec ||
-      !isAccepted(spec) ||
+      !(isAccepted(spec) || backAtEffortNone) ||
       spec.min === undefined ||
       spec.max === undefined
     ) {

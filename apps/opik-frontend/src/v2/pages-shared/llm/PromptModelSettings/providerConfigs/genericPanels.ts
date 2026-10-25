@@ -29,8 +29,10 @@ import {
   ParamBinding,
   ParamControl,
   resolveEffortLevel,
+  isAccepted,
   resolveMaxOutputTokens,
   resolveSampling,
+  samplingComesBackAtEffortNone,
 } from "@/lib/modelParams";
 import { ModelParams } from "@/types/modelParams";
 import { PROVIDER_MODEL_TYPE } from "@/types/providers";
@@ -189,8 +191,16 @@ export const getShownControls = (
   unsupportedParams?: ReadonlySet<string>,
   model = "",
 ): ParamControl[] => {
+  const effortKey = presentation.binding.effort;
+  const samplingOnlyAtEffortNone =
+    params.sampling_at_effort_none === true && !isAccepted(params.temperature);
   const samplingOff =
-    presentation.getSamplingOffNote(model, configs, false) !== undefined;
+    presentation.getSamplingOffNote(model, configs, false) !== undefined ||
+    (samplingOnlyAtEffortNone &&
+      !samplingComesBackAtEffortNone(
+        params,
+        effortKey ? configs[effortKey] : undefined,
+      ));
   const controls = getParamControls(
     params,
     presentation.binding,
