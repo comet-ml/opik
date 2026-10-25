@@ -9,6 +9,7 @@ let mockActiveProjectId: string | null = "proj-a";
 let mockProjectExperiments: {
   data?: { content: { id: string }[] };
   isLoading: boolean;
+  isError?: boolean;
 } = { isLoading: false };
 const mockUseExperimentsList = vi.fn();
 const mockUseExperimentsByIds = vi.fn();
@@ -123,6 +124,18 @@ describe("CompareExperimentsPage", () => {
     });
     expect(screen.getByTestId("details").dataset.ids).toBe("exp-b,exp-a");
     expect(screen.getByTestId("items-tab").dataset.ids).toBe("exp-b,exp-a");
+  });
+
+  it("shows the requested experiments when membership cannot be checked", () => {
+    mockRequestedIds = ["exp-a", "exp-foreign"];
+    mockProjectExperiments = { isLoading: false, isError: true };
+
+    render(<CompareExperimentsPage />);
+
+    expect(mockUseExperimentsByIds).toHaveBeenLastCalledWith({
+      experimentsIds: ["exp-a", "exp-foreign"],
+    });
+    expect(screen.getByTestId("details").dataset.ids).toBe("exp-a,exp-foreign");
   });
 
   it("shows nothing when no requested experiment is in the project", () => {

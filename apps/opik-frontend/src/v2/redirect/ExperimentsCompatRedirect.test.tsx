@@ -77,7 +77,15 @@ describe("ExperimentsCompatRedirect", () => {
     expect(screen.getByTestId("redirect").dataset.projectId).toBe("");
   });
 
-  it("skips the lookup when the link has no experiments", () => {
+  it.each([
+    ["missing", undefined],
+    ["a scalar", "exp-1"],
+    ["an empty list", []],
+    ["a null id", [null]],
+    ["a numeric id", [123]],
+  ])("skips the lookup when experiments is %s", (_, experiments) => {
+    mockLocationSearch = { experiments };
+
     render(<ExperimentsCompatRedirect toPath="/experiments" />);
 
     expect(mockUseExperimentById).toHaveBeenCalledWith(

@@ -51,28 +51,35 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
   // Membership comes from the project-scoped list endpoint, not from
   // experiment.project_id, so an experiment whose traces span several projects
   // is shown in every project that lists it.
-  const { data: projectExperimentsData, isLoading: isProjectScopeLoading } =
-    useExperimentsList(
-      {
-        projectId: activeProjectId ?? undefined,
-        experimentIds: requestedExperimentsIds,
-        types: Object.values(EXPERIMENT_TYPE),
-        page: 1,
-        size: requestedExperimentsIds.length,
-      },
-      {
-        enabled: Boolean(activeProjectId) && requestedExperimentsIds.length > 0,
-      },
-    );
+  const {
+    data: projectExperimentsData,
+    isLoading: isProjectScopeLoading,
+    isError: isProjectScopeError,
+  } = useExperimentsList(
+    {
+      projectId: activeProjectId ?? undefined,
+      experimentIds: requestedExperimentsIds,
+      types: Object.values(EXPERIMENT_TYPE),
+      page: 1,
+      size: requestedExperimentsIds.length,
+    },
+    {
+      enabled: Boolean(activeProjectId) && requestedExperimentsIds.length > 0,
+    },
+  );
 
   const experimentsIds: string[] = useMemo(() => {
+    // Queries don't retry, so fail open rather than hide every experiment
+    // when membership can't be checked.
+    if (isProjectScopeError) return requestedExperimentsIds;
+
     const projectExperimentIds = new Set(
       (projectExperimentsData?.content ?? []).map((e) => e.id),
     );
     return requestedExperimentsIds.filter((id: string) =>
       projectExperimentIds.has(id),
     );
-  }, [requestedExperimentsIds, projectExperimentsData]);
+  }, [requestedExperimentsIds, projectExperimentsData, isProjectScopeError]);
 
   const response = useExperimentsByIds({
     experimentsIds,
