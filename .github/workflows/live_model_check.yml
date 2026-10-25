@@ -99,6 +99,10 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_E2E_TESTS }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          # The service account the SDK's Vertex AI library tests use (project opik-sdk-tests).
+          VERTEX_AI_CREDENTIALS_JSON: ${{ secrets.GCP_CREDENTIALS_JSON }}
+          VERTEX_AI_LOCATION: global
         run: |
           python scripts/check_new_models.py \
             --base-ref "$BASE_SHA" \

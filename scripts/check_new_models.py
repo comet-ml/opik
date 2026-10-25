@@ -19,12 +19,21 @@ that names a setting is a rejected claim, and the call goes again without it, so
 others. Report-only: a failure is a result for a person to read, not an error. The exit code is non-zero only when
 the check itself could not run.
 
+A changed model that no picker offers (the backend serves it without a label) is listed as not checked rather than
+called: nobody can pick it, and most such models are retired, not chat models, or a dated copy of a listed one, so a
+failure there is one nobody acts on. --models still calls it.
+
 When nothing changed, it checks one cheap model per provider instead (from SMOKE_MODELS, when that model is in
 the registry), so a PR that touches only this script or its workflow still runs end to end.
 
+Unchanged picker models are called too, a fifth of them per weekday (the rotation), once each with the plain
+prompt and only with the calls the changed models leave under the cap, so a model that breaks without a catalog
+change shows up within a week of daily sync PRs. OpenRouter's go cheapest first.
+
 Usage:
   python scripts/check_new_models.py --base-ref origin/main --dry-run --catalog-file models.json
-  OPENAI_API_KEY=... ANTHROPIC_API_KEY=... GEMINI_API_KEY=... \\
+  OPENAI_API_KEY=... ANTHROPIC_API_KEY=... GEMINI_API_KEY=... OPENROUTER_API_KEY=... \\
+  VERTEX_AI_CREDENTIALS_JSON="$(cat service-account.json)" VERTEX_AI_LOCATION=global \\
     python scripts/check_new_models.py --base-ref origin/main --backend-url http://localhost:8080 --output report.md
 """
 
@@ -35,6 +44,8 @@ import re
 import subprocess
 import sys
 import time
+import zlib
+from datetime import date
 from pathlib import Path
 from typing import NamedTuple
 from urllib.parse import urlparse
@@ -60,7 +71,14 @@ PROVIDER_KEY_ENV = {
     "openai": "OPENAI_API_KEY",
     "anthropic": "ANTHROPIC_API_KEY",
     "gemini": "GEMINI_API_KEY",
+    "vertex-ai": "VERTEX_AI_CREDENTIALS_JSON",
+    "openrouter": "OPENROUTER_API_KEY",
 }
+# The Vertex AI key is a service account's JSON; the backend reads the region from the key's configuration.
+VERTEX_AI_LOCATION_ENV = "VERTEX_AI_LOCATION"
+DEFAULT_VERTEX_AI_LOCATION = "global"
+OPENROUTER_PRICES_JSON = Path("apps/opik-backend/src/main/resources/model_prices_openrouter.json")
+ROTATION_DAYS = 5
 
 PROVIDER_LABELS = {
     "openai": "OpenAI",
@@ -70,13 +88,16 @@ PROVIDER_LABELS = {
     "openrouter": "OpenRouter",
 }
 
-REASON_PRIORITY = {"new": 0, "changed": 1, "params": 2}
+REASON_PRIORITY = {"new": 0, "changed": 1, "params": 2, "smoke": 3, "rotation": 4}
 OVER_CAP_NOTE = "over the call cap"
+NOT_IN_PICKER_NOTE = "not in a picker"
 
 SMOKE_MODELS = {
-    "openai": "gpt-4.1-nano",
+    "openai": "gpt-5-nano",
     "anthropic": "claude-haiku-4-5-20251001",
     "gemini": "gemini-2.5-flash-lite",
+    "vertex-ai": "gemini-3.5-flash-lite",
+    "openrouter": "openai/gpt-5-nano",
 }
 
 # The fields that change what the backend sends or where it routes a plain prompt. Others, such
@@ -97,6 +118,7 @@ EFFORT_FIELDS = {
     "anthropic": lambda level: {"custom_parameters": {"output_config": {"effort": level}}},
     "gemini": lambda level: {"custom_parameters": {"thinking": {"level": level}}},
     "vertex-ai": lambda level: {"custom_parameters": {"thinking": {"level": level}}},
+    "openrouter": lambda level: {"custom_parameters": {"reasoning": {"effort": level}}},
 }
 
 # The playground sends these levels as no thinking setting at all, so their call would be the plain one.
@@ -461,12 +483,11 @@ class Backend:
             raise RuntimeError(f"Could not read the model catalog: {sanitize(error_text(response), self.secrets)}")
         return catalog_by_id(response.json())
 
-    def add_provider_key(self, provider: str, api_key: str) -> None:
-        response = self.session.post(
-            f"{self.base_url}/v1/private/llm-provider-key",
-            json={"provider": provider, "api_key": api_key, "name": f"live-model-check-{provider}"},
-            timeout=30,
-        )
+    def add_provider_key(self, provider: str, api_key: str, configuration: dict[str, str] | None = None) -> None:
+        body = {"provider": provider, "api_key": api_key, "name": f"live-model-check-{provider}"}
+        if configuration:
+            body["configuration"] = configuration
+        response = self.session.post(f"{self.base_url}/v1/private/llm-provider-key", json=body, timeout=30)
         if response.status_code not in (200, 201, 409):
             raise RuntimeError(f"Could not add the {provider} key: {sanitize(error_text(response), self.secrets)}")
         location = response.headers.get("Location")
@@ -474,9 +495,10 @@ class Backend:
             self.created_keys[provider] = urlparse(location).path.rstrip("/").rsplit("/", 1)[-1]
 
     def set_route(self, provider: str, route: str | None) -> bool:
-        # Only on a key this run created: a key that was already there may be someone's, set up their way.
+        # Only on a key this run created: a key that was already there may be someone's, set up their way. And only
+        # for a provider with routes: the PATCH replaces the whole configuration, which holds Vertex AI's region.
         key_id = self.created_keys.get(provider)
-        if key_id is None:
+        if key_id is None or provider not in ROUTES:
             return route is None
         response = self.session.patch(
             f"{self.base_url}/v1/private/llm-provider-key/{key_id}",
@@ -603,6 +625,16 @@ def render_report(
             lines.append(f"- **{PROVIDER_LABELS.get(provider, provider)}:** {_counts(rows)}")
     if cut:
         lines += ["", f"The call cap of {call_cap} cut {_models(cut)}; they are listed as not checked."]
+    rotated = {r.probe.model for r in results if r.probe.model.reason == "rotation"}
+    if rotated:
+        lines += [
+            "",
+            (
+                f"The rotation adds {_models(len(rotated))} that didn't change, once each with the plain prompt: a "
+                "fifth of the picker each weekday, with the calls the changed models leave, so each picker model "
+                "comes up within a week."
+            ),
+        ]
 
     rejections = [(r, rejection) for r in results for rejection in r.rejections]
     if rejections:
@@ -764,7 +796,7 @@ def _provider_order(items: list) -> list[str]:
     return sorted(seen, key=lambda p: rank.get(p, len(rank)))
 
 
-def plan(args: argparse.Namespace) -> tuple[list[ModelToCheck], list[UnexercisedChange], str]:
+def plan(args: argparse.Namespace) -> tuple[list[ModelToCheck], list[UnexercisedChange], str, dict]:
     head = load_catalog(args.head_ref)
     if args.models:
         rows = {(p, m["id"]): m for p, models in head[0].items() for m in models}
@@ -777,17 +809,76 @@ def plan(args: argparse.Namespace) -> tuple[list[ModelToCheck], list[Unexercised
             ],
             [],
             "asked",
+            head[0],
         )
     to_check, unexercised = find_models_to_check(load_catalog(args.base_ref), head)
     if to_check:
-        return to_check, unexercised, "changes"
-    return smoke_models(head[0]), unexercised, "smoke"
+        return to_check, unexercised, "changes", head[0]
+    return smoke_models(head[0]), unexercised, "smoke", head[0]
+
+
+def rotation_models(
+    head: dict[str, list[dict]],
+    catalog: dict[str, dict[str, dict]],
+    keys: dict[str, str],
+    taken: list[ModelToCheck],
+    day: int,
+) -> list[ModelToCheck]:
+    already = {(m.provider, m.model_id) for m in taken}
+    prices = _openrouter_prices()
+    picked = []
+    for provider, models in head.items():
+        if not keys.get(provider):
+            continue
+        served = catalog.get(provider, {})
+        due = [
+            m
+            for m in models
+            if (served.get(m["id"]) or {}).get("label")
+            and (provider, m["id"]) not in already
+            # crc32, not hash(): Python salts str hashes per process, and the bucket must not move between runs.
+            and zlib.crc32(f"{provider}/{m['id']}".encode()) % ROTATION_DAYS == day % ROTATION_DAYS
+        ]
+        if provider == "openrouter":
+            due.sort(key=lambda m: prices.get(m["id"], float("inf")))
+        picked += [ModelToCheck(provider, m["id"], request_model_name(m), "rotation") for m in due]
+    return picked
+
+
+def _openrouter_prices() -> dict[str, float]:
+    # Only the order depends on prices, so an unreadable file means file order, not a failed run.
+    try:
+        rows = json.loads((REPO_ROOT / OPENROUTER_PRICES_JSON).read_text())
+    except (OSError, ValueError) as e:
+        print(f"::warning::Calling OpenRouter's rotation in file order: {e}", file=sys.stderr)
+        return {}
+    prices = {}
+    for key, row in rows.items() if isinstance(rows, dict) else ():
+        if not isinstance(row, dict):
+            continue
+        costs = (row.get("input_cost_per_token"), row.get("output_cost_per_token"))
+        # A router's price depends on the model it picks, and the prices file leaves it out: unknown, not free.
+        if all(isinstance(c, (int, float)) and not isinstance(c, bool) for c in costs):
+            prices[key.removeprefix("openrouter/")] = sum(costs)
+    return prices
+
+
+def _credential_secrets(credentials_json: str) -> list[str]:
+    # A service-account key holds its private key inside the JSON, and an error could echo that part alone.
+    try:
+        credentials = json.loads(credentials_json)
+    except ValueError:
+        return []
+    if not isinstance(credentials, dict):
+        return []
+    parts = [credentials.get("private_key"), credentials.get("private_key_id")]
+    return [p for part in parts if isinstance(part, str) and part for p in (part, part.replace("\n", "\\n"))]
 
 
 def run(args: argparse.Namespace) -> int:
-    to_check, unexercised, mode = plan(args)
+    to_check, unexercised, mode, head = plan(args)
     keys = {p: os.environ.get(env, "") for p, env in PROVIDER_KEY_ENV.items()}
-    secrets = [k for k in keys.values() if k]
+    secrets = [k for k in keys.values() if k] + _credential_secrets(keys["vertex-ai"])
 
     backend = None if args.dry_run and args.catalog_file else Backend(args.backend_url, secrets)
     if backend is not None:
@@ -797,25 +888,40 @@ def run(args: argparse.Namespace) -> int:
     else:
         catalog = backend.models()
 
+    if mode != "asked":
+        to_check += rotation_models(head, catalog, keys, to_check, args.rotation_day)
+
     results = []
     queues = {}
+    rotation_queues = {}
     for model in sorted(to_check, key=lambda m: REASON_PRIORITY.get(m.reason, len(REASON_PRIORITY))):
         served = catalog.get(model.provider, {}).get(model.model_id)
         probes = plan_probes(model, (served or {}).get("params"))
-        if served is None:
+        if model.reason == "rotation":
+            rotation_queues.setdefault(model.provider, []).append(
+                [p for p in probes if p.name == "plain" and p.route is None]
+            )
+        elif served is None:
             results += [CheckResult(p, "not checked", None, "the backend doesn't list this model") for p in probes]
+        elif mode == "changes" and not served.get("label"):
+            results += [CheckResult(p, "not checked", None, NOT_IN_PICKER_NOTE) for p in probes]
         elif not keys.get(model.provider):
             results += [CheckResult(p, "not checked", None, "no CI key") for p in probes]
         else:
             queues.setdefault(model.provider, []).append(probes)
     planned, over_cap = share_call_cap(queues, args.max_calls)
     results += [CheckResult(p, "not checked", None, OVER_CAP_NOTE) for p in over_cap]
+    # The rotation only fills what the changed models leave; a model it can't fit comes up again next week.
+    rotated, _ = share_call_cap(rotation_queues, args.max_calls - len(planned))
+    planned += rotated
 
     if args.dry_run:
         results += [CheckResult(p, "would call", None, "") for p in planned]
     else:
+        location = os.environ.get(VERTEX_AI_LOCATION_ENV) or DEFAULT_VERTEX_AI_LOCATION
         for provider in sorted({p.model.provider for p in planned}):
-            backend.add_provider_key(provider, keys[provider])
+            configuration = {"location": location} if provider == "vertex-ai" else None
+            backend.add_provider_key(provider, keys[provider], configuration)
         results += run_probes(backend, planned, args.max_calls)
     cut = len({r.probe.model for r in results if r.note.startswith(OVER_CAP_NOTE)})
 
@@ -915,6 +1021,12 @@ def main() -> int:
         type=provider_and_id,
         metavar="PROVIDER/ID",
         help="Check these models instead of the new or changed ones",
+    )
+    parser.add_argument(
+        "--rotation-day",
+        type=non_negative_int,
+        default=date.today().weekday(),
+        help="Which fifth of the unchanged picker models to call (default: today's weekday, Monday = 0)",
     )
     args = parser.parse_args()
     try:

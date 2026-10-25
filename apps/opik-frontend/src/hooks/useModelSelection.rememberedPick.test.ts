@@ -34,6 +34,10 @@ const registry = vi.hoisted(() => {
   };
 });
 
+vi.mock("@/api/llm/useLlmModelDefaults", () => ({
+  default: () => ({ data: undefined, isFetched: true }),
+}));
+
 vi.mock("@/api/llm/useLlmModels", () => ({
   default: () => ({
     data: registry.data,
@@ -41,6 +45,10 @@ vi.mock("@/api/llm/useLlmModels", () => ({
     isError: false,
     error: null,
   }),
+}));
+
+vi.mock("@/api/llm/useLlmModelProfiles", () => ({
+  default: () => ({ data: undefined }),
 }));
 
 vi.mock("@/store/AppStore", () => ({

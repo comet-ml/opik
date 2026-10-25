@@ -6,6 +6,11 @@ models:
   reasoning:
     - gpt-5-nano
     - o3-mini
+  # Reasoning models with a none level: they take sampling params at none, so the reasoning rows, which expect them
+  # dropped, don't run on them. gpt-5.4 runs at none by default, gpt-6-luna at medium.
+  reasoning-none-level:
+    - gpt-5.4
+    - gpt-6-luna
   non-reasoning:
     - gpt-4.1
     - gpt-3.5-turbo
@@ -92,6 +97,13 @@ rows:
     request: {custom_parameters: {temperature: 0.3}}
     # The reasoning rule clears the typed fields only; the extra body is merged into the request last.
     body: {temperature: 0.3}
+  - name: sampling params reach a reasoning model at effort none
+    models: [gpt-5.4, gpt-6-luna]
+    request: {reasoning_effort: none, temperature: 0.3, top_p: 0.9}
+    body: {reasoning: {effort: none}, temperature: 0.3, top_p: 0.9}
+  - name: sampling params are dropped when a reasoning model's default effort is not none
+    model: gpt-6-luna
+    request: {temperature: 0.3, top_p: 0.9}
   - name: seed is not sent
     model: gpt-4.1
     request: {seed: 42}
@@ -195,6 +207,15 @@ rows:
   - name: a judge drops temperature for a reasoning model
     path: judge
     models: [gpt-5-nano, registry-only]
+    request: {temperature: 0.3}
+  - name: a judge keeps temperature when the rule sets effort none
+    path: judge
+    model: gpt-6-luna
+    request: {temperature: 0.3, custom_parameters: {reasoning_effort: none}}
+    body: {temperature: 0.3, reasoning: {effort: none}}
+  - name: a judge drops temperature when a reasoning model's default effort is not none
+    path: judge
+    model: gpt-6-luna
     request: {temperature: 0.3}
   - name: a judge on a model without structured output puts the output format in the prompt
     path: judge

@@ -192,7 +192,7 @@ OPENAI_DROPDOWN_EXCLUDE = [
 # Retired, 404 "model: ...". The deprecated filter hid them only while the prices JSON listed them with a
 # deprecation_date; LiteLLM later drops a retired model's entry, and the next sync would show it again.
 ANTHROPIC_DROPDOWN_EXCLUDE = [
-    r"^claude-mythos-preview$",
+    r"^claude-mythos-",          # Project Glasswing access only: 404 "model: claude-mythos-5" on other keys
     r"^claude-3-7-sonnet-",
     r"^claude-opus-4-1-",
     r"^claude-(opus|sonnet)-4-2025",
@@ -224,6 +224,7 @@ GEMINI_DROPDOWN_EXCLUDE = [
     r"^gemini-gemma-",
     r"^gemini-omni",             # video generation, 400 "only supports Interactions API" on generateContent
     r"^lyria-",                  # music generation, answers with audio the playground cannot show
+    r"-transcribe",              # speech to text: 400 "Developer instruction is not enabled" with a system message, empty text without
 ]
 
 VERTEXAI_DROPDOWN_EXCLUDE = [
@@ -246,6 +247,9 @@ OPENROUTER_DROPDOWN_EXCLUDE = [
     r"llama-guard",                        # safety classifier: answers "safe" or "unsafe", not a chat model
     r"content-safety",                     # safety classifier: answers "safe" or "unsafe", not a chat model
     r"^openrouter/bodybuilder$",           # turns a request into OpenRouter API JSON, not a chat model
+    r"^morph/morph-v3-",                   # code-apply models: 400 "Multi-turn conversations are not supported" with a system message
+    r"^meta/muse-spark-.*-contributor$",   # 404 "No endpoints found matching your data policy" on the default data policy
+    r"^nvidia/nemotron-3-super-120b-a12b:free$",      # 404 from the free endpoint; the paid one works
 ]
 
 
@@ -354,21 +358,32 @@ def _deprecated_value(key: str, litellm_provider: str) -> tuple[str, str] | None
     return None
 
 
-def build_deprecated_by_provider(prices: dict) -> dict[str, set[str]]:
-    today = date.today()
-    deprecated: dict[str, set[str]] = {}
+def build_retirement_dates(prices: dict) -> dict[str, dict[str, str]]:
+    dates: dict[str, dict[str, str]] = {}
     for key, info in prices.items():
         if not isinstance(info, dict) or not info.get("deprecation_date"):
             continue
-        try:
-            if date.fromisoformat(info["deprecation_date"]) > today:
-                continue
-        except ValueError:
-            continue
         scoped = _deprecated_value(key, str(info.get("litellm_provider", "")))
-        if scoped:
-            deprecated.setdefault(scoped[0], set()).add(scoped[1])
-    return deprecated
+        if not scoped:
+            continue
+        try:
+            retires_on = date.fromisoformat(str(info["deprecation_date"]).strip())
+        except ValueError:
+            print(
+                f"::warning::Ignoring deprecation_date {info['deprecation_date']!r} of {key}: not an ISO date",
+                file=sys.stderr,
+            )
+            continue
+        dates.setdefault(scoped[0], {})[scoped[1]] = retires_on.isoformat()
+    return dates
+
+
+def build_deprecated_by_provider(prices: dict) -> dict[str, set[str]]:
+    today = date.today().isoformat()
+    return {
+        provider: {value for value, retires_on in values.items() if retires_on <= today}
+        for provider, values in build_retirement_dates(prices).items()
+    }
 
 
 def filter_for_dropdown(
@@ -1008,11 +1023,15 @@ def sync_simple_provider(
             continue
         used_enum_names.add(enum_name)
 
+        # LiteLLM often lists a new model before it knows its capabilities, so its "no" means "not known yet":
+        # keeping the first answer froze those models without structured output for good. A 1-arg enum stores
+        # no flag, so the YAML is what remembers it for that provider.
+        so = (
+            current_so_by_value.get(value, False)
+            or source_dict.get(value, False)
+            or value in yaml_structured_output_ids
+        )
         if java_format == "2arg":
-            if value in current_so_by_value:
-                so = current_so_by_value[value]
-            else:
-                so = source_dict.get(value, False)
             entries.append((enum_name, value, so))
         else:
             entries.append((enum_name, value))
@@ -1021,10 +1040,7 @@ def sync_simple_provider(
         model_entries.append(ModelEntry(
             enum_name=enum_name,
             value=value,
-            # A 1-arg enum stores no flag, so a kept model that left the source would otherwise lose the one the YAML has.
-            structured_output=current_so_by_value.get(
-                value, source_dict.get(value, value in yaml_structured_output_ids)
-            ),
+            structured_output=so,
             label=label,
         ))
 
@@ -1077,10 +1093,7 @@ def sync_vertexai(
                 continue
             used_enum_names.add(enum_name)
 
-        if qualified in current_so_by_qualified:
-            so = current_so_by_qualified[qualified]
-        else:
-            so = source_dict.get(qualified, False)
+        so = current_so_by_qualified.get(qualified, False) or source_dict.get(qualified, False)
 
         entries.append((enum_name, qualified, value, so))
         label = label_overrides.get(value) or generate_gemini_label(value)
@@ -1443,6 +1456,19 @@ def thinking_models_without_effort(
     return missing
 
 
+def default_models_out_of_picker(dropdown_by_provider: dict[str, list[ModelEntry]], catalog: dict) -> list[str]:
+    yaml_to_provider = {yaml_key: provider_key for provider_key, yaml_key in _PROVIDER_TO_YAML_KEY.items()}
+    missing = []
+    for yaml_key, model_id in (catalog.get("defaultModels") or {}).items():
+        provider_key = yaml_to_provider.get(yaml_key)
+        if provider_key is None:
+            continue
+        picker = {entry.value.removeprefix("vertex_ai/") for entry in dropdown_by_provider.get(provider_key, [])}
+        if model_id.removeprefix("vertex_ai/") not in picker:
+            missing.append(f"{yaml_key}/{model_id}")
+    return missing
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # YAML regeneration
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1551,6 +1577,7 @@ def regenerate_llm_models_yaml(
     openrouter_capabilities: dict[str, OpenRouterCapabilities] | None = None,
     kept_providers: frozenset[str] | set[str] = frozenset(),
     params_lines: dict[str, dict[str, str]] | None = None,
+    retirement_dates: dict[str, dict[str, str]] | None = None,
 ) -> str:
     """
     Regenerate llm-models-default.yaml from the synced model entries.
@@ -1580,6 +1607,7 @@ def regenerate_llm_models_yaml(
     openai_reasoning = openai_reasoning or {}
     openrouter_capabilities = openrouter_capabilities or {}
     params_lines = params_lines or {}
+    retirement_dates = retirement_dates or {}
 
     lines: list[str] = []
 
@@ -1627,6 +1655,13 @@ def regenerate_llm_models_yaml(
             if is_dropdown_entry and entry.label:
                 escaped_label = entry.label.replace('"', '\\"')
                 lines.append(f'    label: "{escaped_label}"')
+            # A layer that leaves the label out keeps the one below it, so the CDN copy could add a model to the
+            # picker but never take one out until a release ships this file; the explicit flag lets it.
+            elif provider_key in dropdown_by_provider:
+                lines.append("    hidden: true")
+            retires_on = retirement_dates.get(provider_key, {}).get(entry.value)
+            if retires_on:
+                lines.append(f'    retiresOn: "{retires_on}"')
 
             if entry.structured_output:
                 lines.append("    structuredOutput: true")
@@ -1717,37 +1752,48 @@ def _cleared_reasoning_ids(existing_yaml_content: str, regenerated_yaml_content:
     return sorted(before.keys() - after.keys())
 
 
-def _parse_yaml_labelled_ids(yaml_content: str, section: str) -> tuple[set[str], set[str]]:
-    ids: set[str] = set()
-    labelled: set[str] = set()
+def _parse_yaml_picker_entries(yaml_content: str) -> dict[tuple[str, str], tuple[bool, str | None]]:
+    entries: dict[tuple[str, str], tuple[bool, str | None]] = {}
     current_provider: str | None = None
-    current_id: str | None = None
+    current_key: tuple[str, str] | None = None
     for line in yaml_content.splitlines():
         provider_match = re.match(r'^(\S[^:]+):\s*$', line)
         if provider_match:
             current_provider = provider_match.group(1)
-            current_id = None
-            continue
-        if current_provider != section:
+            current_key = None
             continue
         id_match = re.match(r'^\s+- id:\s+"([^"]+)"', line)
-        if id_match:
-            current_id = id_match.group(1)
-            ids.add(current_id)
+        if current_provider and id_match:
+            current_key = (current_provider, id_match.group(1))
+            entries[current_key] = (False, None)
             continue
-        if current_id and re.match(r'^\s+label:', line):
-            labelled.add(current_id)
-    return ids, labelled
+        if not current_key:
+            continue
+        labelled, retires_on = entries[current_key]
+        if re.match(r'^\s+label:', line):
+            entries[current_key] = (True, retires_on)
+        retires_match = re.match(r'^\s+retiresOn:\s*"([^"]+)"', line)
+        if retires_match:
+            entries[current_key] = (labelled, retires_match.group(1))
+    return entries
 
 
-def _openrouter_picker_changes(
+def _picker_changes(
     existing_yaml_content: str, regenerated_yaml_content: str,
-) -> tuple[list[str], list[str]]:
-    before_ids, before_labelled = _parse_yaml_labelled_ids(existing_yaml_content, "openrouter")
-    _, after_labelled = _parse_yaml_labelled_ids(regenerated_yaml_content, "openrouter")
-    shown = sorted((after_labelled - before_labelled) & before_ids)
-    hidden = sorted(before_labelled - after_labelled)
+) -> tuple[list[tuple[str, str]], list[tuple[str, str]]]:
+    before = _parse_yaml_picker_entries(existing_yaml_content)
+    after = _parse_yaml_picker_entries(regenerated_yaml_content)
+    shown = sorted(key for key in before.keys() & after.keys() if after[key][0] and not before[key][0])
+    hidden = sorted(key for key, (labelled, _) in before.items() if labelled and not after.get(key, (False, None))[0])
     return shown, hidden
+
+
+def _retirement_changes(
+    existing_yaml_content: str, regenerated_yaml_content: str,
+) -> list[tuple[str, str, str | None]]:
+    before = _parse_yaml_picker_entries(existing_yaml_content)
+    after = _parse_yaml_picker_entries(regenerated_yaml_content)
+    return sorted((*key, after[key][1]) for key in before.keys() & after.keys() if before[key][1] != after[key][1])
 
 
 def _parse_yaml_openrouter_capabilities(yaml_content: str) -> dict[str, dict[str, frozenset[str]]]:
@@ -1785,10 +1831,11 @@ def _should_write_files(
     total_added: int,
     seeded_reasoning_ids: list[str],
     cleared_reasoning_ids: list[str],
-    picker_changed_ids: list[str],
+    picker_changed_ids: list[tuple[str, str]],
     capability_changed_ids: list[str],
     force_regen: bool,
     changed_params: dict[str, tuple[int, int, int]] | None = None,
+    retirement_changes: list[tuple[str, str, str | None]] | None = None,
 ) -> bool:
     if force_regen:
         return True
@@ -1799,6 +1846,7 @@ def _should_write_files(
         or bool(picker_changed_ids)
         or bool(capability_changed_ids)
         or bool(changed_params)
+        or bool(retirement_changes)
     )
 
 
@@ -1974,6 +2022,7 @@ def main():
         openrouter_capabilities=openrouter_capabilities,
         kept_providers=kept_providers,
         params_lines=params_lines,
+        retirement_dates=build_retirement_dates(prices),
     )
     changed_params = params_changes(
         llm_models_yaml_content, params_lines, {_PROVIDER_TO_YAML_KEY[p] for p in kept_providers},
@@ -1982,8 +2031,9 @@ def main():
         llm_models_yaml_content, models_by_provider["openai"], openai_reasoning,
     )
     cleared_reasoning_ids = _cleared_reasoning_ids(llm_models_yaml_content, new_llm_models_yaml)
-    openrouter_shown, openrouter_hidden = _openrouter_picker_changes(llm_models_yaml_content, new_llm_models_yaml)
-    picker_changed_ids = openrouter_shown + openrouter_hidden
+    picker_shown, picker_hidden = _picker_changes(llm_models_yaml_content, new_llm_models_yaml)
+    picker_changed_ids = picker_shown + picker_hidden
+    retirement_changes = _retirement_changes(llm_models_yaml_content, new_llm_models_yaml)
     capability_changed_ids = _changed_openrouter_capability_ids(llm_models_yaml_content, new_llm_models_yaml)
 
     # 5. Print summary
@@ -2028,16 +2078,18 @@ def main():
             print(f"- Total models: {len(entries)} (dropdown: {len(dropdown)})")
         print()
 
-    if seeded_reasoning_ids or cleared_reasoning_ids or picker_changed_ids or capability_changed_ids:
+    if seeded_reasoning_ids or cleared_reasoning_ids or picker_changed_ids or capability_changed_ids or retirement_changes:
         print("### Registry")
         for model_id in seeded_reasoning_ids:
             print(f"  + {model_id} (reasoning)")
         for model_id in cleared_reasoning_ids:
             print(f"  - {model_id} (reasoning)")
-        for model_id in openrouter_shown:
-            print(f"  + openrouter {model_id} (picker)")
-        for model_id in openrouter_hidden:
-            print(f"  - openrouter {model_id} (picker)")
+        for provider, model_id in picker_shown:
+            print(f"  + {provider} {model_id} (picker)")
+        for provider, model_id in picker_hidden:
+            print(f"  - {provider} {model_id} (picker)")
+        for provider, model_id, retires_on in retirement_changes:
+            print(f"  ~ {provider} {model_id} (retires {retires_on})" if retires_on else f"  ~ {provider} {model_id} (no retirement date)")
         for model_id in capability_changed_ids:
             print(f"  ~ openrouter {model_id} (parameters)")
         print()
@@ -2080,6 +2132,18 @@ def main():
             print(f"  ? {model_id}")
         print()
 
+    defaults_out_of_picker = default_models_out_of_picker(dropdown_by_provider, curated_catalog)
+    if defaults_out_of_picker:
+        print("### Default models")
+        print(
+            f"- {len(defaults_out_of_picker)} default model(s) are no longer in the picker, so the playground and "
+            "online-evaluation rules start on the provider's first picker model; name a new one in "
+            "defaultModels in llm-models-curated.yaml:"
+        )
+        for model_id in defaults_out_of_picker:
+            print(f"  ? {model_id}")
+        print()
+
     if not _should_write_files(
         total_added,
         seeded_reasoning_ids,
@@ -2088,6 +2152,7 @@ def main():
         capability_changed_ids,
         args.force_regen,
         changed_params,
+        retirement_changes,
     ):
         if total_stale > 0:
             print(f"No new models found. {total_stale} stale model(s) flagged for manual review.")

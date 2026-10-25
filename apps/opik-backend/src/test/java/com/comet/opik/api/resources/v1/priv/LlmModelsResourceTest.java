@@ -60,6 +60,21 @@ class LlmModelsResourceTest {
     }
 
     @Test
+    void servesTheDefaultModelOfEachProvider() {
+        when(REGISTRY_SERVICE.getDefaultModels()).thenReturn(Map.of(
+                "openai", "gpt-5.5",
+                "vertex-ai", "vertex_ai/gemini-3.5-flash-lite"));
+
+        try (Response response = EXT.target("/v1/private/llm/models/defaults").request().get()) {
+            assertThat(response.getStatus()).isEqualTo(OK.getStatusCode());
+            assertThat(response.readEntity(new GenericType<Map<String, String>>() {
+            })).isEqualTo(Map.of(
+                    "openai", "gpt-5.5",
+                    "vertex-ai", "vertex_ai/gemini-3.5-flash-lite"));
+        }
+    }
+
+    @Test
     void servesFlagsTheRegistryLeavesOutAsFalse() {
         when(REGISTRY_SERVICE.getRegistry()).thenReturn(Map.of(
                 "openai", List.of(LlmModelDefinition.builder().id("gpt-4.1").build())));
@@ -124,6 +139,30 @@ class LlmModelsResourceTest {
                                   "routes": {"some_route": {"stop": {"accepted": false}}}
                                 }
                               }]
+                            }"""));
+        }
+    }
+
+    @Test
+    void servesProfilesByProviderInSnakeCase() {
+        when(REGISTRY_SERVICE.getProfiles()).thenReturn(Map.of("anthropic", ModelParams.builder()
+                .maxOutputTokens(new NumberParam(true, BigDecimal.ONE, BigDecimal.valueOf(64000),
+                        BigDecimal.valueOf(4000)))
+                .effort(new EffortParam(true, List.of("low", "high"), "high"))
+                .samplingExclusive(true)
+                .build()));
+
+        try (Response response = EXT.target("/v1/private/llm/models/profiles").request().get()) {
+            assertThat(response.getStatus()).isEqualTo(OK.getStatusCode());
+
+            assertThat(JsonUtils.getJsonNodeFromString(response.readEntity(String.class)))
+                    .isEqualTo(JsonUtils.getJsonNodeFromString("""
+                            {
+                              "anthropic": {
+                                "max_output_tokens": {"accepted": true, "min": 1, "max": 64000, "default": 4000},
+                                "effort": {"accepted": true, "levels": ["low", "high"], "default": "high"},
+                                "sampling_exclusive": true
+                              }
                             }"""));
         }
     }

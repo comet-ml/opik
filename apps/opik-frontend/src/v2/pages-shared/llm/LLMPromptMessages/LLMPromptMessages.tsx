@@ -43,6 +43,8 @@ interface LLMPromptMessagesProps {
   jsonTreeData?: JsonObject | null;
   compact?: boolean;
   autoFocusFirstMessage?: boolean;
+  shiftEnterInsertsNewline?: boolean;
+  size?: "default" | "xs";
 }
 
 const LLMPromptMessages = ({
@@ -59,6 +61,8 @@ const LLMPromptMessages = ({
   jsonTreeData,
   compact = false,
   autoFocusFirstMessage = false,
+  shiftEnterInsertsNewline = false,
+  size = "default",
 }: LLMPromptMessagesProps) => {
   const lastFocusedMessageIdRef = useRef<string | null>(null);
   const messageRefsMap = useRef<Map<string, LLMPromptMessageHandle>>(new Map());
@@ -188,6 +192,8 @@ const LLMPromptMessages = ({
               improvePromptConfig={improvePromptConfig}
               jsonTreeData={jsonTreeData}
               compact={compact}
+              shiftEnterInsertsNewline={shiftEnterInsertsNewline}
+              size={size}
             />
           ))}
         </div>

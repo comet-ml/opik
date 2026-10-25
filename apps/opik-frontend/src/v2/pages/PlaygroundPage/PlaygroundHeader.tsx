@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Loader2, Pause, Play, RotateCcw } from "lucide-react";
 
 import { Separator } from "@/ui/separator";
@@ -9,10 +9,13 @@ import FiltersButton from "@/shared/FiltersButton/FiltersButton";
 import RunExperimentControl from "@/v2/pages/PlaygroundPage/RunExperimentControl";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { canRunMessages, hasUnsupportedMedia } from "@/lib/playground";
+import { isMac } from "@/lib/utils";
 import { LOGS_SOURCE } from "@/types/traces";
 import { useActiveProjectId } from "@/store/AppStore";
 import TraceLogsSidebarButton from "@/v2/pages-shared/traces/TraceLogsSidebar/TraceLogsSidebarButton";
+import { PLAYGROUND_LOGS_VIEW_CONFIG } from "@/v2/pages/PlaygroundPage/playgroundLogsViewConfig";
 import { DATASET_TYPE } from "@/types/datasets";
+import PlaygroundColumnsButton from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputTable/PlaygroundColumnsButton";
 import useDatasetItemsList from "@/api/datasets/useDatasetItemsList";
 import useDatasetVersionsList from "@/api/datasets/useDatasetVersionsList";
 import {
@@ -20,7 +23,8 @@ import {
   transformDataColumnFilters,
 } from "@/lib/filters";
 import { parseDatasetVersionKey } from "@/utils/datasetVersionStorage";
-import {
+import usePlaygroundRunHotkey from "@/v2/pages/PlaygroundPage/usePlaygroundRunHotkey";
+import usePlaygroundStore, {
   usePromptMap,
   useClearCreatedExperiments,
   useCreatedExperiments,
@@ -48,7 +52,7 @@ interface PlaygroundHeaderProps {
   onChangeDatasetId: (id: string | null) => void;
   onReset: () => void;
   onRunAll: () => void;
-
+  onRunSingle: (promptId: string) => void;
   onStopAll: () => void;
   maxWidth?: string;
 }
@@ -62,6 +66,7 @@ const PlaygroundHeader = ({
   onChangeDatasetId,
   onReset,
   onRunAll,
+  onRunSingle,
   onStopAll,
   maxWidth,
 }: PlaygroundHeaderProps) => {
@@ -189,23 +194,28 @@ const PlaygroundHeader = ({
     experimentTarget,
   ]);
 
-  // Keyboard shortcut: Shift+Enter to run all
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (
-        event.shiftKey &&
-        event.key === "Enter" &&
-        !isRunDisabled &&
-        !isRunning
-      ) {
-        event.preventDefault();
-        event.stopPropagation();
-        onRunAll();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown, true);
-    return () => window.removeEventListener("keydown", handleKeyDown, true);
-  }, [onRunAll, isRunDisabled, isRunning]);
+  const canRunPrompt = useCallback(
+    (promptId: string) => {
+      const prompt = promptMap[promptId];
+      return (
+        !!prompt?.model &&
+        canRunMessages(prompt.messages) &&
+        !hasUnsupportedMedia(prompt) &&
+        !(isExperimentMode && !datasetName) &&
+        !isDatasetEmpty &&
+        !usePlaygroundStore.getState().isRunningMap[promptId]
+      );
+    },
+    [promptMap, isExperimentMode, datasetName, isDatasetEmpty],
+  );
+
+  usePlaygroundRunHotkey({
+    promptCount: Object.keys(promptMap).length,
+    canRunAll: !isRunDisabled && !isRunning,
+    canRunPrompt,
+    onRunAll,
+    onRunPrompt: onRunSingle,
+  });
 
   const handleLeaveExperimentMode = useCallback(() => {
     clearCreatedExperiments();
@@ -249,6 +259,9 @@ const PlaygroundHeader = ({
             size="icon-2xs"
             deferOnChange
           />
+        )}
+        {plainDatasetId && (
+          <PlaygroundColumnsButton datasetId={plainDatasetId} />
         )}
       </>
     );
@@ -295,7 +308,11 @@ const PlaygroundHeader = ({
         >
           <Play className="mr-1 size-3" />
           {label}
-          <HotkeyDisplay hotkey="⇧" size="2xs" className="ml-1.5" />
+          <HotkeyDisplay
+            hotkey={isMac ? "⌘" : "Ctrl"}
+            size="2xs"
+            className="ml-1.5"
+          />
           <HotkeyDisplay hotkey="⏎" size="2xs" className="ml-1" />
         </Button>
       </TooltipWrapper>
@@ -333,6 +350,8 @@ const PlaygroundHeader = ({
               logsSource={LOGS_SOURCE.playground}
               variant="icon"
               title="Playground logs"
+              viewConfig={PLAYGROUND_LOGS_VIEW_CONFIG}
+              sidebarClassName="w-[calc(100vw-72px)] data-[state=open]:duration-300"
             />
           )}
         </div>

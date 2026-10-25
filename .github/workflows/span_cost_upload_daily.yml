@@ -5,6 +5,11 @@ on:
     - cron: '0 0 * * 1-5' # Runs at midnight UTC, Monday to Friday
   workflow_dispatch: # Allows manual trigger
 
+# One rolling PR on a fixed branch: two runs at once would force-push it over each other.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
 jobs:
   update-span-cost:
     runs-on: ubuntu-latest
@@ -16,9 +21,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set branch name and update the file
+      - name: Update the LiteLLM prices file
         run: |
-          echo "BRANCH_NAME=github-actions/NA-automatically-update-model-prices-file-$(date +%Y-%m-%d-%H-%M-%S)" >> "$GITHUB_ENV"
           curl -o apps/opik-backend/src/main/resources/model_prices_and_context_window.json https://raw.githubusercontent.com/BerriAI/litellm/refs/heads/main/model_prices_and_context_window.json
           cp apps/opik-backend/src/main/resources/model_prices_and_context_window.json apps/opik-frontend/src/data/model_prices_and_context_window.json
 
@@ -56,7 +60,7 @@ jobs:
         uses: peter-evans/create-pull-request@v8
         with:
           token: ${{ secrets.COMET_ACTION_CREATE_PR }}
-          branch: ${{ env.BRANCH_NAME }}
+          branch: github-actions/NA-automatically-update-model-prices-file
           title: "[NA] [BE] Update model prices file"
           body: |
             ## Details

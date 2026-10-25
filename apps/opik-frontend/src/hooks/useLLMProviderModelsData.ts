@@ -10,14 +10,20 @@ import {
 } from "@/types/providers";
 import useOpenAICompatibleModels from "@/hooks/useOpenAICompatibleModels";
 import useLlmModels, { LlmModelsByProvider } from "@/api/llm/useLlmModels";
+import useLlmModelProfiles from "@/api/llm/useLlmModelProfiles";
+import { ModelParams } from "@/types/modelParams";
+import useLlmModelDefaults from "@/api/llm/useLlmModelDefaults";
 import { parseComposedProviderType } from "@/lib/provider";
 import { PROVIDERS } from "@/constants/providers";
 import {
   getLatestProviderModelsSnapshot,
   KNOWN_PROVIDER_TYPES,
   ModelFlags,
+  ModelParamsIndex,
   setLatestModelFlags,
+  setLatestModelParams,
   setLatestProviderModelsSnapshot,
+  setLatestProviderProfiles,
 } from "@/lib/modelRegistryStore";
 import { getRoutableProviderModelValue } from "@/lib/modelUtils";
 import { DECISION_MODELS } from "@/constants/decisionModels";
@@ -107,7 +113,7 @@ const withDecisionModels = (models: ProviderModelsMap): ProviderModelsMap => {
     : models;
 };
 
-const buildFlagsIndex = (
+export const buildFlagsIndex = (
   fetched: LlmModelsByProvider,
 ): Map<string, ModelFlags> => {
   const index = new Map<string, ModelFlags>();
@@ -140,6 +146,35 @@ const buildFlagsIndex = (
   return index;
 };
 
+export const buildParamsIndex = (
+  fetched: LlmModelsByProvider,
+): ModelParamsIndex => {
+  const index: ModelParamsIndex = new Map();
+  for (const [provider, models] of Object.entries(fetched)) {
+    if (!KNOWN_PROVIDER_TYPES.has(provider)) {
+      continue;
+    }
+    const byModel = new Map<string, ModelParams>();
+    for (const m of models) {
+      if (!m.params) {
+        continue;
+      }
+      byModel.set(
+        getRoutableProviderModelValue(
+          provider as COMPOSED_PROVIDER_TYPE,
+          m.qualified_name || m.id,
+        ),
+        m.params,
+      );
+      if (!byModel.has(m.id)) {
+        byModel.set(m.id, m.params);
+      }
+    }
+    index.set(provider, byModel);
+  }
+  return index;
+};
+
 const useLLMProviderModelsData = () => {
   const {
     data: fetched,
@@ -148,6 +183,9 @@ const useLLMProviderModelsData = () => {
     isError,
     error,
   } = useLlmModels();
+  const { data: profiles } = useLlmModelProfiles();
+  const { data: defaultModels, isFetched: isDefaultsFetched } =
+    useLlmModelDefaults();
   const openAICompatibleModels = useOpenAICompatibleModels();
 
   // Dropdown-facing map: only entries that are flagged as visible (i.e.
@@ -217,8 +255,15 @@ const useLLMProviderModelsData = () => {
     );
     if (fetched) {
       setLatestModelFlags(buildFlagsIndex(fetched));
+      setLatestModelParams(buildParamsIndex(fetched));
     }
   }, [fetched, openAICompatibleModels]);
+
+  useEffect(() => {
+    if (profiles) {
+      setLatestProviderProfiles(profiles);
+    }
+  }, [profiles]);
 
   const calculateModelProvider: ProviderResolver = useCallback(
     (modelName, preferredProvider) => {
@@ -325,16 +370,25 @@ const useLLMProviderModelsData = () => {
       const providerType = parseComposedProviderType(composedProviderType);
 
       if (composedProviderType && providerType) {
-        if (PROVIDERS[providerType]?.defaultModel) {
-          return PROVIDERS[providerType].defaultModel;
-        } else {
-          return first(providerModels[composedProviderType])?.value ?? "";
-        }
+        const catalogDefault = (defaultModels?.[providerType] ?? "") as
+          | PROVIDER_MODEL_TYPE
+          | "";
+        const defaultModel = isDropdownModel(
+          catalogDefault,
+          composedProviderType,
+        )
+          ? catalogDefault
+          : PROVIDERS[providerType]?.defaultModel;
+        return (
+          defaultModel ||
+          first(providerModels[composedProviderType])?.value ||
+          ""
+        );
       }
 
       return "";
     },
-    [calculateModelProvider, providerModels],
+    [calculateModelProvider, defaultModels, isDropdownModel, providerModels],
   );
 
   return {
@@ -344,7 +398,7 @@ const useLLMProviderModelsData = () => {
     calculateDefaultModel,
     isDropdownModel,
     isPending,
-    isFetched,
+    isFetched: isFetched && isDefaultsFetched,
     isError,
     error,
     hasRegistryModels: some(

@@ -77,7 +77,7 @@ import java.util.Set;
 enum SupportedJudgeProvider {
     ANTHROPIC(LlmProvider.ANTHROPIC, AnthropicModelName.CLAUDE_HAIKU_4_5.toString()),
     OPEN_AI(LlmProvider.OPEN_AI, OpenaiModelName.GPT_4O_MINI.toString()),
-    GEMINI(LlmProvider.GEMINI, GeminiModelName.GEMINI_2_0_FLASH.toString()),
+    GEMINI(LlmProvider.GEMINI, GeminiModelName.GEMINI_3_5_FLASH_LITE.toString()),
     VERTEX_AI(LlmProvider.VERTEX_AI, VertexAIModelName.GEMINI_2_5_FLASH.qualifiedName());
 
     private final LlmProvider provider;
@@ -86,6 +86,14 @@ enum SupportedJudgeProvider {
     SupportedJudgeProvider(LlmProvider provider, String model) {
         this.provider = provider;
         this.model = model;
+    }
+
+    LlmProvider provider() {
+        return provider;
+    }
+
+    String model() {
+        return model;
     }
 
     static List<String> resolveModels(Set<LlmProvider> connectedProviders) {

@@ -2,7 +2,17 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any, Callable, Dict, Optional, Set
+
+SAMPLING_PARAMS = ("temperature", "top_p", "top_k")
+
+_OPENAI_GPT_VERSION = re.compile(r"^gpt-(\d+)(?:\.(\d+))?(?![\d.])")
+
+# Routes that forward OpenAI's own model names. Kept out of _normalize_model_name
+# on purpose: is_openai_gpt_5_4_plus must not match them, because LiteLLM's
+# Responses bridge for tool calls exists only on the direct OpenAI route.
+_ROUTING_PREFIXES = ("openrouter/", "azure/")
 
 
 def coerce_temperature_to_float(value: Any) -> Optional[float]:
@@ -57,13 +67,24 @@ def apply_model_specific_filters(
     """Adjust/drop params for specific model families before calling LiteLLM.
 
     Currently handles:
-    - GPT-5: only honours temperature=1 and does not return log probabilities.
+    - Models LiteLLM's model map marks with ``supports_sampling_params: false``
+      (Claude Opus 4.7+, Claude 5.x): temperature, top_p and top_k are dropped.
+    - GPT-5 / GPT-6, also behind OpenRouter or Azure: only honour temperature=1
+      and do not return log probabilities.
     - Bedrock GPT-5.x / GPT-6: same as GPT-5, and temperature is dropped even at 1
     - DashScope Qwen: enforces constraints for logprobs / top_logprobs
     """
     normalized_model_name = _normalize_model_name(model_name)
 
-    if normalized_model_name.startswith("gpt-5"):
+    if rejects_sampling_params(model_name):
+        _drop_unsupported_params_with_warning(
+            params,
+            [(param, params[param]) for param in SAMPLING_PARAMS if param in params],
+            already_warned,
+            warn,
+        )
+
+    if _vendor_model_name(model_name).startswith(("gpt-5", "gpt-6")):
         _apply_gpt5_filters(params, already_warned, warn)
         return
 
@@ -80,6 +101,37 @@ def apply_model_specific_filters(
         return
 
 
+def rejects_sampling_params(model_name: str) -> bool:
+    import litellm
+
+    model_cost = getattr(litellm, "model_cost", None) or {}
+    # The map keys most routed names without their route (bare Anthropic ids,
+    # Bedrock ids without `bedrock/converse/`), so the most specific suffix of
+    # the name that the map knows decides.
+    parts = model_name.split("/")
+    for start in range(len(parts)):
+        info = model_cost.get("/".join(parts[start:]))
+        if isinstance(info, dict):
+            return info.get("supports_sampling_params") is False
+    return False
+
+
+def takes_reasoning_effort(model_name: str) -> bool:
+    import litellm
+
+    try:
+        return bool(litellm.supports_reasoning(model=model_name))
+    except Exception:
+        return False
+
+
+def is_openai_gpt_5_4_plus(model_name: str) -> bool:
+    match = _OPENAI_GPT_VERSION.match(_normalize_model_name(model_name))
+    if match is None:
+        return False
+    return (int(match.group(1)), int(match.group(2) or 0)) >= (5, 4)
+
+
 def _normalize_model_name(model_name: str) -> str:
     """Normalize provider-prefixed model names for capability checks."""
     if "/" not in model_name:
@@ -90,6 +142,15 @@ def _normalize_model_name(model_name: str) -> str:
         return model_without_provider
 
     return model_name
+
+
+def _vendor_model_name(model_name: str) -> str:
+    """The vendor's own model name behind a routing prefix, e.g.
+    openrouter/openai/gpt-6-luna -> gpt-6-luna."""
+    for route in _ROUTING_PREFIXES:
+        if model_name.startswith(route):
+            return _normalize_model_name(model_name[len(route) :])
+    return _normalize_model_name(model_name)
 
 
 def _is_bedrock_openai_gpt_model(model_name: str) -> bool:

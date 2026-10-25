@@ -6,7 +6,7 @@ export interface LLMJudgeConfig {
     name: string;
     temperature?: number;
     seed?: number;
-    customParameters?: Record<string, unknown>;
+    custom_parameters?: Record<string, unknown>;
   };
   messages: Array<{
     role: "SYSTEM" | "USER" | "AI" | "TOOL_EXECUTION_RESULT" | "CUSTOM";

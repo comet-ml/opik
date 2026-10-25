@@ -5,7 +5,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { FileTerminal, Trash, Save } from "lucide-react";
+import { CopyPlus, FileTerminal, Trash, Save } from "lucide-react";
 import last from "lodash/last";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -19,6 +19,8 @@ import { Button } from "@/ui/button";
 import { Separator } from "@/ui/separator";
 
 import {
+  canRunMessages,
+  generateDefaultPrompt,
   getDefaultConfigByProvider,
   restoreMissingProviderAndConfigKeys,
 } from "@/lib/playground";
@@ -31,12 +33,15 @@ import usePromptBadgeColor from "@/v2/pages/PlaygroundPage/PlaygroundPrompts/use
 import { generateDefaultLLMPromptMessage, getNextMessageType } from "@/lib/llm";
 import LLMPromptMessages from "@/v2/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
 import PromptModelSelect from "@/v2/pages-shared/llm/PromptModelSelect/PromptModelSelect";
+import ModelRetirementTag from "@/v2/pages-shared/llm/ModelRetirementTag/ModelRetirementTag";
+import { parseComposedProviderType } from "@/lib/provider";
 import { cn, getAlphabetLetter } from "@/lib/utils";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import PromptModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/PromptModelConfigs";
 import { BACKEND_RUN_UNSUPPORTED_PARAMS } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
 import { usePlaygroundDataset } from "@/hooks/usePlaygroundDataset";
 import {
+  useAddPrompt,
   useDatasetVariables,
   useDatasetSampleData,
   useDeletePrompt,
@@ -48,6 +53,7 @@ import {
 } from "@/store/PlaygroundStore";
 import useLastPickedModel from "@/hooks/useLastPickedModel";
 import {
+  DropdownModelCheck,
   ModelResolver,
   ProviderResolver,
 } from "@/hooks/useLLMProviderModelsData";
@@ -59,6 +65,7 @@ import AddNewPromptVersionDialog from "@/v2/pages-shared/llm/LLMPromptMessages/A
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import {
   PROMPT_SAVE_AS_CHAT_TOOLTIP,
+  PROMPT_SAVE_EMPTY_MESSAGE_TOOLTIP,
   PROMPT_UNSAVED_TOOLTIP,
 } from "@/constants/prompts";
 import useLoadChatPrompt from "@/hooks/useLoadChatPrompt";
@@ -75,10 +82,16 @@ interface PlaygroundPromptProps {
   hasRegistryModels: boolean;
   providerResolver: ProviderResolver;
   modelResolver: ModelResolver;
+  isDropdownModel: DropdownModelCheck;
   onRun?: () => void;
   onStop?: () => void;
   onCheckAgain?: () => void;
 }
+
+const trimTextContent = (message: LLMMessage): LLMMessage =>
+  typeof message.content === "string"
+    ? { ...message, content: message.content.trim() }
+    : message;
 
 const PlaygroundPrompt = ({
   workspaceName,
@@ -89,11 +102,13 @@ const PlaygroundPrompt = ({
   hasRegistryModels,
   providerResolver,
   modelResolver,
+  isDropdownModel,
   onRun,
   onStop,
   onCheckAgain,
 }: PlaygroundPromptProps) => {
   const checkedIfModelIsValidRef = useRef(false);
+  const cardRef = useRef<HTMLDivElement>(null);
   const activeProjectId = useActiveProjectId();
   const { datasetId } = usePlaygroundDataset();
   const isBackendRun = !!datasetId;
@@ -113,6 +128,7 @@ const PlaygroundPrompt = ({
   const { model, messages, configs, name } = prompt;
 
   const updatePrompt = useUpdatePrompt();
+  const addPrompt = useAddPrompt();
   const deletePrompt = useDeletePrompt();
   const updateOutput = useUpdateOutput();
 
@@ -187,11 +203,9 @@ const PlaygroundPrompt = ({
     [datasetVariables],
   );
 
-  const hasMessageContent = messages.some((msg) =>
-    typeof msg.content === "string"
-      ? msg.content.trim()
-      : Array.isArray(msg.content) && msg.content.length > 0,
-  );
+  // Stricter than Run on purpose: a message of only spaces would still be
+  // saved to the library as a version that looks empty.
+  const canSaveMessages = canRunMessages(messages.map(trimTextContent));
 
   const handleAddMessage = useCallback(() => {
     const newMessage = generateDefaultLLMPromptMessage();
@@ -370,6 +384,33 @@ const PlaygroundPrompt = ({
     setShowSaveChatPromptDialog(true);
   }, []);
 
+  const handleDuplicatePrompt = useCallback(() => {
+    const copy = generateDefaultPrompt({
+      initPrompt: { ...prompt, skipInitialPromptLoad: true },
+      setupProviders: providerKeys,
+      providerResolver,
+      modelResolver,
+      isDropdownModel,
+    });
+    addPrompt(copy, index + 1);
+
+    requestAnimationFrame(() => {
+      cardRef.current?.nextElementSibling?.scrollIntoView({
+        behavior: "smooth",
+        inline: "nearest",
+        block: "nearest",
+      });
+    });
+  }, [
+    prompt,
+    providerKeys,
+    providerResolver,
+    modelResolver,
+    isDropdownModel,
+    addPrompt,
+    index,
+  ]);
+
   const handleImproveAccept = useCallback(
     (messageId: string, improvedContent: LLMMessage["content"]) => {
       const updatedMessages = messages.map((msg) =>
@@ -395,10 +436,18 @@ const PlaygroundPrompt = ({
 
   const badgeColor = usePromptBadgeColor(promptId, promptColor);
 
+  const showPromptLibraryAction =
+    Boolean(selectedChatPromptId) || canViewPrompts;
+  const showSaveChatPrompt = selectedChatPromptId
+    ? canEditPrompts || canCreatePrompts
+    : canCreatePrompts;
+
   return (
     <div
+      ref={cardRef}
       data-testid="playground-variant-card"
       data-variant-index={index}
+      data-prompt-id={promptId}
       className="group/prompt flex min-w-[var(--min-prompt-width)] max-w-[var(--max-prompt-width)] flex-1 flex-col overflow-hidden border-r"
     >
       <div className="flex h-10 items-center justify-between overflow-hidden border-b px-4">
@@ -425,6 +474,12 @@ const PlaygroundPrompt = ({
             onDeleteProvider={handleDeleteProvider}
             hasError={!model}
           />
+          {provider && (
+            <ModelRetirementTag
+              model={model}
+              provider={parseComposedProviderType(provider)}
+            />
+          )}
           <PromptModelConfigs
             provider={provider}
             model={model}
@@ -492,42 +547,55 @@ const PlaygroundPrompt = ({
           )}
 
           <div className="flex shrink-0 items-center">
-            {hasMessageContent &&
-              (selectedChatPromptId
-                ? canEditPrompts || canCreatePrompts
-                : canCreatePrompts) && (
-                <TooltipWrapper
-                  content={
-                    hasUnsavedChatPromptChanges
+            {showSaveChatPrompt && (
+              <TooltipWrapper
+                content={
+                  !canSaveMessages
+                    ? PROMPT_SAVE_EMPTY_MESSAGE_TOOLTIP
+                    : hasUnsavedChatPromptChanges
                       ? PROMPT_UNSAVED_TOOLTIP
                       : PROMPT_SAVE_AS_CHAT_TOOLTIP
-                  }
+                }
+              >
+                <Button
+                  variant="minimal"
+                  size="icon-sm"
+                  onClick={handleSaveChatPrompt}
+                  disabled={!canSaveMessages}
+                  style={!canSaveMessages ? { pointerEvents: "auto" } : {}}
+                  data-testid="playground-save-prompt-button"
                 >
-                  <Button
-                    variant="minimal"
-                    size="icon-sm"
-                    onClick={handleSaveChatPrompt}
-                    data-testid="playground-save-prompt-button"
-                  >
-                    <Save />
-                  </Button>
-                </TooltipWrapper>
-              )}
+                  <Save />
+                </Button>
+              </TooltipWrapper>
+            )}
+
+            {(showPromptLibraryAction || showSaveChatPrompt) && (
+              <Separator orientation="vertical" className="mx-1 h-4" />
+            )}
 
             {promptCount > 1 && (
-              <>
-                <Separator orientation="vertical" className="mx-1 h-4" />
-                <TooltipWrapper content="Remove prompt">
-                  <Button
-                    variant="minimal"
-                    size="icon-sm"
-                    onClick={() => deletePrompt(promptId)}
-                  >
-                    <Trash />
-                  </Button>
-                </TooltipWrapper>
-              </>
+              <TooltipWrapper content="Remove prompt">
+                <Button
+                  variant="minimal"
+                  size="icon-sm"
+                  onClick={() => deletePrompt(promptId)}
+                >
+                  <Trash />
+                </Button>
+              </TooltipWrapper>
             )}
+
+            <TooltipWrapper content="Duplicate variant">
+              <Button
+                variant="minimal"
+                size="icon-sm"
+                onClick={handleDuplicatePrompt}
+                data-testid="playground-duplicate-variant-button"
+              >
+                <CopyPlus />
+              </Button>
+            </TooltipWrapper>
           </div>
         </div>
       </div>
@@ -542,6 +610,8 @@ const PlaygroundPrompt = ({
           hidePromptActions={false}
           improvePromptConfig={improvePromptConfig}
           autoFocusFirstMessage={index === 0}
+          shiftEnterInsertsNewline
+          size="xs"
         />
       </div>
 

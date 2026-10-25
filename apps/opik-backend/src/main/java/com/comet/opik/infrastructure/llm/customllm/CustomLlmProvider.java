@@ -5,6 +5,7 @@ import com.comet.opik.domain.llm.LlmProviderService;
 import com.comet.opik.infrastructure.llm.CustomParametersOverrides;
 import com.comet.opik.infrastructure.llm.LlmProviderLangChainMapper;
 import com.comet.opik.infrastructure.llm.OpenAiStreamingHelper;
+import dev.langchain4j.exception.HttpException;
 import dev.langchain4j.model.openai.internal.OpenAiClient;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionResponse;
@@ -13,6 +14,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.ObjectUtils;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 
 import java.util.Map;
 import java.util.Optional;
@@ -55,7 +57,20 @@ public class CustomLlmProvider implements LlmProviderService {
 
     @Override
     public Optional<ErrorMessage> getLlmProviderError(@NonNull Throwable throwable) {
-        return LlmProviderLangChainMapper.INSTANCE.getCustomLlmErrorObject(throwable, log);
+        return LlmProviderLangChainMapper.INSTANCE.getCustomLlmErrorObject(throwable, log)
+                .map(error -> wireStatus(throwable)
+                        .map(status -> new ErrorMessage(status, error.getMessage(), error.getDetails()))
+                        .orElse(error));
+    }
+
+    // The body's error code is often one OpenAI doesn't use, and those map to 400: Bedrock answered a missing
+    // Marketplace subscription with a 403 whose body says "access_denied". The status on the wire is the provider's own.
+    private static Optional<Integer> wireStatus(Throwable throwable) {
+        return ExceptionUtils.getThrowableList(throwable).stream()
+                .filter(HttpException.class::isInstance)
+                .map(cause -> ((HttpException) cause).statusCode())
+                .filter(status -> status >= 400 && status < 600)
+                .findFirst();
     }
 
     private ChatCompletionRequest cleanModelName(@NonNull ChatCompletionRequest request) {

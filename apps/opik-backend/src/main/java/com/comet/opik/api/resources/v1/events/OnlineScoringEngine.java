@@ -12,6 +12,7 @@ import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema;
 import com.comet.opik.api.resources.v1.events.tools.StringTruncator;
 import com.comet.opik.domain.evaluators.python.PythonScoreResult;
 import com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest;
+import com.comet.opik.domain.llm.ModelAnswerText;
 import com.comet.opik.domain.llm.structuredoutput.StructuredOutputStrategy;
 import com.comet.opik.infrastructure.llm.MediaContentUtils;
 import com.comet.opik.infrastructure.log.LogContextAware;
@@ -1498,13 +1499,14 @@ public class OnlineScoringEngine {
     }
 
     private static String extractJson(String response) {
-        Matcher matcher = JSON_BLOCK_PATTERN.matcher(response);
+        var answer = ModelAnswerText.withoutLeadingReasoning(response);
+        Matcher matcher = JSON_BLOCK_PATTERN.matcher(answer);
         if (matcher.find()) {
             return matcher.group(1);
         }
 
         // Assume the whole response is raw JSON
-        return response.trim();
+        return answer.trim();
     }
 
     @AllArgsConstructor

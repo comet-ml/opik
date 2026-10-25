@@ -13,6 +13,7 @@ import {
 } from "@/types/providers";
 import {
   OpenRouterParam,
+  getGeminiOrVertexListedParams,
   getOpenRouterReasoningEffortOptions,
   isAnthropicThinkingRequested,
   resolveEffort,
@@ -24,6 +25,16 @@ import {
   supportsVertexAIThinkingLevel,
 } from "@/lib/modelUtils";
 import { ModelConfigParam } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
+import { getModelParams, toParamsRoute } from "@/lib/modelParams";
+import { ModelParams } from "@/types/modelParams";
+import {
+  ANTHROPIC_PANEL,
+  GEMINI_PANEL,
+  GenericPanelPresentation,
+  getShownControls,
+  OPENAI_PANEL,
+  VERTEX_AI_PANEL,
+} from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/genericPanels";
 import { resolveSamplingPresentation } from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/ExclusiveSamplingParams";
 
 export type SupportsParam = (param: ModelConfigParam) => boolean;
@@ -174,6 +185,22 @@ export const getOpenRouterVisibleControls = ({
   };
 };
 
+export const hasGenericControls = (
+  params: ModelParams,
+  presentation: GenericPanelPresentation,
+  configs: Record<string, unknown>,
+  unsupportedParams?: ReadonlySet<ModelConfigParam>,
+  model = "",
+): boolean => {
+  const supports = createSupports(unsupportedParams);
+  return (
+    getShownControls(params, presentation, configs, unsupportedParams, model)
+      .length > 0 ||
+    supports("throttling") ||
+    supports("maxConcurrentRequests")
+  );
+};
+
 export const hasVisibleControls = (
   provider: PROVIDER_TYPE,
   model: PROVIDER_MODEL_TYPE | "",
@@ -184,7 +211,21 @@ export const hasVisibleControls = (
   const supports = createSupports(unsupportedParams);
 
   switch (provider) {
-    case PROVIDER_TYPE.OPEN_AI:
+    case PROVIDER_TYPE.OPEN_AI: {
+      const params = getModelParams(
+        PROVIDER_TYPE.OPEN_AI,
+        model,
+        toParamsRoute(openAiPipelineMode),
+      );
+      if (params) {
+        return hasGenericControls(
+          params,
+          OPENAI_PANEL,
+          configs as Record<string, unknown>,
+          unsupportedParams,
+          model,
+        );
+      }
       return isAnyControlVisible(
         getOpenAIVisibleControls({
           model,
@@ -193,7 +234,18 @@ export const hasVisibleControls = (
           openAiPipelineMode,
         }),
       );
-    case PROVIDER_TYPE.ANTHROPIC:
+    }
+    case PROVIDER_TYPE.ANTHROPIC: {
+      const params = getModelParams(PROVIDER_TYPE.ANTHROPIC, model);
+      if (params) {
+        return hasGenericControls(
+          params,
+          ANTHROPIC_PANEL,
+          configs as Record<string, unknown>,
+          unsupportedParams,
+          model,
+        );
+      }
       return isAnyControlVisible(
         getAnthropicVisibleControls({
           model,
@@ -201,7 +253,18 @@ export const hasVisibleControls = (
           supports,
         }),
       );
-    case PROVIDER_TYPE.GEMINI:
+    }
+    case PROVIDER_TYPE.GEMINI: {
+      const params = getGeminiOrVertexListedParams(model);
+      if (params) {
+        return hasGenericControls(
+          params,
+          GEMINI_PANEL,
+          configs as Record<string, unknown>,
+          unsupportedParams,
+          model,
+        );
+      }
       return isAnyControlVisible(
         getGeminiVisibleControls({
           model,
@@ -209,7 +272,18 @@ export const hasVisibleControls = (
           supports,
         }),
       );
-    case PROVIDER_TYPE.VERTEX_AI:
+    }
+    case PROVIDER_TYPE.VERTEX_AI: {
+      const params = getGeminiOrVertexListedParams(model);
+      if (params) {
+        return hasGenericControls(
+          params,
+          VERTEX_AI_PANEL,
+          configs as Record<string, unknown>,
+          unsupportedParams,
+          model,
+        );
+      }
       return isAnyControlVisible(
         getVertexAIVisibleControls({
           model,
@@ -217,6 +291,7 @@ export const hasVisibleControls = (
           supports,
         }),
       );
+    }
     case PROVIDER_TYPE.OPEN_ROUTER:
       return isAnyControlVisible(
         getOpenRouterVisibleControls({
