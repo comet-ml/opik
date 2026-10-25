@@ -569,4 +569,22 @@ class LlmProviderFactoryTest {
 
         assertThat(llmProviderFactory.openAiParams("openai/gpt-5-mini")).isEmpty();
     }
+
+    @Test
+    @DisplayName("geminiParams ignores the same model reached through another provider")
+    void geminiParamsIgnoresOtherProviders() {
+        var registry = mock(LlmModelRegistryService.class);
+        when(registry.findModel("google/gemini-3.8-flash")).thenReturn(Optional.of(
+                new LlmModelRegistryService.ModelLookupResult(LlmProvider.OPEN_ROUTER,
+                        LlmModelDefinition.builder().id("google/gemini-3.8-flash").build())));
+        when(registry.findModel("gpt-4o")).thenReturn(Optional.of(
+                new LlmModelRegistryService.ModelLookupResult(LlmProvider.OPEN_AI,
+                        LlmModelDefinition.builder().id("gpt-4o").build())));
+        var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
+        var llmProviderFactory = new LlmProviderFactoryImpl(mock(LlmProviderApiKeyService.class), mockConfig,
+                registry);
+
+        assertThat(llmProviderFactory.geminiParams("google/gemini-3.8-flash")).isEmpty();
+        assertThat(llmProviderFactory.geminiParams("gpt-4o")).isEmpty();
+    }
 }

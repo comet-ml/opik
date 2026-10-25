@@ -142,6 +142,15 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
                         () -> registryService.paramsOf(LlmProvider.OPEN_AI.getValue(), result.model().id())));
     }
 
+    @Override
+    public Optional<ModelParams> geminiParams(@NonNull String model) {
+        return registryService.findModel(model)
+                .filter(result -> result.provider() == LlmProvider.GEMINI
+                        || result.provider() == LlmProvider.VERTEX_AI)
+                .map(result -> ObjectUtils.getIfNull(result.model().params(),
+                        () -> registryService.paramsOf(result.provider().getValue(), result.model().id())));
+    }
+
     private LlmProvider getLlmProviderFromEnums(@NonNull String model) {
         var freeModelConfig = configuration.getFreeModel();
         if (freeModelConfig.isEnabled() && model.equals(freeModelConfig.getModel())) {
