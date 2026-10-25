@@ -19,6 +19,7 @@ import { Button } from "@/ui/button";
 import { Separator } from "@/ui/separator";
 
 import {
+  canRunMessages,
   generateDefaultPrompt,
   getDefaultConfigByProvider,
   restoreMissingProviderAndConfigKeys,
@@ -64,6 +65,7 @@ import AddNewPromptVersionDialog from "@/v2/pages-shared/llm/LLMPromptMessages/A
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import {
   PROMPT_SAVE_AS_CHAT_TOOLTIP,
+  PROMPT_SAVE_EMPTY_MESSAGE_TOOLTIP,
   PROMPT_UNSAVED_TOOLTIP,
 } from "@/constants/prompts";
 import useLoadChatPrompt from "@/hooks/useLoadChatPrompt";
@@ -85,6 +87,11 @@ interface PlaygroundPromptProps {
   onStop?: () => void;
   onCheckAgain?: () => void;
 }
+
+const trimTextContent = (message: LLMMessage): LLMMessage =>
+  typeof message.content === "string"
+    ? { ...message, content: message.content.trim() }
+    : message;
 
 const PlaygroundPrompt = ({
   workspaceName,
@@ -196,11 +203,9 @@ const PlaygroundPrompt = ({
     [datasetVariables],
   );
 
-  const hasMessageContent = messages.some((msg) =>
-    typeof msg.content === "string"
-      ? msg.content.trim()
-      : Array.isArray(msg.content) && msg.content.length > 0,
-  );
+  // Stricter than Run on purpose: a message of only spaces would still be
+  // saved to the library as a version that looks empty.
+  const canSaveMessages = canRunMessages(messages.map(trimTextContent));
 
   const handleAddMessage = useCallback(() => {
     const newMessage = generateDefaultLLMPromptMessage();
@@ -433,11 +438,9 @@ const PlaygroundPrompt = ({
 
   const showPromptLibraryAction =
     Boolean(selectedChatPromptId) || canViewPrompts;
-  const canSaveChatPrompt =
-    hasMessageContent &&
-    (selectedChatPromptId
-      ? canEditPrompts || canCreatePrompts
-      : canCreatePrompts);
+  const showSaveChatPrompt = selectedChatPromptId
+    ? canEditPrompts || canCreatePrompts
+    : canCreatePrompts;
 
   return (
     <div
@@ -544,18 +547,22 @@ const PlaygroundPrompt = ({
           )}
 
           <div className="flex shrink-0 items-center">
-            {canSaveChatPrompt && (
+            {showSaveChatPrompt && (
               <TooltipWrapper
                 content={
-                  hasUnsavedChatPromptChanges
-                    ? PROMPT_UNSAVED_TOOLTIP
-                    : PROMPT_SAVE_AS_CHAT_TOOLTIP
+                  !canSaveMessages
+                    ? PROMPT_SAVE_EMPTY_MESSAGE_TOOLTIP
+                    : hasUnsavedChatPromptChanges
+                      ? PROMPT_UNSAVED_TOOLTIP
+                      : PROMPT_SAVE_AS_CHAT_TOOLTIP
                 }
               >
                 <Button
                   variant="minimal"
                   size="icon-sm"
                   onClick={handleSaveChatPrompt}
+                  disabled={!canSaveMessages}
+                  style={!canSaveMessages ? { pointerEvents: "auto" } : {}}
                   data-testid="playground-save-prompt-button"
                 >
                   <Save />
@@ -563,7 +570,7 @@ const PlaygroundPrompt = ({
               </TooltipWrapper>
             )}
 
-            {(showPromptLibraryAction || canSaveChatPrompt) && (
+            {(showPromptLibraryAction || showSaveChatPrompt) && (
               <Separator orientation="vertical" className="mx-1 h-4" />
             )}
 
