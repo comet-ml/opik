@@ -263,45 +263,6 @@ const DEFAULT_TRACES_COLUMNS: string[] = [
   COLUMN_COMMENTS_ID,
 ];
 
-// Per-view behavior of the logs view. Defaults serve the entity-scoped logs views (experiments,
-// playground, trials, annotation queues): these are already narrowed to one entity, so they show
-// traces of every visibility (experiment runs auto-create hidden traces; scoping, not visibility,
-// is what isolates them). Callers that need a variant (e.g. the evaluation-traces view, which pins
-// hidden) pass an override so this shared component stays free of scenario-specific branching.
-export type TraceLogsViewConfig = {
-  // Suffix appended to the localStorage key prefix to isolate this view's column state.
-  storageNamespace: string;
-  defaultColumns: string[];
-  autoSelectScoreColumns: boolean;
-  showMetricsSummary: boolean;
-  visibilityMode: TRACE_VISIBILITY_MODE;
-  // These views are already narrowed to one entity, so a trailing window only hides traces of
-  // anything older than it — an experiment run two months ago would open on an empty table. A range
-  // the user picks explicitly still wins over this.
-  defaultDateRangePreset: DateRangePreset;
-  // Row-height, date-range and refresh controls. The experiment Logs tab shows only the columns
-  // selector per its design; the overlay hosts keep the full set they have today. Turning the date
-  // range off also stops the view constraining by date at all — an invisible window would be the
-  // very trap the all-time default exists to avoid.
-  showTableControls: boolean;
-};
-
-export const DEFAULT_TRACE_LOGS_VIEW_CONFIG: TraceLogsViewConfig = {
-  storageNamespace: "",
-  defaultColumns: DEFAULT_TRACES_COLUMNS,
-  autoSelectScoreColumns: true,
-  showMetricsSummary: false,
-  visibilityMode: TRACE_VISIBILITY_MODE.all,
-  defaultDateRangePreset: DATE_RANGE_PRESET_ALLTIME,
-  showTableControls: true,
-};
-
-// Stable empty reference for the "don't auto-select score columns" case (keeps hook deps steady).
-const NO_DYNAMIC_COLUMNS: string[] = [];
-
-// Stable empty reference so an unscoped host doesn't churn the effective-filters memo.
-const NO_SCOPE_FILTERS: Filter[] = [];
-
 const DEFAULT_TRACES_COLUMNS_ORDER: string[] = [
   COLUMN_ID_ID,
   "start_time",
@@ -323,6 +284,47 @@ const DEFAULT_TRACES_COLUMNS_ORDER: string[] = [
   COLUMN_EXPERIMENT_ID,
   "created_by",
 ];
+
+// Per-view behavior of the logs view. Defaults serve the entity-scoped logs views (experiments,
+// playground, trials, annotation queues): these are already narrowed to one entity, so they show
+// traces of every visibility (experiment runs auto-create hidden traces; scoping, not visibility,
+// is what isolates them). Callers that need a variant (e.g. the evaluation-traces view, which pins
+// hidden) pass an override so this shared component stays free of scenario-specific branching.
+export type TraceLogsViewConfig = {
+  // Suffix appended to the localStorage key prefix to isolate this view's column state.
+  storageNamespace: string;
+  defaultColumns: string[];
+  defaultColumnsOrder: string[];
+  autoSelectScoreColumns: boolean;
+  showMetricsSummary: boolean;
+  visibilityMode: TRACE_VISIBILITY_MODE;
+  // These views are already narrowed to one entity, so a trailing window only hides traces of
+  // anything older than it — an experiment run two months ago would open on an empty table. A range
+  // the user picks explicitly still wins over this.
+  defaultDateRangePreset: DateRangePreset;
+  // Row-height, date-range and refresh controls. The experiment Logs tab shows only the columns
+  // selector per its design; the overlay hosts keep the full set they have today. Turning the date
+  // range off also stops the view constraining by date at all — an invisible window would be the
+  // very trap the all-time default exists to avoid.
+  showTableControls: boolean;
+};
+
+export const DEFAULT_TRACE_LOGS_VIEW_CONFIG: TraceLogsViewConfig = {
+  storageNamespace: "",
+  defaultColumns: DEFAULT_TRACES_COLUMNS,
+  defaultColumnsOrder: DEFAULT_TRACES_COLUMNS_ORDER,
+  autoSelectScoreColumns: true,
+  showMetricsSummary: false,
+  visibilityMode: TRACE_VISIBILITY_MODE.all,
+  defaultDateRangePreset: DATE_RANGE_PRESET_ALLTIME,
+  showTableControls: true,
+};
+
+// Stable empty reference for the "don't auto-select score columns" case (keeps hook deps steady).
+const NO_DYNAMIC_COLUMNS: string[] = [];
+
+// Stable empty reference so an unscoped host doesn't churn the effective-filters memo.
+const NO_SCOPE_FILTERS: Filter[] = [];
 
 const COLUMN_DATA: ColumnData<BaseTraceData>[] = [
   {
@@ -731,7 +733,7 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
   const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
     `${storagePrefix}${COLUMNS_ORDER_KEY_SUFFIX}`,
     {
-      defaultValue: DEFAULT_TRACES_COLUMNS_ORDER,
+      defaultValue: viewConfig.defaultColumnsOrder,
     },
   );
 
