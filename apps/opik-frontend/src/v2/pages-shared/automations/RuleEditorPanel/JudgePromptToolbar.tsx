@@ -10,6 +10,7 @@ import useOpenAiPipelineMode from "@/hooks/useOpenAiPipelineMode";
 import { COMPOSED_PROVIDER_TYPE, PROVIDER_MODEL_TYPE } from "@/types/providers";
 import PromptModelSelect from "@/v2/pages-shared/llm/PromptModelSelect/PromptModelSelect";
 import PromptModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/PromptModelConfigs";
+import ModelRetirementTag from "@/v2/pages-shared/llm/ModelRetirementTag/ModelRetirementTag";
 import { LLMPromptTemplate } from "@/types/llm";
 import JudgeTemplateMenu from "@/v2/pages-shared/automations/RuleEditorPanel/JudgeTemplateMenu";
 import { getJudgeTemplateOptions } from "@/v2/pages-shared/automations/RuleEditorPanel/judgeTemplates";
@@ -153,6 +154,12 @@ const JudgePromptToolbar: React.FC<JudgePromptToolbarProps> = ({
         onDeleteProvider={handleDeleteProvider}
         hasError={hasModelError}
       />
+      {provider && (
+        <ModelRetirementTag
+          model={model}
+          provider={parseComposedProviderType(provider)}
+        />
+      )}
       {showSettings && (
         <>
           <Separator orientation="vertical" className="ml-2 mr-0.5 h-3" />

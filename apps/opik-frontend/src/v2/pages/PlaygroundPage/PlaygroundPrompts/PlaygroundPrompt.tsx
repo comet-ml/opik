@@ -31,6 +31,8 @@ import usePromptBadgeColor from "@/v2/pages/PlaygroundPage/PlaygroundPrompts/use
 import { generateDefaultLLMPromptMessage, getNextMessageType } from "@/lib/llm";
 import LLMPromptMessages from "@/v2/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
 import PromptModelSelect from "@/v2/pages-shared/llm/PromptModelSelect/PromptModelSelect";
+import ModelRetirementTag from "@/v2/pages-shared/llm/ModelRetirementTag/ModelRetirementTag";
+import { parseComposedProviderType } from "@/lib/provider";
 import { cn, getAlphabetLetter } from "@/lib/utils";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import PromptModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/PromptModelConfigs";
@@ -425,6 +427,12 @@ const PlaygroundPrompt = ({
             onDeleteProvider={handleDeleteProvider}
             hasError={!model}
           />
+          {provider && (
+            <ModelRetirementTag
+              model={model}
+              provider={parseComposedProviderType(provider)}
+            />
+          )}
           <PromptModelConfigs
             provider={provider}
             model={model}

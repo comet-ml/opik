@@ -11,6 +11,7 @@ export type LlmModelDefinition = {
   supported_parameters?: string[];
   reasoning_efforts?: string[];
   params?: ModelParams;
+  retires_on?: string;
 };
 
 export type LlmModelsByProvider = Record<string, LlmModelDefinition[]>;
