@@ -176,7 +176,7 @@ class TestLLMJudgeReasoningEffort:
         config_dict = evaluator.to_config().model_dump(by_alias=True, exclude_none=True)
 
         assert config_dict["model"] == {
-            "customParameters": {"reasoning_effort": "medium"}
+            "custom_parameters": {"reasoning_effort": "medium"}
         }
 
 
@@ -319,6 +319,25 @@ class TestLLMJudgeFromConfig:
         # Assertions should be preserved
         assert restored.assertions[0] == "Factually correct"
         assert restored.assertions[1] == "Relevant to question"
+
+    @pytest.mark.parametrize("saved_key", ["custom_parameters", "customParameters"])
+    def test_from_config__saved_custom_parameters__read_under_either_spelling(
+        self, saved_key
+    ):
+        config = llm_judge_config.LLMJudgeConfig(
+            **{
+                "model": {saved_key: {"reasoning_effort": "high"}},
+                "messages": [{"role": "USER", "content": "x"}],
+                "variables": {"input": "input", "output": "output"},
+                "schema": [{"name": "ok", "type": "BOOLEAN", "description": "ok"}],
+            }
+        )
+
+        evaluator = llm_judge.LLMJudge.from_config(config, track=False)
+
+        assert evaluator.to_config().model_dump(by_alias=True, exclude_none=True)[
+            "model"
+        ] == {"custom_parameters": {"reasoning_effort": "high"}}
 
     def test_from_config__config_model_params__temperature_and_seed_preserved(self):
         """Temperature and seed from config are preserved, model name is not saved."""
