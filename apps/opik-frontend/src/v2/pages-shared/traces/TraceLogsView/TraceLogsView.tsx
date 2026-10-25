@@ -307,6 +307,8 @@ export type TraceLogsViewConfig = {
   // range off also stops the view constraining by date at all — an invisible window would be the
   // very trap the all-time default exists to avoid.
   showTableControls: boolean;
+  emptyStateTitle: string;
+  emptyStateDescription: string;
 };
 
 export const DEFAULT_TRACE_LOGS_VIEW_CONFIG: TraceLogsViewConfig = {
@@ -318,6 +320,9 @@ export const DEFAULT_TRACE_LOGS_VIEW_CONFIG: TraceLogsViewConfig = {
   visibilityMode: TRACE_VISIBILITY_MODE.all,
   defaultDateRangePreset: DATE_RANGE_PRESET_ALLTIME,
   showTableControls: true,
+  emptyStateTitle: "There are no traces yet",
+  emptyStateDescription:
+    "Traces will appear here once your agent starts receiving requests.",
 };
 
 // Stable empty reference for the "don't auto-select score columns" case (keeps hook deps steady).
@@ -1115,8 +1120,8 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
       isEmpty={showEmptyState}
       emptyState={
         <DataTableEmptyContent
-          title="There are no traces yet"
-          description="Traces will appear here once your agent starts receiving requests."
+          title={viewConfig.emptyStateTitle}
+          description={viewConfig.emptyStateDescription}
           lightImageUrl={emptyLogsLightUrl}
           darkImageUrl={emptyLogsDarkUrl}
         />

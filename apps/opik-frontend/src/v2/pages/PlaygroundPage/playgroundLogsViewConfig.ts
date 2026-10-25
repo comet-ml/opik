@@ -24,4 +24,6 @@ export const PLAYGROUND_LOGS_VIEW_CONFIG: TraceLogsViewConfig = {
   defaultColumnsOrder: placeExperimentAfterOutput(
     DEFAULT_TRACE_LOGS_VIEW_CONFIG.defaultColumnsOrder,
   ),
+  emptyStateTitle: "No logs yet",
+  emptyStateDescription: "Traces will appear here once you run a prompt.",
 };

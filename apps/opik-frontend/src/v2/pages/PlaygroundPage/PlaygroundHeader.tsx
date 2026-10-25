@@ -351,6 +351,7 @@ const PlaygroundHeader = ({
               variant="icon"
               title="Playground logs"
               viewConfig={PLAYGROUND_LOGS_VIEW_CONFIG}
+              sidebarClassName="w-[calc(100vw-72px)] data-[state=open]:duration-300"
             />
           )}
         </div>
