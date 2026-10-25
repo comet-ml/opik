@@ -10,8 +10,11 @@ import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodySt
 import ExperimentFeedbackScoresTab from "@/v2/pages/CompareExperimentsPage/ExperimentFeedbackScoresTab/ExperimentFeedbackScoresTab";
 import ExperimentInsightsTab from "@/v2/pages/CompareExperimentsPage/ExperimentInsightsTab/ExperimentInsightsTab";
 import useExperimentsByIds from "@/api/datasets/useExperimenstByIds";
+import useExperimentsList from "@/api/datasets/useExperimentsList";
 import useDeepMemo from "@/hooks/useDeepMemo";
-import { Experiment } from "@/types/datasets";
+import { useActiveProjectId } from "@/store/AppStore";
+import Loader from "@/shared/Loader/Loader";
+import { Experiment, EXPERIMENT_TYPE } from "@/types/datasets";
 import {
   EXPERIMENT_TAB,
   ExperimentTabId,
@@ -35,9 +38,41 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
     updateType: "replaceIn",
   });
 
-  const [experimentsIds = []] = useQueryParam("experiments", JsonParam, {
-    updateType: "replaceIn",
-  });
+  const [requestedExperimentsIds = []] = useQueryParam(
+    "experiments",
+    JsonParam,
+    {
+      updateType: "replaceIn",
+    },
+  );
+
+  const activeProjectId = useActiveProjectId();
+
+  // Membership comes from the project-scoped list endpoint, not from
+  // experiment.project_id, so an experiment whose traces span several projects
+  // is shown in every project that lists it.
+  const { data: projectExperimentsData, isLoading: isProjectScopeLoading } =
+    useExperimentsList(
+      {
+        projectId: activeProjectId ?? undefined,
+        experimentIds: requestedExperimentsIds,
+        types: Object.values(EXPERIMENT_TYPE),
+        page: 1,
+        size: requestedExperimentsIds.length,
+      },
+      {
+        enabled: Boolean(activeProjectId) && requestedExperimentsIds.length > 0,
+      },
+    );
+
+  const experimentsIds: string[] = useMemo(() => {
+    const projectExperimentIds = new Set(
+      (projectExperimentsData?.content ?? []).map((e) => e.id),
+    );
+    return requestedExperimentsIds.filter((id: string) =>
+      projectExperimentIds.has(id),
+    );
+  }, [requestedExperimentsIds, projectExperimentsData]);
 
   const response = useExperimentsByIds({
     experimentsIds,
@@ -65,6 +100,10 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
     isExperimentTabId(tab) && availableTabs.includes(tab)
       ? tab
       : EXPERIMENT_TAB.items;
+
+  if (isProjectScopeLoading) {
+    return <Loader />;
+  }
 
   const renderContent = () => {
     return (
