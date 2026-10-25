@@ -78,6 +78,35 @@ The `OpikTracer` will automatically log the run and its details to Opik, includi
 
 For detailed parameter information, see the [OpikTracer SDK reference](https://www.comet.com/docs/opik/python-sdk-reference/integrations/langchain/OpikTracer.html).
 
+## Tracing agents
+
+Agents built with `create_agent` (LangChain v1 and later) are traced the same way. Pass the `OpikTracer` in the `callbacks` config when you invoke the agent:
+
+```python wordWrap
+from langchain.agents import create_agent
+from opik.integrations.langchain import OpikTracer
+
+opik_tracer = OpikTracer(project_name="langchain-examples")
+
+def get_weather(city: str) -> str:
+    """Get weather for a given city."""
+    return f"It's always sunny in {city}!"
+
+agent = create_agent(
+    model="openai:gpt-4o",
+    tools=[get_weather],
+    system_prompt="You are a helpful assistant",
+)
+
+result = agent.invoke(
+    {"messages": [{"role": "user", "content": "What is the weather in San Francisco?"}]},
+    config={"callbacks": [opik_tracer]},
+)
+print(result["messages"][-1].content)
+```
+
+Opik logs the agent run as a single trace, with nested spans for each model call and tool call.
+
 ## Practical Example: Text-to-SQL with Evaluation
 
 Let's walk through a real-world example of using LangChain with Opik for a text-to-SQL query generation task. This example demonstrates how to create synthetic datasets, build LangChain chains, and evaluate your application.

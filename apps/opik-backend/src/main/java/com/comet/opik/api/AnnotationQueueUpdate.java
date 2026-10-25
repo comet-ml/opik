@@ -28,5 +28,6 @@ public record AnnotationQueueUpdate(
         // Three-state on purpose: null leaves the existing automation untouched, {"enabled": false}
         // disables it while keeping its conditions (and the routing ledger, so re-enabling does not
         // re-route history), and a full object replaces the conditions. There is no delete.
-        @Valid AnnotationQueueAutomation automation) {
+        @Valid AnnotationQueueAutomation automation,
+        @Valid AnnotationQueueAnnotatorView annotatorView) {
 }

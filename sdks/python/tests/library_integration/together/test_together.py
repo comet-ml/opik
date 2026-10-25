@@ -38,7 +38,8 @@ MODEL = llm_constants.TOGETHER_LLAMA
 # provider contract a keyless suite can actually regress on. Stubbing ``_post``
 # would hand the integration a ``ChatCompletion`` we built ourselves and would
 # keep passing even if Together changed how it parses a response.
-BASE_URL = "https://api.together.ai"
+# Matched on path only: together<3 sends chat to api.together.ai, together>=3 to
+# api-inference.together.ai.
 COMPLETIONS_ROUTE = "/v1/chat/completions"
 
 CONTENT = "Blue, due to Rayleigh scattering."
@@ -124,11 +125,11 @@ def _chunk(
         ("together-integration-test", "together-integration-test"),
     ],
 )
-@respx.mock(base_url=BASE_URL)
+@respx.mock()
 def test_together_chat_completions_create__happyflow(
     respx_mock, fake_backend, project_name, expected_project_name
 ):
-    respx_mock.post(COMPLETIONS_ROUTE).mock(
+    respx_mock.post(path=COMPLETIONS_ROUTE).mock(
         return_value=httpx.Response(200, json=_completion_body())
     )
     client = together.Together(api_key="fake-api-key")
@@ -183,9 +184,9 @@ def test_together_chat_completions_create__happyflow(
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
-@respx.mock(base_url=BASE_URL)
+@respx.mock()
 def test_together_chat_completions_create__async__happyflow(respx_mock, fake_backend):
-    respx_mock.post(COMPLETIONS_ROUTE).mock(
+    respx_mock.post(path=COMPLETIONS_ROUTE).mock(
         return_value=httpx.Response(200, json=_completion_body())
     )
     client = together.AsyncTogether(api_key="fake-api-key")
@@ -203,13 +204,13 @@ def test_together_chat_completions_create__async__happyflow(respx_mock, fake_bac
     assert fake_backend.trace_trees[0].spans[0].provider == "together"
 
 
-@respx.mock(base_url=BASE_URL)
+@respx.mock()
 def test_together_chat_completions_create__error__span_has_error_info(
     respx_mock, fake_backend
 ):
     # A 500 from Together, not a synthetic exception: this exercises the
     # library's own error mapping on the way to the span.
-    respx_mock.post(COMPLETIONS_ROUTE).mock(
+    respx_mock.post(path=COMPLETIONS_ROUTE).mock(
         return_value=httpx.Response(500, json={"error": "boom"})
     )
     client = together.Together(api_key="fake-api-key")
@@ -225,7 +226,7 @@ def test_together_chat_completions_create__error__span_has_error_info(
     assert fake_backend.trace_trees[0].spans[0].error_info is not None
 
 
-@respx.mock(base_url=BASE_URL)
+@respx.mock()
 def test_together_chat_completions_create__stream__happyflow(respx_mock, fake_backend):
     """Drive a stream the way a user does, not through the aggregator directly.
 
@@ -233,7 +234,7 @@ def test_together_chat_completions_create__stream__happyflow(respx_mock, fake_ba
     goes through ``create(stream=True)`` and the real SSE parser, so it also covers
     the stream patching and the span that gets ended when iteration finishes.
     """
-    respx_mock.post(COMPLETIONS_ROUTE).mock(
+    respx_mock.post(path=COMPLETIONS_ROUTE).mock(
         return_value=httpx.Response(
             200,
             headers={"Content-Type": "text/event-stream"},

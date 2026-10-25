@@ -122,6 +122,35 @@ you're happy with the results, save the edit as a new prompt version for your ag
     The process must keep running so the runner can pick up jobs. If your agent is not already
     served by a web framework (for example FastAPI, Flask, Express, or Fastify), block the main
     thread as shown in the Python example.
+
+    The playground sends each input as a value typed in the UI, so entrypoint parameters must
+    use simple types:
+
+    - **Python:** `str`, `int`, `float`, `bool`, or `Optional` of one of these. A typed
+      collection such as `list[str]` or `dict[str, int]` shows a text field, and your function
+      receives the JSON text as a string, so parse it in your function. A bare `list` or `dict`
+      behaves the same way but also logs the warning described in
+      [Troubleshooting](#could-not-resolve-type-for-parameters-warning).
+    - **TypeScript:** `string`, `number`, or `boolean`. A parameter with type `object` shows a
+      JSON field, and your function receives the JSON as a string.
+
+    A playground input cannot hold a runtime object such as a LangChain chain, an LLM client, or
+    a tracer. If a parameter has one of these types, the SDK logs a warning and the parameter
+    receives the text from the UI, so your agent fails when it uses it. Create these objects in
+    your code, at module level or inside the entrypoint, and keep them out of the entrypoint
+    parameters. To reuse a function that takes such an object, add a thin entrypoint that takes
+    simple inputs and calls it:
+
+    ```python title="Python" wordWrap
+    chain = build_chain()  # created once, at module level
+
+    def run_chain(chain, question: str) -> str:
+        return chain.invoke({"question": question})
+
+    @opik.track(entrypoint=True, project_name="my-agent")
+    def my_agent(question: str) -> str:
+        return run_chain(chain, question)
+    ```
   </Step>
   <Step title="Start the playground">
     <CodeBlocks>
@@ -185,22 +214,33 @@ skip the browser pairing flow entirely.
 
 ## Troubleshooting
 
-**"No entrypoint found" error**
+<AccordionGroup>
+  <Accordion title='"No entrypoint found" error'>
+    Make sure at least one function is decorated with `@opik.track(entrypoint=True)` in Python or
+    `track({ entrypoint: true }, fn)` in TypeScript. The entrypoint must be discoverable from the
+    current working directory.
+  </Accordion>
 
-Make sure at least one function is decorated with `@opik.track(entrypoint=True)` in Python or
-`track({ entrypoint: true }, fn)` in TypeScript. The entrypoint must be discoverable from the
-current working directory.
+  <Accordion title='"Could not resolve type for parameter(s)" warning'>
+    One or more entrypoint parameters use a type that the playground cannot fill from the UI.
+    Change them to a supported type. For a runtime object such as a chain or an LLM client,
+    create the object in your code and add a thin entrypoint, as shown in
+    [Mark your agent as an entrypoint](#mark-your-agent-as-an-entrypoint). In TypeScript, the
+    SDK also logs this warning for `object` parameters, which still work as JSON fields.
+  </Accordion>
 
-**Pairing times out**
+  <Accordion title="Pairing times out">
+    The browser pairing session expires after 5 minutes. Re-run the command to generate a new
+    session. Make sure your Opik environment variables are set correctly. See
+    [Getting started with Observability](/tracing/getting-started) for configuration details.
+  </Accordion>
 
-The browser pairing session expires after 5 minutes. Re-run the command to generate a new session.
-Make sure your Opik environment variables are set correctly — see
-[Getting started with Observability](/tracing/getting-started) for configuration details.
-
-**Runner disconnects**
-
-Opik uses heartbeat monitoring to detect disconnects. If your runner shows as disconnected in the
-UI, check that the process is still running locally and that your network connection is stable.
+  <Accordion title="Runner disconnects">
+    Opik uses heartbeat monitoring to detect disconnects. If your runner shows as disconnected in
+    the UI, check that the process is still running locally and that your network connection is
+    stable.
+  </Accordion>
+</AccordionGroup>
 
 ## FAQ
 
