@@ -147,16 +147,22 @@ const OllieChartWidget: React.FunctionComponent<
     [dateRange, hasDateRange],
   );
 
-  // A KPI on a date range compares with the window of the same length just before it.
+  // A KPI on a date range compares with the window of the same length just before it. A preset ("Past 30 days") has
+  // no end: it runs up to now.
   const previousWindow = useMemo(() => {
-    if (!kpi?.window_days || !intervalStart || !intervalEnd) return null;
+    if (!kpi?.window_days || !intervalStart) return null;
     const start = new Date(intervalStart).getTime();
-    const length = new Date(intervalEnd).getTime() - start;
+    const end = intervalEnd ? new Date(intervalEnd).getTime() : Date.now();
+    const length = end - start;
     if (!Number.isFinite(length) || length <= 0) return null;
+    // A range starting at midnight counts today's part as a day ("Past 30 days" is 29 days and today); one starting
+    // on the hour ("Past day") is whole hours.
+    const days =
+      start % DAY === 0 ? Math.ceil(length / DAY) : Math.round(length / DAY);
     return {
       intervalStart: new Date(start - length).toISOString(),
       intervalEnd: intervalStart,
-      days: Math.max(1, Math.round(length / DAY)),
+      days: Math.max(1, days),
     };
   }, [kpi?.window_days, intervalStart, intervalEnd]);
 

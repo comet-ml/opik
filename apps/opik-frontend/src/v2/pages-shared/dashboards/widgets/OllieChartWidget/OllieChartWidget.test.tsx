@@ -190,3 +190,51 @@ describe("OllieChartWidget saved widget", () => {
     expect(queryMock.mock.calls.at(-1)![1]?.retryNotFound).toBe(retryNotFound);
   });
 });
+
+describe("OllieChartWidget KPI comparison", () => {
+  beforeEach(() => {
+    queryMock.mockReset();
+    queryMock.mockReturnValue({
+      data: [{ value: 5 }],
+      isPending: false,
+      isFetching: false,
+      error: null,
+      refetch: vi.fn(),
+      dataUpdatedAt: 1,
+    } as never);
+  });
+
+  it("compares a preset range, which has no end, with the window just before it", () => {
+    const kpiWidget = {
+      ...ollieWidget("w-1"),
+      config: {
+        spec: {
+          kpi: {
+            value: "value",
+            format: "cost_total",
+            aggregate: "sum",
+            window_days: 30,
+          },
+        },
+        query: { id: "q-1" },
+      },
+    } as unknown as DashboardWidgetType;
+    setStore(kpiWidget);
+    render(<OllieChartWidget preview />);
+
+    const [previous, previousOptions] = queryMock.mock.calls.at(-2)!;
+    const [current] = queryMock.mock.calls.at(-1)!;
+    // The dashboard's default range is a preset: it runs to now.
+    expect(current.intervalEnd).toBeUndefined();
+    expect(previousOptions?.enabled).toBe(true);
+    expect(previous.intervalEnd).toBe(current.intervalStart);
+    // As long as the current window, which runs from its start to now.
+    const previousLength =
+      new Date(previous.intervalEnd!).getTime() -
+      new Date(previous.intervalStart!).getTime();
+    const currentLength =
+      Date.now() - new Date(current.intervalStart!).getTime();
+    expect(Math.abs(currentLength - previousLength)).toBeLessThan(60_000);
+    expect(screen.getByText(/previous 30 days/)).toBeTruthy();
+  });
+});
