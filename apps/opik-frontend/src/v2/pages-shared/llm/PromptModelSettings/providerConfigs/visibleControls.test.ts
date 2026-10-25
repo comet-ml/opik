@@ -20,6 +20,7 @@ import {
 import {
   LLMOpenAIConfigsType,
   LLMOpenRouterConfigsType,
+  OpenAIReasoningEffort,
   OpenAiPipelineMode,
   PROVIDER_MODEL_TYPE,
   PROVIDER_TYPE,
@@ -711,4 +712,40 @@ describe("hasVisibleControls on the Gemini and Vertex AI catalog panel", () => {
       ).toBe(true);
     },
   );
+});
+
+describe("OpenAI reasoning model sampling sliders", () => {
+  const sliders = (
+    model: PROVIDER_MODEL_TYPE,
+    reasoningEffort?: OpenAIReasoningEffort,
+  ) => {
+    const { temperature, topP } = getOpenAIVisibleControls({
+      model,
+      configs: { temperature: 0, topP: 1, reasoningEffort },
+      supports: createSupports(),
+    });
+    return { temperature, topP };
+  };
+
+  it("show while the model runs at effort none, its default on GPT 5.4", () => {
+    expect(sliders(PROVIDER_MODEL_TYPE.GPT_5_4)).toEqual({
+      temperature: true,
+      topP: true,
+    });
+    expect(sliders(PROVIDER_MODEL_TYPE.GPT_6_LUNA, "none")).toEqual({
+      temperature: true,
+      topP: true,
+    });
+  });
+
+  it("hide once the model reasons", () => {
+    expect(sliders(PROVIDER_MODEL_TYPE.GPT_5_4, "low")).toEqual({
+      temperature: false,
+      topP: false,
+    });
+    expect(sliders(PROVIDER_MODEL_TYPE.GPT_6_LUNA)).toEqual({
+      temperature: false,
+      topP: false,
+    });
+  });
 });
