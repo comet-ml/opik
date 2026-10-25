@@ -17,6 +17,7 @@ interface CreatePromptTemplate {
 type UsePromptCreateMutationParams = {
   prompt: Partial<Prompt> & CreatePromptTemplate & { project_id?: string };
   withResponse?: boolean;
+  onSuccess?: (prompt: Prompt) => void;
 };
 
 const usePromptCreateMutation = () => {
@@ -61,7 +62,9 @@ const usePromptCreateMutation = () => {
         variant: "destructive",
       });
     },
-    onSuccess: (data) => {
+    onSuccess: (data, { onSuccess }) => {
+      onSuccess?.(data);
+
       // If we have a specific prompt ID, invalidate its query to ensure fresh data
       if (data?.id) {
         queryClient.invalidateQueries({
