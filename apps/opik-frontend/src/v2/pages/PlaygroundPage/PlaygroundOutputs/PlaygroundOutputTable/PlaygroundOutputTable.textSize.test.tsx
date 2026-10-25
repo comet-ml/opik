@@ -29,6 +29,7 @@ describe("PlaygroundOutputTable text size", () => {
     render(
       <TooltipProvider>
         <PlaygroundOutputTable
+          datasetId="dataset-a"
           datasetItems={[]}
           datasetColumns={[{ name: "question", types: [] }]}
           promptIds={["prompt-a"]}
