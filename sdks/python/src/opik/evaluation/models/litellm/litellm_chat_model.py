@@ -26,6 +26,12 @@ DEFAULT_CONNECT_TIMEOUT_SECONDS = 10.0
 DEFAULT_READ_TIMEOUT_SECONDS = 60.0
 DEFAULT_NUM_RETRIES = 0
 
+# First LiteLLM release that sends gpt-5.4+ and gpt-6 function tools to the
+# Responses API while the model reasons; older ones send them to Chat
+# Completions, which rejects them unless reasoning_effort is "none".
+# https://github.com/BerriAI/litellm/pull/39631
+LITELLM_TOOLS_RESPONSES_BRIDGE_VERSION = "1.101.0"
+
 
 def _default_timeout() -> "httpx.Timeout":
     import httpx
@@ -251,6 +257,12 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
           who explicitly opt into both (`temperature=1` *and*
           `reasoning_effort=...`) keep extended thinking.
 
+        - OpenAI gpt-5.4+ + function `tools` + reasoning on (any effort
+          but "none", unset included): Chat Completions rejects the tools.
+          LiteLLM >= 1.101 sends the call to the Responses API instead, as
+          OpenAI recommends; older versions can't, and dropping a param
+          won't fix it, so a one-time warning names the upgrade.
+
         Runs on the merged dict — the per-source
         `_remove_unnecessary_not_supported_params` can't catch the
         cross-source case where one half of the conflict lives in
@@ -285,7 +297,40 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
                         self.model_name,
                         raw_temperature,
                     )
+        if (
+            resolved.get("tools")
+            and resolved.get("reasoning_effort") != "none"
+            and util.is_openai_gpt_5_4_plus(self.model_name)
+        ):
+            self._warn_if_litellm_cannot_route_tools()
         return resolved
+
+    def _warn_if_litellm_cannot_route_tools(self) -> None:
+        if "tools" in self._unsupported_warned:
+            return
+        self._unsupported_warned.add("tools")
+        try:
+            litellm_version = importlib.metadata.version("litellm")
+            routes_tools = (
+                semantic_version.SemanticVersion.parse(litellm_version)  # type: ignore
+                >= LITELLM_TOOLS_RESPONSES_BRIDGE_VERSION
+            )
+        except (importlib.metadata.PackageNotFoundError, TypeError, ValueError):
+            LOGGER.debug(
+                "Could not read the LiteLLM version, skipping the tool routing check.",
+                exc_info=True,
+            )
+            return
+        if routes_tools:
+            return
+        _log_warning(
+            "LiteLLM %s sends tool calls for %s to Chat Completions, which rejects "
+            "tools while the model reasons. Upgrade to litellm>=%s, which sends "
+            "them to the Responses API.",
+            litellm_version,
+            self.model_name,
+            LITELLM_TOOLS_RESPONSES_BRIDGE_VERSION,
+        )
 
     def _warn_about_unsupported_param(self, param: str, value: Any) -> None:
         if param in {"logprobs", "top_logprobs"}:
@@ -293,10 +338,18 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
             # fields. We already drop them gracefully, so skip logging to avoid
             # spamming GEval users with repeated warnings.
             return
-        if param == "temperature":
+        if param == "temperature" and not util.rejects_sampling_params(self.model_name):
             _log_warning(
                 "Model %s only supports temperature=1. Dropping temperature=%s.",
                 self.model_name,
+                value,
+            )
+        elif param in util.SAMPLING_PARAMS:
+            _log_warning(
+                "Model %s does not accept %s. Dropping %s=%s.",
+                self.model_name,
+                param,
+                param,
                 value,
             )
         else:
