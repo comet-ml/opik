@@ -3,10 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
 import { LlmModelsByProvider } from "@/api/llm/useLlmModels";
-import {
-  RULE_DEFAULT_MODEL_BY_PROVIDER,
-  RULE_LAST_PICKED_MODEL,
-} from "./constants";
+import { RULE_LAST_PICKED_MODEL } from "./constants";
 import useRuleDefaultModel from "./useRuleDefaultModel";
 
 const registry = vi.hoisted(() => {
@@ -35,6 +32,14 @@ vi.mock("@/api/llm/useLlmModels", () => ({
     isError: false,
     error: null,
   }),
+}));
+
+vi.mock("@/api/llm/useLlmModelDefaults", () => ({
+  default: () => ({ data: { openai: "gpt-5.5" }, isFetched: true }),
+}));
+
+vi.mock("@/api/llm/useLlmModelProfiles", () => ({
+  default: () => ({ data: undefined }),
 }));
 
 vi.mock("@/store/AppStore", () => ({
@@ -67,7 +72,7 @@ describe("useRuleDefaultModel", () => {
     [
       "ignores a remembered pick that left the picker",
       PROVIDER_MODEL_TYPE.GPT_LIVE_1,
-      RULE_DEFAULT_MODEL_BY_PROVIDER[PROVIDER_TYPE.OPEN_AI],
+      PROVIDER_MODEL_TYPE.GPT_5_5,
     ],
   ])("%s", (_, lastPicked, expected) => {
     localStorage.setItem(RULE_LAST_PICKED_MODEL, JSON.stringify(lastPicked));

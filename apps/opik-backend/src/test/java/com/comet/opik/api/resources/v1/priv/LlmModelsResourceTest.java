@@ -60,6 +60,21 @@ class LlmModelsResourceTest {
     }
 
     @Test
+    void servesTheDefaultModelOfEachProvider() {
+        when(REGISTRY_SERVICE.getDefaultModels()).thenReturn(Map.of(
+                "openai", "gpt-5.5",
+                "vertex-ai", "vertex_ai/gemini-3.5-flash-lite"));
+
+        try (Response response = EXT.target("/v1/private/llm/models/defaults").request().get()) {
+            assertThat(response.getStatus()).isEqualTo(OK.getStatusCode());
+            assertThat(response.readEntity(new GenericType<Map<String, String>>() {
+            })).isEqualTo(Map.of(
+                    "openai", "gpt-5.5",
+                    "vertex-ai", "vertex_ai/gemini-3.5-flash-lite"));
+        }
+    }
+
+    @Test
     void servesFlagsTheRegistryLeavesOutAsFalse() {
         when(REGISTRY_SERVICE.getRegistry()).thenReturn(Map.of(
                 "openai", List.of(LlmModelDefinition.builder().id("gpt-4.1").build())));

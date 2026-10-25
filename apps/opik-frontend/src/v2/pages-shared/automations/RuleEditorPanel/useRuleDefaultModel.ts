@@ -1,22 +1,18 @@
 import { useCallback } from "react";
-import first from "lodash/first";
-
 import useAppStore from "@/store/AppStore";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import useLastPickedModel from "@/hooks/useLastPickedModel";
 import useProviderKeys from "@/api/provider-keys/useProviderKeys";
 import { COMPOSED_PROVIDER_TYPE, PROVIDER_MODEL_TYPE } from "@/types/providers";
-import { parseComposedProviderType } from "@/lib/provider";
-import {
-  RULE_DEFAULT_MODEL_BY_PROVIDER,
-  RULE_LAST_PICKED_MODEL,
-} from "@/v2/pages-shared/automations/RuleEditorPanel/constants";
+import { RULE_LAST_PICKED_MODEL } from "@/v2/pages-shared/automations/RuleEditorPanel/constants";
 
 export type RuleDefaultModel = {
   model: PROVIDER_MODEL_TYPE | "";
   provider: COMPOSED_PROVIDER_TYPE | "";
 };
 
+// Rules start where the playground does: the same last-picked rule, then the catalog's default model. A
+// remembered judge model the picker no longer lists is skipped.
 export const useCalculateRuleDefaultModel = () => {
   const { calculateModelProvider, calculateDefaultModel, isDropdownModel } =
     useLLMProviderModelsData();
@@ -31,19 +27,11 @@ export const useCalculateRuleDefaultModel = () => {
         lastPicked,
         preferredProvider,
       );
-      if (
-        setupProviders.includes(lastPickedProvider) &&
-        isDropdownModel(lastPicked, lastPickedProvider)
-      ) {
-        return lastPicked;
-      }
-
-      const composedProvider = preferredProvider ?? first(setupProviders);
-      if (!composedProvider) return "";
-      return (
-        RULE_DEFAULT_MODEL_BY_PROVIDER[
-          parseComposedProviderType(composedProvider)
-        ] ?? calculateDefaultModel("", setupProviders, composedProvider)
+      const stillListed = isDropdownModel(lastPicked, lastPickedProvider);
+      return calculateDefaultModel(
+        stillListed ? lastPicked : "",
+        setupProviders,
+        preferredProvider,
       );
     },
     [calculateModelProvider, calculateDefaultModel, isDropdownModel],
