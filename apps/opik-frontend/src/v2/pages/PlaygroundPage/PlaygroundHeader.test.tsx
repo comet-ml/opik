@@ -17,12 +17,16 @@ const prompt: PlaygroundPromptType = {
   messages: [{ id: "message-1", role: LLM_MESSAGE_ROLE.user, content: "Hi" }],
 };
 
+const secondPrompt: PlaygroundPromptType = { ...prompt, id: "prompt-2" };
+
+let promptMap: Record<string, PlaygroundPromptType> = { [prompt.id]: prompt };
 let datasetType: DATASET_TYPE | null = DATASET_TYPE.DATASET;
 
 let isStoppingAll = false;
 
 vi.mock("@/store/PlaygroundStore", () => ({
-  usePromptMap: () => ({ [prompt.id]: prompt }),
+  default: { getState: () => ({ isRunningMap: {} }) },
+  usePromptMap: () => promptMap,
   useClearCreatedExperiments: () => vi.fn(),
   useCreatedExperiments: () => [],
   useIsRunning: () => false,
@@ -81,10 +85,14 @@ vi.mock(
 );
 
 const onRunAll = vi.fn();
+const onRunSingle = vi.fn();
 
 const renderHeader = (versionItemsTotal: number | undefined) =>
   render(
     <TooltipProvider delayDuration={0}>
+      <div data-prompt-id={secondPrompt.id}>
+        <textarea data-testid="second-prompt-editor" />
+      </div>
       <PlaygroundHeader
         workspaceName="default"
         datasetId="dataset-1::version-1"
@@ -94,6 +102,7 @@ const renderHeader = (versionItemsTotal: number | undefined) =>
         onChangeDatasetId={vi.fn()}
         onReset={vi.fn()}
         onRunAll={onRunAll}
+        onRunSingle={onRunSingle}
         onStopAll={vi.fn()}
       />
     </TooltipProvider>,
@@ -105,12 +114,17 @@ const getRunButton = () => screen.getByTestId("playground-run-button");
 const hoverRunButton = () =>
   fireEvent.pointerMove(getRunButton(), { pointerType: "mouse" });
 
-const pressRunShortcut = () =>
-  fireEvent.keyDown(window, { key: "Enter", shiftKey: true });
+const pressRunShortcut = (target: Window | Element = window) =>
+  fireEvent.keyDown(target, { key: "Enter", metaKey: true });
+
+const pressRunShortcutInSecondPrompt = () =>
+  pressRunShortcut(screen.getByTestId("second-prompt-editor"));
 
 beforeEach(() => {
   isStoppingAll = false;
   onRunAll.mockClear();
+  onRunSingle.mockClear();
+  promptMap = { [prompt.id]: prompt };
   datasetType = DATASET_TYPE.DATASET;
 });
 
@@ -144,6 +158,16 @@ describe("PlaygroundHeader", () => {
 
       expect(onRunAll).not.toHaveBeenCalled();
     });
+
+    it("should not run the prompt the cursor is in from the keyboard shortcut", () => {
+      promptMap = { [prompt.id]: prompt, [secondPrompt.id]: secondPrompt };
+
+      renderHeader(0);
+      pressRunShortcutInSecondPrompt();
+
+      expect(onRunSingle).not.toHaveBeenCalled();
+      expect(onRunAll).not.toHaveBeenCalled();
+    });
   });
 
   describe("a dataset version with items", () => {
@@ -155,6 +179,16 @@ describe("PlaygroundHeader", () => {
 
       expect(getRunButton()).toBeEnabled();
       expect(onRunAll).toHaveBeenCalledTimes(2);
+    });
+
+    it("should run only the prompt the cursor is in from the keyboard shortcut", () => {
+      promptMap = { [prompt.id]: prompt, [secondPrompt.id]: secondPrompt };
+
+      renderHeader(3);
+      pressRunShortcutInSecondPrompt();
+
+      expect(onRunSingle).toHaveBeenCalledWith(secondPrompt.id);
+      expect(onRunAll).not.toHaveBeenCalled();
     });
   });
 
