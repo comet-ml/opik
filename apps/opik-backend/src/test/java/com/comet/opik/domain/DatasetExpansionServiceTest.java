@@ -215,6 +215,27 @@ class DatasetExpansionServiceTest {
             assertThat(item.data()).doesNotContainKey("_generation_model");
         }
 
+        // The answer shape Bedrock's openai.gpt-oss-20b gives, with a draft of the array inside its reasoning.
+        @Test
+        @DisplayName("Samples are read from after a leading reasoning block, not from the draft inside it")
+        void readsSamplesAfterALeadingReasoningBlock() {
+            setupMocksForExpansion(DatasetType.DATASET);
+            when(llmProviderFactory.getLlmProvider("gpt-oss")).thenReturn(LlmProvider.CUSTOM_LLM);
+            setupLlmResponse(
+                    "<reasoning>Draft: [{\"input\": \"draft\"}]</reasoning>[{\"input\": \"generated input\"}]");
+
+            var request = DatasetExpansion.builder()
+                    .model("gpt-oss")
+                    .sampleCount(1)
+                    .build();
+
+            var result = service.expandDataset(DATASET_ID, request);
+
+            assertThat(result.generatedSamples()).hasSize(1);
+            assertThat(result.generatedSamples().getFirst().data().get("input").asText())
+                    .isEqualTo("generated input");
+        }
+
         @Test
         @DisplayName("Generated items have correct datasetId and source")
         void generatedItemsHaveCorrectFields() {
@@ -346,11 +367,15 @@ class DatasetExpansionServiceTest {
     }
 
     private void setupLlmResponse() {
+        setupLlmResponse("[{\"input\": \"generated input\"}]");
+    }
+
+    private void setupLlmResponse(String content) {
         var response = ChatCompletionResponse.builder()
                 .choices(List.of(ChatCompletionChoice.builder()
                         .index(0)
                         .message(AssistantMessage.builder()
-                                .content("[{\"input\": \"generated input\"}]")
+                                .content(content)
                                 .build())
                         .build()))
                 .build();

@@ -319,7 +319,7 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
 
             String modelName = message.llmAsJudgeCode().model().name();
             boolean providerSupportsTools = agenticScoringService.supportsToolCalling(
-                    llmProviderFactory.getLlmProvider(modelName));
+                    llmProviderFactory.getKeyProvider(message.workspaceId(), modelName));
             // Tools require the {{span}} trigger AND a tool-calling provider. The {{span}} substitution
             // itself is independent of tools — see the inline branch below.
             boolean useTools = referencesSpan && providerSupportsTools;
@@ -390,7 +390,8 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
         // handleToolCalls so the model can decide when to stop investigating. Providers that reject
         // a forced choice outright get AUTO here too — see firstRoundToolChoice.
         scoreRequest = agenticScoringService.addToolSpecs(scoreRequest,
-                agenticScoringService.firstRoundToolChoice(llmProviderFactory.getLlmProvider(modelName),
+                agenticScoringService.firstRoundToolChoice(
+                        llmProviderFactory.getKeyProvider(message.workspaceId(), modelName),
                         message.llmAsJudgeCode().model()));
         return LlmRequests.builder().score(scoreRequest).structured(structuredRequest).build();
     }

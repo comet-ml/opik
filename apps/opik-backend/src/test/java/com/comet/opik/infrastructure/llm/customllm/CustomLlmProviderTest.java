@@ -113,6 +113,53 @@ class CustomLlmProviderTest {
         assertTokenLimit(name, sentBody(), expectedMaxTokens, expectedMaxCompletionTokens);
     }
 
+    // What Bedrock answered on 10-23 for a model the account has no Marketplace subscription to.
+    private static final String ACCESS_DENIED = """
+            {"error": {"code": "access_denied", "message": "Model access is denied due to IAM user or service role \
+            is not authorized to perform the required AWS Marketplace actions"}}
+            """;
+
+    @ParameterizedTest
+    @EnumSource(value = LlmProvider.class, names = {"BEDROCK", "CUSTOM_LLM"})
+    void anErrorKeepsTheStatusTheProviderSent(LlmProvider llmProvider) {
+        wireMock.stubFor(post(urlEqualTo(COMPLETIONS_PATH)).willReturn(aResponse()
+                .withStatus(403)
+                .withHeader("Content-Type", "application/json")
+                .withBody(ACCESS_DENIED)));
+        var provider = newProvider(llmProvider);
+
+        assertThatThrownBy(() -> provider.generate(request(400, null), "workspace-id"))
+                .satisfies(thrown -> assertThat(provider.getLlmProviderError(thrown)).hasValueSatisfying(error -> {
+                    assertThat(error.getCode()).isEqualTo(403);
+                    assertThat(error.getMessage()).startsWith("Model access is denied");
+                    assertThat(error.getDetails()).isEqualTo("access_denied");
+                }));
+    }
+
+    @Test
+    void aStreamedErrorKeepsTheStatusTheProviderSent() throws Exception {
+        wireMock.stubFor(post(urlEqualTo(COMPLETIONS_PATH)).willReturn(aResponse()
+                .withStatus(403)
+                .withHeader("Content-Type", "application/json")
+                .withBody(ACCESS_DENIED)));
+        var provider = newProvider(LlmProvider.BEDROCK);
+        var failure = new CompletableFuture<Throwable>();
+
+        provider.generateStream(request(400, null), "workspace-id", response -> {
+        }, () -> failure.complete(null), failure::complete);
+
+        assertThat(provider.getLlmProviderError(failure.get(10, TimeUnit.SECONDS)))
+                .hasValueSatisfying(error -> assertThat(error.getCode()).isEqualTo(403));
+    }
+
+    @Test
+    void anErrorWithoutAWireStatusKeepsTheStatusItsBodyMapsTo() {
+        var provider = newProvider(LlmProvider.CUSTOM_LLM);
+
+        assertThat(provider.getLlmProviderError(new RuntimeException("upstream said " + ACCESS_DENIED)))
+                .hasValueSatisfying(error -> assertThat(error.getCode()).isEqualTo(400));
+    }
+
     @Test
     void generateKeepsTheRestOfTheRequestForOllama() {
         var request = ChatCompletionRequest.builder()

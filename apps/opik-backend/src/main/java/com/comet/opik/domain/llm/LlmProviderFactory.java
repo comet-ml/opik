@@ -35,6 +35,12 @@ public interface LlmProviderFactory {
 
     LlmProvider getLlmProvider(String model);
 
+    /**
+     * The provider of the workspace key that serves the model. A {@code custom-llm/} name reads as
+     * {@link LlmProvider#CUSTOM_LLM} to {@link #getLlmProvider}, though a Bedrock or Ollama key can serve it too.
+     */
+    LlmProvider getKeyProvider(String workspaceId, String model);
+
     StructuredOutputStrategy getStructuredOutputStrategy(String model);
 
     /** The catalog params of a model the registry lists under OpenAI, or empty for any other model. */
