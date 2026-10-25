@@ -552,6 +552,7 @@ const PlaygroundPrompt = ({
           improvePromptConfig={improvePromptConfig}
           autoFocusFirstMessage={index === 0}
           shiftEnterInsertsNewline
+          size="xs"
         />
       </div>
 

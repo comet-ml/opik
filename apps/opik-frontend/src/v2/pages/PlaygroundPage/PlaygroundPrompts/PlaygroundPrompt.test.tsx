@@ -46,6 +46,10 @@ const PROVIDER_KEY_MODELS = mapValues(
   (models) => models.map((value) => ({ value, label: value })),
 );
 
+const { messagesProps } = vi.hoisted(() => ({
+  messagesProps: { current: null as Record<string, unknown> | null },
+}));
+
 let prompt: PlaygroundPromptType;
 const updatePrompt = vi.fn();
 
@@ -147,7 +151,10 @@ vi.mock("@/v2/pages-shared/llm/PromptModelSettings/PromptModelConfigs", () => ({
   default: () => null,
 }));
 vi.mock("@/v2/pages-shared/llm/LLMPromptMessages/LLMPromptMessages", () => ({
-  default: () => null,
+  default: (props: Record<string, unknown>) => {
+    messagesProps.current = props;
+    return null;
+  },
 }));
 vi.mock("@/v2/pages-shared/llm/PromptLibraryMenu/PromptLibraryMenu", () => ({
   default: () => null,
@@ -208,6 +215,7 @@ const savedConfigs = () => updatePrompt.mock.lastCall?.[1].configs;
 
 beforeEach(() => {
   updatePrompt.mockClear();
+  messagesProps.current = null;
 });
 
 describe("PlaygroundPrompt model switch", () => {
@@ -252,6 +260,16 @@ describe("PlaygroundPrompt model switch", () => {
         PROVIDER_ROWS[to].split(":")[0],
         to as PROVIDER_MODEL_TYPE,
       ),
+    );
+  });
+});
+
+describe("PlaygroundPrompt message editors", () => {
+  it("renders the messages at the xs size", () => {
+    renderPrompt("gpt-4o-mini");
+
+    expect(messagesProps.current).toEqual(
+      expect.objectContaining({ size: "xs" }),
     );
   });
 });

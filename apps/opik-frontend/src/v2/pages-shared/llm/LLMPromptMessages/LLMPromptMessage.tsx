@@ -95,6 +95,7 @@ interface LLMPromptMessageProps {
   onJsonPathSelect?: (path: string, value: JsonValue) => void;
   compact?: boolean;
   shiftEnterInsertsNewline?: boolean;
+  size?: "default" | "xs";
 }
 
 const LLMPromptMessage = forwardRef<
@@ -121,6 +122,7 @@ const LLMPromptMessage = forwardRef<
       onJsonPathSelect,
       compact = false,
       shiftEnterInsertsNewline = false,
+      size = "default",
     },
     ref,
   ) => {
@@ -191,7 +193,8 @@ const LLMPromptMessage = forwardRef<
             editorRef.current?.focus();
           }}
           className={cn(
-            "group p-1 pb-1.5 pl-2 shadow-none [&:focus-within]:border-primary",
+            "group shadow-none [&:focus-within]:border-primary",
+            size === "xs" ? "p-3" : "p-1 pb-1.5 pl-2",
             {
               "pb-0": showMediaActions || hasJsonData,
               "z-10 shadow-sm": id === active?.id,
@@ -318,6 +321,7 @@ const LLMPromptMessage = forwardRef<
                       jsonTreeData={jsonTreeData}
                       onJsonPathSelect={onJsonPathSelect}
                       shiftEnterInsertsNewline={shiftEnterInsertsNewline}
+                      size={size}
                     />
                   </div>
                   {compact && !isExpanded && localText && (
