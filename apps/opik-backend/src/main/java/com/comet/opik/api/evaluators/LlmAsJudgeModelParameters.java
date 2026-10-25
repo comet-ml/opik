@@ -1,5 +1,6 @@
 package com.comet.opik.api.evaluators;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -19,6 +20,8 @@ public record LlmAsJudgeModelParameters(
                 AutomationRuleEvaluator.View.Write.class}) Double temperature,
         @JsonView({AutomationRuleEvaluator.View.Public.class,
                 AutomationRuleEvaluator.View.Write.class}) Integer seed,
-        @JsonView({AutomationRuleEvaluator.View.Public.class,
+        // The Python and TypeScript SDKs and the frontend's test-suite editor save a suite judge's model block with
+        // this key in camelCase, and ignoreUnknown would otherwise drop it without a word.
+        @JsonAlias("customParameters") @JsonView({AutomationRuleEvaluator.View.Public.class,
                 AutomationRuleEvaluator.View.Write.class}) JsonNode customParameters) {
 }

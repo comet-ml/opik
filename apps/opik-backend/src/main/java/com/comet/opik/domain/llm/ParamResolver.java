@@ -7,6 +7,7 @@ import com.comet.opik.api.ModelParams.FlagParam;
 import com.comet.opik.api.ModelParams.NumberParam;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
+import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
@@ -43,7 +44,7 @@ public class ParamResolver {
     public record Resolution<T>(@NonNull T request, @NonNull List<ParamChange> changes) {
     }
 
-    /** One setting left out of a request, or moved to a level the model offers, by its wire name. */
+    /** One setting left out of a request, or moved to a level or type the model offers, by its wire name. */
     public record ParamChange(@NonNull String param, @NonNull Reason reason) {
 
         public enum Reason {
@@ -51,7 +52,8 @@ public class ParamResolver {
             REFUSED_BY_ROUTE,
             THINKING_ENABLED,
             EXCLUSIVE_SAMPLING,
-            LEVEL_NOT_OFFERED
+            LEVEL_NOT_OFFERED,
+            THINKING_TYPE_NOT_OFFERED
         }
     }
 
@@ -61,6 +63,14 @@ public class ParamResolver {
     private static final String THINKING = "thinking";
     private static final String LEVEL = "level";
     private static final String THINKING_LEVEL = THINKING + "." + LEVEL;
+    private static final String TYPE = "type";
+    private static final String THINKING_TYPE = THINKING + "." + TYPE;
+    private static final String BUDGET_TOKENS = "budget_tokens";
+    private static final String ENABLED = "enabled";
+    private static final String ADAPTIVE = "adaptive";
+    // Anthropic's floor for budget_tokens: the least an explicit budget can ask for, standing in for adaptive thinking
+    // on a model that has none.
+    private static final int MINIMUM_THINKING_BUDGET = 1024;
     private static final String EFFORT_NONE = "none";
     // From least to most thinking, so the nearest offered level can be found by distance.
     private static final List<String> THINKING_LEVELS = List.of("minimal", "low", "medium", "high");
@@ -159,6 +169,21 @@ public class ParamResolver {
             });
         }
 
+        if (request.customParameters() != null
+                && request.customParameters().get(THINKING) instanceof Map<?, ?> thinking
+                && thinking.get(TYPE) instanceof String type) {
+            offeredThinkingType(model, type).ifPresent(offered -> {
+                var nextThinking = new LinkedHashMap<String, Object>();
+                thinking.forEach((key, value) -> nextThinking.put(String.valueOf(key), value));
+                nextThinking.remove(BUDGET_TOKENS);
+                nextThinking.putAll(offered);
+                var nextCustomParameters = new LinkedHashMap<>(request.customParameters());
+                nextCustomParameters.put(THINKING, nextThinking);
+                builder.customParameters(nextCustomParameters);
+                changes.add(new ParamChange(THINKING_TYPE, ParamChange.Reason.THINKING_TYPE_NOT_OFFERED));
+            });
+        }
+
         return changes.isEmpty()
                 ? new Resolution<>(request, List.of())
                 : new Resolution<>(builder.build(), List.copyOf(changes));
@@ -182,6 +207,17 @@ public class ParamResolver {
             ((ObjectNode) customParameters.get(THINKING)).put(LEVEL, offeredLevel.get());
             resolved = resolved.toBuilder().customParameters(customParameters).build();
             changes.add(new ParamChange(THINKING_LEVEL, ParamChange.Reason.LEVEL_NOT_OFFERED));
+        }
+
+        var offeredType = judgeThinkingType(parameters.customParameters())
+                .flatMap(type -> offeredThinkingType(model, type));
+        if (offeredType.isPresent()) {
+            var customParameters = (ObjectNode) resolved.customParameters().deepCopy();
+            var thinking = (ObjectNode) customParameters.get(THINKING);
+            thinking.remove(BUDGET_TOKENS);
+            offeredType.get().forEach((key, value) -> thinking.set(key, JsonUtils.getMapper().valueToTree(value)));
+            resolved = resolved.toBuilder().customParameters(customParameters).build();
+            changes.add(new ParamChange(THINKING_TYPE, ParamChange.Reason.THINKING_TYPE_NOT_OFFERED));
         }
 
         if (parameters.temperature() != null) {
@@ -263,6 +299,27 @@ public class ParamResolver {
                 : customParameters.get(THINKING);
         var level = thinking == null || !thinking.isObject() ? null : thinking.get(LEVEL);
         return level != null && level.isTextual() ? Optional.of(level.asText()) : Optional.empty();
+    }
+
+    private static Optional<String> judgeThinkingType(JsonNode customParameters) {
+        var thinking = customParameters == null || !customParameters.isObject()
+                ? null
+                : customParameters.get(THINKING);
+        var type = thinking == null || !thinking.isObject() ? null : thinking.get(TYPE);
+        return type != null && type.isTextual() ? Optional.of(type.asText()) : Optional.empty();
+    }
+
+    // Claude answers a thinking type its model doesn't have with a 400, and names the way out itself: '"thinking.type.
+    // enabled" is not supported for this model. Use "thinking.type.adaptive"'. The 4.5 generation and older have no
+    // adaptive thinking, only an explicit budget.
+    private Optional<Map<String, Object>> offeredThinkingType(String model, String type) {
+        if (ENABLED.equalsIgnoreCase(type) && ModelCapabilities.refusesThinkingBudget(model, registryService)) {
+            return Optional.of(Map.of(TYPE, ADAPTIVE));
+        }
+        if (ADAPTIVE.equalsIgnoreCase(type) && ModelCapabilities.refusesAdaptiveThinking(model, registryService)) {
+            return Optional.of(Map.of(TYPE, ENABLED, BUDGET_TOKENS, MINIMUM_THINKING_BUDGET));
+        }
+        return Optional.empty();
     }
 
     // Gemini answers a level its model doesn't offer with a 400 ("minimal" on gemini-3.8-flash), so it moves to the

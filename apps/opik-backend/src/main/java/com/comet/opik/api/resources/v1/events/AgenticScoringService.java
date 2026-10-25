@@ -460,7 +460,7 @@ class AgenticScoringServiceImpl implements AgenticScoringService {
     public ToolChoice firstRoundToolChoice(@NonNull LlmProvider provider,
             @NonNull LlmAsJudgeModelParameters modelParameters) {
         if (ModelCapabilities.refusesForcedToolChoice(modelParameters.name(), registryService)
-                || hasExplicitThinkingEnabled(modelParameters.customParameters())) {
+                || sendsAThinkingBudget(modelParameters)) {
             return ToolChoice.AUTO;
         }
         return switch (provider) {
@@ -474,10 +474,17 @@ class AgenticScoringServiceImpl implements AgenticScoringService {
     }
 
     // Anthropic answers "Thinking may not be enabled when tool_choice forces tool use" to a thinking budget, while
-    // adaptive thinking takes a forced choice.
-    private boolean hasExplicitThinkingEnabled(JsonNode customParameters) {
-        return customParameters != null
-                && "enabled".equalsIgnoreCase(customParameters.path("thinking").path("type").asText());
+    // adaptive thinking takes a forced choice. ParamResolver swaps a thinking type the model refuses for the one it
+    // takes, so this follows what is sent: adaptive saved on a 4.5 Claude goes out as a budget.
+    private boolean sendsAThinkingBudget(LlmAsJudgeModelParameters modelParameters) {
+        var type = modelParameters.customParameters() == null
+                ? ""
+                : modelParameters.customParameters().path("thinking").path("type").asText();
+        if ("enabled".equalsIgnoreCase(type)) {
+            return !ModelCapabilities.refusesThinkingBudget(modelParameters.name(), registryService);
+        }
+        return "adaptive".equalsIgnoreCase(type)
+                && ModelCapabilities.refusesAdaptiveThinking(modelParameters.name(), registryService);
     }
 
     @Override

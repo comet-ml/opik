@@ -44,10 +44,15 @@ profiles:
     effort:
       levels: [low, medium, high, xhigh, max]
       default: high
+    # Opus 4.7 and later answer an explicit thinking budget with '"thinking.type.enabled" is not supported for this
+    # model'. Rows from the 4.6 generation back take one again through anthropic-sampling.
+    thinking: {budget: {accepted: false}}
+  # The generation that takes sampling params, 4.6 and earlier, is also the one that takes an explicit thinking budget.
   anthropic-sampling:
     temperature: {accepted: true}
     topP: {accepted: true}
     topK: {accepted: true}
+    thinking: {budget: {accepted: true}}
   # A Gemini id without a row takes no sampling params or penalties: Gemini 3.x and 4.x ignore temperature, top-K and
   # top-P, and answer frequency or presence penalty with a 400. So the rows below name the older models that take them.
   gemini:
@@ -326,21 +331,25 @@ models:
       thinksByDefault: false
       effort:
         levels: [low, medium, high, max]
+  # The 4.5 generation and older answer adaptive thinking with "adaptive thinking is not supported on this model".
   - id: claude-opus-4-5-20251101
     profile: anthropic-sampling
     params:
       thinksByDefault: false
+      thinking: {adaptive: {accepted: false}}
       effort:
         levels: [low, medium, high]
   - id: claude-sonnet-4-5-20250929
     profile: anthropic-sampling
     params:
       thinksByDefault: false
+      thinking: {adaptive: {accepted: false}}
       effort: {accepted: false}
   - id: claude-haiku-4-5-20251001
     profile: anthropic-sampling
     params:
       thinksByDefault: false
+      thinking: {adaptive: {accepted: false}}
       effort: {accepted: false}
   - id: claude-mythos-preview
     params:
@@ -350,16 +359,19 @@ models:
     profile: anthropic-sampling
     params:
       thinksByDefault: false
+      thinking: {adaptive: {accepted: false}}
       effort: {accepted: false}
   - id: claude-opus-4-1-20250805
     profile: anthropic-sampling
     params:
       thinksByDefault: false
+      thinking: {adaptive: {accepted: false}}
       effort: {accepted: false}
   - id: claude-opus-4-20250514
     profile: anthropic-sampling
     params:
       thinksByDefault: false
+      thinking: {adaptive: {accepted: false}}
       effort: {accepted: false}
   - id: claude-opus-4-6-20260205
     profile: anthropic-sampling
@@ -373,11 +385,13 @@ models:
     profile: anthropic-sampling
     params:
       thinksByDefault: false
+      thinking: {adaptive: {accepted: false}}
       effort: {accepted: false}
   - id: claude-sonnet-4-5
     profile: anthropic-sampling
     params:
       thinksByDefault: false
+      thinking: {adaptive: {accepted: false}}
       effort: {accepted: false}
   - id: claude-sonnet-5-5
     params:

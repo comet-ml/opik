@@ -34,6 +34,7 @@ import org.mapstruct.factory.Mappers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -75,22 +76,61 @@ interface LlmProviderAnthropicMapper {
     // langchain4j's AnthropicOutputConfig has no effort field, so the whole output_config rides customParameters,
     // which AnthropicCreateMessageRequest flattens into the top level of the body. Mapping outputConfig as well
     // would put a second output_config key on the wire. The thinking an effort level turns on rides along with it.
+    // The request's own thinking block goes too, as on the judge path, unless an effort already turned thinking on.
     @Named("resolveCustomParameters")
     default Map<String, Object> resolveCustomParameters(@NonNull ChatCompletionRequest request,
             @Context LlmModelRegistryService registryService) {
-        return AnthropicEffort.toCustomParameters(request.model(), request.customParameters(), registryService)
-                .orElse(null);
+        var effort = AnthropicEffort.toCustomParameters(request.model(), request.customParameters(), registryService);
+        var thinking = thinkingToSend(request);
+        if (thinking == null || effort.filter(params -> params.containsKey(AnthropicEffort.THINKING)).isPresent()) {
+            return effort.orElse(null);
+        }
+        var customParameters = new LinkedHashMap<String, Object>(effort.orElse(Map.of()));
+        customParameters.put(AnthropicEffort.THINKING, thinking);
+        return customParameters;
     }
 
+    // As on the judge path: a block without a type isn't sent, and a budget goes only with enabled thinking. Anthropic
+    // rejects both partial configs with a 400.
+    private static Map<String, Object> thinkingToSend(ChatCompletionRequest request) {
+        if (request.customParameters() == null
+                || !(request.customParameters().get(AnthropicEffort.THINKING) instanceof Map<?, ?> thinking)
+                || !(thinking.get("type") instanceof String type) || StringUtils.isBlank(type)) {
+            return null;
+        }
+        var toSend = new LinkedHashMap<String, Object>();
+        thinking.forEach((key, value) -> toSend.put(String.valueOf(key), value));
+        if (!"enabled".equalsIgnoreCase(type)) {
+            toSend.remove("budget_tokens");
+        }
+        return toSend;
+    }
+
+    // Anthropic counts thinking inside max_tokens and answers a cap at or below the budget with a 400, so the cap
+    // leaves the answer room above the budget, the way the judge path does.
     @Named("resolveMaxTokens")
     default Integer resolveMaxTokens(@NonNull ChatCompletionRequest request) {
         var maxTokens = ObjectUtils.firstNonNull(request.maxCompletionTokens(), request.maxTokens());
+        var budget = thinkingBudget(request);
+        if (budget != null && (maxTokens == null || maxTokens <= budget)) {
+            return (int) Math.min(Integer.MAX_VALUE, (long) budget + DEFAULT_MAX_COMPLETION_TOKENS);
+        }
         if (maxTokens != null) {
             return maxTokens;
         }
         LOG.info("Anthropic request for model '{}' has no maxCompletionTokens or maxTokens; defaulting to {}",
                 request.model(), DEFAULT_MAX_COMPLETION_TOKENS);
         return DEFAULT_MAX_COMPLETION_TOKENS;
+    }
+
+    private static Integer thinkingBudget(ChatCompletionRequest request) {
+        if (request.customParameters() == null
+                || !(request.customParameters().get(AnthropicEffort.THINKING) instanceof Map<?, ?> thinking)
+                || !(thinking.get("type") instanceof String type) || !"enabled".equalsIgnoreCase(type)
+                || !(thinking.get("budget_tokens") instanceof Number budget) || budget.longValue() <= 0) {
+            return null;
+        }
+        return (int) Math.min(Integer.MAX_VALUE, budget.longValue());
     }
 
     @Named("mapToChoices")
