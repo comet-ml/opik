@@ -1,0 +1,35 @@
+name: Model Bot PR Alert
+
+on:
+  schedule:
+    - cron: '0 8 * * 1-5' # 08:00 UTC on weekdays, after the nightly model sync and prices runs and their CI
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Print the alert instead of posting it to Slack'
+        type: boolean
+        required: false
+        default: true
+
+permissions:
+  pull-requests: read
+
+jobs:
+  check-bot-prs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+
+      - name: Alert on a red or waiting model bot PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: bash .github/scripts/model-bot-pr-alert.sh

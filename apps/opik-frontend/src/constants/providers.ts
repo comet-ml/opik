@@ -54,7 +54,7 @@ export const PROVIDERS: PROVIDERS_TYPE = {
     icon: AnthropicIcon,
     apiKeyName: "ANTHROPIC_API_KEY",
     apiKeyURL: "https://console.anthropic.com/settings/keys",
-    defaultModel: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
+    defaultModel: PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5,
   },
   [PROVIDER_TYPE.OPEN_ROUTER]: {
     label: "OpenRouter",
@@ -62,7 +62,7 @@ export const PROVIDERS: PROVIDERS_TYPE = {
     icon: OpenRouterIcon,
     apiKeyName: "OPENROUTER_API_KEY",
     apiKeyURL: "https://openrouter.ai/keys",
-    defaultModel: PROVIDER_MODEL_TYPE.OPENAI_GPT_4O,
+    defaultModel: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_5,
   },
   [PROVIDER_TYPE.GEMINI]: {
     label: "Gemini",
@@ -70,14 +70,14 @@ export const PROVIDERS: PROVIDERS_TYPE = {
     icon: GeminiIcon,
     apiKeyName: "GEMINI_API_KEY",
     apiKeyURL: "https://aistudio.google.com/apikey",
-    defaultModel: PROVIDER_MODEL_TYPE.GEMINI_3_1_PRO,
+    defaultModel: PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH_LITE,
   },
   [PROVIDER_TYPE.VERTEX_AI]: {
     label: "Vertex AI",
     value: PROVIDER_TYPE.VERTEX_AI,
     icon: VertexAIIcon,
     apiKeyName: "VERTEX_API_KEY",
-    defaultModel: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_PRO,
+    defaultModel: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH_LITE,
   },
   [PROVIDER_TYPE.BEDROCK]: {
     label: "Bedrock",

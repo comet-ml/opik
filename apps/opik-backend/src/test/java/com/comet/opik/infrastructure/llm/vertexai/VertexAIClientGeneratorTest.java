@@ -9,13 +9,17 @@ import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.exception.InvalidRequestException;
+import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import io.dropwizard.util.Duration;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.client.Client;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -31,6 +35,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.KeyPairGenerator;
@@ -531,11 +536,11 @@ class VertexAIClientGeneratorTest {
         }
 
         @Test
-        @DisplayName("an unrecognised level is ignored rather than guessed at")
-        void ignoresUnrecognisedLevel() {
-            completeWithCustomParameters(Map.of("thinking", Map.of("level", "aggressive")));
-
-            assertThat(sentGenerationConfig().has("thinkingConfig")).isFalse();
+        @DisplayName("an unrecognised level is a 400 rather than silently left out")
+        void rejectsAnUnrecognisedLevel() {
+            assertThatThrownBy(() -> completeWithCustomParameters(Map.of("thinking", Map.of("level", "aggressive"))))
+                    .isInstanceOf(BadRequestException.class)
+                    .hasMessageContaining("level 'aggressive'");
         }
 
         @Test
@@ -617,6 +622,49 @@ class VertexAIClientGeneratorTest {
             }
 
             assertThat(sentGenerationConfig().has("thinkingConfig")).isFalse();
+        }
+    }
+
+    @Nested
+    @DisplayName("Thought signatures")
+    class ThoughtSignatures {
+
+        @Test
+        @DisplayName("the judge's next tool-loop round sends back the thought signature of each function call")
+        void judgeSendsBackTheThoughtSignature() {
+            var signature = Base64.getEncoder()
+                    .encodeToString(RandomStringUtils.secure().nextAlphanumeric(12).getBytes(StandardCharsets.UTF_8));
+            wireMock.server().stubFor(post(urlPathMatching(GENERATE_CONTENT_PATH))
+                    .willReturn(aResponse()
+                            .withHeader("Content-Type", "application/json")
+                            .withBody(
+                                    """
+                                            {"candidates": [{"content": {"role": "model", "parts": [\
+                                            {"functionCall": {"name": "read", "args": {"id": "t1"}}, "thoughtSignature": "%s"}]}, \
+                                            "finishReason": "STOP"}], \
+                                            "usageMetadata": {"promptTokenCount": 3, "candidatesTokenCount": 4, "totalTokenCount": 7}}"""
+                                            .formatted(signature))));
+            var config = LlmProviderClientApiConfig.builder()
+                    .apiKey(serviceAccountJson)
+                    .configuration(Map.of("location", "global"))
+                    .build();
+            var question = UserMessage.from("Read trace t1");
+
+            try (var client = (CloseableVertexAiChatModel) new VertexAIClientGenerator(clientConfig(), registry)
+                    .generateChat(config, new LlmAsJudgeModelParameters(GEMINI_3_MODEL, null, null, null))) {
+                var call = client.chat(ChatRequest.builder().messages(question).build()).aiMessage();
+                client.chat(ChatRequest.builder()
+                        .messages(question, call,
+                                ToolExecutionResultMessage.from(call.toolExecutionRequests().getFirst(), "banana"))
+                        .build());
+            }
+
+            var requests = wireMock.server().findAll(postRequestedFor(urlPathMatching(GENERATE_CONTENT_PATH)));
+            assertThat(requests).hasSize(2);
+            var sentCalls = JsonUtils.getJsonNodeFromString(requests.get(1).getBodyAsString())
+                    .findParents("functionCall");
+            assertThat(sentCalls).hasSize(1);
+            assertThat(sentCalls.getFirst().path("thoughtSignature").asText()).isEqualTo(signature);
         }
     }
 

@@ -9,6 +9,7 @@ import { TooltipProvider } from "@/ui/tooltip";
 import { LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
 import { PlaygroundPromptType } from "@/types/playground";
 import {
+  DropdownModelCheck,
   ModelResolver,
   ProviderResolver,
 } from "@/hooks/useLLMProviderModelsData";
@@ -211,6 +212,7 @@ const renderCard = () =>
           hasRegistryModels={false}
           providerResolver={vi.fn(() => "") as unknown as ProviderResolver}
           modelResolver={vi.fn((model) => model) as unknown as ModelResolver}
+          isDropdownModel={vi.fn(() => false) as unknown as DropdownModelCheck}
         />
       </TooltipProvider>
     </QueryClientProvider>,

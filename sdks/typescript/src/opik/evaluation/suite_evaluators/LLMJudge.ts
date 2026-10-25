@@ -82,7 +82,7 @@ export class LLMJudge extends BaseSuiteEvaluator {
           temperature: this.temperature,
         }),
         ...(this.seed !== undefined && { seed: this.seed }),
-        customParameters: { reasoning_effort: this.reasoningEffort },
+        custom_parameters: { reasoning_effort: this.reasoningEffort },
       },
       // NOTE: For test suite evaluators, no consumer reads these messages —
       // the backend replaces them with its own hardcoded copy. Included here
@@ -159,7 +159,10 @@ export class LLMJudge extends BaseSuiteEvaluator {
       (item) => item.description ?? item.name
     );
 
-    const customParameters = asRecord(model.customParameters);
+    // Suites saved by older SDKs hold customParameters, a spelling the backend never read.
+    const customParameters = asRecord(
+      model.custom_parameters ?? model.customParameters
+    );
     const reasoningEffort =
       typeof customParameters.reasoning_effort === "string"
         ? customParameters.reasoning_effort

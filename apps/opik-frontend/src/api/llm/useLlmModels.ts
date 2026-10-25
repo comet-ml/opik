@@ -1,5 +1,6 @@
 import { useQuery, QueryFunctionContext } from "@tanstack/react-query";
 import api, { LLM_MODELS_REST_ENDPOINT, LLM_MODELS_KEY } from "@/api/api";
+import { ModelParams } from "@/types/modelParams";
 
 export type LlmModelDefinition = {
   id: string;
@@ -9,6 +10,8 @@ export type LlmModelDefinition = {
   reasoning: boolean;
   supported_parameters?: string[];
   reasoning_efforts?: string[];
+  params?: ModelParams;
+  retires_on?: string;
 };
 
 export type LlmModelsByProvider = Record<string, LlmModelDefinition[]>;

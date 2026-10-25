@@ -541,4 +541,219 @@ class ParamResolverTest {
 
         assertThat(RESOLVER.resolve(parameters)).isEqualTo(resolution(parameters));
     }
+
+    private static ParamResolver shippedOpenAiResolver(String model) {
+        return resolverWithOpenAiParams(bundledRegistry().paramsOf("openai", model));
+    }
+
+    private static ChatCompletionRequest effortRequest(String model, String effort, Map<String, Object> custom) {
+        return ChatCompletionRequest.builder().from(request(model, 0.5, 0.9, custom)).reasoningEffort(effort).build();
+    }
+
+    // OpenAI: "When reasoning effort is not none, remove temperature, top_p, and top_logprobs". Probed 10-22: these
+    // took temperature 0.5 and top_p 0.5 at none, and gpt-5.1/5.2/5.4 also with no effort sent.
+    @ParameterizedTest
+    @CsvSource(nullValues = "null", value = {"gpt-5.4,none", "gpt-6-luna,none", "gpt-5.5,none", "gpt-5.1,null",
+            "gpt-5.2,null", "gpt-5.4,null"})
+    void keepsTemperatureAndTopPWhenAReasoningModelRunsAtEffortNone(String model, String effort) {
+        var request = effortRequest(model, effort, null);
+
+        assertThat(shippedOpenAiResolver(model).resolve(request, null)).isEqualTo(resolution(request));
+    }
+
+    // Probed 10-22: each of these got "'temperature' does not support 0.5 with this model".
+    @ParameterizedTest
+    @CsvSource(nullValues = "null", value = {"gpt-5.4,low", "gpt-6-luna,null", "gpt-5.5,null", "gpt-5,none",
+            "o3,null"})
+    void dropsTemperatureAndTopPWhenAReasoningModelReasons(String model, String effort) {
+        var request = effortRequest(model, effort, null);
+
+        assertThat(shippedOpenAiResolver(model).resolve(request, null)).isEqualTo(resolution(
+                ChatCompletionRequest.builder().from(request).temperature(null).topP(null).build(),
+                TEMPERATURE_REFUSED, TOP_P_REFUSED));
+    }
+
+    @ParameterizedTest
+    @CsvSource({"low,none,true", "none,low,false", "low,'  ',false", "none,'',true"})
+    void readsTheEffortAnExtraBodyKeySendsInsteadOfTheTypedOne(String typed, String extraBody, boolean keeps) {
+        var request = effortRequest("gpt-5.4", typed, Map.of("reasoning_effort", extraBody));
+
+        var expected = keeps
+                ? resolution(request)
+                : resolution(ChatCompletionRequest.builder().from(request).temperature(null).topP(null).build(),
+                        TEMPERATURE_REFUSED, TOP_P_REFUSED);
+        assertThat(shippedOpenAiResolver("gpt-5.4").resolve(request, null)).isEqualTo(expected);
+    }
+
+    @Test
+    void keepsTemperatureAndTopPAtEffortNoneOnTheResponsesRoute() {
+        var request = effortRequest("gpt-6-luna", "none", null);
+
+        assertThat(shippedOpenAiResolver("gpt-6-luna").resolve(request, ModelParams.RESPONSES_API_ROUTE))
+                .isEqualTo(resolution(ChatCompletionRequest.builder().from(request).seed(null).build(),
+                        new ParamChange("seed", Reason.REFUSED_BY_ROUTE)));
+    }
+
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', nullValues = "null", value = {
+            "gpt-5.4 | null",
+            "gpt-6-luna | {\"reasoning_effort\": \"none\"}",
+            "gpt-5.4 | {\"reasoning_effort\": \"  \"}"})
+    void keepsAJudgeTemperatureWhenTheJudgeRunsAtEffortNone(String model, String customParameters) {
+        var parameters = judge(model, 0.0, customParameters);
+
+        assertThat(shippedOpenAiResolver(model).resolve(parameters)).isEqualTo(resolution(parameters));
+    }
+
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', nullValues = "null", value = {
+            "gpt-6-luna | null",
+            "gpt-5.4 | {\"reasoning_effort\": \"low\"}",
+            "gpt-6-luna | {\"reasoning_effort\": \" \"}"})
+    void dropsAJudgeTemperatureWhenTheJudgeReasons(String model, String customParameters) {
+        assertThat(shippedOpenAiResolver(model).resolve(judge(model, 0.0, customParameters)))
+                .isEqualTo(resolution(judge(model, null, customParameters), TEMPERATURE_REFUSED));
+    }
+
+    private static final ParamChange LEVEL_MOVED = new ParamChange("thinking.level", Reason.LEVEL_NOT_OFFERED);
+
+    private static Map<String, Object> thinking(String level) {
+        return Map.of("thinking", Map.of("level", level, "include_thoughts", true));
+    }
+
+    // Probed 10-22 (online-eval check E): "minimal" got a 400 on these, on Gemini and on Vertex AI alike.
+    @ParameterizedTest
+    @CsvSource({"gemini-3.8-flash,minimal,low", "gemini-3.7-flash,MINIMAL,low",
+            "vertex_ai/gemini-3.1-pro-preview,minimal,low", "vertex_ai/gemini-3.8-flash,minimal,low"})
+    void movesAGeminiThinkingLevelTheModelDoesNotOfferToTheNearestOne(String model, String level, String nearest) {
+        assertThat(RESOLVER.resolve(request(model, null, null, thinking(level)), null))
+                .isEqualTo(resolution(request(model, null, null, thinking(nearest)), LEVEL_MOVED));
+    }
+
+    @ParameterizedTest
+    @CsvSource({"gemini-3.6-flash,minimal", "gemini-3.8-flash,high", "gemini-3.8-flash,off",
+            "gemini-3.8-flash,unknown", "gpt-4o,minimal"})
+    void leavesAThinkingLevelAloneWhenTheModelOffersItOrItIsNotAGeminiLevel(String model, String level) {
+        var request = request(model, null, null, thinking(level));
+
+        assertThat(RESOLVER.resolve(request, null)).isEqualTo(resolution(request));
+    }
+
+    @Test
+    void movesAJudgesGeminiThinkingLevelTheModelDoesNotOffer() {
+        var saved = """
+                {"thinking": {"level": "minimal", "include_thoughts": true}, "other": 1}""";
+
+        assertThat(RESOLVER.resolve(judge("gemini-3.8-flash", null, saved))).isEqualTo(resolution(
+                judge("gemini-3.8-flash", null, """
+                        {"thinking": {"level": "low", "include_thoughts": true}, "other": 1}"""),
+                LEVEL_MOVED));
+    }
+
+    @Test
+    void leavesAJudgesGeminiThinkingLevelTheModelOffers() {
+        var parameters = judge("vertex_ai/gemini-3.6-flash", null, """
+                {"thinking": {"level": "minimal"}}""");
+
+        assertThat(RESOLVER.resolve(parameters)).isEqualTo(resolution(parameters));
+    }
+
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', nullValues = "null", value = {
+            "0.7  | {\"reasoning_effort\": \"low\", \"max_completion_tokens\": 400} | {\"max_completion_tokens\": 400}",
+            "null | {\"reasoning_effort\": \"low\"}                                 | null"})
+    void dropsAJudgeEffortTheModelRefusesAndKeepsTheRest(Double temperature, String saved, String kept) {
+        assertThat(shippedOpenAiResolver("gpt-4o-mini").resolve(judge("gpt-4o-mini", temperature, saved)))
+                .isEqualTo(resolution(judge("gpt-4o-mini", temperature, kept),
+                        new ParamChange("reasoning_effort", Reason.REFUSED_BY_MODEL)));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"gpt-5.4-mini", "o3", "gpt-6-luna"})
+    void keepsAJudgeEffortTheModelTakes(String model) {
+        var parameters = judge(model, null, """
+                {"reasoning_effort": "low"}""");
+
+        assertThat(shippedOpenAiResolver(model).resolve(parameters)).isEqualTo(resolution(parameters));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"openai/gpt-4o-mini", "custom-llm/gw/gpt-4o-mini", "claude-haiku-4-5-20251001"})
+    void keepsAJudgeEffortOnModelsTheOpenAiCatalogDoesNotPlace(String model) {
+        var parameters = judge(model, null, """
+                {"reasoning_effort": "low"}""");
+
+        assertThat(RESOLVER.resolve(parameters)).isEqualTo(resolution(parameters));
+    }
+
+    // The Python SDK saved reasoning_effort "low" into every test-suite judge config, whichever model judges it.
+    @Test
+    void dropsTheEffortAnOldSdkSuiteConfigSavedWhenGpt4oMiniJudgesIt() {
+        var saved = JsonUtils.readValue("""
+                {"name": "gpt-4o-mini", "temperature": null, "seed": null,
+                 "customParameters": {"reasoning_effort": "low"}}""", LlmAsJudgeModelParameters.class);
+
+        assertThat(shippedOpenAiResolver("gpt-4o-mini").resolve(saved)).isEqualTo(resolution(
+                LlmAsJudgeModelParameters.builder().name("gpt-4o-mini").build(),
+                new ParamChange("reasoning_effort", Reason.REFUSED_BY_MODEL)));
+    }
+
+    private static final ParamChange TYPE_MOVED = new ParamChange("thinking.type", Reason.THINKING_TYPE_NOT_OFFERED);
+
+    // Probed 10-23 on Anthropic: '"thinking.type.enabled" is not supported for this model. Use "thinking.type.adaptive"
+    // and "output_config.effort" to control thinking behavior.' on each of these.
+    @ParameterizedTest
+    @ValueSource(strings = {"claude-sonnet-5-5", "claude-haiku-5-5", "claude-opus-4-7", "claude-opus-5",
+            "us.anthropic.claude-sonnet-5-5-v1:0"})
+    void turnsAThinkingBudgetTheModelRefusesIntoAdaptiveThinking(String model) {
+        var request = request(model, null, null, Map.of("thinking", Map.of("type", "enabled", "budget_tokens", 2048),
+                "max_tokens", 8000));
+
+        assertThat(RESOLVER.resolve(request, null)).isEqualTo(resolution(
+                request(model, null, null, Map.of("thinking", Map.of("type", "adaptive"), "max_tokens", 8000)),
+                TYPE_MOVED));
+    }
+
+    // Probed 10-23 on Anthropic: "adaptive thinking is not supported on this model" on each of these.
+    @ParameterizedTest
+    @ValueSource(strings = {"claude-haiku-4-5-20251001", "claude-opus-4-5-20251101", "claude-sonnet-4-5-20250929"})
+    void turnsAdaptiveThinkingTheModelRefusesIntoTheSmallestBudget(String model) {
+        var request = request(model, null, null,
+                Map.of("thinking", Map.of("type", "adaptive", "display", "summarized")));
+
+        assertThat(RESOLVER.resolve(request, null)).isEqualTo(resolution(
+                request(model, null, null, Map.of("thinking",
+                        Map.of("type", "enabled", "budget_tokens", 1024, "display", "summarized"))),
+                TYPE_MOVED));
+    }
+
+    @ParameterizedTest
+    @CsvSource({"claude-sonnet-4-6,enabled", "claude-sonnet-4-6,adaptive", "claude-opus-5-5,adaptive",
+            "claude-haiku-4-5-20251001,enabled", "claude-sonnet-5-5,disabled", "custom-llm/gw/glm-4.6,adaptive",
+            "gemini-3.8-flash,enabled"})
+    void leavesAThinkingTypeTheModelTakesOrThatIsNotAClaudeOne(String model, String type) {
+        var request = request(model, null, null, Map.of("thinking", Map.of("type", type, "budget_tokens", 2048)));
+
+        assertThat(RESOLVER.resolve(request, null)).isEqualTo(resolution(request));
+    }
+
+    @Test
+    void movesAJudgesThinkingTypeTheModelRefuses() {
+        assertThat(RESOLVER.resolve(judge("claude-haiku-5-5", null, """
+                {"thinking": {"type": "enabled", "budget_tokens": 2048}, "max_tokens": 8000}""")))
+                .isEqualTo(resolution(judge("claude-haiku-5-5", null, """
+                        {"thinking": {"type": "adaptive"}, "max_tokens": 8000}"""), TYPE_MOVED));
+        assertThat(RESOLVER.resolve(judge("claude-opus-4-5-20251101", null, """
+                {"thinking": {"type": "adaptive"}}""")))
+                .isEqualTo(resolution(judge("claude-opus-4-5-20251101", null, """
+                        {"thinking": {"type": "enabled", "budget_tokens": 1024}}"""), TYPE_MOVED));
+    }
+
+    @Test
+    void leavesAJudgesThinkingTypeTheModelTakes() {
+        var parameters = judge("claude-sonnet-4-6", null, """
+                {"thinking": {"type": "enabled", "budget_tokens": 2048}}""");
+
+        assertThat(RESOLVER.resolve(parameters)).isEqualTo(resolution(parameters));
+    }
 }

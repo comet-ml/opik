@@ -21,6 +21,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -130,6 +131,41 @@ public class ModelCapabilities {
     public boolean thinksByDefault(String modelName, @NonNull LlmModelRegistryService registryService) {
         return isAnthropicModelWithout(modelName, registryService,
                 params -> Boolean.FALSE.equals(params.thinksByDefault()));
+    }
+
+    /**
+     * Whether the model answers a forced tool_choice (any, or a named tool) with a 400. An Anthropic id we cannot place
+     * keeps the forced choice every Claude took until the 5.5 generation.
+     */
+    public boolean refusesForcedToolChoice(String modelName, @NonNull LlmModelRegistryService registryService) {
+        return isAnthropicModelWithout(modelName, registryService, ModelCapabilities::acceptsForcedToolChoice);
+    }
+
+    /** Whether the model answers an explicit thinking budget ({@code thinking.type: enabled}) with a 400. */
+    public boolean refusesThinkingBudget(String modelName, @NonNull LlmModelRegistryService registryService) {
+        return isAnthropicModelWithout(modelName, registryService,
+                params -> Boolean.TRUE.equals(thinkingFlag(params, ModelParams.ThinkingParam::budget)));
+    }
+
+    /**
+     * Whether the model answers adaptive thinking with a 400. Refusing is the earlier behaviour here, the reverse of a
+     * budget, so an Anthropic id we cannot place takes adaptive thinking, as every Claude from the 4.6 generation does.
+     */
+    public boolean refusesAdaptiveThinking(String modelName, @NonNull LlmModelRegistryService registryService) {
+        return !canonicalAnthropicId(modelName).isEmpty()
+                && !isAnthropicModelWithout(modelName, registryService,
+                        params -> Boolean.FALSE.equals(thinkingFlag(params, ModelParams.ThinkingParam::adaptive)));
+    }
+
+    private Boolean thinkingFlag(ModelParams params,
+            Function<ModelParams.ThinkingParam, ModelParams.FlagParam> flag) {
+        var thinkingFlag = params.thinking() == null ? null : flag.apply(params.thinking());
+        return thinkingFlag == null ? null : thinkingFlag.accepted();
+    }
+
+    private boolean acceptsForcedToolChoice(ModelParams params) {
+        var forcedChoice = params.tools() == null ? null : params.tools().forcedChoice();
+        return forcedChoice == null || !Boolean.FALSE.equals(forcedChoice.accepted());
     }
 
     private boolean isAnthropicModelWithout(String modelName, LlmModelRegistryService registryService,

@@ -56,7 +56,11 @@ public class GeminiClientGenerator implements LlmProviderClientGenerator<GoogleA
                 .apiKey(config.apiKey())
                 .logRequests(llmProviderClientConfig.getLogRequests())
                 .logResponses(llmProviderClientConfig.getLogResponses())
-                .returnThinking(false);
+                // Gemini 3 rejects a tool loop's next round unless each earlier function call carries the thought
+                // signature it came with, and the module keeps that signature only when it returns thinking. Thought
+                // text still stays out of the answer: it lands in AiMessage.thinking(), not text().
+                .returnThinking(true)
+                .sendThinking(true);
 
         Optional.ofNullable(llmProviderClientConfig.getConnectTimeout())
                 .ifPresent(connectTimeout -> modelBuilder.timeout(connectTimeout.toJavaDuration()));
