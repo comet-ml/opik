@@ -8,6 +8,10 @@ import PromptModelConfigsTooltipContent from "@/v2/pages-shared/llm/PromptModelS
 import ExclusiveSamplingParams from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/ExclusiveSamplingParams";
 import { createSupports } from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/visibleControls";
 import {
+  NO_OUTPUT_LIMIT_TOOLTIP,
+  getNoOutputLimitHint,
+} from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/noOutputLimit";
+import {
   GenericPanelPresentation,
   getShownControls,
   getShownValue,
@@ -88,24 +92,34 @@ const GenericModelConfigs = ({
 
   const renderNumber = (control: NumberControl) => {
     if (control.param === "max_output_tokens") {
+      const value = shown(control) as number;
+      const noLimitAtZero = presentation.zeroMeansNoLimit === true;
       return (
         <SliderInputControl
           key={control.configKey}
-          value={shown(control) as number}
+          value={value}
           onChange={(v) => onChange({ [control.configKey]: v })}
-          id={control.configKey}
-          min={control.min}
+          id={presentation.maxOutputTokensId ?? control.configKey}
+          min={noLimitAtZero ? 0 : control.min}
           max={control.max}
           step={1}
           integer
+          hint={noLimitAtZero ? getNoOutputLimitHint(value) : undefined}
           defaultValue={control.default}
           label="Max output tokens"
           tooltip={
             <PromptModelConfigsTooltipContent
-              text={maxOutputTokensTooltip(
-                control.min,
-                presentation.reasoningNoun,
-              )}
+              text={
+                noLimitAtZero
+                  ? `${maxOutputTokensTooltip(
+                      control.min,
+                      presentation.reasoningNoun,
+                    )} ${NO_OUTPUT_LIMIT_TOOLTIP}`
+                  : maxOutputTokensTooltip(
+                      control.min,
+                      presentation.reasoningNoun,
+                    )
+              }
             />
           }
         />
