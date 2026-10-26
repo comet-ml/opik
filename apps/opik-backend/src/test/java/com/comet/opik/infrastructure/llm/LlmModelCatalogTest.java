@@ -274,6 +274,24 @@ class LlmModelCatalogTest {
                     .params(O3)
                     .build());
         }
+
+        @Test
+        void aRowsOnlyRouteReachesEveryRouteTheApiServes(@TempDir Path tempDir) throws IOException {
+            var override = tempDir.resolve("override.yaml");
+            Files.writeString(override, """
+                    openai:
+                      - id: "o3"
+                        params: {onlyRoute: responses_api}
+                    """);
+
+            assertThat(model(service(override.toString()), "openai", "o3").params()).isEqualTo(O3.toBuilder()
+                    .onlyRoute(ModelParams.RESPONSES_API_ROUTE)
+                    .routes(Map.of(ModelParams.RESPONSES_API_ROUTE,
+                            O3.routes().get(ModelParams.RESPONSES_API_ROUTE).toBuilder()
+                                    .onlyRoute(ModelParams.RESPONSES_API_ROUTE)
+                                    .build()))
+                    .build());
+        }
     }
 
     @Test

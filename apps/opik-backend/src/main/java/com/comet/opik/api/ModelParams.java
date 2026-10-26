@@ -27,6 +27,9 @@ public record ModelParams(
         EffortParam effort,
         Boolean samplingExclusive,
         Boolean thinksByDefault,
+        // Set when the provider refuses the model on every other route. Requests still follow the key's route,
+        // so a Responses-only model on a Chat Completions key gets the provider's error; the live check reads it.
+        String onlyRoute,
         Map<String, ModelParams> routes) {
 
     public static final String RESPONSES_API_ROUTE = "responses_api";
@@ -134,6 +137,7 @@ public record ModelParams(
                 EffortParam.overlay(base.effort, top.effort),
                 ObjectUtils.getIfNull(top.samplingExclusive, base.samplingExclusive),
                 ObjectUtils.getIfNull(top.thinksByDefault, base.thinksByDefault),
+                ObjectUtils.getIfNull(top.onlyRoute, base.onlyRoute),
                 overlayRoutes(base.routes, top.routes));
     }
 
@@ -178,6 +182,7 @@ public record ModelParams(
                 effort == null ? null : effort.settled(),
                 samplingExclusive,
                 thinksByDefault,
+                onlyRoute,
                 routes);
     }
 }

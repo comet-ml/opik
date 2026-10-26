@@ -1107,7 +1107,7 @@ CURATED_YAML = Path("apps/opik-backend/src/main/resources/llm-models-curated.yam
 # The field order of ModelParams.java, so a model's line reads the same way in every sync.
 PARAM_FIELDS = (
     "temperature", "topP", "topK", "frequencyPenalty", "presencePenalty",
-    "maxOutputTokens", "stop", "effort", "samplingExclusive", "thinksByDefault", "routes",
+    "maxOutputTokens", "stop", "effort", "samplingExclusive", "thinksByDefault", "onlyRoute", "routes",
 )
 EFFORT_ORDER = ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
 SAMPLING_FIELDS = ("temperature", "topP", "topK")
@@ -1184,6 +1184,17 @@ def litellm_params(provider_key: str, model_id: str, info: dict, default_max_out
         # Chat Completions sends max as high, so max is a level of the Responses route only.
         if info.get("supports_max_reasoning_effort"):
             params["routes"] = {"responses_api": {"effort": {"levels": levels + ["max"]}}}
+
+    # OpenAI answers the codex and pro models on /v1/chat/completions with a 404 "not supported in the
+    # v1/chat/completions endpoint".
+    endpoints = info.get("supported_endpoints")
+    if (
+        provider_key == "openai"
+        and isinstance(endpoints, list)
+        and "/v1/responses" in endpoints
+        and "/v1/chat/completions" not in endpoints
+    ):
+        params["onlyRoute"] = "responses_api"
 
     # Claude's effort is output_config.effort; LiteLLM's supports_reasoning there means extended thinking, which
     # older Claude models have without any effort levels.

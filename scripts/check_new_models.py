@@ -14,10 +14,10 @@ params the backend serves (GET /v1/private/llm/models) and calls the model throu
   effort X    once per effort level the catalog offers
 
 OpenAI models are called on Chat Completions and again on the Responses API, since a route can refuse what the
-model takes. When the plain call fails, the rest of that model's calls on that route are skipped. A provider error
-that names a setting is a rejected claim, and the call goes again without it, so one wrong value does not hide the
-others. Report-only: a failure is a result for a person to read, not an error. The exit code is non-zero only when
-the check itself could not run.
+model takes; a model whose params name an only_route is called on that route alone. When the plain call fails, the
+rest of that model's calls on that route are skipped. A provider error that names a setting is a rejected claim, and
+the call goes again without it, so one wrong value does not hide the others. Report-only: a failure is a result for
+a person to read, not an error. The exit code is non-zero only when the check itself could not run.
 
 When nothing changed, it checks one cheap model per provider instead (from SMOKE_MODELS, when that model is in
 the registry), so a PR that touches only this script or its workflow still runs end to end.
@@ -84,6 +84,7 @@ SMOKE_MODELS = {
 CALL_FIELDS = ("qualifiedName", "structuredOutput", "reasoning")
 
 ROUTES = {"openai": (None, "responses_api")}
+CHAT_COMPLETIONS_ROUTE = "chat_completions_api"
 ROUTE_KEY_CONFIGURATION = {"responses_api": {"openai_pipeline_mode": "responses_api"}}
 ROUTE_LABELS = {None: "Chat Completions", "responses_api": "Responses"}
 
@@ -287,10 +288,18 @@ def _params_inputs(curated: dict, provider: str, row: dict | None, curated_row: 
     names += [(row or {}).get("profile"), (curated_row or {}).get("profile")]
     profiles = tuple((name, json.dumps(curated["profiles"].get(name), sort_keys=True)) for name in names if name)
     return (
-        json.dumps((row or {}).get("params"), sort_keys=True),
-        json.dumps((curated_row or {}).get("params"), sort_keys=True),
+        json.dumps(_request_params((row or {}).get("params")), sort_keys=True),
+        json.dumps(_request_params((curated_row or {}).get("params")), sort_keys=True),
         profiles,
     )
+
+
+def _request_params(params: dict | None) -> dict | None:
+    # onlyRoute changes no request the backend sends, only the routes this check calls, so gaining it alone is no
+    # reason to call a model again.
+    if not isinstance(params, dict) or "onlyRoute" not in params:
+        return params
+    return {key: value for key, value in params.items() if key != "onlyRoute"}
 
 
 def _call_fields(model: dict) -> tuple:
@@ -326,7 +335,10 @@ def plan_probes(model: ModelToCheck, params: dict | None) -> list[Probe]:
     if not params:
         return [Probe(model, None, "plain", {"max_completion_tokens": MAX_COMPLETION_TOKENS}, ())]
     probes = []
+    only_route = params.get("only_route")
     for route in ROUTES.get(model.provider, (None,)):
+        if only_route and (route or CHAT_COMPLETIONS_ROUTE) != only_route:
+            continue
         route_params = params if route is None else (params.get("routes") or {}).get(route, params)
         probes += _route_probes(model, route, route_params)
     return probes
@@ -590,7 +602,8 @@ def render_report(
         "through the backend with the params its API serves: once plain, then with the numbers at the top and the "
         "bottom of their ranges (only one of temperature and top_p for a model that takes one at a time), with the "
         "settings it refuses, and once per effort level that sets a request field (not the Gemini and Vertex AI "
-        "`auto` or `none` levels). Resending without a rejected setting counts toward the call cap. A `refused` call "
+        "`auto` or `none` levels). An OpenAI model the catalog serves on one route only (`only_route`) is called on "
+        "that route alone. Resending without a rejected setting counts toward the call cap. A `refused` call "
         "passes when the backend leaves those settings out or when the provider takes them anyway, so it fails only "
         "when they reach a provider that rejects them. A failure is for a person to read: it can be a real gap in "
         "the model data, or a provider-side limit."
