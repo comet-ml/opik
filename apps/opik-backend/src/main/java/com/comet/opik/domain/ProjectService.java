@@ -517,8 +517,6 @@ class ProjectServiceImpl implements ProjectService {
             return Mono.just(Optional.empty());
         }
 
-        // Callers create in parallel (one experiment per prompt of a dataset run), so a missing project can be
-        // created by another call between our lookup and insert; getOrCreate then reads that one back.
         return getOrCreate(projectName).map(project -> Optional.of(project.id()));
     }
 
@@ -564,7 +562,6 @@ class ProjectServiceImpl implements ProjectService {
     public Mono<Project> getOrCreate(@NonNull String projectName) {
         return makeMonoContextAware((userName, workspaceId) -> Mono
                 .fromCallable(() -> getOrCreate(workspaceId, projectName, userName))
-                .onErrorResume(e -> handleProjectCreationError(e, projectName, workspaceId))
                 .subscribeOn(Schedulers.boundedElastic()));
     }
 
@@ -764,16 +761,6 @@ class ProjectServiceImpl implements ProjectService {
 
             return null;
         });
-    }
-
-    private Mono<Project> handleProjectCreationError(Throwable exception, String projectName, String workspaceId) {
-        return switch (exception) {
-            case EntityAlreadyExistsException __ -> Mono.fromCallable(
-                    () -> findByNames(workspaceId, List.of(projectName)).stream().findFirst()
-                            .orElseThrow())
-                    .subscribeOn(Schedulers.boundedElastic());
-            default -> Mono.error(exception);
-        };
     }
 
     @Override
