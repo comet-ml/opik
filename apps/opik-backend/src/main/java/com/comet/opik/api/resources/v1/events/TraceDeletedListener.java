@@ -8,6 +8,7 @@ import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.ailabels.AiLabelStatusDAO;
 import com.comet.opik.domain.ailabels.AiLabelsDAO;
 import com.comet.opik.domain.attachment.AttachmentService;
+import com.comet.opik.domain.topics.TopicVectorsDAO;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.common.eventbus.Subscribe;
 import jakarta.inject.Inject;
@@ -33,10 +34,11 @@ public class TraceDeletedListener {
     private final @NonNull SpanService spanService;
     private final @NonNull AiLabelsDAO aiLabelsDAO;
     private final @NonNull AiLabelStatusDAO aiLabelStatusDAO;
+    private final @NonNull TopicVectorsDAO topicVectorsDAO;
 
     /**
      * Handles the TracesDeleted event by asynchronously deleting related entities.
-     * This includes feedback scores, comments, attachments, ai-labels and spans associated with the deleted traces.
+     * This includes feedback scores, comments, attachments, ai-labels, topic vectors and spans associated with the deleted traces.
      *
      * @param event the TracesDeleted event containing the trace IDs that were deleted
      */
@@ -88,6 +90,13 @@ public class TraceDeletedListener {
                         .onErrorResume(error -> {
                             log.error("Failed to delete ai-labels for deleted traces, count '{}'", traceIds.size(),
                                     error);
+                            return Mono.empty();
+                        })))
+                // Topic vectors hold the summary text, so they go with the trace too, and never block the span cascade.
+                .then(Mono.defer(() -> topicVectorsDAO.deleteByTraceIds(traceIds, projectId)
+                        .onErrorResume(error -> {
+                            log.error("Failed to delete topic vectors for deleted traces, count '{}'",
+                                    traceIds.size(), error);
                             return Mono.empty();
                         })))
                 .then(Mono.defer(() -> spanService.deleteByTraceIds(traceIds, projectId)));
