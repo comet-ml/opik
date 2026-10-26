@@ -571,6 +571,17 @@ areas:
       # The capability is in the `threads` area even though the spec lives in
       # trace-explore/ — that is this area's `spec_dir`, shared with traces.
       free-text-search:        { covered: false, note: "Free-text `search` over threads, asserted as EXACTNESS rather than membership on a seeded 12-thread project (7 carrying one marker in their trace's input and a DIFFERENT marker in its output, 5 decoys carrying neither, one trace and one usage-carrying llm span per thread): the thread-id SET and the envelope's `total` both pinned, each marker asserted separately because each sits on one column only — so a clause that lost `input` or `output` fails one step and passes the other — each thread's own per-column token resolving to exactly its one thread, /traces/threads/stats agreeing with the listing under each search and without one (an independently written query, read through numericStat so an empty stats list cannot pass as a zero), and a trace NAME searched as the negative control, which must return nothing because the thread clause does not read it. The fixture proves it can discriminate before writing: the clause matches `thread_id`, and the ids are built from the run prefix and the test's own title, so it asserts no marker occurs in any thread id and that each token occurs in exactly one thread's searchable text. Searched rows are also asserted to still carry number_of_messages, duration, total_estimated_cost and usage, since the right ids with empty aggregates is a blank table no count assertion would notice. The UI half types into the box and asserts the footer total, the rendered row set and every decoy's absence against the API's answer for the same term, then that clearing it restores the project; and pins, as the one place two numbers on this page legitimately disagree, that the KPI count card above the table does NOT narrow — `useProjectKpiCards` takes the chip filters and the window and no `search`, so it stays a project-level overview while the footer is the searched total. NOT covered, and not claimed: the week bound itself — the Threads tab excludes the `alltime` preset so its read is always windowed, and an environment running UUIDv7 validation in reject mode with a sub-week window (staging: PT24H) refuses backdated ids, so every row is seeded at `now`; driving the bound needs uuidValidation.auditOnly=true. Also not covered: search composed with a thread filter chip, and a multi-turn thread's aggregate under a search" }
+      # New for 2.2.120, from the release pass's own exploration of opik#9177
+      # (OPIK-6842).
+      #
+      # Its own key, as the exploration's candidate asked for. `list-threads`
+      # above is the Threads table listing seeded conversations and is already
+      # `covered: true` at t1 — folding the environment filter under it would
+      # retire the question permanently while nothing had tested the control.
+      # Not a `traces` key either, though the `environment` param is shared by
+      # all three Logs tabs: the statistics read this narrows is
+      # /traces/threads/stats, which is the threads area's.
+      environment-filter:      { covered: false, note: "The Threads tab's environment filter and the shared `environment` URL param: a 4-thread project across two environments and one untagged (2/1/1, so no two answers are the same number), asserted at the API on both the listing and /traces/threads/stats and in the UI on both the rendered rows and the count card above them — the card being the silent half, since a count that ignored the filter looks exactly like a correct one. Also: the param surviving a reload and a switch to the Traces tab, and an inbound name the workspace registry does not know being dropped with threads_page reset to 1. The fixture registers its environments by seeding traces that carry them (the path a user's data takes) and proves the seed at the trace level before the browser opens, since a UI assertion over an environment that never landed cannot fail. NOT covered: export honouring the selection — the control sits behind the EXPORT_ENABLED feature toggle, so it is not deterministic across environments; and the Spans tab, which shares the param with Traces." }
       thread-level-metrics:    { covered: true,  tier: t2-cuj, note: "conversational metrics; also the thread panel header's duration, asserted at both ends of formatDuration(_, false) — a 3_615_300 ms thread (float remainder 15.300000000000182) rendering as '1h 15.3s', and a 5 ms thread keeping '0.005s'" }
 
     visual:
@@ -1178,6 +1189,21 @@ areas:
       # green. Folding these under them would retire the question permanently.
       automated-queue-fill:    { covered: false, note: "A feedback score matching the queue's condition routes its trace in with source 'automated', and a non-matching score keeps its trace out" }
       automation-max-items:    { covered: false, note: "max_items_in_queue caps automated adds (deterministically, lowest ids first) while a manual add still bypasses the ceiling; the list's Automation cell reads 'Cap reached'" }
+      # New for 2.2.120, from the release pass's own exploration of opik#9079.
+      #
+      # Its own key, and deliberately NOT `sme-flow`. That key is the SME route
+      # rendering a queue's items, and it is where the trace-queue annotation
+      # journey is now asserted; this is the SandboxedView + v1-kit layer
+      # underneath it — a stored HTML view, its fallback when it cannot render,
+      # and the Trusted Types block that stops it writing markup. Those have
+      # three different failure modes from "the route renders", and two of them
+      # are silent, so folding them under `sme-flow` would retire the question
+      # permanently while nothing had tested the sandbox.
+      #
+      # Not an `ollie` key either, though `assistantBridge` shares the same
+      # SandboxedView: the authoring path is Ollie's, the rendering contract is
+      # the annotation queue's, and this covers only the second.
+      custom-annotator-view:   { covered: false, note: "A queue's `annotator_view`: a stored kit v1 view renders inside iframe[title=\"Annotator view\"] (sandbox=allow-scripts) showing that item's own input/output fields and REPLACING the default Input/Output blocks, with the queue-detail header carrying the 'Custom annotator view' tag; a view that never calls kit.mount is replaced by the default view with the 'custom view failed to load' alert rather than left as a blank frame; a view that assigns innerHTML is blocked and replaced, with the same marker asserted to render first through the kit's safe `text:` path as the control, so the marker's absence is the block rather than an unrenderable value; and `html: ''` reads back as null with the header tag gone and no failure alert. Views are PATCHed over REST, not authored: the dialog's only authoring path is Ollie, so 'can a human write one' is NOT covered, and neither is the create/edit dialog's annotator-view card, the thread surface's SandboxedAnnotatorThreadView, the Ollie proposal path, or the preview page." }
       sme-flow:                { covered: false, note: "/sme route, dedicated layout. The only spec reaching /sme is sme-thread-internal-traces.spec.ts, and it asserts the route's own layout — the welcome page naming the queue, Start annotating, and the thread view's internal-trace toggle and Internal badge (opik#9073). SCORING through /sme is NOT covered: score-queue-item / score-with-reason / skip-item are all asserted on the project-scoped admin route (annotation-queue-scoring.spec.ts), so a reviewer's submit path through the SME layout has no test. Read this key as 'the SME route renders', not 'the SME journey works'." }
       export-annotated-data:   { covered: false }
 
