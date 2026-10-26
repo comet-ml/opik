@@ -5,9 +5,7 @@ import com.fasterxml.jackson.annotation.JsonValue;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
-import java.util.Arrays;
 import java.util.Optional;
-import java.util.stream.Stream;
 
 @RequiredArgsConstructor
 @Getter
@@ -28,14 +26,9 @@ public enum FieldType {
     ENUM("enum"),
     ENUM_LEGACY("enum_legacy") {
         @Override
-        public String buildFilter(String template, String dbField, int i, Operator operator, String filterValue,
+        public String buildFilter(String template, String dbField, int i, String filterValue,
                 String enumFallbackTemplate) {
-            var values = Operator.MULTI_VALUE_OPERATORS.contains(operator)
-                    ? Arrays.stream(filterValue.split(",")).map(String::trim)
-                    : Stream.of(filterValue);
-            return values.map(Source::legacyFallbackDbValue)
-                    .flatMap(Optional::stream)
-                    .findFirst()
+            return Source.legacyFallbackDbValue(filterValue)
                     .map(fallback -> "(%s)".formatted(template.formatted(dbField, i, fallback)))
                     .orElseGet(() -> "(%s)".formatted(enumFallbackTemplate.formatted(dbField, i)));
         }
@@ -58,13 +51,12 @@ public enum FieldType {
      * @param template             the operator template for this field type (may contain {@code %3$s} for legacy types)
      * @param dbField              the ClickHouse column name
      * @param i                    the filter index used as the bind-parameter suffix
-     * @param operator             the filter operator; for {@code IN}/{@code NOT_IN} the value is a comma-separated list
      * @param filterValue          the raw filter value supplied by the caller
      * @param enumFallbackTemplate the two-argument {@link #ENUM} template for the same operator,
      *                             used when a legacy type has no fallback mapping for {@code filterValue}
      * @return the fully-formatted {@code (…)} filter clause
      */
-    public String buildFilter(String template, String dbField, int i, Operator operator, String filterValue,
+    public String buildFilter(String template, String dbField, int i, String filterValue,
             String enumFallbackTemplate) {
         return "(%s)".formatted(template.formatted(dbField, i));
     }

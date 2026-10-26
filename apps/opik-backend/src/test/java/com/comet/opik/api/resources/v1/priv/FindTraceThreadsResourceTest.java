@@ -1154,49 +1154,6 @@ class FindTraceThreadsResourceTest {
             }
         }
 
-        private Stream<Arguments> whenFilterBySourceInOrNotIn__thenReturnThreadsWithMatchingSources() {
-            return Stream.of(
-                    Arguments.of(Operator.IN, "playground,experiment", Set.of("playground", "experiment")),
-                    Arguments.of(Operator.IN, "sdk,playground", Set.of("sdk", Source.UNKNOWN_VALUE, "playground")),
-                    Arguments.of(Operator.NOT_IN, "sdk,experiment", Set.of("playground")),
-                    Arguments.of(Operator.NOT_IN, "playground", Set.of("sdk", Source.UNKNOWN_VALUE, "experiment")));
-        }
-
-        @ParameterizedTest(name = "{0} \"{1}\"")
-        @MethodSource
-        @DisplayName("When filtering by a source list with in or not_in, should return the threads whose source matches, and a listed sdk also covers legacy unknown")
-        void whenFilterBySourceInOrNotIn__thenReturnThreadsWithMatchingSources(Operator operator, String value,
-                Set<String> expectedSources) {
-            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var traces = Stream.of(Source.SDK, null, Source.PLAYGROUND, Source.EXPERIMENT)
-                    .map(source -> createTrace().toBuilder()
-                            .projectName(projectName)
-                            .threadId(UUID.randomUUID().toString())
-                            .source(source)
-                            .build())
-                    .toList();
-            traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
-
-            var filter = TraceThreadFilter.builder()
-                    .field(TraceThreadField.SOURCE)
-                    .operator(operator)
-                    .value(value)
-                    .build();
-
-            var page = traceResourceClient.getTraceThreads(null, projectName, API_KEY, TEST_WORKSPACE,
-                    List.of(filter), List.of(), Map.of());
-
-            var expectedThreadIds = traces.stream()
-                    .filter(trace -> expectedSources.contains(Optional.ofNullable(trace.source())
-                            .map(Source::getValue)
-                            .orElse(Source.UNKNOWN_VALUE)))
-                    .map(Trace::threadId)
-                    .toList();
-            assertThat(page.content()).extracting(TraceThread::id)
-                    .containsExactlyInAnyOrderElementsOf(expectedThreadIds);
-            assertThat(page.total()).isEqualTo(expectedThreadIds.size());
-        }
-
         private List<Trace> buildTracesForThread(String projectName, String threadId, String environment, int count) {
             return IntStream.range(0, count)
                     .mapToObj(it -> {
