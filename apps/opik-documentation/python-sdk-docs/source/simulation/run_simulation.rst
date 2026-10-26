@@ -56,7 +56,9 @@ Parameters
    Thread ID for grouping traces. If ``None``, a new ID will be generated.
 
 **project_name** (str, optional)
-   Project name for trace logging. Included in trace metadata.
+   Project to log the simulation to: the app's traces and the simulated user's LLM calls.
+   When ``run_simulation`` is called inside an existing ``opik.project_context(...)`` or a
+   ``@track`` function, the enclosing project is used instead. Also included in trace metadata.
 
 **app_kwargs** (Any)
    Additional keyword arguments passed to the app function.
