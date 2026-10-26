@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.llm;
 
 import com.comet.opik.infrastructure.net.DestinationGuard;
+import com.comet.opik.infrastructure.net.DestinationGuardException;
 import com.google.common.io.Files;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
@@ -87,6 +88,10 @@ public class VideoMimeTypeUtils {
                     .build();
 
             HttpResponse<Void> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.discarding());
+            // redirects aren't followed, so a 3xx carries the redirect page's type, not the video's
+            if (response.statusCode() / 100 != 2) {
+                return null;
+            }
 
             String contentType = response.headers()
                     .firstValue("Content-Type")
@@ -102,6 +107,10 @@ public class VideoMimeTypeUtils {
                         url.substring(0, Math.min(50, url.length())));
                 return contentType;
             }
+        } catch (DestinationGuardException e) {
+            // the guard's message can echo the full URL, query string included
+            log.warn("Skipped MIME type detection for a refused URL: '{}'",
+                    url.substring(0, Math.min(50, url.length())));
         } catch (Exception e) {
             log.error("Failed to detect MIME type for URL: '{}', error: '{}'",
                     url.substring(0, Math.min(50, url.length())), e.getMessage());
