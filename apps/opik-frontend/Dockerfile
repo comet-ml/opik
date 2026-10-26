@@ -37,9 +37,9 @@ COPY --chown=1001:1001 nginx /etc/nginx
 # Copy entrypoint script to the docker-entrypoint.d directory so it runs automatically
 COPY --chmod=0755 patch-nginx.conf.sh /docker-entrypoint.d/99-patch-nginx.conf.sh
       
-# Refresh libexpat and fix permissions
+# Pick up Alpine security fixes released after the base image, and fix permissions
 # hadolint ignore=DL3018
-RUN apk add --no-cache --upgrade libexpat \
+RUN apk upgrade --no-cache \
  && chown -R 1001:1001 /var/log/nginx /var/cache/nginx /run /etc/nginx/conf.d \
  && rm -f /var/log/nginx/access.log /var/log/nginx/error.log
 

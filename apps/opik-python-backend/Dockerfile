@@ -46,10 +46,10 @@ RUN set -eux; \
 #######################################################################
 FROM docker:29.9.2@sha256:9e79b879b177fbd72c34376a3dd3d91747da5db49e1f560f76aea59561471977
 
-# libexpat --upgrade mitigates CVEs; tini (PID 1 reaper) + python3 are the
-# runtime-only OS deps.
+# apk upgrade picks up Alpine security fixes released after the base image;
+# tini (PID 1 reaper) + python3 are the runtime-only OS deps.
 # hadolint ignore=DL3018
-RUN apk add --no-cache --upgrade libexpat && \
+RUN apk upgrade --no-cache && \
     apk add --no-cache tini python3
 
 WORKDIR /opt/opik-python-backend

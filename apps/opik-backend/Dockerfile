@@ -45,8 +45,10 @@ COPY install_rds_cert.sh /tmp/install_rds_cert.sh
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # DL3033: AL2023 core packages track a rolling security channel; pinning exact
 # RPM versions here would rot as AWS updates the base image's repos.
+# --releasever=latest: AL2023 locks yum to the base image's release, so a plain
+# update never reaches fixes published after the amazoncorretto image was built.
 # hadolint ignore=DL3033
-RUN yum update -y && \
+RUN yum upgrade -y --releasever=latest && \
     yum install -y --allowerasing shadow ca-certificates openssl dos2unix curl && \
     yum clean all && \
     rm -rf /var/cache/yum && \

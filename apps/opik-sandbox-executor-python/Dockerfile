@@ -44,6 +44,9 @@ RUN sh /usr/local/bin/selftest.sh ./scoring_runner.pyc
 #######################################################################
 FROM python:3.12.14-slim@sha256:f77ac9e44ae96ef2c90b8053ea08c31f8be030f824196b0ae4db6d462c84e51f AS runtime
 
+# Debian security fixes released after the python image was built.
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /opt/opik-sandbox-executor-python
 
 # LITELLM_MODE: avoid load_dotenv() frame inspection that breaks .pyc-only mode.
