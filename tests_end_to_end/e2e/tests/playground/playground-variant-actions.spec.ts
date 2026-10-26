@@ -9,6 +9,10 @@ import { PlaygroundPage } from '@e2e/pom/playground.page';
 const MODEL_A = 'variant-a-model';
 const MODEL_B = 'variant-b-model';
 
+// `messageBodies()` reads every editor in order, and every variant starts with an
+// empty System message above its User message, so the bodies come in pairs.
+const SYSTEM = '';
+
 test.describe('Playground — variant actions', { tag: ['@t2-cuj', '@area:playground'] }, () => {
   test.use({ viewport: { width: 1600, height: 900 } });
 
@@ -41,7 +45,7 @@ test.describe('Playground — variant actions', { tag: ['@t2-cuj', '@area:playgr
       await test.step('Add variant adds one blank variant at the end', async () => {
         await playground.addBlankVariant();
         await expect(playground.variantCards()).toHaveCount(2);
-        expect(await playground.messageBodies()).toEqual(['Prompt A', '']);
+        expect(await playground.messageBodies()).toEqual([SYSTEM, 'Prompt A', SYSTEM, '']);
       });
 
       await test.step('Configure variant B with the other model', async () => {
@@ -54,7 +58,14 @@ test.describe('Playground — variant actions', { tag: ['@t2-cuj', '@area:playgr
       await test.step('Duplicating the first variant puts its copy right after it', async () => {
         await playground.duplicateVariant(0);
         await expect(playground.variantCards()).toHaveCount(3);
-        expect(await playground.messageBodies()).toEqual(['Prompt A', 'Prompt A', 'Prompt B']);
+        expect(await playground.messageBodies()).toEqual([
+          SYSTEM,
+          'Prompt A',
+          SYSTEM,
+          'Prompt A',
+          SYSTEM,
+          'Prompt B',
+        ]);
         await expect(playground.variantModelPicker(1)).toContainText(MODEL_A);
         await expect(playground.variantModelPicker(2)).toContainText(MODEL_B);
       });
@@ -69,7 +80,7 @@ test.describe('Playground — variant actions', { tag: ['@t2-cuj', '@area:playgr
         // fill() appends to a CodeMirror editor that already has text, so only
         // "the copy changed" is asserted, not its exact new text.
         await playground.configureVariant(1, { userPrompt: ' edited' });
-        const [source, copy, other] = await playground.messageBodies();
+        const [, source, , copy, , other] = await playground.messageBodies();
         expect(source).toBe('Prompt A');
         expect(copy).toContain('edited');
         expect(other).toBe('Prompt B');
