@@ -6,11 +6,15 @@ on:
   pull_request:
     paths:
       - "apps/opik-frontend/**"
+      # A new changelog entry makes the committed release-notes manifest stale, so it has to
+      # trigger this workflow even though it touches no frontend file.
+      - "apps/opik-documentation/documentation/fern/docs-v2/changelog/**"
   push:
     branches:
       - 'main'
     paths:
       - "apps/opik-frontend/**"
+      - "apps/opik-documentation/documentation/fern/docs-v2/changelog/**"
   workflow_dispatch:
 
 
@@ -41,6 +45,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Release notes manifest is up to date
+        run: npm run release-notes:check
 
       - name: Unit tests
         run: npm run test
