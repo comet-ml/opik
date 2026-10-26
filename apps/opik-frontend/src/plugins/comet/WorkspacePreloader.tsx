@@ -155,6 +155,12 @@ const WorkspacePreloader: React.FunctionComponent<WorkspacePreloaderProps> = ({
     return null;
   }
 
+  // Comet refuses everything but sign-in until the email is verified; its own page takes over
+  if (user.emailVerificationRequired) {
+    window.location.href = buildUrl("email-verification");
+    return null;
+  }
+
   if (
     isLandingRoute(pathname) &&
     workspaceNameFromURL &&

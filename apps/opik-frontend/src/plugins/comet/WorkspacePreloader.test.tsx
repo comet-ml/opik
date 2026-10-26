@@ -90,6 +90,40 @@ describe("WorkspacePreloader", () => {
     expect(screen.getByText("navigate:team-b")).toBeInTheDocument();
   });
 
+  it("sends a user who must verify their email to Comet's verification page", () => {
+    hooks.useUser.mockReturnValue({
+      isLoading: false,
+      data: {
+        loggedIn: true,
+        emailVerificationRequired: true,
+        apiKeys: [],
+        userName: "new-user",
+        email: "new-user@example.com",
+        gitHub: false,
+        defaultWorkspace: "new-user",
+        suspended: false,
+      },
+    });
+    givenWorkspaces([workspace("new-user", true)]);
+    const originalLocation = window.location;
+    Object.defineProperty(window, "location", {
+      value: { href: "" },
+      writable: true,
+    });
+
+    try {
+      render(<WorkspacePreloader>app</WorkspacePreloader>);
+
+      expect(window.location.href).toContain("email-verification");
+      expect(screen.queryByText("app")).not.toBeInTheDocument();
+    } finally {
+      Object.defineProperty(window, "location", {
+        value: originalLocation,
+        writable: true,
+      });
+    }
+  });
+
   it("still opens the AI Spend pages", () => {
     givenWorkspaces([workspace(SPEND_WORKSPACE), workspace("team-a")]);
     route.workspaceName = SPEND_WORKSPACE;
