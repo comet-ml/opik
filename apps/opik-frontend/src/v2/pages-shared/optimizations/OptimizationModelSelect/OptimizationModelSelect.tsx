@@ -95,7 +95,7 @@ const OptimizationModelSelect: React.FC<OptimizationModelSelectProps> = ({
           };
         }
       }
-      return null;
+      return { icon: undefined, label: modelValue, title: modelValue };
     },
     [freeModelOption, groupOptions],
   );

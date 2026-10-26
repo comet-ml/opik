@@ -3882,7 +3882,7 @@ paths:
       - Environments
       summary: Find environments
       description: Find environments for the workspace. Capped at the workspace limit
-        (default 20).
+        (default 100).
       operationId: findEnvironments
       responses:
         "200":
@@ -4194,6 +4194,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ExperimentExecutionResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/experiments/items/bulk:
     put:
       tags:
@@ -11094,6 +11100,16 @@ components:
           type: object
           additionalProperties:
             type: string
+        custom_fields:
+          type: object
+          additionalProperties:
+            type: string
+            description: "Optional user-defined key/value pairs, added as top-level\
+              \ keys of the alert's EventBridge event detail. Keys must not collide\
+              \ with the event's own keys."
+          description: "Optional user-defined key/value pairs, added as top-level\
+            \ keys of the alert's EventBridge event detail. Keys must not collide\
+            \ with the event's own keys."
         webhook:
           $ref: "#/components/schemas/Webhook"
         triggers:
@@ -11316,6 +11332,16 @@ components:
           type: object
           additionalProperties:
             type: string
+        custom_fields:
+          type: object
+          additionalProperties:
+            type: string
+            description: "Optional user-defined key/value pairs, added as top-level\
+              \ keys of the alert's EventBridge event detail. Keys must not collide\
+              \ with the event's own keys."
+          description: "Optional user-defined key/value pairs, added as top-level\
+            \ keys of the alert's EventBridge event detail. Keys must not collide\
+            \ with the event's own keys."
         webhook:
           $ref: "#/components/schemas/Webhook_Write"
         triggers:
@@ -11490,6 +11516,16 @@ components:
           type: object
           additionalProperties:
             type: string
+        custom_fields:
+          type: object
+          additionalProperties:
+            type: string
+            description: "Optional user-defined key/value pairs, added as top-level\
+              \ keys of the alert's EventBridge event detail. Keys must not collide\
+              \ with the event's own keys."
+          description: "Optional user-defined key/value pairs, added as top-level\
+            \ keys of the alert's EventBridge event detail. Keys must not collide\
+            \ with the event's own keys."
         webhook:
           $ref: "#/components/schemas/Webhook_Public"
         triggers:

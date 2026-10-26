@@ -210,10 +210,10 @@ databaseAnalyticsDataModel:
   #   instance: the backfill covers the spans written until its first run, live registration the rest.
   spanWeeksBackfillEnabled: ${ANALYTICS_DB_DATA_MODEL_SPAN_WEEKS_BACKFILL_ENABLED:-false}
   #  Default: false
-  #  Description: Bound the spans reads keyed by traces (by trace id, a trace range or a project's traces) to the weeks
-  #   the span_weeks index holds for them. Effective only while spanColumnsNonNullable is also true (the legacy spans
-  #   id_at wraps far-future ids). New spans are indexed by span_weeks_mv in their insert, older ones by the span weeks
-  #   backfill: turn true once the backfill logs that it is complete, as spans it has not indexed yet would be skipped.
+  #  Description: Bound the spans reads keyed by traces or by a project to the weeks the span_weeks index holds for
+  #   them. Effective only while spanColumnsNonNullable is also true (the legacy spans id_at wraps far-future ids). New
+  #   spans are indexed by span_weeks_mv in their insert, older ones by the span weeks backfill: turn true once the
+  #   backfill logs that it is complete, as spans it has not indexed yet would be skipped.
   spanWeeksReadEnabled: ${ANALYTICS_DB_DATA_MODEL_SPAN_WEEKS_READ_ENABLED:-false}
 
 # Span weeks registration (OPIK-8706): retry of a failed span weeks write, with exponential backoff. Registration is
@@ -298,7 +298,7 @@ databaseAnalyticsReadOnlyFreeFormSql:
   socketTimeout: ${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_SOCKET_TIMEOUT:-200s}
 
 # Description: credentials for the extended free-form SQL read-only ClickHouse user.
-# Only used for workspaces in customCharts.enabledWorkspaces.
+# Only used when customCharts.enabled is true.
 databaseAnalyticsReadOnlyFreeFormExtendedSql:
   #  Default: comet_readonly_freeform_extended_sql_user
   #  Description: The read-only username used to connect to the server
@@ -313,12 +313,12 @@ databaseAnalyticsReadOnlyFreeFormExtendedSql:
 # Custom Charts. The ClickHouse credentials it runs as are in databaseAnalyticsReadOnlyFreeFormExtendedSql instead:
 # those describe a database connection and keep the same shape as the account Agent Insights uses.
 customCharts:
-  #  Default: empty (feature off everywhere)
-  #  Description: Comma-separated workspace ids allowed to call POST /v1/internal/analytics-queries, which runs as
-  #   the wider ClickHouse account. The path-scoped Agent Insights endpoint is unaffected and keeps its own account
-  #   for every workspace. Requires serviceToggles.ollieEnabled, which
-  #   gates the endpoint, and the account to be provisioned first (ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_USER_ENABLED).
-  enabledWorkspaces: ${TOGGLE_CUSTOM_CHARTS_WORKSPACES:-""}
+  #  Default: false (feature off everywhere)
+  #  Description: Lets every workspace call POST /v1/internal/analytics-queries, which runs as the wider ClickHouse
+  #   account. The path-scoped Agent Insights endpoint is unaffected and keeps its own account for every workspace.
+  #   Requires serviceToggles.ollieEnabled, which gates the endpoint, and the account to be provisioned first
+  #   (ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_USER_ENABLED).
+  enabled: ${TOGGLE_CUSTOM_CHARTS_ENABLED:-false}
   #  Default: 5000
   #  Description: Cap on distinct ids resolved to names in one result. Above it no row gets a name column, rather
   #   than labelling some and not others.
@@ -375,8 +375,8 @@ health:
     - name: clickhouse-readonly-freeform-sql
       critical: false
       type: ready
-    # Non-critical for the same reason as the check above: Custom Charts is opt-in per workspace, and when no
-    # workspace is allowlisted the probe reports healthy without querying ClickHouse.
+    # Non-critical for the same reason as the check above: Custom Charts is opt-in, and when it is off the probe
+    # reports healthy without querying ClickHouse.
     - name: clickhouse-readonly-freeform-extended-sql
       critical: false
       type: ready
@@ -447,6 +447,48 @@ redis:
   #  Default: 1s
   #  Description: Timeout for the Redis health check ping
   healthCheckTimeout: ${REDIS_HEALTH_CHECK_TIMEOUT:-1s}
+  # Redis Sentinel configuration (optional)
+  # When enabled, singleNodeUrl is the seed sentinel, with its port (usually 26379), instead of a Redis data node: its
+  # scheme selects TLS for every sentinel, and its credentials and database number apply to the master data nodes.
+  # Redisson discovers the master through the sentinels and follows it on failover. The Python backend reads the same
+  # variables. Cannot be combined with awsIamAuth: ElastiCache and MemoryDB offer no Sentinel.
+  sentinel:
+    # Default: false
+    # Description: Enable Redis Sentinel master discovery
+    enabled: ${OPIK_REDIS_SENTINEL_ENABLED:-false}
+    # Description: Name of the master group monitored by the sentinels. Required when enabled
+    masterName: ${OPIK_REDIS_SENTINEL_MASTER_NAME:-''}
+    # Description: Comma separated extra seed sentinels, e.g. redis://sentinel-1:26379,redis://sentinel-2:26379. They
+    # must use the scheme of singleNodeUrl, include a port and carry no credentials. The seed from singleNodeUrl is
+    # always included
+    nodes: ${OPIK_REDIS_SENTINEL_NODES:-''}
+    # Description: Username for the sentinel nodes themselves, if they enforce ACLs
+    username: ${OPIK_REDIS_SENTINEL_USERNAME:-''}
+    # Description: Password for the sentinel nodes themselves, if they require auth
+    password: ${OPIK_REDIS_SENTINEL_PASSWORD:-''}
+    # Default: 3
+    # Description: Times a failed command is retried, e.g. while a failover is in progress. Between 0 and 20
+    retryAttempts: ${OPIK_REDIS_SENTINEL_RETRY_ATTEMPTS:-3}
+    # Default: 500ms
+    # Description: Base of the full-jitter backoff between retries: each waits a random time up to
+    # min(base * 2^attempt, cap). At least 1ms
+    retryBackoffBase: ${OPIK_REDIS_SENTINEL_RETRY_BACKOFF_BASE:-500ms}
+    # Default: 2s
+    # Description: Longest wait between retries. At least retryBackoffBase and at most 5m
+    retryBackoffCap: ${OPIK_REDIS_SENTINEL_RETRY_BACKOFF_CAP:-2s}
+    # Default: true
+    # Description: Require the sentinels to report at least two of them, as a production quorum needs. Set to false to
+    # allow a single sentinel, e.g. in development setups
+    checkSentinelsList: ${OPIK_REDIS_SENTINEL_CHECK_SENTINELS_LIST:-true}
+    # Default: 10s
+    # Description: Timeout for establishing connections. Between 100ms and 5m
+    connectTimeout: ${OPIK_REDIS_SENTINEL_CONNECT_TIMEOUT:-10s}
+    # Default: 5s
+    # Description: Timeout for command responses. Between 100ms and 5m
+    timeout: ${OPIK_REDIS_SENTINEL_TIMEOUT:-5s}
+    # Default: 2s
+    # Description: How often the sentinels are polled for topology changes. Between 100ms and 5m
+    scanInterval: ${OPIK_REDIS_SENTINEL_SCAN_INTERVAL:-2s}
   # AWS IAM authentication configuration (optional)
   # When enabled, takes precedence over singleNodeUrl authentication
   awsIamAuth:
@@ -1184,7 +1226,7 @@ experimentExecution:
   # Description: Duration for long-polling reads on the Redis Stream
   longPollingDuration: ${EXPERIMENT_EXECUTION_LONG_POLLING_DURATION:-5s}
   # Default: 10000
-  # Description: Maximum length of the Redis Stream (trimmed non-strictly)
+  # Description: Maximum length of the Redis Stream (trimmed non-strictly). A run is admitted against a lower bound derived from it, so that launches arriving together overshoot into headroom instead of trimming entries no consumer has taken
   streamMaxLen: ${EXPERIMENT_EXECUTION_STREAM_MAX_LEN:-10000}
   # Default: 100
   # Description: Trim limit for the Redis Stream
@@ -1201,6 +1243,12 @@ experimentExecution:
   # Default: 24h
   # Description: TTL for the batch completion counter in Redis
   batchCounterTtl: ${EXPERIMENT_EXECUTION_BATCH_COUNTER_TTL:-24h}
+  # Default: 60s
+  # Description: Lease on the lock that serialises launching a run, held from the queue-capacity check through publishing so the check cannot be overtaken. Must exceed the time to publish the largest run; a pod that dies holding it stalls launches until it expires
+  publishLockLease: ${EXPERIMENT_EXECUTION_PUBLISH_LOCK_LEASE:-60s}
+  # Default: 10s
+  # Description: How long a run waits for the publish lock before being refused with 429. Several times the time to publish a run, so a queued launch waits rather than being turned away; under publishLockLease, so a pod that died holding the lock refuses quickly instead of holding the request
+  publishLockWait: ${EXPERIMENT_EXECUTION_PUBLISH_LOCK_WAIT:-10s}
 
 # Configuration for Dataset Export
 datasetExport:
@@ -1702,6 +1750,10 @@ alertsEventBridge:
   # Description: AWS region of the bus. When empty, the region in an ARN bus is used, then the default
   #   AWS region provider chain
   region: ${ALERTS_EVENTBRIDGE_REGION:-}
+  # Default: empty
+  # Description: SageMaker Partner AI App endpoint that vends the customer role's credentials. When set, PutEvents
+  #   is signed only with those credentials, never IRSA, EKS Pod Identity or the default AWS chain
+  customerCredentialsEndpoint: ${SAGEMAKER_PARTNER_CUSTOMER_CREDENTIALS_ENDPOINT:-}
 
 # Configuration AWS S3
 s3Config:

@@ -5,7 +5,6 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { keepPreviousData } from "@tanstack/react-query";
 
 import { Separator } from "@/ui/separator";
 import { Skeleton } from "@/ui/skeleton";
@@ -21,23 +20,17 @@ import PlaygroundHeader from "@/v2/pages/PlaygroundPage/PlaygroundHeader";
 import PlaygroundErrorBoundary from "@/v2/pages/PlaygroundPage/PlaygroundErrorBoundary";
 import SetupProviderDialog from "@/v2/pages-shared/llm/SetupProviderDialog/SetupProviderDialog";
 import useActionButtonActions from "@/v2/pages/PlaygroundPage/useActionButtonActions";
-import useDatasetItemsList from "@/api/datasets/useDatasetItemsList";
-import useProjectDatasetsList from "@/api/datasets/useProjectDatasetsList";
+import useDatasetById from "@/api/datasets/useDatasetById";
 import {
   useTriggerProviderValidation,
   useIsRunning,
   usePromptCount,
   useSetPromptMap,
   useClearCreatedExperiments,
-  useDatasetFilters,
-  useDatasetPage,
-  useDatasetSize,
   useLastActiveProjectId,
   useSetLastActiveProjectId,
 } from "@/store/PlaygroundStore";
 import { COMPOSED_PROVIDER_TYPE } from "@/types/providers";
-import { Dataset, DatasetItem } from "@/types/datasets";
-import { transformDataColumnFilters } from "@/lib/filters";
 import { parseDatasetVersionKey } from "@/utils/datasetVersionStorage";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import useNavigationBlocker from "@/hooks/useNavigationBlocker";
@@ -46,11 +39,6 @@ import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import { generateDefaultPrompt } from "@/lib/playground";
 import useResetPlaygroundSession from "@/v2/pages-shared/playground/useResetPlaygroundSession";
 import { PLAYGROUND_LAST_PICKED_MODEL } from "@/constants/llm";
-
-import { DEFAULT_LOADED_DATASETS } from "@/v2/pages-shared/DatasetVersionSelectBox/useDatasetVersionSelect";
-
-const EMPTY_ITEMS: DatasetItem[] = [];
-const EMPTY_DATASETS: Dataset[] = [];
 
 const renderPlaygroundLoadingSkeleton = () => (
   <div className="flex min-h-0 flex-1">
@@ -83,7 +71,7 @@ const PlaygroundPage = () => {
     { enabled: !!activeProjectId },
   );
   const {
-    permissions: { canViewDatasets },
+    permissions: { canViewDatasets, canCreateExperiments },
   } = usePermissions();
   const [setupDialogOpen, setSetupDialogOpen] = useState(false);
   const [hasCheckedInitialProviders, setHasCheckedInitialProviders] =
@@ -92,7 +80,7 @@ const PlaygroundPage = () => {
   const isRunning = useIsRunning();
   const promptCount = usePromptCount();
 
-  const { datasetId, versionName, versionHash, setDatasetId } =
+  const { datasetId, versionName, versionHash, itemsTotal, setDatasetId } =
     usePlaygroundDataset();
 
   const setPromptMap = useSetPromptMap();
@@ -181,13 +169,10 @@ const PlaygroundPage = () => {
   }, [datasetId, clearCreatedExperiments]);
 
   const { DialogComponent } = useNavigationBlocker({
-    condition: isRunning,
-    title: datasetId
-      ? "Experiment execution in progress"
-      : "Prompt execution in progress",
-    description: datasetId
-      ? "Your experiment is currently running. Leaving now will interrupt the execution and may result in incomplete experiment items. Are you sure you want to leave?"
-      : "Your prompt is currently running. Leaving now will interrupt the execution and may result in incomplete traces. Are you sure you want to leave?",
+    condition: isRunning && !datasetId,
+    title: "Prompt execution in progress",
+    description:
+      "Your prompt is currently running. Leaving now will interrupt the execution and may result in incomplete traces. Are you sure you want to leave?",
     confirmText: "Leave anyway",
     cancelText: "Stay and wait",
   });
@@ -211,59 +196,35 @@ const PlaygroundPage = () => {
   const plainDatasetId = parsed?.datasetId || datasetId;
   const parsedVersionId = parsed?.versionId;
 
-  const filters = useDatasetFilters();
-  const page = useDatasetPage();
-  const size = useDatasetSize();
-
-  const transformedFilters = useMemo(
-    () => (filters ? transformDataColumnFilters(filters) : filters),
-    [filters],
+  const { data: selectedDataset } = useDatasetById(
+    { datasetId: plainDatasetId! },
+    { enabled: canViewDatasets && !!plainDatasetId },
   );
+  const datasetName = selectedDataset?.name || null;
 
-  const { data: datasetItemsData } = useDatasetItemsList(
-    {
-      datasetId: plainDatasetId!,
-      page,
-      size,
-      truncate: true,
-      filters: transformedFilters,
-      versionId: versionHash,
-    },
-    {
-      enabled: !!plainDatasetId,
-      placeholderData: plainDatasetId ? keepPreviousData : undefined,
-    },
-  );
-  const datasetItems = datasetItemsData?.content || EMPTY_ITEMS;
+  const isExperimentMode =
+    !!datasetId && canViewDatasets && canCreateExperiments;
+  const experimentDatasetId = isExperimentMode ? datasetId : null;
 
-  const { data: datasetsData } = useProjectDatasetsList(
-    {
-      projectId: activeProjectId ?? "",
-      page: 1,
-      size: DEFAULT_LOADED_DATASETS,
-    },
-    { enabled: canViewDatasets && !!activeProjectId && !!plainDatasetId },
-  );
-  const datasetName =
-    (datasetsData?.content || EMPTY_DATASETS).find(
-      (ds) => ds.id === plainDatasetId,
-    )?.name || null;
+  const { runAll, stopAll, stopWatching, runSingle, stopSingle, checkAgain } =
+    useActionButtonActions({
+      workspaceName,
+      datasetName,
+      datasetVersionId: parsedVersionId || undefined,
+      datasetId: (isExperimentMode && plainDatasetId) || undefined,
+      versionHash: versionHash || undefined,
+      projectName: activeProject?.name,
+      projectId: activeProjectId,
+    });
 
-  const { runAll, stopAll, runSingle, stopSingle } = useActionButtonActions({
-    workspaceName,
-    datasetItems,
-    datasetName,
-    datasetVersionId: parsedVersionId || undefined,
-    datasetId: plainDatasetId || undefined,
-    versionHash: versionHash || undefined,
-    projectName: activeProject?.name,
-  });
-
-  const isExperimentMode = !!datasetId && canViewDatasets;
-
+  // Through a ref, with no dependencies: this must run when the page goes away and at no other
+  // time. Depending on the callback re-runs the cleanup whenever its identity changes — which it
+  // does once the dataset id resolves — tearing down a run that is still going.
+  const stopWatchingRef = useRef(stopWatching);
+  stopWatchingRef.current = stopWatching;
   useEffect(() => {
-    return () => stopAll();
-  }, [stopAll]);
+    return () => stopWatchingRef.current();
+  }, []);
 
   const headerMaxWidth = isPendingPlaygroundSetup
     ? undefined
@@ -284,12 +245,14 @@ const PlaygroundPage = () => {
         <div className="bg-gray-100">
           <PlaygroundHeader
             workspaceName={workspaceName}
-            datasetId={datasetId}
+            datasetId={experimentDatasetId}
             datasetName={datasetName}
             versionName={versionName}
+            versionItemsTotal={itemsTotal}
             onChangeDatasetId={setDatasetId}
             onReset={resetPlayground}
             onRunAll={runAll}
+            onRunSingle={runSingle}
             onStopAll={stopAll}
             maxWidth={headerMaxWidth}
           />
@@ -316,6 +279,7 @@ const PlaygroundPage = () => {
                   hasLoadedProviderKeys={hasLoadedProviderKeys}
                   runSingle={runSingle}
                   stopSingle={stopSingle}
+                  checkAgain={checkAgain}
                 />
               </div>
 
@@ -323,10 +287,11 @@ const PlaygroundPage = () => {
             </div>
 
             <PlaygroundOutputs
-              datasetId={datasetId}
+              datasetId={experimentDatasetId}
               versionHash={versionHash}
               runSingle={runSingle}
               stopSingle={stopSingle}
+              checkAgain={checkAgain}
             />
           </>
         ) : (
@@ -349,10 +314,11 @@ const PlaygroundPage = () => {
 
               <div className="flex flex-1">
                 <PlaygroundOutputs
-                  datasetId={datasetId}
+                  datasetId={experimentDatasetId}
                   versionHash={versionHash}
                   runSingle={runSingle}
                   stopSingle={stopSingle}
+                  checkAgain={checkAgain}
                 />
               </div>
             </div>

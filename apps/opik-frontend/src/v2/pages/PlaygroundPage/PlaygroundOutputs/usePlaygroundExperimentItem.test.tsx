@@ -1,0 +1,401 @@
+import { describe, it, expect, vi, beforeEach, Mock } from "vitest";
+import { renderHook, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import React from "react";
+
+import { EXPERIMENT_STATUS } from "@/types/datasets";
+import usePlaygroundExperimentItem from "./usePlaygroundExperimentItem";
+
+const EXPERIMENT_ID = "experiment-1";
+const DATASET_ID = "dataset-1";
+const DATASET_ITEM_ID = "item-1";
+
+let experimentStatus: string;
+let finishedAt: string | null;
+let createdAt: string;
+/** The hook orders the rows and finish-stamp reads by these timestamps. */
+let rowsReadAt: number;
+let experimentReadAt: number;
+
+const experimentByIdSpy: Mock = vi.fn(() => ({
+  data: {
+    id: EXPERIMENT_ID,
+    status: experimentStatus,
+    finished_at: finishedAt,
+    created_at: createdAt,
+  },
+  dataUpdatedAt: experimentReadAt,
+}));
+
+vi.mock("@/api/datasets/useExperimentById", () => ({
+  default: (...args: unknown[]) => experimentByIdSpy(...args),
+}));
+
+// Empty by default: the shape a stopped run leaves behind for everything it never reached.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let rows: any[];
+
+const compareExperimentsSpy: Mock = vi.fn(() => ({
+  data: { content: rows },
+  dataUpdatedAt: rowsReadAt,
+}));
+
+vi.mock("@/api/datasets/useCompareExperimentsList", () => ({
+  default: (...args: unknown[]) => compareExperimentsSpy(...args),
+}));
+
+vi.mock("@/store/AppStore", () => ({
+  default: vi.fn((selector) => selector({ activeWorkspaceName: "ws" })),
+}));
+
+vi.mock("@/store/PlaygroundStore", () => ({
+  useDatasetFilters: () => [],
+  useDatasetPage: () => 1,
+  useDatasetSize: () => 10,
+}));
+
+const wrapper = ({ children }: { children: React.ReactNode }) => {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return React.createElement(
+    QueryClientProvider,
+    { client: queryClient },
+    children,
+  );
+};
+
+const renderItem = (experimentId: string = EXPERIMENT_ID) =>
+  renderHook(
+    ({ id }: { id: string }) =>
+      usePlaygroundExperimentItem(id, DATASET_ITEM_ID, DATASET_ID),
+    { wrapper, initialProps: { id: experimentId } },
+  );
+
+describe("usePlaygroundExperimentItem", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    experimentStatus = EXPERIMENT_STATUS.CANCELLED;
+    finishedAt = new Date().toISOString();
+    createdAt = new Date().toISOString();
+    experimentReadAt = Date.now();
+    rowsReadAt = experimentReadAt + 1_000;
+    rows = [];
+  });
+
+  it("should report a row the stopped run never reached as not run", async () => {
+    const { result } = renderItem();
+
+    await waitFor(() => expect(result.current.notRun).toBe(true));
+    expect(result.current.cancelled).toBe(true);
+    expect(result.current.hasItem).toBe(false);
+  });
+
+  // The table unmounts rows that scroll out of view. A wait measured from mount restarted every
+  // time one scrolled back, so a settled row showed its loader again for the length of the grace.
+  it("should stay settled when the cell remounts long after the run ended", async () => {
+    const first = renderItem();
+    await waitFor(() => expect(first.result.current.notRun).toBe(true));
+    first.unmount();
+
+    const { result } = renderItem();
+
+    await waitFor(() => expect(result.current.notRun).toBe(true));
+  });
+
+  // Runs from before the stamp existed have it null forever, and the prompt map is persisted, so a
+  // stored playground pointing at one would poll its rows with no end.
+  it("should settle a run that finished before the stamp existed", async () => {
+    finishedAt = null;
+    experimentStatus = EXPERIMENT_STATUS.COMPLETED;
+
+    const { result } = renderItem();
+
+    await waitFor(() => expect(result.current.notRun).toBe(true));
+  });
+
+  it("should settle one that failed before the stamp existed", async () => {
+    finishedAt = null;
+    experimentStatus = EXPERIMENT_STATUS.FAILED;
+
+    const { result } = renderItem();
+
+    await waitFor(() => expect(result.current.notRun).toBe(true));
+  });
+
+  // Re-running a prompt hands the cell a new experiment, and a finished one is served from cache. The
+  // moment we saw the previous run finish says nothing about this one: here the new run was seen to
+  // finish after its rows were read, so those rows cannot yet show what it produced.
+  it("should pin the finish to the experiment it was seen for", async () => {
+    const first = renderItem();
+    await waitFor(() => expect(first.result.current.notRun).toBe(true));
+
+    experimentReadAt = rowsReadAt + 1_000;
+    first.rerender({ id: "experiment-2" });
+
+    expect(first.result.current.notRun).toBe(false);
+  });
+
+  // A stopped run's status is written the moment the stop is asked for, while the finish stamp can
+  // wait for the sibling variant's work to drain. The row says so at the status, not the stamp.
+  it("should label a stopped row cancelled before the run has drained", async () => {
+    finishedAt = null;
+
+    const { result } = renderItem();
+
+    await waitFor(() => expect(result.current.notRun).toBe(true));
+    expect(result.current.cancelled).toBe(true);
+    expect(result.current.hasItem).toBe(false);
+  });
+
+  // Rows read before the cancel was seen cannot show the items written just before it, so they
+  // keep the loader rather than flashing "Cancelled" over output about to render.
+  it("should not label a row cancelled from rows read before the cancel was seen", async () => {
+    finishedAt = null;
+    rowsReadAt = experimentReadAt - 1_000;
+
+    const { result } = renderItem();
+
+    await waitFor(() => expect(result.current.hasItem).toBe(false));
+    expect(result.current.notRun).toBe(false);
+  });
+
+  // Items already with a consumer when the stop landed still finish, after the label is up.
+  it("should replace the label with an item that lands after the stop", async () => {
+    finishedAt = null;
+    const { result, rerender } = renderItem();
+    await waitFor(() => expect(result.current.cancelled).toBe(true));
+
+    rows = [
+      {
+        experiment_items: [
+          {
+            dataset_item_id: DATASET_ITEM_ID,
+            created_at: "2026-10-01T00:00:00Z",
+            trace_id: "trace-1",
+            output: { output: "landed after the stop" },
+          },
+        ],
+      },
+    ];
+    rowsReadAt += 3_000;
+    rerender({ id: EXPERIMENT_ID });
+
+    expect(result.current.hasItem).toBe(true);
+    expect(result.current.notRun).toBe(false);
+    expect(result.current.cancelled).toBe(false);
+    expect(result.current.output).toBe("landed after the stop");
+  });
+
+  it("should pin the cancel to the experiment it was seen for", async () => {
+    finishedAt = null;
+    const first = renderItem();
+    await waitFor(() => expect(first.result.current.cancelled).toBe(true));
+
+    experimentReadAt = rowsReadAt + 1_000;
+    first.rerender({ id: "experiment-2" });
+
+    expect(first.result.current.notRun).toBe(false);
+  });
+
+  // A cancelled run can carry a null stamp for good: purgeIfCancelledWhilePublishing swallows a
+  // failed write, and a drained run has no consumer left to make it again (OPIK_8785, items 1 and
+  // 4). Without this the status is re-read every second for as long as the tab is open.
+  it("should settle a run cancelled too long ago for anything to still be landing", async () => {
+    finishedAt = null;
+    createdAt = new Date(Date.now() - 7 * 60 * 60 * 1000).toISOString();
+
+    const { result } = renderItem();
+
+    await waitFor(() => expect(result.current.notRun).toBe(true));
+  });
+
+  // Both queries pending, which is what the cell shows before either has answered. A row still
+  // being processed must not read as one the run never reached.
+  it("should report a row as still loading while nothing has answered yet", async () => {
+    experimentByIdSpy.mockReturnValueOnce({
+      data: undefined,
+      dataUpdatedAt: 0,
+    });
+    compareExperimentsSpy.mockReturnValueOnce({
+      data: undefined,
+      dataUpdatedAt: 0,
+    });
+
+    const { result } = renderItem();
+
+    expect(result.current.hasItem).toBe(false);
+    expect(result.current.notRun).toBe(false);
+  });
+
+  // The rows read has two ways to stop, and both run through the finish stamp rather than the
+  // status, so a regression in hasFinished would leave this polling with nothing to notice it.
+  describe("how long the rows keep being read for", () => {
+    const rowsInterval = (
+      content: unknown[] = rows,
+      updatedAt = rowsReadAt,
+    ) => {
+      renderItem();
+      const options = compareExperimentsSpy.mock.calls.at(-1)?.[1];
+      return options?.refetchInterval?.({
+        state: { data: { content }, dataUpdatedAt: updatedAt },
+      });
+    };
+
+    const rowsStaleTime = (updatedAt = rowsReadAt) => {
+      renderItem();
+      const options = compareExperimentsSpy.mock.calls.at(-1)?.[1];
+      return options?.staleTime?.({ state: { dataUpdatedAt: updatedAt } });
+    };
+
+    // Scrolling a column out of view and back remounts its cells. Without this the page is read
+    // again in full, untruncated, for a run that cannot produce anything more.
+    it("should never go stale once read after the run finished", () => {
+      expect(rowsStaleTime(experimentReadAt + 1_000)).toBe(Infinity);
+    });
+
+    it("should still go stale while the run may yet write something", () => {
+      finishedAt = null;
+      createdAt = new Date().toISOString();
+
+      expect(rowsStaleTime()).toBe(0);
+    });
+
+    it("should stop once this row has its item", () => {
+      finishedAt = null;
+      createdAt = new Date().toISOString();
+
+      const withItem = [
+        { experiment_items: [{ dataset_item_id: DATASET_ITEM_ID }] },
+      ];
+
+      expect(rowsInterval(withItem)).toBe(false);
+    });
+
+    it("should stop once the rows were read after the run finished", () => {
+      expect(rowsInterval([], experimentReadAt + 1_000)).toBe(false);
+    });
+
+    it("should keep reading while the row is absent and the run may still be landing", () => {
+      finishedAt = null;
+      createdAt = new Date().toISOString();
+
+      expect(rowsInterval([])).toBe(3000);
+    });
+  });
+
+  // The cases above prove the cell stops waiting. This is the other half of the same read: a run
+  // that can never be seen to finish is re-read every second for as long as the tab is open.
+  describe("how long the run keeps being read for", () => {
+    const interval = () => {
+      renderItem();
+      const options = experimentByIdSpy.mock.calls.at(-1)?.[1];
+      return options?.refetchInterval?.({
+        state: {
+          data: {
+            status: experimentStatus,
+            finished_at: finishedAt,
+            created_at: createdAt,
+          },
+        },
+      });
+    };
+
+    it("should stop reading a run cancelled too long ago to still be landing items", () => {
+      finishedAt = null;
+      createdAt = new Date(Date.now() - 7 * 60 * 60 * 1000).toISOString();
+
+      expect(interval()).toBe(false);
+    });
+
+    it("should keep reading one stopped recently enough that items may still arrive", () => {
+      finishedAt = null;
+      createdAt = new Date().toISOString();
+
+      expect(interval()).toBe(1000);
+    });
+
+    it("should stop reading a run that recorded its finish", () => {
+      expect(interval()).toBe(false);
+    });
+  });
+
+  it("should keep waiting while the run is still going", async () => {
+    experimentStatus = EXPERIMENT_STATUS.RUNNING;
+    finishedAt = null;
+
+    const { result } = renderItem();
+
+    await waitFor(() =>
+      expect(result.current).toEqual(
+        expect.objectContaining({ hasItem: false }),
+      ),
+    );
+    expect(result.current.notRun).toBe(false);
+  });
+
+  // A cell scrolling back into view refetches the run, and a read time that moved forward with it
+  // would overtake the rows' own and put the loader back on a row already settled.
+  it("should stay settled when the run is read again after the rows", async () => {
+    const { result, rerender } = renderItem();
+    await waitFor(() => expect(result.current.notRun).toBe(true));
+
+    experimentReadAt = rowsReadAt + 1_000;
+    rerender({ id: EXPERIMENT_ID });
+
+    expect(result.current.notRun).toBe(true);
+  });
+
+  // The stamp and the rows come from separate queries. Rows read before the stamp cannot show the
+  // items written just before it, and concluding from them flashed "Cancelled" over a row that was
+  // about to render its output.
+  it("should not call a row unrun from rows read before the finish was known", async () => {
+    rowsReadAt = experimentReadAt - 1_000;
+
+    const { result } = renderItem();
+
+    await waitFor(() => expect(result.current.hasItem).toBe(false));
+    expect(result.current.notRun).toBe(false);
+  });
+
+  // What the run wrote for this row, read back out of a page that also holds other rows' items and
+  // earlier attempts at this one.
+  describe("reading the row's own item back", () => {
+    const item = (overrides: Record<string, unknown>) => ({
+      dataset_item_id: DATASET_ITEM_ID,
+      created_at: "2026-10-01T00:00:00Z",
+      trace_id: "trace-old",
+      output: { output: "an older answer" },
+      ...overrides,
+    });
+
+    it("should take the newest attempt and count the ones before it", async () => {
+      rows = [
+        {
+          experiment_items: [
+            item({}),
+            { ...item({}), dataset_item_id: "other" },
+          ],
+        },
+        {
+          experiment_items: [
+            item({
+              created_at: "2026-10-02T00:00:00Z",
+              trace_id: "trace-new",
+              output: { error: { message: "provider refused the request" } },
+            }),
+          ],
+        },
+      ];
+
+      const { result } = renderItem();
+
+      await waitFor(() => expect(result.current.hasItem).toBe(true));
+      expect(result.current.error).toBe("provider refused the request");
+      expect(result.current.output).toBeNull();
+      expect(result.current.traceId).toBe("trace-new");
+      // The unrelated row's item is not this row's attempt.
+      expect(result.current.runCount).toBe(2);
+    });
+  });
+});

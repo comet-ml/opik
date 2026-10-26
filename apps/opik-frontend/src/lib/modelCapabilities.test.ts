@@ -105,8 +105,9 @@ describe("getOpenRouterMaxOutputTokens", () => {
     },
     {
       reads: "the base model's row for a variant without its own",
-      model: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_R1_DISTILL_LLAMA_70B_FREE,
-      limit: 7372,
+      model:
+        PROVIDER_MODEL_TYPE.COGNITIVECOMPUTATIONS_DOLPHIN_MISTRAL_24B_VENICE_EDITION_FREE,
+      limit: 8192,
     },
     {
       reads: "no other provider's row",

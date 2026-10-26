@@ -1,5 +1,5 @@
 blinker==1.9.0
-certifi==2026.2.25
+certifi==2026.10.19
 charset-normalizer==3.4.6
 click==8.3.1
 docker==7.1.0

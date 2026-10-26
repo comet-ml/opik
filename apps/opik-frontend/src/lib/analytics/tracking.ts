@@ -56,6 +56,9 @@ export const OpikEvent = {
   DASHBOARD_OLLIE_WIDGET_LOAD_FAILED: "opik_dashboard_ollie_widget_load_failed",
   DASHBOARD_WITH_OLLIE_WIDGETS_OPENED:
     "opik_dashboard_with_ollie_widgets_opened",
+  ANNOTATION_QUEUE_VIEW_OLLIE_CLICKED:
+    "opik_annotation_queue_view_ollie_clicked",
+  ANNOTATION_QUEUE_VIEW_FAILED: "opik_annotation_queue_view_failed",
 } as const;
 
 type OpikEventValues = (typeof OpikEvent)[keyof typeof OpikEvent];

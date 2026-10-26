@@ -741,6 +741,101 @@ export class LogsPage {
   }
 
   /**
+   * One column header's TITLE, addressed by the label the user reads.
+   *
+   * The title and not the header cell, because the two are different click
+   * targets with different handlers. `HeaderWrapper` puts the sort handler on
+   * its own root, but when the table is showing column statistics it also
+   * mounts a second row inside that root which calls `stopPropagation()` and
+   * opens a percentile menu instead — and that menu then swallows the next
+   * outside click. Clicking the header cell is therefore a coin toss between
+   * sorting and opening a menu, decided by where the element's centre happens
+   * to fall. The title span is inside the wrapper and outside the statistics
+   * row, so a click on it always reaches the sort handler.
+   *
+   * By label rather than by column index: column order here is user-configurable
+   * and persisted, so an `nth-child` would address whatever column the profile
+   * happens to have put there.
+   */
+  private columnHeaderTitle(label: string): Locator {
+    return this.page
+      .getByRole('columnheader')
+      .filter({ has: this.page.getByText(label, { exact: true }) })
+      .getByText(label, { exact: true });
+  }
+
+  /**
+   * Click a column header to advance its sort, and resolve once the URL says so.
+   *
+   * The settle point is the `<type>_sorting` param, not a row order: the table
+   * re-requests on the new sort, so a caller reading rows the instant the click
+   * returned would be as likely to read the PREVIOUS response. Waiting on the
+   * param and then on the request is what makes the row order a real assertion.
+   *
+   * Returns the direction the URL ended up carrying, so a caller asserts the
+   * direction it got rather than assuming the first click sorts descending.
+   */
+  async sortByColumn(
+    type: 'traces' | 'spans',
+    label: string,
+    columnId: string,
+  ): Promise<'asc' | 'desc'> {
+    return test.step(`Sort the ${type} table by "${label}"`, async () => {
+      const title = this.columnHeaderTitle(label);
+      // Exactly one, not `.first()`: two columns rendering the same label would
+      // otherwise sort whichever the DOM happened to order first.
+      await expect(title, `exactly one "${label}" column header`).toHaveCount(1);
+
+      const listed = this.page.waitForResponse((response) => {
+        // Trailing slash tolerated deliberately: the frontend's own
+        // `TRACES_REST_ENDPOINT` / `SPANS_REST_ENDPOINT` are declared WITH one
+        // (`/v1/private/traces/`), while the estate's backend client calls the
+        // same endpoint without. Pinning either spelling makes this wait pass
+        // or hang on which caller happened to issue the request.
+        const pathname = new URL(response.url()).pathname.replace(/\/$/, '');
+        return pathname.endsWith(`/v1/private/${type}`) && response.ok();
+      });
+      await title.click();
+
+      await expect
+        .poll(async () => (await this.readUrlSorting(type))?.[0]?.id ?? null, {
+          message: `${type}_sorting in the URL names the ${columnId} column`,
+          timeout: 15_000,
+        })
+        .toBe(columnId);
+      await listed;
+
+      const sorting = await this.readUrlSorting(type);
+      // Asserted away rather than defaulted: the poll above only proves the
+      // param names the column, and a sort whose direction went missing is
+      // exactly the sort that is not doing anything.
+      expect(sorting, `${type}_sorting is in the URL`).not.toBeNull();
+      expect(sorting!.length, `${type}_sorting carries exactly one clause`).toBe(1);
+      return sorting![0].desc ? 'desc' : 'asc';
+    });
+  }
+
+  /**
+   * The sort clauses the URL carries for one table, parsed.
+   *
+   * `null` when the param is absent, which is deliberately distinct from `[]`:
+   * "the table was never sorted" and "the sort was cleared" are different
+   * states, and the first is the precondition that makes a first click mean
+   * something.
+   *
+   * The URL carries TanStack's `{id, desc}` shape, which is NOT the
+   * `{field, direction}` the API takes — `listLogsPage` spells that one. A spec
+   * asserting both is asserting the table and the API agree.
+   */
+  async readUrlSorting(
+    type: 'traces' | 'spans',
+  ): Promise<Array<{ id: string; desc: boolean }> | null> {
+    const raw = new URL(this.page.url()).searchParams.get(`${type}_sorting`);
+    if (raw === null) return null;
+    return JSON.parse(raw) as Array<{ id: string; desc: boolean }>;
+  }
+
+  /**
    * A trace row's cell for ONE named feedback score.
    *
    * Each score in the project is its own dynamic column, and every score the
@@ -814,6 +909,19 @@ export class LogsPage {
   /** The Errors/Duration/Estimated cost cell for a trace row, keyed by Ollie explain kind. */
   explainCell(traceId: string, kind: ExplainKind): Locator {
     return this.page.locator(`[data-cell-id="${traceId}_${EXPLAIN_COLUMN[kind]}"]`);
+  }
+
+  /**
+   * The Estimated cost cell of a trace row.
+   *
+   * The same cell {@link explainCell} addresses under the `cost` kind, named
+   * for what it renders rather than for the Ollie affordance that happens to
+   * live in it — a spec asserting the table's own cost column should not have
+   * to ask for an "explain cell". Delegates rather than repeating the
+   * `data-cell-id` so the column id stays declared once, in `EXPLAIN_COLUMN`.
+   */
+  estimatedCostCell(traceId: string): Locator {
+    return this.explainCell(traceId, 'cost');
   }
 
   /**
@@ -1246,16 +1354,32 @@ export class LogsPage {
     return this.threadRow(threadId).locator(`[data-cell-id="${threadId}_last_message"]`);
   }
 
-  /** Open a thread's detail panel by id, returning the conversation panel POM. */
-  async openThreadById(threadId: string): Promise<ThreadPanelPage> {
-    return test.step(`Open thread ${threadId}`, async () => {
-      if (!this.projectId) {
-        throw new Error('LogsPage.openThreadById: call gotoThreads(projectId) first');
-      }
-      const env = loadEnvConfig();
-      const url = `${env.baseUrl}/${env.workspace}/projects/${this.projectId}/logs?logsType=threads&thread=${threadId}`;
-      await this.page.goto(url);
-      return new ThreadPanelPage(this.page, threadId);
-    });
+  /**
+   * Open a thread's detail panel by id, returning the conversation panel POM.
+   *
+   * `traceId` sets the panel's `trace` param — the shape a deep link into one
+   * turn of a conversation has. It is not a display detail: the panel treats the
+   * selected trace as one it must keep listed whatever the hide preference says,
+   * so it is the only way to reach that branch.
+   */
+  async openThreadById(
+    threadId: string,
+    opts: { traceId?: string } = {},
+  ): Promise<ThreadPanelPage> {
+    return test.step(
+      `Open thread ${threadId}${opts.traceId ? ` on trace ${opts.traceId}` : ''}`,
+      async () => {
+        if (!this.projectId) {
+          throw new Error('LogsPage.openThreadById: call gotoThreads(projectId) first');
+        }
+        const env = loadEnvConfig();
+        const params = new URLSearchParams({ logsType: 'threads', thread: threadId });
+        if (opts.traceId !== undefined) params.set('trace', opts.traceId);
+        await this.page.goto(
+          `${env.baseUrl}/${env.workspace}/projects/${this.projectId}/logs?${params}`,
+        );
+        return new ThreadPanelPage(this.page, threadId);
+      },
+    );
   }
 }

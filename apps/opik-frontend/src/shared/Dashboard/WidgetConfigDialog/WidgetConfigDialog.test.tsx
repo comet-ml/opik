@@ -57,7 +57,7 @@ describe("WidgetConfigDialog Ollie prompt", () => {
   it.each([
     ["Ollie is off", FeatureToggleKeys.OLLIE_ENABLED],
     [
-      "the workspace is not on the Custom Charts allowlist",
+      "Custom Charts is disabled",
       FeatureToggleKeys.CUSTOM_CHARTS_ENABLED_FOR_WORKSPACE,
     ],
   ])("hides the prompt when %s", (_, toggle) => {

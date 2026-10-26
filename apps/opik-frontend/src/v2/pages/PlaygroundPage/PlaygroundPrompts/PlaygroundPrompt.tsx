@@ -34,6 +34,8 @@ import PromptModelSelect from "@/v2/pages-shared/llm/PromptModelSelect/PromptMod
 import { cn, getAlphabetLetter } from "@/lib/utils";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import PromptModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/PromptModelConfigs";
+import { BACKEND_RUN_UNSUPPORTED_PARAMS } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
+import { usePlaygroundDataset } from "@/hooks/usePlaygroundDataset";
 import {
   useDatasetVariables,
   useDatasetSampleData,
@@ -75,6 +77,7 @@ interface PlaygroundPromptProps {
   modelResolver: ModelResolver;
   onRun?: () => void;
   onStop?: () => void;
+  onCheckAgain?: () => void;
 }
 
 const PlaygroundPrompt = ({
@@ -88,9 +91,12 @@ const PlaygroundPrompt = ({
   modelResolver,
   onRun,
   onStop,
+  onCheckAgain,
 }: PlaygroundPromptProps) => {
   const checkedIfModelIsValidRef = useRef(false);
   const activeProjectId = useActiveProjectId();
+  const { datasetId } = usePlaygroundDataset();
+  const isBackendRun = !!datasetId;
   const queryClient = useQueryClient();
 
   const prompt = usePromptById(promptId);
@@ -124,9 +130,15 @@ const PlaygroundPrompt = ({
   const selectedChatPromptVersionId = prompt?.loadedChatPromptVersionId;
 
   const handleChatPromptMessagesLoaded = useCallback(
-    (newMessages: LLMMessage[], promptName: string) => {
+    (newMessages: LLMMessage[], promptName: string, versionId: string) => {
       setLastImportedPromptName(promptName);
-      updatePrompt(promptId, { messages: newMessages });
+      // Pinning the version keeps a newer library version from being applied
+      // over unsaved edits later.
+      updatePrompt(promptId, {
+        messages: newMessages,
+        loadedChatPromptVersionId: versionId,
+        appliedChatPromptVersionId: versionId,
+      });
     },
     [promptId, updatePrompt],
   );
@@ -135,6 +147,7 @@ const PlaygroundPrompt = ({
     updatePrompt(promptId, {
       loadedChatPromptId: undefined,
       loadedChatPromptVersionId: undefined,
+      appliedChatPromptVersionId: undefined,
     });
   }, [promptId, updatePrompt]);
 
@@ -147,6 +160,7 @@ const PlaygroundPrompt = ({
   } = useLoadChatPrompt({
     selectedChatPromptId,
     selectedChatPromptVersionId,
+    appliedChatPromptVersionId: prompt?.appliedChatPromptVersionId,
     messages,
     onMessagesLoaded: handleChatPromptMessagesLoaded,
     onPromptUnavailable: handleChatPromptUnavailable,
@@ -309,7 +323,7 @@ const PlaygroundPrompt = ({
           configs: getDefaultConfigByProvider(newProvider, newModel),
         });
 
-        updateOutput(promptId, "", {
+        updateOutput(promptId, {
           value: null,
           error: undefined,
           errorHint: undefined,
@@ -346,6 +360,7 @@ const PlaygroundPrompt = ({
       updatePrompt(promptId, {
         loadedChatPromptId: loadedPromptId,
         loadedChatPromptVersionId: loadedVersionId,
+        appliedChatPromptVersionId: undefined,
       });
     },
     [promptId, updatePrompt],
@@ -384,6 +399,7 @@ const PlaygroundPrompt = ({
     <div
       data-testid="playground-variant-card"
       data-variant-index={index}
+      data-prompt-id={promptId}
       className="group/prompt flex min-w-[var(--min-prompt-width)] max-w-[var(--max-prompt-width)] flex-1 flex-col overflow-hidden border-r"
     >
       <div className="flex h-10 items-center justify-between overflow-hidden border-b px-4">
@@ -416,6 +432,9 @@ const PlaygroundPrompt = ({
             configs={configs}
             onChange={handleUpdateConfig}
             openAiPipelineMode={openAiPipelineMode}
+            unsupportedParams={
+              isBackendRun ? BACKEND_RUN_UNSUPPORTED_PARAMS : undefined
+            }
             size="icon-xs"
             variant="ghost"
           />
@@ -524,6 +543,7 @@ const PlaygroundPrompt = ({
           hidePromptActions={false}
           improvePromptConfig={improvePromptConfig}
           autoFocusFirstMessage={index === 0}
+          shiftEnterInsertsNewline
         />
       </div>
 
@@ -532,6 +552,7 @@ const PlaygroundPrompt = ({
           promptId={promptId}
           onRun={onRun}
           onStop={onStop}
+          onCheckAgain={onCheckAgain}
           className="flex items-center justify-end border-t px-4 py-2"
         />
       )}
@@ -550,6 +571,7 @@ const PlaygroundPrompt = ({
             updatePrompt(promptId, {
               loadedChatPromptId: savedPromptId,
               loadedChatPromptVersionId: version.id,
+              appliedChatPromptVersionId: version.id,
             });
 
             const newChatPromptKey = `${savedPromptId}-${version.id}`;

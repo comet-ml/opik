@@ -122,15 +122,19 @@ public class ExperimentResourceClient {
 
     public ExperimentExecutionResponse execute(ExperimentExecutionRequest request, String apiKey,
             String workspaceName) {
-        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+        try (var response = callExecute(request, apiKey, workspaceName)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_ACCEPTED);
+            return response.readEntity(ExperimentExecutionResponse.class);
+        }
+    }
+
+    public Response callExecute(ExperimentExecutionRequest request, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("execute")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(request))) {
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_ACCEPTED);
-            return response.readEntity(ExperimentExecutionResponse.class);
-        }
+                .post(Entity.json(request));
     }
 
     public Experiment getExperiment(UUID experimentId, String apiKey, String workspaceName) {
