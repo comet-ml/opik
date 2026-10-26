@@ -7,7 +7,12 @@ import {
   ColumnData,
 } from "@/types/shared";
 import { EVALUATORS_RULE_SCOPE, PythonCodeObject } from "@/types/automations";
-import { LLM_JUDGE, LLM_MESSAGE_ROLE, LLM_SCHEMA_TYPE } from "@/types/llm";
+import {
+  LLM_JUDGE,
+  LLM_MESSAGE_ROLE,
+  LLM_SCHEMA_TYPE,
+  LLMMessage,
+} from "@/types/llm";
 import { DECISION_MODELS } from "@/constants/decisionModels";
 import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
 import {
@@ -24,12 +29,12 @@ export const RULE_DEFAULT_MODEL_BY_PROVIDER: Partial<
   Record<PROVIDER_TYPE, PROVIDER_MODEL_TYPE>
 > = {
   [PROVIDER_TYPE.OPIK_FREE]: PROVIDER_MODEL_TYPE.OPIK_FREE_MODEL,
-  [PROVIDER_TYPE.OPEN_AI]: PROVIDER_MODEL_TYPE.GPT_6_LUNA,
+  [PROVIDER_TYPE.OPEN_AI]: PROVIDER_MODEL_TYPE.GPT_5_5,
   [PROVIDER_TYPE.ANTHROPIC]: PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5,
   [PROVIDER_TYPE.GEMINI]: PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH_LITE,
   [PROVIDER_TYPE.VERTEX_AI]:
     PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH_LITE,
-  [PROVIDER_TYPE.OPEN_ROUTER]: PROVIDER_MODEL_TYPE.OPENAI_GPT_6_LUNA,
+  [PROVIDER_TYPE.OPEN_ROUTER]: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_5,
 };
 
 const DEFAULT_LLM_CONFIG = {
@@ -38,27 +43,33 @@ const DEFAULT_LLM_CONFIG = {
   custom_parameters: null,
 };
 
-const getTaskCompletionData = (
-  content: string,
-  variables: Record<string, string>,
-) => ({
+const EMPTY_JUDGE_DATA = {
   model: "",
   config: DEFAULT_LLM_CONFIG,
   template: LLM_JUDGE.custom,
-  messages: [{ id: "rule-prompt", role: LLM_MESSAGE_ROLE.user, content }],
-  variables,
+  messages: [] as LLMMessage[],
+  variables: {},
   schema: [
     {
       name: "",
-      description: "Whether the agent completed the task",
+      description: "",
       type: LLM_SCHEMA_TYPE.BOOLEAN,
       unsaved: false,
     },
   ],
   maxCostUsd: null,
+};
+
+const getTaskCompletionData = (
+  content: string,
+  variables: Record<string, string>,
+) => ({
+  ...EMPTY_JUDGE_DATA,
+  messages: [{ id: "rule-prompt", role: LLM_MESSAGE_ROLE.user, content }],
+  variables,
 });
 
-export const DEFAULT_LLM_AS_JUDGE_DATA = {
+export const TASK_COMPLETION_DATA = {
   [EVALUATORS_RULE_SCOPE.trace]: getTaskCompletionData(
     [
       "You are an impartial judge. Decide if the agent completed the task the user asked for.",
@@ -118,28 +129,15 @@ export const DEFAULT_LLM_AS_JUDGE_DATA = {
   ),
 };
 
+export const DEFAULT_LLM_AS_JUDGE_DATA = {
+  [EVALUATORS_RULE_SCOPE.trace]: EMPTY_JUDGE_DATA,
+  [EVALUATORS_RULE_SCOPE.thread]: EMPTY_JUDGE_DATA,
+  [EVALUATORS_RULE_SCOPE.span]: EMPTY_JUDGE_DATA,
+};
+
 const DECISION_MODEL_DEFAULT_DATA = {
+  ...EMPTY_JUDGE_DATA,
   model: DECISION_MODELS[0].value,
-  config: DEFAULT_LLM_CONFIG,
-  template: LLM_JUDGE.custom,
-  messages: [
-    {
-      id: "rule-prompt",
-      role: LLM_MESSAGE_ROLE.user,
-      content: "INPUT:\n{{input}}\n\nOUTPUT:\n{{output}}",
-    },
-  ],
-  variables: {},
-  schema: [
-    {
-      name: "",
-      description:
-        "Does the output complete the task the user asked for in the input?",
-      type: LLM_SCHEMA_TYPE.BOOLEAN,
-      unsaved: false,
-    },
-  ],
-  maxCostUsd: null,
 };
 
 export const DEFAULT_DECISION_MODEL_DATA = {

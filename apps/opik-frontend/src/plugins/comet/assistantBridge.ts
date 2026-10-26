@@ -10,6 +10,7 @@ import {
   SidebarEventMap,
 } from "@/types/assistant-sidebar";
 import { IS_ASSISTANT_DEV } from "@/plugins/comet/constants/assistant";
+import { applyArtifact } from "@/lib/ollieArtifacts";
 import useExplainStore, {
   ConsoleEmit,
   handleConsoleEvent,
@@ -46,6 +47,7 @@ export function createHostListeners(): HostListeners {
     "explain:cancel": new Set(),
     "chat:continue": new Set(),
     "chart:edit": new Set(),
+    "artifact:result": new Set(),
   };
 }
 
@@ -157,6 +159,7 @@ const SINGLE_SUBSCRIBER_EVENTS: ReadonlySet<keyof HostEventMap> = new Set([
   "chat:continue",
   "conversation:start",
   "chart:edit",
+  "artifact:result",
 ]);
 
 export const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
@@ -238,6 +241,13 @@ export const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
           data as SidebarEventMap["dashboard:updated"],
         );
         break;
+      case "artifact:proposed":
+        emitHostEvent(
+          refs.listeners,
+          "artifact:result",
+          applyArtifact(data as SidebarEventMap["artifact:proposed"]),
+        );
+        break;
       case "runner:request-pair":
         refs.onRequestPair.current(
           data as SidebarEventMap["runner:request-pair"],
@@ -262,6 +272,12 @@ export const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
   },
   canEditChart: () =>
     useExplainStore.getState().capabilities.includes("charts"),
+  canProposeArtifacts: () =>
+    useExplainStore.getState().capabilities.includes("artifacts"),
+  subscribeCapabilities: (listener) =>
+    useExplainStore.subscribe((state, previous) => {
+      if (state.capabilities !== previous.capabilities) listener();
+    }),
 });
 
 /** Emit a host event to all subscribed sidebar listeners. */

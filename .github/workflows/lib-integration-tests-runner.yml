@@ -274,6 +274,7 @@ jobs:
       # - mistral_tests  # disabled: Mistral API rejects the test traffic with 429
       - groq_tests
       - cerebras_tests
+      - ollama_tests
       - together_tests
       - cohere_tests
       - aisuite_tests
@@ -325,6 +326,7 @@ jobs:
               "Anthropic": "${{ needs.anthropic_tests.result }}",
               "Groq": "${{ needs.groq_tests.result }}",
               "Cerebras": "${{ needs.cerebras_tests.result }}",
+              "Ollama": "${{ needs.ollama_tests.result }}",
               "Together": "${{ needs.together_tests.result }}",
               "Cohere": "${{ needs.cohere_tests.result }}",
               "AISuite": "${{ needs.aisuite_tests.result }}",

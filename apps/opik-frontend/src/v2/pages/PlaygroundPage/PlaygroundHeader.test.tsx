@@ -22,6 +22,8 @@ const secondPrompt: PlaygroundPromptType = { ...prompt, id: "prompt-2" };
 let promptMap: Record<string, PlaygroundPromptType> = { [prompt.id]: prompt };
 let datasetType: DATASET_TYPE | null = DATASET_TYPE.DATASET;
 
+let isStoppingAll = false;
+
 vi.mock("@/store/PlaygroundStore", () => ({
   default: { getState: () => ({ isRunningMap: {} }) },
   usePromptMap: () => promptMap,
@@ -36,6 +38,10 @@ vi.mock("@/store/PlaygroundStore", () => ({
   useDatasetType: () => datasetType,
   useDatasetFilters: () => [],
   useSetDatasetFilters: () => vi.fn(),
+  // Added with the server-side run: the header reads a run's state to decide what it may offer
+  useIsStoppingAll: () => isStoppingAll,
+  useIsResumingRun: () => false,
+  useDatasetItemsTotal: () => null,
 }));
 
 vi.mock("@/contexts/PermissionsContext", () => ({
@@ -110,6 +116,7 @@ const pressRunShortcutInSecondPrompt = () =>
   pressRunShortcut(screen.getByTestId("second-prompt-editor"));
 
 beforeEach(() => {
+  isStoppingAll = false;
   onRunAll.mockClear();
   onRunSingle.mockClear();
   promptMap = { [prompt.id]: prompt };

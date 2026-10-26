@@ -22,6 +22,12 @@ jobs:
           curl -o apps/opik-backend/src/main/resources/model_prices_and_context_window.json https://raw.githubusercontent.com/BerriAI/litellm/refs/heads/main/model_prices_and_context_window.json
           cp apps/opik-backend/src/main/resources/model_prices_and_context_window.json apps/opik-frontend/src/data/model_prices_and_context_window.json
 
+      # LiteLLM's file no longer lists OpenRouter models. A failed fetch keeps the current OpenRouter prices and shows
+      # this step as failed, while the LiteLLM update still goes out.
+      - name: Update the OpenRouter prices file
+        continue-on-error: true
+        run: python3 scripts/update_openrouter_model_prices.py
+
       - name: Check for changes
         id: check_changes
         run: |
@@ -41,6 +47,8 @@ jobs:
           git config --local user.name "GitHub Actions (${ACTOR})"
           git add apps/opik-backend/src/main/resources/model_prices_and_context_window.json
           git add apps/opik-frontend/src/data/model_prices_and_context_window.json
+          git add apps/opik-backend/src/main/resources/model_prices_openrouter.json
+          git add apps/opik-frontend/src/data/model_prices_openrouter.json
           git commit -m "[NA] [BE] Update model prices file"
 
       - name: Create Pull Request
@@ -57,6 +65,8 @@ jobs:
             **Files updated:**
             - `apps/opik-backend/src/main/resources/model_prices_and_context_window.json` - Latest model pricing data from LiteLLM
             - `apps/opik-frontend/src/data/model_prices_and_context_window.json` - Frontend copy kept in sync with backend
+            - `apps/opik-backend/src/main/resources/model_prices_openrouter.json` - Latest OpenRouter model pricing from OpenRouter's model list
+            - `apps/opik-frontend/src/data/model_prices_openrouter.json` - Frontend copy kept in sync with backend
             
             ## Change checklist
             - [X] User facing change
@@ -70,4 +80,5 @@ jobs:
           
             ## Documentation
             - https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json
+            - https://openrouter.ai/api/v1/models
           base: main

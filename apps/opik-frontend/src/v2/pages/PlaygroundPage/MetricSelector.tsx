@@ -34,10 +34,12 @@ interface MetricSelectorProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onRuleCreated?: (rule: EvaluatorsRule) => void;
+  disabled?: boolean;
 }
 
 const MetricSelector: React.FC<MetricSelectorProps> = ({
   rules: allRules,
+  disabled,
   selectedRuleIds,
   onSelectionChange,
   projectId,
@@ -162,12 +164,13 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
 
   return (
     <>
-      <Popover onOpenChange={openChangeHandler} open={open}>
+      <Popover onOpenChange={openChangeHandler} open={open && !disabled}>
         <PopoverTrigger asChild>
           <div
-            tabIndex={0}
+            tabIndex={disabled ? -1 : 0}
             className={cn(
-              "flex h-full w-[120px] cursor-pointer items-center gap-1 px-2 text-xs focus:outline-none",
+              "flex h-full w-[120px] items-center gap-1 px-2 text-xs focus:outline-none",
+              disabled ? "pointer-events-none opacity-50" : "cursor-pointer",
               open
                 ? "text-foreground"
                 : selectedCount > 0

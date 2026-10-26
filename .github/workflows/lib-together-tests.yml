@@ -22,7 +22,7 @@ on:
 
 jobs:
   tests:
-    name: Together Python ${{matrix.python_version}}
+    name: Together ${{matrix.together_version}} Python ${{matrix.python_version}}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults:
@@ -33,6 +33,8 @@ jobs:
       fail-fast: true
       matrix:
         python_version: ${{ fromJSON(vars.PYTHON_VERSIONS) }}
+        # Both majors are supported: 3.x moved type re-exports and the chat host.
+        together_version: ["together>=2,<3", "together>=3"]
 
     steps:
       - name: Check out code
@@ -55,9 +57,11 @@ jobs:
           uv pip install --system -r test_requirements.txt
 
       - name: Install lib
+        env:
+          TOGETHER_VERSION: ${{ matrix.together_version }}
         run: |
           cd ./tests
-          uv pip install --system -r library_integration/together/requirements.txt
+          uv pip install --system -r library_integration/together/requirements.txt "$TOGETHER_VERSION"
 
       - name: Run tests
         run: |

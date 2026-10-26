@@ -16,6 +16,7 @@ import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.DoubleHistogram;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.LongHistogram;
+import io.opentelemetry.api.metrics.ObservableLongMeasurement;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.core.Response;
@@ -27,6 +28,7 @@ import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayDeque;
@@ -40,12 +42,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.function.ToLongFunction;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
@@ -103,10 +107,50 @@ public class AiLabelsTickService {
     private final AiLabelStatusDAO statusDAO;
     private final AiLabelsDAO labelsDAO;
 
+    // Only the throttle reads the clock: the tick's deadlines are measured from its own start.
+    private final Clock clock;
     private final Map<String, Instant> throttledUntil = new ConcurrentHashMap<>();
     private final AtomicLong inFlightBytes = new AtomicLong();
     private long sweeps;
+    // What the latest sweep saw, for the tick's dashboard: one immutable record, assigned once per sweep after all of
+    // it is known, so a scrape never mixes two sweeps. Null until the first sweep, so its gauges report nothing rather
+    // than a sweep of 0 buckets that never happened. A tick that skips the sweep (budget full, or not due on this pod)
+    // leaves it alone, so the gauges describe the latest sweep, and all three values are that sweep's.
+    private volatile SweepObservation lastSweep;
 
+    /** What one sweep found: its candidates, the workspaces they span, and the buckets swept before its deadline. */
+    record SweepObservation(long candidates, long workspaces, long bucketsReached) {
+    }
+
+    // The open jobs (submitted, not yet loaded) as this pod last knew them: one immutable record, assigned whenever the
+    // tick changes the set (a poll, the loads it wrote, an accepted submit), so a scrape never pairs one moment's count
+    // with another's oldest. Null until the first poll, so the gauges report nothing on a pod that never ticked.
+    private volatile JobsObservation lastJobs;
+
+    /** The open jobs at one moment: how many, and when the oldest was submitted (null with none open). */
+    record JobsObservation(long open, Instant oldestSubmittedAt) {
+
+        static final JobsObservation NONE = new JobsObservation(0, null);
+
+        static JobsObservation of(List<AiLabelJob> open) {
+            return new JobsObservation(open.size(),
+                    open.stream().map(AiLabelJob::submittedAt).min(Instant::compareTo).orElse(null));
+        }
+
+        JobsObservation plus(Instant submittedAt) {
+            return new JobsObservation(open + 1,
+                    oldestSubmittedAt == null || submittedAt.isBefore(oldestSubmittedAt)
+                            ? submittedAt
+                            : oldestSubmittedAt);
+        }
+
+        /** The oldest open job's age at {@code now}, in seconds; 0 with none open. */
+        double oldestOpenSeconds(Instant now) {
+            return oldestSubmittedAt == null ? 0 : Duration.between(oldestSubmittedAt, now).toMillis() / 1_000.0;
+        }
+    }
+
+    private final LongCounter jobsSubmitted;
     private final LongCounter itemsSubmitted;
     private final LongCounter itemsDone;
     private final LongCounter itemsFailed;
@@ -122,6 +166,7 @@ public class AiLabelsTickService {
     private final LongHistogram historyBytes;
     private final DoubleHistogram jobAge;
     private final DoubleHistogram phaseDuration;
+    private final DoubleHistogram renderDuration;
 
     @Inject
     public AiLabelsTickService(@NonNull @Config("aiLabels") AiLabelsConfig config,
@@ -130,6 +175,16 @@ public class AiLabelsTickService {
             @NonNull AiLabelTaskRegistry registry, @NonNull AiLabelRenderer renderer,
             @NonNull AiLabelItemBuilder itemBuilder, @NonNull AiLabelResultMapper resultMapper,
             @NonNull AiLabelStatusDAO statusDAO, @NonNull AiLabelsDAO labelsDAO) {
+        this(config, template, client, lockService, sweepService, registry, renderer, itemBuilder, resultMapper,
+                statusDAO, labelsDAO, Clock.systemUTC());
+    }
+
+    AiLabelsTickService(@NonNull AiLabelsConfig config, @NonNull TransactionTemplate template,
+            @NonNull InferenceClient client, @NonNull LockService lockService,
+            @NonNull AiLabelSweepService sweepService, @NonNull AiLabelTaskRegistry registry,
+            @NonNull AiLabelRenderer renderer, @NonNull AiLabelItemBuilder itemBuilder,
+            @NonNull AiLabelResultMapper resultMapper, @NonNull AiLabelStatusDAO statusDAO,
+            @NonNull AiLabelsDAO labelsDAO, @NonNull Clock clock) {
         this.config = config;
         this.template = template;
         this.client = client;
@@ -141,6 +196,7 @@ public class AiLabelsTickService {
         this.resultMapper = resultMapper;
         this.statusDAO = statusDAO;
         this.labelsDAO = labelsDAO;
+        this.clock = clock;
 
         var meter = GlobalOpenTelemetry.get().getMeter("opik.ai_labels");
         meter.gaugeBuilder("ai_labels.budget.in_flight").ofLongs().setUnit("By")
@@ -149,6 +205,35 @@ public class AiLabelsTickService {
         meter.gaugeBuilder("ai_labels.budget.limit").ofLongs().setUnit("By")
                 .setDescription("The global in-flight budget")
                 .buildWithCallback(measurement -> measurement.record(config.getBudgetBytes()));
+        meter.gaugeBuilder("ai_labels.tick.interval_seconds").setUnit("s")
+                .setDescription("How often the leader ticks")
+                .buildWithCallback(measurement -> measurement.record(config.getTickInterval().toMilliseconds() / 1e3));
+        meter.gaugeBuilder("ai_labels.tick.budget_seconds").setUnit("s")
+                .setDescription(
+                        "The time a tick may use: loading stops starting work at %.0f%% of it, the sweep at %.0f%%"
+                                .formatted(LOAD_SHARE * 100, SWEEP_SHARE * 100))
+                .buildWithCallback(measurement -> measurement.record(config.getTickBudget().toMilliseconds() / 1e3));
+        meter.gaugeBuilder("ai_labels.tick.workspaces").ofLongs()
+                .setDescription("Workspaces with candidates in the latest sweep")
+                .buildWithCallback(measurement -> observed(measurement, SweepObservation::workspaces));
+        meter.gaugeBuilder("ai_labels.sweep.candidates").ofLongs()
+                .setDescription("Traces the latest sweep found to label")
+                .buildWithCallback(measurement -> observed(measurement, SweepObservation::candidates));
+        meter.gaugeBuilder("ai_labels.sweep.buckets_reached").ofLongs()
+                .setDescription(
+                        "Buckets the latest sweep swept before its deadline; under ai_labels.sweep.buckets, it overran")
+                .buildWithCallback(measurement -> observed(measurement, SweepObservation::bucketsReached));
+        meter.gaugeBuilder("ai_labels.jobs.open").ofLongs()
+                .setDescription("Jobs submitted to opik-inference whose results are not yet loaded")
+                .buildWithCallback(measurement -> Optional.ofNullable(lastJobs)
+                        .ifPresent(jobs -> measurement.record(jobs.open())));
+        meter.gaugeBuilder("ai_labels.jobs.oldest_open_seconds").setUnit("s")
+                .setDescription("Age of the oldest open job, from its submit to now; 0 with none open")
+                .buildWithCallback(measurement -> Optional.ofNullable(lastJobs)
+                        .ifPresent(jobs -> measurement.record(jobs.oldestOpenSeconds(Instant.now()))));
+        this.jobsSubmitted = meter.counterBuilder("ai_labels.jobs.submitted")
+                .setDescription("Jobs opik-inference accepted and the tick recorded as open")
+                .build();
         this.itemsSubmitted = meter.counterBuilder("ai_labels.items.submitted").build();
         this.itemsDone = meter.counterBuilder("ai_labels.items.done").build();
         this.itemsFailed = meter.counterBuilder("ai_labels.items.failed").build();
@@ -177,6 +262,9 @@ public class AiLabelsTickService {
         this.jobAge = meter.histogramBuilder("ai_labels.jobs.age_seconds").setUnit("s").build();
         this.phaseDuration = meter.histogramBuilder("ai_labels.tick.phase_seconds").setUnit("s")
                 .setDescription("Duration of each tick phase: load, sweep, submit")
+                .build();
+        this.renderDuration = meter.histogramBuilder("ai_labels.render.duration_seconds").setUnit("s")
+                .setDescription("Wall time to read and render one chunk, by outcome: ok or one_at_a_time")
                 .build();
     }
 
@@ -250,6 +338,8 @@ public class AiLabelsTickService {
      */
     void pollAndLoad(Instant deadline) {
         var jobs = template.inTransaction(READ_ONLY, handle -> handle.attach(AiLabelJobDAO.class).submitted());
+        // Before loading, so a status call that fails still reports them; write() publishes what is left after.
+        lastJobs = JobsObservation.of(jobs);
         if (jobs.isEmpty()) {
             return;
         }
@@ -290,13 +380,17 @@ public class AiLabelsTickService {
                         }), config.getLoadConcurrency())
                 .collectList()
                 .block());
-        write(loaded);
+        write(jobs, loaded);
     }
 
     private record LoadedJob(AiLabelJob job, List<AiLabel> labels, List<AiLabelStatus> statuses) {
     }
 
-    private void write(List<LoadedJob> loaded) {
+    /**
+     * Writes the loaded jobs' rows and marks them loaded, then publishes the jobs still open: {@code polled}, every job
+     * the poll found, less the ones marked.
+     */
+    private void write(List<AiLabelJob> polled, List<LoadedJob> loaded) {
         if (loaded.isEmpty()) {
             return;
         }
@@ -317,6 +411,8 @@ public class AiLabelsTickService {
             dao.deleteItems(jobIds);
             return null;
         });
+        var loadedIds = Set.copyOf(jobIds);
+        lastJobs = JobsObservation.of(polled.stream().filter(job -> !loadedIds.contains(job.jobId())).toList());
         for (var result : loaded) {
             countOutcomes(result.job().endpoint(), result.statuses());
             inFlightBytes.addAndGet(-result.job().bytes());
@@ -430,6 +526,8 @@ public class AiLabelsTickService {
         var buckets = sweepService.buckets();
         int offset = (int) Math.floorMod(sweeps++, buckets.size());
         var candidates = new ArrayList<Candidate>();
+        // A bucket whose query a guard stopped still counts as swept: it ran, and ai_labels.sweep.guard_trips has it.
+        int swept = 0;
         for (int i = 0; i < buckets.size(); i++) {
             if (i > 0 && Instant.now().isAfter(deadline)) {
                 sweepOverrun.add(1);
@@ -438,8 +536,29 @@ public class AiLabelsTickService {
             }
             int index = (offset + i) % buckets.size();
             candidates.addAll(sweepService.sweep(buckets.get(index), index, tasks).collectList().block());
+            swept++;
         }
+        lastSweep = new SweepObservation(candidates.size(),
+                candidates.stream().map(Candidate::workspaceId).distinct().count(), swept);
         return candidates;
+    }
+
+    /** Records one value of the latest sweep, or nothing before the first. */
+    private void observed(ObservableLongMeasurement measurement, ToLongFunction<SweepObservation> value) {
+        var sweep = lastSweep;
+        if (sweep != null) {
+            measurement.record(value.applyAsLong(sweep));
+        }
+    }
+
+    /** The latest sweep on this pod, or null before the first. */
+    SweepObservation lastSweep() {
+        return lastSweep;
+    }
+
+    /** The open jobs as this pod last knew them, or null before its first poll. */
+    JobsObservation lastJobs() {
+        return lastJobs;
     }
 
     // --- 3. Submit ---
@@ -633,8 +752,11 @@ public class AiLabelsTickService {
         var tasks = refs.stream()
                 .flatMap(ref -> missingTasks(byTrace.get(ref.traceId()), tasksByName).stream())
                 .collect(Collectors.toSet());
+        long start = System.nanoTime();
         try {
-            return renderer.render(workspaceId, refs, tasks).collectList().block();
+            var outcomes = renderer.render(workspaceId, refs, tasks).collectList().block();
+            recordRenderDuration(start, "ok");
+            return outcomes;
         } catch (RuntimeException chunkError) {
             log.warn("ai-labels failed to render a chunk, workspace '{}', traces '{}'; rendering one at a time",
                     workspaceId, refs.size(), chunkError);
@@ -656,7 +778,12 @@ public class AiLabelsTickService {
                 failures.addAll(failedStatuses(workspaceId, candidate, missing, RENDER_ERROR, true, ""));
             }
         }
+        recordRenderDuration(start, "one_at_a_time");
         return outcomes;
+    }
+
+    private void recordRenderDuration(long startNanos, String outcome) {
+        renderDuration.record((System.nanoTime() - startNanos) / 1e9, Attributes.of(stringKey("outcome"), outcome));
     }
 
     /** One open job: its items, their traces' candidates (for the attempts), its request size and its cost. */
@@ -820,8 +947,11 @@ public class AiLabelsTickService {
             dao.insertItems(jobItems);
             return null;
         });
-        itemsSubmitted.add(items.size(), Attributes.of(stringKey("endpoint"), jobKey.endpoint().getValue()));
+        var endpoint = Attributes.of(stringKey("endpoint"), jobKey.endpoint().getValue());
+        jobsSubmitted.add(1, endpoint);
+        itemsSubmitted.add(items.size(), endpoint);
         inFlightBytes.addAndGet(buffer.cost);
+        lastJobs = Objects.requireNonNullElse(lastJobs, JobsObservation.NONE).plus(job.submittedAt());
         return SubmitOutcome.ACCEPTED;
     }
 
@@ -836,7 +966,7 @@ public class AiLabelsTickService {
             InferenceException exception, List<AiLabelStatus> failures) {
         if (exception.isQuotaExceeded()) {
             var backoff = Optional.ofNullable(exception.getRetryAfter()).orElse(DEFAULT_THROTTLE_BACKOFF);
-            throttledUntil.put(workspaceId, Instant.now().plus(backoff));
+            throttledUntil.put(workspaceId, clock.instant().plus(backoff));
             throttled.add(1, Attributes.of(stringKey("workspace_id"), workspaceId));
             log.info("ai-labels submit throttled, workspace '{}', backing off '{}'", workspaceId, backoff);
             return SubmitOutcome.THROTTLED;
@@ -872,7 +1002,7 @@ public class AiLabelsTickService {
         if (until == null) {
             return false;
         }
-        if (Instant.now().isBefore(until)) {
+        if (clock.instant().isBefore(until)) {
             return true;
         }
         throttledUntil.remove(workspaceId, until);
