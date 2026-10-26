@@ -29,6 +29,8 @@ export interface ExperimentPublic {
     createdBy?: string;
     lastUpdatedBy?: string;
     status?: OpikApi.ExperimentPublicStatus;
+    /** When the run stopped producing items. Unset while it may still produce more, whatever its status */
+    finishedAt?: Date;
     experimentScores?: OpikApi.ExperimentScorePublic[];
     promptVersion?: OpikApi.PromptVersionLinkPublic;
     promptVersions?: OpikApi.PromptVersionLinkPublic[];

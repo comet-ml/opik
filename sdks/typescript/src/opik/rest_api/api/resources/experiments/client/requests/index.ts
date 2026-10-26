@@ -12,4 +12,5 @@ export type { FindExperimentsRequest } from "./FindExperimentsRequest.js";
 export type { FindFeedbackScoreNamesRequest } from "./FindFeedbackScoreNamesRequest.js";
 export type { GetExperimentByIdRequest } from "./GetExperimentByIdRequest.js";
 export type { GetExperimentItemByIdRequest } from "./GetExperimentItemByIdRequest.js";
+export type { IdsHolder } from "./IdsHolder.js";
 export type { UpdateExperimentRequest } from "./UpdateExperimentRequest.js";
