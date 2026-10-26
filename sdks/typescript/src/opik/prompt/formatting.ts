@@ -16,19 +16,46 @@ function hasOwn(obj: object, key: string | number): boolean {
   return Object.prototype.hasOwnProperty.call(obj, key);
 }
 
-// Own-property-only access: inherited/prototype members (`constructor`,
-// `__proto__`, …) resolve to undefined, while genuine data fields carrying
-// those names are returned unchanged. This mirrors the Python SandboxedEnvironment,
-// which renders own fields like `_id` but not prototype-chain attributes.
-function ownProperty(obj: unknown, key: string | number): unknown {
+// Members that are never own data fields and only reach inherited/prototype
+// internals (e.g. `__proto__`, `constructor`).
+function isUnsafeInheritedKey(key: string | number): boolean {
+  const name = String(key);
+  return name.startsWith("__") || name === "constructor" || name === "prototype";
+}
+
+// Resolve `obj[key]` without exposing members that escape the supplied data.
+// Own properties always pass, so genuine fields such as `_id` or a field
+// literally named `constructor` render. On objects/functions only own
+// properties are returned; on primitives (string/number/boolean) ordinary
+// inherited methods still work but prototype-chain members do not. This mirrors
+// the Python SandboxedEnvironment, which renders own fields and object methods
+// but not dunder/prototype attributes.
+function resolveOwnProperty<T>(
+  obj: unknown,
+  key: string | number,
+  resolve: (target: unknown, key: string | number) => T
+): T | undefined {
   if (obj === undefined || obj === null) {
     return undefined;
   }
   const type = typeof obj;
-  if ((type === "object" || type === "function") && !hasOwn(obj as object, key)) {
+  if (type === "object" || type === "function") {
+    return hasOwn(obj as object, key) ? resolve(obj, key) : undefined;
+  }
+  // Primitive receiver: own properties (e.g. a string's length / index) and
+  // ordinary methods are fine, but prototype-chain members are not.
+  if (isUnsafeInheritedKey(key) && !hasOwn(obj as object, key)) {
     return undefined;
   }
-  return (obj as Record<string | number, unknown>)[key];
+  return resolve(obj, key);
+}
+
+function ownProperty(obj: unknown, key: string | number): unknown {
+  return resolveOwnProperty(
+    obj,
+    key,
+    (target, k) => (target as Record<string | number, unknown>)[k]
+  );
 }
 
 // Jinja2 templates render through a dedicated Environment with no loader, which
@@ -50,22 +77,14 @@ function renderJinja2Template(
 ): string {
   // memberLookup is shared module state; rendering is synchronous, so restrict
   // it to own-property access only for this call and always restore it. This
-  // blocks prototype-chain access on globals, literals and data (closing
-  // `{{ range.constructor(...) }}` and similar) without rejecting own fields.
+  // blocks prototype-chain access on globals, literals, primitives and data
+  // (closing `{{ range.constructor(...) }}` and similar) without rejecting own
+  // fields or ordinary methods.
   const originalMemberLookup = nunjucksRuntime.memberLookup;
-  nunjucksRuntime.memberLookup = (obj, val) => {
-    if (obj === undefined || obj === null) {
-      return undefined;
-    }
-    const type = typeof obj;
-    if (
-      (type === "object" || type === "function") &&
-      !hasOwn(obj as object, val)
-    ) {
-      return undefined;
-    }
-    return originalMemberLookup(obj, val);
-  };
+  nunjucksRuntime.memberLookup = (obj, val) =>
+    resolveOwnProperty(obj, val, (target, key) =>
+      originalMemberLookup(target, key)
+    );
   try {
     return jinja2Env.renderString(template, variables);
   } finally {

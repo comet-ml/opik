@@ -439,6 +439,14 @@ describe("Prompt - format()", () => {
           "own/ring"
         );
       });
+
+      it("should render ordinary methods and members on primitives", () => {
+        const prompt = makeJinja2Prompt(
+          "{{ name.toUpperCase() }} ({{ name.length }})"
+        );
+
+        expect(prompt.format({ name: "abc" })).toBe("ABC (3)");
+      });
     });
 
     describe("neutralizes template escapes", () => {
@@ -472,6 +480,22 @@ describe("Prompt - format()", () => {
         );
 
         expect(prompt.format({ users: [{ a: 1 }] })).toBe("0");
+      });
+
+      it("should resolve prototype members on primitives to empty", () => {
+        const prompt = makeJinja2Prompt(
+          "[{{ ''.__proto__ }}][{{ ''.constructor }}][{{ name.constructor }}]"
+        );
+
+        expect(prompt.format({ name: "abc" })).toBe("[][][]");
+      });
+
+      it("should not let attribute filters read inherited members of primitives", () => {
+        const prompt = makeJinja2Prompt(
+          "{{ names | selectattr('constructor') | list | length }}"
+        );
+
+        expect(prompt.format({ names: ["a", "b"] })).toBe("0");
       });
 
       it("should close file-including tags", () => {
