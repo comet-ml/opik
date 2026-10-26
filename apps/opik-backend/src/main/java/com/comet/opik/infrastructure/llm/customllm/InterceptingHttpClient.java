@@ -275,9 +275,7 @@ class InterceptingHttpClient implements HttpClient {
         // a raw substitution into the authority must not move the host, or the credential follows it elsewhere
         if (ProviderBaseUrlGuard.hasModelPlaceholderInAuthority(url)
                 && !AUTHORITY_MODEL_NAME.matcher(modelName).matches()) {
-            throw new ProviderRequestRefusedException(
-                    "model can't be substituted into the provider host or port, only letters, digits, '.' and '-' are allowed, model '%s'"
-                            .formatted(modelName));
+            throw new ProviderRequestRefusedException(ProviderRequestRefusedException.Reason.MODEL_IN_AUTHORITY);
         }
         if (modelName.indexOf('/') >= 0) {
             log.warn(

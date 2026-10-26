@@ -8,6 +8,7 @@ import com.comet.opik.infrastructure.llm.GeminiThinkingParams;
 import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
+import com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -19,7 +20,6 @@ import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.google.genai.GoogleGenAiChatModel;
 import dev.langchain4j.model.google.genai.GoogleGenAiStreamingChatModel;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
-import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.InternalServerErrorException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -147,8 +147,7 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
         var canonical = location.strip().toLowerCase(Locale.ROOT);
         // the SDK formats the location into the endpoint host, so anything else could send the request elsewhere
         if (!LOCATION.matcher(canonical).matches()) {
-            throw new BadRequestException(
-                    "Vertex AI location is not a valid region, location '%s'".formatted(location));
+            throw new ProviderRequestRefusedException(ProviderRequestRefusedException.Reason.VERTEX_AI_LOCATION);
         }
         return canonical;
     }
@@ -177,7 +176,7 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
 
             // the credentials refresh by posting to token_uri, which comes from the user-supplied key file
             if (!clientConfig.getVertexAIClient().tokenUris().contains(credentials.getTokenServerUri())) {
-                throw new BadRequestException("Vertex AI service account token_uri must be a Google token endpoint");
+                throw new ProviderRequestRefusedException(ProviderRequestRefusedException.Reason.VERTEX_AI_TOKEN_URI);
             }
 
             var builder = Client.builder()

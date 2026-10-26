@@ -114,7 +114,7 @@ public class ProviderBaseUrlGuard {
      */
     void validateRequest(@NonNull String url) {
         if (!isAllowed(() -> destinationGuard.validate(url))) {
-            throw new ProviderRequestRefusedException(REFUSED);
+            throw new ProviderRequestRefusedException(ProviderRequestRefusedException.Reason.DESTINATION);
         }
     }
 

@@ -21,6 +21,7 @@ import com.comet.opik.infrastructure.llm.antropic.AnthropicModelName;
 import com.comet.opik.infrastructure.llm.gemini.GeminiModelName;
 import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterModelName;
+import com.comet.opik.infrastructure.llm.vertexai.VertexAIModelName;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -58,6 +59,8 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.security.KeyPairGenerator;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -1325,7 +1328,7 @@ class ChatCompletionsResourceTest {
                     .build(), API_KEY, workspaceName, HttpStatus.SC_CREATED);
             var expected = new ErrorMessage(HttpStatus.SC_BAD_REQUEST,
                     "model can't be substituted into the provider host or port, only letters, digits, '.' and '-'"
-                            + " are allowed, model '%s'".formatted(deployment));
+                            + " are allowed");
 
             var request = ChatCompletionRequest.builder().stream(false).model(model).addUserMessage("ping").build();
             assertThat(chatCompletionsClient.create(API_KEY, workspaceName, request, HttpStatus.SC_BAD_REQUEST))
@@ -1334,6 +1337,51 @@ class ChatCompletionsResourceTest {
             var streamed = ChatCompletionRequest.builder().stream(true).model(model).addUserMessage("ping").build();
             assertThat(chatCompletionsClient.createAndGetStreamedError(API_KEY, workspaceName, streamed))
                     .containsExactly(expected);
+        }
+
+        private Stream<Arguments> vertexAiDestinationsAreRefused() {
+            return Stream.of(
+                    arguments("attacker.example/#", "https://oauth2.googleapis.com/token",
+                            "Vertex AI location is not a valid region"),
+                    arguments("us-central1", "https://attacker.example/token",
+                            "Vertex AI service account token_uri must be a Google token endpoint"));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("a Vertex AI location or token_uri that could send the request elsewhere is refused")
+        void vertexAiDestinationsAreRefused(String location, String tokenUri, String message) throws Exception {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            mockTargetWorkspace(workspaceName, UUID.randomUUID().toString());
+            llmProviderApiKeyResourceClient.createProviderApiKey(ProviderApiKey.builder()
+                    .provider(LlmProvider.VERTEX_AI)
+                    .apiKey(serviceAccountJson(tokenUri))
+                    .configuration(Map.of("location", location))
+                    .build(), API_KEY, workspaceName, HttpStatus.SC_CREATED);
+            var expected = new ErrorMessage(HttpStatus.SC_BAD_REQUEST, message);
+            var model = VertexAIModelName.GEMINI_2_5_FLASH.qualifiedName();
+
+            var request = ChatCompletionRequest.builder().stream(false).model(model).addUserMessage("ping").build();
+            assertThat(chatCompletionsClient.create(API_KEY, workspaceName, request, HttpStatus.SC_BAD_REQUEST))
+                    .isEqualTo(expected);
+
+            var streamed = ChatCompletionRequest.builder().stream(true).model(model).addUserMessage("ping").build();
+            assertThat(chatCompletionsClient.createAndGetStreamedError(API_KEY, workspaceName, streamed))
+                    .containsExactly(expected);
+        }
+
+        /** A key generated for the test: it never authenticates, the request is refused before any token call. */
+        private String serviceAccountJson(String tokenUri) throws Exception {
+            var keyPairGenerator = KeyPairGenerator.getInstance("RSA");
+            keyPairGenerator.initialize(2048);
+            var privateKey = Base64.getEncoder()
+                    .encodeToString(keyPairGenerator.generateKeyPair().getPrivate().getEncoded());
+            return """
+                    {"type": "service_account", "project_id": "test-project", "private_key_id": "test-key-id",
+                    "private_key": "-----BEGIN PRIVATE KEY-----\\n%s\\n-----END PRIVATE KEY-----\\n",
+                    "client_email": "test@test-project.iam.gserviceaccount.com", "client_id": "1234567890",
+                    "token_uri": "%s"}"""
+                    .formatted(privateKey, tokenUri);
         }
 
         @Test

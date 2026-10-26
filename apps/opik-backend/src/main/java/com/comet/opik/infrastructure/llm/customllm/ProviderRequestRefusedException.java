@@ -4,11 +4,27 @@ import dev.langchain4j.exception.NonRetriableException;
 import lombok.NonNull;
 
 /**
- * An outbound provider request refused before it left Opik, so no attempt can succeed. The message is user-facing.
+ * An outbound provider request refused before it left Opik, so no attempt can succeed. The message is returned to
+ * the caller, so it is always one of the fixed texts below and never carries input or detail.
  */
 public class ProviderRequestRefusedException extends NonRetriableException {
 
-    public ProviderRequestRefusedException(@NonNull String message) {
-        super(message);
+    public enum Reason {
+        DESTINATION(ProviderBaseUrlGuard.REFUSED),
+        MODEL_IN_AUTHORITY("model can't be substituted into the provider host or port, only letters, digits, '.' and"
+                + " '-' are allowed"),
+        VERTEX_AI_LOCATION("Vertex AI location is not a valid region"),
+        VERTEX_AI_TOKEN_URI("Vertex AI service account token_uri must be a Google token endpoint"),
+        ;
+
+        private final String message;
+
+        Reason(String message) {
+            this.message = message;
+        }
+    }
+
+    public ProviderRequestRefusedException(@NonNull Reason reason) {
+        super(reason.message);
     }
 }

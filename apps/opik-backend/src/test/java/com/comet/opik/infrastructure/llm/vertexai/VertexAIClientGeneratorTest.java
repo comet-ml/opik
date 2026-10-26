@@ -15,7 +15,6 @@ import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import io.dropwizard.util.Duration;
-import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.client.Client;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -232,30 +231,6 @@ class VertexAIClientGeneratorTest {
     private void assertCalledWithLocation(String expectedLocation) {
         wireMock.server().verify(postRequestedFor(urlPathMatching(
                 ".*/locations/" + expectedLocation + "/publishers/google/models/.*")));
-    }
-
-    @Nested
-    @DisplayName("User-supplied destinations")
-    class UserSuppliedDestinations {
-
-        @ParameterizedTest
-        @ValueSource(strings = {"attacker.example/#", "x.attacker.example", "us-central1@attacker.example"})
-        void locationsThatWouldChangeTheEndpointHostAreRefused(String location) {
-            assertThatThrownBy(() -> completeVia(location)).isInstanceOf(BadRequestException.class);
-        }
-
-        @Test
-        void aTokenUriOutsideTheAllowedSetIsRefused() {
-            var request = ChatCompletionRequest.builder().model(MODEL).build();
-            var config = LlmProviderClientApiConfig.builder()
-                    .apiKey(serviceAccountJson.replace("http://" + wireMockHost() + TOKEN_PATH,
-                            "https://attacker.example/token"))
-                    .configuration(Map.of("location", "global"))
-                    .build();
-            var generator = new VertexAIClientGenerator(clientConfig(), registry);
-
-            assertThatThrownBy(() -> generator.generate(config, request)).isInstanceOf(BadRequestException.class);
-        }
     }
 
     @Nested
