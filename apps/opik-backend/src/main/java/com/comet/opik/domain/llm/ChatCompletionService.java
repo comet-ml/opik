@@ -20,6 +20,7 @@ import dev.langchain4j.exception.RateLimitException;
 import dev.langchain4j.exception.TimeoutException;
 import dev.langchain4j.exception.UnsupportedFeatureException;
 import dev.langchain4j.internal.RetryUtils;
+import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
@@ -147,7 +148,7 @@ public class ChatCompletionService {
             @NonNull String workspaceId) {
         var resolved = paramResolver.resolve(modelParameters);
         logChanges(resolved.request().name(), resolved.changes());
-        var languageModelClient = llmProviderFactory.getLanguageModel(workspaceId, resolved.request());
+        var languageModelClient = getLanguageModel(workspaceId, resolved.request());
 
         ChatResponse chatResponse;
         try {
@@ -345,6 +346,19 @@ public class ChatCompletionService {
                 .filter(UnsupportedFeatureException.class::isInstance)
                 .map(UnsupportedFeatureException.class::cast)
                 .findFirst();
+    }
+
+    /**
+     * Building the client can already refuse the request (a Vertex AI location or token_uri), before scoreTrace's
+     * try, so that refusal is mapped here; anything else propagates as before.
+     */
+    private ChatModel getLanguageModel(String workspaceId, LlmAsJudgeModelParameters modelParameters) {
+        try {
+            return llmProviderFactory.getLanguageModel(workspaceId, modelParameters);
+        } catch (RuntimeException runtimeException) {
+            failIfRequestRefused(runtimeException);
+            throw runtimeException;
+        }
     }
 
     /**
