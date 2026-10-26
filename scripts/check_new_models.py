@@ -19,6 +19,10 @@ rest of that model's calls on that route are skipped. A provider error that name
 the call goes again without it, so one wrong value does not hide the others. Report-only: a failure is a result for
 a person to read, not an error. The exit code is non-zero only when the check itself could not run.
 
+A changed model that no picker offers (the backend serves it without a label) is listed as not checked rather than
+called: nobody can pick it, and most such models are retired, not chat models, or a dated copy of a listed one, so a
+failure there is one nobody acts on. --models still calls it.
+
 When nothing changed, it checks one cheap model per provider instead (from SMOKE_MODELS, when that model is in
 the registry), so a PR that touches only this script or its workflow still runs end to end.
 
@@ -72,6 +76,7 @@ PROVIDER_LABELS = {
 
 REASON_PRIORITY = {"new": 0, "changed": 1, "params": 2}
 OVER_CAP_NOTE = "over the call cap"
+NOT_IN_PICKER_NOTE = "not in a picker"
 
 SMOKE_MODELS = {
     "openai": "gpt-4o-mini",
@@ -828,6 +833,8 @@ def run(args: argparse.Namespace) -> int:
         probes = plan_probes(model, (served or {}).get("params"))
         if served is None:
             results += [CheckResult(p, "not checked", None, "the backend doesn't list this model") for p in probes]
+        elif mode == "changes" and not served.get("label"):
+            results += [CheckResult(p, "not checked", None, NOT_IN_PICKER_NOTE) for p in probes]
         elif not keys.get(model.provider):
             results += [CheckResult(p, "not checked", None, "no CI key") for p in probes]
         else:
