@@ -141,8 +141,12 @@ class StrictDestinationGuardResourceTest {
     @ParameterizedTest
     @ValueSource(strings = {"http://127.0.0.1:8081/tasks/log-level", "http://169.254.169.254/latest/meta-data",
             "http://10.0.0.1/v1", "http://10.0.0.1/{model}/v1", "http://{model}@10.0.0.1/v1",
-            "http://user:{model}@10.0.0.1/v1"})
-    @DisplayName("POST refuses a non-public base_url, wherever a {model} sits outside the host, and stores nothing")
+            "http://user:{model}@10.0.0.1/v1",
+            // a {model} host defers only the DNS check, not the scheme
+            "ftp://{model}.example.com/v1",
+            // the placeholder stand-in written literally is just an unresolvable host (RFC 2606)
+            "https://opik-model-a.invalid/v1"})
+    @DisplayName("POST refuses a base_url that isn't public http(s), wherever a {model} sits, and stores nothing")
     void createRefusesNonPublicBaseUrl(String baseUrl) {
         try (var response = client.callCreateProviderApiKey(customProvider(baseUrl), apiKey, workspaceName)) {
             assertRefused(response, BASE_URL_REFUSED);

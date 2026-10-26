@@ -342,7 +342,7 @@ Accepted values are `strict` and `relaxed` (case-insensitive). When the variable
 
 `LLM_PROVIDER_DESTINATION_SCHEME` sets which schemes `strict` mode accepts: `plaintext_or_tls` (the default on every launch path) allows `http` and `https`, as self-hosted model servers commonly run without TLS, and `https_only` allows `https` only. Values are case-insensitive, and any other value stops the backend at startup. `relaxed` mode doesn't check the scheme.
 
-Video URLs without a file extension get a `HEAD` request to detect their type. `LLM_PROVIDER_VIDEO_URL_DESTINATION_GUARD` (default `strict` on every launch path) applies the same destination check to that request; a refused URL is still sent to the model, just without the detected type. Set it to `relaxed` to detect the type of videos served from private networks.
+Video URLs without a file extension get a `HEAD` request to detect their type. `LLM_PROVIDER_VIDEO_URL_DESTINATION_GUARD` applies the same destination check to that request (default `relaxed` on Docker Compose and `strict` on every other launch path); a refused URL is still sent to the model, just without the detected type. Set it to `relaxed` to detect the type of videos served from private networks.
 
 Changing a provider's **URL** requires re-entering its API key (or OAuth2 credentials), since stored secrets are only ever sent to the endpoint they were saved for.
 
