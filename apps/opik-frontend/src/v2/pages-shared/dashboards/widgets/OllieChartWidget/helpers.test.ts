@@ -51,6 +51,11 @@ describe("comparisonWindow", () => {
     const end = new Date(midnight + 7 * DAY - 1).toISOString();
 
     expect(comparisonWindow(start, end, 0)!.label).toBe("7 days");
+    // A closed day ends a millisecond before midnight and still reads as a whole day.
+    expect(
+      comparisonWindow(start, new Date(midnight + DAY - 1).toISOString(), 0)!
+        .label,
+    ).toBe("24 hours");
     expect(comparisonWindow(start, start, 0)).toBeNull();
   });
 });

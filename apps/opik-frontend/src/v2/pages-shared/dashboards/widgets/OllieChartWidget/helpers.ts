@@ -32,9 +32,13 @@ export const comparisonWindow = (
   if (!Number.isFinite(length) || length <= 0) return null;
   // Under two days the window reads in hours ("Past 24 hours" starts on the hour, so it is 24 hours and a part of
   // one). Longer ranges start at midnight and count today's part as a day ("Past 30 days" is 29 days and today).
+  // A closed range ends a millisecond before its last midnight, so it rounds to the hour; an open one has run past it.
+  const hours = intervalEnd
+    ? Math.round(length / HOUR)
+    : Math.floor(length / HOUR);
   const label =
     length < 2 * DAY
-      ? plural(Math.max(1, Math.floor(length / HOUR)), "hour")
+      ? plural(Math.max(1, hours), "hour")
       : plural(
           start % DAY === 0
             ? Math.ceil(length / DAY)

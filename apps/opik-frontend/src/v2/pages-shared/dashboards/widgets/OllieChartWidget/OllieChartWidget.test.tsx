@@ -192,6 +192,9 @@ describe("OllieChartWidget saved widget", () => {
 });
 
 describe("OllieChartWidget KPI comparison", () => {
+  // When the value was fetched: an open-ended range, and so its comparison window, runs to it.
+  const fetchedAt = Date.now();
+
   beforeEach(() => {
     queryMock.mockReset();
     queryMock.mockReturnValue({
@@ -200,7 +203,7 @@ describe("OllieChartWidget KPI comparison", () => {
       isFetching: false,
       error: null,
       refetch: vi.fn(),
-      dataUpdatedAt: 1,
+      dataUpdatedAt: fetchedAt,
     } as never);
   });
 
@@ -235,8 +238,8 @@ describe("OllieChartWidget KPI comparison", () => {
       new Date(previous.intervalEnd!).getTime() -
       new Date(previous.intervalStart!).getTime();
     const currentLength =
-      Date.now() - new Date(current.intervalStart!).getTime();
-    expect(Math.abs(currentLength - previousLength)).toBeLessThan(60_000);
+      fetchedAt - new Date(current.intervalStart!).getTime();
+    expect(previousLength).toBe(currentLength);
     expect(screen.getByText(/previous 30 days/)).toBeTruthy();
   });
 
@@ -292,7 +295,40 @@ describe("OllieChartWidget KPI comparison", () => {
           isFetching: false,
           error: params.intervalEnd ? new Error("failed") : null,
           refetch: vi.fn(),
-          dataUpdatedAt: 1,
+          dataUpdatedAt: fetchedAt,
+        }) as never,
+    );
+    render(<OllieChartWidget preview />);
+
+    expect(screen.getByText("$5")).toBeTruthy();
+    expect(screen.queryByText(/vs previous/)).toBeNull();
+  });
+
+  it("shows no change while the comparison is still settling", () => {
+    const kpiWidget = {
+      ...ollieWidget("w-1"),
+      config: {
+        spec: {
+          kpi: {
+            value: "value",
+            format: "cost_total",
+            aggregate: "sum",
+            window_days: 30,
+          },
+        },
+        query: { id: "q-1" },
+      },
+    } as unknown as DashboardWidgetType;
+    setStore(kpiWidget);
+    queryMock.mockImplementation(
+      (params) =>
+        ({
+          data: [{ value: params.intervalEnd ? 2 : 5 }],
+          isPending: false,
+          isFetching: Boolean(params.intervalEnd),
+          error: null,
+          refetch: vi.fn(),
+          dataUpdatedAt: fetchedAt,
         }) as never,
     );
     render(<OllieChartWidget preview />);

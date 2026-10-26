@@ -147,32 +147,36 @@ const OllieChartWidget: React.FunctionComponent<
     [dateRange, hasDateRange],
   );
 
-  // When an open-ended range was last read. Its window runs to then; a refresh moves it, so the value and the window
-  // it is compared with end at the same moment.
-  const [readAt, setReadAt] = useState(() => Date.now());
-  useEffect(() => setReadAt(Date.now()), [intervalStart, intervalEnd]);
+  // When the value was last fetched. An open-ended range runs to that moment, so its comparison window ends there too
+  // and moves with every refetch (Refresh, refocus, autosave); until the value arrives there is nothing to compare.
+  const [fetchedAt, setFetchedAt] = useState(0);
 
   // A KPI on a date range compares with the window of the same length just before it.
   const previousWindow = useMemo(
     () =>
-      kpi?.window_days && intervalStart
-        ? comparisonWindow(intervalStart, intervalEnd, readAt)
+      kpi?.window_days && intervalStart && (intervalEnd || fetchedAt)
+        ? comparisonWindow(intervalStart, intervalEnd, fetchedAt)
         : null,
-    [kpi?.window_days, intervalStart, intervalEnd, readAt],
+    [kpi?.window_days, intervalStart, intervalEnd, fetchedAt],
   );
 
   // `live` also covers the moment before the dashboard id arrives (skeleton); only `canQuery` may hit the endpoint.
   const canQuery = Boolean(query?.id && dashboardId && queryWidgetId);
+  // Both queries run the widget's saved query; only their windows differ.
+  const savedQuery = {
+    dashboardId: dashboardId ?? "",
+    scope: dashboardScope ?? DASHBOARD_SCOPE.WORKSPACE,
+    widgetId: queryWidgetId ?? "",
+    queryId: query?.id ?? "",
+  };
   const {
     data: previousRows,
     error: previousError,
+    isFetching: previousFetching,
     refetch: refetchPrevious,
   } = useDashboardWidgetQuery(
     {
-      dashboardId: dashboardId ?? "",
-      scope: dashboardScope ?? DASHBOARD_SCOPE.WORKSPACE,
-      widgetId: queryWidgetId ?? "",
-      queryId: query?.id ?? "",
+      ...savedQuery,
       intervalStart: previousWindow?.intervalStart,
       intervalEnd: previousWindow?.intervalEnd,
     },
@@ -187,26 +191,18 @@ const OllieChartWidget: React.FunctionComponent<
     refetch,
     dataUpdatedAt,
   } = useDashboardWidgetQuery(
-    {
-      dashboardId: dashboardId ?? "",
-      scope: dashboardScope ?? DASHBOARD_SCOPE.WORKSPACE,
-      widgetId: queryWidgetId ?? "",
-      queryId: query?.id ?? "",
-      intervalStart,
-      intervalEnd,
-    },
+    { ...savedQuery, intervalStart, intervalEnd },
     // Only an unsaved widget falls back to the rows the chart was made with.
     { enabled: canQuery, retryNotFound },
   );
   const live = Boolean(query?.id && queryWidgetId);
+  useEffect(() => setFetchedAt(dataUpdatedAt), [dataUpdatedAt]);
 
-  // A refresh re-runs the comparison too, so the value and its change come from the same moment.
+  // A refresh re-runs the comparison too, so the value and its change come from the same moment. An open-ended
+  // range's comparison follows the value's new fetch time and fetches itself; a closed one is re-run here.
   const refresh = () => {
     refetch();
-    if (!previousWindow) return;
-    // An open-ended range has grown since it was read: move its comparison window, which fetches itself.
-    if (intervalEnd) refetchPrevious();
-    else setReadAt(Date.now());
+    if (previousWindow && intervalEnd) refetchPrevious();
   };
 
   // An autosave slower than the 404 retries saves the widget after its queries already gave up; run them once more.
@@ -334,9 +330,15 @@ const OllieChartWidget: React.FunctionComponent<
         <OllieKpi
           kpi={kpi}
           rows={chartRows}
-          // A failed comparison shows none, rather than the change on an older snapshot.
+          // A failed or settling comparison shows none, rather than the change on rows from another moment.
           previousRows={
-            live && previousWindow && !previousError ? previousRows : null
+            live &&
+            previousWindow &&
+            !previousError &&
+            !previousFetching &&
+            !isFetching
+              ? previousRows
+              : null
           }
           comparedWith={
             previousWindow ? `previous ${previousWindow.label}` : undefined
