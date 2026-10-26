@@ -241,6 +241,16 @@ public class AuthTokenProvider {
 
     // --- recipe execution ---
 
+    /**
+     * The same destination check {@link #fetchToken(ProviderAuthConfig)} applies, for callers validating a recipe
+     * before saving it.
+     *
+     * @throws DestinationGuardException when the token endpoint is refused
+     */
+    public void validateTokenUrl(@NonNull String tokenUrl) {
+        destinationGuard.validate(tokenUrl);
+    }
+
     FetchedToken fetchToken(@NonNull ProviderAuthConfig authConfig) {
         return fetchToken(authConfig, ORIGIN_REQUEST);
     }

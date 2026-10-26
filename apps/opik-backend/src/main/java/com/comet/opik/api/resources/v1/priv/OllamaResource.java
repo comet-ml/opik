@@ -43,10 +43,7 @@ public class OllamaResource {
     private final @NonNull OllamaService ollamaService;
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull OpikConfiguration config;
-
-    private void validateDestination(String baseUrl) {
-        new ProviderBaseUrlGuard(config.getLlmProviderClient().getDestinationGuard()).validate(baseUrl);
-    }
+    private final @NonNull ProviderBaseUrlGuard providerBaseUrlGuard;
 
     private boolean isOllamaEnabled() {
         return config.getServiceToggles() != null
@@ -77,7 +74,7 @@ public class OllamaResource {
 
         log.info("Testing Ollama connection for workspace '{}'",
                 requestContext.get().getWorkspaceName());
-        validateDestination(request.baseUrl());
+        providerBaseUrlGuard.validate(request.baseUrl());
 
         OllamaConnectionTestResponse response = ollamaService.testConnection(request.baseUrl(), request.apiKey())
                 .block();
@@ -112,7 +109,7 @@ public class OllamaResource {
 
         log.info("Fetching Ollama models for workspace '{}'",
                 requestContext.get().getWorkspaceName());
-        validateDestination(request.baseUrl());
+        providerBaseUrlGuard.validate(request.baseUrl());
 
         List<OllamaModel> models = ollamaService.listModels(request.baseUrl(), request.apiKey())
                 .block();

@@ -2,6 +2,7 @@ package com.comet.opik.domain.llm;
 
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
+import com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterDecisionModel;
 import com.comet.opik.utils.ChunkedOutputHandlers;
 import com.comet.opik.utils.HttpStatusRetryability;
@@ -86,6 +87,7 @@ public class ChatCompletionService {
                     () -> failFastOnUnsupportedFeature(() -> llmProviderClient.generate(request, workspaceId)));
         } catch (RuntimeException runtimeException) {
             failIfUnsupportedFeature(runtimeException);
+            failIfRequestRefused(runtimeException);
 
             Optional<ErrorMessage> providerError = llmProviderClient.getLlmProviderError(runtimeException);
 
@@ -158,6 +160,7 @@ public class ChatCompletionService {
             return chatResponse;
         } catch (RuntimeException runtimeException) {
             failIfUnsupportedFeature(runtimeException);
+            failIfRequestRefused(runtimeException);
 
             // Report the status the provider actually sent, same as create() and the streaming handler.
             // BaseRedisSubscriber classifies a ClientErrorException by that status, so a truthful 429 is
@@ -201,7 +204,8 @@ public class ChatCompletionService {
      * original exception is kept as the cause, so {@link #failIfUnsupportedFeature} still recognises it downstream.
      */
     private <T> T failFastOnUnsupportedFeature(Callable<T> action) throws Exception {
-        return failFastWhen(action, this::isUnsupportedFeature);
+        return failFastWhen(action, runtimeException -> isUnsupportedFeature(runtimeException)
+                || isRequestRefused(runtimeException));
     }
 
     /**
@@ -228,12 +232,18 @@ public class ChatCompletionService {
      */
     private <T> T failFastOnNonRetriableFailure(Callable<T> action) throws Exception {
         return failFastWhen(action, runtimeException -> isUnsupportedFeature(runtimeException)
+                || isRequestRefused(runtimeException)
                 || isPermanentProviderFailure(runtimeException));
     }
 
     /** A feature the selected provider cannot serve, so no number of attempts will change the answer. */
     private boolean isUnsupportedFeature(RuntimeException runtimeException) {
         return findUnsupportedFeature(runtimeException).isPresent();
+    }
+
+    /** A request Opik refused to send, so no attempt can reach the provider. */
+    private boolean isRequestRefused(RuntimeException runtimeException) {
+        return findRequestRefused(runtimeException).isPresent();
     }
 
     /** A status the provider actually sent that {@link HttpStatusRetryability} classifies as never succeeding. */
@@ -334,6 +344,31 @@ public class ChatCompletionService {
         return ExceptionUtils.getThrowableList(throwable).stream()
                 .filter(UnsupportedFeatureException.class::isInstance)
                 .map(UnsupportedFeatureException.class::cast)
+                .findFirst();
+    }
+
+    /**
+     * Opik's own HTTP client refused the request before sending it, e.g. a destination the guard doesn't allow. The
+     * provider was never reached, so this is the caller's 400, never a 500, and its message is already user-facing.
+     * Logged by the client that refused it.
+     */
+    private void failIfRequestRefused(RuntimeException runtimeException) {
+        findRequestRefused(runtimeException).ifPresent(requestRefused -> {
+            var message = requestRefused.getMessage();
+            throw new BadRequestException(
+                    message,
+                    Response.status(Response.Status.BAD_REQUEST)
+                            .entity(new ErrorMessage(Response.Status.BAD_REQUEST.getStatusCode(), message))
+                            .build(),
+                    runtimeException);
+        });
+    }
+
+    /** Walks the cause chain like {@link #findUnsupportedFeature}. */
+    private Optional<ProviderRequestRefusedException> findRequestRefused(Throwable throwable) {
+        return ExceptionUtils.getThrowableList(throwable).stream()
+                .filter(ProviderRequestRefusedException.class::isInstance)
+                .map(ProviderRequestRefusedException.class::cast)
                 .findFirst();
     }
 
@@ -471,6 +506,13 @@ public class ChatCompletionService {
                 var message = buildUnsupportedFeatureMessage(unsupportedFeature.get());
                 log.warn(message);
                 handlers.handleError(new ErrorMessage(Response.Status.BAD_REQUEST.getStatusCode(), message));
+                return;
+            }
+
+            var requestRefused = findRequestRefused(throwable);
+            if (requestRefused.isPresent()) {
+                handlers.handleError(new ErrorMessage(Response.Status.BAD_REQUEST.getStatusCode(),
+                        requestRefused.get().getMessage()));
                 return;
             }
 

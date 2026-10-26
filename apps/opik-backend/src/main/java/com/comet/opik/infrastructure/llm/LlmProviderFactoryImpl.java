@@ -49,6 +49,7 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
     private final @NonNull LlmProviderApiKeyService llmProviderApiKeyService;
     private final @NonNull OpikConfiguration configuration;
     private final @NonNull LlmModelRegistryService registryService;
+    private final @NonNull ProviderBaseUrlGuard providerBaseUrlGuard;
     private final Map<LlmProvider, LlmServiceProvider> services = new EnumMap<>(LlmProvider.class);
 
     public void register(LlmProvider llmProvider, LlmServiceProvider service) {
@@ -75,15 +76,16 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
             .filter(LlmProvider::supportsProviderName)
             .collect(Collectors.toUnmodifiableSet());
 
-    // OPIK_FREE's URL is operator-configured; the others always build their client through
-    // CustomLlmClientGenerator, which checks every request URL itself
+    /**
+     * OPIK_FREE's URL is operator-configured; the others always build their client through
+     * CustomLlmClientGenerator, which checks every request URL itself.
+     */
     private static final Set<LlmProvider> BASE_URL_GUARD_EXEMPT_PROVIDERS = Set.of(
             LlmProvider.OPIK_FREE, LlmProvider.CUSTOM_LLM, LlmProvider.BEDROCK, LlmProvider.OLLAMA);
 
     private LlmProviderClientApiConfig buildConfig(ProviderApiKey providerConfig, String workspaceId) {
         if (!BASE_URL_GUARD_EXEMPT_PROVIDERS.contains(providerConfig.provider())) {
-            new ProviderBaseUrlGuard(this.configuration.getLlmProviderClient().getDestinationGuard())
-                    .validate(providerConfig.baseUrl());
+            providerBaseUrlGuard.validate(providerConfig.baseUrl());
         }
 
         var configuration = Optional.ofNullable(providerConfig.configuration()).orElse(Map.of());

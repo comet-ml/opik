@@ -72,8 +72,11 @@ class CustomLlmProviderTest {
         var clientConfig = new LlmProviderClientConfig();
         clientConfig.setLogRequests(false);
         clientConfig.setLogResponses(false);
-        clientConfig.setDestinationGuard(DestinationGuard.Mode.RELAXED);
-        clientGenerator = new CustomLlmClientGenerator(clientConfig, mock(AuthTokenProvider.class));
+        var relaxedGuard = ProviderBaseUrlGuard.builder()
+                .mode(DestinationGuard.Mode.RELAXED)
+                .scheme(DestinationGuard.Scheme.PLAINTEXT_OR_TLS)
+                .build();
+        clientGenerator = new CustomLlmClientGenerator(clientConfig, relaxedGuard, mock(AuthTokenProvider.class));
     }
 
     @AfterAll

@@ -20,6 +20,7 @@ import com.comet.opik.infrastructure.llm.antropic.AnthropicModule;
 import com.comet.opik.infrastructure.llm.customllm.AuthTokenProvider;
 import com.comet.opik.infrastructure.llm.customllm.CustomLlmClientGenerator;
 import com.comet.opik.infrastructure.llm.customllm.CustomLlmModule;
+import com.comet.opik.infrastructure.llm.customllm.ProviderBaseUrlGuard;
 import com.comet.opik.infrastructure.llm.gemini.GeminiClientGenerator;
 import com.comet.opik.infrastructure.llm.gemini.GeminiModelName;
 import com.comet.opik.infrastructure.llm.gemini.GeminiModule;
@@ -49,7 +50,6 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
-import java.net.URI;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -68,6 +68,11 @@ import static org.mockito.Mockito.when;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class LlmProviderFactoryTest {
+    private static final ProviderBaseUrlGuard RELAXED_GUARD = ProviderBaseUrlGuard.builder()
+            .mode(DestinationGuard.Mode.RELAXED)
+            .scheme(DestinationGuard.Scheme.PLAINTEXT_OR_TLS)
+            .build();
+
     private LlmProviderClientConfig llmProviderClientConfig;
     private LlmModelRegistryService registryService;
 
@@ -92,7 +97,6 @@ class LlmProviderFactoryTest {
         freeModelConfig.setBaseUrl("https://test-endpoint.example.com");
         freeModelConfig.setApiKey("test-api-key");
         when(mockConfig.getFreeModel()).thenReturn(freeModelConfig);
-        when(mockConfig.getLlmProviderClient()).thenReturn(llmProviderClientConfig);
         return mockConfig;
     }
 
@@ -112,7 +116,8 @@ class LlmProviderFactoryTest {
 
         // SUT - use config with disabled free model to not interfere with other tests
         var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
-        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService);
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService,
+                RELAXED_GUARD);
 
         AnthropicModule anthropicModule = new AnthropicModule();
         GeminiModule geminiModule = new GeminiModule();
@@ -187,12 +192,13 @@ class LlmProviderFactoryTest {
 
         // SUT - use config with disabled free model
         var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
-        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService);
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService,
+                RELAXED_GUARD);
 
         // Register custom LLM service (required for getService to work)
         CustomLlmModule customLlmModule = new CustomLlmModule();
         CustomLlmClientGenerator customLlmClientGenerator = customLlmModule.clientGenerator(llmProviderClientConfig,
-                mock(AuthTokenProvider.class));
+                RELAXED_GUARD, mock(AuthTokenProvider.class));
         customLlmModule.llmServiceProvider(llmProviderFactory, customLlmClientGenerator);
 
         // When & Then - Should successfully get the service
@@ -224,12 +230,13 @@ class LlmProviderFactoryTest {
 
         // SUT - use config with disabled free model
         var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
-        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService);
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService,
+                RELAXED_GUARD);
 
         // Register custom LLM service (required for getService to work)
         CustomLlmModule customLlmModule = new CustomLlmModule();
         CustomLlmClientGenerator customLlmClientGenerator = customLlmModule.clientGenerator(llmProviderClientConfig,
-                mock(AuthTokenProvider.class));
+                RELAXED_GUARD, mock(AuthTokenProvider.class));
         customLlmModule.llmServiceProvider(llmProviderFactory, customLlmClientGenerator);
 
         // When & Then - Should throw BadRequestException
@@ -252,17 +259,17 @@ class LlmProviderFactoryTest {
                         .apiKey(EncryptionUtils.encrypt(UUID.randomUUID().toString()))
                         .baseUrl(baseUrl)
                         .build()));
-        var strictClientConfig = new LlmProviderClientConfig();
-        strictClientConfig.setDestinationGuard(DestinationGuard.Mode.STRICT);
         var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
-        when(mockConfig.getLlmProviderClient()).thenReturn(strictClientConfig);
+        var strictGuard = RELAXED_GUARD.toBuilder().mode(DestinationGuard.Mode.STRICT).build();
         // no services registered: if the guard let this through, getService would fail as unsupported instead
-        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService);
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService,
+                strictGuard);
 
         assertThatThrownBy(() -> llmProviderFactory.getService(workspaceId, OpenaiModelName.GPT_4_1_MINI.toString()))
                 .isInstanceOf(BadRequestException.class)
-                .hasMessageContaining("resolves to a private or internal address, host '%s'"
-                        .formatted(URI.create(baseUrl).getHost()));
+                .hasMessage("the provider base_url was refused: it must be a valid URL with an allowed scheme that"
+                        + " resolves to a public address (self-hosted deployments with providers on internal networks"
+                        + " can set LLM_PROVIDER_DESTINATION_GUARD=relaxed)");
     }
 
     private static Stream<Arguments> testCustomLlmProviderMatching_shouldMatch() {
@@ -366,7 +373,8 @@ class LlmProviderFactoryTest {
 
         // SUT - config with enabled free model
         var mockConfig = createMockConfigWithFreeModel(true, "gpt-4o-mini", "openai");
-        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService);
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService,
+                RELAXED_GUARD);
 
         // When - use the hardcoded model constant
         LlmProvider result = llmProviderFactory.getLlmProvider(FreeModelConfig.FREE_MODEL);
@@ -383,7 +391,8 @@ class LlmProviderFactoryTest {
 
         // SUT - config with disabled built-in provider
         var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
-        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService);
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService,
+                RELAXED_GUARD);
 
         // When & Then - Should throw because model is not recognized when disabled
         assertThatThrownBy(() -> llmProviderFactory.getLlmProvider(FreeModelConfig.FREE_MODEL))
@@ -401,7 +410,8 @@ class LlmProviderFactoryTest {
 
         // SUT - config with enabled free model
         var mockConfig = createMockConfigWithFreeModel(true, actualModel, spanProvider);
-        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService);
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService,
+                RELAXED_GUARD);
 
         // When - use the hardcoded model constant
         LlmProviderFactory.ResolvedModelInfo result = llmProviderFactory
@@ -421,7 +431,8 @@ class LlmProviderFactoryTest {
 
         // SUT - config with enabled free model (should not interfere with OpenAI models)
         var mockConfig = createMockConfigWithFreeModel(true, "gpt-4o-mini", "openai");
-        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService);
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService,
+                RELAXED_GUARD);
 
         // When
         LlmProviderFactory.ResolvedModelInfo result = llmProviderFactory.getResolvedModelInfo(openaiModel);
@@ -437,7 +448,8 @@ class LlmProviderFactoryTest {
         // setup
         LlmProviderApiKeyService llmProviderApiKeyService = mock(LlmProviderApiKeyService.class);
         var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
-        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService);
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService,
+                RELAXED_GUARD);
 
         // When
         LlmProvider result = llmProviderFactory.getLlmProvider("openrouter/some-future-router");
@@ -452,7 +464,8 @@ class LlmProviderFactoryTest {
     void testGetLlmProvider_returnsOpenRouter_forDecisionModels(OpenRouterDecisionModel model) {
         LlmProviderApiKeyService llmProviderApiKeyService = mock(LlmProviderApiKeyService.class);
         var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
-        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService);
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService,
+                RELAXED_GUARD);
 
         assertThat(llmProviderFactory.getLlmProvider(model.toString())).isEqualTo(LlmProvider.OPEN_ROUTER);
     }
@@ -470,7 +483,8 @@ class LlmProviderFactoryTest {
                         .headers(Map.of("X-Custom", "value"))
                         .build()));
         var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
-        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService);
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService,
+                RELAXED_GUARD);
 
         var clientConfig = llmProviderFactory.getClientApiConfig(workspaceId,
                 OpenRouterDecisionModel.TYPESAFE_JEV_LATEST.toString());
@@ -496,7 +510,8 @@ class LlmProviderFactoryTest {
                         .configuration(Map.of("models", model))
                         .build()));
         var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
-        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService);
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService,
+                RELAXED_GUARD);
 
         assertThat(llmProviderFactory.getLlmProvider(model)).isEqualTo(LlmProvider.CUSTOM_LLM);
         assertThat(llmProviderFactory.getClientApiConfig(workspaceId, model).provider()).isEqualTo(keyProvider);
@@ -509,7 +524,8 @@ class LlmProviderFactoryTest {
     void testGetStructuredOutputStrategy_returnsToolCalling_whenRegistryModelSupportsIt() {
         LlmProviderApiKeyService llmProviderApiKeyService = mock(LlmProviderApiKeyService.class);
         var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
-        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService);
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService,
+                RELAXED_GUARD);
 
         // gpt-4o has structuredOutput: true in the default YAML
         var strategy = llmProviderFactory.getStructuredOutputStrategy("gpt-4o");
@@ -522,7 +538,8 @@ class LlmProviderFactoryTest {
     void testGetStructuredOutputStrategy_returnsInstruction_whenRegistryModelDoesNotSupportIt() {
         LlmProviderApiKeyService llmProviderApiKeyService = mock(LlmProviderApiKeyService.class);
         var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
-        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService);
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService,
+                RELAXED_GUARD);
 
         // Model from test file with no structuredOutput (defaults to false)
         var strategy = llmProviderFactory.getStructuredOutputStrategy("claude-sonnet-4-6");
@@ -536,7 +553,7 @@ class LlmProviderFactoryTest {
     void openAiParamsRefuseTemperatureForRegistryReasoningModels(String model, boolean expected) {
         var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
         var llmProviderFactory = new LlmProviderFactoryImpl(mock(LlmProviderApiKeyService.class), mockConfig,
-                registryService);
+                registryService, RELAXED_GUARD);
 
         assertThat(llmProviderFactory.openAiParams(model)
                 .map(params -> Boolean.FALSE.equals(params.temperature().accepted()))
@@ -562,7 +579,8 @@ class LlmProviderFactoryTest {
                         .apiKey(EncryptionUtils.encrypt(UUID.randomUUID().toString()))
                         .build()));
         var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
-        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registry);
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registry,
+                RELAXED_GUARD);
         var vertexAIModule = new VertexAIModule();
         vertexAIModule.llmServiceProvider(llmProviderFactory,
                 vertexAIModule.clientGenerator(llmProviderClientConfig, registry));
@@ -578,7 +596,7 @@ class LlmProviderFactoryTest {
         registryConfig.setCuratedResource("");
         var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
         var llmProviderFactory = new LlmProviderFactoryImpl(mock(LlmProviderApiKeyService.class), mockConfig,
-                new LlmModelRegistryService(registryConfig));
+                new LlmModelRegistryService(registryConfig), RELAXED_GUARD);
 
         assertThat(llmProviderFactory.openAiParams("o3")).hasValueSatisfying(params -> {
             assertThat(params.temperature().accepted()).isFalse();
@@ -597,7 +615,7 @@ class LlmProviderFactoryTest {
                         LlmModelDefinition.builder().id("openai/gpt-5-mini").reasoning(true).build())));
         var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
         var llmProviderFactory = new LlmProviderFactoryImpl(mock(LlmProviderApiKeyService.class), mockConfig,
-                registry);
+                registry, RELAXED_GUARD);
 
         assertThat(llmProviderFactory.openAiParams("openai/gpt-5-mini")).isEmpty();
     }

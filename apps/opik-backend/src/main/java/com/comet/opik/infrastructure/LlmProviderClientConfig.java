@@ -56,5 +56,17 @@ public class LlmProviderClientConfig {
      * Destination policy for user-configured provider base URLs: {@code strict} refuses private and
      * internal destinations, {@code relaxed} allows them for self-hosted providers on internal networks.
      */
-    @NotNull private DestinationGuard.Mode destinationGuard = DestinationGuard.Mode.STRICT;
+    @NotNull private DestinationGuard.Mode destinationGuard;
+
+    /**
+     * Schemes allowed for user-configured provider base URLs: {@code plaintext_or_tls} also accepts http, which
+     * self-hosted model servers commonly use; {@code https_only} refuses it.
+     */
+    @NotNull private DestinationGuard.Scheme destinationScheme;
+
+    /**
+     * Destination policy for the HEAD request that detects the MIME type of an extensionless video URL. The URL
+     * comes from any caller's message, and a refusal only loses the hint.
+     */
+    @NotNull private DestinationGuard.Mode videoUrlDestinationGuard;
 }

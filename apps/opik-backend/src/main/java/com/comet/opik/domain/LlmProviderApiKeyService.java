@@ -14,7 +14,6 @@ import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.llm.customllm.AuthTokenException;
 import com.comet.opik.infrastructure.llm.customllm.AuthTokenProvider;
 import com.comet.opik.infrastructure.llm.customllm.ProviderBaseUrlGuard;
-import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.comet.opik.infrastructure.net.DestinationGuardException;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
@@ -68,10 +67,14 @@ public interface LlmProviderApiKeyService {
 class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
 
     private static final String PROVIDER_API_KEY_ALREADY_EXISTS = "Api key for this provider already exists";
+    private static final String TOKEN_URL_REFUSED = "the auth_config token_url was refused: it must be a valid https URL"
+            + " that resolves to a public address (self-hosted deployments with internal auth services can set"
+            + " LLM_PROVIDER_TOKEN_AUTH_DESTINATION_GUARD=relaxed)";
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull TransactionTemplate template;
     private final @NonNull OpikConfiguration configuration;
     private final @NonNull AuthTokenProvider authTokenProvider;
+    private final @NonNull ProviderBaseUrlGuard providerBaseUrlGuard;
 
     @Override
     public ProviderApiKey find(@NonNull UUID id, @NonNull String workspaceId) {
@@ -133,7 +136,7 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
             @NonNull String workspaceId) {
         // the free provider always comes from operator config, so a stored row is never used
         if (providerApiKey.provider() == LlmProvider.OPIK_FREE) {
-            throw new BadRequestException("the '%s' provider is built in and can't be saved"
+            throw new BadRequestException("provider is built in and can't be saved, provider '%s'"
                     .formatted(LlmProvider.OPIK_FREE.getValue()));
         }
         validateDestinations(providerApiKey.baseUrl(), providerApiKey.provider(),
@@ -227,7 +230,7 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
         ProviderApiKey storedProvider = request.providerId() != null
                 ? find(request.providerId(), workspaceId)
                 : null;
-        if (storedProvider != null && !storedProvider.provider().supportsDynamicTokenAuth()) {
+        if (storedProvider != null && !storedProvider.provider().routesThroughCustomLlmClient()) {
             throw new BadRequestException(
                     "auth_config is only supported for custom LLM, Bedrock, and Ollama providers");
         }
@@ -264,7 +267,7 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
         if (incoming.isEmpty()) {
             return new AuthConfigUpdate(update, true, null);
         }
-        if (!stored.provider().supportsDynamicTokenAuth()) {
+        if (!stored.provider().routesThroughCustomLlmClient()) {
             throw new BadRequestException(
                     "auth_config is only supported for custom LLM, Bedrock, and Ollama providers");
         }
@@ -285,14 +288,14 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
     }
 
     private void validateDestinations(String baseUrl, LlmProvider provider, ProviderAuthConfig authConfig) {
-        new ProviderBaseUrlGuard(configuration.getLlmProviderClient().getDestinationGuard()).validate(baseUrl,
-                provider);
+        providerBaseUrlGuard.validate(baseUrl, provider);
         if (authConfig != null && StringUtils.isNotBlank(authConfig.tokenUrl())) {
             try {
-                DestinationGuard.builder().mode(configuration.getLlmProviderTokenAuth().getDestinationGuard()).build()
-                        .validate(authConfig.tokenUrl());
+                authTokenProvider.validateTokenUrl(authConfig.tokenUrl());
             } catch (DestinationGuardException exception) {
-                throw new BadRequestException(exception.getMessage(), exception);
+                // the guard's detail stays in the logs: it tells a caller how our network resolves their host
+                log.warn("Refused auth_config token_url", exception);
+                throw new BadRequestException(TOKEN_URL_REFUSED);
             }
         }
     }

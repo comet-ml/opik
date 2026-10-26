@@ -11,7 +11,6 @@ import dev.langchain4j.http.client.sse.ServerSentEvent;
 import dev.langchain4j.http.client.sse.ServerSentEventContext;
 import dev.langchain4j.http.client.sse.ServerSentEventListener;
 import dev.langchain4j.http.client.sse.ServerSentEventParser;
-import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -126,7 +125,7 @@ class InterceptingHttpClient implements HttpClient {
         HttpRequest mutated;
         try {
             mutated = mutate(request);
-        } catch (BadRequestException exception) {
+        } catch (ProviderRequestRefusedException exception) {
             listener.onError(exception);
             return;
         }
@@ -276,8 +275,8 @@ class InterceptingHttpClient implements HttpClient {
         // a raw substitution into the authority must not move the host, or the credential follows it elsewhere
         if (ProviderBaseUrlGuard.hasModelPlaceholderInAuthority(url)
                 && !AUTHORITY_MODEL_NAME.matcher(modelName).matches()) {
-            throw new BadRequestException(
-                    "model '%s' can't be substituted into the provider host or port, only letters, digits, '.' and '-' are allowed"
+            throw new ProviderRequestRefusedException(
+                    "model can't be substituted into the provider host or port, only letters, digits, '.' and '-' are allowed, model '%s'"
                             .formatted(modelName));
         }
         if (modelName.indexOf('/') >= 0) {

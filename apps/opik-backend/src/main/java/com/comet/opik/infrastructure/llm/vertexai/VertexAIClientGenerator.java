@@ -147,7 +147,8 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
         var canonical = location.strip().toLowerCase(Locale.ROOT);
         // the SDK formats the location into the endpoint host, so anything else could send the request elsewhere
         if (!LOCATION.matcher(canonical).matches()) {
-            throw new BadRequestException("Vertex AI location '%s' is not a valid region".formatted(location));
+            throw new BadRequestException(
+                    "Vertex AI location is not a valid region, location '%s'".formatted(location));
         }
         return canonical;
     }

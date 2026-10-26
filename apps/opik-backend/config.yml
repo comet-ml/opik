@@ -1649,6 +1649,19 @@ llmProviderClient:
   #   - relaxed: no destination restrictions, for deployments whose providers run on internal networks
   # Description: Destination policy for user-configured LLM provider base URLs
   destinationGuard: ${LLM_PROVIDER_DESTINATION_GUARD:-strict}
+  # Default: plaintext_or_tls
+  # Values: ['plaintext_or_tls', 'https_only']
+  #   - plaintext_or_tls: http and https, as self-hosted model servers commonly run without TLS
+  #   - https_only: https only
+  # Description: Schemes allowed for user-configured LLM provider base URLs, checked in strict mode only
+  destinationScheme: ${LLM_PROVIDER_DESTINATION_SCHEME:-plaintext_or_tls}
+  # Default: strict
+  # Values: ['strict', 'relaxed']
+  #   - strict: video URLs must be http(s) and resolve only to public addresses
+  #   - relaxed: no destination restrictions
+  # Description: Destination policy for the HEAD request that detects the MIME type of an extensionless video URL.
+  #   The URL comes from any caller's message, and a refusal only loses the hint
+  videoUrlDestinationGuard: ${LLM_PROVIDER_VIDEO_URL_DESTINATION_GUARD:-strict}
   # Configuration for OpenAI client
   openAiClient:
     # Default:

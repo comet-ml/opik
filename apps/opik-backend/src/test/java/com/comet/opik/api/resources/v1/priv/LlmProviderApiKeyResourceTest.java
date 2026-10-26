@@ -685,6 +685,8 @@ class LlmProviderApiKeyResourceTest {
 
         private ProviderApiKey customProviderWithAuthConfig() {
             return factory.manufacturePojo(ProviderApiKey.class).toBuilder()
+                    .createdBy(USER)
+                    .lastUpdatedBy(USER)
                     .provider(LlmProvider.CUSTOM_LLM)
                     .providerName(UUID.randomUUID().toString())
                     .apiKey(null)
@@ -701,7 +703,7 @@ class LlmProviderApiKeyResourceTest {
             var replacement = tokenAuthConfig().toBuilder()
                     .credentials(List.of(
                             credential("grant_type", "client_credentials", false),
-                            credential("client_id", "opik-prod", false),
+                            credential("client_id", "opik-rotated", false),
                             credential("client_secret", "rotated-s3cr3t", true)))
                     .build();
             var sentinel = tokenAuthConfig().toBuilder()
@@ -734,11 +736,16 @@ class LlmProviderApiKeyResourceTest {
             llmProviderApiKeyResourceClient.updateProviderApiKey(created.id(), update, apiKey, workspaceName,
                     expectedStatus);
 
-            var stored = mySqlTemplate.inTransaction(READ_ONLY,
-                    handle -> handle.attach(LlmProviderApiKeyDAO.class).findById(created.id(), workspaceId));
-            assertThat(stored.baseUrl())
-                    .isEqualTo(expectedStatus == HttpStatus.SC_NO_CONTENT ? newBaseUrl : created.baseUrl());
-            assertThat(stored.authConfig() == null ? null : stored.authConfig().value()).isEqualTo(expectedStored);
+            var expected = created.toBuilder()
+                    .baseUrl(expectedStatus == HttpStatus.SC_NO_CONTENT ? newBaseUrl : created.baseUrl())
+                    .authConfig(expectedStored == null ? null : EncryptedAuthConfig.of(expectedStored.mask()))
+                    .build();
+            var actual = llmProviderApiKeyResourceClient.getById(created.id(), workspaceName, apiKey,
+                    HttpStatus.SC_OK);
+            assertThat(actual)
+                    .usingRecursiveComparison()
+                    .ignoringFields(IGNORED_FIELDS)
+                    .isEqualTo(expected);
         }
 
         @Test

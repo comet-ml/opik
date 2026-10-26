@@ -26,6 +26,7 @@ import java.util.function.Supplier;
 public class CustomLlmClientGenerator implements LlmProviderClientGenerator<OpenAiClient> {
 
     private final @NonNull LlmProviderClientConfig llmProviderClientConfig;
+    private final @NonNull ProviderBaseUrlGuard providerBaseUrlGuard;
     private final @NonNull AuthTokenProvider authTokenProvider;
 
     public OpenAiClient newCustomLlmClient(@NonNull LlmProviderClientApiConfig config) {
@@ -125,8 +126,7 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
                 .httpClientBuilder(httpClientBuilder);
 
         // innermost, so it sees the URL after InterceptingHttpClient's mutations
-        var guardedBuilder = new DestinationGuardHttpClientBuilder(jdkHttpClientBuilder,
-                new ProviderBaseUrlGuard(llmProviderClientConfig.getDestinationGuard()));
+        var guardedBuilder = new DestinationGuardHttpClientBuilder(jdkHttpClientBuilder, providerBaseUrlGuard);
 
         if (!requiresInterceptingBuilder(config)) {
             return guardedBuilder;

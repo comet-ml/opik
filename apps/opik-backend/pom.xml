@@ -35,6 +35,7 @@
         <aws.java.sdk.version>2.55.1</aws.java.sdk.version>
         <json-path.version>3.0.0</json-path.version>
         <jackson-jq.version>1.6.1</jackson-jq.version>
+        <ipaddress.version>5.6.2</ipaddress.version>
         <mainClass>com.comet.opik.OpikApplication</mainClass>
     </properties>
 
@@ -177,6 +178,11 @@
         <dependency>
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.github.seancfoley</groupId>
+            <artifactId>ipaddress</artifactId>
+            <version>${ipaddress.version}</version>
         </dependency>
         <dependency>
             <groupId>org.redisson</groupId>

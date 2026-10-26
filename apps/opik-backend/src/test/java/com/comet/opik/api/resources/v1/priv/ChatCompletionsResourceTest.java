@@ -31,6 +31,7 @@ import dev.langchain4j.model.openai.internal.chat.ContentType;
 import dev.langchain4j.model.openai.internal.chat.Message;
 import dev.langchain4j.model.openai.internal.chat.Role;
 import dev.langchain4j.model.openai.internal.chat.UserMessage;
+import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
@@ -67,6 +68,8 @@ import static com.comet.opik.domain.llm.ChatCompletionService.ERROR_EMPTY_MESSAG
 import static com.comet.opik.domain.llm.LlmProviderFactory.ERROR_MODEL_NOT_SUPPORTED;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.head;
+import static com.github.tomakehurst.wiremock.client.WireMock.headRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
@@ -1287,6 +1290,78 @@ class ChatCompletionsResourceTest {
             var upstream = WIRE_MOCK.server().findAll(postRequestedFor(urlPathMatching(CHAT_COMPLETIONS_REGEX)));
             assertThat(upstream).as("Opik should have forwarded the request upstream").isNotEmpty();
             return JsonUtils.getJsonNodeFromString(upstream.getFirst().getBodyAsString());
+        }
+    }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @DisplayName("Provider destinations")
+    class ProviderDestinations {
+
+        private Stream<Arguments> modelSubstitutedIntoTheAuthorityCannotMoveTheHost() {
+            return Stream.of(
+                    arguments("https://{model}.gw.example.com/v1", "attacker.example/#"),
+                    arguments("https://{model}.gw.example.com/v1", "x@attacker.example"),
+                    arguments("https://{model}.gw.example.com/v1", "attacker.example:443"),
+                    arguments("https://{model}.gw.example.com/v1", "[::1]"),
+                    arguments("https://{model}@gw.example.com/v1", "attacker.example/#"),
+                    arguments("https://gw.example.com:{model}/v1", "443@attacker.example"));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("a model substituted into the provider authority can't move the request to another host")
+        void modelSubstitutedIntoTheAuthorityCannotMoveTheHost(String baseUrl, String deployment) {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            mockTargetWorkspace(workspaceName, UUID.randomUUID().toString());
+            var providerName = RandomStringUtils.randomAlphanumeric(20);
+            var model = "custom-llm/%s/%s".formatted(providerName, deployment);
+            llmProviderApiKeyResourceClient.createProviderApiKey(ProviderApiKey.builder()
+                    .provider(LlmProvider.CUSTOM_LLM)
+                    .providerName(providerName)
+                    .apiKey("dummy-key")
+                    .baseUrl(baseUrl)
+                    .configuration(Map.of("provider_name", providerName, "models", model))
+                    .build(), API_KEY, workspaceName, HttpStatus.SC_CREATED);
+            var expected = new ErrorMessage(HttpStatus.SC_BAD_REQUEST,
+                    "model can't be substituted into the provider host or port, only letters, digits, '.' and '-'"
+                            + " are allowed, model '%s'".formatted(deployment));
+
+            var request = ChatCompletionRequest.builder().stream(false).model(model).addUserMessage("ping").build();
+            assertThat(chatCompletionsClient.create(API_KEY, workspaceName, request, HttpStatus.SC_BAD_REQUEST))
+                    .isEqualTo(expected);
+
+            var streamed = ChatCompletionRequest.builder().stream(true).model(model).addUserMessage("ping").build();
+            assertThat(chatCompletionsClient.createAndGetStreamedError(API_KEY, workspaceName, streamed))
+                    .containsExactly(expected);
+        }
+
+        @Test
+        @DisplayName("an extensionless video URL on an internal address is never probed for its MIME type")
+        void videoMimeTypeLookupSkipsInternalAddress() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            mockTargetWorkspace(workspaceName, UUID.randomUUID().toString());
+            createLlmProviderApiKey(workspaceName, LlmProvider.GEMINI, "invalid-key");
+            var videoPath = "/video-" + UUID.randomUUID();
+            WIRE_MOCK.server().stubFor(head(urlPathEqualTo(videoPath))
+                    .willReturn(aResponse().withHeader("Content-Type", "video/mp4")));
+            var request = JsonUtils.getJsonNodeFromString(
+                    """
+                            {"model": "%s", "stream": false, "max_completion_tokens": 10, "messages": [{"role": "user",
+                            "content": [{"type": "text", "text": "describe"}, {"type": "video_url", "video_url": {"url": "%s"}}]}]}"""
+                            .formatted(GeminiModelName.GEMINI_2_5_FLASH,
+                                    WIRE_MOCK.runtimeInfo().getHttpBaseUrl() + videoPath));
+
+            // the model call itself fails on the invalid key, the MIME lookup comes before it
+            clientSupport.target(TestUtils.getBaseUrl(clientSupport) + "/v1/private/chat/completions")
+                    .request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                    .post(Entity.json(request))
+                    .close();
+
+            WIRE_MOCK.server().verify(0, headRequestedFor(urlPathEqualTo(videoPath)));
         }
     }
 }

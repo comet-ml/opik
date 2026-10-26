@@ -1,9 +1,11 @@
 package com.comet.opik.infrastructure.llm;
 
+import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.comet.opik.infrastructure.net.DestinationGuardException;
 import com.google.common.io.Files;
 import jakarta.ws.rs.core.Response;
+import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -42,11 +44,25 @@ public class VideoMimeTypeUtils {
             .followRedirects(HttpClient.Redirect.NEVER)
             .build();
 
-    // Strict regardless of deployment: the URL comes from any caller's message, and a refusal only loses the hint
-    private static final DestinationGuard DESTINATION_GUARD = DestinationGuard.builder()
-            .mode(DestinationGuard.Mode.STRICT)
-            .scheme(DestinationGuard.Scheme.PLAINTEXT_OR_TLS)
-            .build();
+    /**
+     * Strict until {@link #setConfig(LlmProviderClientConfig)} runs, so an unconfigured caller takes the restrictive
+     * path.
+     */
+    private static volatile DestinationGuard destinationGuard = destinationGuard(DestinationGuard.Mode.STRICT);
+
+    /**
+     * Called once at startup: the mappers calling this utility are MapStruct singletons outside Guice.
+     */
+    public static void setConfig(@NonNull LlmProviderClientConfig config) {
+        destinationGuard = destinationGuard(config.getVideoUrlDestinationGuard());
+    }
+
+    private static DestinationGuard destinationGuard(DestinationGuard.Mode mode) {
+        return DestinationGuard.builder()
+                .mode(mode)
+                .scheme(DestinationGuard.Scheme.PLAINTEXT_OR_TLS)
+                .build();
+    }
 
     /**
      * Check if the URL has a recognizable video file extension.
@@ -79,7 +95,7 @@ public class VideoMimeTypeUtils {
     public static String detectMimeTypeFromHttpHead(String url) {
         try {
             var uri = URI.create(url);
-            DESTINATION_GUARD.validate(url);
+            destinationGuard.validate(url);
 
             log.debug("Making HEAD request to detect MIME type for URL without extension: '{}'",
                     url.substring(0, Math.min(50, url.length())));
@@ -111,12 +127,10 @@ public class VideoMimeTypeUtils {
                 return contentType;
             }
         } catch (DestinationGuardException e) {
-            // the guard's message can echo the full URL, query string included
             log.warn("Skipped MIME type detection for a refused URL: '{}'",
-                    url.substring(0, Math.min(50, url.length())));
+                    url.substring(0, Math.min(50, url.length())), e);
         } catch (Exception e) {
-            log.error("Failed to detect MIME type for URL: '{}', error: '{}'",
-                    url.substring(0, Math.min(50, url.length())), e.getMessage());
+            log.error("Failed to detect MIME type for URL: '{}'", url.substring(0, Math.min(50, url.length())), e);
         }
         return null;
     }

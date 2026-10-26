@@ -2,16 +2,19 @@ package com.comet.opik.infrastructure.net;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
+import inet.ipaddr.IPAddress;
+import inet.ipaddr.IPAddressNetwork;
+import inet.ipaddr.IPAddressString;
 import lombok.Builder;
 import lombok.NonNull;
 
-import java.net.Inet4Address;
-import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.UnknownHostException;
 import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Stream;
 
 import static org.apache.commons.lang3.StringUtils.isBlank;
 
@@ -67,10 +70,39 @@ public class DestinationGuard {
      */
     public enum Scheme {
         /** Accept http as well as https — for payloads where plaintext is the caller's own choice. */
-        PLAINTEXT_OR_TLS,
+        PLAINTEXT_OR_TLS("plaintext_or_tls"),
         /** Refuse anything but https — for payloads carrying a credential. */
-        HTTPS_ONLY,
+        HTTPS_ONLY("https_only"),
+        ;
+
+        @JsonValue
+        private final String value;
+
+        Scheme(String value) {
+            this.value = value;
+        }
+
+        @JsonCreator
+        public static Scheme fromString(String value) {
+            return Arrays.stream(values())
+                    .filter(scheme -> scheme.value.equalsIgnoreCase(value))
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "Unknown destination guard scheme '%s'".formatted(value)));
+        }
     }
+
+    /**
+     * Ranges the JDK's {@link InetAddress} predicates miss: 0.0.0.0/8, carrier-grade NAT (routable inside provider
+     * networks), 192.0.0.0/24, 198.18.0.0/15, 240.0.0.0/4, IPv6 unique-local (the JDK's site-local check only covers the
+     * deprecated fec0::/10) and NAT64, which a gateway translates to the embedded, possibly internal, IPv4 address.
+     */
+    private static final List<IPAddress> NON_PUBLIC_RANGES = Stream.of(
+            "0.0.0.0/8", "100.64.0.0/10", "192.0.0.0/24", "198.18.0.0/15", "240.0.0.0/4", "fc00::/7", "64:ff9b::/96")
+            .map(cidr -> new IPAddressString(cidr).getAddress().toPrefixBlock())
+            .toList();
+
+    private static final IPAddressNetwork.IPAddressGenerator IP_ADDRESS_GENERATOR = new IPAddressNetwork.IPAddressGenerator();
 
     private final @NonNull Mode mode;
     @Builder.Default
@@ -130,47 +162,14 @@ public class DestinationGuard {
     }
 
     private static boolean isNonPublic(InetAddress address) {
-        return address.isAnyLocalAddress()
+        if (address.isAnyLocalAddress()
                 || address.isLoopbackAddress()
                 || address.isLinkLocalAddress()
                 || address.isSiteLocalAddress()
-                || address.isMulticastAddress()
-                || isSpecialPurposeIpv4(address)
-                || isUniqueLocalIpv6(address)
-                || isNat64(address);
-    }
-
-    /**
-     * 0.0.0.0/8, 100.64.0.0/10 (carrier-grade NAT, routable inside provider networks), 192.0.0.0/24,
-     * 198.18.0.0/15 and 240.0.0.0/4: none of them is a public destination.
-     */
-    private static boolean isSpecialPurposeIpv4(InetAddress address) {
-        if (!(address instanceof Inet4Address)) {
-            return false;
+                || address.isMulticastAddress()) {
+            return true;
         }
-        byte[] bytes = address.getAddress();
-        int first = bytes[0] & 0xFF;
-        int second = bytes[1] & 0xFF;
-        return first == 0
-                || first >= 240
-                || (first == 100 && (second & 0xC0) == 64)
-                || (first == 192 && second == 0 && bytes[2] == 0)
-                || (first == 198 && (second & 0xFE) == 18);
-    }
-
-    /**
-     * 64:ff9b::/96 — a NAT64 gateway translates it to the embedded IPv4 address, which could be internal.
-     */
-    private static boolean isNat64(InetAddress address) {
-        byte[] bytes = address.getAddress();
-        return address instanceof Inet6Address
-                && bytes[0] == 0 && bytes[1] == 0x64 && (bytes[2] & 0xFF) == 0xFF && (bytes[3] & 0xFF) == 0x9B;
-    }
-
-    /**
-     * fc00::/7 — Java's {@code isSiteLocalAddress} only covers the deprecated fec0::/10 for IPv6.
-     */
-    private static boolean isUniqueLocalIpv6(InetAddress address) {
-        return address instanceof Inet6Address && (address.getAddress()[0] & 0xFE) == 0xFC;
+        var ipAddress = IP_ADDRESS_GENERATOR.from(address);
+        return NON_PUBLIC_RANGES.stream().anyMatch(range -> range.contains(ipAddress));
     }
 }

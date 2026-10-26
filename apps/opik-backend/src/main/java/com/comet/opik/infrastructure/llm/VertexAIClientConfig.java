@@ -2,6 +2,7 @@ package com.comet.opik.infrastructure.llm;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import lombok.Builder;
 
@@ -31,5 +32,5 @@ public record VertexAIClientConfig(
         @NotBlank String scope,
         @NotEmpty Map<@Pattern(regexp = "[a-z0-9-]+", message = "must be a lower-case location such as 'global'") String, //
                 @NotBlank @Pattern(regexp = "(https://)?[A-Za-z0-9.-]+(:\\d+)?/?", message = "must be a host or https URL such as 'https://aiplatform.googleapis.com'") String> multiRegionApiEndpoints,
-        @NotEmpty Set<URI> tokenUris) {
+        @NotEmpty Set<@NotNull URI> tokenUris) {
 }
