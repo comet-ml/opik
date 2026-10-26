@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.redis;
 
 import com.comet.opik.infrastructure.ratelimit.RateLimitService;
+import com.google.common.base.Throwables;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -40,9 +41,7 @@ class RedisRateLimitService implements RateLimitService {
                 // defense-in-depth for any other limiter/Lua failure. The error surfaces here as a
                 // RetryExhaustedException wrapping the RedisException, so catch broadly rather than by type.
                 .onErrorResume(error -> {
-                    // Don't log bucketName: for the general and custom buckets it embeds the caller's API
-                    // key. Pass error as the throwable so the full stack trace is kept, not just its message.
-                    log.warn("Rate limiter errored, failing open (request allowed)", error);
+                    log.warn("Rate limiter errored, failing open (request allowed), exception '{}'", errorType(error));
                     return Mono.just(false);
                 });
     }
@@ -51,7 +50,7 @@ class RedisRateLimitService implements RateLimitService {
         return Retry.fixedDelay(2, Duration.ofMillis(5))
                 .filter(RedisException.class::isInstance)
                 .doBeforeRetryAsync(signal -> {
-                    log.warn("Retrying due to error", signal.failure());
+                    log.warn("Rate limiter errored, retrying, exception '{}'", errorType(signal.failure()));
                     return setLimitIfNecessary(limitConfig.limit(), limitConfig.durationInSeconds(), rateLimit).then();
                 });
     }
@@ -86,7 +85,8 @@ class RedisRateLimitService implements RateLimitService {
         return permitCounter(bucketName).get()
                 .defaultIfEmpty(limitConfig.limit())
                 .onErrorResume(error -> {
-                    log.debug("Rate limiter available-events lookup failed, reporting the configured limit", error);
+                    log.debug("Rate limiter available-events lookup failed, reporting the configured limit, "
+                            + "exception '{}'", errorType(error));
                     return Mono.just(limitConfig.limit());
                 });
     }
@@ -103,9 +103,16 @@ class RedisRateLimitService implements RateLimitService {
                 .onErrorResume(error -> {
                     // Report the full window, not 0: the interceptor turns 0 into a RateLimit-Reset of 1s,
                     // which would make a rejected client retry after a second and spin on 429s.
-                    log.debug("Rate limiter TTL lookup failed, reporting the configured window", error);
+                    log.debug("Rate limiter TTL lookup failed, reporting the configured window, exception '{}'",
+                            errorType(error));
                     return Mono.just(Duration.ofSeconds(limitConfig.durationInSeconds()).toMillis());
                 });
+    }
+
+    // Never log the throwable or its message: Redisson's exception messages list the command's keys, and the
+    // general and custom bucket names embed the caller's API key. The root cause's type is all that's logged.
+    private static String errorType(Throwable error) {
+        return Throwables.getRootCause(error).getClass().getSimpleName();
     }
 
     // Redisson 4.8.0 keeps the live permit counter in a String at the rate limiter's value key, named by
