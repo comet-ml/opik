@@ -477,7 +477,7 @@ const PlaygroundPrompt = ({
             unsupportedParams={
               isBackendRun ? BACKEND_RUN_UNSUPPORTED_PARAMS : undefined
             }
-            size="icon-xs"
+            size="icon-2xs"
             variant="ghost"
           />
         </div>
@@ -522,7 +522,7 @@ const PlaygroundPrompt = ({
                     <TooltipWrapper content="Load prompt">
                       <Button
                         variant="minimal"
-                        size="icon-sm"
+                        size="icon-2xs"
                         data-testid="load-prompt-button"
                       >
                         <FileTerminal />
@@ -545,7 +545,7 @@ const PlaygroundPrompt = ({
               >
                 <Button
                   variant="minimal"
-                  size="icon-sm"
+                  size="icon-2xs"
                   onClick={handleSaveChatPrompt}
                   data-testid="playground-save-prompt-button"
                 >
@@ -562,7 +562,7 @@ const PlaygroundPrompt = ({
               <TooltipWrapper content="Remove prompt">
                 <Button
                   variant="minimal"
-                  size="icon-sm"
+                  size="icon-2xs"
                   onClick={() => deletePrompt(promptId)}
                 >
                   <Trash />
@@ -573,7 +573,7 @@ const PlaygroundPrompt = ({
             <TooltipWrapper content="Duplicate variant">
               <Button
                 variant="minimal"
-                size="icon-sm"
+                size="icon-2xs"
                 onClick={handleDuplicatePrompt}
                 data-testid="playground-duplicate-variant-button"
               >
