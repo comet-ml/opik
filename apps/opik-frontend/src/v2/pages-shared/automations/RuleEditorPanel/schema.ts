@@ -4,6 +4,7 @@ import isString from "lodash/isString";
 import uniq from "lodash/uniq";
 import omit from "lodash/omit";
 import isEmpty from "lodash/isEmpty";
+import isPlainObject from "lodash/isPlainObject";
 import {
   LLMJudgeObject,
   EVALUATORS_RULE_SCOPE,
@@ -16,12 +17,17 @@ import {
   AnthropicThinkingEffort,
   COMPOSED_PROVIDER_TYPE,
   GeminiThinkingLevel,
+  OPENAI_REASONING_EFFORT_VALUES,
+  OpenAIReasoningEffort,
+  OpenAiPipelineMode,
   PROVIDER_MODEL_TYPE,
   PROVIDER_TYPE,
 } from "@/types/providers";
 import {
   getAnthropicThinkingEffortOptions,
   getNestedThinkingEffort,
+  getOpenAIReasoningEffortOptions,
+  getOpenRouterReasoningEffortOptions,
   getThinkingLevelOptions,
   knowsAnthropicEffortLevels,
   leavesThinkingToModel,
@@ -291,6 +297,9 @@ const LLMJudgeBaseSchema = z.object({
     thinkingEffort: z
       .enum(["off", ...ANTHROPIC_THINKING_EFFORT_VALUES])
       .optional(),
+    // OpenAI's sits under custom_parameters.reasoning_effort, OpenRouter's under
+    // custom_parameters.reasoning.effort.
+    reasoningEffort: z.enum(OPENAI_REASONING_EFFORT_VALUES).optional(),
   }),
   template: z.nativeEnum(LLM_JUDGE),
   messages: z.array(
@@ -671,19 +680,89 @@ const convertProviderToLLMMessages = (
     id: generateRandomString(),
   }));
 
+const getReasoningEffortProvider = (model: string) => {
+  const provider = getProviderFromModel(model as PROVIDER_MODEL_TYPE);
+  return provider === PROVIDER_TYPE.OPEN_AI ||
+    provider === PROVIDER_TYPE.OPEN_ROUTER
+    ? provider
+    : undefined;
+};
+
+// An unknown mode (keys still loading) gets the Responses API list, a superset of the Chat Completions
+// one: assuming Chat Completions would drop a stored max for good on a save made before the keys load.
+const getRuleReasoningEffortOptions = (
+  model: string,
+  openAiPipelineMode?: OpenAiPipelineMode,
+) => {
+  const provider = getReasoningEffortProvider(model);
+  if (provider === PROVIDER_TYPE.OPEN_AI) {
+    return getOpenAIReasoningEffortOptions(
+      model as PROVIDER_MODEL_TYPE,
+      openAiPipelineMode ?? "responses_api",
+    );
+  }
+  return provider === PROVIDER_TYPE.OPEN_ROUTER
+    ? getOpenRouterReasoningEffortOptions(model as PROVIDER_MODEL_TYPE)
+    : [];
+};
+
+const getPersistedReasoningEffort = (
+  model: string,
+  customParameters: unknown,
+): OpenAIReasoningEffort | undefined => {
+  const provider = getReasoningEffortProvider(model);
+  if (!provider || !isPlainObject(customParameters)) return undefined;
+  const params = customParameters as Record<string, unknown>;
+  const stored =
+    provider === PROVIDER_TYPE.OPEN_ROUTER
+      ? (params.reasoning as { effort?: unknown } | undefined)?.effort
+      : params.reasoning_effort;
+  return OPENAI_REASONING_EFFORT_VALUES.find((level) => level === stored);
+};
+
+const withReasoningEffort = (
+  model: string,
+  customParameters: Record<string, unknown>,
+  effort: OpenAIReasoningEffort | undefined,
+): Record<string, unknown> => {
+  if (getReasoningEffortProvider(model) === PROVIDER_TYPE.OPEN_AI) {
+    return effort
+      ? { ...customParameters, reasoning_effort: effort }
+      : omit(customParameters, "reasoning_effort");
+  }
+  // Rebuilding a non-object reasoning would hide the 400 OpenRouter gives the malformed value.
+  if (
+    customParameters.reasoning != null &&
+    !isPlainObject(customParameters.reasoning)
+  ) {
+    return customParameters;
+  }
+  const reasoning = omit(
+    (customParameters.reasoning ?? {}) as Record<string, unknown>,
+    "effort",
+  );
+  const nextReasoning = effort ? { ...reasoning, effort } : reasoning;
+  return isEmpty(nextReasoning)
+    ? omit(customParameters, "reasoning")
+    : { ...customParameters, reasoning: nextReasoning };
+};
+
 export const updateConfigForModelChange = <
   T extends {
     thinkingEffort?: AnthropicThinkingEffort;
+    reasoningEffort?: OpenAIReasoningEffort;
     custom_parameters?: Record<string, unknown> | null;
   },
 >(
   config: T,
   previous: { model: string; provider: COMPOSED_PROVIDER_TYPE | "" },
   next: { model: PROVIDER_MODEL_TYPE; provider: COMPOSED_PROVIDER_TYPE },
+  openAiPipelineMode?: OpenAiPipelineMode,
 ): T => {
   const adjusted =
     updateProviderConfig(config, {
       ...next,
+      openAiPipelineMode,
       previousModel: previous.model as PROVIDER_MODEL_TYPE,
     }) ?? config;
 
@@ -700,8 +779,8 @@ export const updateConfigForModelChange = <
   // updateProviderConfig leaves custom_parameters alone because opening a rule must keep the effort
   // stored for a Claude model with no row. On a switch that copy belongs to the previous model; the
   // flat thinkingEffort, already fitted to the next model, is what carries the user's choice. The
-  // same goes for a Gemini level nested under thinking: left in, the save would send the old level
-  // while the form shows the new one.
+  // same goes for a Gemini level nested under thinking and an OpenAI or OpenRouter effort: left in,
+  // the save would send the old level while the form shows the new one.
   let customParameters = adjusted.custom_parameters;
   if (
     previous.provider &&
@@ -717,6 +796,18 @@ export const updateConfigForModelChange = <
     customParameters = withoutNestedThinkingLevel(
       customParameters as Record<string, unknown>,
     );
+  }
+  if (
+    customParameters &&
+    getRuleReasoningEffortOptions(previous.model).length > 0 &&
+    getPersistedReasoningEffort(previous.model, customParameters)
+  ) {
+    const rest = withReasoningEffort(
+      previous.model,
+      customParameters,
+      undefined,
+    );
+    customParameters = isEmpty(rest) ? null : rest;
   }
 
   return customParameters === adjusted.custom_parameters
@@ -755,6 +846,10 @@ export const convertLLMJudgeObjectToLLMJudgeData = (data: LLMJudgeObject) => {
     thinkingEffort: ANTHROPIC_THINKING_EFFORT_VALUES.find(
       (e) => e === persistedEffort,
     ),
+    reasoningEffort: getPersistedReasoningEffort(
+      model,
+      persistedCustomParameters,
+    ),
   };
   const config = model
     ? updateProviderConfig(rawConfig, {
@@ -781,6 +876,7 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
     | LLMJudgeDetailsTraceFormType
     | LLMJudgeDetailsThreadFormType
     | LLMJudgeDetailsSpanFormType,
+  openAiPipelineMode?: OpenAiPipelineMode,
 ) => {
   const {
     temperature,
@@ -788,6 +884,7 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
     custom_parameters,
     thinkingLevel,
     thinkingEffort,
+    reasoningEffort,
   } = data.config;
   const model: LLMJudgeObject["model"] = {
     name: data.model as PROVIDER_MODEL_TYPE,
@@ -807,11 +904,12 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
   // keeps a temperature the user set on another model, and the providers that take none reject it at
   // scoring time. The resolver answers whether this model takes one; the value stays the user's, so
   // a rule that never had a temperature does not gain the resolver's default.
-  // Asked without the effort: the judge leaves the temperature out for as long as Claude thinks, and
-  // keeping it in the rule brings it back when the effort goes back to Off.
+  // Asked as if the model did not reason: the judge leaves the temperature out for as long as Claude
+  // thinks or an OpenAI model runs above effort none, and keeping it in the rule brings it back when
+  // the effort goes back to Off or none. A model with no none level never takes one.
   const { temperature: resolvedTemperature } = resolveSamplingParams(
     data.model as PROVIDER_MODEL_TYPE,
-    { temperature },
+    { temperature, reasoningEffort: "none" },
   );
 
   if (temperature != null && resolvedTemperature != null) {
@@ -871,6 +969,13 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
   ).some((o) => o.value === thinkingEffort)
     ? thinkingEffort
     : undefined;
+  // A model with no levels to offer is one the form shows no effort for, so a stored one (an
+  // SDK-made rule, a model this build does not know yet) is sent as it is. A level the key's mode
+  // refuses (max on Chat Completions) is one the panel shows as the default, so it is not saved.
+  const reasoningEffortOptions = getRuleReasoningEffortOptions(
+    data.model,
+    openAiPipelineMode,
+  );
   const finalCustomParameters =
     getProviderFromModel(data.model as PROVIDER_MODEL_TYPE) ===
     PROVIDER_TYPE.ANTHROPIC
@@ -880,7 +985,15 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
             ? formEffort
             : getNestedThinkingEffort(mergedCustomParameters),
         )
-      : mergedCustomParameters;
+      : reasoningEffortOptions.length > 0
+        ? withReasoningEffort(
+            data.model,
+            mergedCustomParameters,
+            reasoningEffortOptions.some((o) => o.value === reasoningEffort)
+              ? reasoningEffort
+              : undefined,
+          )
+        : mergedCustomParameters;
 
   if (finalCustomParameters && Object.keys(finalCustomParameters).length > 0) {
     model.custom_parameters = finalCustomParameters;

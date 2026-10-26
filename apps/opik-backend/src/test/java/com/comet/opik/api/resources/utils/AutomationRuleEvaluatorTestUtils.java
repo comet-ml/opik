@@ -1,13 +1,21 @@
 package com.comet.opik.api.resources.utils;
 
 import com.comet.opik.api.evaluators.ProjectReference;
+import com.comet.opik.domain.llm.LlmProviderFactory;
+import dev.langchain4j.model.chat.request.ChatRequest;
+import dev.langchain4j.model.chat.response.ChatResponse;
 import lombok.experimental.UtilityClass;
+import org.mockito.stubbing.Answer;
 
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.UUID;
 import java.util.stream.Collectors;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.when;
 
 /**
  * Utility methods for automation rule evaluator tests.
@@ -45,5 +53,17 @@ public class AutomationRuleEvaluatorTestUtils {
                 .map(ProjectReference::projectId)
                 .findFirst()
                 .orElse(null);
+    }
+
+    /**
+     * Judges whose prompt gives the model tools ask the factory for a tool-calling model instead of the plain one.
+     * With deep stubs, stubbing only the plain one leaves those judges an empty answer, and the test times out
+     * waiting for a score.
+     */
+    public static void answerEveryJudgeCall(LlmProviderFactory llmProviderFactory, Answer<ChatResponse> answer) {
+        when(llmProviderFactory.getLanguageModel(anyString(), any()).chat(any(ChatRequest.class)))
+                .thenAnswer(answer);
+        when(llmProviderFactory.getToolCallingLanguageModel(anyString(), any()).chat(any(ChatRequest.class)))
+                .thenAnswer(answer);
     }
 }

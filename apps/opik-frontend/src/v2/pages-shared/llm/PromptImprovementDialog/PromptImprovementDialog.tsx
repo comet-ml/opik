@@ -131,9 +131,16 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
   const title = isGenerateMode ? "Generate prompt" : "Improve prompt";
   const hasInstructions = Boolean(userInstructions.trim());
 
+  const originalPromptKey = useMemo(
+    () => JSON.stringify(originalPrompt),
+    [originalPrompt],
+  );
+
   // A run belongs to one opening of the dialog on one source prompt. The dialog stays mounted while
   // closed, and the prompt page can swap the source while it is open (it polls for new versions), so
-  // a run still streaming then would write into the next session.
+  // a run still streaming then would write into the next session. Keyed on the prompt's content, not
+  // the object: a refetch can hand back the same prompt with images as a new array, and that must not
+  // wipe the user's instructions or stop their run.
   useEffect(() => {
     if (!open) return;
     setUserInstructions("");
@@ -146,7 +153,7 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
       runControllerRef.current?.abort();
       runControllerRef.current = null;
     };
-  }, [open, id, originalPrompt]);
+  }, [open, id, originalPromptKey]);
 
   // Smart auto-scroll: only auto-scroll when user is near the bottom
   // This allows users to scroll up to review content without being forced down

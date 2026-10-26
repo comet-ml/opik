@@ -22,6 +22,7 @@ import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.structuredoutput.ToolCallingStrategy;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
+import com.comet.opik.infrastructure.llm.LlmModelRegistryTestUtils;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsQuestion;
 import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsRequest;
@@ -61,6 +62,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
@@ -180,7 +182,8 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
         ToolRegistry toolRegistry = new ToolRegistry(Set.of(
                 stubTool(ReadTool.NAME, "{}"),
                 stubTool(GetAttachmentTool.NAME, "{}")));
-        agenticScoringService = new AgenticScoringServiceImpl(onlineScoringConfig, toolRegistry);
+        agenticScoringService = new AgenticScoringServiceImpl(onlineScoringConfig, toolRegistry,
+                LlmModelRegistryTestUtils.bundledRegistry());
 
         scorer = new OnlineScoringSpanLlmAsJudgeScorer(
                 onlineScoringConfig,
@@ -220,7 +223,7 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
                 .fileName(fileName)
                 .build();
 
-        when(llmProviderFactory.getLlmProvider("gpt-test")).thenReturn(LlmProvider.OPEN_AI);
+        when(llmProviderFactory.getKeyProvider(anyString(), eq("gpt-test"))).thenReturn(LlmProvider.OPEN_AI);
         when(llmProviderFactory.getStructuredOutputStrategy("gpt-test")).thenReturn(new ToolCallingStrategy());
         when(attachmentService.getAttachmentInfoByEntity(
                 any(), eq(EntityType.SPAN), any()))
@@ -257,7 +260,7 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
         var persistentAttachment = AttachmentInfo.builder()
                 .entityId(span.id()).entityType(EntityType.SPAN).fileName("diagram.png").build();
 
-        when(llmProviderFactory.getLlmProvider("gpt-test")).thenReturn(LlmProvider.OPEN_AI);
+        when(llmProviderFactory.getKeyProvider(anyString(), eq("gpt-test"))).thenReturn(LlmProvider.OPEN_AI);
         when(llmProviderFactory.getStructuredOutputStrategy("gpt-test")).thenReturn(new ToolCallingStrategy());
         when(attachmentService.getAttachmentInfoByEntity(
                 any(), eq(EntityType.SPAN), any()))
@@ -282,7 +285,7 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
         var span = createSpan();
         var message = buildMessage(span, code);
 
-        when(llmProviderFactory.getLlmProvider("gpt-test")).thenReturn(LlmProvider.OPEN_AI);
+        when(llmProviderFactory.getKeyProvider(anyString(), eq("gpt-test"))).thenReturn(LlmProvider.OPEN_AI);
         when(llmProviderFactory.getStructuredOutputStrategy("gpt-test")).thenReturn(new ToolCallingStrategy());
         // Attachment listing fails — onErrorReturn(List.of()) degrades to a structure without attachment
         // entries rather than blocking scoring.
@@ -316,7 +319,7 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
                 .fileName(fileName)
                 .build();
 
-        when(llmProviderFactory.getLlmProvider("gpt-test")).thenReturn(LlmProvider.OPEN_AI);
+        when(llmProviderFactory.getKeyProvider(anyString(), eq("gpt-test"))).thenReturn(LlmProvider.OPEN_AI);
         when(llmProviderFactory.getStructuredOutputStrategy("gpt-test")).thenReturn(new ToolCallingStrategy());
         // Cold lookup: first subscription sees the not-yet-uploaded state (empty), the retry sees it land.
         AtomicInteger subscriptions = new AtomicInteger();
@@ -413,7 +416,7 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
         var message = buildMessage(span, code);
 
         // OLLAMA does not support tool-calling → the {{span}} rule falls back to the inline path.
-        when(llmProviderFactory.getLlmProvider("gpt-test")).thenReturn(LlmProvider.OLLAMA);
+        when(llmProviderFactory.getKeyProvider(anyString(), eq("gpt-test"))).thenReturn(LlmProvider.OLLAMA);
         when(llmProviderFactory.getStructuredOutputStrategy("gpt-test")).thenReturn(new ToolCallingStrategy());
         when(attachmentService.getAttachmentInfoByEntity(
                 any(), eq(EntityType.SPAN), any()))
@@ -441,7 +444,7 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
         var span = createSpan();
         var message = buildMessage(span, code);
 
-        lenient().when(llmProviderFactory.getLlmProvider("gpt-test")).thenReturn(LlmProvider.OPEN_AI);
+        lenient().when(llmProviderFactory.getKeyProvider(anyString(), eq("gpt-test"))).thenReturn(LlmProvider.OPEN_AI);
         when(llmProviderFactory.getStructuredOutputStrategy("gpt-test")).thenReturn(new ToolCallingStrategy());
         ArgumentCaptor<ChatRequest> requestCaptor = ArgumentCaptor.forClass(ChatRequest.class);
         when(aiProxyService.scoreTrace(requestCaptor.capture(), any(), any()))
@@ -460,7 +463,7 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
     void responseWithNoReadableScoreStoresNothing(String response) {
         var message = buildMessage(createSpan(), JsonUtils.readValue(EVALUATOR_JSON_INLINE, SpanLlmAsJudgeCode.class));
 
-        lenient().when(llmProviderFactory.getLlmProvider("gpt-test")).thenReturn(LlmProvider.OPEN_AI);
+        lenient().when(llmProviderFactory.getKeyProvider(anyString(), eq("gpt-test"))).thenReturn(LlmProvider.OPEN_AI);
         when(llmProviderFactory.getStructuredOutputStrategy("gpt-test")).thenReturn(new ToolCallingStrategy());
         when(aiProxyService.scoreTrace(any(), any(), any()))
                 .thenReturn(ChatResponse.builder().aiMessage(AiMessage.aiMessage(response)).build());

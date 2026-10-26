@@ -1,4 +1,11 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, X } from "lucide-react";
 import isFunction from "lodash/isFunction";
@@ -9,8 +16,13 @@ import { Button } from "@/ui/button";
 import { Separator } from "@/ui/separator";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { usePortalContainer } from "@/lib/portal-container";
+import {
+  isArrowKeyForFocusedControl,
+  isKeyForLayerAbovePanel,
+} from "@/shared/ResizableSidePanel/panelHotkeys";
 
 const INITIAL_WIDTH = 0.75;
+const BASE_Z_INDEX = 10;
 const MIN_LEFT_POSITION = 0.1;
 const MAX_LEFT_POSITION = 0.8;
 
@@ -46,6 +58,11 @@ const LEFT_HOTKEYS = ["←"];
 const RIGHT_HOTKEYS = ["→"];
 const ESC_HOTKEYS = ["Esc"];
 
+// A panel opened from inside another panel (a trial's trace) shares its portal
+// container. On a fresh page load React inserts the inner panel's portal first,
+// so with equal z-index the outer panel would cover it.
+const PanelDepthContext = createContext(0);
+
 const calculateLeftPosition = (
   percentage: number,
   containerWidth: number,
@@ -78,6 +95,7 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
   verticalNavigation,
   container,
 }) => {
+  const depth = useContext(PanelDepthContext);
   const externalContainer = usePortalContainer();
   const portalContainer = container ?? externalContainer;
   const localStorageKey = `${panelId}-side-panel-width`;
@@ -143,7 +161,17 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
           break;
       }
     },
-    { ignoreEventWhen: () => ignoreHotkeys },
+    {
+      // The listener sits on the document, so it also gets keys pressed in a
+      // menu or dialog opened from the panel. Acting on them would move the
+      // panel to another trace under an open Delete confirm. defaultPrevented
+      // can't tell those apart: a tooltip and the Logs sheet that hosts the
+      // panel also mark Escape, and the panel must still close then.
+      ignoreEventWhen: (keyboardEvent) =>
+        ignoreHotkeys ||
+        isKeyForLayerAbovePanel(keyboardEvent, panelRef.current) ||
+        isArrowKeyForFocusedControl(keyboardEvent),
+    },
     [verticalNavigation, horizontalNavigation, onClose, open, ignoreHotkeys],
   );
 
@@ -289,9 +317,10 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
   return createPortal(
     <div
       className={cn(
-        "absolute inset-0 z-10",
+        "absolute inset-0",
         !open && "pointer-events-none overflow-hidden",
       )}
+      style={{ zIndex: BASE_Z_INDEX + depth }}
     >
       {open && (
         <div
@@ -347,7 +376,9 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
                 )}
               </div>
               <div className="absolute inset-x-0 bottom-0 top-[47px] border-t">
-                {children}
+                <PanelDepthContext.Provider value={depth + 1}>
+                  {children}
+                </PanelDepthContext.Provider>
               </div>
             </div>
           </>

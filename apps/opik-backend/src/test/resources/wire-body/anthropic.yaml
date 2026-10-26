@@ -167,25 +167,44 @@ rows:
     models: [legacy, sampling]
     request: {temperature: 0.3, top_p: 0.9}
     body: {temperature: 0.3}
-  - name: enabled thinking drops sampling params
+  # The thinking block is sent as the judge path sends it, and max_tokens is raised to leave the answer 4096 tokens
+  # above the budget: Anthropic counts thinking inside max_tokens.
+  - name: enabled thinking drops sampling params and is sent
     model: claude-sonnet-4-6
     request:
       temperature: 0.3
       top_p: 0.9
       custom_parameters: {thinking: {type: enabled, budget_tokens: 2048}}
-    # The thinking block turns sampling params off but is never sent: the chat path forwards only output_config.
-  - name: disabled thinking keeps sampling params
+    body: {max_tokens: 6144, thinking: {type: enabled, budget_tokens: 2048}}
+  - name: disabled thinking keeps sampling params and is sent without a budget
     model: claude-sonnet-4-6
     request:
       temperature: 0.3
-      custom_parameters: {thinking: {type: disabled}}
-    body: {temperature: 0.3}
-  - name: thinking without a type keeps sampling params
+      custom_parameters: {thinking: {type: disabled, budget_tokens: 2048}}
+    body: {temperature: 0.3, thinking: {type: disabled}}
+  - name: thinking without a type keeps sampling params and is not sent
     model: claude-sonnet-4-6
     request:
       temperature: 0.3
       custom_parameters: {thinking: {budget_tokens: 2048}}
     body: {temperature: 0.3}
+  - name: a cap above the budget is kept
+    model: claude-sonnet-4-6
+    request:
+      max_completion_tokens: 9000
+      custom_parameters: {thinking: {type: enabled, budget_tokens: 2048}}
+    body: {max_tokens: 9000, thinking: {type: enabled, budget_tokens: 2048}}
+  - name: a budget the model refuses becomes adaptive thinking
+    model: claude-sonnet-5-5
+    request:
+      custom_parameters: {thinking: {type: enabled, budget_tokens: 2048}}
+    body: {thinking: {type: adaptive}}
+  - name: adaptive thinking the model refuses becomes the smallest budget
+    model: claude-haiku-4-5-20251001
+    request:
+      temperature: 0.3
+      custom_parameters: {thinking: {type: adaptive}}
+    body: {max_tokens: 5120, thinking: {type: enabled, budget_tokens: 1024}}
 
   # Max tokens, chat path.
   - name: no output cap sends the 4096 default

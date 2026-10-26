@@ -241,6 +241,7 @@ const PlaygroundOutputTable = ({
               noData={<DataTableNoData title={noDataMessage} />}
               showLoadingOverlay={isFetchingData}
               testId="playground-variables-table"
+              textSize="xs"
             />
           </div>
         </Resizable>

@@ -28,6 +28,7 @@
 
 import { PROVIDER_MODELS } from "@/constants/providerModels";
 import { PROVIDER_TYPE, ProviderModelsMap } from "@/types/providers";
+import { ModelParams, ModelParamsByProvider } from "@/types/modelParams";
 
 export type ModelFlags = {
   reasoning: boolean;
@@ -50,8 +51,12 @@ const buildInitialFlags = (): Map<string, ModelFlags> => {
 const INITIAL_SNAPSHOT: ProviderModelsMap = PROVIDER_MODELS;
 const INITIAL_FLAGS: Map<string, ModelFlags> = buildInitialFlags();
 
+export type ModelParamsIndex = Map<string, Map<string, ModelParams>>;
+
 let latestSnapshot: ProviderModelsMap = INITIAL_SNAPSHOT;
 let latestFlags: Map<string, ModelFlags> = INITIAL_FLAGS;
+let latestParams: ModelParamsIndex = new Map();
+let latestProfiles: ModelParamsByProvider = {};
 
 export const getLatestProviderModelsSnapshot = (): ProviderModelsMap =>
   latestSnapshot;
@@ -61,6 +66,31 @@ export const getLatestModelFlags = (
 ): ModelFlags | undefined => {
   if (!model) return undefined;
   return latestFlags.get(model);
+};
+
+export const getLatestListedModelParams = (
+  provider: string,
+  model?: string | null,
+): ModelParams | undefined => {
+  if (!model) return undefined;
+  return latestParams.get(provider)?.get(model);
+};
+
+export const hasLatestModelList = (provider: string): boolean =>
+  latestParams.has(provider);
+
+export const getLatestProviderProfile = (
+  provider: string,
+): ModelParams | undefined => latestProfiles[provider];
+
+export const setLatestModelParams = (index: ModelParamsIndex): void => {
+  latestParams = index;
+};
+
+export const setLatestProviderProfiles = (
+  profiles: ModelParamsByProvider,
+): void => {
+  latestProfiles = profiles;
 };
 
 export const setLatestProviderModelsSnapshot = (
@@ -80,6 +110,8 @@ export const setLatestModelFlags = (flags: Map<string, ModelFlags>): void => {
 export const resetModelRegistryStoreForTesting = (): void => {
   latestSnapshot = INITIAL_SNAPSHOT;
   latestFlags = INITIAL_FLAGS;
+  latestParams = new Map();
+  latestProfiles = {};
 };
 
 /**

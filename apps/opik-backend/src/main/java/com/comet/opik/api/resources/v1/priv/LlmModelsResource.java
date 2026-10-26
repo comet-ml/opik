@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
+import com.comet.opik.api.ModelParams;
 import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -35,6 +36,26 @@ public class LlmModelsResource {
     public Response getModels() {
         return Response.ok()
                 .entity(registryService.getRegistry())
+                .build();
+    }
+
+    @GET
+    @Path("/profiles")
+    @Operation(operationId = "getLlmModelProfiles", summary = "Get LLM model profiles", description = "Get the params each provider's unlisted models take, keyed by provider", responses = {
+            @ApiResponse(responseCode = "200", description = "Params by provider", content = @Content(schema = @Schema(type = "object", additionalPropertiesSchema = ModelParams.class)))})
+    public Response getProfiles() {
+        return Response.ok()
+                .entity(registryService.getProfiles())
+                .build();
+    }
+
+    @GET
+    @Path("/defaults")
+    @Operation(operationId = "getLlmModelDefaults", summary = "Get default LLM models", description = "Get the model the playground and online evaluation rules start with, by provider", responses = {
+            @ApiResponse(responseCode = "200", description = "Default model by provider", content = @Content(schema = @Schema(implementation = Map.class)))})
+    public Response getDefaultModels() {
+        return Response.ok()
+                .entity(registryService.getDefaultModels())
                 .build();
     }
 }

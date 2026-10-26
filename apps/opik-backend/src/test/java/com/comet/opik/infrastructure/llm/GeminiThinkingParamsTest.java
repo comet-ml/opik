@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.llm;
 
 import com.comet.opik.utils.JsonUtils;
+import jakarta.ws.rs.BadRequestException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -13,6 +14,7 @@ import java.util.Map;
 
 import static com.comet.opik.infrastructure.llm.GeminiThinkingParams.Level;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class GeminiThinkingParamsTest {
 
@@ -122,6 +124,21 @@ class GeminiThinkingParamsTest {
         void keepsBudgetsAtTheAcceptedBoundaries(long given, int expected) {
             assertThat(GeminiThinkingParams.from(Map.of("thinking", Map.of("budget_tokens", (int) given)))
                     .budgetTokens()).isEqualTo(expected);
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"aggressive", "ultra", "xhigh"})
+        void rejectsALevelGeminiDoesNotHave(String level) {
+            assertThatThrownBy(() -> GeminiThinkingParams.from(Map.of("thinking", Map.of("level", level))))
+                    .isInstanceOf(BadRequestException.class)
+                    .hasMessage("Unsupported custom_parameters.thinking.level, level '%s', supported "
+                            .formatted(level) + "'[auto, off, minimal, low, medium, high]'");
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"", " ", "auto", "AUTO"})
+        void leavesABlankOrAutoLevelOut(String level) {
+            assertThat(GeminiThinkingParams.from(Map.of("thinking", Map.of("level", level))).level()).isNull();
         }
 
         @Test

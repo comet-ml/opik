@@ -108,6 +108,27 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
                         String.format(ERROR_MODEL_NOT_SUPPORTED, modelParameters.name())));
     }
 
+    public ChatModel getToolCallingLanguageModel(@NonNull String workspaceId,
+            @NonNull LlmAsJudgeModelParameters modelParameters) {
+        var llmProvider = getLlmProvider(modelParameters.name());
+        var providerConfig = getProviderApiKey(workspaceId, llmProvider, modelParameters.name());
+        var config = buildConfig(providerConfig, workspaceId);
+        var tools = toolsOf(modelParameters.name());
+
+        return Optional.ofNullable(services.get(llmProvider))
+                .map(provider -> provider.getToolCallingLanguageModel(config, modelParameters, tools))
+                .orElseThrow(() -> new BadRequestException(
+                        String.format(ERROR_MODEL_NOT_SUPPORTED, modelParameters.name())));
+    }
+
+    private ModelParams.ToolsParam toolsOf(String model) {
+        return registryService.findModel(model)
+                .map(result -> ObjectUtils.getIfNull(result.model().params(),
+                        () -> registryService.paramsOf(result.provider().getValue(), result.model().id())))
+                .map(ModelParams::tools)
+                .orElse(null);
+    }
+
     /**
      * The agreed requirement is to resolve the LLM provider and its API key based on the model.
      */
@@ -140,6 +161,15 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
                 .filter(result -> result.provider() == LlmProvider.OPEN_AI)
                 .map(result -> ObjectUtils.getIfNull(result.model().params(),
                         () -> registryService.paramsOf(LlmProvider.OPEN_AI.getValue(), result.model().id())));
+    }
+
+    @Override
+    public Optional<ModelParams> geminiParams(@NonNull String model) {
+        return registryService.findModel(model)
+                .filter(result -> result.provider() == LlmProvider.GEMINI
+                        || result.provider() == LlmProvider.VERTEX_AI)
+                .map(result -> ObjectUtils.getIfNull(result.model().params(),
+                        () -> registryService.paramsOf(result.provider().getValue(), result.model().id())));
     }
 
     private LlmProvider getLlmProviderFromEnums(@NonNull String model) {
@@ -202,6 +232,13 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
         // row mapper never decrypts — the auth_config of providers that can't match. Named
         // providers share the "custom-llm/" model prefix, so they're fetched as one family and
         // matched by model in memory (the models list lives inside the configuration JSON).
+        return findProviderApiKey(workspaceId, llmProvider, model)
+                .orElseThrow(() -> new BadRequestException(
+                        "API key not configured for LLM. provider='%s', model='%s'".formatted(
+                                llmProvider.getValue(), model)));
+    }
+
+    private Optional<ProviderApiKey> findProviderApiKey(String workspaceId, LlmProvider llmProvider, String model) {
         Set<LlmProvider> candidates = llmProvider.supportsProviderName()
                 ? NAMED_PROVIDERS
                 : Set.of(llmProvider);
@@ -209,10 +246,18 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
         return llmProviderApiKeyService.findByProviders(workspaceId, candidates).stream()
                 .filter(providerApiKey -> !llmProvider.supportsProviderName()
                         || isModelConfiguredForProvider(model, providerApiKey))
-                .findFirst()
-                .orElseThrow(() -> new BadRequestException(
-                        "API key not configured for LLM. provider='%s', model='%s'".formatted(
-                                llmProvider.getValue(), model)));
+                .findFirst();
+    }
+
+    @Override
+    public LlmProvider getKeyProvider(@NonNull String workspaceId, @NonNull String model) {
+        var llmProvider = getLlmProvider(model);
+        if (!llmProvider.supportsProviderName()) {
+            return llmProvider;
+        }
+        return findProviderApiKey(workspaceId, llmProvider, model)
+                .map(ProviderApiKey::provider)
+                .orElse(llmProvider);
     }
 
     /**

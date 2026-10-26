@@ -3,6 +3,7 @@ package com.comet.opik.infrastructure.llm.vertexai;
 import com.comet.opik.api.ChunkedResponseHandler;
 import com.comet.opik.domain.llm.LlmProviderService;
 import com.comet.opik.infrastructure.llm.GeminiMaxOutputTokens;
+import com.comet.opik.infrastructure.llm.GeminiThinkingParams;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderLangChainMapper;
 import dev.langchain4j.data.message.AiMessage;
@@ -217,7 +218,9 @@ public class LlmProviderVertexAI implements LlmProviderService {
 
     @Override
     public void validateRequest(@NonNull ChatCompletionRequest request) {
-
+        // Called for its 400s only. The client build reads the same block again while sending, where a streamed
+        // request gets the error in-stream.
+        GeminiThinkingParams.from(request.customParameters());
     }
 
     @Override
