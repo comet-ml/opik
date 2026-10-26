@@ -140,6 +140,38 @@ class LlmProviderApiKeyServiceTest {
     }
 
     @Test
+    @DisplayName("a {model} in the host is checked as saved for providers whose client doesn't substitute it")
+    void rejectsHostLevelModelPlaceholderForNonSubstitutingProvider() {
+        // .invalid never resolves (RFC 2606), so the stand-in host can't pass the check
+        var baseUrl = "https://{model}.invalid/v1";
+        var openAi = customProvider().toBuilder().provider(LlmProvider.OPEN_AI).build();
+        givenStoredProvider(Optional.of(openAi));
+        var create = openAi.toBuilder().baseUrl(baseUrl).build();
+        var update = factory.manufacturePojo(ProviderApiKeyUpdate.class).toBuilder().baseUrl(baseUrl).build();
+
+        assertThatThrownBy(() -> service.saveApiKey(create, "user", "workspace"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("model.invalid");
+        assertThatThrownBy(() -> service.updateApiKey(UUID.randomUUID(), update, "user", "workspace"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("model.invalid");
+        verify(template, never()).inTransaction(eq(WRITE), any());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"http://{model}@10.0.0.1/v1", "http://user:{model}@10.0.0.1/v1"})
+    @DisplayName("a {model} in userinfo doesn't exempt the host from the check")
+    void rejectsUserinfoModelPlaceholderOnNonPublicHost(String baseUrl) {
+        givenStoredProvider(Optional.of(customProvider()));
+        var update = factory.manufacturePojo(ProviderApiKeyUpdate.class).toBuilder().baseUrl(baseUrl).build();
+
+        assertThatThrownBy(() -> service.updateApiKey(UUID.randomUUID(), update, "user", "workspace"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("10.0.0.1");
+        verify(template, never()).inTransaction(eq(WRITE), any());
+    }
+
+    @Test
     @DisplayName("update of a provider missing from the workspace is 404, before any destination check")
     void updateOfMissingProviderIsNotFound() {
         givenStoredProvider(Optional.empty());

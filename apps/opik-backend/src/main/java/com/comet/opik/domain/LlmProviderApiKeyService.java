@@ -131,7 +131,7 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
     @Override
     public ProviderApiKey saveApiKey(@NonNull ProviderApiKey providerApiKey, @NonNull String userName,
             @NonNull String workspaceId) {
-        validateDestinations(providerApiKey.baseUrl(),
+        validateDestinations(providerApiKey.baseUrl(), providerApiKey.provider(),
                 providerApiKey.authConfig() == null ? null : providerApiKey.authConfig().value());
         UUID apiKeyId = idGenerator.generateId();
 
@@ -176,8 +176,8 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
             @NonNull String workspaceId) {
 
         // 404 before any destination lookup; validation resolves DNS, so it stays outside the write transaction
-        find(id, workspaceId);
-        validateDestinations(providerApiKeyUpdate.baseUrl(), providerApiKeyUpdate.authConfig());
+        var stored = find(id, workspaceId);
+        validateDestinations(providerApiKeyUpdate.baseUrl(), stored.provider(), providerApiKeyUpdate.authConfig());
 
         template.inTransaction(WRITE, handle -> {
 
@@ -279,8 +279,9 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
         return new AuthConfigUpdate(effectiveUpdate, false, merged);
     }
 
-    private void validateDestinations(String baseUrl, ProviderAuthConfig authConfig) {
-        new ProviderBaseUrlGuard(configuration.getLlmProviderClient().getDestinationGuard()).validate(baseUrl);
+    private void validateDestinations(String baseUrl, LlmProvider provider, ProviderAuthConfig authConfig) {
+        new ProviderBaseUrlGuard(configuration.getLlmProviderClient().getDestinationGuard()).validate(baseUrl,
+                provider);
         if (authConfig != null && StringUtils.isNotBlank(authConfig.tokenUrl())) {
             try {
                 DestinationGuard.builder().mode(configuration.getLlmProviderTokenAuth().getDestinationGuard()).build()

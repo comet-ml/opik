@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.llm.customllm;
 
+import com.comet.opik.api.LlmProvider;
 import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.comet.opik.infrastructure.net.DestinationGuardException;
 import jakarta.ws.rs.BadRequestException;
@@ -27,21 +28,36 @@ public class ProviderBaseUrlGuard {
      * @throws BadRequestException with a user-facing message when the destination is refused
      */
     public void validate(String baseUrl) {
-        // a {model} in the host names a different destination per request, so only the final URL can be judged;
-        // DestinationGuardHttpClientBuilder checks it after substitution
-        if (isBlank(baseUrl) || hasHostPlaceholder(baseUrl)) {
+        if (isBlank(baseUrl)) {
             return;
         }
         // a path-level {model} leaves the host as is, so a stand-in keeps the URL parseable
         validateResolved(baseUrl.replace(InterceptingHttpClient.MODEL_PLACEHOLDER, "model"));
     }
 
+    /**
+     * As {@link #validate(String)}, except a {@code {model}} in the host of a provider whose client substitutes it:
+     * that host names a different destination per request, so only DestinationGuardHttpClientBuilder, checking the
+     * substituted URL, can judge it. Every other provider sends the URL as saved, so it must pass here.
+     */
+    public void validate(String baseUrl, @NonNull LlmProvider provider) {
+        if (provider.routesThroughCustomLlmClient() && !isBlank(baseUrl) && hasHostPlaceholder(baseUrl)) {
+            return;
+        }
+        validate(baseUrl);
+    }
+
+    /** Looks only at the host: a placeholder in userinfo or the port doesn't change where the request goes. */
     private static boolean hasHostPlaceholder(String baseUrl) {
         int schemeEnd = baseUrl.indexOf("://");
         String rest = schemeEnd < 0 ? baseUrl : baseUrl.substring(schemeEnd + 3);
         int authorityEnd = indexOfAny(rest, "/?#");
         String authority = authorityEnd < 0 ? rest : rest.substring(0, authorityEnd);
-        return authority.contains(InterceptingHttpClient.MODEL_PLACEHOLDER);
+        String hostAndPort = authority.substring(authority.lastIndexOf('@') + 1);
+        String host = hostAndPort.startsWith("[")
+                ? hostAndPort.substring(0, hostAndPort.indexOf(']') + 1)
+                : hostAndPort.split(":", 2)[0];
+        return host.contains(InterceptingHttpClient.MODEL_PLACEHOLDER);
     }
 
     void validateResolved(String url) {

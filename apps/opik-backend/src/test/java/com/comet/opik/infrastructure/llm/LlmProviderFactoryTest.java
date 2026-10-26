@@ -34,6 +34,7 @@ import com.comet.opik.infrastructure.llm.vertexai.VertexAIClientGenerator;
 import com.comet.opik.infrastructure.llm.vertexai.VertexAIModelName;
 import com.comet.opik.infrastructure.llm.vertexai.VertexAIModule;
 import com.comet.opik.infrastructure.net.DestinationGuard;
+import com.comet.opik.podam.PodamFactoryUtils;
 import jakarta.ws.rs.BadRequestException;
 import org.apache.commons.lang3.EnumUtils;
 import org.junit.jupiter.api.BeforeAll;
@@ -48,6 +49,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
+import java.net.URI;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -244,7 +246,8 @@ class LlmProviderFactoryTest {
         var llmProviderApiKeyService = mock(LlmProviderApiKeyService.class);
         String workspaceId = UUID.randomUUID().toString();
         when(llmProviderApiKeyService.findByProviders(eq(workspaceId), anySet()))
-                .thenReturn(List.of(ProviderApiKey.builder()
+                .thenReturn(List.of(PodamFactoryUtils.newPodamFactory().manufacturePojo(ProviderApiKey.class)
+                        .toBuilder()
                         .provider(LlmProvider.OPEN_AI)
                         .apiKey(EncryptionUtils.encrypt(UUID.randomUUID().toString()))
                         .baseUrl(baseUrl)
@@ -258,7 +261,8 @@ class LlmProviderFactoryTest {
 
         assertThatThrownBy(() -> llmProviderFactory.getService(workspaceId, OpenaiModelName.GPT_4_1_MINI.toString()))
                 .isInstanceOf(BadRequestException.class)
-                .hasMessageContaining("private or internal address");
+                .hasMessageContaining("resolves to a private or internal address, host '%s'"
+                        .formatted(URI.create(baseUrl).getHost()));
     }
 
     private static Stream<Arguments> testCustomLlmProviderMatching_shouldMatch() {
