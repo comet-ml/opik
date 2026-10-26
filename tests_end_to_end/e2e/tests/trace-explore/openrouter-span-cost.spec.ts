@@ -62,9 +62,14 @@ import type { BackendClient, SpanCostRef } from '@e2e/core/backend';
  * the amounts, on the rows opik#9180 changed and the id it removed.
  */
 
-/** The vectors a price row must resolve, and the one it must not. */
-const priced = (spans: readonly OpenRouterCostSpanSeed[]): OpenRouterCostSpanSeed[] =>
-  spans.filter((s) => s.expectedCost > 0);
+/**
+ * The vectors no price row may resolve.
+ *
+ * There is no `priced` counterpart on purpose: which spans must be billed is
+ * asked by SPELLING here, not by expected cost, because the two bare spellings
+ * are expected to price too once the defect the second test pins is fixed. See
+ * `bySpelling`.
+ */
 const controls = (spans: readonly OpenRouterCostSpanSeed[]): OpenRouterCostSpanSeed[] =>
   spans.filter((s) => s.expectedCost === 0);
 

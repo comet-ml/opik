@@ -170,6 +170,16 @@ test.describe(
         await test.step('Run it to completion against the fast-failing model', async () => {
           await playground.clickReRun();
           await playground.waitForRunsComplete({ expectedRows: rowCount, timeoutMs: 180_000 });
+          // `waitForRunsComplete` only watches the CELLS: it returns as soon as
+          // every cell carries text, and on a server-side run the header is
+          // still showing "Stop all" at that point because `isRunning` tracks
+          // the experiment rather than the grid. The step below asserts no run
+          // is in flight — which is what makes the post-edit reading
+          // attributable to the EDIT — so the run has to be settled by the
+          // header's own signal, not merely by the grid's. Without this the
+          // "no run is in flight" read failed on the local stack against a
+          // header that was still swapped for the progress strip.
+          await playground.waitForRunSettled(120_000);
           await registerCreatedExperiments();
         });
 
