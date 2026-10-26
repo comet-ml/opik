@@ -248,10 +248,13 @@ const useActionButtonActions = ({
       queryClient.invalidateQueries({ queryKey: ["experiments"] });
 
       // Poll for completion instead of immediately finishing
-      const experimentIds = response.experiments.map((e) => e.experiment_id);
-      pollExperimentCompletion(experimentIds, response.total_items, datasetId, {
-        announceExperiments: experiments,
-      });
+      pollExperimentCompletion(
+        Object.fromEntries(
+          response.experiments.map((e) => [e.experiment_id, e.total_items]),
+        ),
+        datasetId,
+        { announceExperiments: experiments },
+      );
     } catch {
       settleRun();
       resetProgress();
@@ -371,8 +374,7 @@ const useActionButtonActions = ({
         queryClient.invalidateQueries({ queryKey: ["experiments"] });
 
         pollExperimentCompletion(
-          [experiment.experiment_id],
-          response.total_items,
+          { [experiment.experiment_id]: experiment.total_items },
           datasetId,
           {
             scopedPromptIds: [promptId],

@@ -179,7 +179,7 @@ function ResourceLink({
     workspaceName,
     ...params,
   };
-  if (useProjectUrl) {
+  if (useProjectUrl && !linkParams.projectId) {
     linkParams.projectId = activeProjectId;
   }
   linkParams[props.param] = id;
