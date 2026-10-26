@@ -54,6 +54,8 @@ export {
   type EntityIdPage,
   type ProjectStatRef,
   type KpiCardStat,
+  type RecentActivityItemRef,
+  type RecentActivityPageRef,
   type TraceDetail,
   type TracePayload,
   type TraceLifecycle,

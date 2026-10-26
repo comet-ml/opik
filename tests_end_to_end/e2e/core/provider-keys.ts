@@ -146,6 +146,115 @@ export const backendSelfUrl = process.env.OPIK_BACKEND_SELF_URL || 'http://local
  */
 export const notFoundProviderBaseUrl = `${backendSelfUrl}/qa-no-such-llm-endpoint`;
 
+/**
+ * A public base URL that always passes the destination guard and is never
+ * connected to.
+ *
+ * `192.0.2.1` is TEST-NET-1 (RFC 5737). Three properties, all load-bearing for
+ * a spec whose subject is the SAVE rather than the call:
+ *
+ *  - It is a literal address, so the guard's `InetAddress.getAllByName` parses
+ *    rather than resolves — no DNS, no third-party host, nothing that can
+ *    start failing.
+ *  - It is public by IANA and outside every range `DestinationGuard`'s
+ *    `NON_PUBLIC_RANGES` refuses (note `192.0.0.0/24` is a different block and
+ *    does not cover it), so it saves under `strict` as well as `relaxed` —
+ *    which the estate's loopback URLs do NOT: a `strict` deployment refuses
+ *    `127.0.0.1` and `localhost` with a 400 on save.
+ *  - `https`, so it also satisfies a deployment running the guard in
+ *    `HTTPS_ONLY` scheme mode rather than the `plaintext_or_tls` default.
+ *
+ * Deliberately NOT for a provider anything will call: a connect to TEST-NET-1
+ * hangs until it times out. `createUnresponsive` wants exactly that; a caller
+ * here wants a URL the server will store and never dial.
+ */
+export const guardPassingBaseUrl = 'https://192.0.2.1/v1';
+
+/** A second {@link guardPassingBaseUrl}, for asserting what a base_url CHANGE does. */
+export const guardPassingBaseUrlAlternate = 'https://192.0.2.1/v2';
+
+/**
+ * As {@link createProviderKey}, but hands back the status and body instead of
+ * throwing on a non-2xx.
+ *
+ * For specs whose subject is the REFUSAL — `provider=opik-free`, a guarded
+ * destination — where the status code and the message are the assertion. The
+ * throwing version turns both into an `Error` string a caller would have to
+ * parse back out.
+ */
+export async function createProviderKeyRaw(payload: {
+  provider: string;
+  provider_name?: string;
+  base_url?: string;
+  api_key?: string;
+  configuration?: Record<string, string>;
+  auth_config?: ProviderAuthConfig;
+}): Promise<{ status: number; body: string; id: string | null }> {
+  const response = await fetch(endpoint(), {
+    method: 'POST',
+    headers: restHeaders(),
+    body: JSON.stringify(payload),
+  });
+  // A 201 answers with no body: the `Location` header is the only place the new
+  // id appears. Taken from there rather than by listing back and matching on
+  // `provider_name`, so the id a caller then PATCHes is the one this request
+  // actually created — on a shared workspace a list lookup can answer for a
+  // namesake another run left behind.
+  const location = response.headers.get('location');
+  return {
+    status: response.status,
+    body: await response.text(),
+    id: location ? (location.split('/').pop() ?? null) : null,
+  };
+}
+
+/**
+ * `PATCH /v1/private/llm-provider-key/{id}` — the update the AI providers tab
+ * sends, with the status and body kept.
+ *
+ * Raw by default rather than throwing, because the interesting updates here are
+ * the ones the server REFUSES: changing `base_url` without resubmitting the
+ * credentials is a 400 whose message is the whole point
+ * (`LlmProviderApiKeyService.validateCredentialsResubmittedOnUrlChange`).
+ *
+ * `base_url` and `api_key` are both optional and the distinction between
+ * omitted and empty is the contract: the rule only fires when `base_url` is
+ * PRESENT and different, so a caller testing the no-op branch must be able to
+ * send the same URL, and one testing the fires-branch must be able to send a
+ * URL with no credential beside it.
+ */
+export async function patchProviderKey(
+  id: string,
+  payload: {
+    base_url?: string;
+    api_key?: string;
+    configuration?: Record<string, string>;
+    auth_config?: ProviderAuthConfig;
+  },
+): Promise<{ status: number; body: string }> {
+  const response = await fetch(endpoint(`/${id}`), {
+    method: 'PATCH',
+    headers: restHeaders(),
+    body: JSON.stringify(payload),
+  });
+  return { status: response.status, body: await response.text() };
+}
+
+/**
+ * One provider key by id — `GET /v1/private/llm-provider-key/{id}`.
+ *
+ * Distinct from `findProviderKeyByName`, which pages the list: a caller
+ * asserting that a REFUSED update did not partially apply wants the stored row
+ * itself, and a 404 here is a different finding from "absent from the list".
+ */
+export async function getProviderKeyById(id: string): Promise<ProviderKeyRef> {
+  const response = await fetch(endpoint(`/${id}`), { headers: restHeaders() });
+  if (!response.ok) {
+    throw new Error(`get provider key ${id} returned ${response.status}: ${await response.text()}`);
+  }
+  return (await response.json()) as ProviderKeyRef;
+}
+
 export async function createProviderKey(payload: {
   provider: string;
   /**

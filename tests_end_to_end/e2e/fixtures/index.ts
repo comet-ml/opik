@@ -1,4 +1,4 @@
-export { test, expect } from './openrouter-repriced-spans.fixture';
+export { test, expect } from './playground-logs-traces.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -550,3 +550,13 @@ export type {
   OpenRouterRepricedSpansRef,
   OpenRouterRepricedSpansFixtures,
 } from './openrouter-repriced-spans.fixture';
+export type {
+  SourceMixTraceRef,
+  SourceMixTracesRef,
+  SourceMixTracesFixtures,
+} from './source-mix-traces.fixture';
+export type {
+  PlaygroundLogsTraceRef,
+  PlaygroundLogsTracesRef,
+  PlaygroundLogsTracesFixtures,
+} from './playground-logs-traces.fixture';

@@ -1456,6 +1456,29 @@ export function numericStat(value: ThreadStatValue | undefined, name: string): n
   return value;
 }
 
+/**
+ * One item of the project home page's "Recent activity" list.
+ *
+ * `type` and `name` are plain strings rather than a narrowed union: the list is
+ * an open set the backend adds to (seven `ActivityType`s today), and a spec
+ * about one of them wants an unknown new type to arrive and be counted, not to
+ * fail type-checking or be silently dropped.
+ */
+export interface RecentActivityItemRef {
+  /** `trace_daily`, `experiment`, `dataset_version`, … */
+  type: string;
+  /** The rendered right-hand value. For `trace_daily` this is the COUNT. */
+  name: string;
+  id: string;
+  createdAt: string;
+}
+
+/** The `GET /projects/{id}/activities` envelope, `total` included. */
+export interface RecentActivityPageRef {
+  total: number;
+  items: RecentActivityItemRef[];
+}
+
 /** A backend filter as the REST layer serialises it (the `filters` query param). */
 export interface BackendFilter {
   field: string;
@@ -3841,6 +3864,78 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
           currentValue: stat.current_value ?? null,
           previousValue: stat.previous_value ?? null,
         })),
+      };
+    },
+
+    /**
+     * `GET /v1/private/projects/{id}/activities` — the read behind the project
+     * home page's "Recent activity" list.
+     *
+     * The whole envelope, items verbatim: the list merges six sources in one
+     * response, so a caller asserting on one of them has to be able to see
+     * that the others did not also change. `total` comes back for the same
+     * reason the other paged reads return it — an item silently dropped from
+     * `content` is otherwise indistinguishable from one that was never there.
+     *
+     * `name` is a plain string even for `trace_daily`, where it carries a
+     * COUNT (`RecentActivityService.toTraceDailyItem` stringifies it). Left as
+     * the server spells it rather than parsed to a number here: the front end
+     * renders the string, so a spec comparing the page against this read is
+     * comparing like with like, and a count that came back as `"3.0"` or
+     * `"3 traces"` fails instead of being normalised into agreement.
+     *
+     * Through `rawFetch` because the pinned SDK has no recent-activity surface
+     * at all.
+     */
+    async listRecentActivity(args: {
+      projectId: string;
+      page?: number;
+      size?: number;
+    }): Promise<RecentActivityPageRef> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/projects/${args.projectId}/activities`,
+        {
+          query: new URLSearchParams({
+            page: String(args.page ?? 1),
+            size: String(args.size ?? 10),
+          }),
+        },
+      );
+      if (status !== 200) {
+        throw new Error(
+          `listRecentActivity(project ${args.projectId}): expected 200, got ${status}: ${message}`,
+        );
+      }
+      const body = (json ?? {}) as {
+        total?: number;
+        content?: Array<Record<string, unknown>>;
+      };
+      if (typeof body.total !== 'number') {
+        throw new Error(
+          `listRecentActivity(project ${args.projectId}): 200 response carried no numeric ` +
+            "'total' — the envelope is where a dropped item shows up, so it cannot be assumed.",
+        );
+      }
+      return {
+        total: body.total,
+        items: (body.content ?? []).map((item) => {
+          // Asserted, not defaulted: an item with no type or no name is a
+          // malformed response, and coercing it to '' would turn that into an
+          // item the caller simply filters out.
+          if (typeof item.type !== 'string' || typeof item.name !== 'string') {
+            throw new Error(
+              `listRecentActivity(project ${args.projectId}): an activity item arrived ` +
+                `without a string type/name: ${JSON.stringify(item)}`,
+            );
+          }
+          return {
+            type: item.type,
+            name: item.name,
+            id: String(item.id ?? ''),
+            createdAt: String(item.created_at ?? ''),
+          };
+        }),
       };
     },
 
@@ -6570,6 +6665,14 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
      * absence is the point; a defaulted `'sdk'` would quietly turn the legacy
      * case into the ordinary one.
      *
+     * The union is every value `api.Source` admits on ingest, `evaluator`
+     * included — the whole enum, deliberately, because a spec whose subject is
+     * an `= sdk` filter has to be able to seed EVERY value that filter is
+     * supposed to exclude. A union missing one leaves that value untested and
+     * reads as though the enum were shorter than it is. `unknown` is absent
+     * here for the same reason it is absent from the enum: the endpoint refuses
+     * it on ingest, and `source: null` is how a caller writes that row.
+     *
      * Written through `rawFetch` rather than the pinned SDK because the SDK
      * validates the request body against `JsonListStringWrite`, which admits an
      * object, an array OF OBJECTS, or a string — while the endpoint itself
@@ -6582,7 +6685,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       id: string;
       projectName: string;
       name: string;
-      source: 'sdk' | 'experiment' | 'playground' | 'optimization' | null;
+      source: 'sdk' | 'experiment' | 'playground' | 'optimization' | 'evaluator' | null;
       input?: TraceJsonSection;
       output?: TraceJsonSection;
       metadata?: Record<string, unknown>;
