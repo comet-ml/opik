@@ -17,6 +17,7 @@ import useProjectById from "@/api/projects/useProjectById";
 import useProviderKeys from "@/api/provider-keys/useProviderKeys";
 import PlaygroundPrompts from "@/v2/pages/PlaygroundPage/PlaygroundPrompts/PlaygroundPrompts";
 import PlaygroundHeader from "@/v2/pages/PlaygroundPage/PlaygroundHeader";
+import PlaygroundErrorBoundary from "@/v2/pages/PlaygroundPage/PlaygroundErrorBoundary";
 import SetupProviderDialog from "@/v2/pages-shared/llm/SetupProviderDialog/SetupProviderDialog";
 import useActionButtonActions from "@/v2/pages/PlaygroundPage/useActionButtonActions";
 import useDatasetById from "@/api/datasets/useDatasetById";
@@ -338,4 +339,10 @@ const PlaygroundPage = () => {
   );
 };
 
-export default PlaygroundPage;
+const PlaygroundPageWithRecovery = () => (
+  <PlaygroundErrorBoundary>
+    <PlaygroundPage />
+  </PlaygroundErrorBoundary>
+);
+
+export default PlaygroundPageWithRecovery;
