@@ -1,15 +1,20 @@
 package com.comet.opik.infrastructure.llm.customllm;
 
+import com.comet.opik.infrastructure.net.DestinationGuard;
 import dev.langchain4j.exception.HttpException;
 import dev.langchain4j.http.client.HttpClient;
+import dev.langchain4j.http.client.HttpClientBuilder;
 import dev.langchain4j.http.client.HttpMethod;
 import dev.langchain4j.http.client.HttpRequest;
 import dev.langchain4j.http.client.SuccessfulHttpResponse;
 import dev.langchain4j.http.client.sse.ServerSentEvent;
 import dev.langchain4j.http.client.sse.ServerSentEventListener;
 import dev.langchain4j.http.client.sse.ServerSentEventParser;
+import jakarta.ws.rs.BadRequestException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -25,6 +30,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -410,5 +416,37 @@ class InterceptingHttpClientTest {
         verify(downstream).onError(failure);
         // no second execute: content already flowed, splicing two half-responses would be worse
         verify(delegate, times(1)).execute(any(HttpRequest.class), any(), any());
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "http://127.0.0.1:8080/v1/chat/completions, gpt-4o",
+            "http://10.0.0.1/v1/chat/completions, gpt-4o",
+            "http://169.254.1.1/v1/chat/completions, gpt-4o",
+            "http://{model}/v1/chat/completions, 127.0.0.1", // host only known after substitution
+    })
+    void rejectsNonPublicDestination(String url, String model) {
+        var client = guardedClient();
+        var request = HttpRequest.builder()
+                .method(HttpMethod.POST)
+                .url(url)
+                .body("{\"model\":\"%s\"}".formatted(model))
+                .build();
+        var listener = mock(ServerSentEventListener.class);
+
+        assertThatThrownBy(() -> client.execute(request)).isInstanceOf(BadRequestException.class);
+        client.execute(request, mock(ServerSentEventParser.class), listener);
+
+        verify(listener).onError(any(BadRequestException.class));
+        verifyNoInteractions(delegate);
+    }
+
+    /** The chain CustomLlmClientGenerator builds: the guard sits under the URL-mutating decorator. */
+    private HttpClient guardedClient() {
+        var delegateBuilder = mock(HttpClientBuilder.class);
+        when(delegateBuilder.build()).thenReturn(delegate);
+        var guarded = new DestinationGuardHttpClientBuilder(delegateBuilder,
+                new ProviderBaseUrlGuard(DestinationGuard.Mode.STRICT)).build();
+        return new InterceptingHttpClient(guarded, Map.of(), "dummy-key");
     }
 }

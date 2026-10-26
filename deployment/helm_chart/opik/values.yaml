@@ -181,6 +181,8 @@ component:
       # Self-hosted deployments legitimately point custom-provider token auth at internal gateways;
       # the application default is "strict" (SSRF guard) for non-self-hosted deployments.
       LLM_PROVIDER_TOKEN_AUTH_DESTINATION_GUARD: "relaxed"
+      # Same for provider base URLs (e.g. a local Ollama or vLLM server)
+      LLM_PROVIDER_DESTINATION_GUARD: "relaxed"
       ANALYTICS_DB_MIGRATIONS_PASS: opik
       ANALYTICS_DB_PASS: opik
       STATE_DB_PASS: opik

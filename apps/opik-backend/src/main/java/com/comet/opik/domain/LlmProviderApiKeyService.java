@@ -175,6 +175,9 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
             @NonNull String userName,
             @NonNull String workspaceId) {
 
+        // resolves DNS, so kept outside the transaction
+        validateDestinations(providerApiKeyUpdate.baseUrl(), providerApiKeyUpdate.authConfig());
+
         template.inTransaction(WRITE, handle -> {
 
             var repository = handle.attach(LlmProviderApiKeyDAO.class);
@@ -182,7 +185,6 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
             ProviderApiKey providerApiKey = repository.fetch(id, workspaceId)
                     .orElseThrow(this::createNotFoundError);
 
-            validateDestinations(providerApiKeyUpdate.baseUrl(), providerApiKeyUpdate.authConfig());
             validateCredentialsResubmittedOnUrlChange(providerApiKeyUpdate, providerApiKey);
             var authConfigUpdate = resolveAuthConfigUpdate(providerApiKeyUpdate, providerApiKey);
 

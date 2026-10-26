@@ -683,6 +683,50 @@ class LlmProviderApiKeyResourceTest {
                     handle -> handle.attach(LlmProviderApiKeyDAO.class).findById(id, workspaceId).authConfig().value());
         }
 
+        private Stream<Arguments> baseUrlChangeWithAuthConfig() {
+            var replacement = tokenAuthConfig().toBuilder()
+                    .credentials(List.of(
+                            credential("grant_type", "client_credentials", false),
+                            credential("client_id", "opik-prod", false),
+                            credential("client_secret", "rotated-s3cr3t", true)))
+                    .build();
+            var sentinel = tokenAuthConfig().toBuilder()
+                    .credentials(List.of(credential("client_secret", ProviderAuthConfig.SECRET_SENTINEL, true)))
+                    .build();
+            return Stream.of(
+                    arguments(named("stored auth_config kept", (ProviderAuthConfig) null),
+                            HttpStatus.SC_BAD_REQUEST, tokenAuthConfig()),
+                    arguments(named("secret sentinel", sentinel), HttpStatus.SC_BAD_REQUEST, tokenAuthConfig()),
+                    arguments(named("complete replacement", replacement), HttpStatus.SC_NO_CONTENT, replacement),
+                    arguments(named("cleared", ProviderAuthConfig.builder().build()), HttpStatus.SC_NO_CONTENT,
+                            null));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("changing base_url requires the stored auth_config to be replaced or cleared")
+        void baseUrlChangeWithAuthConfig(ProviderAuthConfig authConfig, int expectedStatus,
+                ProviderAuthConfig expectedStored) {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var created = llmProviderApiKeyResourceClient.createProviderApiKey(
+                    customProviderWithAuthConfig(), apiKey, workspaceName, HttpStatus.SC_CREATED);
+            var newBaseUrl = created.baseUrl() + "/changed";
+
+            var update = ProviderApiKeyUpdate.builder().baseUrl(newBaseUrl).authConfig(authConfig).build();
+            llmProviderApiKeyResourceClient.updateProviderApiKey(created.id(), update, apiKey, workspaceName,
+                    expectedStatus);
+
+            var stored = mySqlTemplate.inTransaction(READ_ONLY,
+                    handle -> handle.attach(LlmProviderApiKeyDAO.class).findById(created.id(), workspaceId));
+            assertThat(stored.baseUrl())
+                    .isEqualTo(expectedStatus == HttpStatus.SC_NO_CONTENT ? newBaseUrl : created.baseUrl());
+            assertThat(stored.authConfig() == null ? null : stored.authConfig().value()).isEqualTo(expectedStored);
+        }
+
         @Test
         @DisplayName("create stores the recipe encrypted and reads it back masked")
         void createAndGetMasksSecrets() {
