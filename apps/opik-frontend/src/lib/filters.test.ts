@@ -148,8 +148,8 @@ describe("generateLogsSourceFilter", () => {
       {
         field: "source",
         type: COLUMN_TYPE.string,
-        operator: "in",
-        value: "playground,experiment",
+        operator: "!=",
+        value: "sdk",
       },
       {
         field: "metadata",
