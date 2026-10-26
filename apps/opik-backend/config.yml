@@ -1226,7 +1226,7 @@ experimentExecution:
   # Description: Duration for long-polling reads on the Redis Stream
   longPollingDuration: ${EXPERIMENT_EXECUTION_LONG_POLLING_DURATION:-5s}
   # Default: 10000
-  # Description: Maximum length of the Redis Stream (trimmed non-strictly)
+  # Description: Maximum length of the Redis Stream (trimmed non-strictly). A run is admitted against a lower bound derived from it, so that launches arriving together overshoot into headroom instead of trimming entries no consumer has taken
   streamMaxLen: ${EXPERIMENT_EXECUTION_STREAM_MAX_LEN:-10000}
   # Default: 100
   # Description: Trim limit for the Redis Stream
@@ -1243,6 +1243,12 @@ experimentExecution:
   # Default: 24h
   # Description: TTL for the batch completion counter in Redis
   batchCounterTtl: ${EXPERIMENT_EXECUTION_BATCH_COUNTER_TTL:-24h}
+  # Default: 60s
+  # Description: Lease on the lock that serialises launching a run, held from the queue-capacity check through publishing so the check cannot be overtaken. Must exceed the time to publish the largest run; a pod that dies holding it stalls launches until it expires
+  publishLockLease: ${EXPERIMENT_EXECUTION_PUBLISH_LOCK_LEASE:-60s}
+  # Default: 10s
+  # Description: How long a run waits for the publish lock before being refused with 429. Several times the time to publish a run, so a queued launch waits rather than being turned away; under publishLockLease, so a pod that died holding the lock refuses quickly instead of holding the request
+  publishLockWait: ${EXPERIMENT_EXECUTION_PUBLISH_LOCK_WAIT:-10s}
 
 # Configuration for Dataset Export
 datasetExport:
@@ -1637,6 +1643,25 @@ llmProviderClient:
   # Default: false
   # Description: Whether or not to log responses (HTTP-level logging via langchain4j - can be verbose)
   logResponses: ${LLM_PROVIDER_CLIENT_LOG_RESPONSES:-false}
+  # Default: strict
+  # Values: ['strict', 'relaxed']
+  #   - strict: provider base URLs must be http(s) and resolve only to public addresses
+  #   - relaxed: no destination restrictions, for deployments whose providers run on internal networks
+  # Description: Destination policy for user-configured LLM provider base URLs
+  destinationGuard: ${LLM_PROVIDER_DESTINATION_GUARD:-strict}
+  # Default: plaintext_or_tls
+  # Values: ['plaintext_or_tls', 'https_only']
+  #   - plaintext_or_tls: http and https, as self-hosted model servers commonly run without TLS
+  #   - https_only: https only
+  # Description: Schemes allowed for user-configured LLM provider base URLs, checked in strict mode only
+  destinationScheme: ${LLM_PROVIDER_DESTINATION_SCHEME:-plaintext_or_tls}
+  # Default: strict
+  # Values: ['strict', 'relaxed']
+  #   - strict: video URLs must be http(s) and resolve only to public addresses
+  #   - relaxed: no destination restrictions
+  # Description: Destination policy for the HEAD request that detects the MIME type of an extensionless video URL.
+  #   The URL comes from any caller's message, and a refusal only loses the hint
+  videoUrlDestinationGuard: ${LLM_PROVIDER_VIDEO_URL_DESTINATION_GUARD:-strict}
   # Configuration for OpenAI client
   openAiClient:
     # Default:
@@ -1672,6 +1697,11 @@ llmProviderClient:
       global: ${LLM_PROVIDER_VERTEXAI_GLOBAL_ENDPOINT:-https://aiplatform.googleapis.com}
       eu: ${LLM_PROVIDER_VERTEXAI_EU_ENDPOINT:-https://aiplatform.eu.rep.googleapis.com}
       us: ${LLM_PROVIDER_VERTEXAI_US_ENDPOINT:-https://aiplatform.us.rep.googleapis.com}
+    # Description: the only token_uri values a service-account key may carry. The credentials refresh by posting to it,
+    # and the key file is user-supplied, so any other value is refused.
+    tokenUris:
+      - ${LLM_PROVIDER_VERTEXAI_TOKEN_URI:-https://oauth2.googleapis.com/token}
+      - https://accounts.google.com/o/oauth2/token
 
 # Configuration for cache manager
 cacheManager:

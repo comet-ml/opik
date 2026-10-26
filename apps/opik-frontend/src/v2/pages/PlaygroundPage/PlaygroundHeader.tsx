@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pause, Play, RotateCcw } from "lucide-react";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { Loader2, Pause, Play, RotateCcw } from "lucide-react";
 
 import { Separator } from "@/ui/separator";
 import { Button } from "@/ui/button";
@@ -9,10 +9,12 @@ import FiltersButton from "@/shared/FiltersButton/FiltersButton";
 import RunExperimentControl from "@/v2/pages/PlaygroundPage/RunExperimentControl";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { canRunMessages, hasUnsupportedMedia } from "@/lib/playground";
+import { isMac } from "@/lib/utils";
 import { LOGS_SOURCE } from "@/types/traces";
 import { useActiveProjectId } from "@/store/AppStore";
 import TraceLogsSidebarButton from "@/v2/pages-shared/traces/TraceLogsSidebar/TraceLogsSidebarButton";
 import { DATASET_TYPE } from "@/types/datasets";
+import PlaygroundColumnsButton from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputTable/PlaygroundColumnsButton";
 import useDatasetItemsList from "@/api/datasets/useDatasetItemsList";
 import useDatasetVersionsList from "@/api/datasets/useDatasetVersionsList";
 import {
@@ -20,11 +22,13 @@ import {
   transformDataColumnFilters,
 } from "@/lib/filters";
 import { parseDatasetVersionKey } from "@/utils/datasetVersionStorage";
-import {
+import usePlaygroundRunHotkey from "@/v2/pages/PlaygroundPage/usePlaygroundRunHotkey";
+import usePlaygroundStore, {
   usePromptMap,
   useClearCreatedExperiments,
   useCreatedExperiments,
   useIsRunning,
+  useIsResumingRun,
   useSetSelectedRuleIds,
   useResetDatasetFilters,
   useResetOutputMap,
@@ -33,6 +37,8 @@ import {
   useDatasetType,
   useDatasetFilters,
   useSetDatasetFilters,
+  useDatasetItemsTotal,
+  useIsStoppingAll,
 } from "@/store/PlaygroundStore";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
@@ -45,7 +51,7 @@ interface PlaygroundHeaderProps {
   onChangeDatasetId: (id: string | null) => void;
   onReset: () => void;
   onRunAll: () => void;
-
+  onRunSingle: (promptId: string) => void;
   onStopAll: () => void;
   maxWidth?: string;
 }
@@ -59,6 +65,7 @@ const PlaygroundHeader = ({
   onChangeDatasetId,
   onReset,
   onRunAll,
+  onRunSingle,
   onStopAll,
   maxWidth,
 }: PlaygroundHeaderProps) => {
@@ -70,6 +77,8 @@ const PlaygroundHeader = ({
   const resetOutputMap = useResetOutputMap();
   const setExperimentName = useSetExperimentName();
   const isRunning = useIsRunning();
+  const isStoppingAll = useIsStoppingAll();
+  const isResumingRun = useIsResumingRun();
   const setDatasetType = useSetDatasetType();
   const currentDatasetType = useDatasetType();
   const filters = useDatasetFilters();
@@ -138,6 +147,8 @@ const PlaygroundHeader = ({
     [promptMap],
   );
 
+  const datasetItemsTotal = useDatasetItemsTotal();
+
   const allMessagesRunnable = useMemo(
     () => Object.values(promptMap).every((p) => canRunMessages(p.messages)),
     [promptMap],
@@ -146,13 +157,17 @@ const PlaygroundHeader = ({
   const isDatasetEmpty = isExperimentMode && versionItemsTotal === 0;
   const experimentTarget =
     currentDatasetType === DATASET_TYPE.TEST_SUITE ? "test suite" : "dataset";
+  // Zero rows is a real state, not a loading one: a filter can exclude everything
+  const hasNoDatasetItems = isExperimentMode && datasetItemsTotal === 0;
 
   const isRunDisabled =
+    isResumingRun ||
     !allPromptsHaveModels ||
     !allMessagesRunnable ||
     hasMediaCompatibilityIssues ||
     (isExperimentMode && !datasetName) ||
-    isDatasetEmpty;
+    isDatasetEmpty ||
+    hasNoDatasetItems;
 
   const runDisabledReason = useMemo(() => {
     if (!allPromptsHaveModels)
@@ -165,34 +180,54 @@ const PlaygroundHeader = ({
       return "Your dataset has been removed. Select another one";
     if (isDatasetEmpty)
       return `This ${experimentTarget} version has no items. Add items or select another version to run an experiment`;
+    if (hasNoDatasetItems) return "No dataset items match the current filters";
     return null;
   }, [
     allPromptsHaveModels,
     allMessagesRunnable,
     hasMediaCompatibilityIssues,
+    hasNoDatasetItems,
     isExperimentMode,
     datasetName,
     isDatasetEmpty,
     experimentTarget,
   ]);
 
-  // Keyboard shortcut: Shift+Enter to run all
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (
-        event.shiftKey &&
-        event.key === "Enter" &&
-        !isRunDisabled &&
-        !isRunning
-      ) {
-        event.preventDefault();
-        event.stopPropagation();
-        onRunAll();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown, true);
-    return () => window.removeEventListener("keydown", handleKeyDown, true);
-  }, [onRunAll, isRunDisabled, isRunning]);
+  const canRunPrompt = useCallback(
+    (promptId: string) => {
+      const prompt = promptMap[promptId];
+      const { isRunningMap, stopsAwaitingRun, cancelsInFlight } =
+        usePlaygroundStore.getState();
+      return (
+        !!prompt?.model &&
+        canRunMessages(prompt.messages) &&
+        !hasUnsupportedMedia(prompt) &&
+        !(isExperimentMode && !datasetName) &&
+        !isDatasetEmpty &&
+        !hasNoDatasetItems &&
+        !isResumingRun &&
+        !isRunningMap[promptId] &&
+        !stopsAwaitingRun.has(promptId) &&
+        !cancelsInFlight.has(promptId)
+      );
+    },
+    [
+      promptMap,
+      isExperimentMode,
+      datasetName,
+      isDatasetEmpty,
+      hasNoDatasetItems,
+      isResumingRun,
+    ],
+  );
+
+  usePlaygroundRunHotkey({
+    promptCount: Object.keys(promptMap).length,
+    canRunAll: !isRunDisabled && !isRunning && !isStoppingAll,
+    canRunPrompt,
+    onRunAll,
+    onRunPrompt: onRunSingle,
+  });
 
   const handleLeaveExperimentMode = useCallback(() => {
     clearCreatedExperiments();
@@ -237,11 +272,23 @@ const PlaygroundHeader = ({
             deferOnChange
           />
         )}
+        {plainDatasetId && (
+          <PlaygroundColumnsButton datasetId={plainDatasetId} />
+        )}
       </>
     );
   };
 
   const renderRunButton = () => {
+    if (isStoppingAll) {
+      return (
+        <Button size="2xs" variant="outline" disabled>
+          <Loader2 className="mr-1 size-3.5 animate-spin" />
+          Stopping...
+        </Button>
+      );
+    }
+
     if (isRunning) {
       return (
         <TooltipWrapper content="Stop running prompts">
@@ -273,7 +320,11 @@ const PlaygroundHeader = ({
         >
           <Play className="mr-1 size-3" />
           {label}
-          <HotkeyDisplay hotkey="⇧" size="2xs" className="ml-1.5" />
+          <HotkeyDisplay
+            hotkey={isMac ? "⌘" : "Ctrl"}
+            size="2xs"
+            className="ml-1.5"
+          />
           <HotkeyDisplay hotkey="⏎" size="2xs" className="ml-1" />
         </Button>
       </TooltipWrapper>

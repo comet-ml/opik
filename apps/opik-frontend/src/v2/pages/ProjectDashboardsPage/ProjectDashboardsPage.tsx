@@ -14,7 +14,6 @@ import useProjectById from "@/api/projects/useProjectById";
 import DashboardContent from "@/v2/pages-shared/dashboards/DashboardContent/DashboardContent";
 import DashboardAutoSaveIndicator from "@/v2/pages-shared/dashboards/DashboardAutoSaveIndicator/DashboardAutoSaveIndicator";
 import ProjectDashboardViewSelector from "@/v2/pages/ProjectDashboardsPage/ProjectDashboardViewSelector";
-import ProjectDashboardViewDialog from "@/v2/pages/ProjectDashboardsPage/ProjectDashboardViewDialog";
 import useCustomizeTemplate from "@/v2/pages/ProjectDashboardsPage/useCustomizeTemplate";
 import ShareDashboardButton from "@/v2/pages-shared/dashboards/ShareDashboardButton/ShareDashboardButton";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
@@ -55,7 +54,7 @@ const ProjectDashboardsContent: React.FunctionComponent<
   const {
     permissions: { canCreateDashboards, canEditDashboards },
   } = usePermissions();
-  const [renameTargetId, setRenameTargetId] = useState<string | null>(null);
+  const [renameRequestId, setRenameRequestId] = useState<string | null>(null);
 
   const [dashboardId, setDashboardId] = useQueryParamAndLocalStorageState({
     localStorageKey: `${DASHBOARD_LOCAL_STORAGE_KEY_PREFIX}-${workspaceName}-${projectId}`,
@@ -138,9 +137,14 @@ const ProjectDashboardsContent: React.FunctionComponent<
   const handleOpenRename = useCallback(
     (copyId: string) => {
       setDashboardId(copyId);
-      setRenameTargetId(copyId);
+      setRenameRequestId(copyId);
     },
     [setDashboardId],
+  );
+
+  const handleRenameRequestHandled = useCallback(
+    () => setRenameRequestId(null),
+    [],
   );
 
   useCustomizeTemplate({
@@ -178,6 +182,8 @@ const ProjectDashboardsContent: React.FunctionComponent<
           onChange={setDashboardId}
           onViewCreated={handleDashboardCreated}
           onViewDeleted={handleDashboardDeleted}
+          renameRequestId={renameRequestId}
+          onRenameRequestHandled={handleRenameRequestHandled}
         />
         <div className="flex shrink-0 items-center gap-2">
           <DashboardAutoSaveIndicator saveStatus={saveStatus} />
@@ -197,16 +203,6 @@ const ProjectDashboardsContent: React.FunctionComponent<
         {isPending && <Loader />}
         {!isPending && dashboard && <DashboardContent />}
       </div>
-
-      {dashboard && (
-        <ProjectDashboardViewDialog
-          key={dashboard.id}
-          mode="edit"
-          dashboard={dashboard}
-          open={renameTargetId === dashboard.id}
-          setOpen={(open) => !open && setRenameTargetId(null)}
-        />
-      )}
     </PageBodyScrollContainer>
   );
 };

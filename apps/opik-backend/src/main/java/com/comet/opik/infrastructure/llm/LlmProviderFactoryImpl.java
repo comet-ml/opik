@@ -13,6 +13,7 @@ import com.comet.opik.domain.llm.structuredoutput.ToolCallingStrategy;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.llm.antropic.AnthropicModelName;
 import com.comet.opik.infrastructure.llm.customllm.CustomLlmModelNameChecker;
+import com.comet.opik.infrastructure.llm.customllm.ProviderBaseUrlGuard;
 import com.comet.opik.infrastructure.llm.gemini.GeminiModelName;
 import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterDecisionModel;
@@ -49,6 +50,7 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
     private final @NonNull LlmProviderApiKeyService llmProviderApiKeyService;
     private final @NonNull OpikConfiguration configuration;
     private final @NonNull LlmModelRegistryService registryService;
+    private final @NonNull ProviderBaseUrlGuard providerBaseUrlGuard;
     private final Map<LlmProvider, LlmServiceProvider> services = new EnumMap<>(LlmProvider.class);
 
     public void register(LlmProvider llmProvider, LlmServiceProvider service) {
@@ -79,7 +81,18 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
     private static final Set<LlmProvider> CATALOG_PARAMS_PROVIDERS = EnumSet.of(LlmProvider.OPEN_AI,
             LlmProvider.GEMINI, LlmProvider.VERTEX_AI);
 
+    /**
+     * OPIK_FREE's URL is operator-configured; the others always build their client through
+     * CustomLlmClientGenerator, which checks every request URL itself.
+     */
+    private static final Set<LlmProvider> BASE_URL_GUARD_EXEMPT_PROVIDERS = Set.of(
+            LlmProvider.OPIK_FREE, LlmProvider.CUSTOM_LLM, LlmProvider.BEDROCK, LlmProvider.OLLAMA);
+
     private LlmProviderClientApiConfig buildConfig(ProviderApiKey providerConfig, String workspaceId) {
+        if (!BASE_URL_GUARD_EXEMPT_PROVIDERS.contains(providerConfig.provider())) {
+            providerBaseUrlGuard.validate(providerConfig.baseUrl());
+        }
+
         var configuration = Optional.ofNullable(providerConfig.configuration()).orElse(Map.of());
 
         // For providers that support naming, add provider_name to configuration if present

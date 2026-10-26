@@ -99,6 +99,8 @@ public record PartitionRange(@NonNull LocalDate from, @NonNull LocalDate to) {
                         .maxPartBytes(Math.max(left.maxPartBytes(), right.maxPartBytes()))
                         .lastActivityEpochSeconds(
                                 Math.max(left.lastActivityEpochSeconds(), right.lastActivityEpochSeconds()))
+                        .coldBytes(left.coldBytes() + right.coldBytes())
+                        .ttlMoveDueParts(left.ttlMoveDueParts() + right.ttlMoveDueParts())
                         .build());
     }
 

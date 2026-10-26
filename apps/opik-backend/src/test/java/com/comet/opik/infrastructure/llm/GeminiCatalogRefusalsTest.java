@@ -15,6 +15,7 @@ import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.FreeModelConfig;
 import com.comet.opik.infrastructure.LlmModelRegistryConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.llm.customllm.CustomLlmModule;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.request.ChatRequest;
@@ -89,7 +90,7 @@ class GeminiCatalogRefusalsTest {
         registryConfig.setDefaultResource("llm-models-test-gemini.yaml");
         var registryService = new LlmModelRegistryService(registryConfig);
         var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, opikConfiguration,
-                registryService);
+                registryService, new CustomLlmModule().providerBaseUrlGuard(config.getLlmProviderClient()));
         var recordingProvider = new RecordingProvider();
         llmProviderFactory.register(LlmProvider.GEMINI, recordingProvider);
         llmProviderFactory.register(LlmProvider.VERTEX_AI, recordingProvider);

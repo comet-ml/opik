@@ -279,6 +279,27 @@ export class TracePanelPage {
     return this.dataViewer.getByText(formatted, { exact: true });
   }
 
+  /**
+   * Every dollar amount the data viewer renders, however formatted.
+   *
+   * The counterpart to {@link estimatedCost} for a span the backend attributed
+   * NO cost to. `formatCost` maps a zero or absent cost to its `noValue` dash,
+   * and a bare "-" is not a claim worth holding the UI to — it is a default
+   * that could reasonably become an em dash, a blank, or a tooltip. What is
+   * worth asserting is that no AMOUNT is shown: an unpriced span must not
+   * render a figure beside identical siblings that do.
+   *
+   * Matched on `$` followed by a digit so the `<$0.01` floor marker counts as
+   * an amount too — a span rendering the floor marker has been priced, just
+   * below the threshold, and must not pass for an unpriced one. Scoped to the
+   * data viewer, not the whole panel, for the reason `estimatedCost` is: the
+   * span tree renders a cost per node, so a panel-wide lookup would also match
+   * the sibling rows.
+   */
+  get costAmountsInViewer(): Locator {
+    return this.dataViewer.getByText(/\$\d/);
+  }
+
   // --- Quick attribute filters (Details tab) ---
 
   /**
@@ -764,6 +785,30 @@ export class TracePanelPage {
    * section's own header row (the button's parent element) so it cannot resolve
    * to a sibling section's icon.
    */
+  /**
+   * A marker string rendered inside ONE named section's own body.
+   *
+   * Scoped to the section rather than to the whole panel, which is the entire
+   * point: a payload that landed in the wrong field, or one field's content
+   * leaking into another, renders the marker somewhere in the panel either way.
+   *
+   * `xpath=../..` and not `xpath=..`, which is the hop `sectionSearchButton`
+   * takes: `CodeBlock` puts the header button and the mode/search/copy controls
+   * in one row div, and the BODY in a sibling of that row. So the row is enough
+   * to reach the Search icon and one level short of reaching the content.
+   * `CodeBlock` accepts a `testId` but `DetailsTab` passes none, so the two hops
+   * are the only handle on the section until the FE grows one.
+   *
+   * Substring, not exact: the marker is one scalar of a payload the viewer
+   * pretty-prints, so the rendered node carries the YAML/JSON punctuation around
+   * it. Callers should put the marker at the TOP of the payload — the body is a
+   * CodeMirror editor and renders the lines in view, so a marker buried under a
+   * megabyte of filler is not guaranteed to be in the DOM at all.
+   */
+  sectionText(title: string, marker: string): Locator {
+    return this.sectionHeader(title).locator('xpath=../..').getByText(marker);
+  }
+
   sectionSearchButton(title: string): Locator {
     return this.sectionHeader(title)
       .locator('xpath=..')

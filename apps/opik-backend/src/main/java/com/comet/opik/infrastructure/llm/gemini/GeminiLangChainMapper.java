@@ -114,7 +114,7 @@ public interface GeminiLangChainMapper {
                     if (mimeType != null) {
                         imageBuilder.mimeType(mimeType);
                         log.debug("Set mimeType '{}' for video URL: '{}'", mimeType,
-                                videoUrl.substring(0, Math.min(60, videoUrl.length())));
+                                VideoMimeTypeUtils.loggable(videoUrl));
                     }
                     yield ImageContent.from(imageBuilder.build());
                 }

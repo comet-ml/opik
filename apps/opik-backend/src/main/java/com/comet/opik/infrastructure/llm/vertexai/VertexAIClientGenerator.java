@@ -8,6 +8,7 @@ import com.comet.opik.infrastructure.llm.GeminiThinkingParams;
 import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
+import com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -33,10 +34,13 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
+import java.util.regex.Pattern;
 
 @Slf4j
 @RequiredArgsConstructor
 public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatModel> {
+
+    private static final Pattern LOCATION = Pattern.compile("[a-z0-9-]+");
 
     private final @NonNull LlmProviderClientConfig clientConfig;
     private final @NonNull LlmModelRegistryService registryService;
@@ -140,7 +144,12 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
      * endpoint lookup, whose keys are constrained to this same lower-case form.
      */
     private static String canonicalLocation(String location) {
-        return location.strip().toLowerCase(Locale.ROOT);
+        var canonical = location.strip().toLowerCase(Locale.ROOT);
+        // the SDK formats the location into the endpoint host, so anything else could send the request elsewhere
+        if (!LOCATION.matcher(canonical).matches()) {
+            throw new ProviderRequestRefusedException(ProviderRequestRefusedException.Reason.VERTEX_AI_LOCATION);
+        }
+        return canonical;
     }
 
     private Optional<String> apiEndpointFor(String canonicalLocation) {
@@ -164,6 +173,11 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
         try {
             var credentials = ServiceAccountCredentials.fromStream(
                     new ByteArrayInputStream(config.apiKey().getBytes(StandardCharsets.UTF_8)));
+
+            // the credentials refresh by posting to token_uri, which comes from the user-supplied key file
+            if (!clientConfig.getVertexAIClient().tokenUris().contains(credentials.getTokenServerUri())) {
+                throw new ProviderRequestRefusedException(ProviderRequestRefusedException.Reason.VERTEX_AI_TOKEN_URI);
+            }
 
             var builder = Client.builder()
                     .vertexAI(true)

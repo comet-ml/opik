@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { renderHook } from "@testing-library/react";
 
-import usePlaygroundStore from "@/store/PlaygroundStore";
+import usePlaygroundStore, {
+  useIsStoppingAll,
+  useShowsRunProgress,
+} from "@/store/PlaygroundStore";
 import { LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
 import { PlaygroundPromptType } from "@/types/playground";
 import {
@@ -47,7 +51,7 @@ describe("PlaygroundStore updatePrompt", () => {
     const prompt = createPrompt();
     const { setPromptMap, updateOutput } = usePlaygroundStore.getState();
     setPromptMap([PROMPT_ID], { [PROMPT_ID]: prompt });
-    updateOutput(PROMPT_ID, "", { isLoading: false, value: "Hi!" });
+    updateOutput(PROMPT_ID, { isLoading: false, value: "Hi!" });
   });
 
   it.each<[string, Partial<PlaygroundPromptType>]>([
@@ -109,7 +113,7 @@ describe("PlaygroundStore staleChanges", () => {
   beforeEach(() => {
     const { setPromptMap, updateOutput } = usePlaygroundStore.getState();
     setPromptMap([PROMPT_ID], { [PROMPT_ID]: createPrompt() });
-    updateOutput(PROMPT_ID, "", { isLoading: false, value: "Hi!" });
+    updateOutput(PROMPT_ID, { isLoading: false, value: "Hi!" });
   });
 
   it.each<[string, Partial<PlaygroundPromptType>, string[]]>([
@@ -160,7 +164,7 @@ describe("PlaygroundStore staleChanges", () => {
 
     usePlaygroundStore
       .getState()
-      .updateOutput(PROMPT_ID, "", { isLoading: true, value: null });
+      .updateOutput(PROMPT_ID, { isLoading: true, value: null });
 
     expect(getOutput()).toMatchObject({ stale: false });
     expect(getStaleChanges()).toBeUndefined();
@@ -169,20 +173,87 @@ describe("PlaygroundStore staleChanges", () => {
 
     expect(getStaleChanges()).toEqual(["parameters"]);
   });
+});
 
-  it("should record the change on every dataset item", () => {
-    const { setPromptMap, updateOutput } = usePlaygroundStore.getState();
-    setPromptMap([PROMPT_ID], { [PROMPT_ID]: createPrompt() });
-    usePlaygroundStore.setState({ outputMap: {} });
-    updateOutput(PROMPT_ID, "item-1", { isLoading: false, value: "A" });
-    updateOutput(PROMPT_ID, "item-2", { isLoading: false, value: "B" });
-
-    updatePrompt({ configs: { ...CONFIGS, temperature: 1 } });
-
-    const output = getOutput();
-    expect("datasetItemMap" in output && output.datasetItemMap).toMatchObject({
-      "item-1": { stale: true, staleChanges: ["parameters"] },
-      "item-2": { stale: true, staleChanges: ["parameters"] },
+// The run-wide Stop button may only say "Stopping..." once there is nothing left for it to stop.
+// Reading it as "any prompt is stopping" disabled Stop all as soon as one prompt was stopped on
+// its own, leaving its siblings running with no way to stop them from the header.
+describe("PlaygroundStore useIsStoppingAll", () => {
+  beforeEach(() => {
+    usePlaygroundStore.setState({
+      isRunningMap: { "prompt-a": true, "prompt-b": true },
+      stopsAwaitingRun: new Set<string>(),
+      cancelsInFlight: new Set<string>(),
     });
+  });
+
+  const isStoppingAll = () =>
+    renderHook(() => useIsStoppingAll()).result.current;
+
+  it("should be false while nothing is stopping", () => {
+    expect(isStoppingAll()).toBe(false);
+  });
+
+  it("should be false while only one of several prompts is stopping", () => {
+    usePlaygroundStore.setState({
+      cancelsInFlight: new Set(["prompt-a"]),
+    });
+
+    expect(isStoppingAll()).toBe(false);
+  });
+
+  it("should be true once every running prompt is stopping", () => {
+    usePlaygroundStore.setState({
+      cancelsInFlight: new Set(["prompt-a", "prompt-b"]),
+    });
+
+    expect(isStoppingAll()).toBe(true);
+  });
+
+  it("should count a stop still waiting for its run alongside one already sent", () => {
+    usePlaygroundStore.setState({
+      cancelsInFlight: new Set(["prompt-a"]),
+      stopsAwaitingRun: new Set(["prompt-b"]),
+    });
+
+    expect(isStoppingAll()).toBe(true);
+  });
+});
+
+// Both components that read this mock the store, so a regression here passes their suites. The
+// rule itself: only a whole-run launch sets a phase, and only it has a total, so a single-prompt
+// run has neither and shows no run-wide bar.
+describe("PlaygroundStore useShowsRunProgress", () => {
+  const showsRunProgress = () =>
+    renderHook(() => useShowsRunProgress()).result.current;
+
+  beforeEach(() => {
+    usePlaygroundStore.setState({ progressTotal: 0, progressPhase: null });
+  });
+
+  it("should be false for a run that sets neither, such as a scoped one", () => {
+    expect(showsRunProgress()).toBe(false);
+  });
+
+  it("should be true from the press, before the total is known", () => {
+    usePlaygroundStore.setState({ progressPhase: "running" });
+
+    expect(showsRunProgress()).toBe(true);
+  });
+
+  it("should be true once the run has a total", () => {
+    usePlaygroundStore.setState({ progressTotal: 120 });
+
+    expect(showsRunProgress()).toBe(true);
+  });
+
+  it("should be false again once the progress is reset", () => {
+    usePlaygroundStore.setState({
+      progressPhase: "running",
+      progressTotal: 120,
+    });
+    usePlaygroundStore.getState().resetProgress();
+
+    expect(showsRunProgress()).toBe(false);
   });
 });
