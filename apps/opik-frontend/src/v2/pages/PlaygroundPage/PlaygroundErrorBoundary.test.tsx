@@ -7,8 +7,11 @@ import PlaygroundErrorBoundary, {
   clearSavedPlaygroundState,
 } from "./PlaygroundErrorBoundary";
 import usePlaygroundStore from "@/store/PlaygroundStore";
+import usePlaygroundColumnsSettings from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputTable/usePlaygroundColumnsSettings";
 import {
+  PLAYGROUND_OUTPUT_COLUMNS_ORDER_KEY,
   PLAYGROUND_OUTPUT_COLUMNS_WIDTH_KEY,
+  PLAYGROUND_OUTPUT_HIDDEN_COLUMNS_KEY,
   PLAYGROUND_OUTPUT_LEFT_PANEL_WIDTH_KEY,
   PLAYGROUND_SELECTED_DATASET_VERSION_KEY,
 } from "@/constants/llm";
@@ -36,6 +39,12 @@ const renderPlayground = () =>
     </PlaygroundErrorBoundary>,
   );
 
+const VisibleOutputColumns = () => {
+  const { selectedColumns } = usePlaygroundColumnsSettings("d1", ["tags"]);
+
+  return <div>Visible: {selectedColumns.join(", ")}</div>;
+};
+
 const STACK_WITHOUT_TITLE = "render@http://localhost/app.js:1:1";
 
 const ThrowsWithStackWithoutTitle = () => {
@@ -49,6 +58,8 @@ describe("PlaygroundErrorBoundary", () => {
     localStorage.setItem(PLAYGROUND_SELECTED_DATASET_VERSION_KEY, '"d1::v1"');
     localStorage.setItem(PLAYGROUND_OUTPUT_COLUMNS_WIDTH_KEY, "{}");
     localStorage.setItem(PLAYGROUND_OUTPUT_LEFT_PANEL_WIDTH_KEY, '"50%"');
+    localStorage.setItem(PLAYGROUND_OUTPUT_HIDDEN_COLUMNS_KEY, "{}");
+    localStorage.setItem(PLAYGROUND_OUTPUT_COLUMNS_ORDER_KEY, "{}");
   });
 
   afterEach(() => {
@@ -85,6 +96,26 @@ describe("PlaygroundErrorBoundary", () => {
     expect(
       localStorage.getItem(PLAYGROUND_OUTPUT_LEFT_PANEL_WIDTH_KEY),
     ).toBeNull();
+    expect(
+      localStorage.getItem(PLAYGROUND_OUTPUT_HIDDEN_COLUMNS_KEY),
+    ).toBeNull();
+    expect(
+      localStorage.getItem(PLAYGROUND_OUTPUT_COLUMNS_ORDER_KEY),
+    ).toBeNull();
+  });
+
+  it("recovers on Reset from a broken saved column setting", () => {
+    localStorage.setItem(PLAYGROUND_OUTPUT_HIDDEN_COLUMNS_KEY, "null");
+    render(
+      <PlaygroundErrorBoundary>
+        <VisibleOutputColumns />
+      </PlaygroundErrorBoundary>,
+    );
+    expect(screen.getByText("The playground crashed")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Reset playground/ }));
+
+    expect(screen.getByText("Visible: tags")).toBeInTheDocument();
   });
 
   it("copies the error message, stack and component stack", async () => {

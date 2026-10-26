@@ -9,7 +9,9 @@ import { useToast } from "@/ui/use-toast";
 import { IS_SENTRY_ENABLED } from "@/config";
 import usePlaygroundStore from "@/store/PlaygroundStore";
 import {
+  PLAYGROUND_OUTPUT_COLUMNS_ORDER_KEY,
   PLAYGROUND_OUTPUT_COLUMNS_WIDTH_KEY,
+  PLAYGROUND_OUTPUT_HIDDEN_COLUMNS_KEY,
   PLAYGROUND_OUTPUT_LEFT_PANEL_WIDTH_KEY,
   PLAYGROUND_SELECTED_DATASET_VERSION_KEY,
 } from "@/constants/llm";
@@ -20,6 +22,8 @@ const SAVED_PLAYGROUND_KEYS = [
   PLAYGROUND_SELECTED_DATASET_VERSION_KEY,
   PLAYGROUND_OUTPUT_COLUMNS_WIDTH_KEY,
   PLAYGROUND_OUTPUT_LEFT_PANEL_WIDTH_KEY,
+  PLAYGROUND_OUTPUT_HIDDEN_COLUMNS_KEY,
+  PLAYGROUND_OUTPUT_COLUMNS_ORDER_KEY,
 ];
 
 export const clearSavedPlaygroundState = () => {
@@ -85,7 +89,7 @@ const PlaygroundCrashFallback: React.FC<PlaygroundCrashFallbackProps> = ({
       <pre className="comet-code max-w-xl whitespace-pre-wrap break-words rounded-md bg-muted px-3 py-2 text-left text-xs">
         {error.message || error.name}
       </pre>
-      <div className="flex flex-wrap items-center justify-center gap-2">
+      <div className="grid grid-cols-1 gap-2 lg:grid-cols-3">
         <Button size="sm" onClick={onReset}>
           <RotateCcw className="mr-1.5 size-3.5" />
           Reset playground
