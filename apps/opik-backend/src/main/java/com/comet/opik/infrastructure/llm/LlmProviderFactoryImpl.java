@@ -77,11 +77,11 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
 
     // OPIK_FREE's URL is operator-configured; the others always build their client through
     // CustomLlmClientGenerator, which checks every request URL itself
-    private static final Set<LlmProvider> UNCHECKED_BASE_URL_PROVIDERS = Set.of(
+    private static final Set<LlmProvider> BASE_URL_GUARD_EXEMPT_PROVIDERS = Set.of(
             LlmProvider.OPIK_FREE, LlmProvider.CUSTOM_LLM, LlmProvider.BEDROCK, LlmProvider.OLLAMA);
 
     private LlmProviderClientApiConfig buildConfig(ProviderApiKey providerConfig, String workspaceId) {
-        if (!UNCHECKED_BASE_URL_PROVIDERS.contains(providerConfig.provider())) {
+        if (!BASE_URL_GUARD_EXEMPT_PROVIDERS.contains(providerConfig.provider())) {
             new ProviderBaseUrlGuard(this.configuration.getLlmProviderClient().getDestinationGuard())
                     .validate(providerConfig.baseUrl());
         }

@@ -175,7 +175,8 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
             @NonNull String userName,
             @NonNull String workspaceId) {
 
-        // resolves DNS, so kept outside the transaction
+        // 404 before any destination lookup; validation resolves DNS, so it stays outside the write transaction
+        find(id, workspaceId);
         validateDestinations(providerApiKeyUpdate.baseUrl(), providerApiKeyUpdate.authConfig());
 
         template.inTransaction(WRITE, handle -> {

@@ -14,16 +14,19 @@ import jakarta.ws.rs.BadRequestException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.mock;
@@ -418,27 +421,42 @@ class InterceptingHttpClientTest {
         verify(delegate, times(1)).execute(any(HttpRequest.class), any(), any());
     }
 
+    private static Stream<Arguments> nonPublicDestinations() {
+        return Stream.of(
+                arguments("http://127.0.0.1:8080/v1/chat/completions", "gpt-4o"),
+                arguments("http://10.0.0.1/v1/chat/completions", "gpt-4o"),
+                arguments("http://169.254.1.1/v1/chat/completions", "gpt-4o"),
+                // host only known after substitution
+                arguments("http://{model}/v1/chat/completions", "127.0.0.1"));
+    }
+
     @ParameterizedTest
-    @CsvSource({
-            "http://127.0.0.1:8080/v1/chat/completions, gpt-4o",
-            "http://10.0.0.1/v1/chat/completions, gpt-4o",
-            "http://169.254.1.1/v1/chat/completions, gpt-4o",
-            "http://{model}/v1/chat/completions, 127.0.0.1", // host only known after substitution
-    })
+    @MethodSource("nonPublicDestinations")
     void rejectsNonPublicDestination(String url, String model) {
         var client = guardedClient();
-        var request = HttpRequest.builder()
+
+        assertThatThrownBy(() -> client.execute(chatRequest(url, model))).isInstanceOf(BadRequestException.class);
+        verifyNoInteractions(delegate);
+    }
+
+    @ParameterizedTest
+    @MethodSource("nonPublicDestinations")
+    void rejectsNonPublicDestinationWhenStreaming(String url, String model) {
+        var client = guardedClient();
+        var listener = mock(ServerSentEventListener.class);
+
+        client.execute(chatRequest(url, model), mock(ServerSentEventParser.class), listener);
+
+        verify(listener).onError(any(BadRequestException.class));
+        verifyNoInteractions(delegate);
+    }
+
+    private static HttpRequest chatRequest(String url, String model) {
+        return HttpRequest.builder()
                 .method(HttpMethod.POST)
                 .url(url)
                 .body("{\"model\":\"%s\"}".formatted(model))
                 .build();
-        var listener = mock(ServerSentEventListener.class);
-
-        assertThatThrownBy(() -> client.execute(request)).isInstanceOf(BadRequestException.class);
-        client.execute(request, mock(ServerSentEventParser.class), listener);
-
-        verify(listener).onError(any(BadRequestException.class));
-        verifyNoInteractions(delegate);
     }
 
     /** The chain CustomLlmClientGenerator builds: the guard sits under the URL-mutating decorator. */
