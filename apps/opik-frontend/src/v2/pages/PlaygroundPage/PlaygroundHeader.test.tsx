@@ -23,9 +23,15 @@ let promptMap: Record<string, PlaygroundPromptType> = { [prompt.id]: prompt };
 let datasetType: DATASET_TYPE | null = DATASET_TYPE.DATASET;
 
 let isStoppingAll = false;
+let isResumingRun = false;
+let storeState = {
+  isRunningMap: {},
+  stopsAwaitingRun: new Set<string>(),
+  cancelsInFlight: new Set<string>(),
+};
 
 vi.mock("@/store/PlaygroundStore", () => ({
-  default: { getState: () => ({ isRunningMap: {} }) },
+  default: { getState: () => storeState },
   usePromptMap: () => promptMap,
   useClearCreatedExperiments: () => vi.fn(),
   useCreatedExperiments: () => [],
@@ -40,7 +46,7 @@ vi.mock("@/store/PlaygroundStore", () => ({
   useSetDatasetFilters: () => vi.fn(),
   // Added with the server-side run: the header reads a run's state to decide what it may offer
   useIsStoppingAll: () => isStoppingAll,
-  useIsResumingRun: () => false,
+  useIsResumingRun: () => isResumingRun,
   useDatasetItemsTotal: () => null,
 }));
 
@@ -117,6 +123,12 @@ const pressRunShortcutInSecondPrompt = () =>
 
 beforeEach(() => {
   isStoppingAll = false;
+  isResumingRun = false;
+  storeState = {
+    isRunningMap: {},
+    stopsAwaitingRun: new Set<string>(),
+    cancelsInFlight: new Set<string>(),
+  };
   onRunAll.mockClear();
   onRunSingle.mockClear();
   promptMap = { [prompt.id]: prompt };
@@ -184,6 +196,37 @@ describe("PlaygroundHeader", () => {
 
       expect(onRunSingle).toHaveBeenCalledWith(secondPrompt.id);
       expect(onRunAll).not.toHaveBeenCalled();
+    });
+
+    it("should not run from the keyboard shortcut while a run is being picked back up", () => {
+      isResumingRun = true;
+      promptMap = { [prompt.id]: prompt, [secondPrompt.id]: secondPrompt };
+
+      renderHeader(3);
+      pressRunShortcut();
+      pressRunShortcutInSecondPrompt();
+
+      expect(onRunAll).not.toHaveBeenCalled();
+      expect(onRunSingle).not.toHaveBeenCalled();
+    });
+
+    it("should not run all from the keyboard shortcut while every run is stopping", () => {
+      isStoppingAll = true;
+
+      renderHeader(3);
+      pressRunShortcut();
+
+      expect(onRunAll).not.toHaveBeenCalled();
+    });
+
+    it("should not run the prompt the cursor is in while its run is stopping", () => {
+      promptMap = { [prompt.id]: prompt, [secondPrompt.id]: secondPrompt };
+      storeState.cancelsInFlight = new Set([secondPrompt.id]);
+
+      renderHeader(3);
+      pressRunShortcutInSecondPrompt();
+
+      expect(onRunSingle).not.toHaveBeenCalled();
     });
   });
 

@@ -195,21 +195,34 @@ const PlaygroundHeader = ({
   const canRunPrompt = useCallback(
     (promptId: string) => {
       const prompt = promptMap[promptId];
+      const { isRunningMap, stopsAwaitingRun, cancelsInFlight } =
+        usePlaygroundStore.getState();
       return (
         !!prompt?.model &&
         canRunMessages(prompt.messages) &&
         !hasUnsupportedMedia(prompt) &&
         !(isExperimentMode && !datasetName) &&
         !isDatasetEmpty &&
-        !usePlaygroundStore.getState().isRunningMap[promptId]
+        !hasNoDatasetItems &&
+        !isResumingRun &&
+        !isRunningMap[promptId] &&
+        !stopsAwaitingRun.has(promptId) &&
+        !cancelsInFlight.has(promptId)
       );
     },
-    [promptMap, isExperimentMode, datasetName, isDatasetEmpty],
+    [
+      promptMap,
+      isExperimentMode,
+      datasetName,
+      isDatasetEmpty,
+      hasNoDatasetItems,
+      isResumingRun,
+    ],
   );
 
   usePlaygroundRunHotkey({
     promptCount: Object.keys(promptMap).length,
-    canRunAll: !isRunDisabled && !isRunning,
+    canRunAll: !isRunDisabled && !isRunning && !isStoppingAll,
     canRunPrompt,
     onRunAll,
     onRunPrompt: onRunSingle,
