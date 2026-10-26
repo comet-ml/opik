@@ -51,7 +51,6 @@ import java.util.Map;
 import java.util.UUID;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
-import static com.comet.opik.api.resources.v1.priv.LlmProviderApiKeyResourceTest.IGNORED_FIELDS;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -64,6 +63,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class StrictDestinationGuardResourceTest {
 
     private static final String USER = UUID.randomUUID().toString();
+    private static final String[] IGNORED_FIELDS = {"createdAt", "lastUpdatedAt", "apiKey"};
     // never contacted: saving a provider only checks where its base_url resolves
     private static final String PUBLIC_BASE_URL = "http://1.1.1.1/v1";
     // spelled out rather than shared with the production code, so a changed message fails here

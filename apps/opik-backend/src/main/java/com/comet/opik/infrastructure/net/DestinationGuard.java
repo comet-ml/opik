@@ -116,22 +116,24 @@ public class DestinationGuard {
             return;
         }
 
+        // the messages name the scheme or host at most: the URL can carry userinfo or query-string secrets, and
+        // callers log these exceptions (URISyntaxException's message echoes the input, so it isn't kept as the cause)
         URI uri;
         try {
             uri = new URI(url);
         } catch (URISyntaxException exception) {
-            throw new DestinationGuardException("destination is not a valid URL, url '%s'".formatted(url),
-                    exception);
+            throw new DestinationGuardException("destination is not a valid URL");
         }
         // plaintext is the caller's choice, but the scheme must still be one an HTTP client speaks:
         // file://, gopher:// and friends reach places it never should
         if (!isSchemeAllowed(uri.getScheme())) {
             throw new DestinationGuardException(
-                    "destination was refused, only %s URLs are allowed, url '%s'".formatted(allowedSchemes(), url));
+                    "destination was refused, only %s URLs are allowed, scheme '%s'".formatted(allowedSchemes(),
+                            uri.getScheme()));
         }
         String host = uri.getHost();
         if (isBlank(host)) {
-            throw new DestinationGuardException("destination has no valid host, url '%s'".formatted(url));
+            throw new DestinationGuardException("destination has no valid host");
         }
 
         InetAddress[] addresses;
