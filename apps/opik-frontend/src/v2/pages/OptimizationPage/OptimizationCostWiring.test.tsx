@@ -87,6 +87,9 @@ vi.mock("@/v2/pages-shared/experiments/OptimizationProgressChart", () => ({
   default: () => null,
 }));
 vi.mock("./OptimizationHeader", () => ({ default: () => null }));
+vi.mock("@/v2/hooks/useRedirectToOwnProject", () => ({
+  useRedirectToOwnProject: () => undefined,
+}));
 vi.mock("./OptimizationTrialsControls", () => ({ default: () => null }));
 vi.mock("./OptimizationTrialsTable", () => ({ default: () => null }));
 vi.mock("./BestTrialPrompt", () => ({ default: () => null }));
