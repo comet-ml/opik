@@ -5,6 +5,7 @@ import com.comet.opik.infrastructure.net.DestinationGuardException;
 import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
 
+import static org.apache.commons.lang3.StringUtils.indexOfAny;
 import static org.apache.commons.lang3.StringUtils.isBlank;
 
 /**
@@ -26,11 +27,21 @@ public class ProviderBaseUrlGuard {
      * @throws BadRequestException with a user-facing message when the destination is refused
      */
     public void validate(String baseUrl) {
-        if (isBlank(baseUrl)) {
+        // a {model} in the host names a different destination per request, so only the final URL can be judged;
+        // DestinationGuardHttpClientBuilder checks it after substitution
+        if (isBlank(baseUrl) || hasHostPlaceholder(baseUrl)) {
             return;
         }
-        // {model} is substituted per request; the final URL is checked again by the custom LLM client
+        // a path-level {model} leaves the host as is, so a stand-in keeps the URL parseable
         validateResolved(baseUrl.replace(InterceptingHttpClient.MODEL_PLACEHOLDER, "model"));
+    }
+
+    private static boolean hasHostPlaceholder(String baseUrl) {
+        int schemeEnd = baseUrl.indexOf("://");
+        String rest = schemeEnd < 0 ? baseUrl : baseUrl.substring(schemeEnd + 3);
+        int authorityEnd = indexOfAny(rest, "/?#");
+        String authority = authorityEnd < 0 ? rest : rest.substring(0, authorityEnd);
+        return authority.contains(InterceptingHttpClient.MODEL_PLACEHOLDER);
     }
 
     void validateResolved(String url) {

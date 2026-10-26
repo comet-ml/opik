@@ -33,6 +33,7 @@ import com.comet.opik.infrastructure.llm.vertexai.LlmProviderVertexAI;
 import com.comet.opik.infrastructure.llm.vertexai.VertexAIClientGenerator;
 import com.comet.opik.infrastructure.llm.vertexai.VertexAIModelName;
 import com.comet.opik.infrastructure.llm.vertexai.VertexAIModule;
+import com.comet.opik.infrastructure.net.DestinationGuard;
 import jakarta.ws.rs.BadRequestException;
 import org.apache.commons.lang3.EnumUtils;
 import org.junit.jupiter.api.BeforeAll;
@@ -44,6 +45,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
 import java.util.List;
@@ -232,6 +234,31 @@ class LlmProviderFactoryTest {
         assertThatThrownBy(() -> llmProviderFactory.getService(workspaceId, modelToRequest))
                 .isInstanceOf(BadRequestException.class)
                 .hasMessageContaining("API key not configured for LLM");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"http://127.0.0.1:8081/tasks/log-level", "http://169.254.169.254/latest/meta-data",
+            "http://10.10.71.1:10255/pods"})
+    @DisplayName("Strict destination guard refuses a stored base_url on an internal address before any client is built")
+    void getServiceRefusesInternalBaseUrlInStrictMode(String baseUrl) {
+        var llmProviderApiKeyService = mock(LlmProviderApiKeyService.class);
+        String workspaceId = UUID.randomUUID().toString();
+        when(llmProviderApiKeyService.findByProviders(eq(workspaceId), anySet()))
+                .thenReturn(List.of(ProviderApiKey.builder()
+                        .provider(LlmProvider.OPEN_AI)
+                        .apiKey(EncryptionUtils.encrypt(UUID.randomUUID().toString()))
+                        .baseUrl(baseUrl)
+                        .build()));
+        var strictClientConfig = new LlmProviderClientConfig();
+        strictClientConfig.setDestinationGuard(DestinationGuard.Mode.STRICT);
+        var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
+        when(mockConfig.getLlmProviderClient()).thenReturn(strictClientConfig);
+        // no services registered: if the guard let this through, getService would fail as unsupported instead
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService);
+
+        assertThatThrownBy(() -> llmProviderFactory.getService(workspaceId, OpenaiModelName.GPT_4_1_MINI.toString()))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("private or internal address");
     }
 
     private static Stream<Arguments> testCustomLlmProviderMatching_shouldMatch() {

@@ -26,11 +26,13 @@ import java.util.UUID;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
+import static org.assertj.core.api.Assertions.assertThatNoException;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -39,13 +41,14 @@ class LlmProviderApiKeyServiceTest {
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
     private final TransactionTemplate template = mock(TransactionTemplate.class);
+    private final IdGenerator idGenerator = mock(IdGenerator.class);
     private final LlmProviderApiKeyService service;
 
     {
         var config = TestConfigUtils.loadConfigTest();
         config.getLlmProviderClient().setDestinationGuard(DestinationGuard.Mode.STRICT);
         config.getLlmProviderTokenAuth().setDestinationGuard(DestinationGuard.Mode.STRICT);
-        service = new LlmProviderApiKeyServiceImpl(mock(IdGenerator.class), template, config,
+        service = new LlmProviderApiKeyServiceImpl(idGenerator, template, config,
                 mock(AuthTokenProvider.class));
     }
 
@@ -106,6 +109,33 @@ class LlmProviderApiKeyServiceTest {
         assertThatThrownBy(() -> service.updateApiKey(UUID.randomUUID(), update, "user", "workspace"))
                 .isInstanceOf(BadRequestException.class)
                 .hasMessageContaining("127.0.0.1");
+        verify(template, never()).inTransaction(eq(WRITE), any());
+    }
+
+    @Test
+    @DisplayName("a {model} in the host is accepted on save: only the substituted request URL can be judged")
+    void acceptsHostLevelModelPlaceholder() {
+        givenStoredProvider(Optional.of(customProvider()));
+        when(idGenerator.generateId()).thenReturn(UUID.randomUUID());
+        var baseUrl = "https://{model}.example.com/v1";
+        var create = customProvider().toBuilder().baseUrl(baseUrl).build();
+        var update = factory.manufacturePojo(ProviderApiKeyUpdate.class).toBuilder().baseUrl(baseUrl).build();
+
+        assertThatNoException().isThrownBy(() -> service.saveApiKey(create, "user", "workspace"));
+        assertThatNoException().isThrownBy(() -> service.updateApiKey(UUID.randomUUID(), update, "user", "workspace"));
+        verify(template, times(2)).inTransaction(eq(WRITE), any());
+    }
+
+    @Test
+    @DisplayName("a {model} in the path doesn't exempt the host from the check")
+    void rejectsPathLevelModelPlaceholderOnNonPublicHost() {
+        givenStoredProvider(Optional.of(customProvider()));
+        var baseUrl = "http://10.0.0.1/{model}/v1";
+        var update = factory.manufacturePojo(ProviderApiKeyUpdate.class).toBuilder().baseUrl(baseUrl).build();
+
+        assertThatThrownBy(() -> service.updateApiKey(UUID.randomUUID(), update, "user", "workspace"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("10.0.0.1");
         verify(template, never()).inTransaction(eq(WRITE), any());
     }
 
