@@ -776,6 +776,8 @@ llmProviderTokenAuth:
 
 # LLM providers client configuration
 llmProviderClient:
+  # Tests point providers at local mock servers
+  destinationGuard: "relaxed"
   # Default: 60s
   # Description: Call timeout for LLM providers
   callTimeout: 60s

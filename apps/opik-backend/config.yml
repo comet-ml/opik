@@ -1643,6 +1643,14 @@ llmProviderClient:
   # Default: false
   # Description: Whether or not to log responses (HTTP-level logging via langchain4j - can be verbose)
   logResponses: ${LLM_PROVIDER_CLIENT_LOG_RESPONSES:-false}
+  # Default: strict
+  # Values: ['strict', 'relaxed']
+  #   - strict: provider base URLs must be http(s) and resolve only to public addresses; loopback,
+  #     link-local (including 169.254.169.254), private, carrier-grade NAT, IPv6 unique-local,
+  #     multicast, wildcard and unresolvable hosts are refused, on save and before each call
+  #   - relaxed: no destination restrictions, for deployments whose providers run on internal networks
+  # Description: Destination policy for user-configured LLM provider base URLs
+  destinationGuard: ${LLM_PROVIDER_DESTINATION_GUARD:-strict}
   # Configuration for OpenAI client
   openAiClient:
     # Default:

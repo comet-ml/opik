@@ -8,6 +8,7 @@ import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.domain.OllamaService;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.llm.customllm.ProviderBaseUrlGuard;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -43,6 +44,10 @@ public class OllamaResource {
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull OpikConfiguration config;
 
+    private void validateDestination(String baseUrl) {
+        new ProviderBaseUrlGuard(config.getLlmProviderClient().getDestinationGuard()).validate(baseUrl);
+    }
+
     private boolean isOllamaEnabled() {
         return config.getServiceToggles() != null
                 && config.getServiceToggles().isOllamaProviderEnabled();
@@ -72,6 +77,7 @@ public class OllamaResource {
 
         log.info("Testing Ollama connection for workspace '{}'",
                 requestContext.get().getWorkspaceName());
+        validateDestination(request.baseUrl());
 
         OllamaConnectionTestResponse response = ollamaService.testConnection(request.baseUrl(), request.apiKey())
                 .block();
@@ -106,6 +112,7 @@ public class OllamaResource {
 
         log.info("Fetching Ollama models for workspace '{}'",
                 requestContext.get().getWorkspaceName());
+        validateDestination(request.baseUrl());
 
         List<OllamaModel> models = ollamaService.listModels(request.baseUrl(), request.apiKey())
                 .block();

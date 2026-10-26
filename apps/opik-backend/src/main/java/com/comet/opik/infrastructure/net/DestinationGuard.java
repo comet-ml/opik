@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonValue;
 import lombok.Builder;
 import lombok.NonNull;
 
+import java.net.Inet4Address;
 import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.URI;
@@ -18,7 +19,8 @@ import static org.apache.commons.lang3.StringUtils.isBlank;
  * Pre-flight check for outbound calls to user-supplied URLs (SSRF guard). In {@code STRICT} mode
  * (cloud) it resolves the hostname before anyone connects, refusing addresses only our own network
  * can reach: loopback, link-local (including the cloud metadata endpoint at 169.254.169.254),
- * RFC 1918 private ranges, IPv6 unique-local, multicast, and unresolvable hosts. In
+ * RFC 1918 private ranges, carrier-grade NAT (100.64.0.0/10), IPv6 unique-local, multicast, and
+ * unresolvable hosts. IPv4-mapped IPv6 literals resolve to their IPv4 form and are checked as such. In
  * {@code RELAXED} mode (self-hosted default) it is a no-op — internal gateways legitimately live on
  * private ranges there.
  *
@@ -132,7 +134,16 @@ public class DestinationGuard {
                 || address.isLinkLocalAddress()
                 || address.isSiteLocalAddress()
                 || address.isMulticastAddress()
+                || isCarrierGradeNat(address)
                 || isUniqueLocalIpv6(address);
+    }
+
+    /**
+     * 100.64.0.0/10 (RFC 6598) — shared address space, routable inside provider networks.
+     */
+    private static boolean isCarrierGradeNat(InetAddress address) {
+        byte[] bytes = address.getAddress();
+        return address instanceof Inet4Address && (bytes[0] & 0xFF) == 100 && (bytes[1] & 0xC0) == 64;
     }
 
     /**

@@ -13,6 +13,9 @@ import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.llm.customllm.AuthTokenException;
 import com.comet.opik.infrastructure.llm.customllm.AuthTokenProvider;
+import com.comet.opik.infrastructure.llm.customllm.ProviderBaseUrlGuard;
+import com.comet.opik.infrastructure.net.DestinationGuard;
+import com.comet.opik.infrastructure.net.DestinationGuardException;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -22,6 +25,7 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
@@ -127,6 +131,8 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
     @Override
     public ProviderApiKey saveApiKey(@NonNull ProviderApiKey providerApiKey, @NonNull String userName,
             @NonNull String workspaceId) {
+        validateDestinations(providerApiKey.baseUrl(),
+                providerApiKey.authConfig() == null ? null : providerApiKey.authConfig().value());
         UUID apiKeyId = idGenerator.generateId();
 
         // For non-custom providers, explicitly set providerName to null (ignore user input)
@@ -176,6 +182,8 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
             ProviderApiKey providerApiKey = repository.fetch(id, workspaceId)
                     .orElseThrow(this::createNotFoundError);
 
+            validateDestinations(providerApiKeyUpdate.baseUrl(), providerApiKeyUpdate.authConfig());
+            validateCredentialsResubmittedOnUrlChange(providerApiKeyUpdate, providerApiKey);
             var authConfigUpdate = resolveAuthConfigUpdate(providerApiKeyUpdate, providerApiKey);
 
             repository.update(providerApiKey.id(),
@@ -266,6 +274,41 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
                 ? update.toBuilder().apiKey(EncryptionUtils.encrypt("")).build()
                 : update;
         return new AuthConfigUpdate(effectiveUpdate, false, merged);
+    }
+
+    private void validateDestinations(String baseUrl, ProviderAuthConfig authConfig) {
+        new ProviderBaseUrlGuard(configuration.getLlmProviderClient().getDestinationGuard()).validate(baseUrl);
+        if (authConfig != null && StringUtils.isNotBlank(authConfig.tokenUrl())) {
+            try {
+                DestinationGuard.builder().mode(configuration.getLlmProviderTokenAuth().getDestinationGuard()).build()
+                        .validate(authConfig.tokenUrl());
+            } catch (DestinationGuardException exception) {
+                throw new BadRequestException(exception.getMessage(), exception);
+            }
+        }
+    }
+
+    /**
+     * Stored credentials must not follow a base_url change: the new destination requires the caller
+     * to resubmit them.
+     */
+    private void validateCredentialsResubmittedOnUrlChange(ProviderApiKeyUpdate update, ProviderApiKey stored) {
+        if (update.baseUrl() == null || Objects.equals(update.baseUrl(), stored.baseUrl())) {
+            return;
+        }
+        ProviderAuthConfig incoming = update.authConfig();
+        boolean clearsAuthConfig = incoming != null && incoming.isEmpty();
+        boolean newAuthConfig = incoming != null && !clearsAuthConfig
+                && ListUtils.emptyIfNull(incoming.credentials()).stream()
+                        .noneMatch(credential -> ProviderAuthConfig.SECRET_SENTINEL.equals(credential.value()));
+        // a new auth_config clears the stored static key (see resolveAuthConfigUpdate)
+        boolean storedApiKeyKept = update.apiKey() == null && !newAuthConfig
+                && stored.apiKey() != null && StringUtils.isNotBlank(EncryptionUtils.decrypt(stored.apiKey()));
+        boolean storedAuthConfigKept = stored.authConfig() != null && !newAuthConfig && !clearsAuthConfig;
+        if (storedApiKeyKept || storedAuthConfigKept) {
+            throw new BadRequestException(
+                    "changing base_url requires resubmitting the provider credentials (api_key or auth_config)");
+        }
     }
 
     private void validateNoStaticKeyConflict(String encryptedApiKey, boolean authConfigPresent) {

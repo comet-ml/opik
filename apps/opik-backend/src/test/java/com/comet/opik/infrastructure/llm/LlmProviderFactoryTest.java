@@ -88,6 +88,7 @@ class LlmProviderFactoryTest {
         freeModelConfig.setBaseUrl("https://test-endpoint.example.com");
         freeModelConfig.setApiKey("test-api-key");
         when(mockConfig.getFreeModel()).thenReturn(freeModelConfig);
+        when(mockConfig.getLlmProviderClient()).thenReturn(llmProviderClientConfig);
         return mockConfig;
     }
 

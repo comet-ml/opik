@@ -312,6 +312,7 @@ class LlmProviderApiKeyResourceTest {
                 .build();
 
         Function<ProviderApiKey, ProviderApiKey> getExpectedBaseUrl = (ProviderApiKey original) -> original.toBuilder()
+                .apiKey(updateAll.apiKey())
                 .baseUrl(updateAll.baseUrl())
                 .build();
 
@@ -329,12 +330,31 @@ class LlmProviderApiKeyResourceTest {
                         .baseUrl(null).build()), getExpectedName),
                 arguments(named("only apiKey", updateAll.toBuilder().name(null).headers(null).configuration(null)
                         .baseUrl(null).build()), getExpectedApiKey),
-                arguments(named("only baseUrl", updateAll.toBuilder().apiKey(null).name(null).headers(null)
+                arguments(named("baseUrl with apiKey", updateAll.toBuilder().name(null).headers(null)
                         .configuration(null).build()), getExpectedBaseUrl),
                 arguments(named("only headers", updateAll.toBuilder().name(null).apiKey(null).configuration(null)
                         .baseUrl(null).build()), getExpectedHeaders),
                 arguments(named("only configuration", updateAll.toBuilder().name(null).apiKey(null).headers(null)
                         .baseUrl(null).build()), getExpectedConfig));
+    }
+
+    @Test
+    @DisplayName("Update provider Api Key - changing baseUrl without resubmitting the api key is rejected")
+    void testUpdateProviderApiKeyBaseUrlWithoutApiKeyIsRejected() {
+        String workspaceName = UUID.randomUUID().toString();
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var created = llmProviderApiKeyResourceClient.createProviderApiKey(createProviderApiKey(), apiKey,
+                workspaceName, HttpStatus.SC_CREATED);
+
+        var update = ProviderApiKeyUpdate.builder().baseUrl(created.baseUrl() + "/changed").build();
+        llmProviderApiKeyResourceClient.updateProviderApiKey(created.id(), update, apiKey, workspaceName,
+                HttpStatus.SC_BAD_REQUEST);
+
+        getAndAssertProviderApiKey(created, apiKey, workspaceName);
     }
 
     @Test

@@ -13,6 +13,7 @@ import com.comet.opik.domain.llm.structuredoutput.ToolCallingStrategy;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.llm.antropic.AnthropicModelName;
 import com.comet.opik.infrastructure.llm.customllm.CustomLlmModelNameChecker;
+import com.comet.opik.infrastructure.llm.customllm.ProviderBaseUrlGuard;
 import com.comet.opik.infrastructure.llm.gemini.GeminiModelName;
 import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterDecisionModel;
@@ -75,6 +76,12 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
             .collect(Collectors.toUnmodifiableSet());
 
     private LlmProviderClientApiConfig buildConfig(ProviderApiKey providerConfig, String workspaceId) {
+        // operator-configured free model URL is trusted; user-configured base URLs are re-checked on every call
+        if (providerConfig.provider() != LlmProvider.OPIK_FREE) {
+            new ProviderBaseUrlGuard(this.configuration.getLlmProviderClient().getDestinationGuard())
+                    .validate(providerConfig.baseUrl());
+        }
+
         var configuration = Optional.ofNullable(providerConfig.configuration()).orElse(Map.of());
 
         // For providers that support naming, add provider_name to configuration if present
