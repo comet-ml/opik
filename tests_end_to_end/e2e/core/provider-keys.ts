@@ -131,10 +131,34 @@ export async function deleteProviderKeyById(id: string): Promise<void> {
 export const backendSelfUrl = process.env.OPIK_BACKEND_SELF_URL || 'http://localhost:8080';
 
 /**
+ * Whether this deployment's provider destination guard refuses internal
+ * addresses — the `strict` mode of `LLM_PROVIDER_DESTINATION_GUARD`.
+ *
+ * It matters to every seeded failure provider in the estate. opik#9214 made
+ * `strict` the APPLICATION default, and under it `127.0.0.1`, `localhost` and
+ * every RFC 1918 address are refused with a 400 *on save* — so a fixture that
+ * seeds a loopback `base_url` does not produce a provider that fails to
+ * answer, it produces no provider at all. Both shipped deployment manifests set
+ * `relaxed`, because a self-hosted gateway legitimately lives on an internal
+ * network; cloud runs `strict`.
+ *
+ * Inferred from the deployment shape rather than probed, so no seed has to be
+ * attempted and thrown away to find out: `cloud` is the deployment that runs
+ * `strict`. `OPIK_PROVIDER_DESTINATION_GUARD` overrides it for a deployment
+ * configured against that grain — a self-hosted stack that has deliberately
+ * turned the guard on, or a cloud-shaped target running `relaxed`.
+ */
+export function guardRefusesInternalDestinations(): boolean {
+  const override = process.env.OPIK_PROVIDER_DESTINATION_GUARD;
+  if (override) return override.trim().toLowerCase() === 'strict';
+  return loadEnvConfig().deployment === 'cloud';
+}
+
+/**
  * A custom-llm `base_url` that always answers a permanent HTTP 404.
  *
- * langchain4j appends `/chat/completions`, so the backend ends up asking its own
- * connector for a route that does not exist and gets its standard
+ * langchain4j appends `/chat/completions`, so the backend ends up asking for a
+ * route that does not exist and gets the standard
  * `{"code":404,"message":"HTTP 404 Not Found"}` back. That makes "the provider
  * refused with a 4xx" a routing fact rather than a data fact — no external
  * service, no credentials, no mock process, and nothing that can start
@@ -143,8 +167,51 @@ export const backendSelfUrl = process.env.OPIK_BACKEND_SELF_URL || 'http://local
  * Deliberately not httpbin.org or any other public status echo: a permanent test
  * must not depend on a third party being up, and an external body would also be
  * empty, which the scorer renders as a blank error reason.
+ *
+ * KNOWN LIMITATION, and not fixable without giving up what this URL is for: it
+ * only works where the destination guard is `relaxed`. Under `strict` a
+ * loopback `base_url` is refused on save, so `createPermanentlyFailing` cannot
+ * seed at all — see `guardRefusesInternalDestinations`. Substituting a public
+ * host would not rescue it either, because the whole value here is that the
+ * 404 body is OPIK'S OWN (`{"code":404,"message":"HTTP 404 Not Found"}`), which
+ * is what the one spec on this path quotes; any other host answers a body of
+ * its own. Fixing it needs a reachable always-404 route inside the deployment,
+ * which is a deployment change rather than a test one. `unreachableBaseUrl` in
+ * the provider-key fixture is strict-safe because it promises only that the
+ * call fails fast, never what the failure says.
  */
 export const notFoundProviderBaseUrl = `${backendSelfUrl}/qa-no-such-llm-endpoint`;
+
+/**
+ * A base URL that fails FAST and that a `strict` deployment will store.
+ *
+ * Under `strict` the estate has no better option, and this is not for want of
+ * looking. Probed against cloud staging at 2.2.121: loopback and every RFC
+ * 1918, CGNAT and link-local address are refused on save; the DEPLOYMENT'S OWN
+ * hostname is refused too, because it resolves to a private address from inside
+ * the cluster; and the documentation-reserved literals (`192.0.2.1`,
+ * `198.51.100.1`, `203.0.113.1`) are all stored but they BLACKHOLE, so a call
+ * to one hangs until it times out instead of failing. There is no public
+ * address that refuses a connect on demand — a refusal needs a host that is up
+ * with nothing listening, which nothing public guarantees.
+ *
+ * So this is the one URL in the estate that depends on a host outside the
+ * deployment, and the choice is narrowed by exactly that: `comet.com` is
+ * FIRST-PARTY — the same organisation that operates the deployment under test —
+ * rather than a third-party status echo, so "the dependency is down" and "the
+ * vendor is down" are the same event. The path will never exist, so the 4xx is
+ * permanent and cannot start succeeding.
+ *
+ * Only ever used where the caller needs the call to fail quickly and cheaply,
+ * never where it needs a particular error BODY — that is
+ * `notFoundProviderBaseUrl`, and see the limitation recorded on it.
+ *
+ * Override with `OPIK_PUBLIC_NOT_FOUND_BASE_URL` for a `strict` deployment that
+ * has its own reachable always-4xx host, which is strictly better than this.
+ */
+export const PUBLIC_NOT_FOUND_BASE_URL =
+  process.env.OPIK_PUBLIC_NOT_FOUND_BASE_URL ||
+  'https://www.comet.com/qa-no-such-llm-endpoint';
 
 /**
  * A public base URL that always passes the destination guard and is never

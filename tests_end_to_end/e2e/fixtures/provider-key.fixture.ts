@@ -13,7 +13,9 @@ import {
   deleteProviderKeyById,
   deleteProviderKeyByName,
   findProviderKeyByProvider,
+  guardRefusesInternalDestinations,
   notFoundProviderBaseUrl,
+  PUBLIC_NOT_FOUND_BASE_URL,
 } from '../core/provider-keys';
 import { registerUnbilledModel } from '../core/llm-model-policy';
 
@@ -68,36 +70,57 @@ export interface FailingProviderSeed {
 export type UnresponsiveProviderSeed = UnreachableProviderSeed;
 
 /**
- * Base URL for a provider that can never answer.
+ * Base URL for a provider that can never answer, in the form this deployment's
+ * destination guard will store.
  *
- * The discard port on the backend's own loopback: nothing listens there, so the
- * connect is REFUSED immediately and every scoring call through this provider
- * fails in milliseconds, with no dependency on the mock gateway, on an external
- * host, or on the runner being reachable from the backend at all. That last
- * point is why this is not `mockGatewayUrlForBackend` with a forced status: the
- * mock binds to the test runner, which a remote deployment cannot reach (see
+ * Where the guard is `relaxed` — the shipped self-hosted default — this is the
+ * discard port on the backend's own loopback: nothing listens there, so the
+ * connect is REFUSED immediately and every call through this provider fails in
+ * milliseconds, with no dependency on the mock gateway, on an external host, or
+ * on the runner being reachable from the backend at all. That last point is why
+ * it is not `mockGatewayUrlForBackend` with a forced status: the mock binds to
+ * the test runner, which a remote deployment cannot reach (see
  * `mockAuthSkipReason`), so a mock-based failure spec can only ever run locally.
  *
- * A blackholed address (`192.0.2.1`) would also fail, but by TIMING OUT — that
- * turns a one-second failure into a connect-timeout wait and, worse, can leave
- * the provider call still in flight when the scoring message is reclaimed.
- * Refusal is the deterministic shape.
+ * Where the guard is `strict` (cloud, and the application default since
+ * opik#9214) loopback is not an option at all: `createProviderKey` is refused
+ * with a 400 before any provider exists, so every caller here used to fail
+ * during seeding with a message about `LLM_PROVIDER_DESTINATION_GUARD` rather
+ * than on its own subject. There the provider points at
+ * `PUBLIC_NOT_FOUND_BASE_URL` instead, which answers a permanent 4xx just as
+ * fast.
+ *
+ * The shape of the failure therefore differs by deployment, and a caller that
+ * depends on WHICH it is must not use this: `relaxed` refuses at connect, so
+ * there is no provider body to quote, while `strict` answers a 4xx a scorer
+ * can report. What holds on both — and what every current caller actually
+ * needs — is that the call fails immediately and spends nothing. This is why
+ * the two URLs are not merged: `notFoundProviderBaseUrl` promises a SPECIFIC
+ * body (Opik's own 404 JSON), which no public host can honour, so it stays
+ * loopback-only and `createPermanentlyFailing` stays `relaxed`-only with it.
+ *
+ * A blackholed address (`192.0.2.1`) would also be stored everywhere, but it
+ * fails by TIMING OUT — that turns a one-second failure into a connect-timeout
+ * wait and, worse, can leave the provider call still in flight when a scoring
+ * message is reclaimed. See `UNRESPONSIVE_BASE_URL`, which wants exactly that
+ * and is deliberately separate.
  */
-const UNREACHABLE_BASE_URL = 'http://127.0.0.1:9/v1';
+const unreachableBaseUrl = (): string =>
+  guardRefusesInternalDestinations() ? PUBLIC_NOT_FOUND_BASE_URL : 'http://127.0.0.1:9/v1';
 
 /**
  * Base URL for a provider that never answers and never refuses.
  *
  * `192.0.2.1` is TEST-NET-1 (RFC 5737) — reserved for documentation, routed
  * nowhere — so a connect to it hangs until it times out instead of being
- * refused. That is the opposite of what `UNREACHABLE_BASE_URL` wants, and
+ * refused. That is the opposite of what `unreachableBaseUrl` wants, and
  * deliberately so: a refused connect ends a Playground run in milliseconds,
  * which leaves no window in which a spec can click Stop. Holding the run open
  * is the whole point here.
  *
  * Only for specs that abort the run themselves and assert on the FRONTEND's
  * reaction. Do NOT point a scoring rule at this — the warning on
- * `UNREACHABLE_BASE_URL` stands, and an online-scoring message whose provider
+ * `unreachableBaseUrl` stands, and an online-scoring message whose provider
  * call is still connecting when the message is reclaimed is exactly the
  * non-determinism that URL exists to avoid. Stop aborts the browser's own
  * request; whether the backend's upstream connect is still timing out behind it
@@ -166,7 +189,7 @@ export interface ProviderKeysFixture {
    * every other selection helper in the estate types a full model name into
    * "Search model" first and so never sees more than a handful of options.
    *
-   * Points at `UNREACHABLE_BASE_URL` for the same reason `createUnreachable`
+   * Points at `unreachableBaseUrl` for the same reason `createUnreachable`
    * does, with the opposite intent: here nothing is ever meant to call these
    * models, and a refused connect means a spec that accidentally ran one fails
    * in milliseconds instead of billing. Every name is registered unbilled, so
@@ -247,7 +270,7 @@ export const test = baseTest.extend<ProviderKeyFixtures>({
         await createProviderKey({
           provider: 'custom-llm',
           provider_name: providerName,
-          base_url: UNREACHABLE_BASE_URL,
+          base_url: unreachableBaseUrl(),
           // Required whenever `auth_config` is absent. Never sent anywhere: the
           // connection is refused before a request is written.
           api_key: 'unused-the-connection-is-refused',
@@ -302,7 +325,7 @@ export const test = baseTest.extend<ProviderKeyFixtures>({
         await createProviderKey({
           provider: 'custom-llm',
           provider_name: providerName,
-          base_url: UNREACHABLE_BASE_URL,
+          base_url: unreachableBaseUrl(),
           // Required whenever `auth_config` is absent, and never presented to
           // anything: the connect is refused before a request is written.
           api_key: 'unused-these-models-are-never-called',
