@@ -3940,6 +3940,30 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * `GET /v1/private/toggles/` — the feature-toggle map the front end reads
+     * on boot, so a spec can tell "this deployment does not offer the surface"
+     * from "the surface is broken".
+     *
+     * Needed because a toggled-off surface does not fail visibly: a route
+     * behind one redirects to its fallback, and a spec that then waits for the
+     * gated page's own heading times out with no hint that the feature was
+     * simply off. `project_homepage_enabled` is the live example — it defaults
+     * to `false`, so `/projects/{id}/home` replaces itself with `/logs`.
+     *
+     * Returns `false` for a key the deployment does not report at all, which is
+     * the same answer the front end's own `DEFAULT_STATE` merge gives an older
+     * backend: absent means not offered.
+     */
+    async isFeatureToggleEnabled(key: string): Promise<boolean> {
+      const { status, message, json } = await rawFetch('GET', '/v1/private/toggles/');
+      if (status !== 200) {
+        throw new Error(`isFeatureToggleEnabled(${key}): expected 200, got ${status}: ${message}`);
+      }
+      const toggles = (json ?? {}) as Record<string, unknown>;
+      return toggles[key] === true;
+    },
+
+    /**
      * By id, unlike findExperimentByName — `findExperiments({ name })` is not
      * scoped to a project, so a same-named experiment elsewhere would answer
      * for this one.

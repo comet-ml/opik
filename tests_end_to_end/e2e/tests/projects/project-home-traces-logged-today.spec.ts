@@ -37,6 +37,18 @@ import type { BackendFilter } from '@e2e/core/backend';
  * and no data that happens to exist in the workspace.
  */
 
+/**
+ * The toggle the whole page is behind.
+ *
+ * `project_homepage_enabled` defaults to `false`, and when it is off
+ * `ProjectHomePage` replaces itself with `/logs` — so the surface this spec
+ * asserts is not merely hidden, it is unreachable, and waiting for its heading
+ * times out on the Logs page with nothing to say why. Measured off the deployed
+ * build rather than assumed, because it is a staged rollout: on at the time of
+ * writing on staging, off on a stock OSS stack.
+ */
+const PROJECT_HOMEPAGE_TOGGLE = 'project_homepage_enabled';
+
 /** The pair `RecentActivityService` sends, and the Logs traces tab with it. */
 const SDK_SOURCE_FILTERS: BackendFilter[] = [
   { field: 'source', operator: '=', value: 'sdk', type: 'string' },
@@ -53,6 +65,19 @@ test.describe('Project home — Recent activity', { tag: ['@area:projects'] }, (
     { tag: ['@t2-cuj', '@cap:projects.recent-activity'] },
     async ({ project, sourceMixTraces, backendClient, page }) => {
       test.setTimeout(180_000);
+
+      // A deployment that does not offer the page, not a failure: with the
+      // toggle off the route redirects to Logs, so there is no Recent activity
+      // to assert on. Skipped rather than marked `test.fail()` — the behaviour
+      // is not broken anywhere, it is simply absent here, and a `test.fail()`
+      // would turn a correct build with the flag ON into a red run. Every
+      // assertion below is left exactly as it is.
+      const homepageEnabled = await backendClient.isFeatureToggleEnabled(PROJECT_HOMEPAGE_TOGGLE);
+      test.skip(
+        !homepageEnabled,
+        `the project home page is behind ${PROJECT_HOMEPAGE_TOGGLE}, which this deployment ` +
+          'reports as off — the route redirects to Logs, so Recent activity is unreachable',
+      );
 
       const expectedCounted = [...sourceMixTraces.countedIds].sort();
 

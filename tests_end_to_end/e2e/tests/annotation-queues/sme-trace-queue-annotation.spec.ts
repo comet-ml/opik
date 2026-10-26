@@ -62,7 +62,23 @@ test.describe(
   () => {
     test(
       'shows each item its own trace, and lands a reviewer\'s scores on the items they were shown',
-      { tag: ['@cap:annotation-queues.sme-flow'] },
+      // `score-queue-item` and `scores-reach-traces` alongside `sme-flow`,
+      // because this really does assert both: a score is submitted through the
+      // annotate panel, and it is read back off the source trace by id. Both
+      // keys already read covered on the admin-route spec, so nothing flips —
+      // what the tags add is that the SME route's submit path is now visible on
+      // the map instead of being coverage nobody could find.
+      //
+      // NOT `skip-item`: the middle stop is advanced past with the Next
+      // control, which is not the product's Skip action. `score-with-reason` is
+      // not claimed either — see "Not claimed" above.
+      {
+        tag: [
+          '@cap:annotation-queues.sme-flow',
+          '@cap:annotation-queues.score-queue-item',
+          '@cap:annotation-queues.scores-reach-traces',
+        ],
+      },
       async ({ annotationQueue, backendClient, page }) => {
         const scoreName = annotationQueue.feedbackDefinitionName;
         const queueTraces = annotationQueue.traces;

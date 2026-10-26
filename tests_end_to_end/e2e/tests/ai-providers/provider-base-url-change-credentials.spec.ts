@@ -140,7 +140,11 @@ test.describe('AI Providers — base_url change rules', { tag: ['@area:configura
 
   test(
     'the built-in free provider cannot be saved as a workspace key',
-    { tag: ['@t2-cuj', '@cap:configuration.ai-provider-edit'] },
+    // `ai-provider-add`, not `-edit`: this is the CREATE endpoint's own guard
+    // (`saveApiKey`'s OPIK_FREE branch), and nothing here edits a stored
+    // provider. Tagging it `-edit` would have filed a create-path refusal under
+    // the wrong capability.
+    { tag: ['@t2-cuj', '@cap:configuration.ai-provider-add'] },
     async () => {
       // Its own test rather than a step of the one above: it is a different
       // refusal on a different endpoint (`saveApiKey`'s OPIK_FREE guard, not

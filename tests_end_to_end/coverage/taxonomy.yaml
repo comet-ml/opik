@@ -1204,7 +1204,7 @@ areas:
       # SandboxedView: the authoring path is Ollie's, the rendering contract is
       # the annotation queue's, and this covers only the second.
       custom-annotator-view:   { covered: false, note: "A queue's `annotator_view`: a stored kit v1 view renders inside iframe[title=\"Annotator view\"] (sandbox=allow-scripts) showing that item's own input/output fields and REPLACING the default Input/Output blocks, with the queue-detail header carrying the 'Custom annotator view' tag; a view that never calls kit.mount is replaced by the default view with the 'custom view failed to load' alert rather than left as a blank frame; a view that assigns innerHTML is blocked and replaced, with the same marker asserted to render first through the kit's safe `text:` path as the control, so the marker's absence is the block rather than an unrenderable value; and `html: ''` reads back as null with the header tag gone and no failure alert. Views are PATCHed over REST, not authored: the dialog's only authoring path is Ollie, so 'can a human write one' is NOT covered, and neither is the create/edit dialog's annotator-view card, the thread surface's SandboxedAnnotatorThreadView, the Ollie proposal path, or the preview page." }
-      sme-flow:                { covered: false, note: "/sme route, dedicated layout. The only spec reaching /sme is sme-thread-internal-traces.spec.ts, and it asserts the route's own layout — the welcome page naming the queue, Start annotating, and the thread view's internal-trace toggle and Internal badge (opik#9073). SCORING through /sme is NOT covered: score-queue-item / score-with-reason / skip-item are all asserted on the project-scoped admin route (annotation-queue-scoring.spec.ts), so a reviewer's submit path through the SME layout has no test. Read this key as 'the SME route renders', not 'the SME journey works'." }
+      sme-flow:                { covered: false, note: "/sme route, dedicated layout. Two specs reach /sme. sme-thread-internal-traces.spec.ts asserts the route's own layout on a THREAD queue — the welcome page naming the queue, Start annotating, and the thread view's internal-trace toggle and Internal badge (opik#9073). sme-trace-queue-annotation.spec.ts asserts the TRACE queue path (opik#9079), which mounts a different viewer: each stop shows the item's own input/output and no sibling's, the Trace: header names that item, and the scores a reviewer submits are read back off the source traces by id — exactly the graded items, at the values given, with the skipped one carrying none and the queue still holding every item. That spec also carries score-queue-item and scores-reach-traces, so the submit path through the SME layout is no longer invisible. STILL NOT covered here: score-with-reason and skip-item through this layout (both are asserted only on the project-scoped admin route, annotation-queue-scoring.spec.ts — the middle stop above is advanced past with Next, which is not the Skip action), and the completion view after the last item. Read this key as 'the SME route renders and a trace queue can be graded through it', not 'the whole SME journey works'." }
       export-annotated-data:   { covered: false }
 
   # ===================== PRODUCTION =====================
@@ -1434,12 +1434,35 @@ areas:
       - projects/projects-list-stats.spec.ts
     capabilities:
       list-projects:         { covered: true,  tier: t2-cuj, note: "the list and its 30-day windowed stat columns, at the API and rendered in the table; also a trace whose UUIDv7 id embeds mid-2200 — excluded from the windowed trace count and from the error count at every window, while still counted by the unwindowed read" }
-      create-project:        { covered: false }
+      # SCOPE, not a claim: the only spec tagging this key
+      # (project-create-duplicate-name.spec.ts, 2.2.121) asserts the dialog's
+      # two REFUSALS — a duplicate name translated to the frontend's own string,
+      # any other failure keeping the server's message — and that neither
+      # attempt created anything. reconcile.py will flip covered on that tag
+      # alone, so read the key narrowly.
+      #
+      # A project being successfully created through the UI is NOT asserted
+      # anywhere: openCreateProjectDialog/submitNewProject have no other caller
+      # in the estate, and every other spec's project comes from the `project`
+      # fixture over REST. Needs a human call — either a dedicated key for the
+      # create error paths (candidate: projects.create-project-errors) leaving
+      # this one honestly uncovered, or a spec that asserts the happy path.
+      create-project:        { covered: false, note: "Read as 'the create dialog refuses what it should' — the error paths only. A successful UI create is asserted nowhere; see the comment above." }
       delete-project:        { covered: true,  tier: t2-cuj, note: "asserts the project and its traces are gone; deliberately silent on orphaned project-scoped datasets/experiments pending a product decision" }
       project-selector:      { covered: false }
       pin-unpin-project:     { covered: false }
       project-home:          { covered: false }
-      recent-activity:       { covered: false }
+      # SCOPE: project-home-traces-logged-today.spec.ts (2.2.121) asserts ONE of
+      # the six sources the activity list merges — the daily trace count — at
+      # /activities, under the service's own source=sdk + visibility_mode=default
+      # pair, rendered on the page, and through the row's link to Logs. The other
+      # five (experiments, optimizations, alert events, dataset versions, prompt
+      # versions) have no test.
+      #
+      # Also note the spec SKIPS where `project_homepage_enabled` is off, which
+      # is the stock OSS default: the route redirects to /logs there. So this
+      # key earns its coverage only on a deployment that has the flag on.
+      recent-activity:       { covered: false, note: "Read as 'the daily trace count row is right and its link agrees' — one of six merged sources, and only on a deployment with project_homepage_enabled on. See the comment above." }
       breadcrumb-selector:   { covered: false, note: "trace-explore-smoke checks the breadcrumb, but only as project context for the trace panel — not as coverage of the selector itself. A cross-area @cap: here would over-claim." }
 
     visual:
