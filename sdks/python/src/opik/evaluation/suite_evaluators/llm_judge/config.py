@@ -38,8 +38,11 @@ class LLMJudgeModelConfig(pydantic.BaseModel):
     seed: Optional[int] = None
     """Seed for reproducible generation."""
 
+    # Written as custom_parameters, the only spelling the backend judge reads. Suites
+    # saved by older SDKs hold customParameters, so that is still read.
     custom_parameters: Optional[dict[str, Any]] = pydantic.Field(
-        default=None, alias="customParameters"
+        default=None,
+        validation_alias=pydantic.AliasChoices("custom_parameters", "customParameters"),
     )
     """Optional custom parameters for the model."""
 

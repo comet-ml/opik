@@ -98,8 +98,16 @@ vi.mock("@/api/provider-keys/useProviderKeys", () => ({
   default: () => ({ data: mocks.providerKeysData }),
 }));
 
+vi.mock("@/api/llm/useLlmModelDefaults", () => ({
+  default: () => ({ data: undefined, isFetched: true }),
+}));
+
 vi.mock("@/api/llm/useLlmModels", () => ({
   default: () => mocks.registryQuery,
+}));
+
+vi.mock("@/api/llm/useLlmModelProfiles", () => ({
+  default: () => ({ data: undefined }),
 }));
 
 vi.mock("@/hooks/useOpenAICompatibleModels", () => ({

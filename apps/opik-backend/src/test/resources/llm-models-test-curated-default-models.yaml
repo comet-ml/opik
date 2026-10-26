@@ -1,0 +1,6 @@
+defaultModels:
+  anthropic: claude-haiku-4-5
+  vertex-ai: gemini-2.5-pro
+  openai: o3
+  openrouter: openai/gpt-9
+  gemini: gemini-x

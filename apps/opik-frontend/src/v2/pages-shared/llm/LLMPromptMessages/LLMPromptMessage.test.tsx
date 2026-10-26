@@ -1,6 +1,6 @@
 import React, { createRef } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, render } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import type { EditorView } from "@codemirror/view";
 
 import LLMPromptMessage, {
@@ -45,7 +45,7 @@ const message: LLMMessage = {
   content: TEXT,
 };
 
-const renderMessage = () => {
+const renderMessage = (size?: "default" | "xs") => {
   const ref = createRef<LLMPromptMessageHandle>();
   render(
     <TooltipProvider>
@@ -58,6 +58,7 @@ const renderMessage = () => {
         onRemoveMessage={vi.fn()}
         onDuplicateMessage={vi.fn()}
         onChangeMessage={vi.fn()}
+        size={size}
       />
     </TooltipProvider>,
   );
@@ -115,5 +116,29 @@ describe("LLMPromptMessage focus", () => {
     act(() => editor.create?.());
 
     expect(createdView.focus).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("LLMPromptMessage size", () => {
+  afterEach(cleanup);
+
+  const card = () => screen.getByTestId("playground-message-row");
+  const editorWrapper = () =>
+    screen.getByTestId("codemirror-stub").parentElement;
+
+  it("should keep the default padding and text size when no size is given", () => {
+    renderMessage();
+
+    expect(card()).toHaveClass("p-1", "pb-1.5", "pl-2");
+    expect(card()).not.toHaveClass("p-3");
+    expect(editorWrapper()).not.toHaveClass("[&_.cm-editor]:text-xs");
+  });
+
+  it("should use 12px side padding, 8px top padding and xs editor text at the xs size", () => {
+    renderMessage("xs");
+
+    expect(card()).toHaveClass("px-3", "pb-3", "pt-2");
+    expect(card()).not.toHaveClass("p-1", "pb-1.5", "pl-2");
+    expect(editorWrapper()).toHaveClass("[&_.cm-editor]:text-xs");
   });
 });

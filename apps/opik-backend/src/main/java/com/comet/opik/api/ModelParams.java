@@ -25,7 +25,10 @@ public record ModelParams(
         FlagParam stop,
         FlagParam seed,
         EffortParam effort,
+        ToolsParam tools,
+        ThinkingParam thinking,
         Boolean samplingExclusive,
+        Boolean samplingAtEffortNone,
         Boolean thinksByDefault,
         Map<String, ModelParams> routes) {
 
@@ -117,6 +120,57 @@ public record ModelParams(
         }
     }
 
+    @Builder(toBuilder = true)
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record ToolsParam(ChatCompletionsTools chatCompletions, FlagParam forcedChoice) {
+
+        static ToolsParam overlay(ToolsParam base, ToolsParam top) {
+            if (base == null || top == null) {
+                return ObjectUtils.getIfNull(top, base);
+            }
+            return new ToolsParam(
+                    ObjectUtils.getIfNull(top.chatCompletions, base.chatCompletions),
+                    FlagParam.overlay(base.forcedChoice, top.forcedChoice));
+        }
+
+        ToolsParam settled() {
+            return new ToolsParam(chatCompletions, forcedChoice == null ? null : forcedChoice.settled());
+        }
+    }
+
+    /**
+     * The Claude thinking types a model refuses. Anthropic's /v1/models reports them per model: an explicit budget
+     * ({@code type: enabled}) is gone from Opus 4.7 on, and adaptive thinking arrived with the 4.6 generation.
+     */
+    @Builder(toBuilder = true)
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record ThinkingParam(FlagParam budget, FlagParam adaptive) {
+
+        static ThinkingParam overlay(ThinkingParam base, ThinkingParam top) {
+            if (base == null || top == null) {
+                return ObjectUtils.getIfNull(top, base);
+            }
+            return new ThinkingParam(
+                    FlagParam.overlay(base.budget, top.budget),
+                    FlagParam.overlay(base.adaptive, top.adaptive));
+        }
+
+        ThinkingParam settled() {
+            return new ThinkingParam(budget == null ? null : budget.settled(),
+                    adaptive == null ? null : adaptive.settled());
+        }
+    }
+
+    /** Only Chat Completions has a say: OpenAI's Responses API takes function tools at any effort. */
+    public enum ChatCompletionsTools {
+        @JsonProperty("effortNoneOnly")
+        EFFORT_NONE_ONLY,
+        @JsonProperty("refused")
+        REFUSED
+    }
+
     /** Lists are replaced whole: a model's three effort levels must not merge with its profile's five. */
     public static ModelParams overlay(ModelParams base, ModelParams top) {
         if (base == null || top == null) {
@@ -132,7 +186,10 @@ public record ModelParams(
                 FlagParam.overlay(base.stop, top.stop),
                 FlagParam.overlay(base.seed, top.seed),
                 EffortParam.overlay(base.effort, top.effort),
+                ToolsParam.overlay(base.tools, top.tools),
+                ThinkingParam.overlay(base.thinking, top.thinking),
                 ObjectUtils.getIfNull(top.samplingExclusive, base.samplingExclusive),
+                ObjectUtils.getIfNull(top.samplingAtEffortNone, base.samplingAtEffortNone),
                 ObjectUtils.getIfNull(top.thinksByDefault, base.thinksByDefault),
                 overlayRoutes(base.routes, top.routes));
     }
@@ -176,7 +233,10 @@ public record ModelParams(
                 stop == null ? null : stop.settled(),
                 seed == null ? null : seed.settled(),
                 effort == null ? null : effort.settled(),
+                tools == null ? null : tools.settled(),
+                thinking == null ? null : thinking.settled(),
                 samplingExclusive,
+                samplingAtEffortNone,
                 thinksByDefault,
                 routes);
     }

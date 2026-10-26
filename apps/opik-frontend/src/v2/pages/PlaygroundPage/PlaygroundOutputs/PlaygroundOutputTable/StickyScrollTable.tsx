@@ -29,6 +29,7 @@ interface StickyScrollTableProps<TData> {
   noData: React.ReactNode;
   showLoadingOverlay: boolean;
   testId: string;
+  textSize?: "default" | "xs";
 }
 
 const EMPTY_DATA: never[] = [];
@@ -58,6 +59,7 @@ const StickyScrollTable = <TData,>({
   noData,
   showLoadingOverlay,
   testId,
+  textSize = "default",
 }: StickyScrollTableProps<TData>) => {
   const [scrollLinked] = useState(supportsScrollLinkedHeader);
   const headerScrollRef = useRef<HTMLDivElement>(null);
@@ -82,7 +84,13 @@ const StickyScrollTable = <TData,>({
   }, []);
 
   return (
-    <div className={cn(scrollLinked && "comet-scroll-linked")}>
+    <div
+      className={cn(
+        scrollLinked && "comet-scroll-linked",
+        textSize === "xs" &&
+          "[&_[data-cell-wrapper]]:text-xs [&_[data-header-wrapper]]:text-xs",
+      )}
+    >
       <div
         ref={headerScrollRef}
         data-testid={`${testId}-header`}

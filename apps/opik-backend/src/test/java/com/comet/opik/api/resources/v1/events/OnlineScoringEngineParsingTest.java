@@ -136,6 +136,22 @@ class OnlineScoringEngineParsingTest {
         assertThat(parsed.nullScoreNames()).containsExactly("Conciseness");
     }
 
+    // The answer shape Bedrock's openai.gpt-oss-20b gave on 10-23, including the draft of the JSON in its reasoning.
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "<reasoning>So output:\n{\"Correct\": {\"score\": false, \"reason\": \"draft\"}}</reasoning>"
+                    + "{\"Correct\": {\"score\": true, \"reason\": \"Paris is the capital\"}}",
+            "<think>```json\n{\"Correct\": {\"score\": false, \"reason\": \"draft\"}}\n```</think>\n"
+                    + "```json\n{\"Correct\": {\"score\": true, \"reason\": \"Paris is the capital\"}}\n```"})
+    @DisplayName("parse the answer after a leading reasoning block, not the draft inside it")
+    void whenAnswerStartsWithAReasoningBlock_thenParsesWhatFollowsIt(String aiMessage) {
+        var parsed = OnlineScoringEngine.toFeedbackScores(chatResponse(aiMessage), singleScoreSchema("Correct"));
+
+        assertThat(parsed.scores()).hasSize(1);
+        assertThat(parsed.scores().getFirst().value()).isEqualByComparingTo(BigDecimal.ONE);
+        assertThat(parsed.scores().getFirst().reason()).isEqualTo("Paris is the capital");
+    }
+
     @Test
     @DisplayName("parse a flat single-score response by naming it after the only score in the schema")
     void whenResponseIsFlatAndSchemaHasOneScore_thenParsesItUnderThatName() {

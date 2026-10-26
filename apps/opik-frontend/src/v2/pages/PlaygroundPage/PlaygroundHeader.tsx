@@ -13,6 +13,7 @@ import { isMac } from "@/lib/utils";
 import { LOGS_SOURCE } from "@/types/traces";
 import { useActiveProjectId } from "@/store/AppStore";
 import TraceLogsSidebarButton from "@/v2/pages-shared/traces/TraceLogsSidebar/TraceLogsSidebarButton";
+import { PLAYGROUND_LOGS_VIEW_CONFIG } from "@/v2/pages/PlaygroundPage/playgroundLogsViewConfig";
 import { DATASET_TYPE } from "@/types/datasets";
 import PlaygroundColumnsButton from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputTable/PlaygroundColumnsButton";
 import useDatasetItemsList from "@/api/datasets/useDatasetItemsList";
@@ -362,6 +363,8 @@ const PlaygroundHeader = ({
               logsSource={LOGS_SOURCE.playground}
               variant="icon"
               title="Playground logs"
+              viewConfig={PLAYGROUND_LOGS_VIEW_CONFIG}
+              sidebarClassName="w-[calc(100vw-72px)] data-[state=open]:duration-300"
             />
           )}
         </div>

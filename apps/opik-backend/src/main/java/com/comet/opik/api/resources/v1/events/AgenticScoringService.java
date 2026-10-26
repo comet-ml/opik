@@ -4,12 +4,15 @@ import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.attachment.AttachmentInfo;
+import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.api.resources.v1.events.tools.ToolRegistry;
 import com.comet.opik.api.resources.v1.events.tools.TraceCompressor;
 import com.comet.opik.api.resources.v1.events.tools.TraceToolContext;
 import com.comet.opik.domain.attachment.AttachmentUtils;
 import com.comet.opik.domain.evaluation.EvaluationRecorder;
+import com.comet.opik.domain.llm.ModelCapabilities;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
+import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.base.Preconditions;
@@ -164,9 +167,10 @@ public interface AgenticScoringService {
      * failed the evaluation outright instead of scoring it. Vertex therefore gets
      * {@link ToolChoice#AUTO}: the model may skip the tool loop, which the loop already handles (a first
      * response with no tool-execution requests finishes it), so a possibly-tool-less evaluation replaces
-     * a guaranteed failure.
+     * a guaranteed failure. The same trade applies to the Claude models that answer a forced choice with a
+     * 400, and to any Claude given a thinking budget.
      */
-    ToolChoice firstRoundToolChoice(LlmProvider provider);
+    ToolChoice firstRoundToolChoice(LlmProvider provider, LlmAsJudgeModelParameters modelParameters);
 
     /**
      * Attach the tool specs from the registered {@link ToolRegistry} and the given {@code toolChoice} to
@@ -250,6 +254,7 @@ class AgenticScoringServiceImpl implements AgenticScoringService {
 
     private final @NonNull @Config("onlineScoring") OnlineScoringConfig onlineScoringConfig;
     private final @NonNull ToolRegistry toolRegistry;
+    private final @NonNull LlmModelRegistryService registryService;
 
     @Override
     public Mono<ChatResponse> runToolCallLoop(@NonNull ChatResponse initialResponse,
@@ -452,7 +457,12 @@ class AgenticScoringServiceImpl implements AgenticScoringService {
     }
 
     @Override
-    public ToolChoice firstRoundToolChoice(@NonNull LlmProvider provider) {
+    public ToolChoice firstRoundToolChoice(@NonNull LlmProvider provider,
+            @NonNull LlmAsJudgeModelParameters modelParameters) {
+        if (ModelCapabilities.refusesForcedToolChoice(modelParameters.name(), registryService)
+                || sendsAThinkingBudget(modelParameters)) {
+            return ToolChoice.AUTO;
+        }
         return switch (provider) {
             case OPEN_AI, ANTHROPIC, GEMINI, OPEN_ROUTER, BEDROCK -> ToolChoice.REQUIRED;
             // VERTEX_AI: VertexAiGeminiChatModel.validate() throws UnsupportedFeatureException on any
@@ -461,6 +471,20 @@ class AgenticScoringServiceImpl implements AgenticScoringService {
             // that forgets the gate on the harmless side.
             case VERTEX_AI, OLLAMA, CUSTOM_LLM, OPIK_FREE -> ToolChoice.AUTO;
         };
+    }
+
+    // Anthropic answers "Thinking may not be enabled when tool_choice forces tool use" to a thinking budget, while
+    // adaptive thinking takes a forced choice. ParamResolver swaps a thinking type the model refuses for the one it
+    // takes, so this follows what is sent: adaptive saved on a 4.5 Claude goes out as a budget.
+    private boolean sendsAThinkingBudget(LlmAsJudgeModelParameters modelParameters) {
+        var type = modelParameters.customParameters() == null
+                ? ""
+                : modelParameters.customParameters().path("thinking").path("type").asText();
+        if ("enabled".equalsIgnoreCase(type)) {
+            return !ModelCapabilities.refusesThinkingBudget(modelParameters.name(), registryService);
+        }
+        return "adaptive".equalsIgnoreCase(type)
+                && ModelCapabilities.refusesAdaptiveThinking(modelParameters.name(), registryService);
     }
 
     @Override

@@ -1,4 +1,5 @@
 import json
+import logging
 import sys
 import types
 from contextlib import asynccontextmanager, contextmanager
@@ -12,6 +13,7 @@ from opik.evaluation.models import models_factory
 from opik.evaluation.models import base_model
 from opik.evaluation.models.anthropic import anthropic_chat_model
 from opik.evaluation.models.anthropic import message_adapter, response_parser
+from opik.evaluation.models.litellm import util as litellm_util
 
 from ....testlib import patch_submodule
 
@@ -72,6 +74,19 @@ def _clear_model_cache():
     models_factory._MODEL_CACHE.clear()
     yield
     models_factory._MODEL_CACHE.clear()
+
+
+SAMPLING_REFUSING_MODELS = {"claude-sonnet-5-5"}
+
+
+@pytest.fixture(autouse=True)
+def _fake_model_map(monkeypatch):
+    # The real lookup imports LiteLLM, which fetches its model map over the network.
+    monkeypatch.setattr(
+        litellm_util,
+        "rejects_sampling_params",
+        lambda model_name: model_name in SAMPLING_REFUSING_MODELS,
+    )
 
 
 class TestResponseParser:
@@ -242,7 +257,7 @@ class TestMessageAdapter:
     def test_filter_unsupported_params__sdk_dropped_sampling_params__removed(
         self, monkeypatch
     ):
-        # anthropic>=1.7.0 removed temperature/top_p/top_k from create().
+        # anthropic>=1.0.0 removed temperature/top_p/top_k from create().
         monkeypatch.setattr(
             message_adapter,
             "_sdk_accepted_params",
@@ -895,6 +910,62 @@ class TestParamFiltering:
         assert call_kwargs["temperature"] == 0.7
         assert "logprobs" not in call_kwargs
         assert "top_logprobs" not in call_kwargs
+
+    def test_sampling_params__model_refuses_them__not_sent(self, monkeypatch):
+        _, mock_client, _ = _install_anthropic_stub(monkeypatch)
+        monkeypatch.setattr(message_adapter, "_sdk_accepted_params", lambda: None)
+        monkeypatch.setenv("OPIK_ENABLE_LITELLM_MODELS_MONITORING", "false")
+
+        model = anthropic_chat_model.AnthropicChatModel(
+            model_name="anthropic/claude-sonnet-5-5", track=False, temperature=0.0
+        )
+        model.generate_provider_response(
+            [{"role": "user", "content": "hi"}], top_p=0.9, top_k=5, max_tokens=10
+        )
+
+        call_kwargs = mock_client.messages.create.call_args.kwargs
+        assert "temperature" not in call_kwargs
+        assert "top_p" not in call_kwargs
+        assert "top_k" not in call_kwargs
+        assert call_kwargs["max_tokens"] == 10
+
+    def test_sampling_params__model_refuses_them__warned_once_per_param(
+        self, monkeypatch, caplog
+    ):
+        _, mock_client, _ = _install_anthropic_stub(monkeypatch)
+        monkeypatch.setattr(message_adapter, "_sdk_accepted_params", lambda: None)
+        monkeypatch.setenv("OPIK_ENABLE_LITELLM_MODELS_MONITORING", "false")
+        caplog.set_level(logging.WARNING, logger=message_adapter.LOGGER.name)
+
+        model = anthropic_chat_model.AnthropicChatModel(
+            model_name="anthropic/claude-sonnet-5-5", track=False, temperature=0.0
+        )
+        for _ in range(2):
+            model.generate_provider_response(
+                [{"role": "user", "content": "hi"}], top_p=0.9, max_tokens=10
+            )
+
+        assert [
+            record.getMessage()
+            for record in caplog.records
+            if record.name == message_adapter.LOGGER.name
+        ] == [
+            "Model claude-sonnet-5-5 does not accept temperature. Dropping temperature=0.0.",
+            "Model claude-sonnet-5-5 does not accept top_p. Dropping top_p=0.9.",
+        ]
+
+    def test_sampling_params__model_accepts_them__sent(self, monkeypatch):
+        _, mock_client, _ = _install_anthropic_stub(monkeypatch)
+        monkeypatch.setattr(message_adapter, "_sdk_accepted_params", lambda: None)
+        monkeypatch.setenv("OPIK_ENABLE_LITELLM_MODELS_MONITORING", "false")
+
+        model = anthropic_chat_model.AnthropicChatModel(
+            model_name="anthropic/claude-sonnet-4-6", track=False, temperature=0.0
+        )
+        model.generate_provider_response([{"role": "user", "content": "hi"}])
+
+        call_kwargs = mock_client.messages.create.call_args.kwargs
+        assert call_kwargs["temperature"] == 0.0
 
     def test_keeps_all_valid_anthropic_params(self, monkeypatch):
         _, mock_client, _ = _install_anthropic_stub(monkeypatch)

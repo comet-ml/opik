@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
+import { Dialog, DialogContent, DialogTitle } from "@/ui/dialog";
 import ResizableSidePanelArrowNavigation from "./ResizableSidePanelArrowNavigation";
 
 const buildNavigation = (overrides = {}) => ({
@@ -113,6 +114,27 @@ describe("ResizableSidePanelArrowNavigation", () => {
       <ResizableSidePanelArrowNavigation horizontalNavigation={navigation} />,
     );
     fireEvent.keyDown(document, { key: "k" });
+    expect(navigation.onChange).not.toHaveBeenCalled();
+  });
+
+  it("does not trigger nav on J or K pressed in a dialog opened from the panel", () => {
+    const navigation = buildNavigation();
+    render(
+      <>
+        <ResizableSidePanelArrowNavigation horizontalNavigation={navigation} />
+        <Dialog open>
+          <DialogContent aria-describedby={undefined}>
+            <DialogTitle>Delete trace</DialogTitle>
+            <button>Cancel</button>
+          </DialogContent>
+        </Dialog>
+      </>,
+    );
+    const cancel = screen.getByRole("button", { name: "Cancel" });
+
+    fireEvent.keyDown(cancel, { key: "j" });
+    fireEvent.keyDown(cancel, { key: "k" });
+
     expect(navigation.onChange).not.toHaveBeenCalled();
   });
 });

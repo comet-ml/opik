@@ -86,6 +86,13 @@ test.describe(
             }
           });
 
+          await test.step('A toast confirms the new version', async () => {
+            const promptLabel = promptType === 'chat' ? 'chat prompt' : 'prompt';
+            await expect(
+              playground.savedToLibraryToast(`Saved new version of ${promptLabel} "${promptName}"`),
+            ).toBeVisible();
+          });
+
           const prompts = new PromptsPage(page);
 
           await test.step('Navigate to Prompts Library', async () => {

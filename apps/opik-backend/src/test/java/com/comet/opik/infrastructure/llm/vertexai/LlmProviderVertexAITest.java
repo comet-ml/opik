@@ -9,6 +9,7 @@ import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
+import jakarta.ws.rs.BadRequestException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -19,6 +20,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.timeout;
@@ -117,5 +119,20 @@ class LlmProviderVertexAITest {
 
         verify(client).close();
         verify((AutoCloseable) delegate).close();
+    }
+
+    @Test
+    void validateRequestAnswersAThinkingLevelGeminiDoesNotHaveWithA400() {
+        var provider = new LlmProviderVertexAI(mock(VertexAIClientGenerator.class),
+                LlmProviderClientApiConfig.builder().apiKey("key").configuration(Map.of()).build());
+        var request = ChatCompletionRequest.builder()
+                .model(MODEL)
+                .addUserMessage("hi")
+                .customParameters(Map.of("thinking", Map.of("level", "ultra")))
+                .build();
+
+        assertThatThrownBy(() -> provider.validateRequest(request))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("level 'ultra'");
     }
 }

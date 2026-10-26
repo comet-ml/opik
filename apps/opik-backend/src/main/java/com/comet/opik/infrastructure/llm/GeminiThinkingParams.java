@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.llm;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import jakarta.ws.rs.BadRequestException;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.Arrays;
@@ -8,6 +9,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 /**
  * Gemini thinking configuration decoded from {@code custom_parameters.thinking}, shared by the Google AI Studio and
@@ -21,6 +23,9 @@ import java.util.regex.Pattern;
 public record GeminiThinkingParams(Level level, Integer budgetTokens, Boolean includeThoughts) {
 
     public static final GeminiThinkingParams ABSENT = new GeminiThinkingParams(null, null, null);
+
+    // The frontend's own Auto, not a Google level: it asks for no level, so the model's default applies.
+    private static final String AUTO_LEVEL = "auto";
 
     // Bounded, and required to be a real version token (followed by "." or "-"). The judge path takes
     // the model name as free text from the API: an unbounded group would overflow Integer.parseInt,
@@ -146,10 +151,21 @@ public record GeminiThinkingParams(Level level, Integer budgetTokens, Boolean in
 
     /**
      * Decodes the playground shape, where custom parameters arrive as a plain {@link Map} off the proxied request.
+     * <p>
+     * A level Gemini doesn't have is a 400 here, the way an unknown Claude effort is: dropping it would run the model
+     * at its own default while the caller believes the level was sent. The judge shape keeps dropping it, because a
+     * saved rule has no caller to tell, and its model's default still scores.
      */
     public static GeminiThinkingParams from(Map<String, Object> customParameters) {
         if (customParameters == null || !(customParameters.get("thinking") instanceof Map<?, ?> thinking)) {
             return ABSENT;
+        }
+        if (thinking.get("level") instanceof String level && StringUtils.isNotBlank(level)
+                && !AUTO_LEVEL.equalsIgnoreCase(level) && Level.parse(level).isEmpty()) {
+            throw new BadRequestException(
+                    "Unsupported custom_parameters.thinking.level, level '%s', supported '%s'".formatted(level,
+                            Stream.concat(Stream.of(AUTO_LEVEL), Arrays.stream(Level.values()).map(Level::wireValue))
+                                    .toList()));
         }
 
         return new GeminiThinkingParams(

@@ -315,4 +315,69 @@ describe("PromptImprovementDialog — a run still streaming when its session end
       screen.getByRole("button", { name: /Improve prompt/ }),
     ).toBeEnabled();
   });
+
+  it("keeps the run and the instructions when the same prompt comes back as a new object", async () => {
+    const promptWithImage = () => [
+      { type: "text" as const, text: "describe the picture" },
+      {
+        type: "image_url" as const,
+        image_url: { url: "https://example.com/cat.png" },
+      },
+    ];
+    let streamChunk: (chunk: string) => void = () => {};
+    let finishRun: (result: object) => void = () => {};
+    let signal: AbortSignal | undefined;
+    improvement.improvePrompt.mockImplementation(
+      (
+        _prompt: string,
+        _instructions: string,
+        _model: string,
+        _configs: unknown,
+        onChunk: (chunk: string) => void,
+        runSignal: AbortSignal,
+      ) => {
+        streamChunk = onChunk;
+        signal = runSignal;
+        return new Promise((resolve) => {
+          finishRun = resolve;
+        });
+      },
+    );
+    const dialogWith = (originalPrompt: DialogProps["originalPrompt"]) => (
+      <TooltipProvider>
+        <PromptImprovementDialog
+          {...dialogProps}
+          open
+          model={PROVIDER_MODEL_TYPE.GPT_4O_MINI}
+          originalPrompt={originalPrompt}
+        />
+      </TooltipProvider>
+    );
+    const { rerender } = render(dialogWith(promptWithImage()));
+    fireEvent.change(
+      screen.getByPlaceholderText(/What do you want to improve/),
+      {
+        target: { value: "make it shorter" },
+      },
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Improve prompt/ }));
+    await waitFor(() => expect(improvement.improvePrompt).toHaveBeenCalled());
+
+    rerender(dialogWith(promptWithImage()));
+    await act(async () => {
+      streamChunk("Describe the cat.");
+      finishRun({ result: "Describe the cat." });
+    });
+
+    expect(signal?.aborted).toBe(false);
+    expect(
+      screen.getByPlaceholderText(/What do you want to improve/),
+    ).toHaveValue("make it shorter");
+    expect(
+      screen.getByRole("textbox", { name: "Generated prompt" }),
+    ).toHaveValue("Describe the cat.");
+    expect(
+      screen.getByRole("button", { name: "Use this prompt" }),
+    ).toBeEnabled();
+  });
 });

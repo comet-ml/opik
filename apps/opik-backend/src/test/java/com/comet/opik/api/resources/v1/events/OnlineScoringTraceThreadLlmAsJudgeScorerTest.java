@@ -21,6 +21,7 @@ import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.structuredoutput.ToolCallingStrategy;
 import com.comet.opik.domain.threads.TraceThreadService;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
+import com.comet.opik.infrastructure.llm.LlmModelRegistryTestUtils;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -69,6 +70,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -152,7 +154,8 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
         Mockito.lenient().when(onlineScoringConfig.getAgenticToolsThresholdTokens()).thenReturn(50_000);
         Mockito.lenient().when(onlineScoringConfig.getAgenticToolsMaxPreloadMb()).thenReturn(64);
 
-        agenticScoringService = new AgenticScoringServiceImpl(onlineScoringConfig, toolRegistry);
+        agenticScoringService = new AgenticScoringServiceImpl(onlineScoringConfig, toolRegistry,
+                LlmModelRegistryTestUtils.bundledRegistry());
 
         scorer = new OnlineScoringTraceThreadLlmAsJudgeScorer(
                 onlineScoringConfig,
@@ -214,9 +217,10 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
             String modelName = "gpt-test";
             Mockito.lenient().when(onlineScoringConfig.getAgenticToolsThresholdTokens())
                     .thenReturn(thresholdTokens);
-            Mockito.lenient().when(llmProviderFactory.getLlmProvider(modelName)).thenReturn(provider);
+            Mockito.lenient().when(llmProviderFactory.getKeyProvider(anyString(), eq(modelName))).thenReturn(provider);
 
-            boolean useTools = scorer.shouldUseAgenticTools(estimatedTokens, hasAttachments, modelName, "thread-x",
+            boolean useTools = scorer.shouldUseAgenticTools("workspace-x", estimatedTokens, hasAttachments, modelName,
+                    "thread-x",
                     List.of(stringContentMessage()));
 
             org.assertj.core.api.Assertions.assertThat(useTools).isEqualTo(expectedUseTools);
@@ -231,10 +235,10 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
             String modelName = "gpt-test";
             Mockito.lenient().when(onlineScoringConfig.getAgenticToolsThresholdTokens())
                     .thenReturn(50_000);
-            Mockito.lenient().when(llmProviderFactory.getLlmProvider(modelName))
+            Mockito.lenient().when(llmProviderFactory.getKeyProvider(anyString(), eq(modelName)))
                     .thenReturn(com.comet.opik.api.LlmProvider.OPEN_AI);
 
-            boolean useTools = scorer.shouldUseAgenticTools(60_000, false, modelName, "thread-x",
+            boolean useTools = scorer.shouldUseAgenticTools("workspace-x", 60_000, false, modelName, "thread-x",
                     List.of(multimodalContentMessage()));
 
             org.assertj.core.api.Assertions.assertThat(useTools).isFalse();
@@ -582,7 +586,7 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
             when(spanService.getSpansSizeByTraceIds(Set.of(trace.id()))).thenReturn(Mono.just(10_000_000L));
             when(attachmentService.hasAnyAttachmentByEntityIds(EntityType.TRACE, Set.of(trace.id())))
                     .thenReturn(Mono.just(false));
-            when(llmProviderFactory.getLlmProvider("gpt-4o")).thenReturn(LlmProvider.OLLAMA);
+            when(llmProviderFactory.getKeyProvider(anyString(), eq("gpt-4o"))).thenReturn(LlmProvider.OLLAMA);
 
             scorer.score(message).block();
 
@@ -632,7 +636,7 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
             when(spanService.getSpansSizeByTraceIds(Set.of(trace.id()))).thenReturn(Mono.just(10L));
             when(attachmentService.hasAnyAttachmentByEntityIds(EntityType.TRACE, Set.of(trace.id())))
                     .thenReturn(Mono.just(true));
-            when(llmProviderFactory.getLlmProvider("gpt-4o")).thenReturn(LlmProvider.OLLAMA);
+            when(llmProviderFactory.getKeyProvider(anyString(), eq("gpt-4o"))).thenReturn(LlmProvider.OLLAMA);
 
             scorer.score(message).block();
 
@@ -693,7 +697,7 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
             stubThreadScoringHappyPath(trace, project, rule, code);
             Mockito.when(spanService.getSpansSizeByTraceIds(Set.of(trace.id())))
                     .thenReturn(Mono.error(new IllegalStateException("clickhouse unavailable")));
-            Mockito.when(llmProviderFactory.getLlmProvider("gpt-4o"))
+            Mockito.when(llmProviderFactory.getKeyProvider(anyString(), eq("gpt-4o")))
                     .thenReturn(com.comet.opik.api.LlmProvider.OPEN_AI);
 
             scorer.score(message).block();

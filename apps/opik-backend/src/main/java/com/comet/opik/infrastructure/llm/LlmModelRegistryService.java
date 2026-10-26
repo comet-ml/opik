@@ -32,6 +32,8 @@ import java.io.UncheckedIOException;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -59,9 +61,11 @@ public class LlmModelRegistryService {
     private final CuratedCatalog catalog;
     // volatile: reload() is called from the scheduled job thread
     private volatile Map<String, List<LlmModelDefinition>> registry;
+    private volatile Map<String, String> defaultModels;
     private volatile Map<String, List<ModelEntry>> lastGoodRemote;
     private final Set<String> reportedAwaitingSyncRows = ConcurrentHashMap.newKeySet();
     private final Set<String> reportedUnknownProfiles = ConcurrentHashMap.newKeySet();
+    private final Set<String> reportedDefaultFallbacks = ConcurrentHashMap.newKeySet();
     // Kept across reloads because the curated files ship with the release; the reasoning flag, which a reload can
     // change, is part of the key. Bounded because the effort check asks with whatever model name a request carries.
     private final LoadingCache<CuratedParamsKey, Optional<ModelParams>> curatedParams = CacheBuilder.newBuilder()
@@ -83,6 +87,7 @@ public class LlmModelRegistryService {
         this.httpClient = httpClient;
         this.catalog = loadCuratedCatalog();
         this.registry = load();
+        this.defaultModels = resolveDefaultModels(registry);
     }
 
     // visible for testing (no remote fetch)
@@ -91,6 +96,7 @@ public class LlmModelRegistryService {
         this.httpClient = null;
         this.catalog = loadCuratedCatalog();
         this.registry = load();
+        this.defaultModels = resolveDefaultModels(registry);
     }
 
     public record ModelLookupResult(@NonNull LlmProvider provider, @NonNull LlmModelDefinition model) {
@@ -102,19 +108,34 @@ public class LlmModelRegistryService {
     @JsonIgnoreProperties(ignoreUnknown = true)
     record ModelEntry(String id, String qualifiedName, String label, Boolean structuredOutput, Boolean reasoning,
             List<String> supportedParameters, List<String> reasoningEfforts, String profile, ModelParams params,
-            Boolean awaitingSync) {
+            Boolean awaitingSync, Boolean hidden, String retiresOn) {
 
         LlmModelDefinition toDefinition(ModelParams resolvedParams) {
             return LlmModelDefinition.builder()
                     .id(id)
                     .qualifiedName(qualifiedName)
-                    .label(label)
+                    // The picker shows a model when it has a label, and a layer that leaves the label out keeps the
+                    // one below, so hiding needs its own field: an upper layer (the CDN) can then take a model out.
+                    .label(BooleanUtils.isTrue(hidden) ? null : label)
                     .structuredOutput(BooleanUtils.isTrue(structuredOutput))
                     .reasoning(BooleanUtils.isTrue(reasoning))
                     .supportedParameters(supportedParameters)
                     .reasoningEfforts(reasoningEfforts)
                     .params(resolvedParams)
+                    .retiresOn(isoDateOrNull(id, retiresOn))
                     .build();
+        }
+
+        private static String isoDateOrNull(String id, String value) {
+            if (StringUtils.isBlank(value)) {
+                return null;
+            }
+            try {
+                return LocalDate.parse(value.strip()).toString();
+            } catch (DateTimeParseException e) {
+                log.warn("Ignoring retiresOn '{}' of model '{}': not an ISO date", value, id);
+                return null;
+            }
         }
     }
 
@@ -128,7 +149,8 @@ public class LlmModelRegistryService {
     record CuratedCatalog(
             Map<String, ProviderDefaults> defaults,
             Map<String, ModelParams> profiles,
-            Map<String, List<ModelEntry>> models) {
+            Map<String, List<ModelEntry>> models,
+            Map<String, String> defaultModels) {
 
         static final CuratedCatalog EMPTY = CuratedCatalog.builder().build();
 
@@ -136,6 +158,7 @@ public class LlmModelRegistryService {
             defaults = defaults == null ? Map.of() : defaults;
             profiles = profiles == null ? Map.of() : profiles;
             models = models == null ? Map.of() : models;
+            defaultModels = defaultModels == null ? Map.of() : defaultModels;
         }
 
         /**
@@ -215,6 +238,50 @@ public class LlmModelRegistryService {
         return registry;
     }
 
+    public Map<String, ModelParams> getProfiles() {
+        var profiles = new LinkedHashMap<String, ModelParams>();
+        for (var provider : LlmProvider.values()) {
+            var params = paramsOf(provider.getValue(), null);
+            if (params != null) {
+                profiles.put(provider.getValue(), params);
+            }
+        }
+        return profiles;
+    }
+
+    public Map<String, String> getDefaultModels() {
+        return defaultModels;
+    }
+
+    // The CDN can drop a model from the picker without a release, so a curated default that is no longer listed
+    // falls back to the provider's first picker model instead of failing startup like an unknown profile does.
+    private Map<String, String> resolveDefaultModels(Map<String, List<LlmModelDefinition>> models) {
+        var rules = curatedLayerOff() ? shippedCatalog.get() : catalog;
+        var defaults = new LinkedHashMap<String, String>();
+        rules.defaultModels().forEach((provider, modelId) -> {
+            if (StringUtils.isBlank(modelId)) {
+                return;
+            }
+            var pickable = models.getOrDefault(provider, List.of()).stream()
+                    .filter(model -> StringUtils.isNotBlank(model.label()))
+                    .toList();
+            pickable.stream()
+                    .filter(model -> modelId.equals(model.id()))
+                    .findFirst()
+                    .or(() -> {
+                        var fallback = pickable.stream().findFirst();
+                        if (reportedDefaultFallbacks.add(provider + "/" + modelId)) {
+                            log.warn("Default model '{}' for provider '{}' is not in the picker, using '{}'",
+                                    modelId, provider, fallback.map(LlmModelDefinition::id).orElse("none"));
+                        }
+                        return fallback;
+                    })
+                    .ifPresent(model -> defaults.put(provider,
+                            StringUtils.defaultIfBlank(model.qualifiedName(), model.id())));
+        });
+        return Collections.unmodifiableMap(defaults);
+    }
+
     public Optional<ModelLookupResult> findModel(@NonNull String model) {
         var snapshot = this.registry;
 
@@ -256,7 +323,10 @@ public class LlmModelRegistryService {
 
     public void reload() {
         try {
-            registry = load();
+            var loaded = load();
+            var loadedDefaults = resolveDefaultModels(loaded);
+            registry = loaded;
+            defaultModels = loadedDefaults;
             log.info("LLM model registry reloaded successfully");
         } catch (Exception e) {
             log.error("Failed to reload LLM model registry, keeping previous version", e);
@@ -565,6 +635,8 @@ public class LlmModelRegistryService {
                 .reasoningEfforts(ObjectUtils.getIfNull(override.reasoningEfforts(), existing.reasoningEfforts()))
                 .profile(ObjectUtils.getIfNull(override.profile(), existing.profile()))
                 .params(ModelParams.overlay(existing.params(), override.params()))
+                .hidden(ObjectUtils.getIfNull(override.hidden(), existing.hidden()))
+                .retiresOn(ObjectUtils.getIfNull(override.retiresOn(), existing.retiresOn()))
                 .build();
     }
 }

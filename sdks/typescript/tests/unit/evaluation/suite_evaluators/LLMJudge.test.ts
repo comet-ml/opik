@@ -164,7 +164,7 @@ describe("LLMJudge", () => {
           name: "gpt-4o",
           temperature: 0.3,
           seed: 42,
-          customParameters: { reasoning_effort: "low" },
+          custom_parameters: { reasoning_effort: "low" },
         },
       });
 
@@ -208,7 +208,7 @@ describe("LLMJudge", () => {
       expect(variables).toEqual({ input: "input", output: "output" });
     });
 
-    it("should omit undefined temperature and seed from model config but include customParameters", () => {
+    it("should omit undefined temperature and seed from model config but include custom_parameters", () => {
       const judge = new LLMJudge({
         assertions: ["Is correct"],
         track: false,
@@ -219,7 +219,8 @@ describe("LLMJudge", () => {
 
       expect(model.temperature).toBeUndefined();
       expect(model.seed).toBeUndefined();
-      expect(model.customParameters).toEqual({ reasoning_effort: "low" });
+      expect(model.custom_parameters).toEqual({ reasoning_effort: "low" });
+      expect(model).not.toHaveProperty("customParameters");
     });
 
     it("should use indexed keys in user prompt assertions", () => {
@@ -254,6 +255,25 @@ describe("LLMJudge", () => {
   });
 
   describe("fromConfig", () => {
+    it.each(["custom_parameters", "customParameters"])(
+      "should read the reasoning effort saved under %s",
+      (savedKey) => {
+        const judge = LLMJudge.fromConfig({
+          version: "1.0.0",
+          name: "saved_judge",
+          model: { name: "gpt-4o", [savedKey]: { reasoning_effort: "high" } },
+          messages: [{ role: "USER", content: "user prompt" }],
+          variables: { input: "input", output: "output" },
+          schema: [{ name: "ok", type: "BOOLEAN", description: "ok" }],
+        });
+
+        expect(judge.reasoningEffort).toBe("high");
+        expect(judge.toConfig().model).toMatchObject({
+          custom_parameters: { reasoning_effort: "high" },
+        });
+      }
+    );
+
     it("should reconstruct LLMJudge from config", () => {
       const config: LLMJudgeConfig = {
         version: "1.0.0",
@@ -262,7 +282,7 @@ describe("LLMJudge", () => {
           name: "gpt-4o",
           temperature: 0.5,
           seed: 123,
-          customParameters: { reasoning_effort: "high" },
+          custom_parameters: { reasoning_effort: "high" },
         },
         messages: [
           { role: "SYSTEM", content: "system prompt" },

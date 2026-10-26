@@ -6,9 +6,11 @@ import { Separator } from "@/ui/separator";
 import useAppStore from "@/store/AppStore";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import useLastPickedModel from "@/hooks/useLastPickedModel";
+import useOpenAiPipelineMode from "@/hooks/useOpenAiPipelineMode";
 import { COMPOSED_PROVIDER_TYPE, PROVIDER_MODEL_TYPE } from "@/types/providers";
 import PromptModelSelect from "@/v2/pages-shared/llm/PromptModelSelect/PromptModelSelect";
 import PromptModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/PromptModelConfigs";
+import ModelRetirementTag from "@/v2/pages-shared/llm/ModelRetirementTag/ModelRetirementTag";
 import { LLMPromptTemplate } from "@/types/llm";
 import JudgeTemplateMenu from "@/v2/pages-shared/automations/RuleEditorPanel/JudgeTemplateMenu";
 import { getJudgeTemplateOptions } from "@/v2/pages-shared/automations/RuleEditorPanel/judgeTemplates";
@@ -34,6 +36,7 @@ const JudgePromptToolbar: React.FC<JudgePromptToolbarProps> = ({
   onAfterSelectTemplate,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const openAiPipelineMode = useOpenAiPipelineMode(workspaceName);
   const { calculateModelProvider } = useLLMProviderModelsData();
   const calculateRuleDefaultModel = useCalculateRuleDefaultModel();
   const [, setLastPickedModel] = useLastPickedModel({
@@ -50,6 +53,7 @@ const JudgePromptToolbar: React.FC<JudgePromptToolbarProps> = ({
       model,
       config,
       RULE_UNSUPPORTED_PARAMS,
+      openAiPipelineMode,
     );
   const hasModelError = Boolean(
     get(form.formState.errors, ["llmJudgeDetails", "model", "message"]),
@@ -79,12 +83,13 @@ const JudgePromptToolbar: React.FC<JudgePromptToolbarProps> = ({
             selectedProvider ||
             "",
         },
+        openAiPipelineMode,
       );
       if (adjustedConfig !== currentConfig) {
         form.setValue("llmJudgeDetails.config", adjustedConfig);
       }
     },
-    [form, calculateModelProvider],
+    [form, calculateModelProvider, openAiPipelineMode],
   );
 
   const handleModelChange = useCallback(
@@ -149,6 +154,12 @@ const JudgePromptToolbar: React.FC<JudgePromptToolbarProps> = ({
         onDeleteProvider={handleDeleteProvider}
         hasError={hasModelError}
       />
+      {provider && (
+        <ModelRetirementTag
+          model={model}
+          provider={parseComposedProviderType(provider)}
+        />
+      )}
       {showSettings && (
         <>
           <Separator orientation="vertical" className="ml-2 mr-0.5 h-3" />
@@ -159,6 +170,7 @@ const JudgePromptToolbar: React.FC<JudgePromptToolbarProps> = ({
             model={model}
             configs={config}
             unsupportedParams={RULE_UNSUPPORTED_PARAMS}
+            openAiPipelineMode={openAiPipelineMode}
             onChange={(partialConfig) =>
               form.setValue("llmJudgeDetails.config", {
                 ...form.getValues("llmJudgeDetails.config"),

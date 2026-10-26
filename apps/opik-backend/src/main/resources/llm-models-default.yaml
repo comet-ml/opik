@@ -43,6 +43,7 @@ openai:
     params: {maxOutputTokens: {max: 128000}, effort: {accepted: true, levels: [none, low, medium, high, xhigh], default: medium}}
   - id: "gpt-5.4-nano"
     label: "GPT 5.4 Nano"
+    retiresOn: "2027-04-01"
     reasoning: true
     params: {maxOutputTokens: {max: 128000}, effort: {accepted: true, levels: [none, low, medium, high, xhigh], default: medium}}
   - id: "gpt-5.2"
@@ -52,6 +53,7 @@ openai:
     params: {maxOutputTokens: {max: 128000}, effort: {accepted: true, levels: [none, low, medium, high, xhigh], default: medium}}
   - id: "gpt-5.1"
     label: "GPT 5.1"
+    retiresOn: "2027-04-01"
     structuredOutput: true
     reasoning: true
     params: {maxOutputTokens: {max: 128000}, effort: {accepted: true, levels: [none, low, medium, high], default: medium}}
@@ -92,136 +94,226 @@ openai:
     reasoning: true
     params: {maxOutputTokens: {max: 100000}, effort: {accepted: true, levels: [low, medium, high], default: medium}}
   - id: "chatgpt-4o-latest"
+    hidden: true
     structuredOutput: true
   - id: "chatgpt-image-latest"
+    hidden: true
+    retiresOn: "2026-12-01"
   - id: "gpt-3.5-turbo"
+    hidden: true
+    retiresOn: "2026-10-23"
     params: {maxOutputTokens: {max: 4096}}
   - id: "gpt-3.5-turbo-0125"
+    hidden: true
+    retiresOn: "2026-10-23"
     params: {maxOutputTokens: {max: 4096}}
   - id: "gpt-3.5-turbo-1106"
+    hidden: true
+    retiresOn: "2026-09-28"
     params: {maxOutputTokens: {max: 4096}}
   - id: "gpt-3.5-turbo-instruct"
+    hidden: true
+    retiresOn: "2026-09-28"
     params: {maxOutputTokens: {max: 4096}}
   - id: "gpt-3.5-turbo-instruct-0914"
+    hidden: true
     params: {maxOutputTokens: {max: 4097}}
   - id: "gpt-4"
+    hidden: true
+    retiresOn: "2026-10-23"
     params: {maxOutputTokens: {max: 4096}}
   - id: "gpt-4-0125-preview"
+    hidden: true
   - id: "gpt-4-0314"
+    hidden: true
   - id: "gpt-4-0613"
+    hidden: true
+    retiresOn: "2026-10-23"
     params: {maxOutputTokens: {max: 4096}}
   - id: "gpt-4-1106-preview"
+    hidden: true
+    retiresOn: "2026-10-23"
     params: {maxOutputTokens: {max: 4096}}
   - id: "gpt-4-turbo"
+    hidden: true
+    retiresOn: "2026-10-23"
     params: {maxOutputTokens: {max: 4096}}
   - id: "gpt-4-turbo-2024-04-09"
+    hidden: true
+    retiresOn: "2026-10-23"
     params: {maxOutputTokens: {max: 4096}}
   - id: "gpt-4-turbo-preview"
+    hidden: true
   - id: "gpt-4.1-nano"
+    hidden: true
+    retiresOn: "2026-10-23"
     structuredOutput: true
     params: {maxOutputTokens: {max: 32768}}
   - id: "gpt-4o-2024-05-13"
+    hidden: true
+    retiresOn: "2026-10-23"
     params: {maxOutputTokens: {max: 4096}}
   - id: "gpt-4o-2024-08-06"
+    hidden: true
+    retiresOn: "2027-01-14"
     structuredOutput: true
     params: {maxOutputTokens: {max: 16384}}
   - id: "gpt-4o-2024-11-20"
+    hidden: true
+    retiresOn: "2027-01-14"
     structuredOutput: true
     params: {maxOutputTokens: {max: 16384}}
   - id: "gpt-4o-mini-2024-07-18"
+    hidden: true
+    retiresOn: "2027-01-14"
     structuredOutput: true
     params: {maxOutputTokens: {max: 16384}}
   - id: "gpt-4o-transcribe-diarize"
+    hidden: true
+    retiresOn: "2027-02-26"
     params: {maxOutputTokens: {max: 2000, default: 2000}}
   - id: "gpt-5-chat-latest"
+    hidden: true
+    retiresOn: "2026-07-23"
     params: {maxOutputTokens: {max: 16384}}
   - id: "gpt-5-codex"
+    hidden: true
+    retiresOn: "2026-07-23"
     structuredOutput: true
     reasoning: true
     params: {maxOutputTokens: {max: 128000}, effort: {accepted: true, levels: [low, medium, high], default: medium}}
   - id: "gpt-5-pro"
+    hidden: true
     structuredOutput: true
     reasoning: true
     params: {maxOutputTokens: {max: 272000}, effort: {accepted: true, levels: [minimal, low, medium, high], default: medium}}
   - id: "gpt-5.1-chat-latest"
+    hidden: true
+    retiresOn: "2026-07-23"
     structuredOutput: true
     params: {maxOutputTokens: {max: 16384}}
   - id: "gpt-5.1-codex"
+    hidden: true
+    retiresOn: "2026-07-23"
     structuredOutput: true
     reasoning: true
     params: {maxOutputTokens: {max: 128000}, effort: {accepted: true, levels: [low, medium, high], default: medium}}
   - id: "gpt-5.1-codex-max"
+    hidden: true
+    retiresOn: "2026-07-23"
     structuredOutput: true
     reasoning: true
     params: {maxOutputTokens: {max: 128000}, effort: {accepted: true, levels: [low, medium, high], default: medium}}
   - id: "gpt-5.1-codex-mini"
+    hidden: true
+    retiresOn: "2026-07-23"
     structuredOutput: true
     reasoning: true
     params: {maxOutputTokens: {max: 128000}, effort: {accepted: true, levels: [low, medium, high], default: medium}}
   - id: "gpt-5.2-chat-latest"
+    hidden: true
+    retiresOn: "2026-08-10"
     params: {maxOutputTokens: {max: 16384}}
   - id: "gpt-5.2-codex"
+    hidden: true
+    retiresOn: "2026-07-23"
     structuredOutput: true
     reasoning: true
     params: {maxOutputTokens: {max: 128000}, effort: {accepted: true, levels: [low, medium, high], default: medium}}
   - id: "gpt-5.2-pro"
+    hidden: true
     structuredOutput: true
     reasoning: true
     params: {maxOutputTokens: {max: 128000}, effort: {accepted: true, levels: [minimal, low, medium, high, xhigh], default: medium}}
   - id: "gpt-5.3-chat-latest"
+    hidden: true
+    retiresOn: "2026-08-10"
     structuredOutput: true
     params: {maxOutputTokens: {max: 16384}}
   - id: "gpt-5.3-codex"
+    hidden: true
+    retiresOn: "2027-04-01"
     structuredOutput: true
     reasoning: true
     params: {maxOutputTokens: {max: 128000}, effort: {accepted: true, levels: [minimal, low, medium, high], default: medium}}
   - id: "gpt-5.4-pro"
+    hidden: true
     reasoning: true
     params: {maxOutputTokens: {max: 128000}, effort: {accepted: true, levels: [low, medium, high, xhigh], default: medium}}
   - id: "gpt-5.5-pro"
+    hidden: true
     reasoning: true
     params: {maxOutputTokens: {max: 128000}, effort: {accepted: true, levels: [low, medium, high, xhigh], default: medium}}
   - id: "gpt-image-1"
+    hidden: true
+    retiresOn: "2026-10-23"
   - id: "gpt-image-1-mini"
+    hidden: true
+    retiresOn: "2026-12-01"
   - id: "gpt-image-1.5"
+    hidden: true
+    retiresOn: "2026-12-01"
   - id: "gpt-image-2"
+    hidden: true
   - id: "gpt-image-2.5-flare"
+    hidden: true
   - id: "gpt-image-2.5-sunburst"
+    hidden: true
   - id: "gpt-live-1"
+    hidden: true
   - id: "o1"
+    hidden: true
+    retiresOn: "2026-10-23"
     reasoning: true
     params: {maxOutputTokens: {max: 100000}, effort: {accepted: true, levels: [low, medium, high], default: medium}}
   - id: "o1-2024-12-17"
+    hidden: true
+    retiresOn: "2026-10-23"
     reasoning: true
     params: {maxOutputTokens: {max: 100000}, effort: {accepted: true, levels: [low, medium, high], default: medium}}
   - id: "o1-mini"
+    hidden: true
     reasoning: true
   - id: "o1-mini-2024-09-12"
+    hidden: true
     reasoning: true
   - id: "o1-preview"
+    hidden: true
     reasoning: true
   - id: "o1-preview-2024-09-12"
+    hidden: true
     reasoning: true
   - id: "o1-pro"
+    hidden: true
+    retiresOn: "2026-10-23"
     structuredOutput: true
     reasoning: true
     params: {maxOutputTokens: {max: 100000}, effort: {accepted: true, levels: [low, medium, high], default: medium}}
   - id: "o3-deep-research"
+    hidden: true
+    retiresOn: "2026-07-23"
     structuredOutput: true
     reasoning: true
     params: {maxOutputTokens: {max: 100000}, effort: {accepted: true, levels: [low, medium, high], default: medium}}
   - id: "o3-mini"
+    hidden: true
+    retiresOn: "2026-10-23"
     reasoning: true
     params: {maxOutputTokens: {max: 100000}, effort: {accepted: true, levels: [low, medium, high], default: medium}}
   - id: "o3-pro"
+    hidden: true
     structuredOutput: true
     reasoning: true
     params: {maxOutputTokens: {max: 100000}, effort: {accepted: true, levels: [low, medium, high], default: medium}}
   - id: "o4-mini"
+    hidden: true
+    retiresOn: "2026-10-23"
     structuredOutput: true
     reasoning: true
     params: {maxOutputTokens: {max: 100000}, effort: {accepted: true, levels: [low, medium, high], default: medium}}
   - id: "o4-mini-deep-research"
+    hidden: true
+    retiresOn: "2026-07-23"
     structuredOutput: true
     reasoning: true
     params: {maxOutputTokens: {max: 100000}, effort: {accepted: true, levels: [low, medium, high], default: medium}}
@@ -268,6 +360,7 @@ anthropic:
     params: {maxOutputTokens: {max: 64000}, effort: {accepted: true, levels: [low, medium, high]}}
   - id: "claude-sonnet-4-5"
     label: "Claude Sonnet 4.5"
+    retiresOn: "2026-11-30"
     structuredOutput: true
     params: {maxOutputTokens: {max: 64000}}
   - id: "claude-haiku-4-5-20251001"
@@ -291,22 +384,32 @@ anthropic:
     structuredOutput: true
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, maxOutputTokens: {max: 128000}, effort: {accepted: true, levels: [low, medium, high, xhigh, max]}}
   - id: "claude-3-7-sonnet-20250219"
+    hidden: true
   - id: "claude-mythos-preview"
+    hidden: true
+    retiresOn: "2026-06-09"
     structuredOutput: true
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, maxOutputTokens: {max: 128000}, effort: {accepted: true, levels: [low, medium, high, xhigh, max]}}
   - id: "claude-opus-4-1-20250805"
+    hidden: true
     structuredOutput: true
   - id: "claude-opus-4-20250514"
+    hidden: true
     structuredOutput: true
   - id: "claude-opus-4-6-20260205"
+    hidden: true
     structuredOutput: true
     params: {maxOutputTokens: {max: 128000}, effort: {accepted: true, levels: [low, medium, high, max]}}
   - id: "claude-opus-4-7-20260416"
+    hidden: true
     structuredOutput: true
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, maxOutputTokens: {max: 128000}, effort: {accepted: true, levels: [low, medium, high, xhigh, max]}}
   - id: "claude-sonnet-4-20250514"
+    hidden: true
     structuredOutput: true
   - id: "claude-sonnet-4-5-20250929"
+    hidden: true
+    retiresOn: "2026-11-30"
     structuredOutput: true
     params: {maxOutputTokens: {max: 64000}}
 gemini:
@@ -336,6 +439,7 @@ gemini:
     params: {maxOutputTokens: {max: 65536}}
   - id: "gemini-3.1-flash-lite"
     label: "Gemini 3.1 Flash Lite"
+    retiresOn: "2027-05-07"
     params: {maxOutputTokens: {max: 65536}}
   - id: "gemini-3-flash-preview"
     label: "Gemini 3 Flash Preview"
@@ -360,58 +464,91 @@ gemini:
     label: "Gemma 4 31B IT"
     params: {maxOutputTokens: {max: 32768}}
   - id: "aqa"
+    hidden: true
   - id: "gemini-1.0-pro"
+    hidden: true
   - id: "gemini-1.5-flash-latest"
+    hidden: true
     structuredOutput: true
   - id: "gemini-1.5-pro-latest"
+    hidden: true
     structuredOutput: true
   - id: "gemini-2.0-flash"
+    hidden: true
     structuredOutput: true
   - id: "gemini-2.0-flash-lite"
+    hidden: true
     structuredOutput: true
   - id: "gemini-2.5-flash-image"
+    hidden: true
+    retiresOn: "2027-03-15"
     structuredOutput: true
     params: {maxOutputTokens: {max: 32768}}
   - id: "gemini-3-pro-image"
+    hidden: true
     params: {maxOutputTokens: {max: 32768}}
   - id: "gemini-3-pro-image-preview"
+    hidden: true
+    retiresOn: "2026-06-25"
     structuredOutput: true
     params: {maxOutputTokens: {max: 32768}}
   - id: "gemini-3-pro-preview"
+    hidden: true
     structuredOutput: true
   - id: "gemini-3.1-flash-image"
+    hidden: true
     params: {maxOutputTokens: {max: 32768}}
   - id: "gemini-3.1-flash-image-preview"
+    hidden: true
+    retiresOn: "2026-06-25"
     structuredOutput: true
     params: {maxOutputTokens: {max: 65536}}
   - id: "gemini-3.1-flash-lite-image"
+    hidden: true
     params: {maxOutputTokens: {max: 4096}}
   - id: "gemini-3.1-flash-lite-preview"
+    hidden: true
+    retiresOn: "2026-05-25"
     structuredOutput: true
     params: {maxOutputTokens: {max: 65536}}
   - id: "gemini-3.1-flash-tts-preview"
+    hidden: true
+    retiresOn: "2026-11-17"
     params: {maxOutputTokens: {max: 16384}}
   - id: "gemini-3.8-flash-lite-tts"
+    hidden: true
     params: {maxOutputTokens: {max: 16384}}
   - id: "gemini-3.8-flash-tts"
+    hidden: true
     params: {maxOutputTokens: {max: 16384}}
   - id: "gemini-flash-latest-high-res-exp"
+    hidden: true
   - id: "gemini-nano-banana-2.1"
+    hidden: true
     params: {maxOutputTokens: {max: 32768}}
   - id: "gemini-omni-1.1-flash"
+    hidden: true
     params: {maxOutputTokens: {max: 65536}}
   - id: "gemini-omni-flash-preview"
+    hidden: true
+    retiresOn: "2026-10-22"
     params: {maxOutputTokens: {max: 65536}}
   - id: "gemini-pro-vision"
+    hidden: true
   - id: "lyria-3-clip-preview"
+    hidden: true
     params: {maxOutputTokens: {max: 8192}}
   - id: "lyria-3-pro-preview"
+    hidden: true
     params: {maxOutputTokens: {max: 8192}}
   - id: "lyria-3.5"
+    hidden: true
     params: {maxOutputTokens: {max: 65536}}
   - id: "nano-banana-pro-preview"
+    hidden: true
     params: {maxOutputTokens: {max: 32768}}
   - id: "text-embedding-004"
+    hidden: true
 vertex-ai:
   - id: "gemini-3.8-flash"
     qualifiedName: "vertex_ai/gemini-3.8-flash"
@@ -426,21 +563,25 @@ vertex-ai:
   - id: "gemini-3.7-flash"
     qualifiedName: "vertex_ai/gemini-3.7-flash"
     label: "Gemini 3.7 Flash"
+    retiresOn: "2027-01-28"
     structuredOutput: true
     params: {maxOutputTokens: {max: 65536}}
   - id: "gemini-3.6-flash"
     qualifiedName: "vertex_ai/gemini-3.6-flash"
     label: "Gemini 3.6 Flash"
+    retiresOn: "2026-11-19"
     structuredOutput: true
     params: {maxOutputTokens: {max: 65536}}
   - id: "gemini-3.5-flash"
     qualifiedName: "vertex_ai/gemini-3.5-flash"
     label: "Gemini 3.5 Flash"
+    retiresOn: "2027-05-19"
     structuredOutput: true
     params: {maxOutputTokens: {max: 65535}}
   - id: "gemini-3.5-flash-lite"
     qualifiedName: "vertex_ai/gemini-3.5-flash-lite"
     label: "Gemini 3.5 Flash Lite"
+    retiresOn: "2027-07-21"
     structuredOutput: true
     params: {maxOutputTokens: {max: 65536}}
   - id: "gemini-3.1-pro-preview"
@@ -451,6 +592,7 @@ vertex-ai:
   - id: "gemini-3.1-flash-lite"
     qualifiedName: "vertex_ai/gemini-3.1-flash-lite"
     label: "Gemini 3.1 Flash Lite"
+    retiresOn: "2027-05-07"
     structuredOutput: true
     params: {maxOutputTokens: {max: 65536}}
   - id: "gemini-3-flash-preview"
@@ -468,39 +610,51 @@ vertex-ai:
     structuredOutput: true
   - id: "gemini-2.0-flash-001"
     qualifiedName: "vertex_ai/gemini-2.0-flash-001"
+    hidden: true
     structuredOutput: true
   - id: "gemini-2.0-flash-lite-001"
     qualifiedName: "vertex_ai/gemini-2.0-flash-lite-001"
+    hidden: true
   - id: "gemini-2.5-flash-lite-preview-06-17"
     qualifiedName: "vertex_ai/gemini-2.5-flash-lite-preview-06-17"
+    hidden: true
     structuredOutput: true
   - id: "gemini-2.5-flash-preview-04-17"
     qualifiedName: "vertex_ai/gemini-2.5-flash-preview-04-17"
+    hidden: true
     structuredOutput: true
   - id: "gemini-2.5-pro-exp-03-25"
     qualifiedName: "vertex_ai/gemini-2.5-pro-exp-03-25"
+    hidden: true
     structuredOutput: true
   - id: "gemini-2.5-pro-preview-03-25"
     qualifiedName: "vertex_ai/gemini-2.5-pro-preview-03-25"
+    hidden: true
     structuredOutput: true
   - id: "gemini-2.5-pro-preview-05-06"
     qualifiedName: "vertex_ai/gemini-2.5-pro-preview-05-06"
+    hidden: true
     structuredOutput: true
   - id: "gemini-3-pro-preview"
     qualifiedName: "vertex_ai/gemini-3-pro-preview"
+    hidden: true
     structuredOutput: true
     params: {maxOutputTokens: {max: 65535}}
   - id: "gemini-3.1-flash-lite-preview"
     qualifiedName: "vertex_ai/gemini-3.1-flash-lite-preview"
+    hidden: true
     structuredOutput: true
     params: {maxOutputTokens: {max: 65536}}
   - id: "gemini-omni-1.1-flash"
     qualifiedName: "vertex_ai/gemini-omni-1.1-flash"
+    hidden: true
   - id: "gemini-omni-1.1-flash-preview"
     qualifiedName: "vertex_ai/gemini-omni-1.1-flash-preview"
+    hidden: true
     params: {maxOutputTokens: {max: 57920}}
   - id: "gemini-robotics-er-2"
     qualifiedName: "vertex_ai/gemini-robotics-er-2"
+    hidden: true
 openrouter:
   - id: "aion-labs/aion-2.0"
     label: "aion-labs/aion-2.0"
@@ -641,15 +795,18 @@ openrouter:
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 128000}, stop: {accepted: true}, effort: {accepted: true, levels: [low, medium, high, xhigh, max], default: high}}
   - id: "arcee-ai/trinity-large-thinking"
     label: "arcee-ai/trinity-large-thinking"
+    retiresOn: "2026-10-26"
     supportedParameters: [max_tokens, reasoning, temperature, top_k, top_p]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 80000}, stop: {accepted: false}}
   - id: "bytedance-seed/seed-1.6"
     label: "bytedance-seed/seed-1.6"
+    retiresOn: "2026-11-11"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, reasoning, temperature, top_p]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: false}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 32768}, stop: {accepted: true}}
   - id: "bytedance-seed/seed-1.6-flash"
     label: "bytedance-seed/seed-1.6-flash"
+    retiresOn: "2026-11-11"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, reasoning, temperature, top_p]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: false}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 32768}, stop: {accepted: true}}
@@ -660,6 +817,7 @@ openrouter:
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: false}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 235929}, stop: {accepted: true}}
   - id: "bytedance-seed/seed-2.0-code"
     label: "bytedance-seed/seed-2.0-code"
+    retiresOn: "2026-11-11"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, reasoning, reasoning_effort, temperature, top_p]
     reasoningEfforts: [high, medium, low, none]
@@ -779,6 +937,7 @@ openrouter:
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 393216}, stop: {accepted: true}, effort: {accepted: true, levels: [none, low, high, max], default: high}}
   - id: "dots-studio/dots-3-note-preview:free"
     label: "dots-studio/dots-3-note-preview:free"
+    retiresOn: "2026-12-31"
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, temperature, top_p]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 460800}, stop: {accepted: false}}
@@ -1308,6 +1467,7 @@ openrouter:
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 235929}, stop: {accepted: false}, effort: {accepted: true, levels: [none, medium, high], default: high}}
   - id: "nousresearch/hermes-3-llama-3.1-405b"
     label: "nousresearch/hermes-3-llama-3.1-405b"
+    retiresOn: "2026-11-02"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, repetition_penalty, temperature, top_k, top_p]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 16384}, stop: {accepted: true}, effort: {accepted: false}}
@@ -1772,18 +1932,22 @@ openrouter:
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 115200}, stop: {accepted: false}}
   - id: "poolside/laguna-s-2.1"
     label: "poolside/laguna-s-2.1"
+    retiresOn: "2026-10-31"
     supportedParameters: [max_tokens, reasoning, temperature]
     params: {temperature: {accepted: true}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 131072}, stop: {accepted: false}}
   - id: "poolside/laguna-s-2.1:free"
     label: "poolside/laguna-s-2.1:free"
+    retiresOn: "2026-10-31"
     supportedParameters: [max_tokens, reasoning, temperature]
     params: {temperature: {accepted: true}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 32768}, stop: {accepted: false}}
   - id: "poolside/laguna-xs-2.1"
     label: "poolside/laguna-xs-2.1"
+    retiresOn: "2026-10-31"
     supportedParameters: [max_tokens, reasoning, temperature]
     params: {temperature: {accepted: true}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 32768}, stop: {accepted: false}}
   - id: "poolside/laguna-xs-2.1:free"
     label: "poolside/laguna-xs-2.1:free"
+    retiresOn: "2026-10-31"
     supportedParameters: [max_tokens, reasoning, temperature]
     params: {temperature: {accepted: true}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 32768}, stop: {accepted: false}}
   - id: "prism-ml/ternary-bonsai-2-27b"
@@ -2229,6 +2393,7 @@ openrouter:
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 235929}, stop: {accepted: true}}
   - id: "z-ai/glm-4.5"
     label: "z-ai/glm-4.5"
+    retiresOn: "2026-12-31"
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, temperature, top_k, top_p]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 98304}, stop: {accepted: false}}
@@ -2424,860 +2589,1276 @@ openrouter:
     reasoningEfforts: [max, high, low]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 943718}, stop: {accepted: true}, effort: {accepted: true, levels: [low, high, max], default: max}}
   - id: "ai21/jamba-large-1.7"
+    hidden: true
   - id: "ai21/jamba-mini-1.7"
+    hidden: true
   - id: "aion-labs/aion-1.0"
+    hidden: true
   - id: "aion-labs/aion-1.0-mini"
+    hidden: true
   - id: "alfredpros/codellama-7b-instruct-solidity"
+    hidden: true
   - id: "alibaba/tongyi-deepresearch-30b-a3b"
+    hidden: true
   - id: "alibaba/tongyi-deepresearch-30b-a3b:free"
+    hidden: true
   - id: "allenai/molmo-2-8b"
+    hidden: true
   - id: "allenai/olmo-2-0325-32b-instruct"
+    hidden: true
   - id: "allenai/olmo-3-32b-think"
+    hidden: true
   - id: "allenai/olmo-3-7b-instruct"
+    hidden: true
   - id: "allenai/olmo-3-7b-think"
+    hidden: true
   - id: "allenai/olmo-3.1-32b-instruct"
+    hidden: true
   - id: "allenai/olmo-3.1-32b-think"
+    hidden: true
   - id: "alpindale/goliath-120b"
+    hidden: true
   - id: "amazon/nova-premier-v1"
+    hidden: true
     supportedParameters: [max_tokens, temperature, top_k, top_p]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 32000}, stop: {accepted: true}, effort: {accepted: false}}
   - id: "anthropic/claude-3-haiku"
+    hidden: true
   - id: "anthropic/claude-3.5-haiku"
+    hidden: true
   - id: "anthropic/claude-3.5-sonnet"
+    hidden: true
   - id: "anthropic/claude-3.7-sonnet"
+    hidden: true
   - id: "anthropic/claude-3.7-sonnet:thinking"
+    hidden: true
     reasoning: true
   - id: "anthropic/claude-fable-5.1:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [max, xhigh, high, medium, low]
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 128000}, stop: {accepted: true}, effort: {accepted: true, levels: [low, medium, high, xhigh, max], default: high}}
   - id: "anthropic/claude-fable-5:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [max, xhigh, high, medium, low]
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 128000}, stop: {accepted: true}, effort: {accepted: true, levels: [low, medium, high, xhigh, max], default: high}}
   - id: "anthropic/claude-haiku-4.5:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, temperature, top_k, top_p]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 64000}, stop: {accepted: true}}
   - id: "anthropic/claude-haiku-5.5:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [max, xhigh, high, medium, low, none]
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 128000}, stop: {accepted: true}, effort: {accepted: true, levels: [none, low, medium, high, xhigh, max], default: medium}}
   - id: "anthropic/claude-opus-4"
+    hidden: true
   - id: "anthropic/claude-opus-4.1:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, temperature]
     params: {temperature: {accepted: true}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 32000}, stop: {accepted: true}}
   - id: "anthropic/claude-opus-4.5:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, temperature]
     params: {temperature: {accepted: true}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 64000}, stop: {accepted: true}}
   - id: "anthropic/claude-opus-4.6-fast"
+    hidden: true
   - id: "anthropic/claude-opus-4.6:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort, temperature, top_p]
     reasoningEfforts: [max, high, medium, low, none]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 128000}, stop: {accepted: true}, effort: {accepted: true, levels: [none, low, medium, high, max], default: high}}
   - id: "anthropic/claude-opus-4.7-fast"
+    hidden: true
   - id: "anthropic/claude-opus-4.7:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [max, xhigh, high, medium, low, none]
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 128000}, stop: {accepted: true}, effort: {accepted: true, levels: [none, low, medium, high, xhigh, max], default: high}}
   - id: "anthropic/claude-opus-4.8-fast"
+    hidden: true
   - id: "anthropic/claude-opus-4.8:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [max, xhigh, high, medium, low, none]
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 128000}, stop: {accepted: true}, effort: {accepted: true, levels: [none, low, medium, high, xhigh, max], default: high}}
   - id: "anthropic/claude-opus-5-fast"
+    hidden: true
   - id: "anthropic/claude-opus-5.5:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [max, xhigh, high, medium, low]
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 128000}, stop: {accepted: true}, effort: {accepted: true, levels: [low, medium, high, xhigh, max], default: high}}
   - id: "anthropic/claude-opus-5:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [max, xhigh, high, medium, low, none]
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 128000}, stop: {accepted: true}, effort: {accepted: true, levels: [none, low, medium, high, xhigh, max], default: high}}
   - id: "anthropic/claude-sonnet-4"
+    hidden: true
   - id: "anthropic/claude-sonnet-4.5:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, temperature, top_k, top_p]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 64000}, stop: {accepted: true}}
   - id: "anthropic/claude-sonnet-4.6:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort, temperature, top_p]
     reasoningEfforts: [max, high, medium, low, none]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 128000}, stop: {accepted: true}, effort: {accepted: true, levels: [none, low, medium, high, max], default: medium}}
   - id: "anthropic/claude-sonnet-5.5:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [max, xhigh, high, medium, low]
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 128000}, stop: {accepted: true}, effort: {accepted: true, levels: [low, medium, high, xhigh, max], default: high}}
   - id: "anthropic/claude-sonnet-5:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [max, xhigh, high, medium, low, none]
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 128000}, stop: {accepted: true}, effort: {accepted: true, levels: [none, low, medium, high, xhigh, max], default: high}}
   - id: "arcee-ai/afm-4.5b"
+    hidden: true
   - id: "arcee-ai/coder-large"
+    hidden: true
   - id: "arcee-ai/maestro-reasoning"
+    hidden: true
   - id: "arcee-ai/spotlight"
+    hidden: true
   - id: "arcee-ai/trinity-large-preview"
+    hidden: true
   - id: "arcee-ai/trinity-large-preview:free"
+    hidden: true
   - id: "arcee-ai/trinity-large-thinking:free"
+    hidden: true
   - id: "arcee-ai/trinity-mini"
+    hidden: true
   - id: "arcee-ai/trinity-mini:free"
+    hidden: true
   - id: "arcee-ai/virtuoso-large"
+    hidden: true
   - id: "arliai/qwq-32b-arliai-rpr-v1"
+    hidden: true
     reasoning: true
   - id: "arliai/qwq-32b-arliai-rpr-v1:free"
+    hidden: true
     reasoning: true
   - id: "baidu/cobuddy:free"
+    hidden: true
   - id: "baidu/ernie-4.5-21b-a3b"
+    hidden: true
   - id: "baidu/ernie-4.5-21b-a3b-thinking"
+    hidden: true
     reasoning: true
   - id: "baidu/ernie-4.5-300b-a47b"
+    hidden: true
   - id: "baidu/ernie-4.5-vl-28b-a3b"
+    hidden: true
   - id: "baidu/ernie-4.5-vl-424b-a47b"
+    hidden: true
   - id: "baidu/qianfan-ocr-fast"
+    hidden: true
   - id: "baidu/qianfan-ocr-fast:free"
+    hidden: true
   - id: "cognitivecomputations/dolphin-mistral-24b-venice-edition:free"
+    hidden: true
   - id: "deepcogito/cogito-v2-preview-deepseek-671b"
+    hidden: true
   - id: "deepcogito/cogito-v2-preview-llama-109b-moe"
+    hidden: true
   - id: "deepcogito/cogito-v2-preview-llama-405b"
+    hidden: true
   - id: "deepcogito/cogito-v2-preview-llama-70b"
+    hidden: true
   - id: "deepcogito/cogito-v2.1-671b"
+    hidden: true
   - id: "deepseek/deepseek-chat-v3-0324:free"
+    hidden: true
   - id: "deepseek/deepseek-prover-v2"
+    hidden: true
   - id: "deepseek/deepseek-r1"
+    hidden: true
     structuredOutput: true
     reasoning: true
   - id: "deepseek/deepseek-r1-0528-qwen3-8b"
+    hidden: true
     reasoning: true
   - id: "deepseek/deepseek-r1-0528-qwen3-8b:free"
+    hidden: true
     reasoning: true
   - id: "deepseek/deepseek-r1-0528:free"
+    hidden: true
     reasoning: true
   - id: "deepseek/deepseek-r1-distill-llama-70b"
+    hidden: true
     reasoning: true
   - id: "deepseek/deepseek-r1-distill-llama-70b:free"
+    hidden: true
     reasoning: true
   - id: "deepseek/deepseek-r1-distill-qwen-14b"
+    hidden: true
     reasoning: true
   - id: "deepseek/deepseek-r1-distill-qwen-32b"
+    hidden: true
     reasoning: true
   - id: "deepseek/deepseek-r1:free"
+    hidden: true
     reasoning: true
   - id: "deepseek/deepseek-v3.1-terminus"
+    hidden: true
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, reasoning, temperature, top_k, top_p]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 147456}, stop: {accepted: true}}
   - id: "deepseek/deepseek-v3.1-terminus:exacto"
+    hidden: true
   - id: "deepseek/deepseek-v3.2"
+    hidden: true
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, repetition_penalty, temperature, top_k, top_p]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 65536}, stop: {accepted: true}}
   - id: "deepseek/deepseek-v3.2-exp"
+    hidden: true
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, reasoning, temperature, top_k, top_p]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 147456}, stop: {accepted: false}}
   - id: "deepseek/deepseek-v3.2-speciale"
+    hidden: true
   - id: "deepseek/deepseek-v4-flash-0731:batch"
+    hidden: true
     structuredOutput: true
   - id: "deepseek/deepseek-v4-flash-0731:free"
+    hidden: true
     structuredOutput: true
   - id: "deepseek/deepseek-v4-flash-vision-exp:batch"
+    hidden: true
     structuredOutput: true
   - id: "deepseek/deepseek-v4-flash:free"
+    hidden: true
   - id: "deepseek/deepseek-v4-pro-0813:batch"
+    hidden: true
     structuredOutput: true
   - id: "deepseek/deepseek-v4.1-flash:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
     reasoningEfforts: [max, high, low, none]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 384000}, stop: {accepted: true}, effort: {accepted: true, levels: [none, low, high, max], default: high}}
   - id: "eleutherai/llemma_7b"
+    hidden: true
   - id: "essentialai/rnj-1-instruct"
+    hidden: true
   - id: "google/gemini-2.0-flash-001"
+    hidden: true
     structuredOutput: true
   - id: "google/gemini-2.0-flash-exp:free"
+    hidden: true
     structuredOutput: true
   - id: "google/gemini-2.0-flash-lite-001"
+    hidden: true
   - id: "google/gemini-2.5-flash"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, temperature, top_p]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 65535}, stop: {accepted: true}}
   - id: "google/gemini-2.5-flash-image-preview"
+    hidden: true
   - id: "google/gemini-2.5-flash-lite"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, temperature, top_p]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 65535}, stop: {accepted: true}}
   - id: "google/gemini-2.5-flash-lite-preview-09-2025"
+    hidden: true
   - id: "google/gemini-2.5-flash-lite:batch"
+    hidden: true
     structuredOutput: true
   - id: "google/gemini-2.5-flash-preview-09-2025"
+    hidden: true
   - id: "google/gemini-2.5-flash:batch"
+    hidden: true
     structuredOutput: true
   - id: "google/gemini-2.5-pro"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, temperature, top_p]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 65536}, stop: {accepted: false}}
   - id: "google/gemini-2.5-pro-preview-05-06"
+    hidden: true
     structuredOutput: true
   - id: "google/gemini-2.5-pro:batch"
+    hidden: true
     structuredOutput: true
   - id: "google/gemini-3-flash-preview:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort, temperature, top_p]
     reasoningEfforts: [high, medium, low, minimal, none]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 65536}, stop: {accepted: true}, effort: {accepted: true, levels: [none, minimal, low, medium, high], default: medium}}
   - id: "google/gemini-3-pro-preview"
+    hidden: true
     structuredOutput: true
   - id: "google/gemini-3.1-flash-lite:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort, temperature, top_p]
     reasoningEfforts: [high, medium, low, minimal, none]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 65536}, stop: {accepted: true}, effort: {accepted: true, levels: [none, minimal, low, medium, high], default: minimal}}
   - id: "google/gemini-3.1-pro-preview:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort, temperature, top_p]
     reasoningEfforts: [high, medium, low]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 65536}, stop: {accepted: true}, effort: {accepted: true, levels: [low, medium, high], default: medium}}
   - id: "google/gemini-3.5-flash-lite:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [high, medium, low, minimal]
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 65536}, stop: {accepted: true}, effort: {accepted: true, levels: [minimal, low, medium, high], default: minimal}}
   - id: "google/gemini-3.5-flash:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort, temperature, top_p]
     reasoningEfforts: [high, medium, low, minimal]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 65536}, stop: {accepted: true}, effort: {accepted: true, levels: [minimal, low, medium, high], default: medium}}
   - id: "google/gemini-3.6-flash:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [high, medium, low, minimal]
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 65536}, stop: {accepted: true}, effort: {accepted: true, levels: [minimal, low, medium, high], default: medium}}
   - id: "google/gemini-3.7-flash:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [high, medium, low]
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 65536}, stop: {accepted: true}, effort: {accepted: true, levels: [low, medium, high], default: medium}}
   - id: "google/gemini-3.8-flash:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [high, medium, low]
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 65536}, stop: {accepted: true}, effort: {accepted: true, levels: [low, medium, high], default: medium}}
   - id: "google/gemini-4-argon:batch"
+    hidden: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort, temperature, top_p]
     reasoningEfforts: [high, medium, low]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 943718}, stop: {accepted: true}, effort: {accepted: true, levels: [low, medium, high], default: medium}}
   - id: "google/gemma-2-9b-it"
+    hidden: true
   - id: "google/gemma-3-12b-it:free"
+    hidden: true
   - id: "google/gemma-3-27b-it:free"
+    hidden: true
   - id: "google/gemma-3-4b-it:free"
+    hidden: true
   - id: "google/gemma-3n-e2b-it:free"
+    hidden: true
   - id: "google/gemma-3n-e4b-it"
+    hidden: true
   - id: "google/gemma-3n-e4b-it:free"
+    hidden: true
   - id: "google/gemma-4-31b-it:batch"
+    hidden: true
   - id: "google/lyria-3-clip-preview"
+    hidden: true
     supportedParameters: [max_tokens, temperature, top_p]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 65536}, stop: {accepted: false}, effort: {accepted: false}}
   - id: "google/lyria-3-pro-preview"
+    hidden: true
     supportedParameters: [max_tokens, temperature, top_p]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 65536}, stop: {accepted: false}, effort: {accepted: false}}
   - id: "ibm-granite/granite-4.1-8b"
+    hidden: true
   - id: "inception/mercury"
+    hidden: true
   - id: "inception/mercury-2.5-preview"
+    hidden: true
   - id: "inception/mercury-coder"
+    hidden: true
   - id: "inclusionai/ling-2.6-1t"
+    hidden: true
   - id: "inclusionai/ling-2.6-1t:free"
+    hidden: true
   - id: "inclusionai/ling-2.6-flash"
+    hidden: true
   - id: "inclusionai/ling-2.6-flash:free"
+    hidden: true
   - id: "inclusionai/ling-3.0-flash-fin"
+    hidden: true
     structuredOutput: true
   - id: "inclusionai/ling-3.0-flash-fin:free"
+    hidden: true
   - id: "inclusionai/ling-3.0-flash-sante:free"
+    hidden: true
   - id: "inclusionai/ling-3.0-flash-vl:free"
+    hidden: true
   - id: "inclusionai/ling-3.0-flash:free"
+    hidden: true
   - id: "inclusionai/ling-3.0-tiny:free"
+    hidden: true
   - id: "inclusionai/ring-2.6-1t"
+    hidden: true
   - id: "inclusionai/ring-2.6-1t:free"
+    hidden: true
   - id: "inflection/inflection-3-pi"
+    hidden: true
   - id: "inflection/inflection-3-productivity"
+    hidden: true
   - id: "kwaipilot/kat-coder-air-v2.5"
+    hidden: true
   - id: "kwaipilot/kat-coder-pro"
+    hidden: true
   - id: "kwaipilot/kat-coder-pro-v2"
+    hidden: true
     structuredOutput: true
   - id: "kwaipilot/kat-coder-pro-v2.5"
+    hidden: true
     structuredOutput: true
   - id: "kwaipilot/kat-coder-pro:free"
+    hidden: true
   - id: "liquid/lfm-2-24b-a2b"
+    hidden: true
   - id: "liquid/lfm-2.2-6b"
+    hidden: true
   - id: "liquid/lfm-2.5-1.2b-instruct:free"
+    hidden: true
   - id: "liquid/lfm-2.5-1.2b-thinking:free"
+    hidden: true
   - id: "liquid/lfm2-8b-a1b"
+    hidden: true
   - id: "meituan/longcat-flash-chat"
+    hidden: true
   - id: "meituan/longcat-flash-chat:free"
+    hidden: true
   - id: "meta-llama/llama-3-70b-instruct"
+    hidden: true
     structuredOutput: true
   - id: "meta-llama/llama-3-8b-instruct"
+    hidden: true
     structuredOutput: true
   - id: "meta-llama/llama-3.1-405b"
+    hidden: true
   - id: "meta-llama/llama-3.1-405b-instruct"
+    hidden: true
     structuredOutput: true
   - id: "meta-llama/llama-3.2-11b-vision-instruct"
+    hidden: true
     structuredOutput: true
   - id: "meta-llama/llama-3.2-3b-instruct:free"
+    hidden: true
   - id: "meta-llama/llama-3.2-90b-vision-instruct"
+    hidden: true
     structuredOutput: true
   - id: "meta-llama/llama-3.3-70b-instruct:free"
+    hidden: true
   - id: "meta-llama/llama-guard-2-8b"
+    hidden: true
   - id: "meta-llama/llama-guard-3-8b"
+    hidden: true
   - id: "meta-llama/llama-guard-4-12b:free"
+    hidden: true
   - id: "meta/muse-glimmer-30b:batch"
+    hidden: true
     structuredOutput: true
   - id: "microsoft/mai-ds-r1"
+    hidden: true
   - id: "microsoft/mai-ds-r1:free"
+    hidden: true
   - id: "microsoft/phi-3-medium-128k-instruct"
+    hidden: true
   - id: "microsoft/phi-3-mini-128k-instruct"
+    hidden: true
   - id: "microsoft/phi-3.5-mini-128k-instruct"
+    hidden: true
   - id: "microsoft/phi-4-mini-instruct"
+    hidden: true
   - id: "microsoft/phi-4-multimodal-instruct"
+    hidden: true
   - id: "microsoft/phi-4-reasoning-plus"
+    hidden: true
     reasoning: true
   - id: "microsoft/wizardlm-2-8x22b"
+    hidden: true
     structuredOutput: true
   - id: "minimax/minimax-m1"
+    hidden: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, repetition_penalty, temperature, top_k, top_p]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 40000}, stop: {accepted: true}}
   - id: "minimax/minimax-m2.1"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, temperature, top_p]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 131072}, stop: {accepted: false}}
   - id: "minimax/minimax-m2.5:free"
+    hidden: true
   - id: "minimax/minimax-m2.7:free"
+    hidden: true
     structuredOutput: true
   - id: "minimax/minimax-m3:batch"
+    hidden: true
     structuredOutput: true
   - id: "minimax/minimax-m3:free"
+    hidden: true
     structuredOutput: true
   - id: "mistralai/codestral-2501"
+    hidden: true
     structuredOutput: true
   - id: "mistralai/codestral-2508:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_p]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: false}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 204800}, stop: {accepted: true}, effort: {accepted: false}}
   - id: "mistralai/devstral-medium"
+    hidden: true
   - id: "mistralai/devstral-small"
+    hidden: true
   - id: "mistralai/devstral-small-2505"
+    hidden: true
   - id: "mistralai/magistral-medium-2506"
+    hidden: true
   - id: "mistralai/magistral-medium-2506:thinking"
+    hidden: true
     reasoning: true
   - id: "mistralai/magistral-small-2506"
+    hidden: true
   - id: "mistralai/ministral-3b"
+    hidden: true
     structuredOutput: true
   - id: "mistralai/ministral-8b"
+    hidden: true
     structuredOutput: true
   - id: "mistralai/ministral-8b-2512:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_p]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: false}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 209715}, stop: {accepted: true}, effort: {accepted: false}}
   - id: "mistralai/mistral-7b-instruct"
+    hidden: true
   - id: "mistralai/mistral-7b-instruct-v0.1"
+    hidden: true
   - id: "mistralai/mistral-7b-instruct-v0.2"
+    hidden: true
   - id: "mistralai/mistral-7b-instruct-v0.3"
+    hidden: true
   - id: "mistralai/mistral-7b-instruct:free"
+    hidden: true
   - id: "mistralai/mistral-large-2411"
+    hidden: true
     structuredOutput: true
   - id: "mistralai/mistral-large-2512:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_p]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: false}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 209715}, stop: {accepted: true}, effort: {accepted: false}}
   - id: "mistralai/mistral-medium-3-5:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, reasoning_effort, temperature, top_p]
     reasoningEfforts: [high, none]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: false}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 209715}, stop: {accepted: true}, effort: {accepted: true, levels: [none, high], default: high}}
   - id: "mistralai/mistral-medium-3.1:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_p]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: false}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 104857}, stop: {accepted: true}, effort: {accepted: false}}
   - id: "mistralai/mistral-nemo:free"
+    hidden: true
   - id: "mistralai/mistral-small"
+    hidden: true
     structuredOutput: true
   - id: "mistralai/mistral-small-24b-instruct-2501:free"
+    hidden: true
   - id: "mistralai/mistral-small-2603:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, reasoning_effort, temperature, top_p]
     reasoningEfforts: [high, none]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: false}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 209715}, stop: {accepted: true}, effort: {accepted: true, levels: [none, high], default: high}}
   - id: "mistralai/mistral-small-3.1-24b-instruct:free"
+    hidden: true
   - id: "mistralai/mistral-small-3.2-24b-instruct:free"
+    hidden: true
   - id: "mistralai/mistral-small-creative"
+    hidden: true
   - id: "mistralai/mistral-tiny"
+    hidden: true
     structuredOutput: true
   - id: "mistralai/mixtral-8x7b-instruct"
+    hidden: true
     structuredOutput: true
   - id: "mistralai/pixtral-12b"
+    hidden: true
     structuredOutput: true
   - id: "mistralai/pixtral-large-2411"
+    hidden: true
     structuredOutput: true
   - id: "moonshotai/kimi-dev-72b"
+    hidden: true
   - id: "moonshotai/kimi-k2-0905:exacto"
+    hidden: true
   - id: "moonshotai/kimi-k2.6:free"
+    hidden: true
   - id: "moonshotai/kimi-k2.7-code:batch"
+    hidden: true
   - id: "moonshotai/kimi-k2:free"
+    hidden: true
   - id: "moonshotai/kimi-k3:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
     reasoningEfforts: [max, high, low, none]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 16384}, stop: {accepted: true}, effort: {accepted: true, levels: [none, low, high, max], default: max}}
   - id: "moonshotai/kimi-linear-48b-a3b-instruct"
+    hidden: true
   - id: "neversleep/llama-3.1-lumimaid-8b"
+    hidden: true
   - id: "neversleep/noromaid-20b"
+    hidden: true
   - id: "nex-agi/deepseek-v3.1-nex-n1"
+    hidden: true
   - id: "nex-agi/nex-n2-mini"
+    hidden: true
   - id: "nex-agi/nex-n2-pro"
+    hidden: true
   - id: "nex-agi/nex-n2-pro:free"
+    hidden: true
   - id: "nex-agi/nex-n2.5-mini:free"
+    hidden: true
     structuredOutput: true
   - id: "nex-agi/nex-n2.5-pro:free"
+    hidden: true
     structuredOutput: true
   - id: "nousresearch/deephermes-3-mistral-24b-preview"
+    hidden: true
   - id: "nousresearch/hermes-2-pro-llama-3-8b"
+    hidden: true
   - id: "nousresearch/hermes-3-llama-3.1-405b:free"
+    hidden: true
   - id: "nousresearch/hermes-3-llama-3.1-70b"
+    hidden: true
+    retiresOn: "2026-11-02"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, repetition_penalty, temperature, top_k, top_p]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 16384}, stop: {accepted: true}, effort: {accepted: false}}
   - id: "nousresearch/hermes-4-70b"
+    hidden: true
   - id: "nvidia/llama-3.1-nemotron-70b-instruct"
+    hidden: true
   - id: "nvidia/llama-3.1-nemotron-ultra-253b-v1"
+    hidden: true
   - id: "nvidia/llama-3.3-nemotron-super-49b-v1.5"
+    hidden: true
   - id: "nvidia/nemotron-3-nano-30b-a3b:free"
+    hidden: true
   - id: "nvidia/nemotron-3-ultra-550b-a55b:batch"
+    hidden: true
   - id: "nvidia/nemotron-nano-12b-v2-vl"
+    hidden: true
   - id: "nvidia/nemotron-nano-12b-v2-vl:free"
+    hidden: true
   - id: "nvidia/nemotron-nano-9b-v2"
+    hidden: true
   - id: "nvidia/nemotron-nano-9b-v2:free"
+    hidden: true
   - id: "openai/chatgpt-4o-latest"
+    hidden: true
   - id: "openai/codex-mini"
+    hidden: true
   - id: "openai/gpt-3.5-turbo-instruct"
+    hidden: true
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_p]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: false}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 3685}, stop: {accepted: true}, effort: {accepted: false}}
   - id: "openai/gpt-3.5-turbo:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_p]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: false}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 4096}, stop: {accepted: true}, effort: {accepted: false}}
   - id: "openai/gpt-4-0314"
+    hidden: true
   - id: "openai/gpt-4-1106-preview"
+    hidden: true
   - id: "openai/gpt-4-turbo-preview"
+    hidden: true
     structuredOutput: true
   - id: "openai/gpt-4-turbo:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_p]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: false}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 4096}, stop: {accepted: true}, effort: {accepted: false}}
   - id: "openai/gpt-4.1-mini:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, temperature, top_p]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 32768}, stop: {accepted: false}, effort: {accepted: false}}
   - id: "openai/gpt-4.1-nano:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, temperature, top_p]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 32768}, stop: {accepted: false}, effort: {accepted: false}}
   - id: "openai/gpt-4.1:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, temperature, top_p]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 32768}, stop: {accepted: false}, effort: {accepted: false}}
   - id: "openai/gpt-4o-audio-preview"
+    hidden: true
   - id: "openai/gpt-4o-mini-search-preview"
+    hidden: true
   - id: "openai/gpt-4o-mini:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_p]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: false}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 16384}, stop: {accepted: true}, effort: {accepted: false}}
   - id: "openai/gpt-4o-search-preview"
+    hidden: true
   - id: "openai/gpt-4o:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_p]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: false}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 16384}, stop: {accepted: true}, effort: {accepted: false}}
   - id: "openai/gpt-4o:extended"
+    hidden: true
     structuredOutput: true
   - id: "openai/gpt-5-chat"
+    hidden: true
   - id: "openai/gpt-5-codex"
+    hidden: true
   - id: "openai/gpt-5-codex:batch"
+    hidden: true
   - id: "openai/gpt-5-image"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, temperature, top_p]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 128000}, stop: {accepted: false}}
   - id: "openai/gpt-5-image-mini"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, temperature, top_p]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 128000}, stop: {accepted: false}}
   - id: "openai/gpt-5-mini:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [high, medium, low, minimal]
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 128000}, stop: {accepted: false}, effort: {accepted: true, levels: [minimal, low, medium, high], default: medium}}
   - id: "openai/gpt-5-nano:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [high, medium, low, minimal]
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 128000}, stop: {accepted: false}, effort: {accepted: true, levels: [minimal, low, medium, high], default: medium}}
   - id: "openai/gpt-5-pro:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [high]
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 128000}, stop: {accepted: false}, effort: {accepted: true, levels: [high], default: high}}
   - id: "openai/gpt-5.1-chat"
+    hidden: true
   - id: "openai/gpt-5.1:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [high, medium, low, none]
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 128000}, stop: {accepted: false}, effort: {accepted: true, levels: [none, low, medium, high], default: medium}}
   - id: "openai/gpt-5.2-chat"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_completion_tokens]
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 32000}, stop: {accepted: false}, effort: {accepted: false}}
   - id: "openai/gpt-5.2-chat-latest"
+    hidden: true
     structuredOutput: true
   - id: "openai/gpt-5.2-pro:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [xhigh, high, medium]
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 128000}, stop: {accepted: false}, effort: {accepted: true, levels: [medium, high, xhigh], default: medium}}
   - id: "openai/gpt-5.2:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [xhigh, high, medium, low, none]
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 128000}, stop: {accepted: false}, effort: {accepted: true, levels: [none, low, medium, high, xhigh], default: medium}}
   - id: "openai/gpt-5.3-chat"
+    hidden: true
   - id: "openai/gpt-5.4-mini:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [xhigh, high, medium, low, none]
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 128000}, stop: {accepted: false}, effort: {accepted: true, levels: [none, low, medium, high, xhigh], default: medium}}
   - id: "openai/gpt-5.4-nano:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [xhigh, high, medium, low, none]
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 128000}, stop: {accepted: false}, effort: {accepted: true, levels: [none, low, medium, high, xhigh], default: medium}}
   - id: "openai/gpt-5.4-pro:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [xhigh, high, medium]
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 128000}, stop: {accepted: false}, effort: {accepted: true, levels: [medium, high, xhigh], default: medium}}
   - id: "openai/gpt-5.4:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [xhigh, high, medium, low, none]
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 128000}, stop: {accepted: false}, effort: {accepted: true, levels: [none, low, medium, high, xhigh], default: medium}}
   - id: "openai/gpt-5.5-pro:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [xhigh, high, medium]
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 128000}, stop: {accepted: false}, effort: {accepted: true, levels: [medium, high, xhigh], default: medium}}
   - id: "openai/gpt-5.5:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [xhigh, high, medium, low, none]
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 128000}, stop: {accepted: false}, effort: {accepted: true, levels: [none, low, medium, high, xhigh], default: medium}}
   - id: "openai/gpt-5.6-luna-pro:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [max, xhigh, high, medium, low, none]
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 128000}, stop: {accepted: false}, effort: {accepted: true, levels: [none, low, medium, high, xhigh, max], default: medium}}
   - id: "openai/gpt-5.6-luna:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [max, xhigh, high, medium, low, none]
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 128000}, stop: {accepted: false}, effort: {accepted: true, levels: [none, low, medium, high, xhigh, max], default: medium}}
   - id: "openai/gpt-5.6-sol-pro:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [max, xhigh, high, medium, low, none]
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 128000}, stop: {accepted: false}, effort: {accepted: true, levels: [none, low, medium, high, xhigh, max], default: medium}}
   - id: "openai/gpt-5.6-sol:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [max, xhigh, high, medium, low, none]
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 128000}, stop: {accepted: false}, effort: {accepted: true, levels: [none, low, medium, high, xhigh, max], default: medium}}
   - id: "openai/gpt-5.6-terra-pro:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [max, xhigh, high, medium, low, none]
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 128000}, stop: {accepted: false}, effort: {accepted: true, levels: [none, low, medium, high, xhigh, max], default: medium}}
   - id: "openai/gpt-5.6-terra:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [max, xhigh, high, medium, low, none]
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 128000}, stop: {accepted: false}, effort: {accepted: true, levels: [none, low, medium, high, xhigh, max], default: medium}}
   - id: "openai/gpt-5:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [high, medium, low, minimal]
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 128000}, stop: {accepted: false}, effort: {accepted: true, levels: [minimal, low, medium, high], default: medium}}
   - id: "openai/gpt-6-astra-pro:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [max, xhigh, high, medium, low]
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 128000}, stop: {accepted: false}, effort: {accepted: true, levels: [low, medium, high, xhigh, max], default: medium}}
   - id: "openai/gpt-6-astra:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [max, xhigh, high, medium, low]
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 128000}, stop: {accepted: false}, effort: {accepted: true, levels: [low, medium, high, xhigh, max], default: medium}}
   - id: "openai/gpt-6-luna-pro:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [max, xhigh, high, medium, low, none]
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 128000}, stop: {accepted: false}, effort: {accepted: true, levels: [none, low, medium, high, xhigh, max], default: medium}}
   - id: "openai/gpt-6-luna:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [max, xhigh, high, medium, low, none]
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 128000}, stop: {accepted: false}, effort: {accepted: true, levels: [none, low, medium, high, xhigh, max], default: medium}}
   - id: "openai/gpt-6-sol-pro:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [max, xhigh, high, medium, low, none]
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 128000}, stop: {accepted: false}, effort: {accepted: true, levels: [none, low, medium, high, xhigh, max], default: medium}}
   - id: "openai/gpt-6-sol:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [max, xhigh, high, medium, low, none]
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 128000}, stop: {accepted: false}, effort: {accepted: true, levels: [none, low, medium, high, xhigh, max], default: medium}}
   - id: "openai/gpt-6.1-sol-pro:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [max, xhigh, high, medium, low]
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 128000}, stop: {accepted: false}, effort: {accepted: true, levels: [low, medium, high, xhigh, max], default: medium}}
   - id: "openai/gpt-6.1-sol:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort]
     reasoningEfforts: [max, xhigh, high, medium, low]
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 128000}, stop: {accepted: false}, effort: {accepted: true, levels: [low, medium, high, xhigh, max], default: medium}}
   - id: "openai/gpt-audio"
+    hidden: true
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_p]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: false}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 16384}, stop: {accepted: true}, effort: {accepted: false}}
   - id: "openai/gpt-audio-mini"
+    hidden: true
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, temperature, top_p]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: false}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 16384}, stop: {accepted: true}, effort: {accepted: false}}
   - id: "openai/gpt-oss-120b:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
     reasoningEfforts: [high, medium, low]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 117964}, stop: {accepted: true}, effort: {accepted: true, levels: [low, medium, high], default: medium}}
   - id: "openai/gpt-oss-120b:exacto"
+    hidden: true
   - id: "openai/gpt-oss-120b:free"
+    hidden: true
   - id: "openai/gpt-oss-20b:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
     reasoningEfforts: [high, medium, low]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 117964}, stop: {accepted: true}, effort: {accepted: true, levels: [low, medium, high], default: medium}}
   - id: "openai/gpt-oss-20b:free"
+    hidden: true
   - id: "openai/o1-pro:batch"
+    hidden: true
   - id: "openai/o1:batch"
+    hidden: true
   - id: "openai/o3-deep-research"
+    hidden: true
     reasoning: true
   - id: "openai/o3-mini-high:batch"
+    hidden: true
   - id: "openai/o3-mini:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning]
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 100000}, stop: {accepted: false}}
   - id: "openai/o3-pro:batch"
+    hidden: true
   - id: "openai/o3:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning]
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 100000}, stop: {accepted: false}}
   - id: "openai/o4-mini-deep-research"
+    hidden: true
     reasoning: true
   - id: "openai/o4-mini-high:batch"
+    hidden: true
   - id: "openai/o4-mini:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning]
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 100000}, stop: {accepted: false}}
   - id: "opengvlab/internvl3-78b"
+    hidden: true
   - id: "openrouter/elephant-alpha"
+    hidden: true
   - id: "openrouter/healer-alpha"
+    hidden: true
   - id: "openrouter/hunter-alpha"
+    hidden: true
   - id: "openrouter/owl-alpha"
+    hidden: true
   - id: "perplexity/sonar-reasoning"
+    hidden: true
   - id: "poolside/laguna-m.1"
+    hidden: true
   - id: "poolside/laguna-m.1:free"
+    hidden: true
   - id: "poolside/laguna-xs.2"
+    hidden: true
   - id: "poolside/laguna-xs.2:free"
+    hidden: true
   - id: "prime-intellect/intellect-3"
+    hidden: true
   - id: "qwen/qwen-2.5-72b-instruct:free"
+    hidden: true
   - id: "qwen/qwen-2.5-coder-32b-instruct:free"
+    hidden: true
   - id: "qwen/qwen-2.5-vl-7b-instruct"
+    hidden: true
   - id: "qwen/qwen-max"
+    hidden: true
   - id: "qwen/qwen-plus-2025-07-28"
+    hidden: true
     structuredOutput: true
   - id: "qwen/qwen-plus-2025-07-28:thinking"
+    hidden: true
     reasoning: true
   - id: "qwen/qwen-turbo"
+    hidden: true
   - id: "qwen/qwen-vl-max"
+    hidden: true
   - id: "qwen/qwen-vl-plus"
+    hidden: true
   - id: "qwen/qwen2.5-coder-7b-instruct"
+    hidden: true
   - id: "qwen/qwen2.5-vl-32b-instruct"
+    hidden: true
   - id: "qwen/qwen2.5-vl-32b-instruct:free"
+    hidden: true
   - id: "qwen/qwen3-14b"
+    hidden: true
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, repetition_penalty, temperature, top_k, top_p]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 16384}, stop: {accepted: true}}
   - id: "qwen/qwen3-14b:free"
+    hidden: true
   - id: "qwen/qwen3-235b-a22b"
+    hidden: true
     structuredOutput: true
   - id: "qwen/qwen3-235b-a22b-thinking-2507"
+    hidden: true
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, temperature, top_k, top_p]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 16384}, stop: {accepted: true}}
   - id: "qwen/qwen3-235b-a22b:free"
+    hidden: true
   - id: "qwen/qwen3-30b-a3b"
+    hidden: true
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, repetition_penalty, temperature, top_k, top_p]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 16384}, stop: {accepted: true}}
   - id: "qwen/qwen3-30b-a3b-thinking-2507"
+    hidden: true
     structuredOutput: true
   - id: "qwen/qwen3-30b-a3b:free"
+    hidden: true
   - id: "qwen/qwen3-4b:free"
+    hidden: true
   - id: "qwen/qwen3-8b"
+    hidden: true
     structuredOutput: true
   - id: "qwen/qwen3-coder-plus"
+    hidden: true
     structuredOutput: true
   - id: "qwen/qwen3-coder:exacto"
+    hidden: true
   - id: "qwen/qwen3-coder:free"
+    hidden: true
   - id: "qwen/qwen3-max"
+    hidden: true
     structuredOutput: true
   - id: "qwen/qwen3-max-thinking"
+    hidden: true
     structuredOutput: true
     reasoning: true
   - id: "qwen/qwen3-next-80b-a3b-instruct:free"
+    hidden: true
   - id: "qwen/qwen3-next-80b-a3b-thinking"
+    hidden: true
     structuredOutput: true
     reasoning: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, repetition_penalty, temperature, top_k, top_p]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 235929}, stop: {accepted: true}}
   - id: "qwen/qwen3-vl-235b-a22b-thinking"
+    hidden: true
     structuredOutput: true
     reasoning: true
   - id: "qwen/qwen3-vl-30b-a3b-thinking"
+    hidden: true
     structuredOutput: true
     reasoning: true
     supportedParameters: [frequency_penalty, max_tokens, reasoning, temperature, top_k, top_p]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 235929}, stop: {accepted: false}}
   - id: "qwen/qwen3-vl-32b-instruct"
+    hidden: true
     structuredOutput: true
   - id: "qwen/qwen3-vl-8b-instruct"
+    hidden: true
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, repetition_penalty, temperature, top_k, top_p]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 235929}, stop: {accepted: true}, effort: {accepted: false}}
   - id: "qwen/qwen3-vl-8b-thinking"
+    hidden: true
     structuredOutput: true
     reasoning: true
   - id: "qwen/qwen3.5-9b:batch"
+    hidden: true
     structuredOutput: true
   - id: "qwen/qwen3.6-max-preview"
+    hidden: true
     structuredOutput: true
   - id: "qwen/qwen3.6-plus-preview:free"
+    hidden: true
   - id: "qwen/qwen3.6-plus:free"
+    hidden: true
   - id: "qwen/qwen3.7-plus:batch"
+    hidden: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, temperature, top_k, top_p]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 131072}, stop: {accepted: true}}
   - id: "qwen/qwen3.8-2.4t-a95b:batch"
+    hidden: true
     structuredOutput: true
   - id: "qwen/qwen3.8-27b:free"
+    hidden: true
     structuredOutput: true
   - id: "qwen/qwen3.8-max"
+    hidden: true
     structuredOutput: true
   - id: "qwen/qwq-32b"
+    hidden: true
     structuredOutput: true
     reasoning: true
   - id: "raifle/sorcererlm-8x22b"
+    hidden: true
   - id: "reka/reka-edge"
+    hidden: true
   - id: "relace/relace-apply-3"
+    hidden: true
     supportedParameters: [max_tokens]
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 128000}, stop: {accepted: true}, effort: {accepted: false}}
   - id: "sao10k/l3-euryale-70b"
+    hidden: true
   - id: "sao10k/l3.1-70b-hanami-x1"
+    hidden: true
   - id: "sao10k/l3.3-euryale-70b"
+    hidden: true
     structuredOutput: true
   - id: "stealth/ox-alpha"
+    hidden: true
   - id: "stealth/space-bunny-alpha"
+    hidden: true
   - id: "stealth/union-alpha"
+    hidden: true
     structuredOutput: true
   - id: "stepfun-ai/step3"
+    hidden: true
   - id: "stepfun/step-3.5-flash:free"
+    hidden: true
   - id: "switchpoint/router"
+    hidden: true
   - id: "tencent/hy3-preview:free"
+    hidden: true
   - id: "tencent/hy3:free"
+    hidden: true
   - id: "thedrummer/anubis-70b-v1.1"
+    hidden: true
   - id: "thedrummer/rocinante-12b"
+    hidden: true
   - id: "thinkingmachines/inkling-small:batch"
+    hidden: true
   - id: "thinkingmachines/inkling-small:free"
+    hidden: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, reasoning_effort, temperature, top_p]
     reasoningEfforts: [max, high, medium, low, minimal, none]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: false}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 262144}, stop: {accepted: true}, effort: {accepted: true, levels: [none, minimal, low, medium, high, max], default: high}}
   - id: "thinkingmachines/inkling:batch"
+    hidden: true
   - id: "thinkingmachines/inkling:free"
+    hidden: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, reasoning_effort, temperature, top_p]
     reasoningEfforts: [max, high, medium, low, minimal, none]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: false}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 262144}, stop: {accepted: true}, effort: {accepted: true, levels: [none, minimal, low, medium, high, max], default: high}}
   - id: "thudm/glm-4.1v-9b-thinking"
+    hidden: true
     reasoning: true
   - id: "tngtech/deepseek-r1t-chimera"
+    hidden: true
     reasoning: true
   - id: "tngtech/deepseek-r1t-chimera:free"
+    hidden: true
     reasoning: true
   - id: "tngtech/deepseek-r1t2-chimera"
+    hidden: true
     reasoning: true
   - id: "tngtech/deepseek-r1t2-chimera:free"
+    hidden: true
     reasoning: true
   - id: "unbiased/pareto"
+    hidden: true
   - id: "x-ai/grok-3"
+    hidden: true
   - id: "x-ai/grok-3-beta"
+    hidden: true
   - id: "x-ai/grok-3-mini"
+    hidden: true
   - id: "x-ai/grok-3-mini-beta"
+    hidden: true
   - id: "x-ai/grok-4"
+    hidden: true
   - id: "x-ai/grok-4-fast"
+    hidden: true
   - id: "x-ai/grok-4.1-fast"
+    hidden: true
   - id: "x-ai/grok-4.1-fast:free"
+    hidden: true
   - id: "x-ai/grok-4.20-beta"
+    hidden: true
   - id: "x-ai/grok-4.20-multi-agent-beta"
+    hidden: true
   - id: "x-ai/grok-4.3:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort, temperature, top_p]
     reasoningEfforts: [high, medium, low, none]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 900000}, stop: {accepted: false}, effort: {accepted: true, levels: [none, low, medium, high], default: low}}
   - id: "x-ai/grok-code-fast-1"
+    hidden: true
   - id: "xiaomi/mimo-v2-flash"
+    hidden: true
   - id: "xiaomi/mimo-v2-omni"
+    hidden: true
   - id: "xiaomi/mimo-v2-pro"
+    hidden: true
   - id: "z-ai/glm-4-32b"
+    hidden: true
   - id: "z-ai/glm-4.5-air:free"
+    hidden: true
   - id: "z-ai/glm-4.6:exacto"
+    hidden: true
   - id: "z-ai/glm-5.2:batch"
+    hidden: true
     structuredOutput: true
   - id: "z-ai/glm-5.2:free"
+    hidden: true
     structuredOutput: true
   - id: "z-ai/glm-5.3-flash:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
     reasoningEfforts: [max, high, low]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 131072}, stop: {accepted: true}, effort: {accepted: true, levels: [low, high, max], default: max}}
   - id: "z-ai/glm-5.3:batch"
+    hidden: true
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
     reasoningEfforts: [max, high, low]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 131072}, stop: {accepted: true}, effort: {accepted: true, levels: [low, high, max], default: max}}
   - id: "~openai/gpt-latest"
+    hidden: true
