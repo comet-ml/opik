@@ -131,6 +131,11 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
     @Override
     public ProviderApiKey saveApiKey(@NonNull ProviderApiKey providerApiKey, @NonNull String userName,
             @NonNull String workspaceId) {
+        // the free provider always comes from operator config, so a stored row is never used
+        if (providerApiKey.provider() == LlmProvider.OPIK_FREE) {
+            throw new BadRequestException("the '%s' provider is built in and can't be saved"
+                    .formatted(LlmProvider.OPIK_FREE.getValue()));
+        }
         validateDestinations(providerApiKey.baseUrl(), providerApiKey.provider(),
                 providerApiKey.authConfig() == null ? null : providerApiKey.authConfig().value());
         UUID apiKeyId = idGenerator.generateId();

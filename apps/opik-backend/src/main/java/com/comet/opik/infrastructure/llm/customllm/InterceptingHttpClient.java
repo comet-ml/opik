@@ -11,6 +11,7 @@ import dev.langchain4j.http.client.sse.ServerSentEvent;
 import dev.langchain4j.http.client.sse.ServerSentEventContext;
 import dev.langchain4j.http.client.sse.ServerSentEventListener;
 import dev.langchain4j.http.client.sse.ServerSentEventParser;
+import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -78,6 +79,8 @@ class InterceptingHttpClient implements HttpClient {
     private static final Pattern TOKEN_REJECTION_HINT = Pattern.compile("invalid_token|expired|revoked",
             Pattern.CASE_INSENSITIVE);
 
+    private static final Pattern HOST_MODEL_NAME = Pattern.compile("[A-Za-z0-9.-]+");
+
     private final @NonNull HttpClient delegate;
     private final Map<String, String> configuration;
     private final String apiKey;
@@ -120,11 +123,18 @@ class InterceptingHttpClient implements HttpClient {
     @Override
     public void execute(HttpRequest request, ServerSentEventParser parser,
             ServerSentEventListener listener) {
-        if (tokenSupplier == null) {
-            delegate.execute(mutate(request), parser, listener);
+        HttpRequest mutated;
+        try {
+            mutated = mutate(request);
+        } catch (BadRequestException exception) {
+            listener.onError(exception);
             return;
         }
-        delegate.execute(mutate(request), parser, new RetryOnAuthFailureListener(request, parser, listener));
+        if (tokenSupplier == null) {
+            delegate.execute(mutated, parser, listener);
+            return;
+        }
+        delegate.execute(mutated, parser, new RetryOnAuthFailureListener(request, parser, listener));
     }
 
     /**
@@ -263,6 +273,12 @@ class InterceptingHttpClient implements HttpClient {
             return url;
         }
         String modelName = modelNode.asText();
+        // a raw substitution into the host must not move the authority, or the credential follows it elsewhere
+        if (ProviderBaseUrlGuard.hasModelPlaceholderInHost(url) && !HOST_MODEL_NAME.matcher(modelName).matches()) {
+            throw new BadRequestException(
+                    "model '%s' can't be substituted into the provider host, only letters, digits, '.' and '-' are allowed"
+                            .formatted(modelName));
+        }
         if (modelName.indexOf('/') >= 0) {
             log.warn(
                     "Substituted model '{}' contains '/'; the resulting URL will gain extra path segments — verify the gateway expects this",

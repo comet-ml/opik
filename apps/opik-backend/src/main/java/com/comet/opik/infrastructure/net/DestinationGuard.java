@@ -19,8 +19,9 @@ import static org.apache.commons.lang3.StringUtils.isBlank;
  * Pre-flight check for outbound calls to user-supplied URLs (SSRF guard). In {@code STRICT} mode
  * (cloud) it resolves the hostname before anyone connects, refusing addresses only our own network
  * can reach: loopback, link-local (including the cloud metadata endpoint at 169.254.169.254),
- * RFC 1918 private ranges, carrier-grade NAT (100.64.0.0/10), IPv6 unique-local, multicast, and
- * unresolvable hosts. IPv4-mapped IPv6 literals resolve to their IPv4 form and are checked as such. In
+ * RFC 1918 private ranges, carrier-grade NAT (100.64.0.0/10), the other IANA special-purpose IPv4
+ * ranges (0.0.0.0/8, 192.0.0.0/24, 198.18.0.0/15, 240.0.0.0/4), IPv6 unique-local, NAT64
+ * (64:ff9b::/96), multicast, and unresolvable hosts. IPv4-mapped IPv6 literals resolve to their IPv4 form and are checked as such. In
  * {@code RELAXED} mode (self-hosted default) it is a no-op — internal gateways legitimately live on
  * private ranges there.
  *
@@ -30,9 +31,9 @@ import static org.apache.commons.lang3.StringUtils.isBlank;
  * above. A caller passing {@link Scheme#PLAINTEXT_OR_TLS} still gets the full SSRF check.
  *
  * <p>Resolve-then-decide is the accepted level of protection here: the later connection resolves
- * again, so a DNS-rebinding attacker with a sub-TTL flip could theoretically pass the check. The
- * surfaces this guards are admin-configured (not anonymous input), which keeps that residual risk
- * acceptable; connection-time pinning would require a custom socket layer.
+ * again, so a host whose DNS answer changes between the two lookups can pass the check. Some of the
+ * surfaces this guards take URLs from any workspace member, so cloud deployments must also restrict
+ * egress at the network level; connection-time pinning would require a custom socket layer.
  */
 @Builder(toBuilder = true)
 public class DestinationGuard {
@@ -134,16 +135,36 @@ public class DestinationGuard {
                 || address.isLinkLocalAddress()
                 || address.isSiteLocalAddress()
                 || address.isMulticastAddress()
-                || isCarrierGradeNat(address)
-                || isUniqueLocalIpv6(address);
+                || isSpecialPurposeIpv4(address)
+                || isUniqueLocalIpv6(address)
+                || isNat64(address);
     }
 
     /**
-     * 100.64.0.0/10 (RFC 6598) — shared address space, routable inside provider networks.
+     * 0.0.0.0/8, 100.64.0.0/10 (carrier-grade NAT, routable inside provider networks), 192.0.0.0/24,
+     * 198.18.0.0/15 and 240.0.0.0/4: none of them is a public destination.
      */
-    private static boolean isCarrierGradeNat(InetAddress address) {
+    private static boolean isSpecialPurposeIpv4(InetAddress address) {
+        if (!(address instanceof Inet4Address)) {
+            return false;
+        }
         byte[] bytes = address.getAddress();
-        return address instanceof Inet4Address && (bytes[0] & 0xFF) == 100 && (bytes[1] & 0xC0) == 64;
+        int first = bytes[0] & 0xFF;
+        int second = bytes[1] & 0xFF;
+        return first == 0
+                || first >= 240
+                || (first == 100 && (second & 0xC0) == 64)
+                || (first == 192 && second == 0 && bytes[2] == 0)
+                || (first == 198 && (second & 0xFE) == 18);
+    }
+
+    /**
+     * 64:ff9b::/96 — a NAT64 gateway translates it to the embedded IPv4 address, which could be internal.
+     */
+    private static boolean isNat64(InetAddress address) {
+        byte[] bytes = address.getAddress();
+        return address instanceof Inet6Address
+                && bytes[0] == 0 && bytes[1] == 0x64 && (bytes[2] & 0xFF) == 0xFF && (bytes[3] & 0xFF) == 0x9B;
     }
 
     /**

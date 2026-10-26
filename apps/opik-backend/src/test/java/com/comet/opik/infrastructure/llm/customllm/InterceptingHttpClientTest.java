@@ -16,6 +16,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -446,6 +447,29 @@ class InterceptingHttpClientTest {
         var listener = mock(ServerSentEventListener.class);
 
         client.execute(chatRequest(url, model), mock(ServerSentEventParser.class), listener);
+
+        verify(listener).onError(any(BadRequestException.class));
+        verifyNoInteractions(delegate);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"attacker.example/#", "x@attacker.example", "attacker.example:443", "[::1]"})
+    void rejectsModelThatMovesTheHost(String model) {
+        var client = guardedClient();
+
+        assertThatThrownBy(() -> client.execute(chatRequest("https://{model}.gw.example.com/v1/chat", model)))
+                .isInstanceOf(BadRequestException.class);
+        verifyNoInteractions(delegate);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"attacker.example/#", "x@attacker.example", "attacker.example:443", "[::1]"})
+    void rejectsModelThatMovesTheHostWhenStreaming(String model) {
+        var client = guardedClient();
+        var listener = mock(ServerSentEventListener.class);
+
+        client.execute(chatRequest("https://{model}.gw.example.com/v1/chat", model),
+                mock(ServerSentEventParser.class), listener);
 
         verify(listener).onError(any(BadRequestException.class));
         verifyNoInteractions(delegate);

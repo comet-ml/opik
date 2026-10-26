@@ -339,6 +339,20 @@ class LlmProviderApiKeyResourceTest {
     }
 
     @Test
+    @DisplayName("Create provider Api Key - the built-in free provider can't be saved")
+    void testCreateFreeProviderApiKeyIsRejected() {
+        String workspaceName = UUID.randomUUID().toString();
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var freeProvider = createProviderApiKey().toBuilder().provider(LlmProvider.OPIK_FREE).build();
+        llmProviderApiKeyResourceClient.createProviderApiKey(freeProvider, apiKey, workspaceName,
+                HttpStatus.SC_BAD_REQUEST);
+    }
+
+    @Test
     @DisplayName("Update provider Api Key - changing baseUrl without resubmitting the api key is rejected")
     void testUpdateProviderApiKeyBaseUrlWithoutApiKeyIsRejected() {
         String workspaceName = UUID.randomUUID().toString();

@@ -48,7 +48,7 @@ public class ProviderBaseUrlGuard {
     }
 
     /** Looks only at the host: a placeholder in userinfo or the port doesn't change where the request goes. */
-    private static boolean hasModelPlaceholderInHost(String baseUrl) {
+    static boolean hasModelPlaceholderInHost(String baseUrl) {
         int schemeEnd = baseUrl.indexOf("://");
         String rest = schemeEnd < 0 ? baseUrl : baseUrl.substring(schemeEnd + 3);
         int authorityEnd = indexOfAny(rest, "/?#");
