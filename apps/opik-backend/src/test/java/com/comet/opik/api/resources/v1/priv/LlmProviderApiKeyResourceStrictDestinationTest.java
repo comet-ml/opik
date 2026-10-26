@@ -60,6 +60,9 @@ class LlmProviderApiKeyResourceStrictDestinationTest {
 
     private static final String USER = UUID.randomUUID().toString();
     private static final String PUBLIC_BASE_URL = "http://1.1.1.1/v1";
+    // spelled out rather than shared with the production code, so a changed message fails here
+    private static final String REFUSED = "destination was refused, it resolves to a private or internal address, host '%s'";
+    private static final String BASE_URL_HINT = " (self-hosted deployments with providers on internal networks can set LLM_PROVIDER_DESTINATION_GUARD=relaxed)";
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
@@ -130,7 +133,7 @@ class LlmProviderApiKeyResourceStrictDestinationTest {
     @DisplayName("POST refuses a non-public base_url and stores nothing")
     void createRefusesNonPublicBaseUrl(String baseUrl) {
         try (var response = client.callCreateProviderApiKey(openAiProvider(baseUrl), apiKey, workspaceName)) {
-            assertRefused(response, baseUrl);
+            assertBaseUrlRefused(response, baseUrl);
         }
 
         // the listing can include the virtual free-model provider, so check for this destination only
@@ -150,7 +153,7 @@ class LlmProviderApiKeyResourceStrictDestinationTest {
         var update = ProviderApiKeyUpdate.builder().baseUrl(baseUrl).apiKey(UUID.randomUUID().toString()).build();
 
         try (var response = client.callUpdateProviderApiKey(created.id(), update, apiKey, workspaceName)) {
-            assertRefused(response, baseUrl);
+            assertBaseUrlRefused(response, baseUrl);
         }
 
         assertThat(stored(created.id()).baseUrl()).isEqualTo(PUBLIC_BASE_URL);
@@ -166,14 +169,14 @@ class LlmProviderApiKeyResourceStrictDestinationTest {
                 .build();
 
         try (var response = client.callCreateProviderApiKey(withInternalTokenUrl, apiKey, workspaceName)) {
-            assertRefused(response, internalTokenUrl);
+            assertTokenUrlRefused(response, internalTokenUrl);
         }
 
         var created = client.createProviderApiKey(customProvider(), apiKey, workspaceName, HttpStatus.SC_CREATED);
         var update = ProviderApiKeyUpdate.builder().apiKey("").authConfig(authConfig(internalTokenUrl)).build();
 
         try (var response = client.callUpdateProviderApiKey(created.id(), update, apiKey, workspaceName)) {
-            assertRefused(response, internalTokenUrl);
+            assertTokenUrlRefused(response, internalTokenUrl);
         }
 
         assertThat(stored(created.id()).authConfig()).isNull();
@@ -223,9 +226,17 @@ class LlmProviderApiKeyResourceStrictDestinationTest {
         return ProviderAuthConfig.Credential.builder().key(key).value(value).secret(secret).build();
     }
 
-    private void assertRefused(Response response, String url) {
+    private void assertBaseUrlRefused(Response response, String baseUrl) {
+        assertRefused(response, REFUSED.formatted(URI.create(baseUrl).getHost()) + BASE_URL_HINT);
+    }
+
+    private void assertTokenUrlRefused(Response response, String tokenUrl) {
+        assertRefused(response, REFUSED.formatted(URI.create(tokenUrl).getHost()));
+    }
+
+    private void assertRefused(Response response, String expectedMessage) {
         assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
-        assertThat(response.readEntity(ErrorMessage.class).getMessage()).contains(URI.create(url).getHost());
+        assertThat(response.readEntity(ErrorMessage.class).getMessage()).isEqualTo(expectedMessage);
     }
 
     private ProviderApiKey stored(UUID id) {
