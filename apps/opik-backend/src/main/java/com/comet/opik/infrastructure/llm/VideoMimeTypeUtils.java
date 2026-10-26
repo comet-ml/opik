@@ -11,10 +11,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.Objects;
 import java.util.Set;
 
 import static jakarta.ws.rs.core.Response.Status.Family.familyOf;
@@ -65,6 +67,21 @@ public class VideoMimeTypeUtils {
     }
 
     /**
+     * The URL without userinfo, query or fragment, which can carry credentials such as signed-URL tokens, capped at
+     * 50 characters.
+     */
+    public static String loggable(String url) {
+        try {
+            var uri = new URI(url);
+            var path = Objects.toString(uri.getRawPath(), "");
+            var safe = "%s://%s%s".formatted(uri.getScheme(), uri.getHost(), path);
+            return safe.substring(0, Math.min(50, safe.length()));
+        } catch (URISyntaxException e) {
+            return "<invalid URL>";
+        }
+    }
+
+    /**
      * Check if the URL has a recognizable video file extension.
      * If it does, LangChain4j will detect the MIME type automatically.
      *
@@ -80,7 +97,7 @@ public class VideoMimeTypeUtils {
             String extension = Files.getFileExtension(path).toLowerCase();
             return VIDEO_EXTENSIONS.contains(extension);
         } catch (IllegalArgumentException e) {
-            log.debug("Invalid URL format: '{}'", url.substring(0, Math.min(50, url.length())));
+            log.debug("Invalid URL format: '{}'", loggable(url));
             return false;
         }
     }
@@ -98,7 +115,7 @@ public class VideoMimeTypeUtils {
             destinationGuard.validate(url);
 
             log.debug("Making HEAD request to detect MIME type for URL without extension: '{}'",
-                    url.substring(0, Math.min(50, url.length())));
+                    loggable(url));
 
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(uri)
@@ -123,14 +140,15 @@ public class VideoMimeTypeUtils {
                     contentType = contentType.substring(0, semicolonIndex).trim();
                 }
                 log.debug("Detected MIME type '{}' from HTTP HEAD: '{}'", contentType,
-                        url.substring(0, Math.min(50, url.length())));
+                        loggable(url));
                 return contentType;
             }
         } catch (DestinationGuardException e) {
-            log.warn("Skipped MIME type detection for a refused URL: '{}'",
-                    url.substring(0, Math.min(50, url.length())), e);
+            log.warn("Skipped MIME type detection for a refused URL: '{}'", loggable(url));
         } catch (Exception e) {
-            log.error("Failed to detect MIME type for URL: '{}'", url.substring(0, Math.min(50, url.length())), e);
+            // the message can echo the full URL, credentials included (URI.create does), so only the type is logged
+            log.error("Failed to detect MIME type for URL: '{}', error type '{}'", loggable(url),
+                    e.getClass().getSimpleName());
         }
         return null;
     }

@@ -293,8 +293,8 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
             try {
                 authTokenProvider.validateTokenUrl(authConfig.tokenUrl());
             } catch (DestinationGuardException exception) {
-                // the guard's detail stays in the logs: it tells a caller how our network resolves their host
-                log.warn("Refused auth_config token_url", exception);
+                // no exception detail anywhere: it describes a user-supplied URL and how our network resolves it
+                log.warn("Refused auth_config token_url");
                 throw new BadRequestException(TOKEN_URL_REFUSED);
             }
         }

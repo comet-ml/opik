@@ -110,8 +110,8 @@ public class ProviderBaseUrlGuard {
             destinationGuard.validate(url);
             return true;
         } catch (DestinationGuardException exception) {
-            // the guard's detail stays in the logs: it tells a caller how our network resolves their host
-            log.warn("Refused LLM provider destination", exception);
+            // no exception detail anywhere: it describes a user-supplied URL and how our network resolves it
+            log.warn("Refused LLM provider destination");
             return false;
         }
     }
