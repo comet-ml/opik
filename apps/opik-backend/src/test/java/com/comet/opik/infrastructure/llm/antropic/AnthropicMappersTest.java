@@ -337,9 +337,6 @@ public class AnthropicMappersTest {
                     Arguments.of("claude-opus-4-6-20260205", "xhigh",
                             "Unsupported custom_parameters.output_config.effort for the model, "
                                     + "model 'claude-opus-4-6-20260205', effort 'xhigh', supported '[low, medium, high, max]'"),
-                    Arguments.of("claude-mythos-preview", "xhigh",
-                            "Unsupported custom_parameters.output_config.effort for the model, "
-                                    + "model 'claude-mythos-preview', effort 'xhigh', supported '[low, medium, high, max]'"),
                     Arguments.of("claude-opus-4-5-20251101", "max",
                             "Unsupported custom_parameters.output_config.effort for the model, "
                                     + "model 'claude-opus-4-5-20251101', effort 'max', supported '[low, medium, high]'"),

@@ -65,6 +65,7 @@ models:
     - claude-haiku-5-5
     - claude-mythos-5
     - claude-mythos-5-1
+    - claude-mythos-preview
     - claude-opus-4-7
     - claude-opus-4-7-20260416
     - claude-opus-4-8
@@ -73,7 +74,6 @@ models:
     - claude-sonnet-5
     - claude-sonnet-5-5
   effort-to-max:
-    - claude-mythos-preview
     - claude-opus-4-6
     - claude-opus-4-6-20260205
     - claude-sonnet-4-6

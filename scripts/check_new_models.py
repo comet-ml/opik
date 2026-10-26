@@ -21,10 +21,11 @@ a person to read, not an error. The exit code is non-zero only when the check it
 
 A changed model that no picker offers (the backend serves it without a label) is listed as not checked rather than
 called: nobody can pick it, and most such models are retired, not chat models, or a dated copy of a listed one, so a
-failure there is one nobody acts on. --models still calls it.
+failure there is one nobody acts on. A model past its provider's retirement date (read the way the sync reads it) is
+listed as retired, picker or not. --models still calls both.
 
-When nothing changed, it checks one cheap model per provider instead (from SMOKE_MODELS, when that model is in
-the registry), so a PR that touches only this script or its workflow still runs end to end.
+When nothing changed, it checks one cheap model per provider instead (the first in SMOKE_MODELS that is in the
+registry and not retired), so a PR that touches only this script or its workflow still runs end to end.
 
 Usage:
   python scripts/check_new_models.py --base-ref origin/main --dry-run --catalog-file models.json
@@ -45,6 +46,7 @@ from urllib.parse import urlparse
 
 import requests
 import yaml
+from sync_provider_models import build_deprecated_by_provider, load_model_prices
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 LLM_MODELS_YAML = Path("apps/opik-backend/src/main/resources/llm-models-default.yaml")
@@ -77,11 +79,13 @@ PROVIDER_LABELS = {
 REASON_PRIORITY = {"new": 0, "changed": 1, "params": 2}
 OVER_CAP_NOTE = "over the call cap"
 NOT_IN_PICKER_NOTE = "not in a picker"
+RETIRED_NOTE = "retired"
 
 SMOKE_MODELS = {
-    "openai": "gpt-4o-mini",
-    "anthropic": "claude-haiku-4-5-20251001",
-    "gemini": "gemini-2.5-flash-lite",
+    # gpt-4o-mini first: a model without reasoning takes the sampling settings, so the smoke run still sends them.
+    "openai": ("gpt-4o-mini", "gpt-5-nano"),
+    "anthropic": ("claude-haiku-4-5-20251001",),
+    "gemini": ("gemini-2.5-flash-lite",),
 }
 
 # The fields that change what the backend sends or where it routes a plain prompt. Others, such
@@ -333,13 +337,27 @@ def _flag(value) -> bool:
     return False
 
 
-def smoke_models(head: dict[str, list[dict]]) -> list[ModelToCheck]:
+def smoke_models(head: dict[str, list[dict]], retired: dict[str, set[str]]) -> list[ModelToCheck]:
     to_check = []
-    for provider, model_id in SMOKE_MODELS.items():
-        model = next((m for m in head.get(provider, []) if m["id"] == model_id), None)
-        if model is not None:
-            to_check.append(ModelToCheck(provider, model_id, request_model_name(model), "smoke"))
+    for provider, candidates in SMOKE_MODELS.items():
+        for model_id in candidates:
+            row = next((m for m in head.get(provider, []) if m["id"] == model_id), None)
+            model = row and ModelToCheck(provider, model_id, request_model_name(row), "smoke")
+            if model and not is_retired(model, retired):
+                to_check.append(model)
+                break
     return to_check
+
+
+def retired_models() -> dict[str, set[str]]:
+    # Read the way the sync reads them, so the check and the picker agree on which models are gone.
+    return build_deprecated_by_provider(load_model_prices())
+
+
+def is_retired(model: ModelToCheck, retired: dict[str, set[str]]) -> bool:
+    if model.provider == "vertex-ai":
+        return model.request_model in retired.get("vertexai", set())
+    return model.model_id in retired.get(model.provider, set())
 
 
 def plan_probes(model: ModelToCheck, params: dict | None) -> list[Probe]:
@@ -793,7 +811,9 @@ def _provider_order(items: list) -> list[str]:
     return sorted(seen, key=lambda p: rank.get(p, len(rank)))
 
 
-def plan(args: argparse.Namespace) -> tuple[list[ModelToCheck], list[UnexercisedChange], str]:
+def plan(
+    args: argparse.Namespace, retired: dict[str, set[str]]
+) -> tuple[list[ModelToCheck], list[UnexercisedChange], str]:
     head = load_catalog(args.head_ref)
     if args.models:
         rows = {(p, m["id"]): m for p, models in head[0].items() for m in models}
@@ -810,11 +830,12 @@ def plan(args: argparse.Namespace) -> tuple[list[ModelToCheck], list[Unexercised
     to_check, unexercised = find_models_to_check(load_catalog(args.base_ref), head)
     if to_check:
         return to_check, unexercised, "changes"
-    return smoke_models(head[0]), unexercised, "smoke"
+    return smoke_models(head[0], retired), unexercised, "smoke"
 
 
 def run(args: argparse.Namespace) -> int:
-    to_check, unexercised, mode = plan(args)
+    retired = retired_models()
+    to_check, unexercised, mode = plan(args, retired)
     keys = {p: os.environ.get(env, "") for p, env in PROVIDER_KEY_ENV.items()}
     secrets = [k for k in keys.values() if k]
 
@@ -833,6 +854,8 @@ def run(args: argparse.Namespace) -> int:
         probes = plan_probes(model, (served or {}).get("params"))
         if served is None:
             results += [CheckResult(p, "not checked", None, "the backend doesn't list this model") for p in probes]
+        elif mode != "asked" and is_retired(model, retired):
+            results += [CheckResult(p, "not checked", None, RETIRED_NOTE) for p in probes]
         elif mode == "changes" and not served.get("label"):
             results += [CheckResult(p, "not checked", None, NOT_IN_PICKER_NOTE) for p in probes]
         elif not keys.get(model.provider):
