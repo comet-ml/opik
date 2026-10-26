@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.llm;
 
+import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.google.common.io.Files;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
@@ -34,7 +35,13 @@ public class VideoMimeTypeUtils {
      */
     private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
             .connectTimeout(Duration.ofMillis(HEAD_REQUEST_TIMEOUT_MS))
-            .followRedirects(HttpClient.Redirect.NORMAL)
+            .followRedirects(HttpClient.Redirect.NEVER)
+            .build();
+
+    // Strict regardless of deployment: the URL comes from any caller's message, and a refusal only loses the hint
+    private static final DestinationGuard DESTINATION_GUARD = DestinationGuard.builder()
+            .mode(DestinationGuard.Mode.STRICT)
+            .scheme(DestinationGuard.Scheme.PLAINTEXT_OR_TLS)
             .build();
 
     /**
@@ -68,9 +75,7 @@ public class VideoMimeTypeUtils {
     public static String detectMimeTypeFromHttpHead(String url) {
         try {
             var uri = URI.create(url);
-            if (!"http".equalsIgnoreCase(uri.getScheme()) && !"https".equalsIgnoreCase(uri.getScheme())) {
-                return null;
-            }
+            DESTINATION_GUARD.validate(url);
 
             log.debug("Making HEAD request to detect MIME type for URL without extension: '{}'",
                     url.substring(0, Math.min(50, url.length())));

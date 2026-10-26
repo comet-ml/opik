@@ -1684,6 +1684,11 @@ llmProviderClient:
       global: ${LLM_PROVIDER_VERTEXAI_GLOBAL_ENDPOINT:-https://aiplatform.googleapis.com}
       eu: ${LLM_PROVIDER_VERTEXAI_EU_ENDPOINT:-https://aiplatform.eu.rep.googleapis.com}
       us: ${LLM_PROVIDER_VERTEXAI_US_ENDPOINT:-https://aiplatform.us.rep.googleapis.com}
+    # Description: the only token_uri values a service-account key may carry. The credentials refresh by posting to it,
+    # and the key file is user-supplied, so any other value is refused.
+    tokenUris:
+      - ${LLM_PROVIDER_VERTEXAI_TOKEN_URI:-https://oauth2.googleapis.com/token}
+      - https://accounts.google.com/o/oauth2/token
 
 # Configuration for cache manager
 cacheManager:

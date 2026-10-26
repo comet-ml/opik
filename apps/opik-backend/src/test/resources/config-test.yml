@@ -815,6 +815,10 @@ llmProviderClient:
       global: https://aiplatform.googleapis.com
       eu: https://aiplatform.eu.rep.googleapis.com
       us: https://aiplatform.us.rep.googleapis.com
+    # Description: the only token_uri values a service-account key may carry.
+    tokenUris:
+      - https://oauth2.googleapis.com/token
+      - https://accounts.google.com/o/oauth2/token
 
 # Configuration for cache manager
 cacheManager:

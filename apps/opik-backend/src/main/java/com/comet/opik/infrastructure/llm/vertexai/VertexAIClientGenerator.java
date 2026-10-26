@@ -19,6 +19,7 @@ import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.google.genai.GoogleGenAiChatModel;
 import dev.langchain4j.model.google.genai.GoogleGenAiStreamingChatModel;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.InternalServerErrorException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -33,10 +34,13 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
+import java.util.regex.Pattern;
 
 @Slf4j
 @RequiredArgsConstructor
 public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatModel> {
+
+    private static final Pattern LOCATION = Pattern.compile("[a-z0-9-]+");
 
     private final @NonNull LlmProviderClientConfig clientConfig;
     private final @NonNull LlmModelRegistryService registryService;
@@ -140,7 +144,12 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
      * endpoint lookup, whose keys are constrained to this same lower-case form.
      */
     private static String canonicalLocation(String location) {
-        return location.strip().toLowerCase(Locale.ROOT);
+        var canonical = location.strip().toLowerCase(Locale.ROOT);
+        // the SDK formats the location into the endpoint host, so anything else could send the request elsewhere
+        if (!LOCATION.matcher(canonical).matches()) {
+            throw new BadRequestException("Vertex AI location '%s' is not a valid region".formatted(location));
+        }
+        return canonical;
     }
 
     private Optional<String> apiEndpointFor(String canonicalLocation) {
@@ -164,6 +173,11 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
         try {
             var credentials = ServiceAccountCredentials.fromStream(
                     new ByteArrayInputStream(config.apiKey().getBytes(StandardCharsets.UTF_8)));
+
+            // the credentials refresh by posting to token_uri, which comes from the user-supplied key file
+            if (!clientConfig.getVertexAIClient().tokenUris().contains(credentials.getTokenServerUri())) {
+                throw new BadRequestException("Vertex AI service account token_uri must be a Google token endpoint");
+            }
 
             var builder = Client.builder()
                     .vertexAI(true)
