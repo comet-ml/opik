@@ -134,10 +134,10 @@ describe("LLMPromptMessage size", () => {
     expect(editorWrapper()).not.toHaveClass("[&_.cm-editor]:text-xs");
   });
 
-  it("should use 12px padding and xs editor text at the xs size", () => {
+  it("should use 12px side padding, 8px top padding and xs editor text at the xs size", () => {
     renderMessage("xs");
 
-    expect(card()).toHaveClass("p-3");
+    expect(card()).toHaveClass("px-3", "pb-3", "pt-2");
     expect(card()).not.toHaveClass("p-1", "pb-1.5", "pl-2");
     expect(editorWrapper()).toHaveClass("[&_.cm-editor]:text-xs");
   });

@@ -194,7 +194,7 @@ const LLMPromptMessage = forwardRef<
           }}
           className={cn(
             "group shadow-none [&:focus-within]:border-primary",
-            size === "xs" ? "p-3" : "p-1 pb-1.5 pl-2",
+            size === "xs" ? "px-3 pb-3 pt-2" : "p-1 pb-1.5 pl-2",
             {
               "pb-0": showMediaActions || hasJsonData,
               "z-10 shadow-sm": id === active?.id,
