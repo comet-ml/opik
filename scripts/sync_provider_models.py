@@ -1185,8 +1185,8 @@ def litellm_params(provider_key: str, model_id: str, info: dict, default_max_out
         if info.get("supports_max_reasoning_effort"):
             params["routes"] = {"responses_api": {"effort": {"levels": levels + ["max"]}}}
 
-    # OpenAI answers the codex and pro models on /v1/chat/completions with a 404 "not supported in the
-    # v1/chat/completions endpoint".
+    # OpenAI answers a model that takes only /v1/responses (the codex, pro, deep-research and computer-use models)
+    # with a 404 on /v1/chat/completions.
     endpoints = info.get("supported_endpoints")
     if (
         provider_key == "openai"

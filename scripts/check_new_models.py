@@ -74,7 +74,7 @@ REASON_PRIORITY = {"new": 0, "changed": 1, "params": 2}
 OVER_CAP_NOTE = "over the call cap"
 
 SMOKE_MODELS = {
-    "openai": "gpt-4.1-nano",
+    "openai": "gpt-4o-mini",
     "anthropic": "claude-haiku-4-5-20251001",
     "gemini": "gemini-2.5-flash-lite",
 }
@@ -242,12 +242,17 @@ def find_models_to_check(
         for model_id, (row, curated_row) in _rows_by_id(head_registry, head_curated, provider).items():
             model = _merged_row(row, curated_row)
             before = base_rows.get(model_id)
+            # Gaining onlyRoute only takes routes away and changes no request the backend sends, so it alone is no
+            # reason to call a model again. Losing or changing it opens a route the check hasn't called.
+            gained_only_route = (
+                before is not None and _only_route(*before) is None and _only_route(row, curated_row) is not None
+            )
             if before is None:
                 reason = "new"
             elif _call_fields(_merged_row(*before)) != _call_fields(model):
                 reason = "changed"
-            elif _params_inputs(base_curated, provider, *before) != _params_inputs(
-                head_curated, provider, row, curated_row
+            elif _params_inputs(base_curated, provider, *before, gained_only_route) != _params_inputs(
+                head_curated, provider, row, curated_row, gained_only_route
             ):
                 reason = "params"
             else:
@@ -279,7 +284,9 @@ def _merged_row(row: dict | None, curated_row: dict | None) -> dict:
     return {**(row or {}), **{k: v for k, v in (curated_row or {}).items() if k != "params"}}
 
 
-def _params_inputs(curated: dict, provider: str, row: dict | None, curated_row: dict | None) -> tuple:
+def _params_inputs(
+    curated: dict, provider: str, row: dict | None, curated_row: dict | None, without_only_route: bool = False
+) -> tuple:
     # Every input the backend folds into a model's params, compared as a whole rather than merged here: a second
     # copy of the merge would be one more place for the rules to drift.
     defaults = curated["defaults"].get(provider) or {}
@@ -287,19 +294,18 @@ def _params_inputs(curated: dict, provider: str, row: dict | None, curated_row: 
     names = [defaults.get("profile"), defaults.get("reasoningProfile") if reasoning else None]
     names += [(row or {}).get("profile"), (curated_row or {}).get("profile")]
     profiles = tuple((name, json.dumps(curated["profiles"].get(name), sort_keys=True)) for name in names if name)
-    return (
-        json.dumps(_request_params((row or {}).get("params")), sort_keys=True),
-        json.dumps(_request_params((curated_row or {}).get("params")), sort_keys=True),
-        profiles,
-    )
+    params = [(row or {}).get("params"), (curated_row or {}).get("params")]
+    if without_only_route:
+        params = [{k: v for k, v in p.items() if k != "onlyRoute"} if isinstance(p, dict) else p for p in params]
+    return (*(json.dumps(p, sort_keys=True) for p in params), profiles)
 
 
-def _request_params(params: dict | None) -> dict | None:
-    # onlyRoute changes no request the backend sends, only the routes this check calls, so gaining it alone is no
-    # reason to call a model again.
-    if not isinstance(params, dict) or "onlyRoute" not in params:
-        return params
-    return {key: value for key, value in params.items() if key != "onlyRoute"}
+def _only_route(row: dict | None, curated_row: dict | None) -> str | None:
+    for source in (curated_row, row):
+        params = (source or {}).get("params")
+        if isinstance(params, dict) and params.get("onlyRoute") is not None:
+            return params["onlyRoute"]
+    return None
 
 
 def _call_fields(model: dict) -> tuple:
@@ -335,9 +341,14 @@ def plan_probes(model: ModelToCheck, params: dict | None) -> list[Probe]:
     if not params:
         return [Probe(model, None, "plain", {"max_completion_tokens": MAX_COMPLETION_TOKENS}, ())]
     probes = []
+    routes = ROUTES.get(model.provider, (None,))
     only_route = params.get("only_route")
-    for route in ROUTES.get(model.provider, (None,)):
-        if only_route and (route or CHAT_COMPLETIONS_ROUTE) != only_route:
+    if only_route is not None and only_route not in [route or CHAT_COMPLETIONS_ROUTE for route in routes]:
+        raise ValueError(
+            f"{model.provider}/{model.model_id} has only_route {only_route!r}, which names none of its routes"
+        )
+    for route in routes:
+        if only_route is not None and (route or CHAT_COMPLETIONS_ROUTE) != only_route:
             continue
         route_params = params if route is None else (params.get("routes") or {}).get(route, params)
         probes += _route_probes(model, route, route_params)
