@@ -4,8 +4,21 @@
 defaults:
   openai: {profile: openai, reasoningProfile: openai-reasoning}
   anthropic: {profile: anthropic}
-  gemini: {profile: gemini}
-  vertex-ai: {profile: gemini}
+  # The frontend's supportsGeminiSamplingParams draws the same line, so a model the sync adds without a row gets the
+  # same answer on both sides: Gemini 1.x and 2.x, gemini-pro-vision and every id outside the gemini- family (Gemma)
+  # take sampling, and any other gemini- id takes the gemini profile, which refuses it.
+  gemini:
+    profile: gemini
+    idProfiles:
+    - {match: '^(?!gemini-)', profile: gemini-sampling}
+    - {match: '^gemini-(1\.0|1\.5|2\.0|2\.5)(-|$)', profile: gemini-sampling}
+    - {match: '^gemini-pro-vision$', profile: gemini-sampling}
+  vertex-ai:
+    profile: gemini
+    idProfiles:
+    - {match: '^(?!gemini-)', profile: gemini-sampling}
+    - {match: '^gemini-(1\.0|1\.5|2\.0|2\.5)(-|$)', profile: gemini-sampling}
+    - {match: '^gemini-pro-vision$', profile: gemini-sampling}
 profiles:
   openai:
     temperature: {min: 0, max: 2, default: 0}
@@ -45,12 +58,11 @@ profiles:
     temperature: {accepted: true}
     topP: {accepted: true}
     topK: {accepted: true}
-  # A Gemini id without a row takes no sampling params or penalties: Gemini 3.x and 4.x ignore temperature, top-K and
-  # top-P, and answer frequency or presence penalty with a 400. So the rows below name the older models that take them.
+  # Gemini 3.x and 4.x ignore temperature and top-P, and answer frequency or presence penalty with a 400, so a gemini-
+  # id takes none of them unless the defaults above place it in an older generation.
   gemini:
     temperature: {accepted: false, min: 0, max: 2, default: 0}
     topP: {accepted: false, min: 0, max: 1, default: 1}
-    topK: {accepted: false}
     frequencyPenalty: {accepted: false}
     presencePenalty: {accepted: false}
     maxOutputTokens: {min: 1, max: 65535, default: 4000}
@@ -58,13 +70,11 @@ profiles:
   gemini-sampling:
     temperature: {accepted: true}
     topP: {accepted: true}
-    topK: {accepted: true}
     frequencyPenalty: {accepted: true}
     presencePenalty: {accepted: true}
   gemini-no-sampling:
     temperature: {accepted: false}
     topP: {accepted: false}
-    topK: {accepted: false}
     frequencyPenalty: {accepted: false}
     presencePenalty: {accepted: false}
 models:
@@ -424,28 +434,25 @@ models:
         levels: [minimal, low, medium, high]
         default: high
   - id: gemini-2.5-pro
-    profile: gemini-sampling
     params:
       effort:
         accepted: true
         levels: [auto, low, medium, high]
         default: auto
   - id: gemini-2.5-flash
-    profile: gemini-sampling
     params:
       effort:
         accepted: true
         levels: [auto, low, medium, high]
         default: auto
   - id: gemini-2.5-flash-lite
-    profile: gemini-sampling
     params:
       effort:
         accepted: true
         levels: [auto, 'off', low, medium, high]
         default: 'off'
-  - {id: gemini-2.0-flash, profile: gemini-sampling, params: {maxOutputTokens: {max: 8192}}}
-  - {id: gemini-2.0-flash-lite, profile: gemini-sampling, params: {maxOutputTokens: {max: 8192}}}
+  - {id: gemini-2.0-flash, params: {maxOutputTokens: {max: 8192}}}
+  - {id: gemini-2.0-flash-lite, params: {maxOutputTokens: {max: 8192}}}
   - {id: gemini-flash-latest-high-res-exp, profile: gemini-no-sampling}
   - {id: gemini-omni-1.1-flash, profile: gemini-no-sampling}
   - {id: gemini-3-pro-image, profile: gemini-no-sampling}
@@ -471,13 +478,6 @@ models:
   - {id: gemini-3.8-flash-lite-tts, profile: gemini-no-sampling}
   - {id: gemini-3.8-flash-tts, profile: gemini-no-sampling}
   - {id: gemini-omni-flash-preview, profile: gemini-no-sampling}
-  - {id: gemini-2.5-flash-image, profile: gemini-sampling}
-  - {id: gemini-1.5-pro-latest, profile: gemini-sampling}
-  - {id: gemini-1.5-flash-latest, profile: gemini-sampling}
-  - {id: gemini-1.0-pro, profile: gemini-sampling}
-  - {id: gemini-pro-vision, profile: gemini-sampling}
-  - {id: gemma-4-31b-it, profile: gemini-sampling}
-  - {id: gemma-4-26b-a4b-it, profile: gemini-sampling}
   vertex-ai:
   - id: gemini-3.8-flash
     profile: gemini-no-sampling
@@ -550,14 +550,12 @@ models:
         levels: [minimal, low, medium, high]
         default: high
   - id: gemini-2.5-pro
-    profile: gemini-sampling
     params:
       effort:
         accepted: true
         levels: [auto, low, medium, high]
         default: auto
   - id: gemini-2.5-flash
-    profile: gemini-sampling
     params:
       effort:
         accepted: true
@@ -566,15 +564,10 @@ models:
   - {id: gemini-omni-1.1-flash, profile: gemini-no-sampling}
   - {id: gemini-robotics-er-2, profile: gemini-no-sampling}
   - id: gemini-2.5-flash-lite-preview-06-17
-    profile: gemini-sampling
     params:
       effort:
         accepted: true
         levels: [auto, 'off', low, medium, high]
         default: 'off'
-  - {id: gemini-2.0-flash-001, profile: gemini-sampling, params: {maxOutputTokens: {max: 8192}}}
-  - {id: gemini-2.0-flash-lite-001, profile: gemini-sampling, params: {maxOutputTokens: {max: 8192}}}
-  - {id: gemini-2.5-flash-preview-04-17, profile: gemini-sampling}
-  - {id: gemini-2.5-pro-preview-05-06, profile: gemini-sampling}
-  - {id: gemini-2.5-pro-preview-03-25, profile: gemini-sampling}
-  - {id: gemini-2.5-pro-exp-03-25, profile: gemini-sampling}
+  - {id: gemini-2.0-flash-001, params: {maxOutputTokens: {max: 8192}}}
+  - {id: gemini-2.0-flash-lite-001, params: {maxOutputTokens: {max: 8192}}}

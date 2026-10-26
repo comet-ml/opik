@@ -37,7 +37,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
-import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -49,18 +48,14 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
- * What a Gemini or Vertex AI model receives once the shipped catalog has shaped the request, for every model the
- * registry lists. Neither provider's client can be pointed at a stub server (Gemini has no base URL, Vertex AI is a
- * gRPC client), so the provider is replaced right where {@link ChatCompletionService} hands it the request; both
- * clients forward what they are given.
+ * What a Gemini or Vertex AI model receives once the shipped catalog has shaped the request. The ids sit in a
+ * registry of their own, so a sync that adds or retires a model leaves this test alone. Neither provider's client
+ * can be pointed at a stub server (Gemini has no base URL, Vertex AI is a gRPC client), so the provider is replaced
+ * right where {@link ChatCompletionService} hands it the request; both clients forward what they are given.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class GeminiCatalogRefusalsTest {
 
-    // The generations Google still lets a request tune. An id outside them, a new one included, has to refuse
-    // sampling and penalties until a curated row opts it in.
-    private static final Pattern TAKES_SAMPLING = Pattern.compile(
-            "^(vertex_ai/)?(gemini-(1\\.0|1\\.5|2\\.0|2\\.5)(-|$)|gemini-pro-vision$|gemma-)");
     private static final List<ParamChange> REFUSALS = List.of(
             new ParamChange("temperature", Reason.REFUSED_BY_MODEL),
             new ParamChange("top_p", Reason.REFUSED_BY_MODEL),
@@ -69,7 +64,6 @@ class GeminiCatalogRefusalsTest {
 
     private final List<ChatCompletionRequest> sentRequests = new ArrayList<>();
     private final List<LlmAsJudgeModelParameters> judgeParameters = new ArrayList<>();
-    private LlmModelRegistryService registryService;
     private ParamResolver paramResolver;
     private ChatCompletionService chatCompletionService;
 
@@ -91,7 +85,9 @@ class GeminiCatalogRefusalsTest {
         var opikConfiguration = mock(OpikConfiguration.class);
         when(opikConfiguration.getFreeModel()).thenReturn(freeModelConfig);
 
-        registryService = new LlmModelRegistryService(new LlmModelRegistryConfig());
+        var registryConfig = new LlmModelRegistryConfig();
+        registryConfig.setDefaultResource("llm-models-test-gemini.yaml");
+        var registryService = new LlmModelRegistryService(registryConfig);
         var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, opikConfiguration,
                 registryService);
         var recordingProvider = new RecordingProvider();
@@ -110,7 +106,7 @@ class GeminiCatalogRefusalsTest {
     }
 
     @ParameterizedTest(name = "{0}")
-    @MethodSource("listedModels")
+    @MethodSource("models")
     void chatRequestsLoseWhatTheModelRefuses(String model, boolean takesSampling) {
         var request = request(model);
 
@@ -129,7 +125,7 @@ class GeminiCatalogRefusalsTest {
     }
 
     @ParameterizedTest(name = "{0}")
-    @MethodSource("listedModels")
+    @MethodSource("models")
     void judgesLoseTheTemperatureTheModelRefuses(String model, boolean takesSampling) {
         var parameters = LlmAsJudgeModelParameters.builder().name(model).temperature(0.3).build();
 
@@ -149,11 +145,25 @@ class GeminiCatalogRefusalsTest {
                 .isEqualTo(REFUSALS);
     }
 
-    private Stream<Arguments> listedModels() {
-        return Stream.of(LlmProvider.GEMINI, LlmProvider.VERTEX_AI)
-                .flatMap(provider -> registryService.getRegistry().get(provider.getValue()).stream())
-                .map(model -> model.qualifiedName() != null ? model.qualifiedName() : model.id())
-                .map(model -> arguments(model, TAKES_SAMPLING.matcher(model).find()));
+    private static Stream<Arguments> models() {
+        return Stream.of(
+                arguments("gemini-1.5-pro-latest", true),
+                arguments("gemini-2.0-flash", true),
+                arguments("gemini-2.5-pro", true),
+                arguments("gemini-2.5-flash-preview-09-2025", true),
+                arguments("gemini-pro-vision", true),
+                arguments("gemma-4-31b-it", true),
+                arguments("gemma-5-9b-it", true),
+                arguments("gemini-3.1-pro-preview", false),
+                arguments("gemini-3.8-flash", false),
+                arguments("gemini-4-argon", false),
+                arguments("gemini-5-pro", false),
+                arguments("vertex_ai/gemini-2.0-flash-001", true),
+                arguments("vertex_ai/gemini-2.5-pro", true),
+                arguments("vertex_ai/gemini-2.5-flash-preview-09-2025", true),
+                arguments("vertex_ai/gemini-3.8-flash", false),
+                arguments("vertex_ai/gemini-3.8-flash-cyber", false),
+                arguments("vertex_ai/gemini-5-pro", false));
     }
 
     private static ChatCompletionRequest request(String model) {

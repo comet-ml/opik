@@ -161,8 +161,7 @@ public class ParamResolver {
         if (model == null) {
             return Optional.empty();
         }
-        return llmProviderFactory.openAiParams(model)
-                .or(() -> llmProviderFactory.geminiParams(model))
+        return llmProviderFactory.catalogParams(model)
                 .or(() -> route == null
                         ? Optional.empty()
                         : Optional.ofNullable(registryService.paramsOf(LlmProvider.OPEN_AI.getValue(), model)));

@@ -165,7 +165,33 @@ class LlmModelCatalogTest {
                     () -> service("llm-models-test.yaml", "llm-models-test-curated-unknown-profile.yaml", null))
                     .isInstanceOf(IllegalStateException.class)
                     .hasMessageContaining("missing-reasoning")
-                    .hasMessageContaining("missing-row-profile");
+                    .hasMessageContaining("missing-row-profile")
+                    .hasMessageContaining("missing-id-profile");
+        }
+
+        @Test
+        void anIdTakesTheProfileOfTheFirstPatternItMatches() {
+            var service = service("llm-models-test.yaml", "llm-models-test-curated-id-profiles.yaml", null);
+
+            assertThat(service.paramsOf("gemini", "gemini-1.5-flash")).isEqualTo(params("""
+                    temperature: {accepted: true}
+                    """));
+            assertThat(service.paramsOf("gemini", "gemini-9-pro")).isEqualTo(params("""
+                    temperature: {accepted: false}
+                    topP: {accepted: false}
+                    """));
+            assertThat(service.paramsOf("gemini", "gemma-9-it")).isEqualTo(params("""
+                    temperature: {accepted: false}
+                    """));
+        }
+
+        @Test
+        void aRowProfileWinsOverTheProfileItsIdMatches() {
+            var service = service("llm-models-test.yaml", "llm-models-test-curated-id-profiles.yaml", null);
+
+            assertThat(service.curatedParamsOf("gemini", "gemini-1.5-pinned")).isEqualTo(params("""
+                    temperature: {accepted: false}
+                    """));
         }
 
         @Test
