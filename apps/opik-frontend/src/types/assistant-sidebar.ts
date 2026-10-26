@@ -229,6 +229,9 @@ export interface AssistantSidebarBridge {
   editChart?(request: ChartEditRequest): void;
   // Whether the console announced the `charts` capability; an older console never handles `chart:edit`.
   canEditChart?(): boolean;
+  // Whether the console handles `chart:edit`'s `duplicate` (bridge v6). An older one opens a plain edit, whose card
+  // would save over the widget the user meant to copy.
+  canDuplicateChart?(): boolean;
   // Whether the console announced the `artifacts` capability; an older console never sends `artifact:proposed`.
   canProposeArtifacts?(): boolean;
   // Calls back when the console announces its capabilities, so hosts that read them can update.

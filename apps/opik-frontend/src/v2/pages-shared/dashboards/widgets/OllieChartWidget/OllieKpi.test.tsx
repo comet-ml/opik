@@ -55,4 +55,19 @@ describe("OllieKpi", () => {
     expect(screen.getByText(/▼ 8\.3%/).className).toContain("text-chart-green");
     expect(screen.getByText(/vs previous 30 days/)).toBeTruthy();
   });
+
+  it("treats an empty cell as missing, not zero", () => {
+    const avg: KpiSpec = { ...kpi(null), period: null, aggregate: "avg" };
+    const rows = [
+      { value: 0.8 },
+      { value: null },
+      { value: "" },
+      { value: "0.6" },
+    ];
+
+    render(<OllieKpi kpi={{ ...avg, format: "score" }} rows={rows} />);
+
+    // (0.8 + 0.6) / 2, not (0.8 + 0 + 0 + 0.6) / 4.
+    expect(screen.getByText("0.700")).toBeTruthy();
+  });
 });

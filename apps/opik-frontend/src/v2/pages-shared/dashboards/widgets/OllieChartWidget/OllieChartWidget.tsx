@@ -31,7 +31,11 @@ import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 
 const MINUTE = 60_000;
-const DAY = 24 * 60 * MINUTE;
+const HOUR = 60 * MINUTE;
+const DAY = 24 * HOUR;
+
+const plural = (count: number, unit: string) =>
+  `${count} ${unit}${count === 1 ? "" : "s"}`;
 
 // The statuses the widget query endpoint uses on purpose; anything else shows the backend's message.
 const QUERY_ERRORS: Record<number, { title: string; message: string }> = {
@@ -155,20 +159,31 @@ const OllieChartWidget: React.FunctionComponent<
     const end = intervalEnd ? new Date(intervalEnd).getTime() : Date.now();
     const length = end - start;
     if (!Number.isFinite(length) || length <= 0) return null;
-    // A range starting at midnight counts today's part as a day ("Past 30 days" is 29 days and today); one starting
-    // on the hour ("Past day") is whole hours.
-    const days =
-      start % DAY === 0 ? Math.ceil(length / DAY) : Math.round(length / DAY);
+    // Under two days the window reads in hours ("Past 24 hours" starts on the hour, so it is 24 hours and a part of
+    // one). Longer ranges start at midnight and count today's part as a day ("Past 30 days" is 29 days and today).
+    const label =
+      length < 2 * DAY
+        ? plural(Math.max(1, Math.floor(length / HOUR)), "hour")
+        : plural(
+            start % DAY === 0
+              ? Math.ceil(length / DAY)
+              : Math.round(length / DAY),
+            "day",
+          );
     return {
       intervalStart: new Date(start - length).toISOString(),
       intervalEnd: intervalStart,
-      days: Math.max(1, days),
+      label,
     };
   }, [kpi?.window_days, intervalStart, intervalEnd]);
 
   // `live` also covers the moment before the dashboard id arrives (skeleton); only `canQuery` may hit the endpoint.
   const canQuery = Boolean(query?.id && dashboardId && queryWidgetId);
-  const { data: previousRows } = useDashboardWidgetQuery(
+  const {
+    data: previousRows,
+    error: previousError,
+    refetch: refetchPrevious,
+  } = useDashboardWidgetQuery(
     {
       dashboardId: dashboardId ?? "",
       scope: dashboardScope ?? DASHBOARD_SCOPE.WORKSPACE,
@@ -177,7 +192,8 @@ const OllieChartWidget: React.FunctionComponent<
       intervalStart: previousWindow?.intervalStart,
       intervalEnd: previousWindow?.intervalEnd,
     },
-    { enabled: canQuery && Boolean(previousWindow), retryNotFound: false },
+    // The comparison runs the same saved query, so it waits out an unsaved widget's 404 the same way.
+    { enabled: canQuery && Boolean(previousWindow), retryNotFound },
   );
   const {
     data: rows,
@@ -200,20 +216,29 @@ const OllieChartWidget: React.FunctionComponent<
   );
   const live = Boolean(query?.id && queryWidgetId);
 
-  // An autosave slower than the 404 retries saves the widget after its query already gave up; run it once more then.
+  // A refresh re-runs the comparison too, so the value and its change come from the same moment.
+  const refresh = () => {
+    refetch();
+    if (previousWindow) refetchPrevious();
+  };
+
+  // An autosave slower than the 404 retries saves the widget after its queries already gave up; run them once more.
   const wasSavedRef = useRef(!retryNotFound);
   useEffect(() => {
-    const saved = !retryNotFound;
-    if (
-      saved &&
-      !wasSavedRef.current &&
-      error &&
-      queryErrorStatus(error) === 404
-    ) {
-      refetch();
-    }
-    wasSavedRef.current = saved;
-  }, [retryNotFound, error, refetch]);
+    const justSaved = !retryNotFound && !wasSavedRef.current;
+    const gaveUp = (failure: QueryError | null) =>
+      Boolean(failure) && queryErrorStatus(failure!) === 404;
+    if (justSaved && gaveUp(error)) refetch();
+    if (justSaved && previousWindow && gaveUp(previousError)) refetchPrevious();
+    wasSavedRef.current = !retryNotFound;
+  }, [
+    retryNotFound,
+    error,
+    refetch,
+    previousWindow,
+    previousError,
+    refetchPrevious,
+  ]);
 
   // Once per failed load: the same error object survives re-renders. An unsaved widget's 404 is expected and stays
   // unreported after the save that ends it; masked data and charts turned off are states the widget explains.
@@ -324,7 +349,7 @@ const OllieChartWidget: React.FunctionComponent<
           rows={chartRows}
           previousRows={live && previousWindow ? previousRows : null}
           comparedWith={
-            previousWindow ? `previous ${previousWindow.days} days` : undefined
+            previousWindow ? `previous ${previousWindow.label}` : undefined
           }
         />
       );
@@ -344,8 +369,8 @@ const OllieChartWidget: React.FunctionComponent<
       ) : (
         <DashboardWidget.Header
           title={widget.title || widget.generatedTitle || ""}
-          // Ollie writes the chart's scope as its description; an editor's own subtitle wins.
-          subtitle={widget.subtitle || config.description || undefined}
+          // Ollie writes the chart's scope as its description; an editor's own subtitle wins, an empty one included.
+          subtitle={(widget.subtitle ?? config.description) || undefined}
           readOnly={readOnly}
           titleAdornment={<OllieBadge />}
           meta={
@@ -356,7 +381,7 @@ const OllieChartWidget: React.FunctionComponent<
                   <button
                     type="button"
                     className="flex size-4 items-center justify-center text-light-slate hover:text-foreground"
-                    onClick={() => refetch()}
+                    onClick={refresh}
                   >
                     <RefreshCw
                       className={cn("size-3", isFetching && "animate-spin")}
@@ -373,7 +398,7 @@ const OllieChartWidget: React.FunctionComponent<
               widgetTitle={title}
               onEditInOllie={editInOllie}
               onDuplicateInOllie={duplicateInOllie}
-              onRefresh={canQuery ? () => refetch() : undefined}
+              onRefresh={canQuery ? refresh : undefined}
             />
           }
           dragHandle={<DashboardWidget.DragHandle />}

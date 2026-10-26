@@ -223,7 +223,9 @@ describe("OllieChartWidget KPI comparison", () => {
     render(<OllieChartWidget preview />);
 
     const [previous, previousOptions] = queryMock.mock.calls.at(-2)!;
-    const [current] = queryMock.mock.calls.at(-1)!;
+    const [current, currentOptions] = queryMock.mock.calls.at(-1)!;
+    // The comparison waits out an unsaved widget's 404 like the value does.
+    expect(previousOptions?.retryNotFound).toBe(currentOptions?.retryNotFound);
     // The dashboard's default range is a preset: it runs to now.
     expect(current.intervalEnd).toBeUndefined();
     expect(previousOptions?.enabled).toBe(true);
@@ -236,5 +238,32 @@ describe("OllieChartWidget KPI comparison", () => {
       Date.now() - new Date(current.intervalStart!).getTime();
     expect(Math.abs(currentLength - previousLength)).toBeLessThan(60_000);
     expect(screen.getByText(/previous 30 days/)).toBeTruthy();
+  });
+
+  it("reads the past 24 hours in hours", () => {
+    const kpiWidget = {
+      ...ollieWidget("w-1"),
+      config: {
+        spec: {
+          kpi: {
+            value: "value",
+            format: "cost_total",
+            aggregate: "sum",
+            window_days: 1,
+          },
+        },
+        query: { id: "q-1" },
+      },
+    } as unknown as DashboardWidgetType;
+    setStore(kpiWidget);
+    useDashboardStore.setState({
+      runtimeConfig: {
+        dashboardId: "dash-1",
+        dateRange: "past24hours",
+      } as never,
+    });
+    render(<OllieChartWidget preview />);
+
+    expect(screen.getByText(/previous 24 hours/)).toBeTruthy();
   });
 });

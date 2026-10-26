@@ -77,7 +77,9 @@ const OllieChartActionsMenu: React.FunctionComponent<
   // Read on every render, so opening the menu sees whether the console has announced chart editing yet.
   const canEditChart = window.opikBridge?.canEditChart?.();
   const editInOllie = canEditChart ? onEditInOllie : undefined;
-  const duplicateInOllie = canEditChart ? onDuplicateInOllie : undefined;
+  const duplicateInOllie = window.opikBridge?.canDuplicateChart?.()
+    ? onDuplicateInOllie
+    : undefined;
 
   const run = (action: () => void) => (e: React.MouseEvent) => {
     e.stopPropagation();

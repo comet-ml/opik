@@ -84,10 +84,18 @@ export const formatMetric = (value: number, format: MetricFormat): string => {
   }
 };
 
+// A missing cell is no value, not zero: Number(null) and Number("") are 0, and Number(true) is 1.
+const toNumber = (value: unknown): number | null => {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value !== "string" || value.trim() === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
 const numbers = (rows: Rows, field: string) =>
   rows
-    .map((row) => Number(row[field]))
-    .filter((value) => Number.isFinite(value));
+    .map((row) => toNumber(row[field]))
+    .filter((value): value is number => value !== null);
 
 const aggregate = (rows: Rows, kpi: KpiSpec): number | null => {
   const values = numbers(rows, kpi.value);
