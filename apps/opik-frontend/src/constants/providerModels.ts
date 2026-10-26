@@ -282,10 +282,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "anthropic/claude-sonnet-5.5",
     },
     {
-      value: PROVIDER_MODEL_TYPE.ARCEE_AI_TRINITY_LARGE_THINKING,
-      label: "arcee-ai/trinity-large-thinking",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.BYTEDANCE_SEED_SEED_1_6,
       label: "bytedance-seed/seed-1.6",
     },
@@ -359,6 +355,18 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "deepseek/deepseek-r1-0528",
     },
     {
+      value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_V3_1_TERMINUS,
+      label: "deepseek/deepseek-v3.1-terminus",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_V3_2,
+      label: "deepseek/deepseek-v3.2",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_V3_2_EXP,
+      label: "deepseek/deepseek-v3.2-exp",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_V4_FLASH,
       label: "deepseek/deepseek-v4-flash",
     },
@@ -399,8 +407,20 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "fireworks/ember-1",
     },
     {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_5_FLASH,
+      label: "google/gemini-2.5-flash",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_5_FLASH_IMAGE,
       label: "google/gemini-2.5-flash-image",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_5_FLASH_LITE,
+      label: "google/gemini-2.5-flash-lite",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_5_PRO,
+      label: "google/gemini-2.5-pro",
     },
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_5_PRO_PREVIEW,
@@ -551,6 +571,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "inference-net/schematron-v2-turbo",
     },
     {
+      value: PROVIDER_MODEL_TYPE.LIQUID_LFM_2_5_2_6B,
+      label: "liquid/lfm-2.5-2.6b",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.LIQUID_LFM_2_5_2_6B_FREE,
       label: "liquid/lfm-2.5-2.6b:free",
     },
@@ -593,10 +617,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_4_SCOUT,
       label: "meta-llama/llama-4-scout",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_GUARD_4_12B,
-      label: "meta-llama/llama-guard-4-12b",
     },
     {
       value: PROVIDER_MODEL_TYPE.META_MUSE_GLIMMER_30B,
@@ -645,6 +665,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.MINIMAX_MINIMAX_M2_HER,
       label: "minimax/minimax-m2-her",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.MINIMAX_MINIMAX_M2_1,
+      label: "minimax/minimax-m2.1",
     },
     {
       value: PROVIDER_MODEL_TYPE.MINIMAX_MINIMAX_M2_5,
@@ -779,6 +803,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "moonshotai/kimi-k3",
     },
     {
+      value: PROVIDER_MODEL_TYPE.MOONSHOTAI_KIMI_K3_1_PRO,
+      label: "moonshotai/kimi-k3.1-pro",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.MORPH_MORPH_V3_FAST,
       label: "morph/morph-v3-fast",
     },
@@ -828,14 +856,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "nvidia/nemotron-3-ultra-550b-a55b:free",
     },
     {
-      value: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_5_CONTENT_SAFETY,
-      label: "nvidia/nemotron-3.5-content-safety",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_5_CONTENT_SAFETY_FREE,
-      label: "nvidia/nemotron-3.5-content-safety:free",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_5_LIGHTNING,
       label: "nvidia/nemotron-3.5-lightning",
     },
@@ -854,10 +874,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.NVIDIA_SWITCHYARD,
       label: "nvidia/switchyard",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_3_5_TURBO,
-      label: "openai/gpt-3.5-turbo",
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_3_5_TURBO_0613,
@@ -1100,10 +1116,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "openrouter/auto-beta",
     },
     {
-      value: PROVIDER_MODEL_TYPE.OPENROUTER_BODYBUILDER,
-      label: "openrouter/bodybuilder",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.OPENROUTER_FREE,
       label: "openrouter/free",
     },
@@ -1184,8 +1196,20 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "qwen/qwen2.5-vl-72b-instruct",
     },
     {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_14B,
+      label: "qwen/qwen3-14b",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_235B_A22B_2507,
       label: "qwen/qwen3-235b-a22b-2507",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_235B_A22B_THINKING_2507,
+      label: "qwen/qwen3-235b-a22b-thinking-2507",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_30B_A3B,
+      label: "qwen/qwen3-30b-a3b",
     },
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_30B_A3B_INSTRUCT_2507,
@@ -1216,12 +1240,24 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "qwen/qwen3-next-80b-a3b-instruct",
     },
     {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_NEXT_80B_A3B_THINKING,
+      label: "qwen/qwen3-next-80b-a3b-thinking",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_VL_235B_A22B_INSTRUCT,
       label: "qwen/qwen3-vl-235b-a22b-instruct",
     },
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_VL_30B_A3B_INSTRUCT,
       label: "qwen/qwen3-vl-30b-a3b-instruct",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_VL_30B_A3B_THINKING,
+      label: "qwen/qwen3-vl-30b-a3b-thinking",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_VL_8B_INSTRUCT,
+      label: "qwen/qwen3-vl-8b-instruct",
     },
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_5_122B_A10B,
@@ -1709,6 +1745,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
   ],
 
   [PROVIDER_TYPE.VERTEX_AI]: [
+    {
+      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_4_ARGON,
+      label: "Gemini 4 Argon",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_4_ARGON_CYBER_PERMISSIVE,
+      label: "Gemini 4 Argon Cyber Permissive",
+    },
     {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_8_FLASH,
       label: "Gemini 3.8 Flash",
