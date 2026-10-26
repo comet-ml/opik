@@ -3,8 +3,10 @@ import difference from "lodash/difference";
 import union from "lodash/union";
 import useLocalStorageState from "use-local-storage-state";
 
-const HIDDEN_COLUMNS_KEY = "playground-output-table-hidden-columns";
-const COLUMNS_ORDER_KEY = "playground-output-table-columns-order";
+import {
+  PLAYGROUND_OUTPUT_COLUMNS_ORDER_KEY,
+  PLAYGROUND_OUTPUT_HIDDEN_COLUMNS_KEY,
+} from "@/constants/llm";
 
 const EMPTY_IDS: string[] = [];
 
@@ -21,11 +23,11 @@ const usePlaygroundColumnsSettings = (
   // version, a filter) are kept so they are still hidden when they come back.
   const [hiddenColumnsMap, setHiddenColumnsMap] = useLocalStorageState<
     Record<string, string[]>
-  >(HIDDEN_COLUMNS_KEY, { defaultValue: {} });
+  >(PLAYGROUND_OUTPUT_HIDDEN_COLUMNS_KEY, { defaultValue: {} });
 
   const [columnsOrderMap, setColumnsOrderMap] = useLocalStorageState<
     Record<string, string[]>
-  >(COLUMNS_ORDER_KEY, { defaultValue: {} });
+  >(PLAYGROUND_OUTPUT_COLUMNS_ORDER_KEY, { defaultValue: {} });
 
   const hiddenColumns = hiddenColumnsMap[datasetId] ?? EMPTY_IDS;
   const columnsOrder = columnsOrderMap[datasetId] ?? EMPTY_IDS;
