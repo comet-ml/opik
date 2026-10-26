@@ -338,6 +338,8 @@ component:
       LLM_PROVIDER_DESTINATION_GUARD: "strict"
 ```
 
+Accepted values are `strict` and `relaxed` (case-insensitive). When the variable is unset, the default for your launch path applies. Any other value, including an empty one, stops the backend at startup with a configuration error, so a typo never silently turns the check off. Docker Compose is the one exception for an empty value: it treats it as unset and uses its `relaxed` default.
+
 Changing a provider's **URL** requires re-entering its API key (or OAuth2 credentials), since stored secrets are only ever sent to the endpoint they were saved for.
 
 ##### Custom Headers
