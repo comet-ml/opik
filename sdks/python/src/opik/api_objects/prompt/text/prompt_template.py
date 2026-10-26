@@ -37,6 +37,11 @@ class PromptTemplate(base_prompt_template.BasePromptTemplate):
         ``{{ name }}`` matches ``name``. A ``None`` value renders as an empty
         string, and a placeholder with no matching argument is left unchanged.
 
+        Jinja2 templates render in a sandboxed environment. Ordinary
+        substitution, filters, loops and access to the supplied data work as
+        usual, but access to unsafe or dunder attributes is unsupported and may
+        be rejected at render time.
+
         Raises:
             PromptPlaceholdersDontMatchFormatArguments: If ``validate_placeholders``
                 is True and the arguments don't match the placeholders.

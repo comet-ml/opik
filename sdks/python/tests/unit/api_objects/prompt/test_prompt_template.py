@@ -205,3 +205,16 @@ def test_prompt__format_jinja2__normal_substitution_still_works_under_sandbox():
     result = tested.format(name="harry", city="London")
 
     assert result == "HARRY from London"
+
+
+def test_prompt__format_jinja2__underscore_and_computed_data_access_render():
+    tested = PromptTemplate(
+        "{{ hit._id }}: {% for k in keys %}{{ row[k] }}{% endfor %}",
+        type=PromptType.JINJA2,
+    )
+
+    result = tested.format(
+        hit={"_id": "507f"}, keys=["a", "b"], row={"a": "1", "b": "2"}
+    )
+
+    assert result == "507f: 12"

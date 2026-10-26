@@ -379,56 +379,106 @@ describe("Prompt - format()", () => {
         mockOpikClient
       );
 
-    it("should block access to the constructor property", () => {
-      const prompt = makeJinja2Prompt("{{ range.constructor }}");
+    describe("renders ordinary prompts (own-property access)", () => {
+      it("should substitute and apply filters", () => {
+        const prompt = makeJinja2Prompt(
+          "Hello {{ name | upper }} from {{ city }}"
+        );
 
-      expect(() => prompt.format({})).toThrow(PromptValidationError);
+        expect(prompt.format({ name: "alice", city: "London" })).toBe(
+          "Hello ALICE from London"
+        );
+      });
+
+      it("should render dotted access and loops", () => {
+        const prompt = makeJinja2Prompt(
+          "{{ user.name }}: {% for item in items %}{{ item }}{% endfor %}"
+        );
+
+        expect(
+          prompt.format({ user: { name: "Alice" }, items: ["a", "b"] })
+        ).toBe("Alice: ab");
+      });
+
+      it("should render underscore-prefixed data fields", () => {
+        const prompt = makeJinja2Prompt("{{ hit._id }}: {{ hit._source.text }}");
+
+        expect(
+          prompt.format({ hit: { _id: "507f", _source: { text: "hello" } } })
+        ).toBe("507f: hello");
+      });
+
+      it("should render dynamically computed key access", () => {
+        const prompt = makeJinja2Prompt(
+          "{% for k in keys %}{{ row[k] }}{% endfor %}"
+        );
+
+        expect(prompt.format({ keys: ["a", "b"], row: { a: "1", b: "2" } })).toBe(
+          "12"
+        );
+      });
+
+      it("should render computed indexing with an expression", () => {
+        const prompt = makeJinja2Prompt("{{ msgs[msgs.length - 1] }}");
+
+        expect(prompt.format({ msgs: ["x", "y", "z"] })).toBe("z");
+      });
+
+      it("should render variables named like host globals", () => {
+        const prompt = makeJinja2Prompt("{{ process }}-{{ module }}-{{ exports }}");
+
+        expect(prompt.format({ process: "p", module: "m", exports: "e" })).toBe(
+          "p-m-e"
+        );
+      });
+
+      it("should render data fields named like object members", () => {
+        const prompt = makeJinja2Prompt("{{ o.constructor }}/{{ o.call }}");
+
+        expect(prompt.format({ o: { constructor: "own", call: "ring" } })).toBe(
+          "own/ring"
+        );
+      });
     });
 
-    it("should block prototype-chain property access", () => {
-      const prompt = makeJinja2Prompt("{{ user.__proto__ }}");
+    describe("neutralizes template escapes", () => {
+      it("should not execute a constructor call chain", () => {
+        const prompt = makeJinja2Prompt(
+          "{{ range.constructor('return 7')() }}"
+        );
 
-      expect(() => prompt.format({ user: { name: "Alice" } })).toThrow(
-        PromptValidationError
-      );
-    });
+        expect(() => prompt.format({})).toThrow(PromptValidationError);
+      });
 
-    it("should block the constructor via a string-literal index", () => {
-      const prompt = makeJinja2Prompt('{{ user["constructor"] }}');
+      it("should not execute a literal constructor call chain", () => {
+        const prompt = makeJinja2Prompt(
+          "{{ ''.constructor.constructor('return 7')() }}"
+        );
 
-      expect(() => prompt.format({ user: { name: "Alice" } })).toThrow(
-        PromptValidationError
-      );
-    });
+        expect(() => prompt.format({})).toThrow(PromptValidationError);
+      });
 
-    it("should block a dynamically computed property access", () => {
-      // A computed key cannot be verified statically, so string-concatenation
-      // and variable-indirection attempts are refused outright.
-      const prompt = makeJinja2Prompt('{{ user["cons" + "tructor"] }}');
+      it("should resolve inherited properties to empty", () => {
+        const prompt = makeJinja2Prompt(
+          "[{{ range.constructor }}][{{ user.constructor }}][{{ user.__proto__ }}]"
+        );
 
-      expect(() => prompt.format({ user: { name: "Alice" } })).toThrow(
-        PromptValidationError
-      );
-    });
+        expect(prompt.format({ user: { name: "Alice" } })).toBe("[][][]");
+      });
 
-    it("should still render ordinary variable substitution", () => {
-      const prompt = makeJinja2Prompt(
-        "Hello {{ name | upper }} from {{ city }}"
-      );
+      it("should not let attribute filters read inherited properties", () => {
+        const prompt = makeJinja2Prompt(
+          "{{ users | selectattr('constructor') | list | length }}"
+        );
 
-      expect(prompt.format({ name: "alice", city: "London" })).toBe(
-        "Hello ALICE from London"
-      );
-    });
+        expect(prompt.format({ users: [{ a: 1 }] })).toBe("0");
+      });
 
-    it("should still render dotted access and loops", () => {
-      const prompt = makeJinja2Prompt(
-        "{{ user.name }}: {% for item in items %}{{ item }}{% endfor %}"
-      );
+      it("should close file-including tags", () => {
+        const prompt = makeJinja2Prompt("{% include 'secrets.txt' %}");
 
-      expect(prompt.format({ user: { name: "Alice" }, items: ["a", "b"] })).toBe(
-        "Alice: ab"
-      );
+        expect(() => prompt.format({})).toThrow(PromptValidationError);
+      });
     });
   });
 });
