@@ -219,7 +219,7 @@ models:
       effort:
         accepted: true
         levels: [low, medium, high, xhigh]
-        default: high
+        default: medium
       tools: {chatCompletions: refused}
       routes:
         responses_api:
