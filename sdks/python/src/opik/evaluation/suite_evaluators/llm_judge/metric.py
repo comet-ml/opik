@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional, Union
 
 import tenacity
 
+from opik import _logging
 from opik.decorator import error_info_collector
 from opik.evaluation.models import base_model, models_factory
 from opik.evaluation.metrics import score_result
@@ -491,8 +492,10 @@ class LLMJudge(base.BaseSuiteEvaluator):
             return supported_results
 
         unsupported_types = sorted({item.type for item in unsupported_items})
-        LOGGER.warning(
+        _logging.log_once_at_level(
+            logging.WARNING,
             "LLMJudge %s cannot score configured assertion types: %s",
+            LOGGER,
             self.name,
             ", ".join(unsupported_types),
         )
