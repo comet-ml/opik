@@ -34,7 +34,6 @@ import {
   generateDefaultLLMPromptMessage,
   getNextMessageType,
   parsePromptVersionContent,
-  toContentForRole,
 } from "@/lib/llm";
 import LLMPromptMessages from "@/v2/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
 import PromptModelSelect from "@/v2/pages-shared/llm/PromptModelSelect/PromptModelSelect";
@@ -71,7 +70,6 @@ import useMessageTextPrompt from "@/v2/pages-shared/llm/LLMPromptMessages/useMes
 import { PromptVersion, PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import {
   PROMPT_LOAD_TOOLTIP,
-  PROMPT_MEDIA_NOT_LOADED_TOAST,
   PROMPT_NO_SAVED_PROMPTS_TOOLTIP,
   PROMPT_SAVE_AS_CHAT_TOOLTIP,
   PROMPT_SAVE_AS_TEXT_TOOLTIP,
@@ -80,7 +78,6 @@ import {
 import useProjectPromptsList from "@/api/prompts/useProjectPromptsList";
 import { useFetchPrompt } from "@/api/prompts/usePromptById";
 import { useFetchPromptVersion } from "@/api/prompts/usePromptVersionById";
-import { useToast } from "@/ui/use-toast";
 import useLoadChatPrompt from "@/hooks/useLoadChatPrompt";
 import usePromptVersionLabel from "@/hooks/usePromptVersionLabel";
 import PlaygroundRunButton from "@/v2/pages/PlaygroundPage/PlaygroundRunButton";
@@ -155,7 +152,6 @@ const PlaygroundPrompt = ({
   const selectedChatPromptId = prompt?.loadedChatPromptId;
   const selectedChatPromptVersionId = prompt?.loadedChatPromptVersionId;
 
-  const { toast } = useToast();
   const fetchPrompt = useFetchPrompt();
   const fetchPromptVersion = useFetchPromptVersion();
 
@@ -419,31 +415,17 @@ const PlaygroundPrompt = ({
 
       if (!version) return;
 
-      const [firstMessage, ...otherMessages] = messages.length
-        ? messages
-        : [generateDefaultLLMPromptMessage({ role: LLM_MESSAGE_ROLE.system })];
-      const { content, mediaDropped } = toContentForRole(
-        parsePromptVersionContent(version),
-        firstMessage.role,
-      );
-
       updatePrompt(promptId, {
         messages: [
-          {
-            ...firstMessage,
-            content,
+          generateDefaultLLMPromptMessage({
+            content: parsePromptVersionContent(version),
             promptId: textPromptId,
             promptVersionId: version.id,
-          },
-          ...otherMessages,
+          }),
         ],
       });
-
-      if (mediaDropped) {
-        toast(PROMPT_MEDIA_NOT_LOADED_TOAST);
-      }
     },
-    [fetchPrompt, fetchPromptVersion, messages, promptId, toast, updatePrompt],
+    [fetchPrompt, fetchPromptVersion, promptId, updatePrompt],
   );
 
   const handleLibrarySelect = useCallback(

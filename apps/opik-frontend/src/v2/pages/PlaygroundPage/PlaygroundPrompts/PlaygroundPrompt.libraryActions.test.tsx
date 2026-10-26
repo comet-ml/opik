@@ -270,7 +270,7 @@ describe("PlaygroundPrompt header Load", () => {
     expect(screen.queryByTestId("library-menu")).not.toBeInTheDocument();
   });
 
-  it("loads a picked text prompt into the first message only", async () => {
+  it("replaces every message with one user message holding the picked text prompt", async () => {
     seedPlaygroundPrompt({ messages: [SYSTEM_MESSAGE, USER_MESSAGE] });
     renderCard();
 
@@ -281,12 +281,12 @@ describe("PlaygroundPrompt header Load", () => {
     expect(fetchPrompt).toHaveBeenCalledWith({ promptId: "system-text" });
     expect(storedMessages()).toEqual([
       {
-        ...SYSTEM_MESSAGE,
+        id: expect.any(String),
+        role: LLM_MESSAGE_ROLE.user,
         content: "You are terse.",
         promptId: "system-text",
         promptVersionId: "text-v2",
       },
-      USER_MESSAGE,
     ]);
     expect(
       usePlaygroundStore.getState().promptMap[CARD_ID].loadedChatPromptId,
@@ -302,6 +302,7 @@ describe("PlaygroundPrompt header Load", () => {
     });
 
     expect(fetchPromptVersion).toHaveBeenCalledWith({ versionId: "text-v1" });
+    expect(storedMessages()).toHaveLength(1);
     expect(storedMessages()[0]).toMatchObject({
       content: "You are kind.",
       promptId: "system-text",
