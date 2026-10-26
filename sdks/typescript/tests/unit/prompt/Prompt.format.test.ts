@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Prompt } from "../../../src/opik/prompt/Prompt";
@@ -474,9 +474,23 @@ describe("Prompt - format()", () => {
 
         expect(prompt.format({ box: new Box(21) })).toBe("42");
       });
+
+      it("should render a bounded range", () => {
+        const prompt = makeJinja2Prompt("{% for i in range(3) %}{{ i }}{% endfor %}");
+
+        expect(prompt.format({})).toBe("012");
+      });
     });
 
     describe("neutralizes template escapes", () => {
+      it("should reject an oversized range", () => {
+        const prompt = makeJinja2Prompt(
+          "{% for i in range(1000000000) %}x{% endfor %}"
+        );
+
+        expect(() => prompt.format({})).toThrow(PromptValidationError);
+      });
+
       it("should not execute a constructor call chain", () => {
         const prompt = makeJinja2Prompt(
           "{{ range.constructor('return 7')() }}"
@@ -547,9 +561,13 @@ describe("Prompt - format()", () => {
         expect(prompt.format({ greeting: "hi" })).toBe("[][][][hi]");
       });
 
-      it("should refuse to include a real file from the working directory", () => {
+      it("should refuse to include a real file a default loader would find", () => {
+        // A default/null loader resolves to FileSystemLoader('views'), which
+        // searches <cwd>/views, so place the file there: the test fails if the
+        // empty-loader env is reverted to a default one, and passes with [].
         const dir = mkdtempSync(join(tmpdir(), "opik-prompt-"));
-        writeFileSync(join(dir, "partial.txt"), "INCLUDED_FILE_CONTENT");
+        mkdirSync(join(dir, "views"));
+        writeFileSync(join(dir, "views", "partial.txt"), "INCLUDED_FILE_CONTENT");
         const originalCwd = process.cwd();
         process.chdir(dir);
         try {

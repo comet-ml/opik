@@ -86,6 +86,40 @@ jinja2Env.addFilter("rejectattr", (arr: unknown[], attr: string) =>
   arr.filter((item) => !ownProperty(item, attr))
 );
 
+// Cap range() like the Python SandboxedEnvironment (MAX_RANGE = 100000) so an
+// oversized range cannot build a huge array and stall the process.
+const MAX_RANGE = 100000;
+jinja2Env.addGlobal(
+  "range",
+  (start: number, stop?: number, step?: number): number[] => {
+    let from = start;
+    let to = stop;
+    let by = step;
+    if (to === undefined) {
+      to = from;
+      from = 0;
+      by = 1;
+    } else if (!by) {
+      by = 1;
+    }
+    const count = Math.max(0, Math.ceil((to - from) / by));
+    if (count > MAX_RANGE) {
+      throw new Error(`range() produces more than ${MAX_RANGE} values`);
+    }
+    const result: number[] = [];
+    if (by > 0) {
+      for (let i = from; i < to; i += by) {
+        result.push(i);
+      }
+    } else {
+      for (let i = from; i > to; i += by) {
+        result.push(i);
+      }
+    }
+    return result;
+  }
+);
+
 function renderJinja2Template(
   template: string,
   variables: PromptVariables
