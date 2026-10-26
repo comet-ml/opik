@@ -30,7 +30,7 @@ function isUnsafeInheritedKey(key: string | number): boolean {
 // inherited methods still work but prototype-chain members do not. This mirrors
 // the Python SandboxedEnvironment, which renders own fields and object methods
 // but not dunder/prototype attributes.
-function resolveOwnProperty<T>(
+function resolveSafeProperty<T>(
   obj: unknown,
   key: string | number,
   resolve: (target: unknown, key: string | number) => T
@@ -51,7 +51,7 @@ function resolveOwnProperty<T>(
 }
 
 function ownProperty(obj: unknown, key: string | number): unknown {
-  return resolveOwnProperty(
+  return resolveSafeProperty(
     obj,
     key,
     (target, k) => (target as Record<string | number, unknown>)[k]
@@ -82,7 +82,7 @@ function renderJinja2Template(
   // fields or ordinary methods.
   const originalMemberLookup = nunjucksRuntime.memberLookup;
   nunjucksRuntime.memberLookup = (obj, val) =>
-    resolveOwnProperty(obj, val, (target, key) =>
+    resolveSafeProperty(obj, val, (target, key) =>
       originalMemberLookup(target, key)
     );
   try {

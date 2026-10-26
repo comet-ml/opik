@@ -498,6 +498,14 @@ describe("Prompt - format()", () => {
         expect(prompt.format({ names: ["a", "b"] })).toBe("0");
       });
 
+      it("should keep all items when rejectattr targets an inherited member", () => {
+        const prompt = makeJinja2Prompt(
+          "{{ names | rejectattr('constructor') | list | length }}"
+        );
+
+        expect(prompt.format({ names: ["a", "b"] })).toBe("2");
+      });
+
       it("should close file-including tags", () => {
         const prompt = makeJinja2Prompt("{% include 'secrets.txt' %}");
 
