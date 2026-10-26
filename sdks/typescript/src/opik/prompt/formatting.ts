@@ -16,20 +16,21 @@ function hasOwn(obj: object, key: string | number): boolean {
   return Object.prototype.hasOwnProperty.call(obj, key);
 }
 
-// Members that are never own data fields and only reach inherited/prototype
-// internals (e.g. `__proto__`, `constructor`).
+// Prototype-chain gadget keys: when reached via inheritance (rather than as an
+// own data field) they expose engine internals, so they are withheld.
 function isUnsafeInheritedKey(key: string | number): boolean {
   const name = String(key);
   return name.startsWith("__") || name === "constructor" || name === "prototype";
 }
 
 // Resolve `obj[key]` without exposing members that escape the supplied data.
-// Own properties always pass, so genuine fields such as `_id` or a field
-// literally named `constructor` render. On objects/functions only own
-// properties are returned; on primitives (string/number/boolean) ordinary
-// inherited methods still work but prototype-chain members do not. This mirrors
-// the Python SandboxedEnvironment, which renders own fields and object methods
-// but not dunder/prototype attributes.
+// Own properties always resolve, so genuine fields such as `_id` or a field
+// literally named `constructor` render. Inherited members resolve too — ordinary
+// methods and getters (array/Date methods, `length`, class getters, string
+// methods) work regardless of receiver type — except prototype-chain gadget keys
+// (`constructor`, `prototype`, `__proto__`, dunders) reached via the prototype
+// chain, which return undefined. This mirrors the Python SandboxedEnvironment,
+// which renders own fields and object methods but not dunder/prototype access.
 function resolveSafeProperty<T>(
   obj: unknown,
   key: string | number,
@@ -38,13 +39,7 @@ function resolveSafeProperty<T>(
   if (obj === undefined || obj === null) {
     return undefined;
   }
-  const type = typeof obj;
-  if (type === "object" || type === "function") {
-    return hasOwn(obj as object, key) ? resolve(obj, key) : undefined;
-  }
-  // Primitive receiver: own properties (e.g. a string's length / index) and
-  // ordinary methods are fine, but prototype-chain members are not.
-  if (isUnsafeInheritedKey(key) && !hasOwn(obj as object, key)) {
+  if (!hasOwn(obj as object, key) && isUnsafeInheritedKey(key)) {
     return undefined;
   }
   return resolve(obj, key);
@@ -58,12 +53,13 @@ function ownProperty(obj: unknown, key: string | number): unknown {
   );
 }
 
-// Jinja2 templates render through a dedicated Environment with no loader, which
-// closes {% include %} / {% import %} / {% extends %} (no filesystem access).
+// Jinja2 templates render through a dedicated Environment with an empty loader
+// list, which closes {% include %} / {% import %} / {% extends %} (no filesystem
+// access; an empty array, not null, since null falls back to a default loader).
 // autoescape stays on so rendered output is unchanged. The attribute-resolving
-// filters read members directly, so they are reduced to own-property access to
-// match the render guard in renderJinja2Template.
-const jinja2Env = new nunjucks.Environment(null, { autoescape: true });
+// filters read members directly, so they go through the same safe-property guard
+// as the member lookups in renderJinja2Template.
+const jinja2Env = new nunjucks.Environment([], { autoescape: true });
 jinja2Env.addFilter("selectattr", (arr: unknown[], attr: string) =>
   arr.filter((item) => Boolean(ownProperty(item, attr)))
 );
@@ -75,11 +71,11 @@ function renderJinja2Template(
   template: string,
   variables: PromptVariables
 ): string {
-  // memberLookup is shared module state; rendering is synchronous, so restrict
-  // it to own-property access only for this call and always restore it. This
-  // blocks prototype-chain access on globals, literals, primitives and data
-  // (closing `{{ range.constructor(...) }}` and similar) without rejecting own
-  // fields or ordinary methods.
+  // memberLookup is shared module state; rendering is synchronous, so route it
+  // through the safe-property guard for this call and always restore it. This
+  // withholds prototype-chain gadget keys on globals, literals, primitives and
+  // data (closing `{{ range.constructor(...) }}` and similar) without rejecting
+  // own fields or ordinary inherited methods/getters.
   const originalMemberLookup = nunjucksRuntime.memberLookup;
   nunjucksRuntime.memberLookup = (obj, val) =>
     resolveSafeProperty(obj, val, (target, key) =>

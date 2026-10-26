@@ -447,6 +447,30 @@ describe("Prompt - format()", () => {
 
         expect(prompt.format({ name: "abc" })).toBe("ABC (3)");
       });
+
+      it("should render inherited array methods and length", () => {
+        const prompt = makeJinja2Prompt("{{ items.length }}: {{ items.join('-') }}");
+
+        expect(prompt.format({ items: [1, 2, 3] })).toBe("3: 1-2-3");
+      });
+
+      it("should render inherited Date methods", () => {
+        const prompt = makeJinja2Prompt("{{ d.getTime() }}");
+
+        expect(prompt.format({ d: new Date(0) })).toBe("0");
+      });
+
+      it("should render class getters", () => {
+        class Box {
+          constructor(private readonly value: number) {}
+          get doubled(): number {
+            return this.value * 2;
+          }
+        }
+        const prompt = makeJinja2Prompt("{{ box.doubled }}");
+
+        expect(prompt.format({ box: new Box(21) })).toBe("42");
+      });
     });
 
     describe("neutralizes template escapes", () => {
@@ -472,6 +496,12 @@ describe("Prompt - format()", () => {
         );
 
         expect(prompt.format({ user: { name: "Alice" } })).toBe("[][][]");
+      });
+
+      it("should not reach the prototype chain through an allowed method", () => {
+        const prompt = makeJinja2Prompt("[{{ items.map.constructor }}]");
+
+        expect(prompt.format({ items: [1, 2] })).toBe("[]");
       });
 
       it("should not let attribute filters read inherited properties", () => {
