@@ -36,6 +36,18 @@ class DestinationGuardTest {
             "https://[fe80::1]/token",
             "https://[fc00::1]/token", // IPv6 unique-local
             "https://0.0.0.0/token",
+            "https://100.64.0.1/token",
+            "https://100.127.255.254/token",
+            "https://[::ffff:127.0.0.1]/token",
+            "https://[::ffff:10.0.0.1]/token",
+            "https://[fd12:3456::1]/token",
+            "https://0.1.2.3/token",
+            "https://192.0.0.1/token",
+            "https://198.18.0.1/token",
+            "https://198.19.255.254/token",
+            "https://240.0.0.1/token",
+            "https://255.255.255.255/token",
+            "https://[64:ff9b::a00:1]/token", // NAT64 of 10.0.0.1
             "not a url",
     })
     @DisplayName("strict mode refuses non-https, private, internal and malformed destinations")
@@ -56,6 +68,9 @@ class DestinationGuardTest {
     @ValueSource(strings = {
             "https://8.8.8.8/token",
             "https://1.1.1.1/oauth/token",
+            "https://100.128.0.1/token",
+            "https://198.20.0.1/token",
+            "https://192.0.1.1/token",
     })
     @DisplayName("strict mode allows public https destinations")
     void strictModeAllowsPublicHttps(String url) {
