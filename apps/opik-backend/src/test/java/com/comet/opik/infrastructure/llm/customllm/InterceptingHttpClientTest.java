@@ -16,7 +16,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -452,23 +451,33 @@ class InterceptingHttpClientTest {
         verifyNoInteractions(delegate);
     }
 
+    private static Stream<Arguments> authorityMovingSubstitutions() {
+        return Stream.of(
+                arguments("https://{model}.gw.example.com/v1/chat", "attacker.example/#"),
+                arguments("https://{model}.gw.example.com/v1/chat", "x@attacker.example"),
+                arguments("https://{model}.gw.example.com/v1/chat", "attacker.example:443"),
+                arguments("https://{model}.gw.example.com/v1/chat", "[::1]"),
+                arguments("https://{model}@gw.example.com/v1/chat", "attacker.example/#"),
+                arguments("https://gw.example.com:{model}/v1/chat", "443@attacker.example"));
+    }
+
     @ParameterizedTest
-    @ValueSource(strings = {"attacker.example/#", "x@attacker.example", "attacker.example:443", "[::1]"})
-    void rejectsModelThatMovesTheHost(String model) {
+    @MethodSource("authorityMovingSubstitutions")
+    void rejectsModelThatMovesTheHost(String url, String model) {
         var client = guardedClient();
 
-        assertThatThrownBy(() -> client.execute(chatRequest("https://{model}.gw.example.com/v1/chat", model)))
+        assertThatThrownBy(() -> client.execute(chatRequest(url, model)))
                 .isInstanceOf(BadRequestException.class);
         verifyNoInteractions(delegate);
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"attacker.example/#", "x@attacker.example", "attacker.example:443", "[::1]"})
-    void rejectsModelThatMovesTheHostWhenStreaming(String model) {
+    @MethodSource("authorityMovingSubstitutions")
+    void rejectsModelThatMovesTheHostWhenStreaming(String url, String model) {
         var client = guardedClient();
         var listener = mock(ServerSentEventListener.class);
 
-        client.execute(chatRequest("https://{model}.gw.example.com/v1/chat", model),
+        client.execute(chatRequest(url, model),
                 mock(ServerSentEventParser.class), listener);
 
         verify(listener).onError(any(BadRequestException.class));

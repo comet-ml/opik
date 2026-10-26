@@ -79,7 +79,7 @@ class InterceptingHttpClient implements HttpClient {
     private static final Pattern TOKEN_REJECTION_HINT = Pattern.compile("invalid_token|expired|revoked",
             Pattern.CASE_INSENSITIVE);
 
-    private static final Pattern HOST_MODEL_NAME = Pattern.compile("[A-Za-z0-9.-]+");
+    private static final Pattern AUTHORITY_MODEL_NAME = Pattern.compile("[A-Za-z0-9.-]+");
 
     private final @NonNull HttpClient delegate;
     private final Map<String, String> configuration;
@@ -273,10 +273,11 @@ class InterceptingHttpClient implements HttpClient {
             return url;
         }
         String modelName = modelNode.asText();
-        // a raw substitution into the host must not move the authority, or the credential follows it elsewhere
-        if (ProviderBaseUrlGuard.hasModelPlaceholderInHost(url) && !HOST_MODEL_NAME.matcher(modelName).matches()) {
+        // a raw substitution into the authority must not move the host, or the credential follows it elsewhere
+        if (ProviderBaseUrlGuard.hasModelPlaceholderInAuthority(url)
+                && !AUTHORITY_MODEL_NAME.matcher(modelName).matches()) {
             throw new BadRequestException(
-                    "model '%s' can't be substituted into the provider host, only letters, digits, '.' and '-' are allowed"
+                    "model '%s' can't be substituted into the provider host or port, only letters, digits, '.' and '-' are allowed"
                             .formatted(modelName));
         }
         if (modelName.indexOf('/') >= 0) {

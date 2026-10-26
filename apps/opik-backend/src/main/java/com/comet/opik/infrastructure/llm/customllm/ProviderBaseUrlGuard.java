@@ -47,17 +47,26 @@ public class ProviderBaseUrlGuard {
         validate(baseUrl);
     }
 
-    /** Looks only at the host: a placeholder in userinfo or the port doesn't change where the request goes. */
+    /** Only a host placeholder defers the save-time check; elsewhere the "model" stand-in keeps the saved host. */
     static boolean hasModelPlaceholderInHost(String baseUrl) {
-        int schemeEnd = baseUrl.indexOf("://");
-        String rest = schemeEnd < 0 ? baseUrl : baseUrl.substring(schemeEnd + 3);
-        int authorityEnd = indexOfAny(rest, "/?#");
-        String authority = authorityEnd < 0 ? rest : rest.substring(0, authorityEnd);
+        String authority = authority(baseUrl);
         String hostAndPort = authority.substring(authority.lastIndexOf('@') + 1);
         String host = hostAndPort.startsWith("[")
                 ? hostAndPort.substring(0, hostAndPort.indexOf(']') + 1)
                 : hostAndPort.split(":", 2)[0];
         return host.contains(InterceptingHttpClient.MODEL_PLACEHOLDER);
+    }
+
+    /** Userinfo, host or port: a raw substitution anywhere here can move the request to another host. */
+    static boolean hasModelPlaceholderInAuthority(String baseUrl) {
+        return authority(baseUrl).contains(InterceptingHttpClient.MODEL_PLACEHOLDER);
+    }
+
+    private static String authority(String url) {
+        int schemeEnd = url.indexOf("://");
+        String rest = schemeEnd < 0 ? url : url.substring(schemeEnd + 3);
+        int authorityEnd = indexOfAny(rest, "/?#");
+        return authorityEnd < 0 ? rest : rest.substring(0, authorityEnd);
     }
 
     void validateResolved(String url) {
