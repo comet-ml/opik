@@ -330,10 +330,12 @@ const OllieChartWidget: React.FunctionComponent<
         <OllieKpi
           kpi={kpi}
           rows={chartRows}
-          // A failed or settling comparison shows none, rather than the change on rows from another moment.
+          // A failed or settling comparison shows none, rather than the change on rows from another moment: that
+          // includes the render where the value was refetched but its window hasn't followed yet.
           previousRows={
             live &&
             previousWindow &&
+            (intervalEnd || fetchedAt === dataUpdatedAt) &&
             !previousError &&
             !previousFetching &&
             !isFetching
