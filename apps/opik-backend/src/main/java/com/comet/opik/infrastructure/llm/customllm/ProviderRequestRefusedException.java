@@ -2,6 +2,7 @@ package com.comet.opik.infrastructure.llm.customllm;
 
 import dev.langchain4j.exception.NonRetriableException;
 import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 
 /**
  * An outbound provider request refused before it left Opik, so no attempt can succeed. The message is returned to
@@ -9,6 +10,7 @@ import lombok.NonNull;
  */
 public class ProviderRequestRefusedException extends NonRetriableException {
 
+    @RequiredArgsConstructor
     public enum Reason {
         DESTINATION(ProviderBaseUrlGuard.REFUSED),
         MODEL_IN_AUTHORITY("model can't be substituted into the provider host or port, only letters, digits, '.' and"
@@ -18,10 +20,6 @@ public class ProviderRequestRefusedException extends NonRetriableException {
         ;
 
         private final String message;
-
-        Reason(String message) {
-            this.message = message;
-        }
     }
 
     public ProviderRequestRefusedException(@NonNull Reason reason) {

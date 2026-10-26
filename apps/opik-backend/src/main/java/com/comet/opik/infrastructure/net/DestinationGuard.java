@@ -2,13 +2,13 @@ package com.comet.opik.infrastructure.net;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
-import inet.ipaddr.IPAddress;
-import inet.ipaddr.IPAddressNetwork;
-import inet.ipaddr.IPAddressString;
+import io.netty.handler.ipfilter.IpFilterRuleType;
+import io.netty.handler.ipfilter.IpSubnetFilterRule;
 import lombok.Builder;
 import lombok.NonNull;
 
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.UnknownHostException;
@@ -97,12 +97,10 @@ public class DestinationGuard {
      * networks), 192.0.0.0/24, 198.18.0.0/15, 240.0.0.0/4, IPv6 unique-local (the JDK's site-local check only covers the
      * deprecated fec0::/10) and NAT64, which a gateway translates to the embedded, possibly internal, IPv4 address.
      */
-    private static final List<IPAddress> NON_PUBLIC_RANGES = Stream.of(
+    private static final List<IpSubnetFilterRule> NON_PUBLIC_RANGES = Stream.of(
             "0.0.0.0/8", "100.64.0.0/10", "192.0.0.0/24", "198.18.0.0/15", "240.0.0.0/4", "fc00::/7", "64:ff9b::/96")
-            .map(cidr -> new IPAddressString(cidr).getAddress().toPrefixBlock())
+            .map(cidr -> new IpSubnetFilterRule(cidr, IpFilterRuleType.REJECT))
             .toList();
-
-    private static final IPAddressNetwork.IPAddressGenerator IP_ADDRESS_GENERATOR = new IPAddressNetwork.IPAddressGenerator();
 
     private final @NonNull Mode mode;
     @Builder.Default
@@ -186,7 +184,8 @@ public class DestinationGuard {
                 || address.isMulticastAddress()) {
             return true;
         }
-        var ipAddress = IP_ADDRESS_GENERATOR.from(address);
-        return NON_PUBLIC_RANGES.stream().anyMatch(range -> range.contains(ipAddress));
+        // the port plays no part in subnet matching
+        var socketAddress = new InetSocketAddress(address, 0);
+        return NON_PUBLIC_RANGES.stream().anyMatch(range -> range.matches(socketAddress));
     }
 }
