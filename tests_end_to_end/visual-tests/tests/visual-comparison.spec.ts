@@ -1,4 +1,4 @@
-import { test } from '@playwright/test';
+import { test } from './utils/fixtures';
 import { getEnvironmentConfig } from '../config/env.config';
 import { TestHelperClient } from '../helpers/test-helper-client';
 import { ProjectsPage } from '../page-objects/projects.page';
