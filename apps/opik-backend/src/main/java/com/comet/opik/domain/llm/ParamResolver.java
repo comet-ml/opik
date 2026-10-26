@@ -50,6 +50,7 @@ public class ParamResolver {
     private static final String TEMPERATURE = "temperature";
     private static final String TOP_P = "top_p";
     private static final String REASONING_EFFORT = "reasoning_effort";
+    private static final String REASONING = "reasoning";
 
     private final @NonNull LlmProviderFactory llmProviderFactory;
     private final @NonNull LlmModelRegistryService registryService;
@@ -161,14 +162,19 @@ public class ParamResolver {
             }
         }
         // A rule made through the API can carry an effort its model has no levels for, and gpt-4o-mini answers
-        // "Unrecognized request argument supplied: reasoning_effort". The rule editor never offers one there.
+        // "Unrecognized request argument supplied: reasoning_effort". The rule editor never offers one there. The
+        // Responses-shaped reasoning object carries the same effort, so it goes too.
         if (parameters.customParameters() instanceof ObjectNode customParameters
-                && customParameters.has(REASONING_EFFORT)
                 && catalogParams.map(ModelParams::effort).filter(this::isRefused).isPresent()) {
             var kept = customParameters.deepCopy();
-            kept.remove(REASONING_EFFORT);
-            builder.customParameters(kept.isEmpty() ? null : kept);
-            changes.add(new ParamChange(REASONING_EFFORT, ParamChange.Reason.REFUSED_BY_MODEL));
+            for (var key : List.of(REASONING_EFFORT, REASONING)) {
+                if (kept.remove(key) != null) {
+                    changes.add(new ParamChange(key, ParamChange.Reason.REFUSED_BY_MODEL));
+                }
+            }
+            if (kept.size() < customParameters.size()) {
+                builder.customParameters(kept.isEmpty() ? null : kept);
+            }
         }
         return changes.isEmpty()
                 ? new Resolution<>(parameters, List.of())
