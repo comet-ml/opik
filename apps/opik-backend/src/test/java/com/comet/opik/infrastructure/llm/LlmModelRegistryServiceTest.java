@@ -22,6 +22,10 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 
@@ -703,13 +707,54 @@ class LlmModelRegistryServiceTest {
         assertThat(json.has("hidden")).isFalse();
     }
 
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', value = {
+            "2026-11-29 | GPT 4o",
+            "2026-11-30 | ",
+            "2026-12-01 | "
+    })
+    void aModelLeavesThePickerOnItsRetirementDateButStillResolves(LocalDate today, String expectedLabel,
+            @TempDir Path tempDir) throws IOException {
+        var service = serviceWithOverride(tempDir, GPT_4O_RETIRES_ON_NOV_30,
+                Clock.fixed(today.atStartOfDay(ZoneOffset.UTC).toInstant(), ZoneOffset.UTC));
+
+        assertThat(labelOf(service.getRegistry(), "gpt-4o")).isEqualTo(expectedLabel);
+        assertThat(service.findModel("gpt-4o").orElseThrow().model().label()).isEqualTo("GPT 4o");
+    }
+
+    @Test
+    void aRunningBackendHidesAModelOnItsRetirementDateWithoutAReload(@TempDir Path tempDir) throws IOException {
+        var clock = mock(Clock.class);
+        when(clock.getZone()).thenReturn(ZoneOffset.UTC);
+        when(clock.instant()).thenReturn(Instant.parse("2026-11-29T23:59:00Z"), Instant.parse("2026-11-30T00:01:00Z"));
+        var service = serviceWithOverride(tempDir, GPT_4O_RETIRES_ON_NOV_30, clock);
+
+        assertThat(labelOf(service.getRegistry(), "gpt-4o")).isEqualTo("GPT 4o");
+        assertThat(labelOf(service.getRegistry(), "gpt-4o")).isNull();
+    }
+
+    private static final String GPT_4O_RETIRES_ON_NOV_30 = """
+            openai:
+              - id: "gpt-4o"
+                retiresOn: "2026-11-30"
+            """;
+
+    private static String labelOf(Map<String, List<LlmModelDefinition>> registry, String id) {
+        return registry.get("openai").stream().filter(m -> m.id().equals(id)).findFirst().orElseThrow().label();
+    }
+
     private static LlmModelRegistryService serviceWithOverride(Path tempDir, String overrideYaml) throws IOException {
+        return serviceWithOverride(tempDir, overrideYaml, Clock.systemUTC());
+    }
+
+    private static LlmModelRegistryService serviceWithOverride(Path tempDir, String overrideYaml, Clock clock)
+            throws IOException {
         var overridePath = tempDir.resolve("override.yaml");
         Files.writeString(overridePath, overrideYaml);
         var config = new LlmModelRegistryConfig();
         config.setDefaultResource("llm-models-test.yaml");
         config.setLocalOverridePath(overridePath.toString());
-        return new LlmModelRegistryService(config);
+        return new LlmModelRegistryService(config, clock);
     }
 
     private static Client mockHttpClient(int statusCode, String responseBody) {

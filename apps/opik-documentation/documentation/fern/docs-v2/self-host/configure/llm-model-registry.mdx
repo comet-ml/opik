@@ -47,7 +47,7 @@ Fields:
 - `structuredOutput` (optional, default `false`) — whether the model supports JSON schema / tool-calling structured output mode.
 - `reasoning` (optional, default `false`) — whether the model is a reasoning model (enforces temperature = 1.0 and unlocks reasoning-effort parameters in the UI).
 - `hidden` (optional, default `false`) — takes the model out of the dropdowns. Saved prompts and rules that use it keep running.
-- `retiresOn` (optional) — the date the provider retires the model, as `YYYY-MM-DD`. From 30 days before that date, the Playground and the Online Evaluation rules show a warning next to the model. They don't block it. A value that isn't a date is ignored and logged.
+- `retiresOn` (optional) — the date the provider retires the model, as `YYYY-MM-DD`. From 30 days before that date, the Playground and the Online Evaluation rules show a warning next to the model. They don't block it. On that date (UTC) the model leaves the dropdowns by itself, as if it were `hidden`, with no reload or restart. A value that isn't a date is ignored and logged.
 
 An optional field that an override leaves out keeps the lower layer's value (see below). The defaults apply only when no layer sets the field.
 
