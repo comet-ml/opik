@@ -131,6 +131,21 @@ export class AnnotationQueuePage {
   }
 
   /**
+   * The orange header tag a queue carries once it stores a custom annotator
+   * view (opik#9079).
+   *
+   * `AnnotationQueuePage.tsx` renders it on `annotator_view?.html` alone, so it
+   * is the one place the product says, outside the SME flow itself, that this
+   * queue shows annotators something other than the default view. Matched on
+   * the exact text: the tag carries no testid and no role beyond its text, and
+   * `AnnotatorViewStatusTag` elsewhere reads "Custom view" — a substring match
+   * would conflate the two.
+   */
+  get customAnnotatorViewTag(): Locator {
+    return this.page.getByText('Custom annotator view', { exact: true });
+  }
+
+  /**
    * Wait for the items tab to have settled on either rows or its empty state.
    *
    * `waitForReady` above only proves the tab strip mounted — the tabs render

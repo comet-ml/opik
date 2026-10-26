@@ -1,4 +1,4 @@
-export { test, expect } from './gemini-thinking-stub.fixture';
+export { test, expect } from './openrouter-repriced-spans.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -536,3 +536,17 @@ export {
   OPEN_ROUTER_VISION_MODEL,
   OPEN_ROUTER_MAX_TOKENS_LIMIT,
 } from './openrouter-vision-models.fixture';
+export type {
+  EnvironmentThreadRef,
+  EnvironmentThreadsRef,
+  EnvironmentThreadsFixtures,
+} from './environment-threads.fixture';
+export type {
+  AnnotatorViewQueueRef,
+  AnnotatorViewQueueFixtures,
+} from './annotator-view-queue.fixture';
+export type {
+  OpenRouterRepricedSpanSeed,
+  OpenRouterRepricedSpansRef,
+  OpenRouterRepricedSpansFixtures,
+} from './openrouter-repriced-spans.fixture';

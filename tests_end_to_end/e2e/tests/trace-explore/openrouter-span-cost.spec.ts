@@ -53,6 +53,13 @@ import type { BackendClient, SpanCostRef } from '@e2e/core/backend';
  * Deterministic and provider-free: the fixture supplies `usage` and no
  * `total_cost`, so every amount is the server's own lookup, and the two members
  * of each pair differ ONLY in how the model id is spelled.
+ *
+ * ## Not this spec's question
+ *
+ * Whether the rows a given release RE-PRICED are billed at the rates it
+ * shipped. Both models here are ones no release has moved, deliberately, so
+ * this stays a spec about the lookup. `openrouter-repriced-rows.spec.ts` pins
+ * the amounts, on the rows opik#9180 changed and the id it removed.
  */
 
 /** The vectors a price row must resolve, and the one it must not. */

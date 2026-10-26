@@ -790,6 +790,14 @@ export interface TraceBatchSeed {
    * round trips and the quickest route to the workspace ingestion rate limit.
    */
   threadId?: string;
+  /**
+   * The trace's `environment` tag, as `createTraceWithSource` takes it.
+   *
+   * Sent only when supplied: a trace with no `environment` is the "Untagged"
+   * case the Logs environment filter has its own `is_empty` branch for, so an
+   * absent value and a present one are different seeds.
+   */
+  environment?: string;
 }
 
 /**
@@ -1248,6 +1256,18 @@ export interface AutomationRuleEvaluatorPageRef {
  * call, the same way `rawFetch` exists for calls the pinned SDK can't express.
  */
 export type TraceJsonSection = Record<string, unknown> | unknown[] | string | number;
+
+/**
+ * One row of `GET /v1/private/environments` — a name the workspace knows.
+ *
+ * Only the id and the name: the id is what the delete endpoint takes, and the
+ * name is what a trace carries and what the dropdown and the `environment`
+ * query param are keyed on. The colour and position are presentation.
+ */
+export interface EnvironmentRef {
+  id: string;
+  name: string;
+}
 
 export interface AnnotationQueueReviewerRef {
   username: string;
@@ -6588,6 +6608,16 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
        * supply its own.
        */
       errorInfo?: { exceptionType: string; message: string; traceback: string };
+      /**
+       * The trace's `environment` tag — the column the Logs tabs' environment
+       * filter matches on (opik#9177), and the name the backend registers in
+       * the workspace's environment list when it first sees it.
+       *
+       * Deliberately not defaulted: a trace written with no `environment` is
+       * the "Untagged" case the filter has its own branch for, so "absent" and
+       * "some string" are different seeds and the caller has to say which.
+       */
+      environment?: string;
     }): Promise<string> {
       await postSeedWrite('/v1/private/traces', `createTraceWithSource '${args.name}'`, {
         id: args.id,
@@ -6595,6 +6625,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         name: args.name,
         ...(args.source === null ? {} : { source: args.source }),
         ...(args.threadId ? { thread_id: args.threadId } : {}),
+        ...(args.environment === undefined ? {} : { environment: args.environment }),
         start_time: (args.startTime ?? new Date()).toISOString(),
         ...(args.endTime ? { end_time: args.endTime.toISOString() } : {}),
         ...(args.errorInfo
@@ -6651,6 +6682,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
             end_time: (trace.endTime ?? now).toISOString(),
             source: 'sdk' as const,
             ...(trace.threadId ? { thread_id: trace.threadId } : {}),
+            ...(trace.environment === undefined ? {} : { environment: trace.environment }),
             ...(trace.input === undefined ? {} : { input: trace.input }),
             ...(trace.output === undefined ? {} : { output: trace.output }),
             ...(trace.metadata === undefined ? {} : { metadata: trace.metadata }),
@@ -6997,6 +7029,52 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       }
     },
 
+    /**
+     * The workspace's environment registry — `GET /v1/private/environments`,
+     * the list the Logs tabs' environment dropdown is built from.
+     *
+     * Workspace-scoped, and auto-populated: the backend registers a name the
+     * first time a trace is written carrying it. A fixture that seeds traces
+     * under a new environment therefore has to poll this (the registration is
+     * asynchronous) and delete what it caused to exist — environments cascade
+     * with neither a project nor the run-prefix sweep in `global-teardown.ts`.
+     */
+    async listEnvironments(): Promise<EnvironmentRef[]> {
+      const { status, message, json } = await rawFetch('GET', '/v1/private/environments');
+      if (status !== 200) {
+        throw new Error(`listEnvironments(): expected 200, got ${status}: ${message}`);
+      }
+      const content = (json as { content?: unknown } | null)?.content;
+      if (!Array.isArray(content)) {
+        throw new Error("listEnvironments(): 200 response carried no 'content' array.");
+      }
+      return content.map((raw) => {
+        const env = raw as { id?: unknown; name?: unknown };
+        return { id: String(env.id ?? ''), name: String(env.name ?? '') };
+      });
+    },
+
+    /**
+     * `POST /v1/private/environments/delete` — the only way an environment
+     * leaves the workspace.
+     *
+     * Takes ids a caller resolved from {@link listEnvironments} by name, so a
+     * fixture can delete the names it registered and nothing else: the
+     * workspace is shared, and sweeping by anything looser would take
+     * environments another run (or a human) is relying on.
+     */
+    async deleteEnvironments(ids: string[]): Promise<void> {
+      if (ids.length === 0) return;
+      const { status, message } = await rawFetch('POST', '/v1/private/environments/delete', {
+        body: { ids },
+      });
+      if (status !== 204 && status !== 200) {
+        throw new Error(
+          `deleteEnvironments(${ids.join(', ')}): expected 204, got ${status}: ${message}`,
+        );
+      }
+    },
+
     async getAnnotationQueue(id: string): Promise<AnnotationQueueDetail | null> {
       try {
         const q = await opik.api.annotationQueues.getAnnotationQueueById(id);
@@ -7127,6 +7205,74 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
             };
           }),
         ),
+      };
+    },
+
+    /**
+     * Store (or clear) a queue's custom annotator view — the `annotator_view`
+     * block opik#9079 added, through `PATCH /annotation-queues/{id}`.
+     *
+     * Written over `rawFetch` because the pinned SDK's queue types do not
+     * declare `annotator_view` at all: a write through the typed client would
+     * drop the field and report a queue that stored nothing exactly like one
+     * that stored the view.
+     *
+     * The caller passes the `html` verbatim. There is no "delete" verb — the
+     * backend's `serializeAnnotatorView` stores null for a blank `html`, so
+     * `html: ''` is how a view is removed, and that asymmetry is itself worth a
+     * spec rather than something to paper over here.
+     */
+    async setAnnotationQueueAnnotatorView(
+      queueId: string,
+      view: { html: string; kitVersion?: number; summary?: string },
+    ): Promise<void> {
+      const { status, message } = await rawFetch(
+        'PATCH',
+        `/v1/private/annotation-queues/${queueId}`,
+        {
+          body: {
+            annotator_view: {
+              html: view.html,
+              ...(view.kitVersion === undefined ? {} : { kit_version: view.kitVersion }),
+              ...(view.summary === undefined ? {} : { summary: view.summary }),
+            },
+          },
+        },
+      );
+      if (status !== 204) {
+        throw new Error(
+          `setAnnotationQueueAnnotatorView('${queueId}'): expected 204, got ${status}: ${message}`,
+        );
+      }
+    },
+
+    /**
+     * A queue's stored `annotator_view`, or null when it carries none.
+     *
+     * Read through `rawFetch` for the same reason the write is: the typed
+     * client would silently drop the field. `null` means the key was genuinely
+     * absent or stored as null — never a default, because "it read back as no
+     * view at all" is one of the things a spec asserts.
+     */
+    async getAnnotationQueueAnnotatorView(
+      queueId: string,
+    ): Promise<{ html: string | null; kitVersion: number | null; summary: string | null } | null> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/annotation-queues/${queueId}`,
+      );
+      if (status !== 200) {
+        throw new Error(
+          `getAnnotationQueueAnnotatorView('${queueId}'): expected 200, got ${status}: ${message}`,
+        );
+      }
+      const view = (json as { annotator_view?: unknown } | null)?.annotator_view;
+      if (view === undefined || view === null) return null;
+      const raw = view as { html?: unknown; kit_version?: unknown; summary?: unknown };
+      return {
+        html: typeof raw.html === 'string' ? raw.html : null,
+        kitVersion: typeof raw.kit_version === 'number' ? raw.kit_version : null,
+        summary: typeof raw.summary === 'string' ? raw.summary : null,
       };
     },
 

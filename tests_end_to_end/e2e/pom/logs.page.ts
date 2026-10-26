@@ -457,16 +457,34 @@ export class LogsPage {
    */
   async gotoThreads(
     projectId: string,
-    opts: { timeRange?: string; size?: number } = {},
+    opts: {
+      timeRange?: string;
+      size?: number;
+      /**
+       * The shared `environment` param, stated in the URL rather than picked
+       * from the dropdown.
+       *
+       * Two things need this. The param outranks the per-project localStorage
+       * memory `useLogsEnvironment` keeps, so a spec that wants a known
+       * starting point has to say so; and an inbound name the workspace does
+       * not know is a branch reachable no other way — the dropdown can only
+       * offer names that exist.
+       */
+      environment?: string;
+      /** The Threads table's own `threads_page`, for asserting a reset to 1. */
+      threadsPage?: number;
+    } = {},
   ): Promise<void> {
     return test.step(
-      `Open Logs (Threads) for project ${projectId}${opts.timeRange ? ` over ${opts.timeRange}` : ''}`,
+      `Open Logs (Threads) for project ${projectId}${opts.timeRange ? ` over ${opts.timeRange}` : ''}${opts.environment ? ` in environment ${opts.environment}` : ''}`,
       async () => {
         this.projectId = projectId;
         const env = loadEnvConfig();
         const params = new URLSearchParams({ logsType: 'threads' });
         if (opts.timeRange !== undefined) params.set('time_range', opts.timeRange);
         if (opts.size !== undefined) params.set('size', String(opts.size));
+        if (opts.environment !== undefined) params.set('environment', opts.environment);
+        if (opts.threadsPage !== undefined) params.set('threads_page', String(opts.threadsPage));
         await this.page.goto(
           `${env.baseUrl}/${env.workspace}/projects/${projectId}/logs?${params}`,
         );
@@ -1241,6 +1259,81 @@ export class LogsPage {
         { timeout: 15_000 },
       );
     });
+  }
+
+  // --- Environment filter (opik#9177) ---
+  //
+  // One `EnvironmentFilterSelect` shared by the Traces, Spans and Threads tabs,
+  // backed by the `environment` query param and a per-project localStorage
+  // memory. It feeds the listing, the statistics read and the export alike, and
+  // the tab resets to page 1 when the inbound name is one the workspace does
+  // not know.
+
+  /**
+   * The environment dropdown's trigger, identified by the label it currently
+   * reads — the environment's own name, "Untagged", or "All environments".
+   *
+   * The control carries no testid, and the label IS its accessible name, so
+   * the label is both the handle and a thing worth asserting: it is the only
+   * place the page says which environment the table below is scoped to.
+   *
+   * Parameterised rather than matched by a pattern over the three
+   * possibilities, deliberately: a selected environment's name is an arbitrary
+   * `[A-Za-z0-9_-]+` string, and a regex loose enough to accept one also
+   * matches the breadcrumb's workspace button and whatever else in the chrome
+   * happens to be a single-word button. The caller always knows what it set.
+   */
+  environmentFilterTrigger(label: string): Locator {
+    return this.page.getByRole('button', { name: label, exact: true });
+  }
+
+  /**
+   * Open the environment dropdown — whose trigger currently reads
+   * `currentLabel` — and pick `name`, resolving once the `environment` query
+   * param carries it.
+   *
+   * Gated on the URL rather than on the trigger's new label: the param is what
+   * the listing, the statistics read and a reload all key on, and the label
+   * changes from local state the moment the item is selected — so a caller
+   * that waited on the label could read the table before the refetch went out.
+   *
+   * `name` is an environment's own name. "All environments" and "Untagged" are
+   * deliberately not expressible here: they map to an ABSENT param and to the
+   * `__untagged__` sentinel respectively, so each needs its own wait, and
+   * folding three different post-conditions behind one argument is how a helper
+   * quietly stops waiting for the right thing.
+   */
+  async selectEnvironment(currentLabel: string, name: string): Promise<void> {
+    return test.step(`Filter Logs by environment "${name}"`, async () => {
+      const trigger = this.environmentFilterTrigger(currentLabel);
+      await expect(
+        trigger,
+        `exactly one environment filter control reading "${currentLabel}"`,
+      ).toHaveCount(1);
+      await trigger.click();
+      const item = this.page.getByRole('menuitem', { name, exact: true });
+      await expect(item, `exactly one "${name}" item in the environment dropdown`).toHaveCount(1);
+      await item.click();
+      await this.page.waitForURL((url) => url.searchParams.get('environment') === name);
+    });
+  }
+
+  /**
+   * The `environment` query param as the page currently has it, or null when it
+   * carries none.
+   *
+   * Read rather than asserted so a caller can say what it expects: an absent
+   * param is the right answer after an unknown name is dropped, and the wrong
+   * one after a tab switch.
+   */
+  currentEnvironmentParam(): string | null {
+    return new URL(this.page.url()).searchParams.get('environment');
+  }
+
+  /** The `threads_page` query param as a number, defaulting to the page's own 1. */
+  currentThreadsPage(): number {
+    const raw = new URL(this.page.url()).searchParams.get('threads_page');
+    return raw === null ? 1 : Number(raw);
   }
 
   // --- Threads tab ---
