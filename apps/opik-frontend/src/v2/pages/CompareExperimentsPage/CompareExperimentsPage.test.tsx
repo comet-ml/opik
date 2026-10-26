@@ -104,7 +104,7 @@ describe("CompareExperimentsPage", () => {
         page: 1,
         size: 2,
       },
-      { enabled: true },
+      expect.objectContaining({ enabled: true }),
     );
     expect(screen.getByTestId("details").dataset.ids).toBe("exp-a,exp-b");
     expect(screen.getByTestId("items-tab").dataset.ids).toBe("exp-a,exp-b");
@@ -149,6 +149,20 @@ describe("CompareExperimentsPage", () => {
     expect(screen.getByTestId("details").dataset.ids).toBe("");
   });
 
+  it("keeps the previous membership while a new selection loads, only within the same project", () => {
+    render(<CompareExperimentsPage />);
+
+    const { placeholderData } = mockUseExperimentsList.mock.calls[0][1];
+    const previous = { content: [{ id: "exp-a" }] };
+    const queryFor = (projectId: string) => ({
+      queryKey: ["experiments", { projectId }],
+    });
+
+    expect(placeholderData(previous, queryFor("proj-a"))).toBe(previous);
+    expect(placeholderData(previous, queryFor("proj-other"))).toBeUndefined();
+    expect(placeholderData(undefined, undefined)).toBeUndefined();
+  });
+
   it("shows a loader until project membership is known", () => {
     mockProjectExperiments = { isLoading: true };
 
@@ -165,7 +179,7 @@ describe("CompareExperimentsPage", () => {
 
     expect(mockUseExperimentsList).toHaveBeenCalledWith(
       expect.objectContaining({ experimentIds: [] }),
-      { enabled: false },
+      expect.objectContaining({ enabled: false }),
     );
   });
 });

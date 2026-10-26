@@ -65,6 +65,12 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
     },
     {
       enabled: Boolean(activeProjectId) && requestedExperimentsIds.length > 0,
+      // Keep the page visible while a new selection is checked, but never
+      // reuse another project's membership.
+      placeholderData: (previousData, previousQuery) =>
+        previousQuery?.queryKey[1]?.projectId === activeProjectId
+          ? previousData
+          : undefined,
     },
   );
 
