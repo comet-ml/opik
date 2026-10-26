@@ -12,6 +12,7 @@ import { PlaygroundPromptType } from "@/types/playground";
 import { getDefaultConfigByProvider } from "@/lib/playground";
 import { LlmModelsByProvider } from "@/api/llm/useLlmModels";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
+import { TooltipProvider } from "@/ui/tooltip";
 import PlaygroundPrompt from "./PlaygroundPrompt";
 
 const PROVIDER_ROWS: Record<string, COMPOSED_PROVIDER_TYPE> = {
@@ -57,6 +58,7 @@ vi.mock("@/store/PlaygroundStore", () => ({
   useProviderValidationTrigger: () => 0,
   useUpdatePrompt: () => updatePrompt,
   useDeletePrompt: () => vi.fn(),
+  useAddPrompt: () => vi.fn(),
   useUpdateOutput: () => vi.fn(),
 }));
 
@@ -90,6 +92,17 @@ vi.mock("@/hooks/usePlaygroundDataset", () => ({
 
 vi.mock("@/contexts/PermissionsContext", () => ({
   usePermissions: () => ({ permissions: {} }),
+}));
+
+vi.mock("@/api/prompts/useProjectPromptsList", () => ({
+  default: () => ({ data: undefined }),
+}));
+vi.mock("@/api/prompts/usePromptById", () => ({ useFetchPrompt: vi.fn() }));
+vi.mock("@/api/prompts/usePromptVersionById", () => ({
+  useFetchPromptVersion: vi.fn(),
+}));
+vi.mock("@/v2/pages-shared/llm/LLMPromptMessages/useMessageTextPrompt", () => ({
+  default: () => ({ hasUnsavedChanges: false }),
 }));
 
 vi.mock("@/hooks/useLastPickedModel", () => ({
@@ -177,19 +190,22 @@ const renderPrompt = (model: string) => {
   } as unknown as PlaygroundPromptType;
 
   render(
-    <PlaygroundPrompt
-      workspaceName="default"
-      index={0}
-      promptId="prompt-a"
-      providerKeys={Object.values(PROVIDER_ROWS)}
-      hasLoadedProviderKeys={false}
-      hasRegistryModels={false}
-      providerResolver={
-        renderHook(() => useLLMProviderModelsData()).result.current
-          .calculateModelProvider
-      }
-      modelResolver={vi.fn()}
-    />,
+    <TooltipProvider>
+      <PlaygroundPrompt
+        workspaceName="default"
+        index={0}
+        promptId="prompt-a"
+        providerKeys={Object.values(PROVIDER_ROWS)}
+        hasLoadedProviderKeys={false}
+        hasRegistryModels={false}
+        providerResolver={
+          renderHook(() => useLLMProviderModelsData()).result.current
+            .calculateModelProvider
+        }
+        modelResolver={vi.fn()}
+        isDropdownModel={vi.fn()}
+      />
+    </TooltipProvider>,
   );
 };
 
