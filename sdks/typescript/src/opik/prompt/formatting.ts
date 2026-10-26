@@ -1,7 +1,10 @@
 import Mustache from "mustache";
 import nunjucks from "nunjucks";
 import { PromptValidationError } from "./errors";
-import { validateTemplateVariables } from "./validation";
+import {
+  validateJinja2Template,
+  validateTemplateVariables,
+} from "./validation";
 import type { PromptType, PromptVariables } from "./types";
 
 /**
@@ -35,6 +38,9 @@ export function formatPromptTemplate(
         );
 
       case "jinja2":
+        // Nunjucks has no runtime sandbox, so restrict the template statically
+        // before rendering.
+        validateJinja2Template(template);
         return nunjucks.renderString(template, variables);
 
       default:

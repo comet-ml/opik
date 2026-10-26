@@ -1,6 +1,99 @@
 import Mustache from "mustache";
+import nunjucks from "nunjucks";
 import { PromptType } from "./types";
 import { PromptValidationError } from "./errors";
+
+// Nunjucks has no runtime sandbox like Jinja2, so templates are restricted
+// statically before rendering: variable substitution needs only plain and
+// dotted access, so prototype-chain properties and dynamically computed lookups
+// are refused. `parser`/`nodes` are exported at runtime but are not in the
+// public type definitions.
+interface Jinja2Node {
+  value?: unknown;
+  val?: Jinja2Node;
+  findAll: (type: unknown) => Jinja2Node[];
+}
+
+const { parser: nunjucksParser, nodes: nunjucksNodes } = nunjucks as unknown as {
+  parser: { parse: (src: string) => Jinja2Node };
+  nodes: { LookupVal: unknown; Symbol: unknown; Literal: unknown };
+};
+
+// Non-underscore properties that still reach the prototype chain / Function.
+const UNSAFE_JINJA2_PROPERTIES = new Set([
+  "constructor",
+  "prototype",
+  "call",
+  "apply",
+  "bind",
+]);
+
+// Host globals that must never be reachable from a template.
+const UNSAFE_JINJA2_SYMBOLS = new Set([
+  "process",
+  "global",
+  "globalThis",
+  "require",
+  "module",
+  "exports",
+  "eval",
+  "Function",
+  "Reflect",
+  "Proxy",
+  "child_process",
+  "__dirname",
+  "__filename",
+]);
+
+function isUnsafeJinja2Property(name: string): boolean {
+  // Underscore-prefixed names cover every dunder property (__proto__, etc.),
+  // matching the attribute restriction of the Python sandbox.
+  return name.startsWith("_") || UNSAFE_JINJA2_PROPERTIES.has(name);
+}
+
+/**
+ * Statically rejects Jinja2 (Nunjucks) templates that reach beyond the provided
+ * variables — prototype-chain access and dynamically computed property lookups.
+ * Ordinary substitution, dotted access, literal indexing, loops, conditionals
+ * and filters are untouched.
+ *
+ * @param template - Jinja2 template string
+ * @throws PromptValidationError if the template uses a disallowed construct
+ */
+export function validateJinja2Template(template: string): void {
+  let ast: Jinja2Node;
+  try {
+    ast = nunjucksParser.parse(template);
+  } catch {
+    // Leave genuine syntax errors to the renderer so its messages are unchanged.
+    return;
+  }
+
+  for (const lookup of ast.findAll(nunjucksNodes.LookupVal)) {
+    const key = lookup.val;
+    const isLiteral = key instanceof (nunjucksNodes.Literal as never);
+    if (!isLiteral) {
+      // A computed key (obj[expr]) cannot be verified statically.
+      throw new PromptValidationError(
+        "Jinja2 template uses a dynamically computed property access, which is not allowed"
+      );
+    }
+    if (typeof key?.value === "string" && isUnsafeJinja2Property(key.value)) {
+      throw new PromptValidationError(
+        `Jinja2 template accesses a disallowed property: "${key.value}"`
+      );
+    }
+  }
+
+  for (const symbol of ast.findAll(nunjucksNodes.Symbol)) {
+    const name = symbol.value;
+    if (typeof name === "string" && UNSAFE_JINJA2_SYMBOLS.has(name)) {
+      throw new PromptValidationError(
+        `Jinja2 template references a disallowed name: "${name}"`
+      );
+    }
+  }
+}
 
 /**
  * Extracts root variable names from a Mustache template using the Mustache parser.

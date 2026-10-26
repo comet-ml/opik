@@ -367,4 +367,68 @@ describe("Prompt - format()", () => {
       expect(prompt.format({ value: undefined })).toBe("Value: ");
     });
   });
+
+  describe("JINJA2 restricted rendering", () => {
+    const makeJinja2Prompt = (template: string) =>
+      new Prompt(
+        {
+          ...basicPromptData,
+          prompt: template,
+          type: PromptType.JINJA2,
+        },
+        mockOpikClient
+      );
+
+    it("should block access to the constructor property", () => {
+      const prompt = makeJinja2Prompt("{{ range.constructor }}");
+
+      expect(() => prompt.format({})).toThrow(PromptValidationError);
+    });
+
+    it("should block prototype-chain property access", () => {
+      const prompt = makeJinja2Prompt("{{ user.__proto__ }}");
+
+      expect(() => prompt.format({ user: { name: "Alice" } })).toThrow(
+        PromptValidationError
+      );
+    });
+
+    it("should block the constructor via a string-literal index", () => {
+      const prompt = makeJinja2Prompt('{{ user["constructor"] }}');
+
+      expect(() => prompt.format({ user: { name: "Alice" } })).toThrow(
+        PromptValidationError
+      );
+    });
+
+    it("should block a dynamically computed property access", () => {
+      // A computed key cannot be verified statically, so string-concatenation
+      // and variable-indirection attempts are refused outright.
+      const prompt = makeJinja2Prompt('{{ user["cons" + "tructor"] }}');
+
+      expect(() => prompt.format({ user: { name: "Alice" } })).toThrow(
+        PromptValidationError
+      );
+    });
+
+    it("should still render ordinary variable substitution", () => {
+      const prompt = makeJinja2Prompt(
+        "Hello {{ name | upper }} from {{ city }}"
+      );
+
+      expect(prompt.format({ name: "alice", city: "London" })).toBe(
+        "Hello ALICE from London"
+      );
+    });
+
+    it("should still render dotted access and loops", () => {
+      const prompt = makeJinja2Prompt(
+        "{{ user.name }}: {% for item in items %}{{ item }}{% endfor %}"
+      );
+
+      expect(prompt.format({ user: { name: "Alice" }, items: ["a", "b"] })).toBe(
+        "Alice: ab"
+      );
+    });
+  });
 });

@@ -1,11 +1,15 @@
 import re
 from typing import Any, Set
 from typing_extensions import override
-import jinja2
+from jinja2.sandbox import SandboxedEnvironment
 
 import opik.exceptions as exceptions
 from .. import types as prompt_types
 from .. import base_prompt_template
+
+# Jinja2 templates are rendered through a sandboxed environment, which restricts
+# access to unsafe/dunder attributes, rather than the bare ``jinja2.Template``.
+_JINJA2_ENV = SandboxedEnvironment()
 
 
 class PromptTemplate(base_prompt_template.BasePromptTemplate):
@@ -60,7 +64,7 @@ class PromptTemplate(base_prompt_template.BasePromptTemplate):
             template = _MUSTACHE_PLACEHOLDER.sub(_replace, template)
 
         elif self._type == prompt_types.PromptType.JINJA2:
-            template = jinja2.Template(self._template).render(**kwargs)
+            template = _JINJA2_ENV.from_string(self._template).render(**kwargs)
         else:
             template = self._template
 
