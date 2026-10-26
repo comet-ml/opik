@@ -234,6 +234,21 @@ describe("assistantBridge — chart editing capability", () => {
     });
     expect(bridge.canDuplicateChart!()).toBe(true);
   });
+
+  it("hides Duplicate in Ollie without chart editing or a known console version", () => {
+    const bridge = createBridge(makeRefs(createHostListeners()));
+
+    useExplainStore
+      .getState()
+      .onConsoleReady({ bridgeVersion: 6, capabilities: ["explain"] });
+    expect(bridge.canDuplicateChart!()).toBe(false);
+
+    useExplainStore.setState({
+      capabilities: ["explain", "charts"],
+      consoleBridgeVersion: null,
+    });
+    expect(bridge.canDuplicateChart!()).toBe(false);
+  });
 });
 
 describe("assistantBridge — artifacts", () => {

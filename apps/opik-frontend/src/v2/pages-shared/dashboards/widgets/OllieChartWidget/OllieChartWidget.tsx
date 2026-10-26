@@ -11,6 +11,7 @@ import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { cn } from "@/lib/utils";
 import OllieChartActionsMenu from "./OllieChartActionsMenu";
 import OllieKpi, { parseKpiSpec } from "./OllieKpi";
+import { comparisonWindow } from "./helpers";
 import {
   useDashboardStore,
   selectRuntimeConfig,
@@ -31,11 +32,6 @@ import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 
 const MINUTE = 60_000;
-const HOUR = 60 * MINUTE;
-const DAY = 24 * HOUR;
-
-const plural = (count: number, unit: string) =>
-  `${count} ${unit}${count === 1 ? "" : "s"}`;
 
 // The statuses the widget query endpoint uses on purpose; anything else shows the backend's message.
 const QUERY_ERRORS: Record<number, { title: string; message: string }> = {
@@ -151,31 +147,19 @@ const OllieChartWidget: React.FunctionComponent<
     [dateRange, hasDateRange],
   );
 
-  // A KPI on a date range compares with the window of the same length just before it. A preset ("Past 30 days") has
-  // no end: it runs up to now.
-  const previousWindow = useMemo(() => {
-    if (!kpi?.window_days || !intervalStart) return null;
-    const start = new Date(intervalStart).getTime();
-    const end = intervalEnd ? new Date(intervalEnd).getTime() : Date.now();
-    const length = end - start;
-    if (!Number.isFinite(length) || length <= 0) return null;
-    // Under two days the window reads in hours ("Past 24 hours" starts on the hour, so it is 24 hours and a part of
-    // one). Longer ranges start at midnight and count today's part as a day ("Past 30 days" is 29 days and today).
-    const label =
-      length < 2 * DAY
-        ? plural(Math.max(1, Math.floor(length / HOUR)), "hour")
-        : plural(
-            start % DAY === 0
-              ? Math.ceil(length / DAY)
-              : Math.round(length / DAY),
-            "day",
-          );
-    return {
-      intervalStart: new Date(start - length).toISOString(),
-      intervalEnd: intervalStart,
-      label,
-    };
-  }, [kpi?.window_days, intervalStart, intervalEnd]);
+  // When an open-ended range was last read. Its window runs to then; a refresh moves it, so the value and the window
+  // it is compared with end at the same moment.
+  const [readAt, setReadAt] = useState(() => Date.now());
+  useEffect(() => setReadAt(Date.now()), [intervalStart, intervalEnd]);
+
+  // A KPI on a date range compares with the window of the same length just before it.
+  const previousWindow = useMemo(
+    () =>
+      kpi?.window_days && intervalStart
+        ? comparisonWindow(intervalStart, intervalEnd, readAt)
+        : null,
+    [kpi?.window_days, intervalStart, intervalEnd, readAt],
+  );
 
   // `live` also covers the moment before the dashboard id arrives (skeleton); only `canQuery` may hit the endpoint.
   const canQuery = Boolean(query?.id && dashboardId && queryWidgetId);
@@ -219,7 +203,10 @@ const OllieChartWidget: React.FunctionComponent<
   // A refresh re-runs the comparison too, so the value and its change come from the same moment.
   const refresh = () => {
     refetch();
-    if (previousWindow) refetchPrevious();
+    if (!previousWindow) return;
+    // An open-ended range has grown since it was read: move its comparison window, which fetches itself.
+    if (intervalEnd) refetchPrevious();
+    else setReadAt(Date.now());
   };
 
   // An autosave slower than the 404 retries saves the widget after its queries already gave up; run them once more.
@@ -347,7 +334,10 @@ const OllieChartWidget: React.FunctionComponent<
         <OllieKpi
           kpi={kpi}
           rows={chartRows}
-          previousRows={live && previousWindow ? previousRows : null}
+          // A failed comparison shows none, rather than the change on an older snapshot.
+          previousRows={
+            live && previousWindow && !previousError ? previousRows : null
+          }
           comparedWith={
             previousWindow ? `previous ${previousWindow.label}` : undefined
           }
