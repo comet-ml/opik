@@ -15,8 +15,10 @@ type Output = {
   value: string | null;
   error?: string;
   errorHint?: RunFailureHint;
+  stopped?: boolean;
   stale: boolean;
   staleChanges?: PlaygroundRunInputChange[];
+  usage?: { duration?: number; totalTokens?: number };
 };
 
 let output: Output;
@@ -245,5 +247,71 @@ describe("PlaygroundPromptOutput", () => {
     expect(markdown).not.toHaveClass("opacity-50");
     expect(screen.getByText("Output A")).not.toHaveClass("text-muted-gray");
     expect(queryStaleNote()).not.toBeInTheDocument();
+  });
+
+  describe("a run the user stopped", () => {
+    const queryStoppedTag = () =>
+      screen.queryByTestId("playground-output-stopped");
+
+    it("should keep the partial answer and say it was stopped, with no token count", () => {
+      output = {
+        isLoading: false,
+        value: "Once upon a",
+        stopped: true,
+        stale: false,
+        usage: { duration: 2.4 },
+      };
+
+      renderOutput();
+
+      expect(screen.getByTestId("markdown")).toHaveTextContent("Once upon a");
+      expect(queryStoppedTag()).toHaveTextContent("Stopped");
+      expect(screen.getByText("2.4s")).toBeInTheDocument();
+      expect(screen.getByText("n/a tokens")).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("playground-output-error"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("should say it was stopped rather than No runs yet when no text came back", () => {
+      output = {
+        isLoading: false,
+        value: null,
+        stopped: true,
+        stale: false,
+        usage: { duration: 0.8 },
+      };
+
+      renderOutput();
+
+      expect(queryStoppedTag()).toBeInTheDocument();
+      expect(screen.getByText("n/a tokens")).toBeInTheDocument();
+      expect(screen.queryByText("No runs yet")).not.toBeInTheDocument();
+    });
+
+    it("should drop the label and n/a once the prompt runs to the end", () => {
+      output = {
+        isLoading: false,
+        value: "Once upon a",
+        stopped: true,
+        stale: false,
+        usage: { duration: 2.4 },
+      };
+      const { rerender } = renderOutput();
+      expect(queryStoppedTag()).toBeInTheDocument();
+
+      output = {
+        isLoading: false,
+        value: "Once upon a time",
+        stopped: false,
+        stale: false,
+        usage: { duration: 1.2, totalTokens: 42 },
+      };
+      rerender(outputView());
+
+      expect(screen.getByText("42 tokens")).toBeInTheDocument();
+      expect(queryStoppedTag()).not.toBeInTheDocument();
+      expect(screen.queryByText("n/a tokens")).not.toBeInTheDocument();
+    });
   });
 });

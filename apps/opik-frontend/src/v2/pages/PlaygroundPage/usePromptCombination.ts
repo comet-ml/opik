@@ -186,6 +186,7 @@ const usePromptCombination = ({
           error: undefined,
           errorHint: undefined,
           usage: undefined,
+          stopped: false,
         });
 
         const messagesToSend = dropEmptySystemMessages(prompt.messages);
@@ -233,6 +234,7 @@ const usePromptCombination = ({
 
         updateOutput(prompt.id, {
           isLoading: false,
+          stopped: controller.signal.aborted,
           usage: {
             duration,
             totalTokens,

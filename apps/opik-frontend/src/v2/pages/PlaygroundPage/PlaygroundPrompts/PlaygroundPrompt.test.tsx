@@ -55,6 +55,7 @@ const { messagesProps } = vi.hoisted(() => ({
 let prompt: PlaygroundPromptType;
 let permissions: Record<string, boolean> = {};
 const updatePrompt = vi.fn();
+const updateOutput = vi.fn();
 
 vi.mock("@/store/PlaygroundStore", () => ({
   usePromptById: () => prompt,
@@ -65,7 +66,7 @@ vi.mock("@/store/PlaygroundStore", () => ({
   useUpdatePrompt: () => updatePrompt,
   useDeletePrompt: () => vi.fn(),
   useAddPrompt: () => vi.fn(),
-  useUpdateOutput: () => vi.fn(),
+  useUpdateOutput: () => updateOutput,
 }));
 
 vi.mock("@/api/llm/useLlmModelDefaults", () => ({
@@ -185,7 +186,11 @@ const USER_CONFIGS = {
   maxConcurrentRequests: 5,
 } as LLMPromptConfigsType;
 
-const renderPrompt = (model: string, messages: LLMMessage[] = []) => {
+const renderPrompt = (
+  model: string,
+  messages: LLMMessage[] = [],
+  { modelResolver = vi.fn(), modelsLoaded = false } = {},
+) => {
   prompt = {
     id: "prompt-a",
     name: "Prompt",
@@ -202,13 +207,13 @@ const renderPrompt = (model: string, messages: LLMMessage[] = []) => {
         index={0}
         promptId="prompt-a"
         providerKeys={Object.values(PROVIDER_ROWS)}
-        hasLoadedProviderKeys={false}
-        hasRegistryModels={false}
+        hasLoadedProviderKeys={modelsLoaded}
+        hasRegistryModels={modelsLoaded}
         providerResolver={
           renderHook(() => useLLMProviderModelsData()).result.current
             .calculateModelProvider
         }
-        modelResolver={vi.fn()}
+        modelResolver={modelResolver}
         isDropdownModel={vi.fn()}
       />
     </TooltipProvider>,
@@ -224,6 +229,7 @@ beforeEach(() => {
   updatePrompt.mockClear();
   messagesProps.current = null;
   permissions = {};
+  updateOutput.mockClear();
 });
 
 describe("PlaygroundPrompt model switch", () => {
@@ -346,5 +352,21 @@ describe("PlaygroundPrompt save button", () => {
     renderPrompt("gpt-4o-mini", messages);
 
     expect(saveButton()).toBeEnabled();
+  });
+});
+
+describe("PlaygroundPrompt model check on load", () => {
+  it("clears the output, including a Stopped label, when the stored model's provider is gone", () => {
+    renderPrompt("custom-llm/mock/mock-model", [], {
+      modelResolver: vi.fn(() => "gpt-4o-mini"),
+      modelsLoaded: true,
+    });
+
+    expect(updateOutput).toHaveBeenCalledWith("prompt-a", {
+      value: null,
+      error: undefined,
+      errorHint: undefined,
+      stopped: false,
+    });
   });
 });
