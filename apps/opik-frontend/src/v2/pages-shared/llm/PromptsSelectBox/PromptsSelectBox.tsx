@@ -17,6 +17,7 @@ import usePromptVersionsWithLabels from "@/v2/pages-shared/version-history/usePr
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import PromptLibraryMenu from "@/v2/pages-shared/llm/PromptLibraryMenu/PromptLibraryMenu";
 import LoadedPromptDisplay from "@/v2/pages-shared/llm/LoadedPromptDisplay/LoadedPromptDisplay";
+import { PROMPT_LOAD_TEXT_TOOLTIP } from "@/constants/prompts";
 
 const DEFAULT_LOADED_PROMPTS = 1000;
 const MAX_LOADED_PROMPTS = 10000;
@@ -185,7 +186,7 @@ const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
         enableVersionSelect={enableVersionSelect}
         trigger={
           <div>
-            <TooltipWrapper content="Load prompt">
+            <TooltipWrapper content={PROMPT_LOAD_TEXT_TOOLTIP}>
               <Button
                 variant="minimal"
                 size="icon-2xs"

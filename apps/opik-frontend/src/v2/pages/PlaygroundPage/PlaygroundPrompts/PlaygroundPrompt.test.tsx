@@ -94,6 +94,17 @@ vi.mock("@/contexts/PermissionsContext", () => ({
   usePermissions: () => ({ permissions: {} }),
 }));
 
+vi.mock("@/api/prompts/useProjectPromptsList", () => ({
+  default: () => ({ data: undefined }),
+}));
+vi.mock("@/api/prompts/usePromptById", () => ({ useFetchPrompt: vi.fn() }));
+vi.mock("@/api/prompts/usePromptVersionById", () => ({
+  useFetchPromptVersion: vi.fn(),
+}));
+vi.mock("@/v2/pages-shared/llm/LLMPromptMessages/useMessageTextPrompt", () => ({
+  default: () => ({ hasUnsavedChanges: false }),
+}));
+
 vi.mock("@/hooks/useLastPickedModel", () => ({
   default: () => [undefined, vi.fn()],
 }));
