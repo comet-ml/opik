@@ -156,20 +156,82 @@ export class OnlineEvaluationPage {
   }
 
   /**
+   * Every validation message the editor is currently rendering, in DOM order.
+   *
+   * The whole set rather than one message, because the claim a submit-block
+   * spec needs to make is an exhaustive one: "this is the only thing wrong" is
+   * what separates a refinement that names the missing field from one that also
+   * flags a field the user has not been offered yet (which is what the start
+   * cards hid, and what #9143's last commit stopped). A membership check on one
+   * message cannot see a second one beside it.
+   *
+   * By class, which the conventions put last and which is justified here the
+   * same way `costLimitInput`'s placeholder is: `FormErrorSkeleton` is the one
+   * component every form error in this panel renders through, and it carries no
+   * test id, no role and no accessible name — only `text-destructive`. The
+   * right fix is a `data-testid` on it, added with the FE change; this branch
+   * may only touch `tests_end_to_end/`, so it is flagged here instead.
+   *
+   * `div` is load-bearing, not decoration: `ScoreNameTitle` paints an errored
+   * score NAME with the same class on a `<span>`, and that span is the name
+   * itself rather than a message — counting it would report the same error
+   * twice and break the exhaustive comparison above.
+   *
+   * Deliberately NOT wrapped in a `test.step`, unlike most of this POM:
+   * validation renders a tick after the submit, so callers read this through
+   * `expect.poll`, and a step per poll attempt buries the step the assertion
+   * belongs to under a dozen identical ones. Same reason
+   * `readModelPickerText` has none.
+   */
+  async panelErrorMessages(): Promise<string[]> {
+    const messages = await this.panel.locator('div.text-destructive').allInnerTexts();
+    return messages.map((message) => message.trim());
+  }
+
+  /**
    * Opens the create panel. A new judge or decision model starts on cards, so
    * this also picks one: the given template, or the card to write your own.
    */
   async openCreateRulePanel(type: EvaluatorType = 'LLM-as-a-Judge', startCard?: string): Promise<void> {
     return test.step(`open the create panel for a ${type} evaluator`, async () => {
-      await this.page.getByTestId('online-evaluation-create-rule-button').click();
-      await this.page.getByRole('menuitem', { name: new RegExp(`^${type}`) }).click();
-      // The Evaluator menu animates out over the panel; clicks land on it until it is gone.
-      await expect(this.page.getByRole('menu')).toHaveCount(0);
-      await this.waitForPanelOpen();
+      await this.openEvaluatorMenuItem(type);
       if (type !== 'Code evaluator') {
         await this.chooseStartCard(startCard ?? (type === 'Decision model' ? 'Write your own' : 'Type your prompt'));
       }
     });
+  }
+
+  /**
+   * Opens the create panel and STOPS on the start cards, choosing none.
+   *
+   * For the specs whose subject is the card screen itself — which card set a
+   * scope offers, what each card applies, and the submit the cards block. Every
+   * other caller wants `openCreateRulePanel`, which goes on to pick one,
+   * because the rest of the form does not exist until a card is chosen.
+   *
+   * The cards are asserted present rather than assumed: a panel that opened
+   * already past them (a default prompt coming back, an edit panel opening by
+   * mistake) would otherwise surface as the caller's later card click never
+   * finding its button, several steps from the cause.
+   */
+  async openCreateRulePanelOnStartCards(
+    type: Exclude<EvaluatorType, 'Code evaluator'>,
+  ): Promise<void> {
+    return test.step(`open the create panel for a ${type} evaluator, on its start cards`, async () => {
+      await this.openEvaluatorMenuItem(type);
+      await expect(
+        this.startCards,
+        `a new ${type} rule opens on the start cards`,
+      ).toHaveCount(1);
+    });
+  }
+
+  private async openEvaluatorMenuItem(type: EvaluatorType): Promise<void> {
+    await this.page.getByTestId('online-evaluation-create-rule-button').click();
+    await this.page.getByRole('menuitem', { name: new RegExp(`^${type}`) }).click();
+    // The Evaluator menu animates out over the panel; clicks land on it until it is gone.
+    await expect(this.page.getByRole('menu')).toHaveCount(0);
+    await this.waitForPanelOpen();
   }
 
   get startCards(): Locator {
@@ -839,8 +901,57 @@ export class OnlineEvaluationPage {
     });
   }
 
+  /**
+   * The Questions card's question boxes, in render order — one per score a
+   * decision-model rule declares.
+   *
+   * By placeholder because the boxes have no label of their own: the heading
+   * above each one is the editable score NAME (`ScoreNameTitle`), not a
+   * `<label>`, so there is nothing for `getByLabel` to match.
+   */
+  get questionInputs(): Locator {
+    return this.panel.getByPlaceholder('For example: Does the output fully answer the input?');
+  }
+
   get mainQuestionInput(): Locator {
-    return this.panel.getByPlaceholder('For example: Does the output fully answer the input?').first();
+    return this.questionInputs.first();
+  }
+
+  /**
+   * The question text of every score the Questions card shows, in order.
+   *
+   * The whole list, because a template that applied only its first question is
+   * the regression: reading just the main box would pass for a Support reply
+   * that silently lost two of its three questions.
+   *
+   * Read in one `evaluateAll` rather than as several `inputValue()` round trips
+   * so the list cannot be stitched together across a re-render, the same reason
+   * `mountedJudgeParameterIds` does it that way.
+   */
+  async readQuestions(): Promise<string[]> {
+    return test.step('read the question list out of the Questions card', async () => {
+      return this.questionInputs.evaluateAll((els) =>
+        els.map((el) => (el as HTMLTextAreaElement).value),
+      );
+    });
+  }
+
+  /**
+   * The score name each question block DISPLAYS, in order.
+   *
+   * Displayed, not stored, and the difference is the point: a template leaves
+   * its main question unnamed and `ScoreNameTitle` falls back to the rule name
+   * for it, so what is on screen for the first block is the rule's name while
+   * the named extras ("Polite tone") show their own. A spec asserting the
+   * fallback is asserting the thing the author actually sees.
+   */
+  async readQuestionNames(): Promise<string[]> {
+    return test.step('read the score names the Questions card shows', async () => {
+      const names = await this.panel
+        .getByRole('button', { name: 'Edit score name' })
+        .allInnerTexts();
+      return names.map((name) => name.trim());
+    });
   }
 
   /**
