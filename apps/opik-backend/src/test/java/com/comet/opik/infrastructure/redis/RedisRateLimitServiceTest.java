@@ -19,6 +19,7 @@ import reactor.test.StepVerifier;
 
 import java.time.Duration;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -170,5 +171,23 @@ class RedisRateLimitServiceTest {
         StepVerifier.create(rateLimitService.getRemainingTTL(bucketName(), config))
                 .expectNext(Duration.ofSeconds(config.durationInSeconds()).toMillis())
                 .verifyComplete();
+    }
+
+    @Test
+    void sanitizedKeepsRootStackTraceButNoMessageOrCause() {
+        // Redisson exception messages list the command's keys, and bucket names embed the caller's API key.
+        String apiKey = RandomStringUtils.secure().nextAlphanumeric(RANDOM_STRING_LENGTH);
+        var root = new RedisException(
+                "ERR user_script:1: arithmetic on a nil value, params: [{rate-limit:general_events-%s}:value]"
+                        .formatted(apiKey));
+        root.addSuppressed(new IllegalStateException(apiKey));
+        var wrapped = new IllegalStateException("Retries exhausted: " + apiKey, root);
+
+        Throwable actual = RedisRateLimitService.sanitized(wrapped);
+
+        assertThat(actual.getMessage()).isEqualTo(RedisException.class.getName());
+        assertThat(actual.getCause()).isNull();
+        assertThat(actual.getSuppressed()).isEmpty();
+        assertThat(actual.getStackTrace()).isEqualTo(root.getStackTrace());
     }
 }

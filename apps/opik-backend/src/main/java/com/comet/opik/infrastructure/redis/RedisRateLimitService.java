@@ -41,7 +41,8 @@ class RedisRateLimitService implements RateLimitService {
                 // defense-in-depth for any other limiter/Lua failure. The error surfaces here as a
                 // RetryExhaustedException wrapping the RedisException, so catch broadly rather than by type.
                 .onErrorResume(error -> {
-                    log.warn("Rate limiter errored, failing open (request allowed), exception '{}'", errorType(error));
+                    log.warn("Rate limiter errored, failing open (request allowed), exception '{}'", errorType(error),
+                            sanitized(error));
                     return Mono.just(false);
                 });
     }
@@ -50,7 +51,8 @@ class RedisRateLimitService implements RateLimitService {
         return Retry.fixedDelay(2, Duration.ofMillis(5))
                 .filter(RedisException.class::isInstance)
                 .doBeforeRetryAsync(signal -> {
-                    log.warn("Rate limiter errored, retrying, exception '{}'", errorType(signal.failure()));
+                    log.warn("Rate limiter errored, retrying, exception '{}'", errorType(signal.failure()),
+                            sanitized(signal.failure()));
                     return setLimitIfNecessary(limitConfig.limit(), limitConfig.durationInSeconds(), rateLimit).then();
                 });
     }
@@ -86,7 +88,7 @@ class RedisRateLimitService implements RateLimitService {
                 .defaultIfEmpty(limitConfig.limit())
                 .onErrorResume(error -> {
                     log.debug("Rate limiter available-events lookup failed, reporting the configured limit, "
-                            + "exception '{}'", errorType(error));
+                            + "exception '{}'", errorType(error), sanitized(error));
                     return Mono.just(limitConfig.limit());
                 });
     }
@@ -104,15 +106,29 @@ class RedisRateLimitService implements RateLimitService {
                     // Report the full window, not 0: the interceptor turns 0 into a RateLimit-Reset of 1s,
                     // which would make a rejected client retry after a second and spin on 429s.
                     log.debug("Rate limiter TTL lookup failed, reporting the configured window, exception '{}'",
-                            errorType(error));
+                            errorType(error), sanitized(error));
                     return Mono.just(Duration.ofSeconds(limitConfig.durationInSeconds()).toMillis());
                 });
     }
 
-    // Never log the throwable or its message: Redisson's exception messages list the command's keys, and the
-    // general and custom bucket names embed the caller's API key. The root cause's type is all that's logged.
+    // Never log the original throwable or its message: Redisson's exception messages list the command's keys,
+    // and the general and custom bucket names embed the caller's API key. Only the root cause's type and its
+    // stack frames (class, method, line; no data) are logged.
     private static String errorType(Throwable error) {
         return Throwables.getRootCause(error).getClass().getSimpleName();
+    }
+
+    static Throwable sanitized(Throwable error) {
+        return new SanitizedLimiterException(Throwables.getRootCause(error));
+    }
+
+    private static final class SanitizedLimiterException extends RuntimeException {
+
+        SanitizedLimiterException(Throwable root) {
+            // No cause and no suppressed exceptions: their messages could carry the keys.
+            super(root.getClass().getName(), null, false, true);
+            setStackTrace(root.getStackTrace());
+        }
     }
 
     // Redisson 4.8.0 keeps the live permit counter in a String at the rate limiter's value key, named by
