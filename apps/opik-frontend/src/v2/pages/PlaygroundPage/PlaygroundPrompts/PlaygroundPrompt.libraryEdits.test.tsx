@@ -15,8 +15,17 @@ import {
 } from "@/hooks/useLLMProviderModelsData";
 import PlaygroundPrompt from "./PlaygroundPrompt";
 
-vi.mock("@/api/prompts/usePromptById", () => ({ default: vi.fn() }));
-vi.mock("@/api/prompts/usePromptVersionById", () => ({ default: vi.fn() }));
+vi.mock("@/api/prompts/usePromptById", () => ({
+  default: vi.fn(),
+  useFetchPrompt: vi.fn(),
+}));
+vi.mock("@/api/prompts/usePromptVersionById", () => ({
+  default: vi.fn(),
+  useFetchPromptVersion: vi.fn(),
+}));
+vi.mock("@/api/prompts/useProjectPromptsList", () => ({
+  default: () => ({ data: undefined }),
+}));
 
 vi.mock("@/contexts/PermissionsContext", () => ({
   usePermissions: () => ({

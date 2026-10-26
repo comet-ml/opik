@@ -1715,8 +1715,24 @@ export class PlaygroundPage {
       await this.variantCard(0).hover();
       await this.variantCard(0).getByTestId('load-prompt-button').click();
 
+      await this.chooseChatPromptsInLibraryMenu();
       await this.navigateLibraryMenuToVersion(promptName, versionLabel);
     });
+  }
+
+  /**
+   * The variant header's library menu first asks for Text or Chat, but only when
+   * the library holds both types; with one type it opens straight on the list.
+   * The workspace is shared, so either can happen. The menu shows a spinner
+   * until it knows which, never the type choice and the search box together.
+   */
+  private async chooseChatPromptsInLibraryMenu(): Promise<void> {
+    const menu = this.page.getByTestId('prompt-library-menu');
+    const chatOption = menu.getByTestId('prompt-library-structure-chat');
+    await expect(chatOption.or(menu.getByPlaceholder('Search'))).toBeVisible();
+    if (await chatOption.isVisible()) {
+      await chatOption.click();
+    }
   }
 
   /**
@@ -2023,7 +2039,7 @@ export class PlaygroundPage {
    * Hover a row's save-to-library button and read the tooltip it raises.
    *
    * The tooltip is the user-readable half of the same `saveWarning` flag the
-   * dot renders: "Save to prompt library" when the message still matches the
+   * dot renders: "Save as text prompt" when the message still matches the
    * loaded version, and "This prompt version hasn't been saved" when it does
    * not. Radix portals the content out of the row, so it is read at page scope.
    */
