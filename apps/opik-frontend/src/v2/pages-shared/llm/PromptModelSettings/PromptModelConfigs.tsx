@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useSyncExternalStore } from "react";
 import { Settings2 } from "lucide-react";
 
 import {
@@ -36,6 +36,10 @@ import {
   OPENAI_PANEL,
 } from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/genericPanels";
 import { getModelParams, toParamsRoute } from "@/lib/modelParams";
+import {
+  getModelParamsVersion,
+  subscribeToModelParams,
+} from "@/lib/modelRegistryStore";
 import { ModelParams } from "@/types/modelParams";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import {
@@ -76,6 +80,7 @@ const PromptModelConfigs = ({
 }: PromptModelConfigsProps) => {
   const provider: PROVIDER_TYPE =
     parseComposedProviderType(composedProviderType);
+  useSyncExternalStore(subscribeToModelParams, getModelParamsVersion);
 
   const renderCatalogPanel = (
     params: ModelParams,

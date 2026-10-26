@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 
 // The custom panel embeds the real CodeMirror editor for custom_parameters, which does not mount
 // under this environment (a duplicate @codemirror/state breaks its instanceof checks).
@@ -17,6 +17,15 @@ import {
 import { getDefaultConfigByProvider } from "@/lib/playground";
 import { TooltipProvider } from "@/ui/tooltip";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
+import ANTHROPIC_FIXTURE from "@/lib/anthropicCatalog.fixture.json";
+import { buildParamsIndex } from "@/hooks/useLLMProviderModelsData";
+import {
+  resetModelRegistryStoreForTesting,
+  setLatestModelParams,
+  setLatestProviderProfiles,
+} from "@/lib/modelRegistryStore";
+import { LlmModelsByProvider } from "@/api/llm/useLlmModels";
+import { ModelParamsByProvider } from "@/types/modelParams";
 
 const renderTrigger = (
   provider: COMPOSED_PROVIDER_TYPE,
@@ -125,5 +134,44 @@ describe("PromptModelConfigs typed values", () => {
     fireEvent.keyDown(input, { key: "Escape" });
 
     expect(onChange).toHaveBeenCalledWith({ temperature: 0.7 });
+  });
+});
+
+describe("PromptModelConfigs when the provider profiles load after the model list", () => {
+  beforeEach(() => {
+    resetModelRegistryStoreForTesting();
+    setLatestModelParams(
+      buildParamsIndex(
+        ANTHROPIC_FIXTURE.models as unknown as LlmModelsByProvider,
+      ),
+    );
+  });
+
+  afterEach(() => {
+    resetModelRegistryStoreForTesting();
+  });
+
+  it("redraws the panel of an id the registry doesn't list from its profile", () => {
+    render(
+      <TooltipProvider delayDuration={700}>
+        <PromptModelConfigs
+          provider={PROVIDER_TYPE.ANTHROPIC}
+          model={"claude-unlisted-1" as PROVIDER_MODEL_TYPE}
+          configs={{ temperature: 0.4, maxCompletionTokens: 4000 }}
+          onChange={vi.fn()}
+        />
+      </TooltipProvider>,
+    );
+    openPanel();
+    expect(screen.getByTestId("temperature-input")).toBeInTheDocument();
+
+    act(() => {
+      setLatestProviderProfiles(
+        ANTHROPIC_FIXTURE.profiles as unknown as ModelParamsByProvider,
+      );
+    });
+
+    expect(screen.queryByTestId("temperature-input")).not.toBeInTheDocument();
+    expect(screen.getByTestId("maxCompletionTokens-input")).toHaveValue("4000");
   });
 });

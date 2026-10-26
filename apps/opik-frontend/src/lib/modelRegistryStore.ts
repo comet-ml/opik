@@ -57,6 +57,24 @@ let latestSnapshot: ProviderModelsMap = INITIAL_SNAPSHOT;
 let latestFlags: Map<string, ModelFlags> = INITIAL_FLAGS;
 let latestParams: ModelParamsIndex = new Map();
 let latestProfiles: ModelParamsByProvider = {};
+let paramsVersion = 0;
+const paramsListeners = new Set<() => void>();
+
+// The hook fills the params and profiles in an effect, after the render that received them, so a
+// component reading them while rendering subscribes here to render again once they land.
+export const subscribeToModelParams = (listener: () => void): (() => void) => {
+  paramsListeners.add(listener);
+  return () => {
+    paramsListeners.delete(listener);
+  };
+};
+
+export const getModelParamsVersion = (): number => paramsVersion;
+
+const notifyModelParamsChanged = (): void => {
+  paramsVersion += 1;
+  paramsListeners.forEach((listener) => listener());
+};
 
 export const getLatestProviderModelsSnapshot = (): ProviderModelsMap =>
   latestSnapshot;
@@ -85,12 +103,14 @@ export const getLatestProviderProfile = (
 
 export const setLatestModelParams = (index: ModelParamsIndex): void => {
   latestParams = index;
+  notifyModelParamsChanged();
 };
 
 export const setLatestProviderProfiles = (
   profiles: ModelParamsByProvider,
 ): void => {
   latestProfiles = profiles;
+  notifyModelParamsChanged();
 };
 
 export const setLatestProviderModelsSnapshot = (
@@ -112,6 +132,7 @@ export const resetModelRegistryStoreForTesting = (): void => {
   latestFlags = INITIAL_FLAGS;
   latestParams = new Map();
   latestProfiles = {};
+  notifyModelParamsChanged();
 };
 
 /**

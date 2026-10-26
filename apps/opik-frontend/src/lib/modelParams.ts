@@ -1,3 +1,4 @@
+import sortBy from "lodash/sortBy";
 import {
   getLatestListedModelParams,
   getLatestProviderProfile,
@@ -31,63 +32,64 @@ export const getModelParams = (
 export const isAccepted = (param?: { accepted?: boolean }): boolean =>
   param?.accepted === true;
 
-const EFFORT_ORDER = [
-  "none",
-  "minimal",
-  "low",
-  "medium",
-  "high",
-  "xhigh",
-  "max",
-];
-
 export const getEffortLevels = (effort?: EffortParam): string[] =>
   isAccepted(effort) ? effort?.levels ?? [] : [];
 
 const getDefaultEffortLevel = (
   effort: EffortParam | undefined,
-  levels: string[],
+  levels: readonly string[],
 ): string | undefined =>
   effort?.default && levels.includes(effort.default)
     ? effort.default
     : levels[0];
 
-export const getNearestEffortLevel = (
-  levels: readonly string[],
-  level: string,
-): string | undefined => {
-  const rank = EFFORT_ORDER.indexOf(level);
-  if (rank < 0) {
+// From least to most thinking. "none" and "off" switch thinking off rather than
+// being its smallest amount, so a level that thinks never lands on them:
+// Minimal on a model offering None and Low becomes Low. "auto" has no rank, it
+// leaves the amount to the model.
+const THINKING_AMOUNT_RANK: ReadonlyMap<string, number> = new Map([
+  ["none", 0],
+  ["off", 0],
+  ["minimal", 1],
+  ["low", 2],
+  ["medium", 3],
+  ["high", 4],
+  ["xhigh", 5],
+  ["max", 6],
+]);
+
+// Where a level picked on the previous model lands on a model that does not
+// offer it: the nearest offered level, a tie going to the lower, cheaper one. A
+// level the previous model did not offer either was never on screen (a Max on a
+// Chat Completions key shows as the model's default), so it gets none and falls
+// to the default.
+export const getNearestOfferedLevel = <L extends string>(
+  level: L | undefined,
+  options: Array<{ value: L }>,
+  previousOptions: Array<{ value: L }>,
+): L | undefined => {
+  const rank =
+    level === undefined ? undefined : THINKING_AMOUNT_RANK.get(level);
+  if (rank === undefined || !previousOptions.some((o) => o.value === level)) {
     return undefined;
   }
-  let nearest: string | undefined;
-  let nearestRank = -1;
-  for (const candidate of levels) {
-    const candidateRank = EFFORT_ORDER.indexOf(candidate);
-    // "none" turns reasoning off, a different mode rather than a cheaper level, so only a stored "none" keeps it.
-    if (candidateRank < 0 || (candidate === "none" && level !== "none")) {
-      continue;
-    }
-    const distance = Math.abs(candidateRank - rank);
-    const nearestDistance = Math.abs(nearestRank - rank);
-    // A tie goes to the lower level, which costs less.
-    if (
-      nearest === undefined ||
-      distance < nearestDistance ||
-      (distance === nearestDistance && candidateRank < nearestRank)
-    ) {
-      nearest = candidate;
-      nearestRank = candidateRank;
-    }
-  }
-  return nearest;
+  const ranked = options.flatMap(({ value }) => {
+    const valueRank = THINKING_AMOUNT_RANK.get(value);
+    return valueRank === undefined || (valueRank === 0 && rank > 0)
+      ? []
+      : [{ value, valueRank }];
+  });
+  return sortBy(ranked, [
+    ({ valueRank }) => Math.abs(valueRank - rank),
+    ({ valueRank }) => valueRank,
+  ])[0]?.value;
 };
 
 export const resolveEffortLevel = (
   effort: EffortParam | undefined,
   stored: readonly unknown[],
+  levels: readonly string[] = getEffortLevels(effort),
 ): string | undefined => {
-  const levels = getEffortLevels(effort);
   if (levels.length === 0) {
     return undefined;
   }
@@ -266,12 +268,16 @@ export const getParamControls = (
 /**
  * What a model switch writes back. Numbers are left alone on purpose: they are clamped where they are
  * shown and sent, so switching back to a model with a wider range brings the stored value back.
+ * getLevels is for a provider whose request can only send some of the catalog's levels, so a switch
+ * never settles on one the panel hides and the request drops.
  */
 export const adjustConfigForModel = <T extends object>(
   config: T,
   params: ModelParams,
   binding: ParamBinding,
   previousParams?: ModelParams,
+  getLevels: (params?: ModelParams) => readonly string[] = (p) =>
+    getEffortLevels(p?.effort),
 ): T => {
   const effortKey = binding.effort;
   if (!effortKey) {
@@ -281,8 +287,8 @@ export const adjustConfigForModel = <T extends object>(
   if (current === undefined) {
     return config;
   }
-  const levels = getEffortLevels(params.effort);
-  const previousLevels = getEffortLevels(previousParams?.effort);
+  const levels = getLevels(params);
+  const previousLevels = previousParams ? getLevels(previousParams) : [];
   // A value that is just the previous model's default was never picked, so it follows the next model's default.
   const keptDefault =
     previousLevels.length > 0 &&
@@ -294,7 +300,11 @@ export const adjustConfigForModel = <T extends object>(
       : typeof current === "string" && levels.includes(current)
         ? current
         : (typeof current === "string"
-            ? getNearestEffortLevel(levels, current)
+            ? getNearestOfferedLevel(
+                current,
+                levels.map((value) => ({ value })),
+                previousLevels.map((value) => ({ value })),
+              )
             : undefined) ?? getDefaultEffortLevel(params.effort, levels);
   }
   return next === current ? config : { ...config, [effortKey]: next };

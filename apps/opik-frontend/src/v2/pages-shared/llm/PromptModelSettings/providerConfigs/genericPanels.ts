@@ -6,20 +6,20 @@ import {
   EffortParams,
   getAnthropicThinkingEffortLabel,
   getAnthropicThinkingEffortOptions,
+  getOpenAIEffortLevels,
   getOpenAIReasoningEffortLabel,
   hasEffortWithoutThinking,
   hasThinkingInCustomParameters,
   isAnthropicThinkingRequested,
   resolveEffort,
+  resolveOpenAIEffort,
 } from "@/lib/modelUtils";
 import {
   ANTHROPIC_PARAM_BINDING,
-  getEffortLevels,
   getParamControls,
   OPENAI_PARAM_BINDING,
   ParamBinding,
   ParamControl,
-  resolveEffortLevel,
   resolveMaxOutputTokens,
   resolveSampling,
 } from "@/lib/modelParams";
@@ -101,19 +101,16 @@ export const OPENAI_PANEL: GenericPanelPresentation = {
     "Controls how much effort the model puts into reasoning before responding. Higher effort may result in more thoughtful but slower responses.",
   effortPlaceholder: "Select reasoning effort",
   getEffortLabel: getOpenAIReasoningEffortLabel,
-  getEffortChoice: (_model, params, configs) => {
-    const levels = getEffortLevels(params.effort);
-    return {
-      levels,
-      value: resolveEffortLevel(params.effort, [configs.reasoningEffort]),
-    };
-  },
+  getEffortChoice: (_model, params, configs) => ({
+    levels: getOpenAIEffortLevels(params),
+    value: resolveOpenAIEffort(params, configs.reasoningEffort),
+  }),
   getSamplingOffNote: () => undefined,
   throttlingDefault: DEFAULT_OPEN_AI_CONFIGS.THROTTLING,
   maxConcurrentRequestsDefault: DEFAULT_OPEN_AI_CONFIGS.MAX_CONCURRENT_REQUESTS,
 };
 
-const holdsNumber = (
+const keepsStoredNumber = (
   control: ParamControl,
   configs: Record<string, unknown>,
 ): boolean => control.kind !== "number" || configs[control.configKey] != null;
@@ -150,7 +147,7 @@ export const getShownControls = (
     return samplingOff && isSamplingControl(control) ? [] : [control];
   });
   return presentation.storedNumbersOnly
-    ? controls.filter((control) => holdsNumber(control, configs))
+    ? controls.filter((control) => keepsStoredNumber(control, configs))
     : controls;
 };
 
