@@ -6,10 +6,29 @@ import type { PromptType, PromptVariables } from "./types";
 
 type MemberLookup = (obj: unknown, val: string | number) => unknown;
 
-// nunjucks resolves `a.b` / `a[b]` through runtime.memberLookup at render time,
-// but it is not part of the public type definitions.
+interface NunjucksContext {
+  ctx: object;
+  env: { globals: object };
+}
+interface NunjucksFrame {
+  lookup: (name: string) => unknown;
+}
+type ContextOrFrameLookup = (
+  context: NunjucksContext,
+  frame: NunjucksFrame,
+  name: string
+) => unknown;
+
+// nunjucks resolves `a.b` / `a[b]` through runtime.memberLookup and bare names
+// through runtime.contextOrFrameLookup at render time, but neither is part of
+// the public type definitions.
 const nunjucksRuntime = (
-  nunjucks as unknown as { runtime: { memberLookup: MemberLookup } }
+  nunjucks as unknown as {
+    runtime: {
+      memberLookup: MemberLookup;
+      contextOrFrameLookup: ContextOrFrameLookup;
+    };
+  }
 ).runtime;
 
 function hasOwn(obj: object, key: string | number): boolean {
@@ -71,20 +90,39 @@ function renderJinja2Template(
   template: string,
   variables: PromptVariables
 ): string {
-  // memberLookup is shared module state; rendering is synchronous, so route it
-  // through the safe-property guard for this call and always restore it. This
-  // withholds prototype-chain gadget keys on globals, literals, primitives and
-  // data (closing `{{ range.constructor(...) }}` and similar) without rejecting
-  // own fields or ordinary inherited methods/getters.
+  // memberLookup and contextOrFrameLookup are shared module state; rendering is
+  // synchronous, so route them through the guards for this call and always
+  // restore them. memberLookup withholds prototype-chain gadget keys on globals,
+  // literals, primitives and data (closing `{{ range.constructor(...) }}` and
+  // similar) without rejecting own fields or ordinary inherited methods/getters.
   const originalMemberLookup = nunjucksRuntime.memberLookup;
+  const originalContextOrFrameLookup = nunjucksRuntime.contextOrFrameLookup;
   nunjucksRuntime.memberLookup = (obj, val) =>
     resolveSafeProperty(obj, val, (target, key) =>
       originalMemberLookup(target, key)
     );
+  // A bare top-level name is resolved against a plain object copy of the
+  // variables, which would otherwise expose Object.prototype members such as
+  // `constructor` or `valueOf`. Frame variables use a null-prototype object, so
+  // only own names on the user variables or the environment globals resolve.
+  nunjucksRuntime.contextOrFrameLookup = (context, frame, name) => {
+    const frameValue = frame.lookup(name);
+    if (frameValue !== undefined) {
+      return frameValue;
+    }
+    if (hasOwn(context.ctx, name)) {
+      return (context.ctx as Record<string, unknown>)[name];
+    }
+    if (hasOwn(context.env.globals, name)) {
+      return (context.env.globals as Record<string, unknown>)[name];
+    }
+    return undefined;
+  };
   try {
     return jinja2Env.renderString(template, variables);
   } finally {
     nunjucksRuntime.memberLookup = originalMemberLookup;
+    nunjucksRuntime.contextOrFrameLookup = originalContextOrFrameLookup;
   }
 }
 

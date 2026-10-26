@@ -1,4 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Prompt } from "../../../src/opik/prompt/Prompt";
 import { PromptValidationError } from "../../../src/opik/prompt/errors";
 import { PromptType } from "../../../src/opik/prompt/types";
@@ -536,10 +539,27 @@ describe("Prompt - format()", () => {
         expect(prompt.format({ names: ["a", "b"] })).toBe("2");
       });
 
-      it("should close file-including tags", () => {
-        const prompt = makeJinja2Prompt("{% include 'secrets.txt' %}");
+      it("should not resolve bare prototype names from the variable context", () => {
+        const prompt = makeJinja2Prompt(
+          "[{{ constructor }}][{{ valueOf }}][{{ __proto__ }}][{{ greeting }}]"
+        );
 
-        expect(() => prompt.format({})).toThrow(PromptValidationError);
+        expect(prompt.format({ greeting: "hi" })).toBe("[][][][hi]");
+      });
+
+      it("should refuse to include a real file from the working directory", () => {
+        const dir = mkdtempSync(join(tmpdir(), "opik-prompt-"));
+        writeFileSync(join(dir, "partial.txt"), "INCLUDED_FILE_CONTENT");
+        const originalCwd = process.cwd();
+        process.chdir(dir);
+        try {
+          const prompt = makeJinja2Prompt("[{% include 'partial.txt' %}]");
+
+          expect(() => prompt.format({})).toThrow(PromptValidationError);
+        } finally {
+          process.chdir(originalCwd);
+          rmSync(dir, { recursive: true, force: true });
+        }
       });
     });
   });
