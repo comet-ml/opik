@@ -51,6 +51,7 @@ public class ParamResolver {
     private static final String TOP_P = "top_p";
     private static final String REASONING_EFFORT = "reasoning_effort";
     private static final String REASONING = "reasoning";
+    private static final String EFFORT = "effort";
 
     private final @NonNull LlmProviderFactory llmProviderFactory;
     private final @NonNull LlmModelRegistryService registryService;
@@ -162,23 +163,35 @@ public class ParamResolver {
             }
         }
         // A rule made through the API can carry an effort its model has no levels for, and gpt-4o-mini answers
-        // "Unrecognized request argument supplied: reasoning_effort". The rule editor never offers one there. The
-        // Responses-shaped reasoning object carries the same effort, so it goes too.
+        // "Unrecognized request argument supplied: reasoning_effort". The rule editor never offers one there.
         if (parameters.customParameters() instanceof ObjectNode customParameters
                 && catalogParams.map(ModelParams::effort).filter(this::isRefused).isPresent()) {
             var kept = customParameters.deepCopy();
-            for (var key : List.of(REASONING_EFFORT, REASONING)) {
-                if (kept.remove(key) != null) {
-                    changes.add(new ParamChange(key, ParamChange.Reason.REFUSED_BY_MODEL));
-                }
-            }
-            if (kept.size() < customParameters.size()) {
+            var removed = removeReasoningEffort(kept);
+            if (!removed.isEmpty()) {
                 builder.customParameters(kept.isEmpty() ? null : kept);
+                removed.forEach(param -> changes.add(new ParamChange(param, ParamChange.Reason.REFUSED_BY_MODEL)));
             }
         }
         return changes.isEmpty()
                 ? new Resolution<>(parameters, List.of())
                 : new Resolution<>(builder.build(), List.copyOf(changes));
+    }
+
+    // The Responses-shaped reasoning object carries the same effort, but the rest of it, such as summary, can still
+    // apply to a reasoning model whose catalog row lists no effort levels.
+    public static List<String> removeReasoningEffort(@NonNull ObjectNode customParameters) {
+        var removed = new ArrayList<String>();
+        if (customParameters.remove(REASONING_EFFORT) != null) {
+            removed.add(REASONING_EFFORT);
+        }
+        if (customParameters.get(REASONING) instanceof ObjectNode reasoning && reasoning.remove(EFFORT) != null) {
+            removed.add(REASONING + "." + EFFORT);
+            if (reasoning.isEmpty()) {
+                customParameters.remove(REASONING);
+            }
+        }
+        return removed;
     }
 
     // Only OpenAI keys have a route, so an id the registry doesn't list still gets the OpenAI profile there.

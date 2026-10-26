@@ -137,6 +137,15 @@ class OpenAIJudgeToolCallRouteTest {
     }
 
     @Test
+    void aNestedReasoningEffortIsLeftOutOnChatCompletionsWithoutReasoning() {
+        callTools(onOpenAi, keyInChatCompletionsMode(null),
+                judge("{\"reasoning_effort\": \"none\", \"reasoning\": {\"effort\": \"high\"}}"),
+                tools(ChatCompletionsTools.EFFORT_NONE_ONLY));
+
+        assertToolsOnChatCompletionsWithoutReasoning();
+    }
+
+    @Test
     void aModelThatTakesNoToolsOnChatCompletionsGoesToTheResponsesApiEvenBehindACustomBaseUrl() {
         callTools(behindServerWideUrl, keyInChatCompletionsMode(wireMock.baseUrl()), judge(null),
                 tools(ChatCompletionsTools.REFUSED));
@@ -175,6 +184,7 @@ class OpenAIJudgeToolCallRouteTest {
         var body = JsonUtils.getJsonNodeFromString(rawBody);
         assertThat(StringUtils.countMatches(rawBody, "\"reasoning_effort\"")).isEqualTo(1);
         assertThat(body.at("/reasoning_effort").asText()).isEqualTo("none");
+        assertThat(body.has("reasoning")).isFalse();
         assertThat(body.at("/tool_choice").asText()).isEqualTo("required");
         assertThat(body.at("/tools/0/function/name").asText()).isEqualTo("read");
         assertThat(requestsTo(RESPONSES_PATH)).isZero();

@@ -5,6 +5,7 @@ import com.comet.opik.api.ModelParams;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.LlmProviderService;
+import com.comet.opik.domain.llm.ParamResolver;
 import com.comet.opik.domain.llm.ParamResolver.ParamChange;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmServiceProvider;
@@ -16,7 +17,7 @@ import jakarta.inject.Named;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.List;
+import java.util.stream.Stream;
 
 import static com.comet.opik.infrastructure.llm.openai.OpenAIClientGenerator.ApiPipelineMode.RESPONSES_API;
 
@@ -88,15 +89,19 @@ class OpenAILlmServiceProvider implements LlmServiceProvider {
     // Written into custom_parameters rather than the typed field, because an extra body key replaces the typed field
     // of the same name, so a rule's own reasoning_effort would otherwise win.
     private static LlmAsJudgeModelParameters withoutReasoning(LlmAsJudgeModelParameters modelParameters) {
-        if (NO_REASONING.equals(effortOf(modelParameters))) {
-            return modelParameters;
-        }
-        log.debug("Request to model '{}' changed: {}", modelParameters.name(),
-                List.of(new ParamChange(REASONING_EFFORT, ParamChange.Reason.REFUSED_BY_ROUTE)));
         var customParameters = modelParameters.customParameters() instanceof ObjectNode object
                 ? object.deepCopy()
                 : JsonUtils.getMapper().createObjectNode();
+        var removed = ParamResolver.removeReasoningEffort(customParameters);
         customParameters.put(REASONING_EFFORT, NO_REASONING);
+        if (customParameters.equals(modelParameters.customParameters())) {
+            return modelParameters;
+        }
+        log.debug("Request to model '{}' changed: {}", modelParameters.name(),
+                Stream.concat(Stream.of(REASONING_EFFORT), removed.stream())
+                        .distinct()
+                        .map(param -> new ParamChange(param, ParamChange.Reason.REFUSED_BY_ROUTE))
+                        .toList());
         return modelParameters.toBuilder().customParameters(customParameters).build();
     }
 
