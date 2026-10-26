@@ -17,6 +17,7 @@ type Output = {
   isLoading: boolean;
   value: string | null;
   error?: string;
+  stopped?: boolean;
   stale: boolean;
   staleChanges?: PlaygroundRunInputChange[];
   traceId?: string;

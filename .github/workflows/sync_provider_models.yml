@@ -14,6 +14,10 @@ on:
 permissions:
   contents: write
   pull-requests: write
+# One rolling PR on a fixed branch: two runs at once would force-push it over each other.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
 env:
   # Retry transient PyPI/network failures longer before failing the build.
   PIP_RETRIES: 8
@@ -42,10 +46,6 @@ jobs:
 
       - name: Install dependencies
         run: uv pip install --system requests pyyaml==6.0.3
-
-      - name: Set branch name
-        run: |
-          echo "BRANCH_NAME=github-actions/NA-sync-provider-models-$(date +%Y-%m-%d-%H-%M-%S)" >> "$GITHUB_ENV"
 
       - name: Run sync script
         id: sync
@@ -123,7 +123,7 @@ jobs:
         uses: peter-evans/create-pull-request@v8
         with:
           token: ${{ secrets.COMET_ACTION_CREATE_PR }}
-          branch: ${{ env.BRANCH_NAME }}
+          branch: github-actions/NA-sync-provider-models
           title: "[NA] [BE][FE] chore: sync provider model definitions"
           body: |
             ## Details

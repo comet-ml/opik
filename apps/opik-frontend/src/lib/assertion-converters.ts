@@ -24,7 +24,7 @@ export const DEFAULT_LLM_JUDGE_BE_CONFIG = {
     name: null,
     temperature: null,
     seed: null,
-    customParameters: null,
+    custom_parameters: null,
   },
   messages: [
     {

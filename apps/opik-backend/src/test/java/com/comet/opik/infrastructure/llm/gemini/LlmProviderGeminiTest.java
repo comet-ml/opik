@@ -3,6 +3,7 @@ package com.comet.opik.infrastructure.llm.gemini;
 import com.comet.opik.api.ChunkedResponseHandler;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.infrastructure.llm.GeminiMaxOutputTokens;
+import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.StreamingResponseLogger;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.UserMessage;
@@ -13,6 +14,7 @@ import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionResponse;
 import dev.langchain4j.model.output.FinishReason;
 import dev.langchain4j.model.output.TokenUsage;
+import jakarta.ws.rs.BadRequestException;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -35,6 +37,8 @@ import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathMatching;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Gemini streaming")
@@ -192,5 +196,20 @@ class LlmProviderGeminiTest {
 
         assertThat(terminal.await(10, TimeUnit.SECONDS)).isTrue();
         return new StreamOutcome(messages, errors);
+    }
+
+    @Test
+    void validateRequestAnswersAThinkingLevelGeminiDoesNotHaveWithA400() {
+        var provider = new LlmProviderGemini(mock(GeminiClientGenerator.class),
+                LlmProviderClientApiConfig.builder().apiKey("key").build());
+        var request = ChatCompletionRequest.builder()
+                .model(MODEL)
+                .addUserMessage("hi")
+                .customParameters(Map.of("thinking", Map.of("level", "ultra")))
+                .build();
+
+        assertThatThrownBy(() -> provider.validateRequest(request))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("level 'ultra'");
     }
 }

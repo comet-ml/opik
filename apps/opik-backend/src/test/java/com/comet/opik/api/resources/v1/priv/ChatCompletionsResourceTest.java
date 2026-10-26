@@ -401,7 +401,7 @@ class ChatCompletionsResourceTest {
         }
 
         @Test
-        @DisplayName("OpenAI-style {error:string} body — message propagates, status collapses to 400")
+        @DisplayName("OpenAI-style {error:string} body — message and the upstream status propagate")
         void openAiStyleErrorBodyIsPropagated() {
             var workspaceName = RandomStringUtils.randomAlphanumeric(20);
             var workspaceId = UUID.randomUUID().toString();
@@ -425,9 +425,7 @@ class ChatCompletionsResourceTest {
             var status = raw.getStatus();
             var body = raw.readEntity(String.class);
 
-            // CustomLlmErrorMessage.toErrorMessage() hardcodes 400 regardless of upstream
-            // status. Message text does propagate cleanly.
-            assertThat(status).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            assertThat(status).isEqualTo(HttpStatus.SC_UNAUTHORIZED);
             assertThat(body).contains("Invalid API key provided");
         }
 

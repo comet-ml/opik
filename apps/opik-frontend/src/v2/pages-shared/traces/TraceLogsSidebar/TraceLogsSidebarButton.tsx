@@ -33,6 +33,7 @@ type TraceLogsSidebarButtonProps = {
   // mounted once for the page instead of once per row (which would race on the shared tls_* state).
   renderSidebar?: boolean;
   stopClickPropagation?: boolean;
+  sidebarClassName?: string;
 };
 
 const TraceLogsSidebarButton: React.FunctionComponent<
@@ -50,6 +51,7 @@ const TraceLogsSidebarButton: React.FunctionComponent<
   viewConfig,
   renderSidebar = true,
   stopClickPropagation = false,
+  sidebarClassName,
 }) => {
   const { open, openSidebar, closeSidebar } = useTraceLogsSidebarControls();
 
@@ -126,6 +128,7 @@ const TraceLogsSidebarButton: React.FunctionComponent<
           logsSource={logsSource}
           title={title}
           viewConfig={viewConfig}
+          className={sidebarClassName}
         />
       )}
     </>

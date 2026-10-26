@@ -1,5 +1,6 @@
 package com.comet.opik.api.filter;
 
+import com.comet.opik.api.Source;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -51,7 +52,7 @@ public class FiltersFactory {
                     // No value is required for IS_EMPTY / IS_NOT_EMPTY (e.g. "Untagged" environment filter).
                     Operator.NO_VALUE_OPERATORS.contains(filter.operator()) ||
                             StringUtils.isNotBlank(filter.value()))
-                    .put(FieldType.ENUM_LEGACY, filter -> StringUtils.isNotBlank(filter.value()))
+                    .put(FieldType.ENUM_LEGACY, FiltersFactory::hasOnlySourceValues)
                     .put(FieldType.DATE_TIME, filter -> {
                         try {
                             Instant.parse(filter.value());
@@ -177,6 +178,21 @@ public class FiltersFactory {
 
     private boolean validateFieldType(Filter filter) {
         return FIELD_TYPE_VALIDATION_MAP.get(filter.field().getType()).apply(filter);
+    }
+
+    // ClickHouse fails the whole query when a source value is not one of the column's enum names
+    private static boolean hasOnlySourceValues(Filter filter) {
+        if (StringUtils.isBlank(filter.value())) {
+            return false;
+        }
+        var values = Operator.MULTI_VALUE_OPERATORS.contains(filter.operator())
+                ? Arrays.stream(filter.value().split(","))
+                        .map(String::trim)
+                        .filter(StringUtils::isNotEmpty)
+                        .toList()
+                : List.of(filter.value());
+        return !values.isEmpty() && values.stream()
+                .allMatch(value -> Source.UNKNOWN_VALUE.equals(value) || Source.fromString(value).isPresent());
     }
 
     public <T extends Filter> T mapCustom(T filter) {

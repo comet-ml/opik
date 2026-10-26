@@ -7,6 +7,7 @@ import com.comet.opik.api.DatasetType;
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.domain.llm.ChatCompletionService;
 import com.comet.opik.domain.llm.LlmProviderFactory;
+import com.comet.opik.domain.llm.ModelAnswerText;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.AsyncUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -247,7 +248,7 @@ public class DatasetExpansionService {
             DatasetType datasetType) {
         try {
             // Clean the response - sometimes LLMs add markdown formatting
-            String cleanedContent = generatedContent.trim();
+            String cleanedContent = ModelAnswerText.withoutLeadingReasoning(generatedContent).trim();
             if (cleanedContent.startsWith("```json")) {
                 cleanedContent = cleanedContent.substring(7);
             }

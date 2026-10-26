@@ -12,6 +12,8 @@ import usePromptModelDisplay from "@/v2/pages/PlaygroundPage/usePromptModelDispl
 import PlaygroundNoRunsYet from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundNoRunsYet";
 import PlaygroundStaleOutputNote from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundStaleOutputNote";
 import PlaygroundRunButton from "@/v2/pages/PlaygroundPage/PlaygroundRunButton";
+import PlaygroundStoppedTag from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundStoppedTag";
+import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 
 interface PlaygroundPromptOutputProps {
   promptId: string;
@@ -37,6 +39,7 @@ const PlaygroundPromptOutput = ({
   const errorHint = output?.errorHint;
   const isLoading = output?.isLoading ?? false;
   const stale = output?.stale ?? false;
+  const stopped = output?.stopped ?? false;
   const usage = output?.usage;
 
   const { ProviderIcon, modelLabel } = usePromptModelDisplay(
@@ -44,7 +47,7 @@ const PlaygroundPromptOutput = ({
     usage?.model,
   );
 
-  const hasOutput = value !== null || Boolean(error) || isLoading;
+  const hasOutput = value !== null || Boolean(error) || isLoading || stopped;
 
   const renderContent = () => {
     if (isLoading && !value) {
@@ -100,6 +103,7 @@ const PlaygroundPromptOutput = ({
                 <span className="comet-body-xs">{modelLabel}</span>
               </span>
             )}
+            {stopped && <PlaygroundStoppedTag stale={stale} />}
             {usage?.duration != null && (
               <span className="flex items-center gap-1 text-muted-gray">
                 <Clock className="size-3.5 shrink-0" />
@@ -108,13 +112,22 @@ const PlaygroundPromptOutput = ({
                 </span>
               </span>
             )}
-            {usage?.totalTokens != null && (
+            {usage?.totalTokens != null ? (
               <span className="flex items-center gap-1 text-muted-gray">
                 <Coins className="size-3.5 shrink-0" />
                 <span className="comet-body-xs">
                   {usage.totalTokens} tokens
                 </span>
               </span>
+            ) : (
+              stopped && (
+                <TooltipWrapper content="The provider sends the token count only at the end of the answer.">
+                  <span className="flex cursor-default items-center gap-1 text-muted-gray">
+                    <Coins className="size-3.5 shrink-0" />
+                    <span className="comet-body-xs">n/a tokens</span>
+                  </span>
+                </TooltipWrapper>
+              )
             )}
           </div>
           {stale && (

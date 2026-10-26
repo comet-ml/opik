@@ -517,10 +517,9 @@ class ProjectServiceImpl implements ProjectService {
             return Mono.just(Optional.empty());
         }
 
-        return Mono.deferContextual(ctx -> Mono.fromCallable(
-                () -> Optional.of(getOrCreate(ctx.get(RequestContext.WORKSPACE_ID),
-                        projectName, ctx.get(RequestContext.USER_NAME)).id()))
-                .subscribeOn(Schedulers.boundedElastic()));
+        // Callers create in parallel (one experiment per prompt of a dataset run), so a missing project can be
+        // created by another call between our lookup and insert; getOrCreate then reads that one back.
+        return getOrCreate(projectName).map(project -> Optional.of(project.id()));
     }
 
     @Override

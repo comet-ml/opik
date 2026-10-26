@@ -61,14 +61,21 @@ const streamedRun = (
 const processRun = async (
   run: RunStreamingReturn,
   promptToRun: PlaygroundPromptType = prompt,
+  { stopDuringRun = false } = {},
 ) => {
-  mocks.runStreaming.mockResolvedValue(run);
+  let controller: AbortController | undefined;
+  mocks.runStreaming.mockImplementation(async () => {
+    if (stopDuringRun) controller?.abort();
+    return run;
+  });
   const log = vi.fn();
   const { result } = renderHook(() =>
     usePromptCombination({
       workspaceName: "workspace",
       selectedRuleIds: null,
-      addAbortController: vi.fn(),
+      addAbortController: (_key: string, value: AbortController) => {
+        controller = value;
+      },
       deleteAbortController: vi.fn(),
       throttlingSeconds: 0,
     }),
@@ -156,5 +163,59 @@ describe("usePromptCombination", () => {
         errorHint: undefined,
       }),
     );
+  });
+
+  describe("a run the user stopped", () => {
+    it("keeps the partial answer and marks it stopped, with no token count", async () => {
+      const log = await processRun(
+        streamedRun({ result: "Once upon a" }),
+        prompt,
+        { stopDuringRun: true },
+      );
+
+      expect(mocks.updateOutput).toHaveBeenLastCalledWith(
+        PROMPT_ID,
+        expect.objectContaining({
+          isLoading: false,
+          stopped: true,
+          usage: expect.objectContaining({ totalTokens: undefined }),
+        }),
+      );
+      expect(log).toHaveBeenCalledWith(
+        expect.objectContaining({ result: "Once upon a", usage: null }),
+      );
+    });
+
+    it("marks a run stopped before the first token as stopped, not failed", async () => {
+      await processRun(streamedRun({ result: "" }), prompt, {
+        stopDuringRun: true,
+      });
+
+      expect(mocks.updateOutput).toHaveBeenCalledWith(
+        PROMPT_ID,
+        expect.objectContaining({ isLoading: false, stopped: true }),
+      );
+      expect(mocks.updateOutput).not.toHaveBeenCalledWith(
+        PROMPT_ID,
+        expect.objectContaining({ error: expect.anything() }),
+      );
+    });
+
+    it("does not mark a run that finished on its own as stopped", async () => {
+      await processRun(
+        streamedRun({
+          result: "Hello",
+          usage: { prompt_tokens: 5, completion_tokens: 7, total_tokens: 12 },
+        }),
+      );
+
+      expect(mocks.updateOutput).toHaveBeenLastCalledWith(
+        PROMPT_ID,
+        expect.objectContaining({
+          stopped: false,
+          usage: expect.objectContaining({ totalTokens: 12 }),
+        }),
+      );
+    });
   });
 });

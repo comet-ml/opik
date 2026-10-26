@@ -190,31 +190,35 @@ public class AnthropicMappersTest {
     @DisplayName("Sampling params on the Anthropic chat path, after ParamResolver")
     class SamplingParamsGating {
 
+        private static final int DEFAULT_MAX = LlmProviderAnthropicMapper.DEFAULT_MAX_COMPLETION_TOKENS;
+
         private final ParamResolver resolver = new ParamResolver(Mockito.mock(LlmProviderFactory.class),
                 bundledRegistry());
 
         @ParameterizedTest(name = "{0}")
         @MethodSource("samplingGatingCases")
         void gatesSamplingParams(String description, ChatCompletionRequest request, Double expectedTemperature,
-                Double expectedTopP) {
+                Double expectedTopP, Map<String, Object> expectedThinking, int expectedMaxTokens) {
             var actual = LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(
                     resolver.resolve(request, null).request(), bundledRegistry());
 
             // Build the expected payload independently of the mapper (not by re-calling it), so a regression in
             // any collateral field — model, messages, max_tokens, etc. — can't hide by changing actual and
             // expected identically. Every case uses the same fixture: one "hi" user message, no system, no
-            // explicit max_tokens (defaults to 4096) and no stream/stop. Only temperature/top_p vary per the gate.
+            // explicit max_tokens (4096 by default) and no stream/stop. Temperature/top_p vary per the gate, and the
+            // thinking block sent and the max_tokens it needs per the request's thinking.
             var expected = AnthropicCreateMessageRequest.builder()
                     .model(request.model())
                     .stream(false)
                     .temperature(expectedTemperature)
                     .topP(expectedTopP)
-                    .maxTokens(LlmProviderAnthropicMapper.DEFAULT_MAX_COMPLETION_TOKENS)
+                    .maxTokens(expectedMaxTokens)
                     .messages(List.of(AnthropicMessage.builder()
                             .role(AnthropicRole.USER)
                             .content(List.of(new AnthropicTextContent("hi")))
                             .build()))
                     .system(List.of())
+                    .customParameters(expectedThinking == null ? null : Map.of("thinking", expectedThinking))
                     .build();
 
             assertThat(actual).usingRecursiveComparison().isEqualTo(expected);
@@ -228,43 +232,51 @@ public class AnthropicMappersTest {
                     adaptiveDropsBoth("claude-opus-4-8"),
                     // Sampling-capable model: params forwarded, with temperature winning over top_p.
                     Arguments.of("sampling-capable forwards temperature",
-                            samplingCapable().temperature(0.7).build(), 0.7, null),
+                            samplingCapable().temperature(0.7).build(), 0.7, null, null, DEFAULT_MAX),
                     Arguments.of("sampling-capable forwards top_p when temperature absent",
-                            samplingCapable().topP(0.9).build(), null, 0.9),
+                            samplingCapable().topP(0.9).build(), null, 0.9, null, DEFAULT_MAX),
                     Arguments.of("sampling-capable drops top_p when temperature also set",
-                            samplingCapable().temperature(0.7).topP(0.9).build(), 0.7, null),
-                    // Thinking enabled (any non-blank type other than "disabled", case-insensitive) drops both.
-                    thinkingDropsBoth("enabled"),
-                    thinkingDropsBoth("ENABLED"),
-                    thinkingDropsBoth("adaptive"),
-                    thinkingDropsBoth("some-future-mode"),
-                    // Thinking disabled / blank / null / absent leaves sampling params untouched.
-                    thinkingForwards("thinking disabled forwards", Map.of("thinking", Map.of("type", "disabled"))),
+                            samplingCapable().temperature(0.7).topP(0.9).build(), 0.7, null, null, DEFAULT_MAX),
+                    // Thinking enabled (any non-blank type other than "disabled", case-insensitive) drops both, and
+                    // the block is sent: a budget only with enabled thinking, and Claude 3.7's missing adaptive
+                    // thinking already turned into the smallest budget by the resolver.
+                    // An enabled budget also leaves the answer DEFAULT_MAX tokens above it, as on the judge path.
+                    thinkingDropsBoth("enabled", Map.of("type", "enabled", "budget_tokens", 1024), 1024 + DEFAULT_MAX),
+                    thinkingDropsBoth("ENABLED", Map.of("type", "ENABLED", "budget_tokens", 1024), 1024 + DEFAULT_MAX),
+                    thinkingDropsBoth("adaptive", Map.of("type", "enabled", "budget_tokens", 1024),
+                            1024 + DEFAULT_MAX),
+                    thinkingDropsBoth("some-future-mode", Map.of("type", "some-future-mode"), DEFAULT_MAX),
+                    // Thinking disabled / blank / null / absent leaves sampling params untouched; only a typed block
+                    // is sent.
+                    thinkingForwards("thinking disabled forwards", Map.of("thinking", Map.of("type", "disabled")),
+                            Map.of("type", "disabled")),
                     thinkingForwards("thinking DISABLED (case-insensitive) forwards",
-                            Map.of("thinking", Map.of("type", "DISABLED"))),
-                    thinkingForwards("thinking blank type forwards", Map.of("thinking", Map.of("type", " "))),
-                    thinkingForwards("thinking null type forwards", nullThinkingTypeParameters()),
-                    thinkingForwards("thinking block absent forwards", Map.of("max_tokens", 2048)));
+                            Map.of("thinking", Map.of("type", "DISABLED")), Map.of("type", "DISABLED")),
+                    thinkingForwards("thinking blank type forwards", Map.of("thinking", Map.of("type", " ")), null),
+                    thinkingForwards("thinking null type forwards", nullThinkingTypeParameters(), null),
+                    thinkingForwards("thinking block absent forwards", Map.of("max_tokens", 2048), null));
         }
 
         private Arguments adaptiveDropsBoth(String model) {
             return Arguments.of("adaptive model %s drops both".formatted(model),
                     ChatCompletionRequest.builder().model(model).addUserMessage("hi")
                             .temperature(0.7).topP(0.9).build(),
-                    null, null);
+                    null, null, null, DEFAULT_MAX);
         }
 
-        private Arguments thinkingDropsBoth(String thinkingType) {
+        private Arguments thinkingDropsBoth(String thinkingType, Map<String, Object> sentThinking, int maxTokens) {
             return Arguments.of("thinking type '%s' drops both".formatted(thinkingType),
                     samplingCapable().temperature(0.7).topP(0.9)
                             .customParameters(Map.of("thinking", Map.of("type", thinkingType, "budget_tokens", 1024)))
                             .build(),
-                    null, null);
+                    null, null, sentThinking, maxTokens);
         }
 
-        private Arguments thinkingForwards(String description, Map<String, Object> customParameters) {
+        private Arguments thinkingForwards(String description, Map<String, Object> customParameters,
+                Map<String, Object> sentThinking) {
             return Arguments.of(description,
-                    samplingCapable().temperature(0.7).customParameters(customParameters).build(), 0.7, null);
+                    samplingCapable().temperature(0.7).customParameters(customParameters).build(), 0.7, null,
+                    sentThinking, DEFAULT_MAX);
         }
 
         private ChatCompletionRequest.Builder samplingCapable() {
@@ -544,7 +556,7 @@ public class AnthropicMappersTest {
         @ParameterizedTest(name = "{0}: {1}")
         @MethodSource
         void leavesThinkingAlone(String description, String model, Map<String, Object> customParameters,
-                Double expectedTemperature) {
+                Double expectedTemperature, String sentThinking) {
             var request = ChatCompletionRequest.builder()
                     .model(model)
                     .addUserMessage("hi")
@@ -554,23 +566,26 @@ public class AnthropicMappersTest {
 
             var actual = toWireRequest(request);
 
-            assertThat(JsonUtils.getJsonNodeFromString(Json.toJson(actual)).has("thinking")).isFalse();
+            var thinking = JsonUtils.getJsonNodeFromString(Json.toJson(actual)).path("thinking");
+            assertThat(thinking.isMissingNode() ? null : thinking)
+                    .isEqualTo(sentThinking == null ? null : JsonUtils.getJsonNodeFromString(sentThinking));
             assertThat(actual.temperature).isEqualTo(expectedTemperature);
         }
 
         Stream<Arguments> leavesThinkingAlone() {
             return Stream.of(
                     Arguments.of("no effort on a model that thinks only when asked", "claude-sonnet-4-6",
-                            Map.of("output_config", Map.of("format", JSON_SCHEMA_FORMAT)), 0.7),
-                    Arguments.of("a request that turns thinking off itself", "claude-sonnet-4-6",
+                            Map.of("output_config", Map.of("format", JSON_SCHEMA_FORMAT)), 0.7, null),
+                    Arguments.of("a request that turns thinking off itself, which is sent as it asked",
+                            "claude-sonnet-4-6",
                             Map.of("output_config", Map.of("effort", "low"), "thinking", Map.of("type", "disabled")),
-                            0.7),
+                            0.7, "{\"type\": \"disabled\"}"),
                     Arguments.of("a model that thinks by default", "claude-sonnet-5",
-                            Map.of("output_config", Map.of("effort", "xhigh")), null),
+                            Map.of("output_config", Map.of("effort", "xhigh")), null, null),
                     Arguments.of("a model that thinks by default", "claude-opus-5-5",
-                            Map.of("output_config", Map.of("effort", "medium")), null),
+                            Map.of("output_config", Map.of("effort", "medium")), null, null),
                     Arguments.of("Opus 4.5, which has no adaptive thinking", "claude-opus-4-5-20251101",
-                            Map.of("output_config", Map.of("effort", "high")), 0.7));
+                            Map.of("output_config", Map.of("effort", "high")), 0.7, null));
         }
     }
 

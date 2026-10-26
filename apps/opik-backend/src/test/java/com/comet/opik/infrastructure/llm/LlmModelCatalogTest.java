@@ -11,9 +11,14 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import org.apache.commons.collections4.CollectionUtils;
+import org.assertj.core.api.InstanceOfAssertFactories;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -66,6 +71,11 @@ class LlmModelCatalogTest {
                 temperature: {accepted: false}
                 maxOutputTokens: {accepted: true, min: 16, max: 128000, default: 4000}
                 effort: {accepted: false}
+            """);
+
+    private static final ModelParams ANTHROPIC_PROFILE = params("""
+            temperature: {accepted: false}
+            effort: {accepted: true, levels: [low, medium, high], default: high}
             """);
 
     private static final ModelParams CLAUDE_SONNET_4_6 = params("""
@@ -160,6 +170,23 @@ class LlmModelCatalogTest {
         }
 
         @Test
+        void aDefaultModelOutOfThePickerFallsBackToTheProvidersFirstPickerModel() {
+            var service = service("llm-models-test-default-models.yaml", "llm-models-test-curated-default-models.yaml",
+                    null);
+
+            assertThat(service.getDefaultModels()).isEqualTo(Map.of(
+                    "anthropic", "claude-haiku-4-5",
+                    "vertex-ai", "vertex_ai/gemini-2.5-pro",
+                    "openai", "gpt-4o",
+                    "openrouter", "openai/gpt-5.5"));
+        }
+
+        @Test
+        void aCuratedFileWithoutDefaultModelsServesNone() {
+            assertThat(service(null).getDefaultModels()).isEmpty();
+        }
+
+        @Test
         void aCuratedFileNamingAProfileItDoesNotDefineStopsTheLoad() {
             assertThatThrownBy(
                     () -> service("llm-models-test.yaml", "llm-models-test-curated-unknown-profile.yaml", null))
@@ -246,6 +273,15 @@ class LlmModelCatalogTest {
         @Test
         void aProviderWithoutDefaultsGetsNoParams() {
             assertThat(model(service(null), "vertex-ai", "gemini-2.0-flash-001").params()).isNull();
+        }
+
+        @Test
+        void theProfilesAreWhatAnUnlistedIdOfEachProviderGets() {
+            var service = service(null);
+
+            assertThat(service.getProfiles())
+                    .isEqualTo(Map.of("openai", OPENAI_PROFILE, "anthropic", ANTHROPIC_PROFILE));
+            assertThat(service.paramsOf("anthropic", "an-id-no-layer-lists")).isEqualTo(ANTHROPIC_PROFILE);
         }
 
         @Test
@@ -340,6 +376,17 @@ class LlmModelCatalogTest {
                             .contains(row.id())));
         }
 
+        // Listed, not "in the picker": the sync only adds models, but it does take a retired one out of the picker,
+        // and the loader falls back then instead of failing the sync's PR.
+        @Test
+        void everyDefaultModelIsAModelTheSyncLists() {
+            catalog.defaultModels().forEach((provider, modelId) -> assertThat(generated.getOrDefault(provider,
+                    List.of()))
+                    .as("default model %s/%s is not listed by the sync", provider, modelId)
+                    .extracting(ModelEntry::id)
+                    .contains(modelId));
+        }
+
         @Test
         void noModelHasTwoRows() {
             catalog.models().forEach((provider, rows) -> assertThat(rows)
@@ -379,6 +426,52 @@ class LlmModelCatalogTest {
                     .as("OpenAI reasoning models without effort levels; give each a curated row with them, or"
                             + " effort: {accepted: false} if it refuses reasoning_effort")
                     .isEmpty();
+        }
+
+        // Gemini 2.5 Flash and Flash-Lite turn thinking off with a zero budget, which GeminiThinkingParams sends for
+        // OFF. A row without it makes the catalog panel replace a saved Off with the default.
+        @ParameterizedTest(name = "{0}/{1}")
+        @MethodSource("gemini25FlashRows")
+        void gemini25FlashModelOffersThinkingOff(String provider, String id) {
+            assertThat(registry.get(provider))
+                    .filteredOn(model -> model.id().equals(id))
+                    .singleElement()
+                    .extracting(model -> model.params().effort().levels())
+                    .asInstanceOf(InstanceOfAssertFactories.list(String.class))
+                    .contains("auto", "off");
+        }
+
+        static Stream<Arguments> gemini25FlashRows() {
+            return Stream.of(
+                    Arguments.of("gemini", "gemini-2.5-flash"),
+                    Arguments.of("gemini", "gemini-2.5-flash-lite"),
+                    Arguments.of("vertex-ai", "gemini-2.5-flash"),
+                    Arguments.of("vertex-ai", "gemini-2.5-flash-lite-preview-06-17"));
+        }
+
+        @ParameterizedTest(name = "{0} -> {1}")
+        @CsvSource(value = {"gpt-5.2, null", "gpt-5.4, EFFORT_NONE_ONLY", "gpt-6-luna, EFFORT_NONE_ONLY",
+                "gpt-6-astra, REFUSED", "gpt-6.1-sol, REFUSED", "gpt-4o, null"}, nullValues = "null")
+        void theListedOpenAiModelsCarryHowChatCompletionsTakesTheirTools(String id,
+                ModelParams.ChatCompletionsTools expected) {
+            var model = registry.get("openai").stream().filter(listed -> listed.id().equals(id)).findFirst()
+                    .orElseThrow();
+
+            assertThat(model.params().tools() == null ? null : model.params().tools().chatCompletions())
+                    .isEqualTo(expected);
+        }
+
+        // A judge whose key has its own base URL calls tools on these models with reasoning_effort "none".
+        @Test
+        void everyOpenAiModelThatTakesToolsOnlyWithoutReasoningCanTurnReasoningOff() {
+            var cannotTurnItOff = registry.getOrDefault("openai", List.of()).stream()
+                    .filter(model -> model.params().tools() != null && model.params().tools()
+                            .chatCompletions() == ModelParams.ChatCompletionsTools.EFFORT_NONE_ONLY)
+                    .filter(model -> !model.params().effort().levels().contains("none"))
+                    .map(LlmModelDefinition::id)
+                    .toList();
+
+            assertThat(cannotTurnItOff).isEmpty();
         }
 
         private static Stream<ModelParams> allVariants(ModelParams params) {

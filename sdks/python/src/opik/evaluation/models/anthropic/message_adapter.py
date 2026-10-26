@@ -36,7 +36,7 @@ LOGGER = logging.getLogger(__name__)
 #
 # This is a ceiling, not the final answer: `filter_unsupported_params`
 # intersects it with what the installed SDK's `Messages.create()` actually
-# accepts, because the SDK removes parameters over time (1.7.0 dropped
+# accepts, because the SDK removes parameters over time (1.0.0 dropped
 # `temperature`, `top_p` and `top_k`) and forwarding one it no longer
 # takes is a `TypeError` before the request is ever sent.
 _SUPPORTED_PARAMS: frozenset[str] = frozenset(
@@ -247,6 +247,31 @@ def filter_unsupported_params(
             )
             already_warned.add(key)
     return filtered
+
+
+def drop_unsupported_sampling_params(
+    params: Dict[str, Any],
+    model_name: str,
+    already_warned: Set[str],
+) -> None:
+    from ..litellm import util as litellm_util
+
+    present = [param for param in litellm_util.SAMPLING_PARAMS if param in params]
+    # Anthropic SDKs from 1.0.0 no longer take these, so they are usually gone
+    # already. Checked first because importing LiteLLM fetches its model map.
+    if not present or not litellm_util.rejects_sampling_params(model_name):
+        return
+    for param in present:
+        value = params.pop(param)
+        if param not in already_warned:
+            LOGGER.warning(
+                "Model %s does not accept %s. Dropping %s=%s.",
+                model_name,
+                param,
+                param,
+                value,
+            )
+            already_warned.add(param)
 
 
 # OpenAI accepts `tool_choice` as a bare string ("auto" / "none" /

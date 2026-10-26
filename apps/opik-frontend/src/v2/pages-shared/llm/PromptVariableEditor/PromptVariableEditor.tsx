@@ -7,17 +7,25 @@ import React, {
   useState,
 } from "react";
 import CodeMirror from "@uiw/react-codemirror";
-import { EditorView } from "@codemirror/view";
+import { EditorView, keymap } from "@codemirror/view";
+import { insertNewlineAndIndent } from "@codemirror/commands";
 import isEmpty from "lodash/isEmpty";
 
 import JsonTreePopover from "@/shared/JsonTreePopover/JsonTreePopover";
 import { JsonObject, JsonValue } from "@/types/shared";
+import { cn } from "@/lib/utils";
 import {
   codeMirrorPromptTheme,
   mustachePlugin,
   VariableHintExtension,
 } from "@/constants/codeMirrorPlugins";
 import { useJsonPopover } from "@/v2/pages-shared/llm/LLMPromptMessages/useJsonPopover";
+
+// @codemirror/view before 6.38 drops Chrome's own Shift+Enter line break.
+// Opt-in only: the Agent playground submits on Shift+Enter.
+const shiftEnterNewlineKeymap = keymap.of([
+  { key: "Shift-Enter", run: insertNewlineAndIndent },
+]);
 
 export type PromptVariableEditorHandle = {
   insertAtCursor: (text: string) => void;
@@ -36,6 +44,8 @@ type PromptVariableEditorProps = {
   jsonTreeEmptyState?: string;
   onJsonPathSelect?: (path: string, value: JsonValue) => void;
   openInsideTag?: boolean;
+  shiftEnterInsertsNewline?: boolean;
+  size?: "default" | "xs";
 };
 
 const PromptVariableEditor = forwardRef<
@@ -53,6 +63,8 @@ const PromptVariableEditor = forwardRef<
       jsonTreeEmptyState,
       onJsonPathSelect,
       openInsideTag,
+      shiftEnterInsertsNewline = false,
+      size = "default",
     },
     ref,
   ) => {
@@ -140,7 +152,9 @@ const PromptVariableEditor = forwardRef<
     }, [hintText, braceStartPos]);
 
     return (
-      <div className="relative">
+      <div
+        className={cn("relative", size === "xs" && "[&_.cm-editor]:text-xs")}
+      >
         <CodeMirror
           onCreateEditor={handleCreateEditor}
           onFocus={onFocus}
@@ -160,6 +174,7 @@ const PromptVariableEditor = forwardRef<
           extensions={[
             EditorView.lineWrapping,
             mustachePlugin,
+            ...(shiftEnterInsertsNewline ? [shiftEnterNewlineKeymap] : []),
             ...(braceKeyExtension ? [braceKeyExtension] : []),
             ...(hasJsonData ? variableHintRef.current.getExtension() : []),
           ]}

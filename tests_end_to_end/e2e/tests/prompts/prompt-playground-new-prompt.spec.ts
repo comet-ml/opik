@@ -51,6 +51,13 @@ test.describe(
           }
         });
 
+        await test.step('A toast confirms the save', async () => {
+          const promptLabel = promptType === 'chat' ? 'chat prompt' : 'prompt';
+          await expect(
+            playground.savedToLibraryToast(`Saved new ${promptLabel} "${promptName}"`),
+          ).toBeVisible();
+        });
+
         const prompts = new PromptsPage(page);
 
         await test.step('Navigate to Prompt Library', async () => {

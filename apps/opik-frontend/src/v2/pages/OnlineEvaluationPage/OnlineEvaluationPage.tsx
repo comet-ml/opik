@@ -51,6 +51,7 @@ import RulesActionsPanel from "@/v2/pages-shared/automations/RulesActionsPanel";
 import RuleRowActionsCell from "@/v2/pages-shared/automations/RuleRowActionsCell";
 import RuleLogsCell from "@/v2/pages-shared/automations/RuleLogsCell";
 import RuleTracesCell from "@/v2/pages-shared/automations/RuleTracesCell";
+import RuleModelCell from "@/v2/pages-shared/automations/RuleModelCell";
 import { EvaluationTracesSidebar } from "@/v2/pages-shared/automations/EvaluationTracesSidebar";
 import { capitalizeFirstLetter } from "@/lib/utils";
 import {
@@ -113,11 +114,20 @@ const DEFAULT_COLUMNS: ColumnData<EvaluatorsRule>[] = [
     type: COLUMN_TYPE.string,
     cell: StatusCell as never,
   },
+  {
+    id: "model",
+    label: "Model",
+    type: COLUMN_TYPE.string,
+    cell: RuleModelCell as never,
+  },
 ];
 
 const FILTER_COLUMNS = DEFAULT_COLUMNS.filter(
   (col) =>
-    col.id !== "type" && col.id !== "enabled" && col.id !== "sampling_rate",
+    col.id !== "type" &&
+    col.id !== "enabled" &&
+    col.id !== "sampling_rate" &&
+    col.id !== "model",
 );
 
 const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
@@ -130,6 +140,7 @@ const DEFAULT_SELECTED_COLUMNS: string[] = [
   "enabled",
   "sampling_rate",
   "type",
+  "model",
   "last_updated_at",
 ];
 
@@ -139,6 +150,7 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
   "enabled",
   "sampling_rate",
   "type",
+  "model",
   "last_updated_at",
   "created_at",
   "created_by",

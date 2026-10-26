@@ -6,7 +6,8 @@ the judge can decide on the first turn whether any drill-in tool
 throughout, and `response_format` is set on every turn — so any turn
 where the model declines to call a tool already produces the structured
 JSON verdict the caller parses. A dedicated wrap-up turn only runs as a
-force-finalize when the loop exits via `max_rounds`.
+force-finalize when the loop exits via `max_rounds`, or for models that
+take no `response_format` next to tools (Gemini before 3).
 
 Telemetry is emitted via `LOGGER` at the end of each loop run so an
 operator running `evaluate()` over a dataset can spot misconfigured
@@ -17,6 +18,7 @@ signal in particular).
 import collections
 import dataclasses
 import logging
+import re
 from typing import Any, Dict, List, Set, Tuple, Type
 
 import pydantic
@@ -50,6 +52,11 @@ _DEDUP_HINT_TEMPLATE = (
     "for a specific path, or `search` for a keyword. Repeating this call "
     "cannot produce new information."
 )
+
+
+# "Function calling with a response mime type: 'application/json' is unsupported"
+# on Google AI Studio and Vertex AI; Gemini 3 takes both.
+_JSON_FORMAT_WITH_TOOLS_REFUSED = re.compile(r"^gemini-[12](?:[.-]|$)")
 
 
 @dataclasses.dataclass
@@ -94,6 +101,9 @@ def run_agentic_judge(
     contract as `LLMJudge._generate_and_parse`.
     """
     tool_specs: List[Any] = registry.specs()
+    tool_round_format = (
+        response_format if _takes_json_format_with_tools(model) else None
+    )
     telemetry = LoopTelemetry()
     # Tracks every (tool_name, arguments) pair seen during this loop run.
     # Second and subsequent occurrences are short-circuited with a hint
@@ -119,7 +129,7 @@ def run_agentic_judge(
         messages=messages,
         tools=tool_specs,
         tool_choice="auto",
-        response_format=response_format,
+        response_format=tool_round_format,
         temperature=0,
     )
     messages.append(_assistant_message_from_response(response))
@@ -180,7 +190,7 @@ def run_agentic_judge(
             messages=messages,
             tools=tool_specs,
             tool_choice="auto",
-            response_format=response_format,
+            response_format=tool_round_format,
             temperature=0,
         )
         messages.append(_assistant_message_from_response(response))
@@ -200,7 +210,12 @@ def run_agentic_judge(
     # to produce.
     pending_tool_calls = response.get("tool_calls") or []
     content = response.get("content")
-    if not max_rounds_exhausted and content and not pending_tool_calls:
+    if (
+        not max_rounds_exhausted
+        and content
+        and not pending_tool_calls
+        and tool_round_format is not None
+    ):
         return content
 
     # Otherwise (max rounds reached, or the last response lacked usable
@@ -234,6 +249,11 @@ def run_agentic_judge(
         temperature=0,
     )
     return verdict.get("content") or ""
+
+
+def _takes_json_format_with_tools(model: base_model.OpikBaseModel) -> bool:
+    model_name = getattr(model, "model_name", None) or ""
+    return _JSON_FORMAT_WITH_TOOLS_REFUSED.match(model_name.rsplit("/", 1)[-1]) is None
 
 
 def _emit_telemetry(

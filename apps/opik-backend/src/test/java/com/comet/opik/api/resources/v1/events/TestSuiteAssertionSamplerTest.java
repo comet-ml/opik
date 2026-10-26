@@ -1134,7 +1134,7 @@ class TestSuiteAssertionSamplerTest {
                     .isEqualTo(AnthropicModelName.CLAUDE_HAIKU_4_5.toString());
             assertThat(message.judgeFallbackModels()).containsExactly(
                     OpenaiModelName.GPT_4O_MINI.toString(),
-                    GeminiModelName.GEMINI_2_0_FLASH.toString());
+                    GeminiModelName.GEMINI_3_5_FLASH_LITE.toString());
         }
 
         @Test

@@ -249,6 +249,9 @@ class AnthropicChatModel(base_model.OpikBaseModel):
             **self._completion_kwargs,
             **filtered_extra,
         }
+        message_adapter.drop_unsupported_sampling_params(
+            call_kwargs, self._api_model_name, self._unsupported_warned
+        )
         call_kwargs["model"] = self._api_model_name
         call_kwargs["messages"] = non_system_messages
         call_kwargs.setdefault("max_tokens", DEFAULT_MAX_TOKENS)

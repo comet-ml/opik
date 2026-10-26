@@ -12,6 +12,7 @@ import com.comet.opik.infrastructure.llm.gemini.GeminiModelName;
 import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
 import com.comet.opik.infrastructure.llm.vertexai.VertexAIModelName;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import dev.langchain4j.data.message.ChatMessageType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -62,7 +63,7 @@ class TestSuiteEvaluatorMapperTest {
             return Stream.of(
                     Arguments.of(LlmProvider.OPEN_AI, OpenaiModelName.GPT_4O_MINI.toString()),
                     Arguments.of(LlmProvider.ANTHROPIC, AnthropicModelName.CLAUDE_HAIKU_4_5.toString()),
-                    Arguments.of(LlmProvider.GEMINI, GeminiModelName.GEMINI_2_0_FLASH.toString()),
+                    Arguments.of(LlmProvider.GEMINI, GeminiModelName.GEMINI_3_5_FLASH_LITE.toString()),
                     Arguments.of(LlmProvider.VERTEX_AI, VertexAIModelName.GEMINI_2_5_FLASH.qualifiedName()));
         }
 
@@ -74,7 +75,7 @@ class TestSuiteEvaluatorMapperTest {
             assertThat(result).containsExactly(
                     AnthropicModelName.CLAUDE_HAIKU_4_5.toString(),
                     OpenaiModelName.GPT_4O_MINI.toString(),
-                    GeminiModelName.GEMINI_2_0_FLASH.toString());
+                    GeminiModelName.GEMINI_3_5_FLASH_LITE.toString());
         }
 
         @Test
@@ -84,7 +85,7 @@ class TestSuiteEvaluatorMapperTest {
                     Set.of(LlmProvider.GEMINI, LlmProvider.ANTHROPIC));
             assertThat(result).containsExactly(
                     AnthropicModelName.CLAUDE_HAIKU_4_5.toString(),
-                    GeminiModelName.GEMINI_2_0_FLASH.toString());
+                    GeminiModelName.GEMINI_3_5_FLASH_LITE.toString());
         }
 
         @Test
@@ -92,7 +93,7 @@ class TestSuiteEvaluatorMapperTest {
         void ignoresUnsupportedProvidersInMixedSet() {
             var result = SupportedJudgeProvider.resolveModels(
                     Set.of(LlmProvider.OLLAMA, LlmProvider.BEDROCK, LlmProvider.GEMINI));
-            assertThat(result).containsExactly(GeminiModelName.GEMINI_2_0_FLASH.toString());
+            assertThat(result).containsExactly(GeminiModelName.GEMINI_3_5_FLASH_LITE.toString());
         }
     }
 
@@ -133,6 +134,24 @@ class TestSuiteEvaluatorMapperTest {
             var result = mapper.toScoringCode(config, "gpt-4o-mini", false);
 
             assertThat(result.maxCostUsd()).isNull();
+        }
+
+        @Test
+        @DisplayName("keeps the custom parameters an SDK saved under customParameters")
+        void keepsCamelCaseCustomParameters() {
+            var mapper = new TestSuiteEvaluatorMapper(new TestSuiteConfig());
+            var config = JsonUtils.valueToTree(judgeCode(null));
+            ((ObjectNode) config).set("model", JsonUtils.getJsonNodeFromString(
+                    """
+                            {"name": null, "temperature": null, "seed": null, "customParameters": {"reasoning_effort": "low"}}"""));
+
+            var result = mapper.toScoringCode(config, "gpt-4o-mini", false);
+
+            assertThat(result.model()).isEqualTo(LlmAsJudgeModelParameters.builder()
+                    .name("gpt-4o-mini")
+                    .customParameters(JsonUtils.getJsonNodeFromString("""
+                            {"reasoning_effort": "low"}"""))
+                    .build());
         }
     }
 }
