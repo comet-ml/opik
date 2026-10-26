@@ -3,6 +3,7 @@ package com.comet.opik.infrastructure.llm;
 import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.comet.opik.infrastructure.net.DestinationGuardException;
 import com.google.common.io.Files;
+import jakarta.ws.rs.core.Response;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -13,6 +14,8 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.Set;
+
+import static jakarta.ws.rs.core.Response.Status.Family.familyOf;
 
 /**
  * Utility class for detecting MIME types of video URLs.
@@ -89,7 +92,7 @@ public class VideoMimeTypeUtils {
 
             HttpResponse<Void> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.discarding());
             // redirects aren't followed, so a 3xx carries the redirect page's type, not the video's
-            if (response.statusCode() / 100 != 2) {
+            if (familyOf(response.statusCode()) != Response.Status.Family.SUCCESSFUL) {
                 return null;
             }
 
