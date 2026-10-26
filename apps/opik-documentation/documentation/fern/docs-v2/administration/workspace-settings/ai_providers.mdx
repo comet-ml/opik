@@ -324,6 +324,20 @@ Use this option to add any other OpenAI API-compliant provider such as vLLM, etc
   **Self-hosted deployments:** The Docker Compose and Helm deployments allow provider URLs on private networks (`LLM_PROVIDER_DESTINATION_GUARD=relaxed`), so local servers such as Ollama or vLLM work out of the box. Other launch paths default to `strict`, which allows only public `http`/`https` provider URLs; set the variable to `relaxed` if your provider runs on a private network, or to `strict` on Compose/Helm to harden them. Note that `relaxed` disables the SSRF protection on provider URLs, so it is only appropriate where provider configuration is restricted to trusted administrators. On Opik Cloud, the provider URL must be publicly reachable.
 </Tip>
 
+| Launch path | Default | How to change it |
+|---|---|---|
+| Docker Compose (`./opik.sh` or `docker compose`) | `relaxed` | Export it before starting, e.g. `LLM_PROVIDER_DESTINATION_GUARD=strict ./opik.sh` |
+| Helm chart | `relaxed` | Set `component.backend.env.LLM_PROVIDER_DESTINATION_GUARD` in your values file (example below) |
+| Backend started any other way | `strict` | Set the `LLM_PROVIDER_DESTINATION_GUARD` environment variable on the backend |
+
+```yaml
+# Helm values: harden a deployment whose providers are all public
+component:
+  backend:
+    env:
+      LLM_PROVIDER_DESTINATION_GUARD: "strict"
+```
+
 Changing a provider's **URL** requires re-entering its API key (or OAuth2 credentials), since stored secrets are only ever sent to the endpoint they were saved for.
 
 ##### Custom Headers
