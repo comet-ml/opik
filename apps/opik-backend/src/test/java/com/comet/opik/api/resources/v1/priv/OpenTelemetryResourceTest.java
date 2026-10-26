@@ -545,7 +545,11 @@ class OpenTelemetryResourceTest {
                     // Vertex also serves Claude, which Opik prices under a different provider than
                     // the Gemini rows — so the Vertex alias alone would still leave this span at $0.
                     arguments("vertex_ai + claude", "gen_ai.system", "vertex_ai", "claude-haiku-4-5", null,
-                            "anthropic_vertexai"));
+                            "anthropic_vertexai"),
+                    // #7772: an OpenAI-compatible SDK pointed at Cerebras reports its API host. The span keeps
+                    // the host as sent and is priced under the provider the host names.
+                    arguments("api.cerebras.ai", "gen_ai.system", "api.cerebras.ai", "llama-3.3-70b", null,
+                            "api.cerebras.ai"));
         }
 
         @ParameterizedTest(name = "OTel provider {0} is stored as {5} and priced")

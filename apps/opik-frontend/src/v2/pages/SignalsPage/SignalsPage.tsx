@@ -40,7 +40,7 @@ import SignalsStatsCards from "@/v2/pages/SignalsPage/SignalsStatsCards";
 import IssuesTab from "@/v2/pages/SignalsPage/IssuesTab/IssuesTab";
 import DiagnosticsEmptyState from "@/v2/pages/SignalsPage/DiagnosticsEmptyState";
 import AutoRunToggle from "@/v2/pages/SignalsPage/AutoRunToggle";
-import OutOfCreditsButton from "@/v2/pages/SignalsPage/OutOfCreditsButton";
+import OutOfCreditsButton from "@/v2/pages-shared/ollie/OutOfCreditsButton";
 import DiagnosticsSettingsMenu from "@/v2/pages/SignalsPage/DiagnosticsSettingsMenu";
 import GuidanceSheet from "@/v2/pages/SignalsPage/GuidanceSheet";
 import GuidanceChangedCallout from "@/v2/pages/SignalsPage/GuidanceChangedCallout";
