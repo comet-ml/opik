@@ -2522,3 +2522,39 @@ aiLabels:
     #  Description: Per sweep query on the shared ClickHouse; a trip skips that bucket for the tick. Lengthens the leader
     #  lease when over readTimeout
     maxExecutionTime: ${AI_LABELS_SWEEP_MAX_EXECUTION_TIME:-50s}
+
+# Topics: groups traces by the intent ai-labels summarizes. Step 1 stores a bge-small vector of every trace_summary in
+# ClickHouse topic_vectors, for the workspaces ai-labels is enabled for. Calls aiLabels.inference's deployment with its
+# credential (/v1/embed). See apps/opik-backend/docs/ai-labels-runbook.md, section "Topic vectors".
+topics:
+  #  Default: false
+  #  Description: Runs the topic vectors job. Requires aiLabels.enabled and aiLabels.inference.url. Server-side only,
+  #  never exposed to the UI
+  enabled: ${TOPICS_ENABLED:-false}
+  vectors:
+    #  Default: 1m
+    #  Description: How often the leader ticks: finds labeled traces without a vector, embeds and stores them
+    tickInterval: ${TOPICS_VECTORS_TICK_INTERVAL:-1m}
+    #  Default: 50s
+    #  Description: Every ClickHouse query and embed call of a tick ends within this. Must be under tickInterval
+    tickBudget: ${TOPICS_VECTORS_TICK_BUDGET:-50s}
+    #  Default: 24h
+    #  Description: How far back, by ai_label_status write time, each tick looks for done traces without a vector. Never
+    #  before the task's applies_from
+    window: ${TOPICS_VECTORS_WINDOW:-24h}
+    #  Default: 7d
+    #  Description: The window of the pass run once per longWindowInterval, for rows the short window missed. At least
+    #  window
+    longWindow: ${TOPICS_VECTORS_LONG_WINDOW:-7d}
+    #  Default: 1d
+    #  Description: How often a tick uses longWindow instead of window; a cluster-wide Redis lock
+    longWindowInterval: ${TOPICS_VECTORS_LONG_WINDOW_INTERVAL:-1d}
+    #  Default: 5000
+    #  Description: The most traces one tick embeds, oldest first; the rest wait for the next tick
+    maxTracesPerTick: ${TOPICS_VECTORS_MAX_TRACES_PER_TICK:-5000}
+    #  Default: 256 (the most /v1/embed takes)
+    #  Description: Texts per embed call
+    embedBatchSize: ${TOPICS_VECTORS_EMBED_BATCH_SIZE:-256}
+    #  Default: 10s
+    #  Description: Each embed call's deadline, cut to the time left in the tick. At most 60s
+    embedTimeout: ${TOPICS_VECTORS_EMBED_TIMEOUT:-10s}
