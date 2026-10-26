@@ -63,14 +63,7 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
                 .logRequests(llmProviderClientConfig.getLogRequests())
                 .logResponses(llmProviderClientConfig.getLogResponses());
 
-        Optional.ofNullable(llmProviderClientConfig.getOpenAiClient())
-                .map(OpenAiClientConfig::url)
-                .filter(StringUtils::isNotBlank)
-                .ifPresent(openAiClientBuilder::baseUrl);
-
-        if (StringUtils.isNotEmpty(config.baseUrl())) {
-            openAiClientBuilder.baseUrl(config.baseUrl());
-        }
+        customBaseUrl(config).ifPresent(openAiClientBuilder::baseUrl);
 
         Optional.ofNullable(config.headers())
                 .filter(MapUtils::isNotEmpty)
@@ -135,14 +128,7 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
         Optional.ofNullable(llmProviderClientConfig.getConnectTimeout())
                 .ifPresent(connectTimeout -> builder.timeout(connectTimeout.toJavaDuration()));
 
-        Optional.ofNullable(llmProviderClientConfig.getOpenAiClient())
-                .map(OpenAiClientConfig::url)
-                .filter(StringUtils::isNotBlank)
-                .ifPresent(builder::baseUrl);
-
-        if (StringUtils.isNotEmpty(config.baseUrl())) {
-            builder.baseUrl(config.baseUrl());
-        }
+        customBaseUrl(config).ifPresent(builder::baseUrl);
 
         Optional.ofNullable(config.headers())
                 .filter(MapUtils::isNotEmpty)
@@ -237,17 +223,24 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
     // body can wrap the client; a builder given its own client ignores the connection settings.
     private OpenAIClient newResponsesApiClient(LlmProviderClientApiConfig config, String modelName,
             @Nullable Map<String, Object> extraBody) {
-        var baseUrl = Optional.ofNullable(config.baseUrl())
-                .filter(StringUtils::isNotEmpty)
-                .or(() -> Optional.ofNullable(llmProviderClientConfig.getOpenAiClient())
-                        .map(OpenAiClientConfig::url)
-                        .filter(StringUtils::isNotBlank))
-                .orElse(null);
+        var baseUrl = customBaseUrl(config).orElse(null);
         var timeout = Optional.ofNullable(llmProviderClientConfig.getConnectTimeout())
                 .map(Duration::toJavaDuration)
                 .orElse(null);
         var client = OpenAiOfficialSetup.setupSyncClient(baseUrl, config.apiKey(), null, null, null, null, false,
                 false, modelName, timeout, null, null, config.headers());
         return OpenAiResponsesExtraBody.withExtraBody(client, extraBody);
+    }
+
+    boolean hasCustomBaseUrl(@NonNull LlmProviderClientApiConfig config) {
+        return customBaseUrl(config).isPresent();
+    }
+
+    private Optional<String> customBaseUrl(LlmProviderClientApiConfig config) {
+        return Optional.ofNullable(config.baseUrl())
+                .filter(StringUtils::isNotEmpty)
+                .or(() -> Optional.ofNullable(llmProviderClientConfig.getOpenAiClient())
+                        .map(OpenAiClientConfig::url)
+                        .filter(StringUtils::isNotBlank));
     }
 }

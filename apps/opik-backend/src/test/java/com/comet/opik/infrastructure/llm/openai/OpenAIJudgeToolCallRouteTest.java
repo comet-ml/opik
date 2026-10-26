@@ -38,8 +38,8 @@ import static org.mockito.Mockito.mock;
 
 /**
  * Which endpoint a tool-calling judge reaches on an OpenAI key in Chat Completions mode, and with which reasoning
- * effort, per the catalog's tools fact. The keys below leave their own base URL blank and reach the stub through the
- * installation-wide URL, which is how a judge on api.openai.com looks to the route choice.
+ * effort, per the catalog's tools fact. Every request lands on the stub through a base URL, so the judges meant to
+ * look like they call api.openai.com use a generator that reports no custom base URL to the route choice.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class OpenAIJudgeToolCallRouteTest {
@@ -63,18 +63,24 @@ class OpenAIJudgeToolCallRouteTest {
             .build();
 
     private WireMockServer wireMock;
-    private OpenAILlmServiceProvider serviceProvider;
+    private OpenAILlmServiceProvider onOpenAi;
+    private OpenAILlmServiceProvider behindServerWideUrl;
+    private OpenAILlmServiceProvider withoutServerWideUrl;
 
     @BeforeAll
     void setUpAll() {
         wireMock = new WireMockServer(WireMockConfiguration.options().dynamicPort());
         wireMock.start();
 
-        var clientConfig = new LlmProviderClientConfig();
-        clientConfig.setLogRequests(false);
-        clientConfig.setLogResponses(false);
-        clientConfig.setOpenAiClient(new OpenAiClientConfig(wireMock.baseUrl()));
-        serviceProvider = new OpenAILlmServiceProvider(new OpenAIClientGenerator(clientConfig),
+        onOpenAi = new OpenAILlmServiceProvider(new OpenAIClientGenerator(clientConfig(wireMock.baseUrl())) {
+            @Override
+            boolean hasCustomBaseUrl(LlmProviderClientApiConfig config) {
+                return false;
+            }
+        }, mock(LlmProviderFactory.class));
+        behindServerWideUrl = new OpenAILlmServiceProvider(
+                new OpenAIClientGenerator(clientConfig(wireMock.baseUrl())), mock(LlmProviderFactory.class));
+        withoutServerWideUrl = new OpenAILlmServiceProvider(new OpenAIClientGenerator(clientConfig(null)),
                 mock(LlmProviderFactory.class));
     }
 
@@ -97,7 +103,7 @@ class OpenAIJudgeToolCallRouteTest {
     @ParameterizedTest
     @EnumSource(ChatCompletionsTools.class)
     void aModelLimitedOnChatCompletionsCallsToolsOnTheResponsesApiWithTheRulesEffort(ChatCompletionsTools rule) {
-        callTools(keyInChatCompletionsMode(null), judge("{\"reasoning_effort\": \"low\"}"), tools(rule));
+        callTools(onOpenAi, keyInChatCompletionsMode(null), judge("{\"reasoning_effort\": \"low\"}"), tools(rule));
 
         var body = sentBody(RESPONSES_PATH);
         assertThat(body.at("/reasoning")).isEqualTo(JsonUtils.getJsonNodeFromString("{\"effort\": \"low\"}"));
@@ -108,21 +114,32 @@ class OpenAIJudgeToolCallRouteTest {
 
     @Test
     void aKeyWithItsOwnBaseUrlKeepsChatCompletionsAndGivesUpReasoningWhereTheModelAllowsIt() {
-        callTools(keyInChatCompletionsMode(wireMock.baseUrl()), judge("{\"reasoning_effort\": \"high\"}"),
-                tools(ChatCompletionsTools.EFFORT_NONE_ONLY));
+        callTools(withoutServerWideUrl, keyInChatCompletionsMode(wireMock.baseUrl()),
+                judge("{\"reasoning_effort\": \"high\"}"), tools(ChatCompletionsTools.EFFORT_NONE_ONLY));
 
-        var rawBody = sentRawBody(COMPLETIONS_PATH);
-        var body = JsonUtils.getJsonNodeFromString(rawBody);
-        assertThat(StringUtils.countMatches(rawBody, "\"reasoning_effort\"")).isEqualTo(1);
-        assertThat(body.at("/reasoning_effort").asText()).isEqualTo("none");
-        assertThat(body.at("/tool_choice").asText()).isEqualTo("required");
-        assertThat(body.at("/tools/0/function/name").asText()).isEqualTo("read");
-        assertThat(requestsTo(RESPONSES_PATH)).isZero();
+        assertToolsOnChatCompletionsWithoutReasoning();
     }
 
     @Test
-    void aModelThatTakesNoToolsOnChatCompletionsGoesToTheResponsesApiEvenBehindTheKeysBaseUrl() {
-        callTools(keyInChatCompletionsMode(wireMock.baseUrl()), judge(null), tools(ChatCompletionsTools.REFUSED));
+    void aServerWideBaseUrlKeepsChatCompletionsLikeAKeysOwn() {
+        callTools(behindServerWideUrl, keyInChatCompletionsMode(null), judge("{\"reasoning_effort\": \"high\"}"),
+                tools(ChatCompletionsTools.EFFORT_NONE_ONLY));
+
+        assertToolsOnChatCompletionsWithoutReasoning();
+    }
+
+    @Test
+    void aRuleThatAsksForNoReasoningKeepsChatCompletions() {
+        callTools(onOpenAi, keyInChatCompletionsMode(null), judge("{\"reasoning_effort\": \"none\"}"),
+                tools(ChatCompletionsTools.EFFORT_NONE_ONLY));
+
+        assertToolsOnChatCompletionsWithoutReasoning();
+    }
+
+    @Test
+    void aModelThatTakesNoToolsOnChatCompletionsGoesToTheResponsesApiEvenBehindACustomBaseUrl() {
+        callTools(behindServerWideUrl, keyInChatCompletionsMode(wireMock.baseUrl()), judge(null),
+                tools(ChatCompletionsTools.REFUSED));
 
         assertThat(sentBody(RESPONSES_PATH).at("/tool_choice").asText()).isEqualTo("required");
         assertThat(requestsTo(COMPLETIONS_PATH)).isZero();
@@ -130,7 +147,7 @@ class OpenAIJudgeToolCallRouteTest {
 
     @Test
     void aModelWithoutAToolsFactCallsToolsWhereTheKeySendsIt() {
-        callTools(keyInChatCompletionsMode(null), judge(null), null);
+        callTools(onOpenAi, keyInChatCompletionsMode(null), judge(null), null);
 
         var body = sentBody(COMPLETIONS_PATH);
         assertThat(body.has("reasoning_effort")).isFalse();
@@ -145,11 +162,30 @@ class OpenAIJudgeToolCallRouteTest {
                 .configuration(Map.of("openai_pipeline_mode", "responses_api"))
                 .build();
 
-        callTools(key, judge("{\"reasoning_effort\": \"high\"}"), tools(ChatCompletionsTools.EFFORT_NONE_ONLY));
+        callTools(behindServerWideUrl, key, judge("{\"reasoning_effort\": \"high\"}"),
+                tools(ChatCompletionsTools.EFFORT_NONE_ONLY));
 
         assertThat(sentBody(RESPONSES_PATH).at("/reasoning"))
                 .isEqualTo(JsonUtils.getJsonNodeFromString("{\"effort\": \"high\"}"));
         assertThat(requestsTo(COMPLETIONS_PATH)).isZero();
+    }
+
+    private void assertToolsOnChatCompletionsWithoutReasoning() {
+        var rawBody = sentRawBody(COMPLETIONS_PATH);
+        var body = JsonUtils.getJsonNodeFromString(rawBody);
+        assertThat(StringUtils.countMatches(rawBody, "\"reasoning_effort\"")).isEqualTo(1);
+        assertThat(body.at("/reasoning_effort").asText()).isEqualTo("none");
+        assertThat(body.at("/tool_choice").asText()).isEqualTo("required");
+        assertThat(body.at("/tools/0/function/name").asText()).isEqualTo("read");
+        assertThat(requestsTo(RESPONSES_PATH)).isZero();
+    }
+
+    private static LlmProviderClientConfig clientConfig(String serverWideUrl) {
+        var clientConfig = new LlmProviderClientConfig();
+        clientConfig.setLogRequests(false);
+        clientConfig.setLogResponses(false);
+        clientConfig.setOpenAiClient(new OpenAiClientConfig(serverWideUrl));
+        return clientConfig;
     }
 
     private static LlmProviderClientApiConfig keyInChatCompletionsMode(String baseUrl) {
@@ -170,8 +206,8 @@ class OpenAIJudgeToolCallRouteTest {
         return ModelParams.ToolsParam.builder().chatCompletions(chatCompletions).build();
     }
 
-    private void callTools(LlmProviderClientApiConfig key, LlmAsJudgeModelParameters judge,
-            ModelParams.ToolsParam tools) {
+    private void callTools(OpenAILlmServiceProvider serviceProvider, LlmProviderClientApiConfig key,
+            LlmAsJudgeModelParameters judge, ModelParams.ToolsParam tools) {
         var model = serviceProvider.getToolCallingLanguageModel(key, judge, tools);
         catchThrowable(() -> model.chat(TOOL_REQUEST));
     }
