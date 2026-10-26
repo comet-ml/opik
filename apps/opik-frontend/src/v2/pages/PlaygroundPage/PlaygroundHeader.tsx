@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pause, Play, RotateCcw } from "lucide-react";
+import { Loader2, Pause, Play, RotateCcw } from "lucide-react";
 
 import { Separator } from "@/ui/separator";
 import { Button } from "@/ui/button";
@@ -13,6 +13,7 @@ import { LOGS_SOURCE } from "@/types/traces";
 import { useActiveProjectId } from "@/store/AppStore";
 import TraceLogsSidebarButton from "@/v2/pages-shared/traces/TraceLogsSidebar/TraceLogsSidebarButton";
 import { DATASET_TYPE } from "@/types/datasets";
+import PlaygroundColumnsButton from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputTable/PlaygroundColumnsButton";
 import useDatasetItemsList from "@/api/datasets/useDatasetItemsList";
 import useDatasetVersionsList from "@/api/datasets/useDatasetVersionsList";
 import {
@@ -25,6 +26,7 @@ import {
   useClearCreatedExperiments,
   useCreatedExperiments,
   useIsRunning,
+  useIsResumingRun,
   useSetSelectedRuleIds,
   useResetDatasetFilters,
   useResetOutputMap,
@@ -33,6 +35,8 @@ import {
   useDatasetType,
   useDatasetFilters,
   useSetDatasetFilters,
+  useDatasetItemsTotal,
+  useIsStoppingAll,
 } from "@/store/PlaygroundStore";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
@@ -70,6 +74,8 @@ const PlaygroundHeader = ({
   const resetOutputMap = useResetOutputMap();
   const setExperimentName = useSetExperimentName();
   const isRunning = useIsRunning();
+  const isStoppingAll = useIsStoppingAll();
+  const isResumingRun = useIsResumingRun();
   const setDatasetType = useSetDatasetType();
   const currentDatasetType = useDatasetType();
   const filters = useDatasetFilters();
@@ -138,6 +144,8 @@ const PlaygroundHeader = ({
     [promptMap],
   );
 
+  const datasetItemsTotal = useDatasetItemsTotal();
+
   const allMessagesRunnable = useMemo(
     () => Object.values(promptMap).every((p) => canRunMessages(p.messages)),
     [promptMap],
@@ -146,13 +154,17 @@ const PlaygroundHeader = ({
   const isDatasetEmpty = isExperimentMode && versionItemsTotal === 0;
   const experimentTarget =
     currentDatasetType === DATASET_TYPE.TEST_SUITE ? "test suite" : "dataset";
+  // Zero rows is a real state, not a loading one: a filter can exclude everything
+  const hasNoDatasetItems = isExperimentMode && datasetItemsTotal === 0;
 
   const isRunDisabled =
+    isResumingRun ||
     !allPromptsHaveModels ||
     !allMessagesRunnable ||
     hasMediaCompatibilityIssues ||
     (isExperimentMode && !datasetName) ||
-    isDatasetEmpty;
+    isDatasetEmpty ||
+    hasNoDatasetItems;
 
   const runDisabledReason = useMemo(() => {
     if (!allPromptsHaveModels)
@@ -165,11 +177,13 @@ const PlaygroundHeader = ({
       return "Your dataset has been removed. Select another one";
     if (isDatasetEmpty)
       return `This ${experimentTarget} version has no items. Add items or select another version to run an experiment`;
+    if (hasNoDatasetItems) return "No dataset items match the current filters";
     return null;
   }, [
     allPromptsHaveModels,
     allMessagesRunnable,
     hasMediaCompatibilityIssues,
+    hasNoDatasetItems,
     isExperimentMode,
     datasetName,
     isDatasetEmpty,
@@ -237,11 +251,23 @@ const PlaygroundHeader = ({
             deferOnChange
           />
         )}
+        {plainDatasetId && (
+          <PlaygroundColumnsButton datasetId={plainDatasetId} />
+        )}
       </>
     );
   };
 
   const renderRunButton = () => {
+    if (isStoppingAll) {
+      return (
+        <Button size="2xs" variant="outline" disabled>
+          <Loader2 className="mr-1 size-3.5 animate-spin" />
+          Stopping...
+        </Button>
+      );
+    }
+
     if (isRunning) {
       return (
         <TooltipWrapper content="Stop running prompts">

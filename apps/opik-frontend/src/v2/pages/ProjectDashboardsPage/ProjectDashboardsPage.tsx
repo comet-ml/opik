@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { StringParam } from "use-query-params";
 
 import Loader from "@/shared/Loader/Loader";
@@ -14,6 +14,7 @@ import useProjectById from "@/api/projects/useProjectById";
 import DashboardContent from "@/v2/pages-shared/dashboards/DashboardContent/DashboardContent";
 import DashboardAutoSaveIndicator from "@/v2/pages-shared/dashboards/DashboardAutoSaveIndicator/DashboardAutoSaveIndicator";
 import ProjectDashboardViewSelector from "@/v2/pages/ProjectDashboardsPage/ProjectDashboardViewSelector";
+import useCustomizeTemplate from "@/v2/pages/ProjectDashboardsPage/useCustomizeTemplate";
 import ShareDashboardButton from "@/v2/pages-shared/dashboards/ShareDashboardButton/ShareDashboardButton";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { useDashboardLifecycle } from "@/v2/pages-shared/dashboards/hooks/useDashboardLifecycle";
@@ -51,8 +52,9 @@ const ProjectDashboardsContent: React.FunctionComponent<
   const workspaceName = useActiveWorkspaceName();
 
   const {
-    permissions: { canEditDashboards },
+    permissions: { canCreateDashboards, canEditDashboards },
   } = usePermissions();
+  const [renameRequestId, setRenameRequestId] = useState<string | null>(null);
 
   const [dashboardId, setDashboardId] = useQueryParamAndLocalStorageState({
     localStorageKey: `${DASHBOARD_LOCAL_STORAGE_KEY_PREFIX}-${workspaceName}-${projectId}`,
@@ -131,6 +133,28 @@ const ProjectDashboardsContent: React.FunctionComponent<
     [setDashboardId],
   );
 
+  // The toast can outlive the view it is about, so Rename opens that copy before its dialog.
+  const handleOpenRename = useCallback(
+    (copyId: string) => {
+      setDashboardId(copyId);
+      setRenameRequestId(copyId);
+    },
+    [setDashboardId],
+  );
+
+  const handleRenameRequestHandled = useCallback(
+    () => setRenameRequestId(null),
+    [],
+  );
+
+  useCustomizeTemplate({
+    projectId,
+    dashboardId: dashboardId ?? null,
+    enabled: canCreateDashboards && canEditDashboards,
+    onCopyCreated: handleDashboardCreated,
+    onRename: handleOpenRename,
+  });
+
   const handleDashboardDeleted = useCallback(
     (deletedDashboardId: string) => {
       if (dashboardId === deletedDashboardId) {
@@ -158,6 +182,8 @@ const ProjectDashboardsContent: React.FunctionComponent<
           onChange={setDashboardId}
           onViewCreated={handleDashboardCreated}
           onViewDeleted={handleDashboardDeleted}
+          renameRequestId={renameRequestId}
+          onRenameRequestHandled={handleRenameRequestHandled}
         />
         <div className="flex shrink-0 items-center gap-2">
           <DashboardAutoSaveIndicator saveStatus={saveStatus} />

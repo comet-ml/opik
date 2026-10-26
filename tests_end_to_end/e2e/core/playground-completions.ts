@@ -53,3 +53,24 @@ export async function captureCompletionBody(
   expect(body, 'the Run posted a JSON completion body').not.toBeNull();
   return body!;
 }
+
+/**
+ * Wait until the playground is idle again after a run.
+ *
+ * `captureCompletionBody` returns as soon as the POST goes out, which is while
+ * the run is still in flight — the button is in its "stop" mode and the
+ * parameters gear is unusable. A spec that captures one body, edits the panel
+ * and runs again must wait here in between, or the edit races the running
+ * request and the second capture reads the first run's config.
+ *
+ * The run button's `data-mode` is the state machine's own flag: `run` before
+ * the first run, `re-run` once one has finished.
+ */
+export async function expectPlaygroundIdle(page: Page): Promise<void> {
+  await expect(
+    page
+      .getByTestId('playground-run-button')
+      .and(page.locator('[data-mode="run"], [data-mode="re-run"]')),
+    'the run finished and the playground is idle again',
+  ).toBeVisible();
+}

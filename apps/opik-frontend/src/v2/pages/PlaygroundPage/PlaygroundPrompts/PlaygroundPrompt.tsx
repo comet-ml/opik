@@ -35,6 +35,8 @@ import PromptModelSelect from "@/v2/pages-shared/llm/PromptModelSelect/PromptMod
 import { cn, getAlphabetLetter } from "@/lib/utils";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import PromptModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/PromptModelConfigs";
+import { BACKEND_RUN_UNSUPPORTED_PARAMS } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
+import { usePlaygroundDataset } from "@/hooks/usePlaygroundDataset";
 import {
   useAddPrompt,
   useDatasetVariables,
@@ -79,6 +81,7 @@ interface PlaygroundPromptProps {
   isDropdownModel: DropdownModelCheck;
   onRun?: () => void;
   onStop?: () => void;
+  onCheckAgain?: () => void;
 }
 
 const PlaygroundPrompt = ({
@@ -93,10 +96,13 @@ const PlaygroundPrompt = ({
   isDropdownModel,
   onRun,
   onStop,
+  onCheckAgain,
 }: PlaygroundPromptProps) => {
   const checkedIfModelIsValidRef = useRef(false);
   const cardRef = useRef<HTMLDivElement>(null);
   const activeProjectId = useActiveProjectId();
+  const { datasetId } = usePlaygroundDataset();
+  const isBackendRun = !!datasetId;
   const queryClient = useQueryClient();
 
   const prompt = usePromptById(promptId);
@@ -324,7 +330,7 @@ const PlaygroundPrompt = ({
           configs: getDefaultConfigByProvider(newProvider, newModel),
         });
 
-        updateOutput(promptId, "", {
+        updateOutput(promptId, {
           value: null,
           error: undefined,
           errorHint: undefined,
@@ -468,6 +474,9 @@ const PlaygroundPrompt = ({
             configs={configs}
             onChange={handleUpdateConfig}
             openAiPipelineMode={openAiPipelineMode}
+            unsupportedParams={
+              isBackendRun ? BACKEND_RUN_UNSUPPORTED_PARAMS : undefined
+            }
             size="icon-xs"
             variant="ghost"
           />
@@ -593,6 +602,7 @@ const PlaygroundPrompt = ({
           promptId={promptId}
           onRun={onRun}
           onStop={onStop}
+          onCheckAgain={onCheckAgain}
           className="flex items-center justify-end border-t px-4 py-2"
         />
       )}
