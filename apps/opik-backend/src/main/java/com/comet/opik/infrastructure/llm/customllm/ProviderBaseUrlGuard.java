@@ -41,14 +41,14 @@ public class ProviderBaseUrlGuard {
      * substituted URL, can judge it. Every other provider sends the URL as saved, so it must pass here.
      */
     public void validate(String baseUrl, @NonNull LlmProvider provider) {
-        if (provider.routesThroughCustomLlmClient() && !isBlank(baseUrl) && hasHostPlaceholder(baseUrl)) {
+        if (provider.routesThroughCustomLlmClient() && !isBlank(baseUrl) && hasModelPlaceholderInHost(baseUrl)) {
             return;
         }
         validate(baseUrl);
     }
 
     /** Looks only at the host: a placeholder in userinfo or the port doesn't change where the request goes. */
-    private static boolean hasHostPlaceholder(String baseUrl) {
+    private static boolean hasModelPlaceholderInHost(String baseUrl) {
         int schemeEnd = baseUrl.indexOf("://");
         String rest = schemeEnd < 0 ? baseUrl : baseUrl.substring(schemeEnd + 3);
         int authorityEnd = indexOfAny(rest, "/?#");
