@@ -11,7 +11,9 @@ type WorkspacePreloaderProps = {
 const WorkspacePreloader: React.FunctionComponent<WorkspacePreloaderProps> = ({
   children,
 }) => {
-  useAppStore.getState().setActiveWorkspaceName(DEFAULT_WORKSPACE_NAME);
+  if (useAppStore.getState().activeWorkspaceName !== DEFAULT_WORKSPACE_NAME) {
+    useAppStore.getState().setActiveWorkspaceName(DEFAULT_WORKSPACE_NAME);
+  }
   const workspaceNameFromURL = useWorkspaceNameFromURL();
 
   if (workspaceNameFromURL && workspaceNameFromURL !== DEFAULT_WORKSPACE_NAME) {
