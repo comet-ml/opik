@@ -81,6 +81,11 @@ vi.mock("@/shared/FiltersButton/FiltersButton", () => ({
 }));
 
 vi.mock(
+  "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputTable/PlaygroundColumnsButton",
+  () => ({ default: () => null }),
+);
+
+vi.mock(
   "@/v2/pages-shared/traces/TraceLogsSidebar/TraceLogsSidebarButton",
   () => ({ default: () => null }),
 );
