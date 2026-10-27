@@ -124,11 +124,14 @@ public class InferenceClient {
     /**
      * One vector per input, in the inputs' order, from the realtime embedding pool. Retried like a submit, and like a
      * submit a {@code quota_exceeded} answer fails at once, so the caller can stop calling for a while. The request's
-     * {@code deadline_ms} is the time left before {@code deadline}, capped at the service's maximum.
+     * {@code deadline_ms} is the caller's, if set, cut to the time left before {@code deadline} and to the service's
+     * maximum.
      */
     public Mono<EmbedResponse> embed(@NonNull EmbedRequest request, @NonNull Instant deadline) {
         Preconditions.checkArgument(!request.inputs().isEmpty() && request.inputs().size() <= MAX_EMBED_INPUTS,
                 "an embed call takes 1 to '%s' inputs, inputs '%s'", MAX_EMBED_INPUTS, request.inputs().size());
+        Preconditions.checkArgument(request.deadlineMs() == null || request.deadlineMs() > 0,
+                "an embed deadline must be positive, deadlineMs '%s'", request.deadlineMs());
         return Mono.defer(() -> {
             var left = Duration.between(Instant.now(), deadline);
             if (left.toMillis() < 1) {
@@ -136,9 +139,8 @@ public class InferenceClient {
             }
             var withIds = request.toBuilder()
                     .requestId(request.requestId() == null ? newRequestId() : request.requestId())
-                    .deadlineMs(request.deadlineMs() == null
-                            ? Math.min(left.toMillis(), MAX_EMBED_DEADLINE.toMillis())
-                            : request.deadlineMs())
+                    .deadlineMs(Math.min(request.deadlineMs() == null ? Long.MAX_VALUE : request.deadlineMs(),
+                            Math.min(left.toMillis(), MAX_EMBED_DEADLINE.toMillis())))
                     .build();
             // Serialized once, so every retry sends the same bytes and the same request_id.
             var body = InferenceJson.writeBytes(withIds);

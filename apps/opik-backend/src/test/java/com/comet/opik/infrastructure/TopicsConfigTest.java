@@ -1,13 +1,16 @@
 package com.comet.opik.infrastructure;
 
 import io.dropwizard.util.Duration;
+import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -17,32 +20,35 @@ class TopicsConfigTest {
 
     private static final Validator VALIDATOR = Validation.buildDefaultValidatorFactory().getValidator();
 
-    static Stream<Arguments> aiLabelsSettings() {
+    @Test
+    void validWhenOffOrWhenAiLabelsIsOnWithAnInferenceUrl() {
+        assertThat(aiLabelsViolations(false, false, null)).isEmpty();
+        assertThat(aiLabelsViolations(true, true, "https://opik-inference.example.com")).isEmpty();
+    }
+
+    static Stream<Arguments> invalidAiLabelsSettings() {
         return Stream.of(
-                arguments("topics off, ai-labels off", false, false, null, true),
-                arguments("topics on, ai-labels off", true, false, "https://opik-inference.example.com", false),
-                arguments("topics on, ai-labels on without a url", true, true, " ", false),
-                arguments("topics on, ai-labels on with a url", true, true, "https://opik-inference.example.com",
-                        true));
+                arguments("topics on, ai-labels off", true, false, "https://opik-inference.example.com"),
+                arguments("topics on, ai-labels on without a url", true, true, " "),
+                arguments("topics on, ai-labels on with no url", true, true, null));
     }
 
     @ParameterizedTest(name = "{0}")
-    @MethodSource("aiLabelsSettings")
+    @MethodSource("invalidAiLabelsSettings")
     void enabledRequiresAiLabelsAndItsInferenceUrl(String description, boolean topicsEnabled,
-            boolean aiLabelsEnabled, String url, boolean valid) {
+            boolean aiLabelsEnabled, String url) {
+        assertThat(aiLabelsViolations(topicsEnabled, aiLabelsEnabled, url)).singleElement()
+                .satisfies(violation -> assertThat(violation.getMessage())
+                        .contains("aiLabels.enabled").contains("aiLabels.inference.url"));
+    }
+
+    private static Set<ConstraintViolation<OpikConfiguration>> aiLabelsViolations(boolean topicsEnabled,
+            boolean aiLabelsEnabled, String url) {
         var config = new OpikConfiguration();
         config.getTopics().setEnabled(topicsEnabled);
         config.getAiLabels().setEnabled(aiLabelsEnabled);
         config.getAiLabels().getInference().setUrl(url);
-
-        var violations = VALIDATOR.validateProperty(config, "topicsAiLabelsEnabled");
-
-        if (valid) {
-            assertThat(violations).isEmpty();
-        } else {
-            assertThat(violations).singleElement().satisfies(violation -> assertThat(violation.getMessage())
-                    .contains("aiLabels.enabled").contains("aiLabels.inference.url"));
-        }
+        return VALIDATOR.validateProperty(config, "topicsAiLabelsEnabled");
     }
 
     static Stream<Arguments> vectorsSettings() {

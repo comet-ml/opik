@@ -167,7 +167,7 @@ FROM (
 |---|---|
 | `topics.vectors.oldest_unvectored_seconds` by `workspace_id` | Age of the oldest done label without a vector that the last tick found. The headline. It grows when the job falls behind or stops. |
 | `topics.vectors.written` | Vectors stored. |
-| `topics.vectors.skipped` by `reason` | `missing_summary` (no output row or an empty summary for that task version), `embed_failed` (the call failed or timed out: the next tick retries), `invalid_vector` (zero vector or wrong dimension), `over_budget` (the tick ran out of time: the next tick continues). |
+| `topics.vectors.skipped` by `reason` | `missing_summary` (no output row or an empty summary for that task version), `embed_failed` (the call failed or timed out: the next tick retries), `invalid_vector` (a missing, null, zero or wrong-dimension vector), `over_budget` (the tick ran out of time: the next tick continues), `insert_failed` (the ClickHouse insert failed: the next tick embeds them again). |
 | `topics.vectors.embed.failures` by `http_status`, `code` | Failed embed calls. 429 `quota_exceeded` means the embed pool is full. |
 | `topics.vectors.embed.duration_seconds` by `outcome` | Wall time per embed call: `ok`, or the error code. |
 | `topics.vectors.tick.phase_seconds` by `phase` | Time in `find` (ClickHouse reads) and `embed` (embed calls and inserts). |
@@ -179,4 +179,6 @@ ClickHouse queries of the job have a `log_comment` that starts with `topics:`.
 
 A vector lives as long as its trace. Retention deletes vectors with the traces (the same rules as `ai_labels`), and a
 trace delete deletes its vectors. There is no project or workspace delete path, the same as for `ai_labels`: deleting
-a project or a workspace leaves its vectors until retention removes them.
+a project or a workspace leaves its vectors until retention removes them. A trace deleted between a tick's read and its
+insert (at most one tick) can leave a vector row behind, exactly like `ai_labels`. The retention sweep removes such rows
+by trace id range and week.

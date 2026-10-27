@@ -482,6 +482,28 @@ class InferenceClientTest {
     }
 
     @Test
+    void embedDeadlineIsTheSmallestOfTheCallersTheTimeLeftAndTheMaximum() {
+        server.stubFor(post(urlEqualTo(EMBED_PATH)).willReturn(embedded()));
+
+        client.embed(embedRequest().toBuilder().deadlineMs(2_000L).build(), later()).block();
+        client.embed(embedRequest().toBuilder().deadlineMs(120_000L).build(), Instant.now().plusSeconds(5)).block();
+        client.embed(embedRequest().toBuilder().deadlineMs(120_000L).build(), Instant.now().plusSeconds(600))
+                .block();
+
+        var sent = server.findAll(postRequestedFor(urlEqualTo(EMBED_PATH))).stream()
+                .map(request -> json(request).path("deadline_ms").asLong())
+                .toList();
+        assertThat(sent).hasSize(3);
+        assertThat(sent.get(0)).isEqualTo(2_000L);
+        assertThat(sent.get(1)).isBetween(1L, 5_000L);
+        assertThat(sent.get(2)).isEqualTo(InferenceClient.MAX_EMBED_DEADLINE.toMillis());
+        assertThatThrownBy(() -> client.embed(embedRequest().toBuilder().deadlineMs(0L).build(), later()))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> client.embed(embedRequest().toBuilder().deadlineMs(-1L).build(), later()))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     void embedTakesOneTo256Inputs() {
         var tooMany = IntStream.rangeClosed(0, InferenceClient.MAX_EMBED_INPUTS).mapToObj("text %d"::formatted)
                 .toList();

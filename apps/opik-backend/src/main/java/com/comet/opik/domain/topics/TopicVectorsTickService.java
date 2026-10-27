@@ -5,6 +5,8 @@ import com.comet.opik.domain.ailabels.AiLabelTaskRegistry;
 import com.comet.opik.domain.ailabels.AiLabelWorkspaceDAO;
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.inference.EmbedRequest;
+import com.comet.opik.infrastructure.inference.EmbedResponse;
+import com.comet.opik.infrastructure.inference.EmbedResult;
 import com.comet.opik.infrastructure.inference.InferenceClient;
 import com.comet.opik.infrastructure.inference.InferenceException;
 import com.comet.opik.infrastructure.lock.LockService;
@@ -30,6 +32,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Function;
@@ -64,6 +67,7 @@ public class TopicVectorsTickService {
     static final String EMBED_FAILED = "embed_failed";
     static final String INVALID_VECTOR = "invalid_vector";
     static final String OVER_BUDGET = "over_budget";
+    static final String INSERT_FAILED = "insert_failed";
 
     private static final Lock LONG_WINDOW_LOCK = new Lock("topics:vectors:long_window");
     // A query or embed call started just before the budget ends still finishes within this past it.
@@ -289,7 +293,7 @@ public class TopicVectorsTickService {
                 try {
                     dao.insert(vectors).block();
                 } catch (RuntimeException exception) {
-                    tally.skip(EMBED_FAILED, vectors.size());
+                    tally.skip(INSERT_FAILED, vectors.size());
                     log.error("Topic vectors insert failed, workspace '{}', rows '{}'; embedding them again next tick",
                             workspaceId, vectors.size(), exception);
                     continue;
@@ -311,9 +315,9 @@ public class TopicVectorsTickService {
                 .inputs(chunk.stream().map(Pending::text).toList())
                 .build();
         long started = System.nanoTime();
-        List<List<Float>> embeddings;
+        EmbedResponse response;
         try {
-            embeddings = client.embed(request, callDeadline).block().result().embeddings();
+            response = client.embed(request, callDeadline).block();
         } catch (InferenceException exception) {
             embedDuration.record((System.nanoTime() - started) / 1e9,
                     Attributes.of(stringKey("outcome"), exception.getCode()));
@@ -322,6 +326,15 @@ public class TopicVectorsTickService {
             throw exception;
         }
         embedDuration.record((System.nanoTime() - started) / 1e9, Attributes.of(stringKey("outcome"), "ok"));
+        // A malformed response must cost only its own traces, never an exception out of the tick.
+        var embeddings = Optional.ofNullable(response).map(EmbedResponse::result).map(EmbedResult::embeddings)
+                .orElse(null);
+        if (embeddings == null) {
+            log.error("Topic vectors embed answered no embeddings for '{}' inputs, workspace '{}'", chunk.size(),
+                    workspaceId);
+            tally.skip(INVALID_VECTOR, chunk.size());
+            return List.of();
+        }
         if (embeddings.size() != chunk.size()) {
             log.error("Topic vectors embed answered '{}' vectors for '{}' inputs, workspace '{}'", embeddings.size(),
                     chunk.size(), workspaceId);
@@ -332,9 +345,10 @@ public class TopicVectorsTickService {
         for (int i = 0; i < chunk.size(); i++) {
             var candidate = chunk.get(i).candidate();
             var embedding = embeddings.get(i);
-            var normalized = embedding.size() == EMBED_DIMENSIONS
-                    ? normalize(embedding)
-                    : Optional.<List<Float>>empty();
+            var normalized = embedding != null && embedding.size() == EMBED_DIMENSIONS
+                    && embedding.stream().allMatch(Objects::nonNull)
+                            ? normalize(embedding)
+                            : Optional.<List<Float>>empty();
             if (normalized.isEmpty()) {
                 tally.skip(INVALID_VECTOR, 1);
                 continue;

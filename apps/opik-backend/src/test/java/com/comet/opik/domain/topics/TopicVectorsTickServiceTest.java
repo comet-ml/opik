@@ -41,6 +41,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -205,6 +206,89 @@ class TopicVectorsTickServiceTest {
             assertThat(result.skipped()).isEqualTo(Map.of(
                     TopicVectorsTickService.INVALID_VECTOR, 1,
                     TopicVectorsTickService.MISSING_SUMMARY, 1));
+        }
+
+        @Test
+        @DisplayName("a null embedding and a null element cost only their own traces, the rest of the chunk is written")
+        void nullEmbeddingAndNullElement() {
+            var nullEmbedding = candidate(UUID.randomUUID(), 1, NOW.minusSeconds(3));
+            var nullElement = candidate(UUID.randomUUID(), 1, NOW.minusSeconds(2));
+            var normal = candidate(UUID.randomUUID(), 1, NOW.minusSeconds(1));
+            stub(List.of(nullEmbedding, nullElement, normal), candidate -> "intent of " + candidate.traceId());
+            var withNull = new ArrayList<>(vectorOf("x"));
+            withNull.set(7, null);
+            var embeddings = new ArrayList<List<Float>>();
+            embeddings.add(null);
+            embeddings.add(withNull);
+            embeddings.add(vectorOf("intent of " + normal.traceId()));
+            answerEmbed(EmbedResponse.builder()
+                    .result(EmbedResult.builder().embeddings(embeddings).dimensions(384).build())
+                    .build());
+
+            var result = service.tick(NOW);
+
+            assertThat(inserted).extracting(TopicVector::traceId).containsExactly(normal.traceId());
+            assertThat(result.written()).isOne();
+            assertThat(result.skipped()).isEqualTo(Map.of(TopicVectorsTickService.INVALID_VECTOR, 2));
+        }
+
+        @Test
+        @DisplayName("a response without embeddings counts its whole chunk as invalid, and the next chunk still runs")
+        void nullEmbeddingsList() {
+            config.getVectors().setEmbedBatchSize(2);
+            var candidates = IntStream.range(0, 4)
+                    .mapToObj(i -> candidate(UUID.randomUUID(), 1, NOW.minusSeconds(4 - i)))
+                    .toList();
+            stub(candidates, candidate -> "intent of " + candidate.traceId());
+            var calls = new java.util.concurrent.atomic.AtomicInteger();
+            doAnswer(invocation -> {
+                EmbedRequest request = invocation.getArgument(0);
+                requests.add(request);
+                if (calls.incrementAndGet() == 1) {
+                    return Mono.just(EmbedResponse.builder()
+                            .result(EmbedResult.builder().embeddings(null).dimensions(384).build())
+                            .build());
+                }
+                return Mono.just(EmbedResponse.builder()
+                        .result(EmbedResult.builder()
+                                .embeddings(request.inputs().stream().map(TopicVectorsTickServiceTest::vectorOf)
+                                        .toList())
+                                .dimensions(384)
+                                .build())
+                        .build());
+            }).when(client).embed(any(), any());
+
+            var result = service.tick(NOW);
+
+            assertThat(requests).hasSize(2);
+            assertThat(inserted).extracting(TopicVector::traceId)
+                    .containsExactly(candidates.get(2).traceId(), candidates.get(3).traceId());
+            assertThat(result.skipped()).isEqualTo(Map.of(TopicVectorsTickService.INVALID_VECTOR, 2));
+        }
+
+        @Test
+        @DisplayName("an empty answer or one without a result counts the chunk as invalid and throws nothing")
+        void nullResult() {
+            config.getVectors().setEmbedBatchSize(1);
+            var candidates = List.of(candidate(UUID.randomUUID(), 1, NOW.minusSeconds(2)),
+                    candidate(UUID.randomUUID(), 1, NOW.minusSeconds(1)));
+            stub(candidates, c -> "intent");
+            var calls = new java.util.concurrent.atomic.AtomicInteger();
+            doAnswer(invocation -> calls.incrementAndGet() == 1
+                    ? Mono.empty()
+                    : Mono.just(EmbedResponse.builder().build())).when(client).embed(any(), any());
+
+            var result = service.tick(NOW);
+
+            assertThat(inserted).isEmpty();
+            assertThat(result.skipped()).isEqualTo(Map.of(TopicVectorsTickService.INVALID_VECTOR, 2));
+        }
+
+        private void answerEmbed(EmbedResponse response) {
+            doAnswer(invocation -> {
+                requests.add(invocation.getArgument(0));
+                return Mono.just(response);
+            }).when(client).embed(any(), any());
         }
 
         @Test
