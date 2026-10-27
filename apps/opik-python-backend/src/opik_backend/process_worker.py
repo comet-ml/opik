@@ -16,6 +16,7 @@ from multiprocessing.connection import Connection
 from types import ModuleType
 from typing import Any, Type, Union, List, Optional, Tuple
 
+from flask.json.provider import DefaultJSONProvider
 from opik.evaluation.metrics import BaseMetric
 from opik.evaluation.metrics.score_result import ScoreResult
 from .payload_types import PayloadType
@@ -31,6 +32,10 @@ if not logger.hasHandlers():
     logger.addHandler(handler)
 logger.setLevel(logging.INFO)
 
+# Key of the request id in a command, echoed by its reply.
+REQUEST_ID_KEY = "request_id"
+# Key of the result in a reply to a command.
+RESULT_KEY = "result"
 # Key of the READY reply from a worker that could not be isolated, holding the reason.
 ISOLATION_ERROR_KEY = "isolation_error"
 # The account an isolated worker runs as: it owns no files and has no capabilities.
@@ -617,9 +622,25 @@ def isolate_worker(keep_fd: int) -> None:
             raise OSError(f"{name} failed: {e}") from e
 
 
+def _json_value(value: Any) -> Any:
+    """A JSON value for what json can't encode itself, as the evaluator endpoint encoded it when replies were pickled.
+
+    Flask's encoder first (dates, Decimal, UUID, dataclasses), so the endpoint's response is unchanged;
+    then array-likes and their scalars (numpy, tensors) via tolist(), which Studio read as numbers in-process.
+    Anything else still raises TypeError.
+    """
+    try:
+        return DefaultJSONProvider.default(value)
+    except TypeError:
+        tolist = getattr(value, "tolist", None)
+        if callable(tolist):
+            return tolist()
+        raise
+
+
 def send_reply(connection: Connection, reply: Any) -> None:
     """Replies go out as JSON, so the parent reads them as data, not objects."""
-    connection.send_bytes(json.dumps(reply).encode())
+    connection.send_bytes(json.dumps(reply, default=_json_value).encode())
 
 
 def worker_process_main(connection: Connection, isolate: bool = False) -> None:
@@ -647,22 +668,27 @@ def worker_process_main(connection: Connection, isolate: bool = False) -> None:
 
         # Keep reading commands until told to exit or pipe closes
         while True:
+            # Every reply to a command carries the command's request id, so the parent never takes
+            # bytes written to the pipe by user code, in this request or an earlier one, as the reply.
+            request_id: Optional[str] = None
             try:
                 # Read a command from the pipe - this will block until we get a command
                 command_data = connection.recv()
                 if command_data is None or command_data.get("command") == "EXIT":
                     break
 
-                # Parse the command (code, data, and payload_type)
+                # Only code and data reach user code, never the command itself.
+                request_id = command_data.get(REQUEST_ID_KEY)
                 code = command_data.get("code", "")
                 input_data = command_data.get("data", {})
                 payload_type = command_data.get("payload_type")
+                del command_data
 
                 # Execute the code
                 result = run_user_code(code, input_data, payload_type)
 
                 # Return the result via the pipe
-                send_reply(connection, result)
+                send_reply(connection, {REQUEST_ID_KEY: request_id, RESULT_KEY: result})
             except EOFError as e:
                 # This occurs when the parent closes the pipe, e.g., during shutdown.
                 # The worker will break from its loop and be terminated by SIGTERM from the parent.
@@ -678,7 +704,7 @@ def worker_process_main(connection: Connection, isolate: bool = False) -> None:
                     "traceback": traceback.format_exc(),
                 }
                 try:
-                    send_reply(connection, error_msg)
+                    send_reply(connection, {REQUEST_ID_KEY: request_id, RESULT_KEY: error_msg})
                 except Exception as send_e:
                     logger.error(f"Failed to send error to parent: {send_e}")
                 logger.error(f"Encountered error: {e}")

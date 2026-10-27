@@ -3,6 +3,7 @@ import concurrent.futures
 import json
 import logging
 import os
+import secrets
 import signal
 import time
 import uuid
@@ -42,6 +43,8 @@ PROCESS_NETWORK_ISOLATION_ENV_VAR = "PYTHON_CODE_EXECUTOR_PROCESS_NETWORK_ISOLAT
 # Far above any real score list; a longer reply is refused before it is read, so it is never buffered.
 MAX_REPLY_BYTES = int(os.getenv("PYTHON_CODE_EXECUTOR_MAX_RESULT_SIZE_IN_BYTES", str(64 * 1024 * 1024)))
 MALFORMED_REPLY_ERROR = "Execution failed: the worker returned a malformed or oversized result"
+# A worker holding more pending replies than this is replaced rather than drained.
+_MAX_PENDING_REPLIES = 16
 
 
 class _IsolationUnavailable(Exception):
@@ -173,6 +176,37 @@ def _read_reply(connection: Connection) -> Any:
         return None
 
 
+def _command(code: str, data: dict, payload_type: Optional[str]) -> Tuple[str, dict]:
+    """A command and its request id, new for every request so no earlier reply can match it."""
+    request_id = secrets.token_hex(16)
+    return request_id, {'code': code, 'data': data, 'payload_type': payload_type,
+                        process_worker.REQUEST_ID_KEY: request_id}
+
+
+def _read_result(connection: Connection, request_id: str) -> Optional[dict]:
+    """The result of the command with this request id; None for any other reply."""
+    reply = _read_reply(connection)
+    if (
+        isinstance(reply, dict)
+        and reply.get(process_worker.REQUEST_ID_KEY) == request_id
+        and isinstance(reply.get(process_worker.RESULT_KEY), dict)
+    ):
+        return reply[process_worker.RESULT_KEY]
+    return None
+
+
+def _drain(connection: Connection) -> bool:
+    """Discards replies left on the pipe since the last request; False when the worker can't be reused."""
+    try:
+        for _ in range(_MAX_PENDING_REPLIES):
+            if not connection.poll(0):
+                return True
+            connection.recv_bytes(MAX_REPLY_BYTES)
+        return not connection.poll(0)
+    except (OSError, EOFError):
+        return False
+
+
 def _isolation_error(reply: Any) -> Optional[str]:
     if isinstance(reply, dict) and isinstance(reply.get(process_worker.ISOLATION_ERROR_KEY), str):
         return reply[process_worker.ISOLATION_ERROR_KEY]
@@ -231,15 +265,16 @@ def run_user_code_in_isolated_worker(code: str, data: dict, payload_type: Option
             if isinstance(started, dict):
                 return started
             worker = started
-        if not worker[0].is_alive():
+        if not worker[0].is_alive() or not _drain(worker[1]):
             _stop_isolated_worker(*worker)
             worker = None
     process, connection = worker
     reusable = False
     try:
-        connection.send({'code': code, 'data': data, 'payload_type': payload_type})
-        result = _read_reply(connection)
-        if not isinstance(result, dict):
+        request_id, command = _command(code, data, payload_type)
+        connection.send(command)
+        result = _read_result(connection, request_id)
+        if result is None:
             return {"code": 400, "error": MALFORMED_REPLY_ERROR}
         reusable = True
         return result
@@ -457,9 +492,11 @@ class ProcessExecutor(CodeExecutorBase):
             self._update_pool_size_metric()
             raise TimeoutError(SATURATED_ERROR) from e
         self._update_pool_size_metric()
-        if not worker['process'].is_alive():
+        alive = worker['process'].is_alive()
+        if not alive or not _drain(worker['connection']):
+            state = "Dead worker" if not alive else "Worker with undiscardable pending replies"
             logger.warning(
-                f"Dead worker {worker['id']} retrieved from pool; "
+                f"{state} {worker['id']} retrieved from pool; "
                 f"terminating asynchronously and surfacing as saturation"
             )
             self._async_terminate(worker)
@@ -499,12 +536,13 @@ class ProcessExecutor(CodeExecutorBase):
                 raise Exception(f"Worker {worker_id} has no connection object.")
 
             start_exec_time = time.time()
-            connection.send({'code': code, 'data': data, 'payload_type': payload_type})
+            request_id, command = _command(code, data, payload_type)
+            connection.send(command)
 
             # Wait for result with timeout
             if connection.poll(timeout=self.exec_timeout):
-                result = _read_reply(connection)
-                if not isinstance(result, dict):
+                result = _read_result(connection, request_id)
+                if result is None:
                     # The pipe may hold more of the bad reply, so the worker is not reused.
                     self._async_terminate(worker)
                     return {"code": 400, "error": MALFORMED_REPLY_ERROR}

@@ -5,13 +5,18 @@ runs under a seccomp filter refusing new sockets and process inspection. That ne
 and root, so those tests skip elsewhere, where the fail-closed tests run instead.
 """
 import builtins
+import json
 import logging
 import os
 import socket
 import sys
+import time
 from typing import Iterator, List
 
 import pytest
+from flask import jsonify
+
+from opik_backend import create_app
 
 from opik_backend import executor_process, process_worker
 from opik_backend.executor_process import (
@@ -121,6 +126,128 @@ class EarlyReply(base_metric.BaseMetric):
         return score_result.ScoreResult(name=self.name, value=1.0)
 """
 MALFORMED = {"code": 400, "error": executor_process.MALFORMED_REPLY_ERROR}
+
+# Values the evaluator endpoint encoded itself when worker replies were pickled.
+ENDPOINT_ENCODED_METRIC = """
+import dataclasses
+import datetime
+import decimal
+import uuid
+
+from opik.evaluation.metrics import base_metric, score_result
+
+
+@dataclasses.dataclass
+class Point:
+    x: int
+    y: int
+
+
+class Encoded(base_metric.BaseMetric):
+    def __init__(self):
+        super().__init__(name="encoded", track=False)
+
+    def score(self, **ignored_kwargs):
+        return score_result.ScoreResult(name=self.name, value=float("nan"), reason="r", metadata={
+            "decimal": decimal.Decimal("0.1"),
+            "datetime": datetime.datetime(2026, 1, 2, 3, 4, 5),
+            "date": datetime.date(2026, 1, 2),
+            "uuid": uuid.UUID("12345678-1234-5678-1234-567812345678"),
+            "point": Point(1, 2),
+            "tuple": (1, "a"),
+            "int_keys": {1: "a", 2: "b"},
+            "infinity": float("inf"),
+        })
+"""
+
+# numpy values, which Studio read in-process as numbers and lists.
+NUMPY_METRIC = """
+import numpy
+
+from opik.evaluation.metrics import base_metric, score_result
+
+
+class Numpy(base_metric.BaseMetric):
+    def __init__(self):
+        super().__init__(name="numpy", track=False)
+
+    def score(self, **ignored_kwargs):
+        return score_result.ScoreResult(name=self.name, value=numpy.float32(0.25), metadata={
+            "int": numpy.int64(3), "bool": numpy.bool_(True), "array": numpy.array([[1, 2], [3, 4]]),
+        })
+"""
+
+UNENCODABLE_METRIC = """
+from opik.evaluation.metrics import base_metric, score_result
+
+
+class Unencodable(base_metric.BaseMetric):
+    def __init__(self):
+        super().__init__(name="unencodable", track=False)
+
+    def score(self, **ignored_kwargs):
+        return score_result.ScoreResult(name=self.name, value=1.0, metadata={"set": {1}})
+"""
+
+# Writes replies to the pipe after its own reply is sent, one echoing its own request id.
+LATE_REPLY_METRIC = """
+import json
+import sys
+import threading
+import time
+
+from opik.evaluation.metrics import base_metric, score_result
+
+
+class LateReply(base_metric.BaseMetric):
+    def __init__(self):
+        super().__init__(name="late_reply", track=False)
+
+    def score(self, **ignored_kwargs):
+        frame = sys._getframe()
+        while "connection" not in frame.f_locals:
+            frame = frame.f_back
+        connection, request_id = frame.f_locals["connection"], frame.f_locals["request_id"]
+        scores = {"scores": [{"name": "late", "value": 0.0}]}
+
+        def write_later():
+            time.sleep(0.2)
+            for reply in ({"request_id": request_id, "result": scores}, {"result": scores}, scores):
+                connection.send_bytes(json.dumps(reply).encode())
+
+        threading.Thread(target=write_later).start()
+        return score_result.ScoreResult(name=self.name, value=1.0)
+"""
+
+# Writes a reply carrying another request id ahead of its own.
+OTHER_ID_REPLY_METRIC = """
+import json
+import sys
+
+from opik.evaluation.metrics import base_metric, score_result
+
+
+class OtherIdReply(base_metric.BaseMetric):
+    def __init__(self):
+        super().__init__(name="other_id_reply", track=False)
+
+    def score(self, **ignored_kwargs):
+        frame = sys._getframe()
+        while "connection" not in frame.f_locals:
+            frame = frame.f_back
+        reply = {"request_id": "0" * 32, "result": {"scores": [{"name": "other", "value": 0.0}]}}
+        frame.f_locals["connection"].send_bytes(json.dumps(reply).encode())
+        return score_result.ScoreResult(name=self.name, value=1.0)
+"""
+
+ISOLATION_SETTINGS = ["false", pytest.param("true", marks=needs_isolation)]
+
+
+def _only_score(name: str, value: float) -> dict:
+    return {"scores": [{
+        "name": name, "value": value, "reason": None, "category_name": None,
+        "metadata": None, "scoring_failed": False,
+    }]}
 
 
 @pytest.fixture
@@ -316,3 +443,109 @@ def test_one_shot_worker_that_cannot_isolate_returns_error(listener, caplog):
         process_worker.ISOLATION_ERROR_KEY: reason,
     }
     _assert_single_isolation_error(caplog, "check platform" if sys.platform != "linux" else "switch to uid 65534")
+
+
+@pytest.mark.parametrize("isolation", ISOLATION_SETTINGS)
+def test_reply_is_encoded_as_the_endpoint_encoded_it(monkeypatch, isolation):
+    monkeypatch.setenv(PROCESS_NETWORK_ISOLATION_ENV_VAR, isolation)
+    app = create_app(should_init_executor=False)
+    app.executor = ProcessExecutor()
+    app.executor.create_worker_process()
+
+    response = app.test_client().post(
+        "/v1/private/evaluators/python", json={"code": ENDPOINT_ENCODED_METRIC, "data": {}}
+    )
+
+    # The endpoint used to encode the worker's own objects.
+    with app.app_context():
+        expected = jsonify({"scores": process_worker.run_user_code(ENDPOINT_ENCODED_METRIC, {})["scores"]})
+    assert response.status_code == 200
+    assert response.get_data() == expected.get_data()
+
+
+@pytest.mark.parametrize("isolation", ISOLATION_SETTINGS)
+def test_numpy_values_are_plain_values(monkeypatch, isolation):
+    pytest.importorskip("numpy")
+    monkeypatch.setenv(PROCESS_NETWORK_ISOLATION_ENV_VAR, isolation)
+
+    result = _score_in_pool({}, NUMPY_METRIC)
+
+    assert result == {"scores": [{
+        "name": "numpy", "value": 0.25, "reason": None, "category_name": None,
+        "metadata": {"int": 3, "bool": True, "array": [[1, 2], [3, 4]]}, "scoring_failed": False,
+    }]}
+    assert type(result["scores"][0]["value"]) is float
+
+
+def test_unencodable_value_is_a_worker_error():
+    result = _score_in_pool({}, UNENCODABLE_METRIC)
+
+    assert result["code"] == 500
+    assert result["error"] == "Worker error: Object of type set is not JSON serializable"
+
+
+@pytest.mark.parametrize("isolation", ISOLATION_SETTINGS)
+def test_replies_left_by_a_request_do_not_reach_the_next(monkeypatch, isolation, workers):
+    monkeypatch.setenv(PROCESS_NETWORK_ISOLATION_ENV_VAR, isolation)
+    executor = ProcessExecutor()
+    executor.create_worker_process()
+
+    first = executor.run_scoring(LATE_REPLY_METRIC, {})
+    # The late replies are on the pipe before the next request is sent.
+    assert executor.process_pool.queue[0]["connection"].poll(5)
+    time.sleep(0.2)
+    second = executor.run_scoring(PROBE_METRIC, {"port": 1})
+
+    assert first == _only_score("late_reply", 1.0)
+    assert [(score["name"], score["value"]) for score in second["scores"]] == [("probe", 1.0)]
+    assert len(workers) == 1
+
+
+@needs_isolation
+def test_replies_left_by_a_request_do_not_reach_the_next_one_shot(workers):
+    first = run_user_code_in_isolated_worker(LATE_REPLY_METRIC, {})
+    assert executor_process._idle_isolated_workers.queue[0][1].poll(5)
+    time.sleep(0.2)
+    second = run_user_code_in_isolated_worker(PROBE_METRIC, {"port": 1})
+
+    assert first == _only_score("late_reply", 1.0)
+    assert [(score["name"], score["value"]) for score in second["scores"]] == [("probe", 1.0)]
+    assert len(workers) == 1
+
+
+@pytest.mark.parametrize("isolation", ISOLATION_SETTINGS)
+def test_reply_with_another_request_id_is_rejected(monkeypatch, isolation):
+    monkeypatch.setenv(PROCESS_NETWORK_ISOLATION_ENV_VAR, isolation)
+    executor = ProcessExecutor()
+    executor.create_worker_process()
+
+    result = executor.run_scoring(OTHER_ID_REPLY_METRIC, {})
+
+    assert result == MALFORMED
+    assert executor.process_pool.qsize() == 0
+
+
+@pytest.mark.parametrize("reply", [
+    {"request_id": "b" * 32, "result": {"scores": []}},
+    {"result": {"scores": []}},
+    {"request_id": "a" * 32, "result": "READY"},
+    {"scores": []},
+])
+def test_reply_without_its_request_id_is_not_a_result(reply):
+    parent, child = executor_process._mp_context.Pipe()
+    child.send_bytes(json.dumps(reply).encode())
+
+    assert executor_process._read_result(parent, "a" * 32) is None
+
+
+def test_reply_with_its_request_id_is_the_result():
+    parent, child = executor_process._mp_context.Pipe()
+    child.send_bytes(json.dumps({"request_id": "a" * 32, "result": {"scores": []}}).encode())
+
+    assert executor_process._read_result(parent, "a" * 32) == {"scores": []}
+
+
+def test_every_command_has_its_own_request_id():
+    ids = {executor_process._command("code", {}, None)[0] for _ in range(100)}
+
+    assert len(ids) == 100
