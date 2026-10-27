@@ -3,12 +3,18 @@ package com.comet.opik.domain.llm;
 import com.comet.opik.api.ModelParams;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
+import com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterDecisionModel;
+import com.comet.opik.infrastructure.llm.vertexai.LlmProviderVertexAI.CutOffBeforeAnsweringException;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.ChunkedOutputHandlers;
 import com.google.api.gax.rpc.ApiException;
 import com.google.api.gax.rpc.StatusCode;
 import com.openai.errors.OpenAIServiceException;
+import dev.langchain4j.agent.tool.ToolExecutionRequest;
+import dev.langchain4j.agent.tool.ToolSpecification;
+import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.exception.AuthenticationException;
 import dev.langchain4j.exception.HttpException;
@@ -55,12 +61,14 @@ import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
+import static com.comet.opik.domain.llm.ChatCompletionService.UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
 import static com.comet.opik.infrastructure.llm.LlmModelRegistryTestUtils.bundledRegistry;
 import static jakarta.ws.rs.core.Response.Status.Family.familyOf;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.atLeast;
@@ -91,6 +99,13 @@ class ChatCompletionServiceTest {
     @Mock
     private ChatModel chatModel;
 
+    private static final int PROVIDER_ERROR_MESSAGE_MAX_LENGTH = 300;
+    private static final String VERTEX_AI_CUT_OFF = """
+            Vertex AI used up the max output tokens limit (1024) before writing any answer. Thinking tokens count \
+            toward this limit, so raise Max output tokens and run again""";
+
+    private ProviderErrorMessageValidator providerErrorMessageValidator;
+
     private ChatCompletionService chatCompletionService;
 
     @BeforeEach
@@ -101,8 +116,11 @@ class ChatCompletionServiceTest {
         when(llmProviderClientConfig.getJitterScale()).thenReturn(null);
         when(llmProviderClientConfig.getBackoffExp()).thenReturn(null);
 
+        when(llmProviderClientConfig.getProviderErrorMessageMaxLength()).thenReturn(PROVIDER_ERROR_MESSAGE_MAX_LENGTH);
+        providerErrorMessageValidator = new ProviderErrorMessageValidator(llmProviderClientConfig);
+
         chatCompletionService = new ChatCompletionService(llmProviderClientConfig, llmProviderFactory,
-                new ParamResolver(llmProviderFactory, bundledRegistry()));
+                new ParamResolver(llmProviderFactory, bundledRegistry()), providerErrorMessageValidator);
     }
 
     @Nested
@@ -184,8 +202,8 @@ class ChatCompletionServiceTest {
         }
 
         @Test
-        @DisplayName("when generic RuntimeException occurs, then throw InternalServerErrorException with exception message")
-        void create__whenGenericRuntimeException__thenThrowWithExceptionMessage() {
+        @DisplayName("when generic RuntimeException occurs, then throw InternalServerErrorException without its message")
+        void create__whenGenericRuntimeException__thenThrowWithoutExceptionMessage() {
             // Given
             var request = podamFactory.manufacturePojo(ChatCompletionRequest.class);
             var workspaceId = "test-workspace-id";
@@ -199,14 +217,13 @@ class ChatCompletionServiceTest {
             // When & Then
             assertThatThrownBy(() -> chatCompletionService.create(request, workspaceId))
                     .isExactlyInstanceOf(InternalServerErrorException.class)
-                    .hasMessageContaining("Unexpected error calling LLM provider")
-                    .hasMessageContaining(errorMessage)
+                    .hasMessage(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER)
                     .hasCauseInstanceOf(RuntimeException.class);
         }
 
         @Test
-        @DisplayName("when RuntimeException with no message occurs, then throw InternalServerErrorException with exception class name")
-        void create__whenRuntimeExceptionWithNoMessage__thenThrowWithClassName() {
+        @DisplayName("when RuntimeException with no message occurs, then throw InternalServerErrorException with the generic message")
+        void create__whenRuntimeExceptionWithNoMessage__thenThrowWithGenericMessage() {
             // Given
             var request = podamFactory.manufacturePojo(ChatCompletionRequest.class);
             var workspaceId = "test-workspace-id";
@@ -219,14 +236,13 @@ class ChatCompletionServiceTest {
             // When & Then
             assertThatThrownBy(() -> chatCompletionService.create(request, workspaceId))
                     .isExactlyInstanceOf(InternalServerErrorException.class)
-                    .hasMessageContaining("Unexpected error calling LLM provider")
-                    .hasMessageContaining("RuntimeException")
+                    .hasMessage(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER)
                     .hasCauseInstanceOf(RuntimeException.class);
         }
 
         @Test
-        @DisplayName("when nested exception occurs, then extract root cause message")
-        void create__whenNestedException__thenExtractRootCauseMessage() {
+        @DisplayName("when nested exception occurs, then its root cause message is not passed on")
+        void create__whenNestedException__thenRootCauseMessageIsNotPassedOn() {
             // Given
             var request = podamFactory.manufacturePojo(ChatCompletionRequest.class);
             var workspaceId = "test-workspace-id";
@@ -242,8 +258,7 @@ class ChatCompletionServiceTest {
             // When & Then
             assertThatThrownBy(() -> chatCompletionService.create(request, workspaceId))
                     .isExactlyInstanceOf(InternalServerErrorException.class)
-                    .hasMessageContaining("Unexpected error calling LLM provider")
-                    .hasMessageContaining(rootCauseMessage)
+                    .hasMessage(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER)
                     .hasCauseInstanceOf(RuntimeException.class);
         }
 
@@ -354,6 +369,26 @@ class ChatCompletionServiceTest {
         }
 
         @Test
+        @DisplayName("scoreTrace maps a refusal raised while building the client to a 400")
+        void scoreTrace__whenClientRefusesRequest__thenThrowBadRequest() {
+            var chatRequest = ChatRequest.builder().messages(UserMessage.from("score this")).build();
+            var modelParameters = LlmAsJudgeModelParameters.builder()
+                    .name("vertex_ai/gemini-3.1-flash-lite")
+                    .temperature(0.0)
+                    .build();
+            when(llmProviderFactory.getLanguageModel(anyString(), any())).thenThrow(
+                    new ProviderRequestRefusedException(ProviderRequestRefusedException.Reason.VERTEX_AI_LOCATION));
+
+            var thrown = catchThrowable(
+                    () -> chatCompletionService.scoreTrace(chatRequest, modelParameters, "test-workspace-id"));
+
+            assertThat(thrown)
+                    .isExactlyInstanceOf(BadRequestException.class)
+                    .hasMessage("Vertex AI location is not a valid region");
+            assertThat(((BadRequestException) thrown).getResponse().getStatus()).isEqualTo(400);
+        }
+
+        @Test
         @DisplayName("scoreTrace should not consult the provider error mapper for unsupported features")
         void scoreTrace__whenUnsupportedFeatureException__thenSkipProviderErrorLookup() {
             // Given
@@ -435,7 +470,7 @@ class ChatCompletionServiceTest {
 
             when(llmProviderClientConfig.getMaxAttempts()).thenReturn(3);
             var retryingService = new ChatCompletionService(llmProviderClientConfig, llmProviderFactory,
-                    new ParamResolver(llmProviderFactory, bundledRegistry()));
+                    new ParamResolver(llmProviderFactory, bundledRegistry()), providerErrorMessageValidator);
 
             when(llmProviderFactory.getService(anyString(), anyString())).thenReturn(llmProviderService);
             when(llmProviderService.generate(any(), anyString()))
@@ -459,7 +494,7 @@ class ChatCompletionServiceTest {
 
             when(llmProviderClientConfig.getMaxAttempts()).thenReturn(3);
             var retryingService = new ChatCompletionService(llmProviderClientConfig, llmProviderFactory,
-                    new ParamResolver(llmProviderFactory, bundledRegistry()));
+                    new ParamResolver(llmProviderFactory, bundledRegistry()), providerErrorMessageValidator);
 
             when(llmProviderFactory.getService(anyString(), anyString())).thenReturn(llmProviderService);
             when(llmProviderService.generate(any(), anyString())).thenThrow(new RuntimeException("transient"));
@@ -610,60 +645,59 @@ class ChatCompletionServiceTest {
                             "upstream proxy 503 with a plain-text body",
                             new RuntimeException(new HttpException(503, "[PROXY] service temporarily unavailable")),
                             503,
-                            "[PROXY] service temporarily unavailable"),
+                            UNEXPECTED_ERROR_CALLING_LLM_PROVIDER),
                     Arguments.of(
                             "Anthropic billing rejection nested under a retry wrapper",
                             new NonRetriableException(new InvalidRequestException(
                                     "{\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Your credit balance is too low to access the Anthropic API.\"}}")),
                             400,
-                            "credit balance is too low"),
+                            UNEXPECTED_ERROR_CALLING_LLM_PROVIDER),
                     Arguments.of(
                             "Vertex AI reply cut off before writing any text",
-                            new InvalidRequestException("Vertex AI used up the max output tokens limit (1024) "
-                                    + "before writing any answer. Thinking tokens count toward this limit, so raise "
-                                    + "Max output tokens and run again"),
+                            new CutOffBeforeAnsweringException(VERTEX_AI_CUT_OFF),
                             400,
-                            "Vertex AI used up the max output tokens limit"),
+                            UNEXPECTED_ERROR_CALLING_LLM_PROVIDER + ": " + VERTEX_AI_CUT_OFF),
                     Arguments.of(
                             "Cloudflare rate limit with a plain-text body",
                             new RuntimeException(new HttpException(429, "error code: 1015")),
                             429,
-                            "error code: 1015"),
+                            UNEXPECTED_ERROR_CALLING_LLM_PROVIDER),
                     Arguments.of(
                             "bare RateLimitException with no HttpException in the chain",
                             new RateLimitException("slow down"),
                             429,
-                            "slow down"),
+                            UNEXPECTED_ERROR_CALLING_LLM_PROVIDER),
                     Arguments.of(
                             "bare AuthenticationException",
                             new AuthenticationException("bad key"),
                             401,
-                            "bad key"),
+                            UNEXPECTED_ERROR_CALLING_LLM_PROVIDER),
                     Arguments.of(
                             "bare TimeoutException",
                             new TimeoutException("provider timed out"),
                             408,
-                            "provider timed out"),
+                            UNEXPECTED_ERROR_CALLING_LLM_PROVIDER),
                     Arguments.of(
                             "typed exception wrapping an HttpException",
                             new InternalServerException(new HttpException(503, "upstream is down")),
                             503,
-                            "upstream is down"),
+                            UNEXPECTED_ERROR_CALLING_LLM_PROVIDER),
                     Arguments.of(
                             "failure that never reached HTTP",
                             new RuntimeException("Connection error", new ConnectException("Connection refused")),
                             500,
-                            "Service is unreachable"),
+                            "%s: Service is unreachable. Please check the provider URL."
+                                    .formatted(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER)),
                     Arguments.of(
                             "status outside the error families",
                             new RuntimeException(new HttpException(302, "moved")),
                             500,
-                            "moved"),
+                            UNEXPECTED_ERROR_CALLING_LLM_PROVIDER),
                     Arguments.of(
                             "status outside the valid HTTP range",
                             new RuntimeException(new HttpException(0, "no response")),
                             500,
-                            "no response"));
+                            UNEXPECTED_ERROR_CALLING_LLM_PROVIDER));
         }
 
         @ParameterizedTest(name = "create: when {0}, then report status {2}")
@@ -685,7 +719,7 @@ class ChatCompletionServiceTest {
             // Then
             assertThat(thrown)
                     .isInstanceOf(WebApplicationException.class)
-                    .hasMessageContaining(expectedMessagePart);
+                    .hasMessage(expectedMessagePart);
             assertThat(((WebApplicationException) thrown).getResponse().getStatus()).isEqualTo(expectedStatus);
         }
 
@@ -875,8 +909,9 @@ class ChatCompletionServiceTest {
 
             assertRetryable(thrown);
             assertThat(thrown)
-                    .as("the provider body must survive for diagnostics even though it decides nothing")
-                    .hasMessageContaining("insufficient_quota");
+                    .as("the provider body is kept as the cause, not the message")
+                    .hasMessage(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER)
+                    .hasCause(providerFailure);
         }
 
         /**
@@ -936,7 +971,7 @@ class ChatCompletionServiceTest {
                 String testName, RuntimeException providerFailure, int expectedStatus, String expectedMessagePart) {
             var thrown = whenScoreTraceFails(providerFailure, Optional.empty());
 
-            assertThat(thrown).hasMessageContaining(expectedMessagePart);
+            assertThat(thrown).hasMessage(expectedMessagePart);
             assertNonRetryable(thrown, expectedStatus);
         }
 
@@ -947,7 +982,7 @@ class ChatCompletionServiceTest {
                 String testName, RuntimeException providerFailure, int expectedStatus, String expectedMessagePart) {
             var thrown = whenScoreTraceFails(providerFailure, Optional.empty());
 
-            assertThat(thrown).hasMessageContaining(expectedMessagePart);
+            assertThat(thrown).hasMessage(expectedMessagePart);
             assertRetryable(thrown, expectedStatus);
         }
 
@@ -994,7 +1029,7 @@ class ChatCompletionServiceTest {
         private Throwable scoreTraceWithBudget(int maxRetries, RuntimeException providerFailure) {
             when(llmProviderClientConfig.getMaxAttempts()).thenReturn(maxRetries);
             var retryingService = new ChatCompletionService(llmProviderClientConfig, llmProviderFactory,
-                    new ParamResolver(llmProviderFactory, bundledRegistry()));
+                    new ParamResolver(llmProviderFactory, bundledRegistry()), providerErrorMessageValidator);
             var chatRequest = ChatRequest.builder().messages(UserMessage.from("score this")).build();
             var modelParameters = podamFactory.manufacturePojo(LlmAsJudgeModelParameters.class);
 
@@ -1309,8 +1344,9 @@ class ChatCompletionServiceTest {
             // Then
             var errorCaptor = ArgumentCaptor.forClass(ErrorMessage.class);
             verify(handlers).handleError(errorCaptor.capture());
-            assertThat(errorCaptor.getValue().getCode()).isEqualTo(expectedStatus);
-            assertThat(errorCaptor.getValue().getMessage()).contains(expectedMessagePart);
+            var actualError = errorCaptor.getValue();
+            assertThat(actualError.getCode()).isEqualTo(expectedStatus);
+            assertThat(actualError.getMessage()).isEqualTo(expectedMessagePart);
         }
 
         @Test
@@ -1372,8 +1408,8 @@ class ChatCompletionServiceTest {
         }
 
         @Test
-        @DisplayName("when ConnectException with custom message, then include custom message")
-        void buildDetailedErrorMessage__whenConnectExceptionWithCustomMessage__thenIncludeCustomMessage() {
+        @DisplayName("when ConnectException with a custom message, then return the fixed message without it")
+        void buildDetailedErrorMessage__whenConnectExceptionWithCustomMessage__thenOmitCustomMessage() {
             // Given
             var request = podamFactory.manufacturePojo(ChatCompletionRequest.class);
             var workspaceId = "test-workspace-id";
@@ -1388,9 +1424,8 @@ class ChatCompletionServiceTest {
             // When & Then
             assertThatThrownBy(() -> chatCompletionService.create(request, workspaceId))
                     .isExactlyInstanceOf(InternalServerErrorException.class)
-                    .hasMessageContaining("Unexpected error calling LLM provider")
-                    .hasMessageContaining("Service is unreachable")
-                    .hasMessageContaining(customMessage);
+                    .hasMessage("%s: Service is unreachable. Please check the provider URL."
+                            .formatted(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER));
         }
     }
 
@@ -1423,7 +1458,7 @@ class ChatCompletionServiceTest {
         }
 
         private ChatCompletionRequest requestSentByCreate(String model, boolean reasoning) {
-            when(llmProviderFactory.openAiParams(model)).thenReturn(openAiParams(reasoning));
+            when(llmProviderFactory.catalogParams(model)).thenReturn(openAiParams(reasoning));
             when(llmProviderFactory.getService(WORKSPACE_ID, model)).thenReturn(llmProviderService);
             var captor = ArgumentCaptor.forClass(ChatCompletionRequest.class);
             when(llmProviderService.generate(captor.capture(), anyString()))
@@ -1462,7 +1497,7 @@ class ChatCompletionServiceTest {
         @DisplayName("createAndStreamResponse: a reasoning model reaches the provider without sampling params or penalties")
         void stream__whenReasoningModel__thenDropSamplingParamsAndPenalties() {
             var model = "o3";
-            when(llmProviderFactory.openAiParams(model)).thenReturn(openAiParams(true));
+            when(llmProviderFactory.catalogParams(model)).thenReturn(openAiParams(true));
             when(llmProviderFactory.getService(WORKSPACE_ID, model)).thenReturn(llmProviderService);
             var captor = ArgumentCaptor.forClass(ChatCompletionRequest.class);
 
@@ -1478,7 +1513,7 @@ class ChatCompletionServiceTest {
         }
 
         private LlmAsJudgeModelParameters judgeParametersSentByScoreTrace(String model, boolean reasoning) {
-            when(llmProviderFactory.openAiParams(model)).thenReturn(openAiParams(reasoning));
+            when(llmProviderFactory.catalogParams(model)).thenReturn(openAiParams(reasoning));
             var captor = ArgumentCaptor.forClass(LlmAsJudgeModelParameters.class);
             when(llmProviderFactory.getLanguageModel(anyString(), captor.capture())).thenReturn(chatModel);
             when(chatModel.chat(any(ChatRequest.class))).thenReturn(mock(ChatResponse.class));
@@ -1528,7 +1563,7 @@ class ChatCompletionServiceTest {
                 .build();
 
         private void givenTheShippedCatalogAnd(String route) {
-            when(llmProviderFactory.openAiParams(MODEL))
+            when(llmProviderFactory.catalogParams(MODEL))
                     .thenReturn(Optional.ofNullable(bundledRegistry().paramsOf("openai", MODEL)));
             when(llmProviderFactory.getService(WORKSPACE_ID, MODEL)).thenReturn(llmProviderService);
             when(llmProviderService.paramsRoute()).thenReturn(route);
@@ -1579,6 +1614,86 @@ class ChatCompletionServiceTest {
 
             verify(llmProviderService).generateStream(captor.capture(), anyString(), any(), any(), any());
             assertThat(captor.getValue()).isEqualTo(withoutWhatTheResponsesRouteRefuses());
+        }
+    }
+
+    @Nested
+    @DisplayName("Tool-calling judges:")
+    class ToolCallingJudges {
+
+        private static final ToolSpecification READ_TOOL = ToolSpecification.builder()
+                .name("read")
+                .description("Read the trace")
+                .build();
+        private static final ToolExecutionRequest READ_CALL = ToolExecutionRequest.builder()
+                .id("call-1")
+                .name("read")
+                .arguments("{}")
+                .build();
+
+        private static final UserMessage QUESTION = UserMessage.from("score this");
+        private static final LlmAsJudgeModelParameters JUDGE = LlmAsJudgeModelParameters.builder()
+                .name("gpt-6-luna")
+                .build();
+
+        private static Stream<Arguments> toolLoopRounds() {
+            return Stream.of(
+                    arguments("a call carrying tool specs",
+                            ChatRequest.builder().messages(QUESTION).toolSpecifications(READ_TOOL).build()),
+                    arguments("the wrap-up replaying the tool calls without specs",
+                            ChatRequest.builder()
+                                    .messages(QUESTION, AiMessage.from(READ_CALL),
+                                            ToolExecutionResultMessage.from(READ_CALL, "{}"),
+                                            UserMessage.from("respond with the JSON"))
+                                    .build()));
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("toolLoopRounds")
+        @DisplayName("scoreTrace builds the tool-calling model for every round of a tool loop")
+        void scoreTrace__picksTheToolCallingModelForAToolLoop(String name, ChatRequest request) {
+            when(llmProviderFactory.getToolCallingLanguageModel(anyString(), any())).thenReturn(chatModel);
+            when(chatModel.chat(any(ChatRequest.class))).thenReturn(ChatResponse.builder()
+                    .aiMessage(AiMessage.from("{}"))
+                    .build());
+
+            chatCompletionService.scoreTrace(request, JUDGE, "test-workspace-id");
+
+            verify(chatModel).chat(request);
+            verify(llmProviderFactory, never()).getLanguageModel(anyString(), any());
+        }
+
+        @Test
+        @DisplayName("scoreTrace keeps the plain model for a judge call without tools")
+        void scoreTrace__keepsThePlainModelWithoutTools() {
+            var request = ChatRequest.builder().messages(QUESTION).build();
+            when(llmProviderFactory.getLanguageModel(anyString(), any())).thenReturn(chatModel);
+            when(chatModel.chat(any(ChatRequest.class))).thenReturn(ChatResponse.builder()
+                    .aiMessage(AiMessage.from("{}"))
+                    .build());
+
+            chatCompletionService.scoreTrace(request, JUDGE, "test-workspace-id");
+
+            verify(chatModel).chat(request);
+            verify(llmProviderFactory, never()).getToolCallingLanguageModel(anyString(), any());
+        }
+
+        @Test
+        @DisplayName("scoreTrace maps a refusal raised while building the tool-calling client to a 400")
+        void scoreTrace__whenToolCallingClientRefusesRequest__thenThrowBadRequest() {
+            var request = ChatRequest.builder().messages(QUESTION).toolSpecifications(READ_TOOL).build();
+            var judge = LlmAsJudgeModelParameters.builder()
+                    .name("vertex_ai/gemini-3.1-flash-lite")
+                    .build();
+            when(llmProviderFactory.getToolCallingLanguageModel(anyString(), any())).thenThrow(
+                    new ProviderRequestRefusedException(ProviderRequestRefusedException.Reason.VERTEX_AI_LOCATION));
+
+            var thrown = catchThrowable(() -> chatCompletionService.scoreTrace(request, judge, "test-workspace-id"));
+
+            assertThat(thrown)
+                    .isExactlyInstanceOf(BadRequestException.class)
+                    .hasMessage("Vertex AI location is not a valid region");
+            assertThat(((BadRequestException) thrown).getResponse().getStatus()).isEqualTo(400);
         }
     }
 }

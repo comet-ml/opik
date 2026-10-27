@@ -3,4 +3,5 @@
 export interface ExperimentInfo {
     experimentId?: string;
     promptIndex?: number;
+    totalItems?: number;
 }

@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.llm.gemini;
 
+import com.comet.opik.domain.llm.ProviderErrorMessageValidator.DocumentedErrors;
 import com.comet.opik.infrastructure.llm.LlmProviderError;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import io.dropwizard.jersey.errors.ErrorMessage;
@@ -8,6 +9,10 @@ import io.dropwizard.jersey.errors.ErrorMessage;
 public record GeminiErrorObject(GeminiError error) implements LlmProviderError<GeminiError> {
     public ErrorMessage toErrorMessage() {
         return new ErrorMessage(error.code(), error.message(), error().status());
+    }
+
+    public boolean isDocumented() {
+        return DocumentedErrors.GOOGLE.documents(error.status());
     }
 }
 

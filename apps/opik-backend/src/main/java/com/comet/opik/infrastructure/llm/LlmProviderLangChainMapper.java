@@ -1,7 +1,9 @@
 package com.comet.opik.infrastructure.llm;
 
+import com.comet.opik.domain.llm.ProviderErrorMessageValidator;
 import com.comet.opik.domain.llm.langchain4j.OpikContent;
 import com.comet.opik.domain.llm.langchain4j.OpikUserMessage;
+import com.comet.opik.infrastructure.llm.antropic.AnthropicErrorMessage;
 import com.comet.opik.infrastructure.llm.customllm.CustomLlmErrorMessage;
 import com.comet.opik.infrastructure.llm.gemini.GeminiErrorObject;
 import com.comet.opik.infrastructure.llm.openai.OpenAiErrorMessage;
@@ -51,7 +53,7 @@ public interface LlmProviderLangChainMapper {
     LlmProviderLangChainMapper INSTANCE = Mappers.getMapper(LlmProviderLangChainMapper.class);
     String CANNOT_BE_NULL_OR_EMPTY = "Message content cannot be null or empty";
 
-    default ChatMessage toChatMessage(@NonNull Message message) {
+    default ChatMessage toChatMessage(@NonNull Message message, @NonNull VideoMimeTypeUtils videoMimeTypeUtils) {
         if (!List.of(Role.ASSISTANT, Role.USER, Role.SYSTEM).contains(message.role())) {
             throw new BadRequestException(ERR_UNEXPECTED_ROLE.formatted(message.role()));
         }
@@ -68,7 +70,7 @@ public interface LlmProviderLangChainMapper {
                     validateMessageContent(userMessage.content().toString());
                     return dev.langchain4j.data.message.UserMessage.from(userMessage.content().toString());
                 } else if (message instanceof OpikUserMessage opikUserMessage) {
-                    return convertOpikUserMessage(opikUserMessage);
+                    return convertOpikUserMessage(opikUserMessage, videoMimeTypeUtils);
                 }
             }
             case SYSTEM -> {
@@ -94,7 +96,8 @@ public interface LlmProviderLangChainMapper {
      * OpikUserMessage supports multimodal content (text, images, videos, etc.)
      * and its content can be either a String or a List<OpikContent>.
      */
-    private dev.langchain4j.data.message.UserMessage convertOpikUserMessage(OpikUserMessage opikUserMessage) {
+    private dev.langchain4j.data.message.UserMessage convertOpikUserMessage(OpikUserMessage opikUserMessage,
+            VideoMimeTypeUtils videoMimeTypeUtils) {
         if (opikUserMessage.content() instanceof String stringContent) {
             validateMessageContent(stringContent);
             return dev.langchain4j.data.message.UserMessage.from(stringContent);
@@ -103,7 +106,7 @@ public interface LlmProviderLangChainMapper {
             List<Content> publicApiContents = new java.util.ArrayList<>();
             for (Object item : contentList) {
                 if (item instanceof OpikContent opikContent) {
-                    publicApiContents.add(convertOpikContent(opikContent));
+                    publicApiContents.add(convertOpikContent(opikContent, videoMimeTypeUtils));
                 }
             }
             return dev.langchain4j.data.message.UserMessage.from(publicApiContents);
@@ -114,7 +117,7 @@ public interface LlmProviderLangChainMapper {
     /**
      * Convert OpikContent to public API Content.
      */
-    private Content convertOpikContent(OpikContent opikContent) {
+    private Content convertOpikContent(OpikContent opikContent, VideoMimeTypeUtils videoMimeTypeUtils) {
         return switch (opikContent.type()) {
             case TEXT -> TextContent.from(opikContent.text());
             case IMAGE_URL -> {
@@ -139,13 +142,13 @@ public interface LlmProviderLangChainMapper {
                     // Only detect MIME type if not provided AND URL has no file extension
                     // (LangChain4j can detect MIME type from extensions automatically)
                     if (mimeType == null && !VideoMimeTypeUtils.hasVideoFileExtension(videoUrl)) {
-                        mimeType = VideoMimeTypeUtils.detectMimeTypeFromHttpHead(videoUrl);
+                        mimeType = videoMimeTypeUtils.detectMimeTypeFromHttpHead(videoUrl);
                     }
 
                     if (mimeType != null) {
                         videoBuilder.mimeType(mimeType);
                         log.debug("Set mimeType '{}' for video URL: '{}'", mimeType,
-                                videoUrl.substring(0, Math.min(60, videoUrl.length())));
+                                VideoMimeTypeUtils.loggable(videoUrl));
                     }
                     yield new VideoContent(videoBuilder.build());
                 }
@@ -192,8 +195,9 @@ public interface LlmProviderLangChainMapper {
                 .build();
     }
 
-    default List<ChatMessage> mapMessages(ChatCompletionRequest request) {
-        return request.messages().stream().map(this::toChatMessage).toList();
+    default List<ChatMessage> mapMessages(ChatCompletionRequest request,
+            @NonNull VideoMimeTypeUtils videoMimeTypeUtils) {
+        return request.messages().stream().map(message -> toChatMessage(message, videoMimeTypeUtils)).toList();
     }
 
     default Optional<ErrorMessage> getGeminiErrorObject(@NonNull Throwable throwable, @NonNull Logger log) {
@@ -204,18 +208,30 @@ public interface LlmProviderLangChainMapper {
         return getErrorMessage(throwable, log, CustomLlmErrorMessage.class);
     }
 
+    default Optional<ErrorMessage> getAnthropicErrorObject(@NonNull Throwable throwable, @NonNull Logger log) {
+        return getErrorMessage(throwable, log, AnthropicErrorMessage.class);
+    }
+
     private <E, T extends LlmProviderError<E>> Optional<ErrorMessage> getErrorMessage(Throwable throwable, Logger log,
             Class<T> errorType) {
         Optional<String> errorJson = extractErrorJson(throwable);
 
         String failToGetErrorMessage = "failed to parse %s message".formatted(errorType.getSimpleName());
 
+        // without the throwable, whose message is the provider's response; the caller logs it once
         if (errorJson.isEmpty()) {
-            log.warn(failToGetErrorMessage, throwable);
+            log.warn(failToGetErrorMessage);
             return Optional.empty();
         }
 
-        return parseError(log, errorJson.get(), errorType).map(LlmProviderError::toErrorMessage);
+        return parseError(log, errorJson.get(), errorType).flatMap(LlmProviderLangChainMapper::toCallerError);
+    }
+
+    private static Optional<ErrorMessage> toCallerError(LlmProviderError<?> error) {
+        return Optional.ofNullable(error.toErrorMessage())
+                .map(errorMessage -> error.isDocumented()
+                        ? errorMessage
+                        : ProviderErrorMessageValidator.withoutProviderText(errorMessage));
     }
 
     private <E, T extends LlmProviderError<E>> Optional<T> parseError(Logger log, String jsonPart, Class<T> errorType) {
@@ -229,7 +245,7 @@ public interface LlmProviderLangChainMapper {
             }
             return Optional.of(error);
         } catch (UncheckedIOException e) {
-            log.warn(failToGetErrorMessage, e);
+            log.warn(failToGetErrorMessage);
             return Optional.empty();
         }
     }
