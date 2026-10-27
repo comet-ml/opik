@@ -413,14 +413,16 @@ class LlmProviderApiKeyResourceTest {
                         RandomStringUtils.secure().nextAlphanumeric(20)))
                 .build();
 
-        llmProviderApiKeyResourceClient.updateProviderApiKey(created.id(), update, apiKey, workspaceName,
-                HttpStatus.SC_NO_CONTENT);
-
-        getAndAssertProviderApiKey(created.toBuilder()
+        var expectedProviderApiKey = created.toBuilder()
                 .baseUrl(update.baseUrl())
                 .apiKey(update.apiKey())
                 .headers(update.headers())
-                .build(), apiKey, workspaceName);
+                .build();
+
+        llmProviderApiKeyResourceClient.updateProviderApiKey(created.id(), update, apiKey, workspaceName,
+                HttpStatus.SC_NO_CONTENT);
+
+        getAndAssertProviderApiKey(expectedProviderApiKey, apiKey, workspaceName);
     }
 
     @Test

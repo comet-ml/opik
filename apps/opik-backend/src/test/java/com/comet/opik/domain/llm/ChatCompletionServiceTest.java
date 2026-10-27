@@ -100,8 +100,9 @@ class ChatCompletionServiceTest {
     private ChatModel chatModel;
 
     private static final int PROVIDER_ERROR_MESSAGE_MAX_LENGTH = 300;
-    private static final String VERTEX_AI_CUT_OFF = "Vertex AI used up the max output tokens limit (1024) before "
-            + "writing any answer. Thinking tokens count toward this limit, so raise Max output tokens and run again";
+    private static final String VERTEX_AI_CUT_OFF = """
+            Vertex AI used up the max output tokens limit (1024) before writing any answer. Thinking tokens count \
+            toward this limit, so raise Max output tokens and run again""";
 
     private ProviderErrorMessageValidator providerErrorMessageValidator;
 
@@ -685,8 +686,8 @@ class ChatCompletionServiceTest {
                             "failure that never reached HTTP",
                             new RuntimeException("Connection error", new ConnectException("Connection refused")),
                             500,
-                            UNEXPECTED_ERROR_CALLING_LLM_PROVIDER
-                                    + ": Service is unreachable. Please check the provider URL."),
+                            "%s: Service is unreachable. Please check the provider URL."
+                                    .formatted(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER)),
                     Arguments.of(
                             "status outside the error families",
                             new RuntimeException(new HttpException(302, "moved")),
@@ -1343,8 +1344,9 @@ class ChatCompletionServiceTest {
             // Then
             var errorCaptor = ArgumentCaptor.forClass(ErrorMessage.class);
             verify(handlers).handleError(errorCaptor.capture());
-            assertThat(errorCaptor.getValue().getCode()).isEqualTo(expectedStatus);
-            assertThat(errorCaptor.getValue().getMessage()).isEqualTo(expectedMessagePart);
+            var actualError = errorCaptor.getValue();
+            assertThat(actualError.getCode()).isEqualTo(expectedStatus);
+            assertThat(actualError.getMessage()).isEqualTo(expectedMessagePart);
         }
 
         @Test

@@ -74,10 +74,10 @@ class DestinationGuardTest {
     void resolverTellsRefusedFromUnresolvable() {
         var dns = new DestinationGuardDns(strict);
 
-        assertThatThrownBy(() -> dns.lookup("127.0.0.1")).isInstanceOf(DestinationGuardDns.RefusedHostException.class);
-        assertThatThrownBy(() -> dns.lookup("token-endpoint.invalid"))
-                .isInstanceOf(UnknownHostException.class)
-                .isNotInstanceOf(DestinationGuardDns.RefusedHostException.class);
+        assertThatThrownBy(() -> dns.lookup("127.0.0.1"))
+                .isExactlyInstanceOf(RefusedHostException.class)
+                .hasCauseExactlyInstanceOf(DestinationGuardException.class);
+        assertThatThrownBy(() -> dns.lookup("token-endpoint.invalid")).isExactlyInstanceOf(UnknownHostException.class);
         assertThatCode(() -> new DestinationGuardDns(relaxed).lookup("127.0.0.1")).doesNotThrowAnyException();
     }
 

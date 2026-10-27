@@ -317,10 +317,12 @@ class LlmProviderOpenAiResponsesTest {
         var ex = openAiBadRequest("Unsupported parameter: 'top_p' is not supported with this model.",
                 "unsupported_parameter", "invalid_request_error");
 
-        var result = provider.getLlmProviderError(ex);
+        var expectedError = new ErrorMessage(400,
+                "Unsupported parameter: 'top_p' is not supported with this model.", "unsupported_parameter");
 
-        assertThat(result).contains(new ErrorMessage(400,
-                "Unsupported parameter: 'top_p' is not supported with this model.", "unsupported_parameter"));
+        var actualError = provider.getLlmProviderError(ex);
+
+        assertThat(actualError).contains(expectedError);
     }
 
     @Test
@@ -348,10 +350,12 @@ class LlmProviderOpenAiResponsesTest {
 
         var ex = openAiBadRequest("Something else broke", "weird_specific", "weird_high_level");
 
-        var result = provider.getLlmProviderError(ex);
-
         // neither is an identifier OpenAI documents, so its text isn't passed on
-        assertThat(result).contains(new ErrorMessage(400, UNEXPECTED_ERROR_CALLING_LLM_PROVIDER));
+        var expectedError = new ErrorMessage(400, UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
+
+        var actualError = provider.getLlmProviderError(ex);
+
+        assertThat(actualError).contains(expectedError);
     }
 
     @Test
@@ -376,9 +380,11 @@ class LlmProviderOpenAiResponsesTest {
                 Mockito.mock(OpenAIClientGenerator.class), Mockito.mock(LlmProviderClientApiConfig.class));
 
         var ex = BadRequestException.builder().headers(Headers.builder().build()).build();
+        var expectedError = new ErrorMessage(400, UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
 
-        assertThat(provider.getLlmProviderError(ex))
-                .contains(new ErrorMessage(400, UNEXPECTED_ERROR_CALLING_LLM_PROVIDER));
+        var actualError = provider.getLlmProviderError(ex);
+
+        assertThat(actualError).contains(expectedError);
     }
 
     private static BadRequestException openAiBadRequest(String message, String code, String type) {

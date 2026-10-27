@@ -47,7 +47,7 @@ class RemoteMediaInlinerTest {
 
     private final WireMockUtils.WireMockRuntime wireMock = WireMockUtils.startWireMock();
 
-    // the mock server is on loopback, which strict mode refuses; the refusal itself is covered through the API
+    /** The mock server is on loopback, which strict mode refuses; the refusal itself is covered through the API. */
     private final RemoteMediaInliner remoteMediaInliner = LlmTestClients.remoteMediaInliner(
             DestinationGuard.Mode.RELAXED);
     private final int maxBytes = Math.toIntExact(
@@ -83,9 +83,12 @@ class RemoteMediaInlinerTest {
         var text = TextContent.from("describe");
         List<ChatMessage> messages = List.of(system,
                 UserMessage.from(text, fromUrl.apply(wireMock.runtimeInfo().getHttpBaseUrl() + mediaPath)));
+        var expectedMessages = List.of(system,
+                UserMessage.from(text, fromBase64.apply(Base64.getEncoder().encodeToString(bytes), mimeType)));
 
-        assertThat(remoteMediaInliner.inline(messages)).isEqualTo(List.of(system,
-                UserMessage.from(text, fromBase64.apply(Base64.getEncoder().encodeToString(bytes), mimeType))));
+        var actualMessages = remoteMediaInliner.inline(messages);
+
+        assertThat(actualMessages).isEqualTo(expectedMessages);
     }
 
     @Test
@@ -106,14 +109,17 @@ class RemoteMediaInlinerTest {
                         .build(), ImageContent.DetailLevel.HIGH)))
                 .build());
         var original = (UserMessage) messages.getFirst();
-
-        assertThat(remoteMediaInliner.inline(messages)).isEqualTo(List.of(original.toBuilder()
+        var expectedMessages = List.of(original.toBuilder()
                 .contents(List.of(ImageContent.from(Image.builder()
                         .base64Data(Base64.getEncoder().encodeToString(bytes))
                         .mimeType("image/png")
                         .revisedPrompt(revisedPrompt)
                         .build(), ImageContent.DetailLevel.HIGH)))
-                .build()));
+                .build());
+
+        var actualMessages = remoteMediaInliner.inline(messages);
+
+        assertThat(actualMessages).isEqualTo(expectedMessages);
     }
 
     @Test
@@ -123,7 +129,9 @@ class RemoteMediaInlinerTest {
                 ImageContent.from("gs://bucket-%s/image.png".formatted(UUID.randomUUID())),
                 AudioContent.from("data:audio/wav,%s".formatted(UUID.randomUUID()))));
 
-        assertThat(remoteMediaInliner.inline(messages)).isEqualTo(messages);
+        var actualMessages = remoteMediaInliner.inline(messages);
+
+        assertThat(actualMessages).isEqualTo(messages);
     }
 
     @ParameterizedTest
@@ -132,10 +140,11 @@ class RemoteMediaInlinerTest {
     @DisplayName("a media URL with any other scheme is refused before anything is read")
     void otherSchemesAreRefused(String url) {
         List<ChatMessage> messages = List.of(UserMessage.from(ImageContent.from(url)));
+        var expectedMessage = new ProviderRequestRefusedException(MEDIA_URL).getMessage();
 
         assertThatThrownBy(() -> remoteMediaInliner.inline(messages))
-                .isInstanceOf(ProviderRequestRefusedException.class)
-                .hasMessage(new ProviderRequestRefusedException(MEDIA_URL).getMessage());
+                .isExactlyInstanceOf(ProviderRequestRefusedException.class)
+                .hasMessage(expectedMessage);
     }
 
     private Stream<Arguments> failedDownloadIsRefused() {
@@ -154,9 +163,10 @@ class RemoteMediaInlinerTest {
         wireMock.server().stubFor(get(urlPathEqualTo(mediaPath)).willReturn(response));
         List<ChatMessage> messages = List.of(
                 UserMessage.from(ImageContent.from(wireMock.runtimeInfo().getHttpBaseUrl() + mediaPath)));
+        var expectedMessage = new ProviderRequestRefusedException(MEDIA_URL_DOWNLOAD).getMessage();
 
         assertThatThrownBy(() -> remoteMediaInliner.inline(messages))
-                .isInstanceOf(ProviderRequestRefusedException.class)
-                .hasMessage(new ProviderRequestRefusedException(MEDIA_URL_DOWNLOAD).getMessage());
+                .isExactlyInstanceOf(ProviderRequestRefusedException.class)
+                .hasMessage(expectedMessage);
     }
 }

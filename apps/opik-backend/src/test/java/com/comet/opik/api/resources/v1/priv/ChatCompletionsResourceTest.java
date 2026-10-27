@@ -440,15 +440,16 @@ class ChatCompletionsResourceTest {
                             .withStatus(upstreamStatus)
                             .withHeader("Content-Type", contentType)
                             .withBody(upstreamBody)));
-            var expected = new ErrorMessage(expectedStatus, UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
+            var expectedError = new ErrorMessage(expectedStatus, UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
 
             var request = ChatCompletionRequest.builder().stream(false).model(MODEL).addUserMessage("ping").build();
-            assertThat(chatCompletionsClient.create(API_KEY, workspaceName, request, expectedStatus))
-                    .isEqualTo(expected);
+            var actualError = chatCompletionsClient.create(API_KEY, workspaceName, request, expectedStatus);
+            assertThat(actualError).isEqualTo(expectedError);
 
             var streamed = ChatCompletionRequest.builder().stream(true).model(MODEL).addUserMessage("ping").build();
-            assertThat(chatCompletionsClient.createAndGetStreamedError(API_KEY, workspaceName, streamed))
-                    .containsExactly(expected);
+            var actualStreamedErrors = chatCompletionsClient.createAndGetStreamedError(API_KEY, workspaceName,
+                    streamed);
+            assertThat(actualStreamedErrors).containsExactly(expectedError);
         }
 
         private Stream<Arguments> providerErrorMessageIsValidated() {
@@ -480,13 +481,17 @@ class ChatCompletionsResourceTest {
                             .withBody(JsonUtils.writeValueAsString(
                                     Map.of("error", Map.of("message", providerMessage, "type", type))))));
 
+            var expectedError = new ErrorMessage(HttpStatus.SC_BAD_REQUEST, message);
+            var expectedStreamedError = new ErrorMessage(HttpStatus.SC_BAD_REQUEST, message, details);
+
             var request = ChatCompletionRequest.builder().stream(false).model(MODEL).addUserMessage("ping").build();
-            assertThat(chatCompletionsClient.create(API_KEY, workspaceName, request, HttpStatus.SC_BAD_REQUEST))
-                    .isEqualTo(new ErrorMessage(HttpStatus.SC_BAD_REQUEST, message));
+            var actualError = chatCompletionsClient.create(API_KEY, workspaceName, request, HttpStatus.SC_BAD_REQUEST);
+            assertThat(actualError).isEqualTo(expectedError);
 
             var streamed = ChatCompletionRequest.builder().stream(true).model(MODEL).addUserMessage("ping").build();
-            assertThat(chatCompletionsClient.createAndGetStreamedError(API_KEY, workspaceName, streamed))
-                    .containsExactly(new ErrorMessage(HttpStatus.SC_BAD_REQUEST, message, details));
+            var actualStreamedErrors = chatCompletionsClient.createAndGetStreamedError(API_KEY, workspaceName,
+                    streamed);
+            assertThat(actualStreamedErrors).containsExactly(expectedStreamedError);
         }
 
         @Test
@@ -511,8 +516,11 @@ class ChatCompletionsResourceTest {
                     .build();
 
             // CustomLlmErrorMessage.toErrorMessage() hardcodes 400 regardless of upstream status
-            assertThat(chatCompletionsClient.create(API_KEY, workspaceName, request, HttpStatus.SC_BAD_REQUEST))
-                    .isEqualTo(new ErrorMessage(HttpStatus.SC_BAD_REQUEST, UNEXPECTED_ERROR_CALLING_LLM_PROVIDER));
+            var expectedError = new ErrorMessage(HttpStatus.SC_BAD_REQUEST, UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
+
+            var actualError = chatCompletionsClient.create(API_KEY, workspaceName, request, HttpStatus.SC_BAD_REQUEST);
+
+            assertThat(actualError).isEqualTo(expectedError);
         }
 
         @Test
@@ -630,8 +638,11 @@ class ChatCompletionsResourceTest {
 
             // 400 because `InvalidAPIVersion` isn't in the OpenAI-compat code table and CustomLlmErrorMessage
             // defaults unknown codes to 400; its text isn't passed on because OpenAI doesn't document the code.
-            assertThat(chatCompletionsClient.create(API_KEY, workspaceName, request, HttpStatus.SC_BAD_REQUEST))
-                    .isEqualTo(new ErrorMessage(HttpStatus.SC_BAD_REQUEST, UNEXPECTED_ERROR_CALLING_LLM_PROVIDER));
+            var expectedError = new ErrorMessage(HttpStatus.SC_BAD_REQUEST, UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
+
+            var actualError = chatCompletionsClient.create(API_KEY, workspaceName, request, HttpStatus.SC_BAD_REQUEST);
+
+            assertThat(actualError).isEqualTo(expectedError);
         }
 
         @Test
@@ -1044,7 +1055,7 @@ class ChatCompletionsResourceTest {
 
         @ParameterizedTest(name = "OpenAI {0}")
         @MethodSource("openAiErrors")
-        void openAiError(int upstreamStatus, String contentType, String upstreamBody, ErrorMessage expected) {
+        void openAiError(int upstreamStatus, String contentType, String upstreamBody, ErrorMessage expectedError) {
             var workspaceName = prepareWorkspace(LlmProvider.OPEN_AI, WIRE_MOCK.runtimeInfo().getHttpBaseUrl());
             WIRE_MOCK.server().stubFor(post(urlPathMatching(CHAT_COMPLETIONS_REGEX))
                     .willReturn(aResponse()
@@ -1052,7 +1063,7 @@ class ChatCompletionsResourceTest {
                             .withHeader("Content-Type", contentType)
                             .withBody(upstreamBody)));
 
-            assertErrors(workspaceName, OPENAI_MODEL, expected);
+            assertErrors(workspaceName, OPENAI_MODEL, expectedError);
         }
 
         private Stream<Arguments> anthropicErrors() {
@@ -1070,7 +1081,8 @@ class ChatCompletionsResourceTest {
 
         @ParameterizedTest(name = "Anthropic {0}")
         @MethodSource("anthropicErrors")
-        void anthropicError(int upstreamStatus, String contentType, String upstreamBody, ErrorMessage expected) {
+        void anthropicError(int upstreamStatus, String contentType, String upstreamBody,
+                ErrorMessage expectedError) {
             var workspaceName = prepareWorkspace(LlmProvider.ANTHROPIC,
                     WIRE_MOCK.runtimeInfo().getHttpBaseUrl() + "/v1/");
             WIRE_MOCK.server().stubFor(post(urlPathEqualTo(MESSAGES_PATH))
@@ -1079,7 +1091,7 @@ class ChatCompletionsResourceTest {
                             .withHeader("Content-Type", contentType)
                             .withBody(upstreamBody)));
 
-            assertErrors(workspaceName, ANTHROPIC_MODEL, expected);
+            assertErrors(workspaceName, ANTHROPIC_MODEL, expectedError);
         }
 
         private Stream<Arguments> anthropicStreamErrors() {
@@ -1094,7 +1106,7 @@ class ChatCompletionsResourceTest {
 
         @ParameterizedTest(name = "Anthropic error event, {0}")
         @MethodSource("anthropicStreamErrors")
-        void anthropicErrorEventAfterTheStreamStarted(String type, String message, ErrorMessage expected) {
+        void anthropicErrorEventAfterTheStreamStarted(String type, String message, ErrorMessage expectedError) {
             var workspaceName = prepareWorkspace(LlmProvider.ANTHROPIC,
                     WIRE_MOCK.runtimeInfo().getHttpBaseUrl() + "/v1/");
             WIRE_MOCK.server().stubFor(post(urlPathEqualTo(MESSAGES_PATH))
@@ -1105,20 +1117,24 @@ class ChatCompletionsResourceTest {
 
             var streamed = ChatCompletionRequest.builder().stream(true).model(ANTHROPIC_MODEL)
                     .maxCompletionTokens(100).addUserMessage("ping").build();
-            assertThat(chatCompletionsClient.createAndGetStreamedError(API_KEY, workspaceName, streamed))
-                    .containsExactly(expected);
+
+            var actualStreamedErrors = chatCompletionsClient.createAndGetStreamedError(API_KEY, workspaceName,
+                    streamed);
+
+            assertThat(actualStreamedErrors).containsExactly(expectedError);
         }
 
-        private void assertErrors(String workspaceName, String model, ErrorMessage expected) {
+        private void assertErrors(String workspaceName, String model, ErrorMessage expectedError) {
             var request = ChatCompletionRequest.builder().stream(false).model(model).maxCompletionTokens(100)
                     .addUserMessage("ping").build();
-            assertThat(chatCompletionsClient.create(API_KEY, workspaceName, request, expected.getCode()))
-                    .isEqualTo(expected);
+            var actualError = chatCompletionsClient.create(API_KEY, workspaceName, request, expectedError.getCode());
+            assertThat(actualError).isEqualTo(expectedError);
 
             var streamed = ChatCompletionRequest.builder().stream(true).model(model).maxCompletionTokens(100)
                     .addUserMessage("ping").build();
-            assertThat(chatCompletionsClient.createAndGetStreamedError(API_KEY, workspaceName, streamed))
-                    .containsExactly(expected);
+            var actualStreamedErrors = chatCompletionsClient.createAndGetStreamedError(API_KEY, workspaceName,
+                    streamed);
+            assertThat(actualStreamedErrors).containsExactly(expectedError);
         }
 
         private String prepareWorkspace(LlmProvider provider, String baseUrl) {
@@ -1500,6 +1516,11 @@ class ChatCompletionsResourceTest {
     @DisplayName("Provider destinations")
     class ProviderDestinations {
 
+        private static final String MEDIA_URL_REFUSED = """
+                a media URL was refused: it must be an http or https URL that resolves to a public address \
+                (self-hosted deployments serving media from internal networks can set \
+                LLM_PROVIDER_VIDEO_URL_DESTINATION_GUARD=relaxed)""";
+
         private Stream<Arguments> modelSubstitutedIntoTheAuthorityCannotMoveTheHost() {
             return Stream.of(
                     arguments("https://{model}.gw.example.com/v1", "attacker.example/#"),
@@ -1620,23 +1641,21 @@ class ChatCompletionsResourceTest {
                         .videoUrl(VideoUrl.builder().url(mediaUrl).build()).build();
                 case AUDIO_URL -> OpikContent.builder().type(type)
                         .audioUrl(AudioUrl.builder().url(mediaUrl).build()).build();
-                default -> throw new IllegalArgumentException(type.toString());
+                case TEXT, AUDIO, FILE -> throw new IllegalArgumentException(type.toString());
             };
             var message = OpikUserMessage.builder()
                     .content(List.of(OpikContent.builder().type(OpikContentType.TEXT).text("describe").build(), media))
                     .build();
-            var expected = new ErrorMessage(HttpStatus.SC_BAD_REQUEST,
-                    "a media URL was refused: it must be an http or https URL that resolves to a public address"
-                            + " (self-hosted deployments serving media from internal networks can set"
-                            + " LLM_PROVIDER_VIDEO_URL_DESTINATION_GUARD=relaxed)");
+            var expectedError = new ErrorMessage(HttpStatus.SC_BAD_REQUEST, MEDIA_URL_REFUSED);
 
             var request = ChatCompletionRequest.builder().stream(false).model(model).messages(message).build();
-            assertThat(chatCompletionsClient.create(API_KEY, workspaceName, request, HttpStatus.SC_BAD_REQUEST))
-                    .isEqualTo(expected);
+            var actualError = chatCompletionsClient.create(API_KEY, workspaceName, request, HttpStatus.SC_BAD_REQUEST);
+            assertThat(actualError).isEqualTo(expectedError);
 
             var streamed = ChatCompletionRequest.builder().stream(true).model(model).messages(message).build();
-            assertThat(chatCompletionsClient.createAndGetStreamedError(API_KEY, workspaceName, streamed))
-                    .containsExactly(expected);
+            var actualStreamedErrors = chatCompletionsClient.createAndGetStreamedError(API_KEY, workspaceName,
+                    streamed);
+            assertThat(actualStreamedErrors).containsExactly(expectedError);
 
             WIRE_MOCK.server().verify(0, anyRequestedFor(urlPathEqualTo(mediaPath)));
         }
@@ -1658,12 +1677,11 @@ class ChatCompletionsResourceTest {
                     .build();
             var request = ChatCompletionRequest.builder().stream(false)
                     .model(VertexAIModelName.GEMINI_2_5_FLASH.qualifiedName()).messages(message).build();
+            var expectedError = new ErrorMessage(HttpStatus.SC_BAD_REQUEST, MEDIA_URL_REFUSED);
 
-            assertThat(chatCompletionsClient.create(API_KEY, workspaceName, request, HttpStatus.SC_BAD_REQUEST))
-                    .isEqualTo(new ErrorMessage(HttpStatus.SC_BAD_REQUEST,
-                            "a media URL was refused: it must be an http or https URL that resolves to a public"
-                                    + " address (self-hosted deployments serving media from internal networks can set"
-                                    + " LLM_PROVIDER_VIDEO_URL_DESTINATION_GUARD=relaxed)"));
+            var actualError = chatCompletionsClient.create(API_KEY, workspaceName, request, HttpStatus.SC_BAD_REQUEST);
+
+            assertThat(actualError).isEqualTo(expectedError);
         }
 
         @Test
@@ -1694,7 +1712,8 @@ class ChatCompletionsResourceTest {
                     .close();
 
             // the provider was reached, so the redirect was answered and not followed
-            assertThat(WIRE_MOCK.server().findAll(anyRequestedFor(urlPathMatching(basePath + "/.*")))).isNotEmpty();
+            var actualProviderRequests = WIRE_MOCK.server().findAll(anyRequestedFor(urlPathMatching(basePath + "/.*")));
+            assertThat(actualProviderRequests).isNotEmpty();
             WIRE_MOCK.server().verify(0, anyRequestedFor(urlPathEqualTo(redirectTarget)));
         }
 

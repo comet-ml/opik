@@ -54,7 +54,7 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
     }
 
     private final @NonNull LlmProviderClientConfig llmProviderClientConfig;
-    // see OpenAIModule: no redirects, every connection resolved through the destination guard
+    /** See {@link OpenAIModule}: no redirects, every connection resolved through the destination guard. */
     private final @NonNull HttpClient responsesApiHttpClient;
 
     public OpenAiClient newOpenAiClient(@NonNull LlmProviderClientApiConfig config) {

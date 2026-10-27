@@ -119,8 +119,10 @@ class LlmProviderLangChainMapperTest {
     @DisplayName("a parsed provider error keeps its text only when the provider documents its type, code or status")
     void keepsTheTextOfDocumentedErrorsOnly(String shape,
             BiFunction<LlmProviderLangChainMapper, Throwable, Optional<ErrorMessage>> parse, String body,
-            ErrorMessage expected) {
-        assertThat(parse.apply(mapper, providerErrorWith(body))).contains(expected);
+            ErrorMessage expectedError) {
+        var actualError = parse.apply(mapper, providerErrorWith(body));
+
+        assertThat(actualError).contains(expectedError);
     }
 
     @Test

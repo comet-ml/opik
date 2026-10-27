@@ -51,7 +51,9 @@ public record CustomLlmErrorMessage(JsonNode error) implements LlmProviderError<
         return new ErrorMessage(DEFAULT_STATUS, error.toString(), DEFAULT_DETAILS);
     }
 
-    // OpenAI-compatible servers are held to OpenAI's documented type and code values; the text shape names neither
+    /**
+     * OpenAI-compatible servers are held to OpenAI's documented type and code values; the text shape names neither.
+     */
     public boolean isDocumented() {
         return error != null && error.isObject()
                 && (DocumentedErrors.OPENAI.documents(textOrNull(error, "type"))
