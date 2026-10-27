@@ -25,6 +25,7 @@ import java.util.UUID;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.moreThanOrExactly;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
@@ -115,6 +116,22 @@ class WebhookSubscriberTest {
         // Verify multiple retry attempts were made
         wireMockServer.verify(webhookConfig.getMaxRetries() + 1,
                 postRequestedFor(urlEqualTo("/webhook")));
+    }
+
+    @Test
+    void processEvent_whenWebhookRedirects_shouldNotFollowTheRedirect() {
+        var webhookPath = "/webhook-" + UUID.randomUUID();
+        var redirectTarget = "/elsewhere-" + UUID.randomUUID();
+        var webhookEvent = createWebhookEvent("http://localhost:" + wireMockServer.port() + webhookPath);
+        wireMockServer.stubFor(post(urlEqualTo(webhookPath))
+                .willReturn(aResponse().withStatus(307).withHeader("Location", redirectTarget)));
+        wireMockServer.stubFor(post(urlEqualTo(redirectTarget)).willReturn(aResponse().withStatus(200)));
+
+        StepVerifier.create(webhookSubscriber.processEvent(webhookEvent))
+                .verifyComplete();
+
+        wireMockServer.verify(moreThanOrExactly(1), postRequestedFor(urlEqualTo(webhookPath)));
+        wireMockServer.verify(0, postRequestedFor(urlEqualTo(redirectTarget)));
     }
 
     @Test

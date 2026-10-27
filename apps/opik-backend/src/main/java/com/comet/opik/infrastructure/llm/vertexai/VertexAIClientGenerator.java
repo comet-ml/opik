@@ -8,6 +8,7 @@ import com.comet.opik.infrastructure.llm.GeminiThinkingParams;
 import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
+import com.comet.opik.infrastructure.llm.RemoteMediaInliner;
 import com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -44,6 +45,7 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
 
     private final @NonNull LlmProviderClientConfig clientConfig;
     private final @NonNull LlmModelRegistryService registryService;
+    private final @NonNull RemoteMediaInliner remoteMediaInliner;
 
     CloseableVertexAiChatModel newVertexAIClient(LlmProviderClientApiConfig apiKey, ChatCompletionRequest request) {
         return buildOwnedClient(apiKey, request, (client, model) -> {
@@ -61,7 +63,7 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
 
             applyThinking(builder::thinkingLevel, builder::thinkingBudget, model, request.customParameters());
 
-            return new CloseableVertexAiChatModel(builder.build(), client);
+            return new CloseableVertexAiChatModel(builder.build(), client, remoteMediaInliner);
         });
     }
 
@@ -82,7 +84,7 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
 
             applyThinking(builder::thinkingLevel, builder::thinkingBudget, model, request.customParameters());
 
-            return new CloseableVertexAiStreamingChatModel(builder.build(), client);
+            return new CloseableVertexAiStreamingChatModel(builder.build(), client, remoteMediaInliner);
         });
     }
 
