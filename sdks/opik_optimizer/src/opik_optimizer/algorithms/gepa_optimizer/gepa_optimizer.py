@@ -737,7 +737,7 @@ class GepaOptimizer(BaseOptimizer):
         run_dir = context.extra_params.get("run_dir", None)
         track_best_outputs = context.extra_params.get("track_best_outputs", False)
         display_progress_bar = context.extra_params.get("display_progress_bar", False)
-        seed = context.extra_params.get("seed", 42)
+        seed = context.extra_params.get("seed", self.seed)
         raise_on_exception = context.extra_params.get("raise_on_exception", True)
         optimizable_roles = (
             context.extra_params.get("optimizable_roles")
