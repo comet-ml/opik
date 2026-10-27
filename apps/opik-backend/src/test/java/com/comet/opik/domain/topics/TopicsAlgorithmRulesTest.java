@@ -174,6 +174,29 @@ class TopicsAlgorithmRulesTest {
             assertThat(applied.topics()).extracting(AuthorApplier.NewTopic::name).containsExactly("B", "A");
             assertThat(applied.topics().getFirst().definition()).isEqualTo("b");
         }
+
+        @Test
+        @DisplayName("topics with the same name merge into the largest one, at the first one's place")
+        void sameNames() {
+            var answer = new AuthorAnswer(List.of(
+                    new AuthorAnswer.Topic("Email Drafting", "small", List.of(9, 4)),
+                    new AuthorAnswer.Topic("Billing", "d", List.of(2)),
+                    new AuthorAnswer.Topic(" email\u00A0 drafting", "large", List.of(3, 4)),
+                    new AuthorAnswer.Topic("Email Drafts", "d", List.of(10))), List.of());
+            var applied = AuthorApplier.apply(answer, groups, 10);
+            assertThat(applied.topics()).extracting(AuthorApplier.NewTopic::name)
+                    .containsExactly("email\u00A0 drafting", "Billing", "Email Drafts");
+            var email = applied.topics().getFirst();
+            assertThat(email.definition()).isEqualTo("large");
+            assertThat(email.groups()).containsExactly(3, 4, 9);
+        }
+
+        @Test
+        @DisplayName("the name key strips, collapses whitespace as Python does, and lower-cases")
+        void nameKey() {
+            assertThat(AuthorApplier.nameKey("\u00A0 Email \t\u2003Drafting \n")).isEqualTo("email drafting");
+            assertThat(AuthorApplier.nameKey("   ")).isEmpty();
+        }
     }
 
     @Nested

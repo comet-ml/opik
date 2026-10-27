@@ -7,13 +7,15 @@ import lombok.experimental.UtilityClass;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.regex.Pattern;
 
 /**
- * Turns the author answer into topics, as the stand's {@code apply_author} (v4): topics ordered by the total size of
+ * Turns the author answer into topics, as the stand's {@code apply_author} (v4): topics with the same name merged
+ * first (see {@link #mergeSameNames}); topics ordered by the total size of
  * their valid group ids (largest first, ties in answer order); catch-all names dropped; the first {@code maxTopics}
  * kept; each takes the groups no earlier topic claimed, and one left with none creates nothing; every unclaimed group is
  * Other. The answer's {@code other} list is ignored. A group listed twice in one topic counts once (the stand kept the
@@ -27,7 +29,7 @@ public class AuthorApplier {
 
     public static Applied apply(@NonNull AuthorAnswer answer, @NonNull List<GroupSummary> groups, int maxTopics) {
         int k = groups.size();
-        var ordered = new ArrayList<>(answer.topics());
+        var ordered = new ArrayList<>(mergeSameNames(answer.topics(), groups));
         ordered.sort(Comparator.comparingLong(topic -> -validSize(topic, groups)));
         var claimed = new boolean[k];
         var topics = new ArrayList<NewTopic>();
@@ -59,6 +61,52 @@ public class AuthorApplier {
             }
         }
         return new Applied(List.copyOf(topics), List.copyOf(other));
+    }
+
+    /**
+     * Topics whose names are equal after {@link #nameKey} become one, at the place of the first of them in the answer.
+     * It keeps the name and definition of its largest member (by {@link #validSize}, ties in answer order) and lists
+     * the members' group ids, largest member first, each id once.
+     */
+    static List<AuthorAnswer.Topic> mergeSameNames(List<AuthorAnswer.Topic> topics, List<GroupSummary> groups) {
+        var byName = new LinkedHashMap<String, List<AuthorAnswer.Topic>>();
+        for (var topic : topics) {
+            byName.computeIfAbsent(nameKey(topic.name()), key -> new ArrayList<>()).add(topic);
+        }
+        var out = new ArrayList<AuthorAnswer.Topic>(byName.size());
+        for (var members : byName.values()) {
+            if (members.size() == 1) {
+                out.add(members.getFirst());
+                continue;
+            }
+            var bySize = new ArrayList<>(members);
+            bySize.sort(Comparator.comparingLong(topic -> -validSize(topic, groups)));
+            var clusters = new LinkedHashSet<Integer>();
+            bySize.forEach(topic -> clusters.addAll(topic.clusters()));
+            var head = bySize.getFirst();
+            out.add(new AuthorAnswer.Topic(head.name(), head.definition(), List.copyOf(clusters)));
+        }
+        return out;
+    }
+
+    /** Python's {@code " ".join(name.split()).lower()}: no outer whitespace, inner runs as one space, lower case. */
+    static String nameKey(@NonNull String name) {
+        var out = new StringBuilder(name.length());
+        boolean space = false;
+        for (int i = 0; i < name.length();) {
+            int cp = name.codePointAt(i);
+            i += Character.charCount(cp);
+            if (TopicText.isPythonSpace(cp)) {
+                space = !out.isEmpty();
+                continue;
+            }
+            if (space) {
+                out.append(' ');
+                space = false;
+            }
+            out.appendCodePoint(cp);
+        }
+        return out.toString().toLowerCase(Locale.ROOT);
     }
 
     public static boolean isCatchAll(@NonNull String name) {
