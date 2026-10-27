@@ -5,6 +5,10 @@ import {
   ONLY_INTERNAL_CALLS_MESSAGE,
   internalCallsToggleLabel,
 } from './thread-panel.page';
+import {
+  measureTraceMessages,
+  type TraceMessagesGeometry,
+} from './trace-messages-geometry';
 
 /**
  * `AnnotatorViewFallbackAlert`'s message, verbatim.
@@ -111,6 +115,21 @@ export class SmeFlowPage {
   /** A single turn, located by the trace it was logged under. */
   turn(traceId: string): Locator {
     return this.page.locator(`[data-trace-message-id="${traceId}"]`);
+  }
+
+  /**
+   * Measure the boxes of this view's message list — see `measureTraceMessages`
+   * for why geometry rather than a screenshot.
+   *
+   * The twin of `ThreadPanelPage.measureMessages`, and worth having twice for
+   * the reason the whole class exists: `ThreadDataViewer` renders the shared
+   * `TraceMessages` inside a layout of its own, at a message column far
+   * narrower than the side panel's, so a wrapping rule that holds in one can
+   * fail in the other. Depends on the same closed-side-panel precondition
+   * `turns` does; call `waitForThreadReady` first.
+   */
+  async measureMessages(): Promise<TraceMessagesGeometry> {
+    return measureTraceMessages(this.turns);
   }
 
   /** Read the trace ids of the rendered turns in order. */

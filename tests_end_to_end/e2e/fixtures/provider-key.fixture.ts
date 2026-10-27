@@ -5,6 +5,7 @@ import {
   MOCK_AUTH_CLIENT_SECRET,
   mockAuthClearChatStatus,
   mockAuthForceChatStatus,
+  type MockAuthForcedError,
   mockGatewayUrlForBackend,
   mockTokenUrlForBackend,
 } from '../core/mock-auth';
@@ -165,8 +166,13 @@ export interface ProviderKeysFixture {
    * The hook lives on the mock process, which outlives the test, so it is registered
    * here rather than reset in the test body — a trailing reset step is skipped exactly
    * when an assertion has already failed.
+   *
+   * `error` additionally picks the error BODY the gateway answers with — a documented
+   * OpenAI envelope, whose message the backend passes through, or a bare one, whose
+   * message it replaces. Omit it and the gateway's pre-existing body is used, so a
+   * caller that cares only about the status is unaffected.
    */
-  forceChatStatus(modelName: string, status: number): Promise<void>;
+  forceChatStatus(modelName: string, status: number, error?: MockAuthForcedError): Promise<void>;
   /**
    * REST-seeds a Custom provider whose endpoint always answers a permanent HTTP
    * 404, and returns the qualified model id (`custom-llm/<provider>/<model>`) to
@@ -293,10 +299,10 @@ export const test = baseTest.extend<ProviderKeyFixtures>({
         });
         return model;
       },
-      async forceChatStatus(modelName, status) {
+      async forceChatStatus(modelName, status, error) {
         forcedStatusModels.push(modelName);
         registerUnbilledModel(modelName);
-        await mockAuthForceChatStatus(modelName, status);
+        await mockAuthForceChatStatus(modelName, status, error);
       },
       async createPermanentlyFailing({ providerName, modelName = 'always-404-model' }) {
         registered.push(providerName);

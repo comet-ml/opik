@@ -1,4 +1,4 @@
-export { test, expect } from './stoppable-run-dataset.fixture';
+export { test, expect } from './wide-content-thread.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -564,3 +564,10 @@ export type {
   StoppableRunDatasetRef,
   StoppableRunDatasetFixtures,
 } from './stoppable-run-dataset.fixture';
+export type {
+  WideContentTurnSeed,
+  WideContentTurnRef,
+  WideContentThreadRef,
+  WideContentThreadQueueRef,
+  WideContentThreadFixtures,
+} from './wide-content-thread.fixture';
