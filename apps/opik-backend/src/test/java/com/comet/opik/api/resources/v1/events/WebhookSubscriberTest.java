@@ -7,22 +7,29 @@ import com.comet.opik.api.resources.utils.TestHttpClientUtils;
 import com.comet.opik.api.resources.v1.events.webhooks.WebhookHttpClient;
 import com.comet.opik.infrastructure.WebhookConfig;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
+import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.github.tomakehurst.wiremock.WireMockServer;
+import io.dropwizard.util.DataSize;
 import io.dropwizard.util.Duration;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.redisson.api.RedissonReactiveClient;
+import org.slf4j.Logger;
 import reactor.test.StepVerifier;
 
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
 
+import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.moreThanOrExactly;
@@ -59,7 +66,7 @@ class WebhookSubscriberTest {
         // Mock the static UserFacingLoggingFactory.getLogger method
         try (MockedStatic<UserFacingLoggingFactory> mockedFactory = mockStatic(UserFacingLoggingFactory.class)) {
             mockedFactory.when(() -> UserFacingLoggingFactory.getLogger(any(Class.class)))
-                    .thenReturn(mock(org.slf4j.Logger.class));
+                    .thenReturn(mock(Logger.class));
 
             // Create WebhookHttpClient with a real JAX-RS client and a mock UserFacingLoggingFactory
             // Note: The factory parameter is not actually used in the constructor, but is required
@@ -96,6 +103,36 @@ class WebhookSubscriberTest {
         wireMockServer.verify(postRequestedFor(urlEqualTo("/webhook"))
                 .withHeader("Content-Type", equalTo("application/json"))
                 .withHeader("User-Agent", equalTo("Opik-Webhook/1.0")));
+    }
+
+    /**
+     * The body is sent in chunks over far longer than the test allows, so it completes only if the client stops at the
+     * cap and drops the rest of the response, rather than reading it all and truncating.
+     */
+    @ParameterizedTest
+    @ValueSource(ints = {16, 512})
+    void sendWebhook_whenResponseBodyExceedsTheCap_shouldReadOnlyTheCap(int responseBodyMaxSize) {
+        int chunks = 8;
+        var body = RandomStringUtils.secure().nextAlphanumeric(responseBodyMaxSize * chunks);
+        wireMockServer.stubFor(post(urlEqualTo("/webhook"))
+                .willReturn(aResponse().withStatus(200).withBody(body).withChunkedDribbleDelay(chunks, 16_000)));
+        var config = createWebhookConfig();
+        config.setRequestTimeout(Duration.seconds(30));
+        config.setResponseBodyMaxSize(DataSize.bytes(responseBodyMaxSize));
+        WebhookHttpClient webhookHttpClient;
+        try (MockedStatic<UserFacingLoggingFactory> mockedFactory = mockStatic(UserFacingLoggingFactory.class)) {
+            mockedFactory.when(() -> UserFacingLoggingFactory.getLogger(any(Class.class)))
+                    .thenReturn(mock(Logger.class));
+            webhookHttpClient = new WebhookHttpClient(TestHttpClientUtils.client(), config);
+        }
+
+        var expectedBody = body.substring(0, responseBodyMaxSize);
+        StepVerifier.create(webhookHttpClient.sendWebhook(
+                createWebhookEvent("http://localhost:" + wireMockServer.port() + "/webhook"))
+                .contextWrite(ctx -> setRequestContext(ctx, USER_NAME, WORKSPACE_ID)))
+                .expectNext(expectedBody)
+                .expectComplete()
+                .verify(Duration.seconds(8).toJavaDuration());
     }
 
     @Test
@@ -195,6 +232,8 @@ class WebhookSubscriberTest {
         config.setMaxRetryDelay(Duration.seconds(1));
         config.setRequestTimeout(Duration.seconds(5));
         config.setConnectionTimeout(Duration.seconds(2));
+        config.setDestinationScheme(DestinationGuard.Scheme.PLAINTEXT_OR_TLS);
+        config.setResponseBodyMaxSize(DataSize.bytes(512));
         config.setConsumerBatchSize(10);
         config.setPoolingInterval(Duration.seconds(1));
         return config;

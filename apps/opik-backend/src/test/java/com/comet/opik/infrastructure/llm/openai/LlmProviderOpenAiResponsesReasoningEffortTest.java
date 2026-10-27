@@ -99,7 +99,8 @@ class LlmProviderOpenAiResponsesReasoningEffortTest {
 
     private List<Throwable> sendBlockingAndStreaming(ChatCompletionRequest request) {
         var provider = new LlmProviderOpenAiResponses(
-                new OpenAIClientGenerator(new LlmProviderClientConfig(), LlmTestClients.RESPONSES_API_HTTP_CLIENT),
+                new OpenAIClientGenerator(new LlmProviderClientConfig(), LlmTestClients.RESPONSES_API_HTTP_CLIENT,
+                        LlmTestClients.LLM_HTTP_CLIENT_BUILDERS),
                 LlmProviderClientApiConfig.builder()
                         .apiKey("test-key")
                         .baseUrl(openAi.baseUrl())

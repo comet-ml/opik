@@ -3,6 +3,7 @@ package com.comet.opik.infrastructure.llm.gemini;
 import com.comet.opik.api.ChunkedResponseHandler;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.infrastructure.llm.GeminiMaxOutputTokens;
+import com.comet.opik.infrastructure.llm.LlmTestClients;
 import com.comet.opik.infrastructure.llm.StreamingResponseLogger;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.UserMessage;
@@ -182,6 +183,7 @@ class LlmProviderGeminiTest {
         GoogleAiGeminiStreamingChatModel.builder()
                 .baseUrl("http://localhost:%d/v1beta".formatted(wireMock.server().port()))
                 .apiKey("test-api-key")
+                .httpClientBuilder(LlmTestClients.LLM_HTTP_CLIENT_BUILDERS.builder())
                 .modelName(MODEL)
                 .maxOutputTokens(GeminiMaxOutputTokens.firstPositive(request).orElse(null))
                 .returnThinking(false)

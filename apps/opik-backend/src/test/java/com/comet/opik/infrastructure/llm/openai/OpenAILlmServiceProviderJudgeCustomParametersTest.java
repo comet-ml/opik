@@ -60,7 +60,8 @@ class OpenAILlmServiceProviderJudgeCustomParametersTest {
         clientConfig.setLogRequests(false);
         clientConfig.setLogResponses(false);
         serviceProvider = new OpenAILlmServiceProvider(
-                new OpenAIClientGenerator(clientConfig, LlmTestClients.RESPONSES_API_HTTP_CLIENT),
+                new OpenAIClientGenerator(clientConfig, LlmTestClients.RESPONSES_API_HTTP_CLIENT,
+                        LlmTestClients.LLM_HTTP_CLIENT_BUILDERS),
                 mock(LlmProviderFactory.class));
     }
 

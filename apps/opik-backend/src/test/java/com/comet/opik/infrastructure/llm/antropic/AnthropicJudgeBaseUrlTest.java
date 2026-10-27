@@ -4,6 +4,7 @@ import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.AnthropicClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
+import com.comet.opik.infrastructure.llm.LlmTestClients;
 import com.comet.opik.infrastructure.llm.OpenAiClientConfig;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
@@ -52,7 +53,8 @@ class AnthropicJudgeBaseUrlTest {
         var clientConfig = new LlmProviderClientConfig();
         clientConfig.setAnthropicClient(new AnthropicClientConfig(anthropic.baseUrl() + "/v1/", "2099-01-01"));
         clientConfig.setOpenAiClient(new OpenAiClientConfig(openAi.baseUrl() + "/v1/"));
-        var generator = new AnthropicClientGenerator(clientConfig, bundledRegistry());
+        var generator = new AnthropicClientGenerator(clientConfig, bundledRegistry(),
+                LlmTestClients.LLM_HTTP_CLIENT_BUILDERS);
         var key = LlmProviderClientApiConfig.builder().apiKey("test-key").build();
 
         generator.generateChat(key, LlmAsJudgeModelParameters.builder().name("claude-haiku-4-5-20251001").build())

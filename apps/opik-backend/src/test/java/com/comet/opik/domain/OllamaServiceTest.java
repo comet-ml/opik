@@ -3,6 +3,8 @@ package com.comet.opik.domain;
 import com.comet.opik.api.OllamaConnectionTestResponse;
 import com.comet.opik.api.OllamaModel;
 import com.comet.opik.api.resources.utils.TestHttpClientUtils;
+import com.comet.opik.infrastructure.llm.customllm.ProviderBaseUrlGuard;
+import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -41,7 +43,11 @@ class OllamaServiceTest {
         baseUrl = "http://localhost:" + wireMockServer.port();
         var httpClient = TestHttpClientUtils.client();
 
-        ollamaService = new OllamaService(httpClient);
+        // the mock server is on loopback, which strict mode refuses
+        ollamaService = new OllamaService(httpClient, ProviderBaseUrlGuard.builder()
+                .mode(DestinationGuard.Mode.RELAXED)
+                .scheme(DestinationGuard.Scheme.PLAINTEXT_OR_TLS)
+                .build());
     }
 
     @AfterAll
