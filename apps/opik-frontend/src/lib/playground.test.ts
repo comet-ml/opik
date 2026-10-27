@@ -24,6 +24,21 @@ import {
 import { PlaygroundPromptType } from "@/types/playground";
 import { LLM_MESSAGE_ROLE, LLMMessage, MessageContent } from "@/types/llm";
 
+// The prices bot rewrites this file from OpenRouter's live list every day, and OpenRouter drops models without
+// notice: a live model used as an example here turns the bot's PR red the day it goes.
+vi.mock("@/data/model_prices_openrouter.json", async (importOriginal) => {
+  const { default: rows } = await importOriginal<{
+    default: Record<string, object>;
+  }>();
+  return {
+    default: {
+      ...rows,
+      "openrouter/acme/short-output-model": { max_output_tokens: 2048 },
+      "openrouter/openai/gpt-3.5-turbo-instruct": { max_output_tokens: 3685 },
+    },
+  };
+});
+
 const userMessage = (content: MessageContent): LLMMessage => ({
   id: "message",
   role: LLM_MESSAGE_ROLE.user,
@@ -187,8 +202,7 @@ describe("getDefaultConfigByProvider — the starting max output tokens", () => 
   });
 
   it.each([
-    { model: "google/gemma-2-27b-it", maxTokens: 2048 },
-    { model: "gryphe/mythomax-l2-13b", maxTokens: 3686 },
+    { model: "acme/short-output-model", maxTokens: 2048 },
     // OpenAI's own entry for gpt-3.5-turbo-instruct allows 4096.
     { model: "openai/gpt-3.5-turbo-instruct", maxTokens: 3685 },
     { model: "openai/gpt-4o-mini", maxTokens: 4000 },
