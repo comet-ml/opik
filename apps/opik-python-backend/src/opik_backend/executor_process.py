@@ -144,8 +144,10 @@ _MAX_PENDING_REPLIES = 16
 # the kernel delivering it. Not settings: neither depends on the workload.
 _TERMINATE_GRACE_SECONDS = 2
 _KILL_GRACE_SECONDS = 1
-# A worker writes a reply in one go once it has encoded it, so a reply still incomplete this long after its first
-# byte, outside a scoring call's own deadline, is from a worker that stalled mid-message.
+# A worker writes a reply in one go once it has encoded it, so a reply that has started and then gets no more
+# bytes for this long is from a worker that stalled mid-message. Outside a scoring call, which has its own deadline,
+# it bounds each pause rather than the whole reply, so a large reply that keeps arriving completes. Draining uses it
+# as a fixed bound: pending replies are discarded, and a worker that can't be drained in time is just replaced.
 _REPLY_GRACE_SECONDS = 1
 
 
@@ -318,7 +320,7 @@ def _close(connection: Connection, worker_id: str) -> None:
         logger.warning(f"Error closing connection for worker {worker_id}: {e}")
 
 
-def _recv_exact(sock: socket.socket, size: int, deadline: float) -> bytearray:
+def _recv_exact(sock: socket.socket, size: int, deadline: float, idle: float) -> bytearray:
     buf = bytearray(size)
     with memoryview(buf) as view:
         received = 0
@@ -328,9 +330,11 @@ def _recv_exact(sock: socket.socket, size: int, deadline: float) -> bytearray:
                 # that would block waits, never past the deadline.
                 n = sock.recv_into(view[received:], size - received, socket.MSG_DONTWAIT)
             except BlockingIOError:
-                remaining = deadline - time.monotonic()
-                if remaining <= 0 or not wait([sock], remaining):
-                    raise _StalledReply()
+                # Each time the pipe runs dry it waits at most `idle`, and never past the deadline: bytes that keep
+                # arriving restart the wait, and a pause of `idle` is a stall.
+                timeout = min(deadline - time.monotonic(), idle)
+                if timeout <= 0 or not wait([sock], timeout):
+                    raise _StalledReply("the worker sent part of a reply and stalled")
                 continue
             if n == 0:
                 raise EOFError
@@ -338,11 +342,11 @@ def _recv_exact(sock: socket.socket, size: int, deadline: float) -> bytearray:
     return buf
 
 
-def _recv_reply(connection: Connection, deadline: float, max_bytes: int) -> Optional[bytearray]:
-    """One message as Connection.recv_bytes frames it, read without blocking past the deadline.
+def _recv_reply(connection: Connection, deadline: float, max_bytes: int, idle: float = math.inf) -> Optional[bytearray]:
+    """One message as Connection.recv_bytes frames it, read without blocking past the deadline or pausing past idle.
 
-    None when it is longer than max_bytes, before its body is read. Raises _StalledReply at the deadline
-    and EOFError when the worker closed the pipe.
+    None when it is longer than max_bytes, before its body is read. Raises _StalledReply at the deadline or after
+    a pause of idle, and EOFError when the worker closed the pipe.
     """
     # The pipe's own descriptor (Pipe() is a Unix socket pair), detached after the read: family, type and protocol are
     # given, so building it queries nothing. A process-wide default timeout would have made the descriptor
@@ -351,23 +355,23 @@ def _recv_reply(connection: Connection, deadline: float, max_bytes: int) -> Opti
     try:
         if sock.gettimeout() is not None:
             sock.settimeout(None)
-        size, = struct.unpack("!i", _recv_exact(sock, 4, deadline))
+        size, = struct.unpack("!i", _recv_exact(sock, 4, deadline, idle))
         if size == -1:
-            size, = struct.unpack("!Q", _recv_exact(sock, 8, deadline))
+            size, = struct.unpack("!Q", _recv_exact(sock, 8, deadline, idle))
         if size > max_bytes:
             return None
-        return _recv_exact(sock, size, deadline)
+        return _recv_exact(sock, size, deadline, idle)
     finally:
         sock.detach()
 
 
-def _read_reply(connection: Connection, deadline: float, max_bytes: int) -> Any:
+def _read_reply(connection: Connection, deadline: float, max_bytes: int, idle: float = math.inf) -> Any:
     """One worker reply, decoded as JSON: replies are read as data, not objects.
 
     None when the reply is too long, not JSON or could not be read. EOFError and _StalledReply still propagate.
     """
     try:
-        reply = _recv_reply(connection, deadline, max_bytes)
+        reply = _recv_reply(connection, deadline, max_bytes, idle)
     except OSError as e:
         # The pipe itself failed; the size limit is checked on the length prefix and never raises.
         code = errno.errorcode.get(e.errno, e.errno) if e.errno is not None else "none"
@@ -391,9 +395,10 @@ def _command(code: str, data: dict, payload_type: Optional[str]) -> Tuple[str, d
                         process_worker.REQUEST_ID_KEY: request_id}
 
 
-def _read_result(connection: Connection, request_id: str, deadline: float, max_bytes: int) -> Optional[dict]:
+def _read_result(connection: Connection, request_id: str, deadline: float, max_bytes: int,
+                 idle: float = math.inf) -> Optional[dict]:
     """The result of the command with this request id; None for any other reply."""
-    reply = _read_reply(connection, deadline, max_bytes)
+    reply = _read_reply(connection, deadline, max_bytes, idle)
     if (
         isinstance(reply, dict)
         and reply.get(process_worker.REQUEST_ID_KEY) == request_id
@@ -538,9 +543,9 @@ def run_user_code_in_isolated_worker(code: str, data: dict, payload_type: Option
     try:
         request_id, command = _command(code, data, payload_type)
         connection.send(command)
-        # No deadline for the run itself (see above), only for the rest of a reply once it has started.
+        # No deadline for the run itself (see above), only a bound on pauses once the reply has started.
         connection.poll(None)
-        result = _read_result(connection, request_id, time.monotonic() + _REPLY_GRACE_SECONDS, max_bytes)
+        result = _read_result(connection, request_id, math.inf, max_bytes, idle=_REPLY_GRACE_SECONDS)
         if result is None:
             return {"code": 400, "error": MALFORMED_REPLY_ERROR}
         reusable = True
