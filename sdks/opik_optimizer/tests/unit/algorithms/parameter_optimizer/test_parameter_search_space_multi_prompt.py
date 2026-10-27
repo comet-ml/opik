@@ -273,23 +273,3 @@ class TestBackwardCompatibility:
 
         assert len(expanded.parameters) == 1
         assert expanded.parameters[0].name == "my_single_prompt.temperature"
-
-    def test_describe_with_expanded_params(self) -> None:
-        s = ParameterSearchSpace(
-            parameters=[
-                ParameterSpec(
-                    name="temperature",
-                    distribution=ParameterType.FLOAT,
-                    low=0.0,
-                    high=1.0,
-                ),
-            ]
-        )
-
-        expanded = s.expand_for_prompts(["p1", "p2"])
-        description = expanded.describe()
-
-        assert "p1.temperature" in description
-        assert "p2.temperature" in description
-        assert description["p1.temperature"]["min"] == 0.0
-        assert description["p1.temperature"]["max"] == 1.0

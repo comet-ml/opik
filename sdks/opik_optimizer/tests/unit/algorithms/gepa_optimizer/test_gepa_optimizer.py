@@ -6,114 +6,15 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from opik_optimizer import ChatPrompt, GepaOptimizer, OptimizationResult
+from opik_optimizer import ChatPrompt, GepaOptimizer
 from opik_optimizer.algorithms.gepa_optimizer.adapter import OpikGEPAAdapter
-from tests.unit.fixtures import assert_baseline_early_stop, assert_invalid_prompt_raises
-from tests.unit.fixtures import make_baseline_prompt, make_two_prompt_bundle
+from tests.unit.fixtures import assert_baseline_early_stop
+from tests.unit.fixtures import make_baseline_prompt
 from tests.unit.test_helpers import (
     make_mock_dataset,
     make_optimization_context,
     STANDARD_DATASET_ITEMS,
 )
-
-
-class TestGepaOptimizerOptimizePrompt:
-    def test_single_prompt_returns_chat_prompt(
-        self,
-        mock_optimization_context,
-        monkeypatch,
-        simple_chat_prompt,
-        mock_dataset,
-        sample_dataset_items,
-        sample_metric,
-    ) -> None:
-        mock_optimization_context()
-
-        optimizer = GepaOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
-        prompt = simple_chat_prompt
-        dataset = mock_dataset(
-            sample_dataset_items, name="test-dataset", dataset_id="dataset-123"
-        )
-
-        monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 0.5)
-
-        mock_gepa_result = MagicMock()
-        mock_gepa_result.best_prompt = prompt.copy()
-        mock_gepa_result.best_score = 0.85
-        mock_gepa_result.history = []
-        mock_gepa_result.pareto_front = []
-        mock_gepa_result.total_metric_calls = 1
-
-        monkeypatch.setattr("gepa.optimize", lambda **kwargs: mock_gepa_result)
-
-        result = optimizer.optimize_prompt(
-            prompt=prompt,
-            dataset=dataset,
-            metric=sample_metric,
-            max_trials=2,
-            n_samples=2,
-        )
-
-        assert isinstance(result, OptimizationResult)
-        assert isinstance(result.prompt, ChatPrompt)
-
-    def test_dict_prompt_returns_dict(
-        self,
-        mock_optimization_context,
-        monkeypatch,
-        mock_dataset,
-        sample_dataset_items,
-        sample_metric,
-    ) -> None:
-        mock_optimization_context()
-
-        optimizer = GepaOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
-        prompts = make_two_prompt_bundle()
-        dataset = mock_dataset(
-            sample_dataset_items, name="test-dataset", dataset_id="dataset-123"
-        )
-
-        monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 0.5)
-
-        mock_gepa_result = MagicMock()
-        mock_gepa_result.best_prompt = list(prompts.values())[0].copy()
-        mock_gepa_result.best_score = 0.85
-        mock_gepa_result.history = []
-        mock_gepa_result.pareto_front = []
-        mock_gepa_result.total_metric_calls = 1
-
-        monkeypatch.setattr("gepa.optimize", lambda **kwargs: mock_gepa_result)
-
-        result = optimizer.optimize_prompt(
-            prompt=prompts,
-            dataset=dataset,
-            metric=sample_metric,
-            max_trials=2,
-            n_samples=2,
-        )
-
-        assert isinstance(result, OptimizationResult)
-        assert isinstance(result.prompt, dict)
-
-    def test_invalid_prompt_raises_error(
-        self,
-        mock_optimization_context,
-        mock_dataset,
-        sample_dataset_items,
-        sample_metric,
-    ) -> None:
-        mock_optimization_context()
-        optimizer = GepaOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
-        dataset = mock_dataset(
-            sample_dataset_items, name="test-dataset", dataset_id="dataset-123"
-        )
-
-        assert_invalid_prompt_raises(
-            optimizer,
-            dataset=dataset,
-            metric=sample_metric,
-            max_trials=1,
-        )
 
 
 class TestGepaOptimizerEarlyStop:

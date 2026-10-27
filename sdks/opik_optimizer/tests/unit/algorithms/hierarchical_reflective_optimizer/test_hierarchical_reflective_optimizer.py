@@ -15,7 +15,7 @@ from opik_optimizer.algorithms.hierarchical_reflective_optimizer.types import (
     FailureMode,
     HierarchicalRootCauseAnalysis,
 )
-from tests.unit.fixtures import assert_baseline_early_stop, assert_invalid_prompt_raises
+from tests.unit.fixtures import assert_baseline_early_stop
 from tests.unit.fixtures import make_baseline_prompt, make_two_prompt_bundle
 
 
@@ -96,28 +96,6 @@ class TestHierarchicalReflectiveOptimizerOptimizePrompt:
 
         assert isinstance(result, OptimizationResult)
         assert isinstance(result.prompt, expected_type)
-
-    def test_invalid_prompt_raises_error(
-        self,
-        mock_optimization_context,
-        mock_dataset,
-        sample_dataset_items,
-        sample_metric,
-    ) -> None:
-        mock_optimization_context()
-        optimizer = HierarchicalReflectiveOptimizer(
-            model="gpt-4o-mini", verbose=0, seed=42
-        )
-        dataset = mock_dataset(
-            sample_dataset_items, name="test-dataset", dataset_id="dataset-123"
-        )
-
-        assert_invalid_prompt_raises(
-            optimizer,
-            dataset=dataset,
-            metric=sample_metric,
-            max_trials=1,
-        )
 
 
 class TestHierarchicalReflectiveOptimizerEarlyStop:

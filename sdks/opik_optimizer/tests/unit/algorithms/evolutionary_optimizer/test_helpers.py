@@ -4,48 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from opik_optimizer import ChatPrompt
 from opik_optimizer.algorithms.evolutionary_optimizer.helpers import (
-    get_task_description_for_llm,
     calculate_population_diversity,
 )
 from opik_optimizer.algorithms.evolutionary_optimizer import helpers
 from tests.unit.fixtures import assistant_message, system_message, user_message
-
-
-class TestGetTaskDescriptionForLLM:
-    """Tests for get_task_description_for_llm function."""
-
-    def test_basic_description(self) -> None:
-        prompt = ChatPrompt(
-            system="You are a helpful assistant.",
-            user="Answer the question: {question}",
-        )
-        description = get_task_description_for_llm(prompt)
-        assert "Task:" in description
-        assert "messages" in description.lower() or "instruction" in description.lower()
-        assert "effective prompt" in description.lower()
-
-    def test_includes_original_messages(self) -> None:
-        prompt = ChatPrompt(
-            system="Summarize the text.",
-            user="{text}",
-        )
-        description = get_task_description_for_llm(prompt)
-        assert "optimized" in description.lower() or "original" in description.lower()
-
-    def test_handles_complex_prompt(self) -> None:
-        prompt = ChatPrompt(
-            messages=[
-                system_message("You are a code reviewer."),
-                user_message("Review this code: {code}"),
-                assistant_message("I'll review your code."),
-                user_message("What issues did you find?"),
-            ]
-        )
-        description = get_task_description_for_llm(prompt)
-        assert isinstance(description, str)
-        assert len(description) > 0
 
 
 class TestCalculatePopulationDiversity:

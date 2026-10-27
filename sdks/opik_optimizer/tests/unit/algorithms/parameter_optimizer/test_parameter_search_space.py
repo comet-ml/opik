@@ -135,21 +135,6 @@ def test_narrow_around_creates_smaller_range() -> None:
     assert top_p_spec.high <= 1.0
 
 
-def test_describe_returns_summary() -> None:
-    space = ParameterSearchSpace.model_validate(
-        {
-            "temperature": {"type": "float", "min": 0.0, "max": 1.0, "scale": "linear"},
-            "mode": {"type": "categorical", "values": ["fast", "accurate"]},
-        }
-    )
-
-    summary = space.describe()
-    assert summary["temperature"]["min"] == 0.0
-    assert summary["temperature"]["max"] == 1.0
-    assert summary["temperature"]["type"] == "float"
-    assert summary["mode"]["choices"] == ["fast", "accurate"]
-
-
 def test_docs_basic_example() -> None:
     """Test the basic example from documentation."""
     parameter_space = ParameterSearchSpace(
@@ -297,3 +282,18 @@ def test_docs_nested_parameter_example() -> None:
     assert spec.name == "model_kwargs.response_format.type"
     assert spec.distribution == ParameterType.CATEGORICAL
     assert spec.choices == ["text", "json_object"]
+
+
+def test_describe_returns_summary() -> None:
+    space = ParameterSearchSpace.model_validate(
+        {
+            "temperature": {"type": "float", "min": 0.0, "max": 1.0, "scale": "linear"},
+            "mode": {"type": "categorical", "values": ["fast", "accurate"]},
+        }
+    )
+
+    summary = space.describe()
+    assert summary["temperature"]["min"] == 0.0
+    assert summary["temperature"]["max"] == 1.0
+    assert summary["temperature"]["type"] == "float"
+    assert summary["mode"]["choices"] == ["fast", "accurate"]

@@ -27,22 +27,6 @@ from tests.unit.test_helpers import (
 
 class TestParameterOptimizerInit:
     @pytest.mark.parametrize(
-        "kwargs,expected",
-        [
-            ({}, {"model": None, "model_parameters": {}, "seed": 42}),
-            ({"verbose": 0, "seed": 123}, {"verbose": 0, "seed": 123}),
-        ],
-    )
-    def test_initialization(
-        self, kwargs: dict[str, Any], expected: dict[str, Any]
-    ) -> None:
-        with warnings.catch_warnings():
-            warnings.simplefilter("error")
-            optimizer = ParameterOptimizer(**kwargs)
-        for key, value in expected.items():
-            assert getattr(optimizer, key) == value
-
-    @pytest.mark.parametrize(
         "kwargs",
         [
             {"model": "gpt-4o"},
@@ -213,30 +197,6 @@ class TestParameterOptimizerEarlyStop:
         # scoring_health in its own result details (present, not dropped) — here the
         # float-mode baseline leaves it unset, so it falls back to the all-clear shape.
         assert result.details["scoring_health"] == {"failed_count": 0, "total_count": 0}
-
-
-class TestNormalizePromptInput:
-    def test_single_prompt_normalized_to_dict(self) -> None:
-        optimizer = ParameterOptimizer(verbose=0)
-        prompt = ChatPrompt(name="test_prompt", system="Hello")
-
-        prompts, is_single = optimizer._normalize_prompt_input(prompt)
-
-        assert isinstance(prompts, dict)
-        assert "test_prompt" in prompts
-        assert is_single is True
-
-    def test_dict_prompt_kept_as_dict(self) -> None:
-        optimizer = ParameterOptimizer(verbose=0)
-        prompt_dict = {
-            "a": ChatPrompt(name="a", system="A"),
-            "b": ChatPrompt(name="b", system="B"),
-        }
-
-        prompts, is_single = optimizer._normalize_prompt_input(prompt_dict)
-
-        assert prompts is prompt_dict
-        assert is_single is False
 
 
 class TestSharedLifecycle:

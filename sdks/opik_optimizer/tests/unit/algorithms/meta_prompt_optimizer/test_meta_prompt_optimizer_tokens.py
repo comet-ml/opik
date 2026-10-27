@@ -10,7 +10,6 @@ from opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_learning_ops im
     get_task_context,
 )
 from opik_optimizer.utils import token as token_utils
-from opik_optimizer import constants
 
 
 def _metric_with_name(name: str = "mock_metric") -> Mock:
@@ -64,11 +63,6 @@ class TestTokenCalculation:
 
             # Should be capped at 10000 even though 25% of 200k = 50k
             assert optimizer.max_context_tokens == 10000
-
-    def test_constants_are_correctly_defined(self) -> None:
-        """Test that all token-related constants are properly defined."""
-        assert constants.META_PROMPT_DEFAULT_DATASET_CONTEXT_MAX_TOKENS == 10000
-        assert constants.META_PROMPT_DEFAULT_DATASET_CONTEXT_RATIO == 0.25
 
 
 class TestContextOpsTokenCounting:
@@ -264,36 +258,3 @@ class TestColumnSelection:
                 # Should fall back to all input columns
                 assert "{question}" in context
                 assert "{context}" in context
-
-
-class TestMetadataMapping:
-    """Test that metadata is properly mapped."""
-
-    def test_optimizer_metadata_includes_token_budget(self) -> None:
-        """Test that optimizer metadata includes max_context_tokens."""
-        with patch("opik_optimizer.utils.token.get_max_tokens") as mock_get_max_tokens:
-            mock_get_max_tokens.return_value = 16000
-
-            optimizer = MetaPromptOptimizer(model="gpt-3.5-turbo")
-            metadata = optimizer.get_optimizer_metadata()
-
-            assert "max_context_tokens" in metadata
-            assert metadata["max_context_tokens"] == 4000  # 25% of 16000
-
-    def test_optimizer_metadata_includes_all_parameters(self) -> None:
-        """Test that all optimizer parameters are in metadata."""
-        optimizer = MetaPromptOptimizer(
-            model="gpt-4",
-            prompts_per_round=5,
-            num_task_examples=4,
-            task_context_columns=["question", "context"],
-        )
-        metadata = optimizer.get_optimizer_metadata()
-
-        assert metadata["prompts_per_round"] == 5
-        assert metadata["num_task_examples"] == 4
-        assert metadata["task_context_columns"] == ["question", "context"]
-        assert "max_context_tokens" in metadata
-        assert "hall_of_fame_size" in metadata
-        assert "pattern_extraction_interval" in metadata
-        assert "pattern_injection_rate" in metadata

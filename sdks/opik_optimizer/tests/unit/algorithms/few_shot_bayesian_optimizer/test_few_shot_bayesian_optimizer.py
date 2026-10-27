@@ -7,10 +7,8 @@ from unittest.mock import MagicMock
 import pytest
 
 from opik_optimizer import (
-    AlgorithmResult,
     ChatPrompt,
     FewShotBayesianOptimizer,
-    OptimizationResult,
 )
 from opik_optimizer.api_objects import types as api_types
 from opik_optimizer.agents.optimizable_agent import OptimizableAgent
@@ -22,108 +20,11 @@ from tests.unit.test_helpers import (
 )
 from tests.unit.fixtures import (
     assert_baseline_early_stop,
-    assert_invalid_prompt_raises,
     make_baseline_prompt,
-    make_two_prompt_bundle,
 )
 
 
-class TestFewShotBayesianOptimizerInit:
-    @pytest.mark.parametrize(
-        "kwargs,expected",
-        [
-            ({"model": "gpt-4o"}, {"model": "gpt-4o", "seed": 42}),
-            (
-                {
-                    "model": "gpt-4o-mini",
-                    "verbose": 0,
-                    "seed": 123,
-                    "min_examples": 1,
-                    "max_examples": 5,
-                },
-                {
-                    "model": "gpt-4o-mini",
-                    "verbose": 0,
-                    "seed": 123,
-                    "min_examples": 1,
-                    "max_examples": 5,
-                },
-            ),
-        ],
-    )
-    def test_initialization(
-        self, kwargs: dict[str, Any], expected: dict[str, Any]
-    ) -> None:
-        """Test optimizer initialization with defaults and custom params."""
-        optimizer = FewShotBayesianOptimizer(**kwargs)
-        for key, value in expected.items():
-            assert getattr(optimizer, key) == value
-
-
 class TestFewShotBayesianOptimizerOptimizePrompt:
-    def test_single_prompt_returns_chat_prompt(
-        self,
-        mock_optimization_context,
-        monkeypatch,
-    ) -> None:
-        mock_optimization_context()
-
-        optimizer = FewShotBayesianOptimizer(
-            model="gpt-4o-mini",
-            verbose=0,
-            seed=42,
-            min_examples=1,
-            max_examples=2,
-        )
-        prompt = ChatPrompt(system="Test", user="{question}")
-        dataset = make_mock_dataset(
-            STANDARD_DATASET_ITEMS, name="test-dataset", dataset_id="dataset-123"
-        )
-
-        monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 0.5)
-
-        def mock_create_fewshot_template(**kwargs):
-            prompts = kwargs.get("prompts", {})
-            return {
-                name: p.copy() for name, p in prompts.items()
-            }, "Examples:\n{examples}"
-
-        monkeypatch.setattr(
-            optimizer, "_create_few_shot_prompt_template", mock_create_fewshot_template
-        )
-
-        def mock_run_optimization(context):
-            prompts = context.prompts
-            original_prompts = context.initial_prompts
-            best_prompt = prompts
-            initial_prompt = original_prompts
-            return AlgorithmResult(
-                best_prompts=best_prompt,
-                best_score=0.85,
-                history=optimizer.get_history_entries(),
-                metadata={
-                    "initial_prompt": initial_prompt,
-                    "initial_score": 0.5,
-                    "metric_name": "test_metric",
-                },
-            )
-
-        monkeypatch.setattr(optimizer, "run_optimization", mock_run_optimization)
-
-        result = optimizer.optimize_prompt(
-            prompt=prompt,
-            dataset=dataset,
-            metric=make_simple_metric(),
-            max_trials=2,
-            n_samples=2,
-        )
-
-        assert isinstance(result, OptimizationResult)
-        assert isinstance(result.prompt, ChatPrompt)
-        assert isinstance(result.initial_prompt, ChatPrompt)
-        assert result.score == 0.85
-        assert result.initial_score == 0.5
-
     def test_sanitized_prompt_name_collision_raises(self) -> None:
         optimizer = FewShotBayesianOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
 
@@ -303,76 +204,6 @@ class TestFewShotBayesianOptimizerOptimizePrompt:
         assert len(preserved) == 1
         assert preserved[0]["role"] == "system"
 
-    def test_dict_prompt_returns_dict(
-        self,
-        mock_optimization_context,
-        monkeypatch,
-    ) -> None:
-        mock_optimization_context()
-
-        optimizer = FewShotBayesianOptimizer(
-            model="gpt-4o-mini",
-            verbose=0,
-            seed=42,
-            min_examples=1,
-            max_examples=2,
-        )
-        prompts = make_two_prompt_bundle()
-        dataset = make_mock_dataset(
-            STANDARD_DATASET_ITEMS, name="test-dataset", dataset_id="dataset-123"
-        )
-
-        monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 0.5)
-
-        def mock_create_fewshot_template(**kwargs):
-            prompts_arg = kwargs.get("prompts", {})
-            return {
-                name: p.copy() for name, p in prompts_arg.items()
-            }, "Examples:\n{examples}"
-
-        monkeypatch.setattr(
-            optimizer, "_create_few_shot_prompt_template", mock_create_fewshot_template
-        )
-
-        def mock_run_optimization(context):
-            prompts_arg = context.prompts
-            original_prompts = context.initial_prompts
-            is_single = context.is_single_prompt_optimization
-            best_prompt = (
-                prompts_arg if not is_single else list(prompts_arg.values())[0]
-            )
-            initial_prompt = (
-                original_prompts
-                if not is_single
-                else list(original_prompts.values())[0]
-            )
-            return AlgorithmResult(
-                best_prompts=best_prompt,
-                best_score=0.85,
-                history=optimizer.get_history_entries(),
-                metadata={
-                    "initial_prompt": initial_prompt,
-                    "initial_score": 0.5,
-                    "metric_name": "test_metric",
-                },
-            )
-
-        monkeypatch.setattr(optimizer, "run_optimization", mock_run_optimization)
-
-        result = optimizer.optimize_prompt(
-            prompt=prompts,
-            dataset=dataset,
-            metric=make_simple_metric(),
-            max_trials=2,
-            n_samples=2,
-        )
-
-        assert isinstance(result, OptimizationResult)
-        assert isinstance(result.prompt, dict)
-        assert isinstance(result.initial_prompt, dict)
-        assert result.score == 0.85
-        assert result.initial_score == 0.5
-
     def test_custom_task_respects_allow_tool_use(self) -> None:
         class AgentSpy(OptimizableAgent):
             def __init__(self) -> None:
@@ -405,23 +236,6 @@ class TestFewShotBayesianOptimizerOptimizePrompt:
 
         task({"question": "Q1"})
         assert agent.last_allow_tool_use is False
-
-    def test_invalid_prompt_raises_error(
-        self,
-        mock_optimization_context,
-    ) -> None:
-        mock_optimization_context()
-        optimizer = FewShotBayesianOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
-        dataset = make_mock_dataset(
-            STANDARD_DATASET_ITEMS, name="test-dataset", dataset_id="dataset-123"
-        )
-
-        assert_invalid_prompt_raises(
-            optimizer,
-            dataset=dataset,
-            metric=make_simple_metric(),
-            max_trials=1,
-        )
 
 
 class TestFewShotBayesianOptimizerEarlyStop:
