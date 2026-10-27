@@ -53,6 +53,7 @@ import static jakarta.ws.rs.core.Response.Status.Family.familyOf;
 @Slf4j
 public class ChatCompletionService {
     public static final String UNEXPECTED_ERROR_CALLING_LLM_PROVIDER = "Unexpected error calling LLM provider";
+    private static final String UPSTREAM_STATUS_ONLY = "provider responded with HTTP %s";
     public static final String UNSUPPORTED_FEATURE_CALLING_LLM_PROVIDER = "Unsupported feature for the selected LLM provider";
     public static final String ERROR_EMPTY_MESSAGES = "messages cannot be empty";
 
@@ -567,12 +568,6 @@ public class ChatCompletionService {
         };
     }
 
-    private String upstreamStatusOnly(Throwable throwable) {
-        return findProviderHttpStatus(throwable)
-                .map("provider responded with HTTP %s"::formatted)
-                .orElseGet(() -> throwable.getClass().getSimpleName());
-    }
-
     // decided only once a call has failed; an unanswerable lookup takes the restrictive path
     private boolean hidesUpstreamText(String workspaceId, String model) {
         try {
@@ -631,8 +626,10 @@ public class ChatCompletionService {
             case ClosedChannelException closedChannelException ->
                 "Service is unreachable. Please check the provider URL.";
             // their message is what the destination answered: only echoed when Opik chose the destination
-            case HttpException ignored when hideUpstreamText -> upstreamStatusOnly(throwable);
-            case OpenAIServiceException ignored when hideUpstreamText -> upstreamStatusOnly(throwable);
+            case HttpException httpException when hideUpstreamText ->
+                UPSTREAM_STATUS_ONLY.formatted(httpException.statusCode());
+            case OpenAIServiceException serviceException when hideUpstreamText ->
+                UPSTREAM_STATUS_ONLY.formatted(serviceException.statusCode());
             default -> {
                 // For other exceptions, use the exception message
                 String message = exceptionToHandle.getMessage();

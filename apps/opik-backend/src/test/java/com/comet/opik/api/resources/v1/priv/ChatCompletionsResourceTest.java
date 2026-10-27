@@ -417,27 +417,33 @@ class ChatCompletionsResourceTest {
         private Stream<Arguments> rawUpstreamBodyIsNotEchoed() {
             var text = UUID.randomUUID().toString();
             return Stream.of(
-                    arguments("text/plain", "internal page " + text),
-                    arguments("application/json", "{\"internal\": \"%s\"}".formatted(text)));
+                    arguments(HttpStatus.SC_BAD_GATEWAY, "text/plain", "internal page " + text,
+                            HttpStatus.SC_BAD_GATEWAY),
+                    arguments(HttpStatus.SC_BAD_GATEWAY, "application/json", "{\"internal\": \"%s\"}".formatted(text),
+                            HttpStatus.SC_BAD_GATEWAY),
+                    // redirects aren't followed, and a 3xx is no provider error status, so the call fails as Opik's
+                    arguments(HttpStatus.SC_MOVED_TEMPORARILY, "text/html", "<a href=\"/%s\">moved</a>".formatted(text),
+                            HttpStatus.SC_INTERNAL_SERVER_ERROR));
         }
 
         @ParameterizedTest
         @MethodSource
         @DisplayName("a body that isn't a provider error is not echoed back from a user-configured destination")
-        void rawUpstreamBodyIsNotEchoed(String contentType, String upstreamBody) {
+        void rawUpstreamBodyIsNotEchoed(int upstreamStatus, String contentType, String upstreamBody,
+                int expectedStatus) {
             var workspaceName = RandomStringUtils.randomAlphanumeric(20);
             mockTargetWorkspace(workspaceName, UUID.randomUUID().toString());
             createCustomProvider(workspaceName);
             WIRE_MOCK.server().stubFor(post(urlPathMatching(CHAT_COMPLETIONS_REGEX))
                     .willReturn(aResponse()
-                            .withStatus(HttpStatus.SC_BAD_GATEWAY)
+                            .withStatus(upstreamStatus)
                             .withHeader("Content-Type", contentType)
                             .withBody(upstreamBody)));
-            var expected = new ErrorMessage(HttpStatus.SC_BAD_GATEWAY,
-                    "Unexpected error calling LLM provider: provider responded with HTTP 502");
+            var expected = new ErrorMessage(expectedStatus,
+                    "Unexpected error calling LLM provider: provider responded with HTTP " + upstreamStatus);
 
             var request = ChatCompletionRequest.builder().stream(false).model(MODEL).addUserMessage("ping").build();
-            assertThat(chatCompletionsClient.create(API_KEY, workspaceName, request, HttpStatus.SC_BAD_GATEWAY))
+            assertThat(chatCompletionsClient.create(API_KEY, workspaceName, request, expectedStatus))
                     .isEqualTo(expected);
 
             var streamed = ChatCompletionRequest.builder().stream(true).model(MODEL).addUserMessage("ping").build();
