@@ -10,6 +10,8 @@ import com.google.api.gax.rpc.ApiException;
 import com.google.api.gax.rpc.StatusCode;
 import com.google.common.base.Throwables;
 import com.openai.errors.OpenAIServiceException;
+import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import dev.langchain4j.exception.AuthenticationException;
 import dev.langchain4j.exception.HttpException;
 import dev.langchain4j.exception.InternalServerException;
@@ -35,6 +37,7 @@ import jakarta.ws.rs.ServerErrorException;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
@@ -151,7 +154,7 @@ public class ChatCompletionService {
             @NonNull String workspaceId) {
         var resolved = paramResolver.resolve(modelParameters);
         logChanges(resolved.request().name(), resolved.changes());
-        var languageModelClient = getLanguageModel(workspaceId, resolved.request());
+        var languageModelClient = getLanguageModel(workspaceId, resolved.request(), chatRequest);
 
         ChatResponse chatResponse;
         try {
@@ -199,6 +202,14 @@ public class ChatCompletionService {
                 }
             }
         }
+    }
+
+    // The wrap-up call of a tool loop sends no tool specs but replays the tool calls, so it has to reach the model the
+    // way the rounds before it did.
+    private static boolean usesTools(ChatRequest chatRequest) {
+        return CollectionUtils.isNotEmpty(chatRequest.toolSpecifications())
+                || chatRequest.messages().stream().anyMatch(message -> message instanceof ToolExecutionResultMessage
+                        || message instanceof AiMessage aiMessage && aiMessage.hasToolExecutionRequests());
     }
 
     /**
@@ -356,9 +367,12 @@ public class ChatCompletionService {
      * Building the client can already refuse the request (a Vertex AI location or token_uri), before scoreTrace's
      * try, so that refusal is mapped here; anything else propagates as before.
      */
-    private ChatModel getLanguageModel(String workspaceId, LlmAsJudgeModelParameters modelParameters) {
+    private ChatModel getLanguageModel(String workspaceId, LlmAsJudgeModelParameters modelParameters,
+            ChatRequest chatRequest) {
         try {
-            return llmProviderFactory.getLanguageModel(workspaceId, modelParameters);
+            return usesTools(chatRequest)
+                    ? llmProviderFactory.getToolCallingLanguageModel(workspaceId, modelParameters)
+                    : llmProviderFactory.getLanguageModel(workspaceId, modelParameters);
         } catch (RuntimeException runtimeException) {
             failIfRequestRefused(runtimeException);
             throw runtimeException;

@@ -99,6 +99,10 @@ public class FreeModelServiceProvider implements LlmServiceProvider {
 
         Optional.ofNullable(transformedParameters.temperature()).ifPresent(builder::temperature);
         Optional.ofNullable(transformedParameters.seed()).ifPresent(builder::seed);
+        // Same reason as FreeModelLlmProvider: gpt-5-nano defaults to medium effort, which makes a judge slow.
+        if (freeModelConfig.isReasoningModel()) {
+            builder.reasoningEffort(FreeModelConfig.OPENAI_REASONING_MODEL_EFFORT);
+        }
 
         return builder.build();
     }
