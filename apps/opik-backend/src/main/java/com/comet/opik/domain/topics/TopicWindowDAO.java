@@ -38,9 +38,9 @@ public class TopicWindowDAO {
      * orders them by time.
      */
     private static final String READ_WINDOW = """
-            SELECT trace_id, trace_created_at, text, vector
+            SELECT trace_id, trace_created_at, task_version, text, vector
             FROM (
-                SELECT trace_id, trace_created_at, text, vector
+                SELECT trace_id, trace_created_at, task_version, text, vector
                 FROM topic_vectors
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
@@ -100,6 +100,7 @@ public class TopicWindowDAO {
         return TopicWindowRow.builder()
                 .traceId(UUID.fromString(row.get("trace_id", String.class)))
                 .traceCreatedAt(row.get("trace_created_at", Instant.class))
+                .taskVersion(((Number) row.get("task_version", Object.class)).longValue())
                 .text(row.get("text", String.class))
                 .vector(vector)
                 .build();

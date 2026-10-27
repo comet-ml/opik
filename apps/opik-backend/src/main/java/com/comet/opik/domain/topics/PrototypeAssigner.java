@@ -5,6 +5,7 @@ import lombok.Builder;
 import lombok.NonNull;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -97,6 +98,16 @@ public class PrototypeAssigner {
 
     public int gatedOther() {
         return gatedOther;
+    }
+
+    /** The prototype at {@code position}, in the order a tie is broken by: the topic ones, then the kept Other ones. */
+    public float[] prototype(int position) {
+        return Arrays.copyOfRange(prototypes, position * dimensions, (position + 1) * dimensions);
+    }
+
+    /** The owner of the prototype at {@code position}: a topic index or {@link #OTHER}. */
+    public int owner(int position) {
+        return owners[position];
     }
 
     private static double dot(float[] a, int aOffset, float[] b, int bOffset, int dimensions) {
