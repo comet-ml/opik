@@ -37,6 +37,14 @@ public class LlmTestClients {
         return new RemoteMediaInliner(client, config);
     }
 
+    /** For tests of the schemes a media URL may use, which config-test.yml leaves at {@code plaintext_or_tls}. */
+    public static RemoteMediaInliner remoteMediaInliner(DestinationGuard.Mode mode, DestinationGuard.Scheme scheme) {
+        var config = TestConfigUtils.loadConfigTest().getLlmProviderClient();
+        config.setVideoUrlDestinationGuard(mode);
+        config.setMediaUrlDestinationScheme(scheme);
+        return new RemoteMediaInliner(TestHttpClientUtils.client(), config);
+    }
+
     /** As {@link #remoteMediaInliner(DestinationGuard.Mode)}, for the MIME type lookup of video URLs. */
     public static VideoMimeTypeUtils videoMimeTypeUtils(DestinationGuard.Mode mode) {
         var config = TestConfigUtils.loadConfigTest().getLlmProviderClient();

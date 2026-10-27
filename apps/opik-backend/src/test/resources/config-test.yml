@@ -806,6 +806,13 @@ llmProviderClient:
   #   detects the MIME type of an extensionless video URL, and the download of the image, audio, video and PDF URLs
   #   that Gemini and Vertex AI receive as inline data
   videoUrlDestinationGuard: strict
+  # Default: plaintext_or_tls
+  # Values: ['plaintext_or_tls', 'https_only']
+  #   - plaintext_or_tls: http and https
+  #   - https_only: https only
+  # Description: Schemes allowed for the image, audio, video and PDF URLs that Gemini and Vertex AI receive as inline
+  #   data, checked in strict mode only; a URL that isn't http or https is refused in every mode
+  mediaUrlDestinationScheme: plaintext_or_tls
   # Default: 30s
   # Description: Time allowed for downloading one media URL that Gemini or Vertex AI receives as inline data,
   #   connecting included; at most 5m

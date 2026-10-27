@@ -70,7 +70,7 @@ public class RemoteMediaInliner {
         this.client = client;
         this.destinationGuard = DestinationGuard.builder()
                 .mode(config.getVideoUrlDestinationGuard())
-                .scheme(DestinationGuard.Scheme.PLAINTEXT_OR_TLS)
+                .scheme(config.getMediaUrlDestinationScheme())
                 .build();
         this.timeoutMillis = Math.toIntExact(config.getMediaDownloadTimeout().toMilliseconds());
         this.maxBytes = Math.toIntExact(config.getMediaDownloadMaxSize().toBytes());

@@ -77,6 +77,13 @@ public class LlmProviderClientConfig {
     @NotNull private DestinationGuard.Mode videoUrlDestinationGuard;
 
     /**
+     * Schemes allowed for the media URLs downloaded for Gemini and Vertex AI: {@code plaintext_or_tls} also accepts
+     * http; {@code https_only} refuses it. Checked in strict mode only; in every mode, a URL that isn't http or https
+     * is refused.
+     */
+    @NotNull private DestinationGuard.Scheme mediaUrlDestinationScheme;
+
+    /**
      * Time allowed for downloading one media URL that Gemini or Vertex AI receives as inline data, connecting
      * included. At most 5 minutes: every download completes before the provider is called, so a slow or stalled media
      * server must fail the request fast, and 5 minutes still fits the largest size cap (1 GiB) at about 3.5 MB/s.

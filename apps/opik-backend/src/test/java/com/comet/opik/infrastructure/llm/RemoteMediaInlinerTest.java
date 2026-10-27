@@ -198,6 +198,21 @@ class RemoteMediaInlinerTest {
                 .hasMessage(expectedMessage);
     }
 
+    /** A public address literal, so nothing but the scheme can refuse it and no lookup is needed. */
+    @Test
+    @DisplayName("with https_only, an http media URL is refused before anything is read")
+    void httpUrlIsRefusedWithHttpsOnly() {
+        var httpsOnlyInliner = LlmTestClients.remoteMediaInliner(DestinationGuard.Mode.STRICT,
+                DestinationGuard.Scheme.HTTPS_ONLY);
+        List<ChatMessage> messages = List.of(UserMessage.from(
+                ImageContent.from("http://8.8.8.8/media-%s.png".formatted(UUID.randomUUID()))));
+        var expectedMessage = new ProviderRequestRefusedException(MEDIA_URL).getMessage();
+
+        assertThatThrownBy(() -> httpsOnlyInliner.inline(messages))
+                .isExactlyInstanceOf(ProviderRequestRefusedException.class)
+                .hasMessage(expectedMessage);
+    }
+
     private Stream<Arguments> failedDownloadIsRefused() {
         return Stream.of(
                 arguments("/missing-" + UUID.randomUUID(), aResponse().withStatus(404)),
