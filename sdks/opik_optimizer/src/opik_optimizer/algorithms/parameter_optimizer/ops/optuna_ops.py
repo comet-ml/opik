@@ -117,10 +117,6 @@ def build_optuna_objective(
                 local_trials=stage_ref.get("local_trials"),
                 global_trials=stage_ref.get("global_trials"),
             )
-            sampling_tag = optimizer._build_sampling_tag(
-                scope="parameter_trial",
-                candidate_id=str(trial.number),
-            )
             # Extract trial-specific model_kwargs to override optimizer_metadata.model_parameters
             # For single prompt, use its model_kwargs directly; for multi-prompt, use first prompt's
             first_prompt = next(iter(tuned_prompts.values()))
@@ -138,7 +134,6 @@ def build_optuna_objective(
                 context,
                 tuned_prompts,
                 experiment_config=trial_experiment_config,
-                sampling_tag=sampling_tag,
             )
 
             prev_best_score = best_state["score"]

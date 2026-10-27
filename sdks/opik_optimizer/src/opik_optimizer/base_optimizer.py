@@ -808,7 +808,6 @@ class BaseOptimizer(ABC):
         context: OptimizationContext,
         prompts: dict[str, chat_prompt.ChatPrompt],
         experiment_config: dict[str, Any] | None = None,
-        sampling_tag: str | None = None,
     ) -> float:
         """
         Evaluate prompts and return the score.
@@ -828,7 +827,6 @@ class BaseOptimizer(ABC):
             prompts: Dict of named prompts to evaluate (e.g., {"main": ChatPrompt(...)}).
                      Single-prompt optimizations use a dict with one entry.
             experiment_config: Optional experiment configuration.
-            sampling_tag: Optional tag that seeds candidate-output selection for this call.
 
         Returns:
             The score (float).
@@ -839,9 +837,7 @@ class BaseOptimizer(ABC):
                 if context.should_stop:
                     break
         """
-        score, _ = self._evaluate_candidate(
-            context, prompts, experiment_config, sampling_tag=sampling_tag
-        )
+        score, _ = self._evaluate_candidate(context, prompts, experiment_config)
         return score
 
     def _score_from_evaluation_result(
@@ -871,7 +867,6 @@ class BaseOptimizer(ABC):
         empty_score: float | None = None,
         n_samples: int | float | str | None = None,
         n_samples_strategy: str | None = None,
-        sampling_tag: str | None = None,
     ) -> tuple[float, EvaluationResult | EvaluationResultOnDictItems]:
         """Evaluate prompts and return both the score and EvaluationResult."""
         score, result = self._evaluate_candidate(
@@ -881,7 +876,6 @@ class BaseOptimizer(ABC):
             empty_score=empty_score,
             n_samples=n_samples,
             n_samples_strategy=n_samples_strategy,
-            sampling_tag=sampling_tag,
             require_result=True,
         )
         assert isinstance(result, (EvaluationResult, EvaluationResultOnDictItems))
@@ -896,7 +890,6 @@ class BaseOptimizer(ABC):
         empty_score: float | None = None,
         n_samples: int | float | str | None = None,
         n_samples_strategy: str | None = None,
-        sampling_tag: str | None = None,
         require_result: bool = False,
     ) -> tuple[float, EvaluationResult | EvaluationResultOnDictItems | None]:
         """Score and account for a candidate once, with optional result access."""
@@ -923,7 +916,6 @@ class BaseOptimizer(ABC):
                     n_threads=normalize_eval_threads(getattr(self, "n_threads", None)),
                     verbose=self.verbose,
                     allow_tool_use=context.allow_tool_use,
-                    sampling_tag=sampling_tag,
                     return_evaluation_result=True,
                 )
         except Exception:
@@ -1171,26 +1163,6 @@ class BaseOptimizer(ABC):
             seed=resolved_seed,
             strategy=resolved_strategy,
         )
-
-    @staticmethod
-    def _build_sampling_tag(
-        *,
-        scope: str,
-        round_index: int | None = None,
-        candidate_id: str | None = None,
-        batch_index: int | None = None,
-        attempt: int | None = None,
-    ) -> str:
-        parts = [scope]
-        if round_index is not None:
-            parts.append(f"round:{round_index}")
-        if candidate_id is not None:
-            parts.append(f"candidate:{candidate_id}")
-        if batch_index is not None:
-            parts.append(f"batch:{batch_index}")
-        if attempt is not None:
-            parts.append(f"attempt:{attempt}")
-        return ":".join(parts)
 
     # ------------------------------------------------------------------
     # Hooks (subclass extension points)
@@ -2027,7 +1999,6 @@ class BaseOptimizer(ABC):
         return_evaluation_result: Literal[True] = True,
         allow_tool_use: bool | None = None,
         use_evaluate_on_dict_items: bool | None = None,
-        sampling_tag: str | None = None,
     ) -> EvaluationResult | EvaluationResultOnDictItems: ...
 
     @overload
@@ -2047,7 +2018,6 @@ class BaseOptimizer(ABC):
         return_evaluation_result: Literal[False] = False,
         allow_tool_use: bool | None = None,
         use_evaluate_on_dict_items: bool | None = None,
-        sampling_tag: str | None = None,
     ) -> float: ...
 
     def evaluate_prompt(
@@ -2066,7 +2036,6 @@ class BaseOptimizer(ABC):
         return_evaluation_result: bool = False,
         allow_tool_use: bool | None = None,
         use_evaluate_on_dict_items: bool | None = None,
-        sampling_tag: str | None = None,
     ) -> float | EvaluationResult | EvaluationResultOnDictItems:
         sampling_seed = seed if seed is not None else self.seed
         n_threads = normalize_eval_threads(n_threads)
@@ -2075,9 +2044,7 @@ class BaseOptimizer(ABC):
         if use_evaluate_on_dict_items is None:
             # TODO(opik-sdk): remove this flag once evaluate_on_dict_items is the default path.
             use_evaluate_on_dict_items = constants.ENABLE_EVALUATE_ON_DICT_ITEMS
-        selection_rng = rng_utils.make_rng(
-            sampling_seed, "candidate_selection", sampling_tag or ""
-        )
+        selection_rng = rng_utils.make_rng(sampling_seed, "candidate_selection")
 
         if agent is None:
             agent = LiteLLMAgent(project_name=self.project_name)
@@ -2202,7 +2169,6 @@ class BaseOptimizer(ABC):
         )
         debug_log(
             "evaluation_sampling",
-            sampling_tag=sampling_tag,
             sampling_plan_mode=sampling_plan.mode,
             n_samples=n_samples,
             resolved_n_samples=resolved_n_samples,

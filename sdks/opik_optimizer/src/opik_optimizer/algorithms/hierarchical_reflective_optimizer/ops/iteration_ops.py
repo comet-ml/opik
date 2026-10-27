@@ -31,8 +31,16 @@ def run_root_cause_analysis(
     metric: MetricFunction,
     agent: Any,
     n_samples: int | float | str | None,
-    sampling_tag: str | None = None,
+    round_index: int,
 ) -> HierarchicalRootCauseAnalysis:
+    # Each iteration analyses its own training sample, so later iterations see
+    # failures the earlier ones did not.
+    sample = optimizer._prepare_sampling_plan(
+        dataset=dataset,
+        n_samples=n_samples,
+        phase=f"root_cause:{round_index}",
+        strategy=context.n_samples_strategy,
+    )
     with reporting.display_root_cause_analysis(
         verbose=optimizer.verbose
     ) as rca_reporter:
@@ -69,7 +77,12 @@ def run_root_cause_analysis(
                     dataset=dataset,
                     metric=metric,
                     agent=agent,
-                    n_samples=n_samples,
+                    n_samples=(
+                        None
+                        if sample.dataset_item_ids is not None
+                        else sample.nb_samples
+                    ),
+                    dataset_item_ids=sample.dataset_item_ids,
                     n_samples_strategy=context.n_samples_strategy,
                     n_threads=normalize_eval_threads(
                         getattr(optimizer, "n_threads", None)
@@ -77,7 +90,6 @@ def run_root_cause_analysis(
                     experiment_config=context.experiment_config,
                     return_evaluation_result=True,
                     allow_tool_use=context.allow_tool_use,
-                    sampling_tag=sampling_tag,
                 )
                 # Read before the recording closes: closing resets the local store.
                 traces = (

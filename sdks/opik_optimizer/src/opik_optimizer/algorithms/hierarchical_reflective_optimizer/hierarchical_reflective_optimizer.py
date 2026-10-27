@@ -194,7 +194,6 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         n_samples: int | float | str | None,
         context: OptimizationContext,
         empty_score: float | None = None,
-        sampling_tag: str | None = None,
     ) -> tuple[float, EvaluationResult]:
         """Evaluate prompts, update trial state, and return score + result."""
         return self.evaluate_with_result(
@@ -204,7 +203,6 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             empty_score=empty_score,
             n_samples=n_samples,
             n_samples_strategy=context.n_samples_strategy,
-            sampling_tag=sampling_tag,
         )
 
     def _improve_prompt(
@@ -472,7 +470,6 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             n_samples=n_samples,
             context=context,
             empty_score=best_score,
-            sampling_tag=fallback_id,
         )
         runtime.record_and_post_trial(
             optimizer=self,
@@ -507,7 +504,6 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             agent=agent,
             n_samples=n_samples,
             context=context,
-            sampling_tag=best_candidate_id,
         )
         runtime.record_and_post_trial(
             optimizer=self,
@@ -533,7 +529,6 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                     agent=agent,
                     n_samples=n_samples,
                     context=context,
-                    sampling_tag=candidate_id,
                 )
             )
             runtime.record_and_post_trial(
@@ -621,10 +616,6 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             )
             round_handle = self.pre_round(context)
 
-            sampling_tag = self._build_sampling_tag(
-                scope="hro_root_cause",
-                round_index=iteration,
-            )
             hierarchical_analysis = iteration_ops.run_root_cause_analysis(
                 optimizer=self,
                 context=context,
@@ -633,7 +624,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 metric=metric,
                 agent=agent,
                 n_samples=minibatch_samples,
-                sampling_tag=sampling_tag,
+                round_index=iteration,
             )
 
             # Display synthesis results

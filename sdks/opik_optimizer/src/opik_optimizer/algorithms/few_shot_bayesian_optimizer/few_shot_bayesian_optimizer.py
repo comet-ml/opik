@@ -182,7 +182,6 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         return_evaluation_result: bool = False,
         allow_tool_use: bool | None = None,
         use_evaluate_on_dict_items: bool | None = None,
-        sampling_tag: str | None = None,
     ) -> float | EvaluationResult | EvaluationResultOnDictItems:
         """
         Override evaluate_prompt to support custom evaluated_task.
@@ -201,7 +200,6 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 verbose=verbose,
                 allow_tool_use=allow_tool_use,
                 use_evaluate_on_dict_items=use_evaluate_on_dict_items,
-                sampling_tag=sampling_tag,
                 return_evaluation_result=return_evaluation_result,
             )
 
@@ -220,7 +218,6 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             return_evaluation_result=return_evaluation_result,
             allow_tool_use=allow_tool_use,
             use_evaluate_on_dict_items=use_evaluate_on_dict_items,
-            sampling_tag=sampling_tag,
         )
 
     def _evaluate_custom_task(
@@ -233,7 +230,6 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         verbose: int,
         allow_tool_use: bool | None,
         use_evaluate_on_dict_items: bool | None,
-        sampling_tag: str | None,
         return_evaluation_result: bool = False,
     ) -> float | EvaluationResult | EvaluationResultOnDictItems:
         n_threads = normalize_eval_threads(n_threads or self.n_threads)
@@ -243,7 +239,6 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             self._custom_allow_tool_use = allow_tool_use
         debug_log(
             "evaluation_sampling",
-            sampling_tag=sampling_tag,
             sampling_mode="custom",
             n_samples=self._custom_eval_n_samples,
             dataset_item_ids_count=len(self._custom_eval_item_ids or []),
@@ -709,15 +704,10 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 # - Trial counting (context.trials_completed)
                 # - Early stop checks (perfect score, max trials)
                 # - Progress display hooks
-                sampling_tag = self._build_sampling_tag(
-                    scope="fewshot",
-                    candidate_id=f"trial{trial.number}",
-                )
                 score = self.evaluate(
                     context,
                     prompts_with_examples,
                     trial_config,
-                    sampling_tag=sampling_tag,
                 )
             finally:
                 # Clear custom task state
