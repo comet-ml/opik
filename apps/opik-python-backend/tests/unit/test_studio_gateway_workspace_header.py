@@ -8,6 +8,7 @@ rejects every call with 403 "Workspace name should be provided". These tests
 cover the wrapping seam in optimizer_runner.
 """
 
+import concurrent.futures
 import asyncio
 import logging
 import sys
@@ -110,7 +111,7 @@ class TestRouteLitellmCallsThroughGateway:
                 fake_litellm.completion(messages=[], extra_headers={"comet-workspace": "other", "Authorization": "x"})
 
         assert [r.getMessage() for r in caplog.records] == [
-            "Dropped headers not passed to the gateway: 2 (Authorization, comet-workspace)"]
+            "Dropped headers not passed to the gateway: 2 ('Authorization', 'comet-workspace')"]
 
     def test_noop_when_gateway_not_active(self, fake_litellm, monkeypatch):
         monkeypatch.setattr(optimizer_runner, "OPENAI_API_BASE", None)
@@ -264,9 +265,29 @@ class TestModelParameterAllowlist:
             for _ in range(3):
                 fake_litellm.completion(model="openai/m", messages=[], **REROUTING_PARAMS)
 
-        expected_sample = ", ".join(sorted(REROUTING_PARAMS)[:5])
+        expected_sample = ", ".join(repr(name) for name in sorted(REROUTING_PARAMS)[:5])
         assert [r.getMessage() for r in caplog.records] == [
             f"Dropped model parameters not passed to the gateway: {len(REROUTING_PARAMS)} ({expected_sample}, ...)"]
+
+    def test_escapes_line_breaks_in_dropped_names(self, fake_litellm, gateway_env, caplog):
+        route_litellm_calls_through_gateway("my-workspace")
+
+        with caplog.at_level(logging.WARNING, logger=optimizer_runner.__name__):
+            fake_litellm.completion(model="openai/m", messages=[], **{"a\nFAKE log line": 1})
+
+        assert [r.getMessage() for r in caplog.records] == [
+            "Dropped model parameters not passed to the gateway: 1 ('a\\nFAKE log line')"]
+
+    def test_concurrent_calls_log_dropped_names_once(self, fake_litellm, gateway_env, caplog):
+        route_litellm_calls_through_gateway("my-workspace")
+
+        with caplog.at_level(logging.WARNING, logger=optimizer_runner.__name__):
+            with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
+                list(pool.map(lambda _: fake_litellm.completion(model="openai/m", messages=[], sagemaker_base_url="x"),
+                              range(200)))
+
+        assert [r.getMessage() for r in caplog.records] == [
+            "Dropped model parameters not passed to the gateway: 1 ('sagemaker_base_url')"]
 
     def test_logs_a_bounded_sample_of_dropped_names(self, fake_litellm, gateway_env, caplog):
         route_litellm_calls_through_gateway("my-workspace")
@@ -275,7 +296,7 @@ class TestModelParameterAllowlist:
         with caplog.at_level(logging.WARNING, logger=optimizer_runner.__name__):
             fake_litellm.completion(model="openai/m", messages=[], **many)
 
-        expected_sample = ", ".join(name[:64] for name in sorted(many)[:5])
+        expected_sample = ", ".join(repr(name[:64]) for name in sorted(many)[:5])
         assert [r.getMessage() for r in caplog.records] == [
             f"Dropped model parameters not passed to the gateway: 200 ({expected_sample}, ...)"]
 

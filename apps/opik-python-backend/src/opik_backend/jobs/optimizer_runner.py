@@ -10,10 +10,12 @@ streamed to Redis for S3 sync.
 """
 
 import functools
+import heapq
 import json
 import logging
 import os
 import sys
+import threading
 import traceback
 import warnings
 
@@ -160,11 +162,24 @@ _LOGGED_NAMES = 5
 _LOGGED_NAME_LENGTH = 64
 
 
+_dropped_names_lock = threading.Lock()
+
+
 def _name_sample(names):
-    """The count and the first few sorted names, each shortened, so a log line stays readable whatever was sent."""
-    sample = [str(name)[:_LOGGED_NAME_LENGTH] for name in sorted(names, key=str)[:_LOGGED_NAMES]]
+    """The count and the first few names, shortened and escaped, so a log line stays one bounded line."""
+    sample = [repr(str(name)[:_LOGGED_NAME_LENGTH]) for name in heapq.nsmallest(_LOGGED_NAMES, names, key=str)]
     more = ", ..." if len(names) > _LOGGED_NAMES else ""
     return f"{len(names)} ({', '.join(sample)}{more})"
+
+
+def _log_dropped_once(message, names, logged):
+    """Logs names not logged before; claiming them under the lock keeps concurrent calls from logging them twice."""
+    with _dropped_names_lock:
+        new = names - logged
+        logged.update(new)
+    if new:
+        # Names only: values can be credentials or URLs.
+        logger.warning(f"{message}: {_name_sample(names)}")
 
 
 def route_litellm_calls_through_gateway(workspace_name):
@@ -206,10 +221,7 @@ def route_litellm_calls_through_gateway(workspace_name):
         dropped = kwargs.keys() - _ALLOWED_PARAMS
         for name in dropped:
             del kwargs[name]
-        if dropped - _dropped_params_logged:
-            _dropped_params_logged.update(dropped)
-            # Names only: values can be credentials or URLs.
-            logger.warning(f"Dropped model parameters not passed to the gateway: {_name_sample(dropped)}")
+        _log_dropped_once("Dropped model parameters not passed to the gateway", dropped, _dropped_params_logged)
         kwargs["api_base"] = OPENAI_API_BASE
         extra_headers = {}
         dropped_headers = set()
@@ -218,9 +230,7 @@ def route_litellm_calls_through_gateway(workspace_name):
                 dropped_headers.add(str(name))
             else:
                 extra_headers[name] = value
-        if dropped_headers - _dropped_headers_logged:
-            _dropped_headers_logged.update(dropped_headers)
-            logger.warning(f"Dropped headers not passed to the gateway: {_name_sample(dropped_headers)}")
+        _log_dropped_once("Dropped headers not passed to the gateway", dropped_headers, _dropped_headers_logged)
         extra_headers["Comet-Workspace"] = _gateway_workspace["name"]
         kwargs["extra_headers"] = extra_headers
         return kwargs
