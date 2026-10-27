@@ -8,7 +8,24 @@ og:title: Changelog - Opik Updates and Enhancements
 title: Changelog
 ---
 
-Stay current on Agent Optimizer updates. Each entry below reflects a version bump in `sdks/opik_optimizer/pyproject.toml` on `main`. The compare links jump straight to the commits that landed in that release. As Opik is a monorepo, you will see other non-optimizer related changes in the commit links below.
+Stay current on Agent Optimizer updates. Released entries reflect version bumps in `sdks/opik_optimizer/pyproject.toml` on `main`. The compare links jump straight to the commits that landed in that release. As Opik is a monorepo, you will see other non-optimizer related changes in the commit links below.
+
+## Unreleased
+
+These changes are pending release and are not included in the published package yet.
+
+- Agent model settings stay independent from optimizer reasoning settings. Empty prompt settings are preserved; HRPO accepts an explicit empty reasoning-parameter override.
+- Prompt text rewrites preserve media, tool bindings, and prompt configuration. Inline base64 media is redacted from reasoning requests.
+- MetaPrompt, Evolutionary, GEPA, and HRPO support tool-description optimization in agent prompt bundles, including qualified selectors such as `planner.lookup`.
+- HRPO root-cause analysis includes bounded agent trace context. Nested local trace recordings remain unsupported; see the [HRPO guide](/development/optimization-runs/algorithms/hierarchical_adaptive_optimizer).
+- Candidate evaluation, trial accounting, and call attribution share the base lifecycle. Winner selection, ties, stopping, malformed MetaPrompt generations, and Context7 test-mode dataset sizes are corrected.
+
+### Migration
+
+- **ParameterOptimizer:** set models and baseline settings on each `ChatPrompt`, then call `optimize_parameter()`. Constructor `model` and `model_parameters` are deprecated and ignored. Search changes only selected fields; result parameter maps are keyed by prompt name.
+- **MCP:** install `opik-optimizer[mcp]` for MCP tools. The extra requires MCP 1.x; plain function tools work without it.
+- **Custom optimizers:** implement `run_optimization(context)` and use `pre_round`, `post_round`, `pre_trial`, and `post_trial`. The legacy hook aliases remain available with deprecation warnings. See [Extending optimizers](/development/optimization-runs/advanced/extending_optimizers).
+- **FewShot:** `enable_optuna_pruning` is deprecated and has no effect.
 
 ## Version 3.x
 

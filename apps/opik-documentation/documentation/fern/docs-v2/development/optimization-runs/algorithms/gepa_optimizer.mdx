@@ -15,6 +15,11 @@ single system prompt for single-turn tasks. It maps Opik datasets and metrics in
 format, runs GEPA’s optimization using a task model and a reflection model, and returns a standard
 `OptimizationResult` compatible with the Opik SDK.
 
+The same adapter also accepts custom `OptimizableAgent` implementations and dictionaries of
+prompts for multi-step agents. It preserves prompt models, media, and tool bindings, and supports
+tool-description optimization with `optimize_tools`. See [Optimize agents](/development/optimization-runs/optimization/optimize_agents)
+and [Optimize tools](/development/optimization-runs/optimization/optimize_tools).
+
 <Note>
   `GepaOptimizer` is ideal when you have a single-turn task (one user input → one model
   response) and you want to optimize the system prompt using a reflection-driven search.
@@ -22,7 +27,7 @@ format, runs GEPA’s optimization using a task model and a reflection model, an
 
 ## How it works
 
-The GEPA optimizer companies two key approaches to optimize agents:
+The GEPA optimizer combines two key approaches to optimize agents:
 
 1. **Reflection**: The optimizer uses the outcomes from evaluations to improve the prompts.
 2. **Evolution**: The optimizer uses an evolutionary algorithm to explore the space of prompts.

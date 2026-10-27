@@ -8,7 +8,10 @@ og:title: Optimize multimodal performance with Opik
 title: Optimize multimodal prompts
 ---
 
-Multimodal agents often juggle text instructions, images, audio, video, and structured outputs. Opik’s optimizers can work with any model that LiteLLM supports for non-text modalities (GPT-4o, Gemini, Claude Sonnet 4.6, etc.). Make sure that both the optimizer’s `model` and your `ChatPrompt.model` accept the modality you plan to optimize. Otherwise, the run will fail or silently ignore the media.
+Multimodal agents often combine text instructions with images, audio, video, and structured
+outputs. Choose a `ChatPrompt.model` or custom agent model that supports the media you evaluate.
+Optimizer reasoning uses text instructions and bounded feedback; inline base64 media is redacted
+from those requests. The optimizer's reasoning model can be text-only.
 
 ### Optimizer multimodal support
 
@@ -16,7 +19,7 @@ Use optimizers that can forward OpenAI-style content parts (string or an array o
 
 | Optimizer | Multimodal (text+image) | Notes |
 |---|---|---|
-| HRPO (Hierarchical Reflective Prompt Optimizer) | ✓ | Ensure both optimizer `model` and `ChatPrompt.model` are multimodal-capable. |
+| HRPO (Hierarchical Reflective Prompt Optimizer) | ✓ | Analyzes text feedback and agent steps; evaluation uses the prompt's multimodal model. |
 | MetaPrompt Optimizer | ✓ | Uses content parts; requires a multimodal-capable model for evaluation. |
 | Evolutionary Optimizer | ✓ | Uses content parts; requires a multimodal-capable model for evaluation. |
 | Few-shot Bayesian Optimizer | ✓ | Uses content parts; requires a multimodal-capable model for evaluation. |
@@ -49,6 +52,11 @@ prompt = ChatPrompt(
 )
 ```
 
+Text rewrites retain the original media parts and placeholders, along with tool bindings and
+model settings. Inline data URLs stay available to the evaluated agent while being redacted from
+optimizer reasoning requests. Model and custom-agent support determine which audio and video
+formats can be evaluated.
+
 - Describe the expected output schema (JSON, markdown table, etc.) to reduce ambiguity.
 
 ## Metrics
@@ -63,7 +71,7 @@ prompt = ChatPrompt(
 - Start with MetaPrompt for wording improvements. For cold-start exploration, pair Evolutionary → Few-Shot Bayesian to uncover new structures and example choices.
 - Use HRPO to catch recurring multimodal failures (e.g., missing chart descriptions) and highlight which dataset rows are problematic.
 - Monitor token usage because multimodal prompts send larger payloads; pick models like `gpt-4o-mini` when budgets are tight.
-- All prompt optimizers can forward multimodal content parts, but evaluation will fail if the chosen models do not support the modality. Use multimodal-capable models for both optimizer generation and prompt evaluation.
+- All six optimizers preserve text-and-image prompts. Use a multimodal-capable model for prompt evaluation, and configure the reasoning model separately.
 
 ## Validation
 

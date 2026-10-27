@@ -12,17 +12,16 @@ The Opik Agent Optimizer SDK provides a comprehensive set of tools for optimizin
 
 ## Key Features
 
-- **Standardized API**: All optimizers follow the same interface for `optimize_prompt()` methods
+- **Shared lifecycle**: Prompt optimizers use `optimize_prompt()`; parameter search uses `ParameterOptimizer.optimize_parameter()`
 - **Multiple Algorithms**: Support for various optimization strategies including evolutionary, few-shot, meta-prompt, and GEPA
-- **MCP Support**: Built-in support for Model Context Protocol tool calling and optimization
+- **MCP Support**: Install `opik-optimizer[mcp]` for MCP tool calling and description optimization
 - **Consistent Results**: All optimizers return standardized `OptimizationResult` objects
 - **Counter Tracking**: Built-in LLM and tool call counters for monitoring usage
-- **Backward Compatibility**: All original parameters preserved through kwargs extraction
 - **Deprecation Warnings**: Clear warnings for deprecated parameters with migration guidance
 
 ## Core Classes
 
-The SDK provides several optimizer classes that all inherit from `BaseOptimizer` and implement the same standardized interface:
+The SDK provides several optimizer classes that inherit from `BaseOptimizer` and return `OptimizationResult`:
 
 - **ParameterOptimizer**: Optimizes LLM call parameters (temperature, top_p, etc.) using Bayesian optimization
 - **FewShotBayesianOptimizer**: Uses few-shot learning with Bayesian optimization
@@ -33,7 +32,7 @@ The SDK provides several optimizer classes that all inherit from `BaseOptimizer`
 
 ## Standardized Method Signatures
 
-All optimizers implement these core methods with identical signatures:
+The prompt optimizers share the following entrypoint. `ParameterOptimizer` uses `optimize_parameter()` with a `parameter_space` argument; calling its `optimize_prompt()` raises `NotImplementedError`.
 
 ### optimize_prompt()
 ```python wordWrap
@@ -44,40 +43,48 @@ def optimize_prompt(
     metric: MetricFunction,
     agent: OptimizableAgent | None = None,
     experiment_config: dict | None = None,
-    n_samples: int | None = None,
+    n_samples: int | float | str | None = None,
+    n_samples_minibatch: int | None = None,
+    n_samples_strategy: str | None = None,
     auto_continue: bool = False,
     project_name: str | None = None,
     optimization_id: str | None = None,
     validation_dataset: Dataset | None = None,
     max_trials: int = 10,
     allow_tool_use: bool = True,
+    optimize_prompts: bool | str | list[str] | None = "system",
+    optimize_tools: bool | dict[str, bool] | None = None,
+    *args: Any,
     **kwargs: Any,
-) -> OptimizationResult
+) -> OptimizationResult:
+    ...
 ```
 
-## Deprecation Warnings
+## Model settings
 
-The following parameters are deprecated and will be removed in future versions:
+`ChatPrompt.model` and `model_parameters` control agent evaluation. The optimizer's `model` and
+`model_parameters` control its internal reasoning calls and are not copied into prompt settings.
+Custom agents own their calls and should read each supplied prompt's model and `model_kwargs`.
+HRPO's `reasoning_model_parameters=None` inherits optimizer parameters; `{}` is an empty override.
 
-### Constructor Parameters
+## Migration and deprecated APIs
 
-- **`num_threads`** in optimizer constructors: Use `n_threads` instead
+- **ParameterOptimizer:** constructor `model` and `model_parameters` are deprecated, ignored, and
+  emit `DeprecationWarning`. Set them on each `ChatPrompt` instead. Parameter search changes only
+  selected fields. Result `details["baseline_parameters"]` and `details["optimized_model_kwargs"]`
+  are maps keyed by prompt name.
+- **MCP:** install the optional `opik-optimizer[mcp]` extra (MCP 1.x). Plain function tools do not
+  require this extra. Description optimization is supported by MetaPrompt, Evolutionary, GEPA,
+  and HRPO.
+- **FewShot:** `enable_optuna_pruning` is deprecated and has no effect. Use `n_threads` to configure
+  evaluation parallelism.
+- **Custom optimizers:** implement `run_optimization(context)` and return `AlgorithmResult`.
+  `begin_round`, `finish_round`, `start_candidate`, and `finish_candidate` remain deprecated aliases
+  of `pre_round`, `post_round`, `pre_trial`, and `post_trial` respectively.
 
-### Example Migration
-
-```python wordWrap
-# ❌ Deprecated
-optimizer = FewShotBayesianOptimizer(
-    model="gpt-4o-mini",
-    num_threads=16,  # Deprecated
-)
-
-# ✅ Correct
-optimizer = FewShotBayesianOptimizer(
-    model="gpt-4o-mini",
-    n_threads=16,  # Use n_threads instead
-)
-```
+See [Configure models](/development/optimization-runs/optimization/configure_models),
+[ParameterOptimizer](/development/optimization-runs/algorithms/parameter_optimizer), and
+[Extending optimizers](/development/optimization-runs/advanced/extending_optimizers) for examples.
 
 ## FewShotBayesianOptimizer
 
@@ -115,7 +122,7 @@ FewShotBayesianOptimizer(
 <ParamField path="enable_columnar_selection" type="bool" optional={true} default="True" />
 <ParamField path="enable_diversity" type="bool" optional={true} default="True" />
 <ParamField path="enable_multivariate_tpe" type="bool" optional={true} default="True" />
-<ParamField path="enable_optuna_pruning" type="bool | None" optional={true}>Deprecated; has no effect.</ParamField>
+<ParamField path="enable_optuna_pruning" type="bool | None" optional={true} />
 <ParamField path="prompt_overrides" type="dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None" optional={true} />
 <ParamField path="skip_perfect_score" type="bool" optional={true} default="True" />
 <ParamField path="perfect_score" type="float" optional={true} default="0.95" />
@@ -177,7 +184,7 @@ evaluate_prompt(
     n_samples_strategy: str | None = None,
     seed: int | None = None,
     return_evaluation_result: bool = False,
-    allow_tool_use: bool = False,
+    allow_tool_use: bool | None = None,
     use_evaluate_on_dict_items: bool | None = None,
     sampling_tag: str | None = None
 )
@@ -198,7 +205,7 @@ evaluate_prompt(
 <ParamField path="n_samples_strategy" type="str | None" optional={true} />
 <ParamField path="seed" type="int | None" optional={true} />
 <ParamField path="return_evaluation_result" type="bool" optional={true} default="False" />
-<ParamField path="allow_tool_use" type="bool" optional={true} default="False" />
+<ParamField path="allow_tool_use" type="bool | None" optional={true} />
 <ParamField path="use_evaluate_on_dict_items" type="bool | None" optional={true} />
 <ParamField path="sampling_tag" type="str | None" optional={true} />
 
@@ -441,7 +448,7 @@ optimize_prompt(
 <ParamField path="n_samples_strategy" type="str | None" optional={true}>Sampling strategy name (default "random_sorted")</ParamField>
 <ParamField path="auto_continue" type="bool" optional={true} default="False">Whether to continue optimization automatically</ParamField>
 <ParamField path="project_name" type="str | None" optional={true}>Opik project name for logging traces (defaults to OPIK_PROJECT_NAME env or "Optimization")</ParamField>
-<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID of the Opik optimization run to log to. An existing run is reused; if none exists with this ID, one is created with it (must be a valid UUIDv7 string).</ParamField>
+<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID of the Opik optimization run to log to. An existing run is reused; otherwise one is created with this ID (must be a valid UUIDv7).</ParamField>
 <ParamField path="validation_dataset" type="opik.api_objects.dataset.dataset.Dataset | None" optional={true}>Optional validation dataset for ranking candidates</ParamField>
 <ParamField path="max_trials" type="int" optional={true} default="10">Maximum number of optimization trials</ParamField>
 <ParamField path="allow_tool_use" type="bool" optional={true} default="True">Whether tools may be executed during evaluation (default True)</ParamField>
@@ -1051,7 +1058,7 @@ optimize_prompt(
 <ParamField path="n_samples_strategy" type="str | None" optional={true}>Sampling strategy name (default "random_sorted")</ParamField>
 <ParamField path="auto_continue" type="bool" optional={true} default="False">Whether to continue optimization automatically</ParamField>
 <ParamField path="project_name" type="str | None" optional={true}>Opik project name for logging traces (defaults to OPIK_PROJECT_NAME env or "Optimization")</ParamField>
-<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID of the Opik optimization run to log to. An existing run is reused; if none exists with this ID, one is created with it (must be a valid UUIDv7 string).</ParamField>
+<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID of the Opik optimization run to log to. An existing run is reused; otherwise one is created with this ID (must be a valid UUIDv7).</ParamField>
 <ParamField path="validation_dataset" type="opik.api_objects.dataset.dataset.Dataset | None" optional={true}>Optional validation dataset for ranking candidates</ParamField>
 <ParamField path="max_trials" type="int" optional={true} default="10">Maximum number of optimization trials</ParamField>
 <ParamField path="allow_tool_use" type="bool" optional={true} default="True">Whether tools may be executed during evaluation (default True)</ParamField>
@@ -1671,7 +1678,7 @@ optimize_prompt(
 <ParamField path="n_samples_strategy" type="str | None" optional={true}>Sampling strategy name (default "random_sorted")</ParamField>
 <ParamField path="auto_continue" type="bool" optional={true} default="False">Whether to continue optimization automatically</ParamField>
 <ParamField path="project_name" type="str | None" optional={true}>Opik project name for logging traces (defaults to OPIK_PROJECT_NAME env or "Optimization")</ParamField>
-<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID of the Opik optimization run to log to. An existing run is reused; if none exists with this ID, one is created with it (must be a valid UUIDv7 string).</ParamField>
+<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID of the Opik optimization run to log to. An existing run is reused; otherwise one is created with this ID (must be a valid UUIDv7).</ParamField>
 <ParamField path="validation_dataset" type="opik.api_objects.dataset.dataset.Dataset | None" optional={true}>Optional validation dataset for ranking candidates</ParamField>
 <ParamField path="max_trials" type="int" optional={true} default="10">Maximum number of optimization trials</ParamField>
 <ParamField path="allow_tool_use" type="bool" optional={true} default="True">Whether tools may be executed during evaluation (default True)</ParamField>
@@ -2305,7 +2312,7 @@ optimize_prompt(
 <ParamField path="n_samples_strategy" type="str | None" optional={true}>Sampling strategy name (default "random_sorted")</ParamField>
 <ParamField path="auto_continue" type="bool" optional={true} default="False">Whether to continue optimization automatically</ParamField>
 <ParamField path="project_name" type="str | None" optional={true}>Opik project name for logging traces (defaults to OPIK_PROJECT_NAME env or "Optimization")</ParamField>
-<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID of the Opik optimization run to log to. An existing run is reused; if none exists with this ID, one is created with it (must be a valid UUIDv7 string).</ParamField>
+<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID of the Opik optimization run to log to. An existing run is reused; otherwise one is created with this ID (must be a valid UUIDv7).</ParamField>
 <ParamField path="validation_dataset" type="opik.api_objects.dataset.dataset.Dataset | None" optional={true}>Optional validation dataset for ranking candidates</ParamField>
 <ParamField path="max_trials" type="int" optional={true} default="10">Maximum number of optimization trials</ParamField>
 <ParamField path="allow_tool_use" type="bool" optional={true} default="True">Whether tools may be executed during evaluation (default True)</ParamField>
@@ -2925,7 +2932,7 @@ optimize_prompt(
 <ParamField path="n_samples_strategy" type="str | None" optional={true}>Sampling strategy name (default "random_sorted")</ParamField>
 <ParamField path="auto_continue" type="bool" optional={true} default="False">Whether to continue optimization automatically</ParamField>
 <ParamField path="project_name" type="str | None" optional={true}>Opik project name for logging traces (defaults to OPIK_PROJECT_NAME env or "Optimization")</ParamField>
-<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID of the Opik optimization run to log to. An existing run is reused; if none exists with this ID, one is created with it (must be a valid UUIDv7 string).</ParamField>
+<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID of the Opik optimization run to log to. An existing run is reused; otherwise one is created with this ID (must be a valid UUIDv7).</ParamField>
 <ParamField path="validation_dataset" type="opik.api_objects.dataset.dataset.Dataset | None" optional={true}>Optional validation dataset for ranking candidates</ParamField>
 <ParamField path="max_trials" type="int" optional={true} default="10">Maximum number of optimization trials</ParamField>
 <ParamField path="allow_tool_use" type="bool" optional={true} default="True">Whether tools may be executed during evaluation (default True)</ParamField>
@@ -3206,8 +3213,8 @@ ParameterOptimizer(
 
 **Parameters:**
 
-<ParamField path="model" type="str | None" optional={true}>Deprecated and ignored (emits a `DeprecationWarning`). The evaluated model comes from each `ChatPrompt`; set `model` there.</ParamField>
-<ParamField path="model_parameters" type="dict[str, typing.Any] | None" optional={true}>Deprecated and ignored (emits a `DeprecationWarning`). Set `model_parameters` on the `ChatPrompt`; the search starts from them.</ParamField>
+<ParamField path="model" type="str | None" optional={true} />
+<ParamField path="model_parameters" type="dict[str, typing.Any] | None" optional={true} />
 <ParamField path="default_n_trials" type="int" optional={true} default="20" />
 <ParamField path="local_search_ratio" type="float" optional={true} default="0.3" />
 <ParamField path="local_search_scale" type="float" optional={true} default="0.2" />
@@ -3533,7 +3540,7 @@ optimize_parameter(
 <ParamField path="dataset" type="Dataset">Dataset providing evaluation examples</ParamField>
 <ParamField path="metric" type="MetricFunction">Objective function to maximize</ParamField>
 <ParamField path="parameter_space" type="opik_optimizer.algorithms.parameter_optimizer.ops.search_ops.ParameterSearchSpace | collections.abc.Mapping[str, typing.Any]">Definition of the search space for tunable parameters. For multi-prompt, params without a prefix are expanded per prompt. Params already prefixed (e.g., 'analyze.temperature') are kept as-is.</ParamField>
-<ParamField path="validation_dataset" type="opik.api_objects.dataset.dataset.Dataset | None" optional={true}>Optional validation dataset. Note: Due to the internal implementation of ParameterOptimizer, this parameter is currently not fully utilized and we recommend not using it for this optimizer.</ParamField>
+<ParamField path="validation_dataset" type="opik.api_objects.dataset.dataset.Dataset | None" optional={true}>Optional dataset used instead of dataset to rank baseline and trial configurations. Keep a separate test dataset for final evaluation.</ParamField>
 <ParamField path="experiment_config" type="dict | None" optional={true}>Optional experiment metadata</ParamField>
 <ParamField path="max_trials" type="int | None" optional={true}>Total number of trials (if None, uses default_n_trials)</ParamField>
 <ParamField path="n_samples" type="int | float | str | None" optional={true}>Number of dataset samples to evaluate per trial (None for all)</ParamField>
@@ -3543,10 +3550,10 @@ optimize_parameter(
 <ParamField path="project_name" type="str" optional={true} default="Optimization">Opik project name for logging traces (default: "Optimization")</ParamField>
 <ParamField path="sampler" type="optuna.samplers._base.BaseSampler | None" optional={true}>Optuna sampler to use (default: TPESampler with seed)</ParamField>
 <ParamField path="callbacks" type="list[collections.abc.Callable[[optuna.study.study.Study, optuna.trial._frozen.FrozenTrial], None]] | None" optional={true}>List of callback functions for Optuna study</ParamField>
-<ParamField path="timeout" type="float | None" optional={true}>Maximum time in seconds for optimization</ParamField>
+<ParamField path="timeout" type="float | None" optional={true}>Maximum time in seconds for each search phase (global, then local). A run cut short by it reports ``finish_reason="timeout"``.</ParamField>
 <ParamField path="local_trials" type="int | None" optional={true}>Number of trials for local search (overrides local_search_ratio)</ParamField>
 <ParamField path="local_search_scale" type="float | None" optional={true}>Scale factor for local search narrowing (0.0-1.0)</ParamField>
-<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID of the Opik optimization run to log to. An existing run is reused; if none exists with this ID, one is created with it (must be a valid UUIDv7 string).</ParamField>
+<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID of the Opik optimization run to log to. An existing run is reused; otherwise one is created with this ID (must be a valid UUIDv7).</ParamField>
 
 #### post_baseline
 ```python wordWrap
@@ -3719,6 +3726,18 @@ record_candidate_entry(
 <ParamField path="notes" type="str | None" optional={true} />
 <ParamField path="extra" type="dict[str, typing.Any] | None" optional={true} />
 <ParamField path="context" type="opik_optimizer.core.state.OptimizationContext | None" optional={true} />
+
+#### run_optimization
+```python wordWrap
+run_optimization(
+    context: OptimizationContext
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="context" type="OptimizationContext">The optimization context with prompts, dataset, metric, etc.</ParamField>
 
 #### set_default_dataset_split
 ```python wordWrap
@@ -4194,7 +4213,7 @@ optimize_prompt(
 <ParamField path="n_samples_strategy" type="str | None" optional={true}>Sampling strategy name (default "random_sorted")</ParamField>
 <ParamField path="auto_continue" type="bool" optional={true} default="False">Whether to continue optimization automatically</ParamField>
 <ParamField path="project_name" type="str | None" optional={true}>Opik project name for logging traces (defaults to OPIK_PROJECT_NAME env or "Optimization")</ParamField>
-<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID of the Opik optimization run to log to. An existing run is reused; if none exists with this ID, one is created with it (must be a valid UUIDv7 string).</ParamField>
+<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID of the Opik optimization run to log to. An existing run is reused; otherwise one is created with this ID (must be a valid UUIDv7).</ParamField>
 <ParamField path="validation_dataset" type="opik.api_objects.dataset.dataset.Dataset | None" optional={true}>Optional validation dataset for ranking candidates</ParamField>
 <ParamField path="max_trials" type="int" optional={true} default="10">Maximum number of optimization trials</ParamField>
 <ParamField path="allow_tool_use" type="bool" optional={true} default="True">Whether tools may be executed during evaluation (default True)</ParamField>

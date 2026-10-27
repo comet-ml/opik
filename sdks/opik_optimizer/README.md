@@ -23,7 +23,6 @@ The Opik Agent Optimizer refines your prompts to achieve better performance from
 * **Counter Tracking**: Built-in LLM and tool call counters for monitoring usage
 * **Multimodal Prompts**: Supports OpenAI-style content parts (text, image, audio, video) across optimizers
 * **Type Safety**: Full type hints and validation for robust development
-* **Backward Compatibility**: All original parameters preserved through kwargs extraction
 * **Deprecation Warnings**: Clear warnings for deprecated parameters with migration guidance
 
 Opik Optimizer is a component of the [Opik platform](https://github.com/comet-ml/opik), an open-source LLM evaluation platform by Comet.
@@ -85,21 +84,32 @@ You'll typically need:
 
 ## Standardized API
 
-All optimizers follow the same interface, making it easy to switch between algorithms or chain them together:
+Prompt optimizers share `optimize_prompt()`. `ParameterOptimizer` uses `optimize_parameter()` with a search space; all return `OptimizationResult`.
 
 ```python
-# All optimizers have the same signature
+# Shared prompt-optimization entrypoint
 def optimize_prompt(
     self,
-    prompt: ChatPrompt,
+    prompt: ChatPrompt | dict[str, ChatPrompt],
     dataset: Dataset,
     metric: Callable,
+    agent: OptimizableAgent | None = None,
     experiment_config: dict | None = None,
-    n_samples: int | None = None,
+    n_samples: int | float | str | None = None,
+    n_samples_minibatch: int | None = None,
+    n_samples_strategy: str | None = None,
     auto_continue: bool = False,
-    agent_class: type[OptimizableAgent] | None = None,
+    project_name: str | None = None,
+    optimization_id: str | None = None,
+    validation_dataset: Dataset | None = None,
+    max_trials: int = 10,
+    allow_tool_use: bool = True,
+    optimize_prompts: bool | str | list[str] | None = "system",
+    optimize_tools: bool | dict[str, bool] | None = None,
+    *args: Any,
     **kwargs: Any,
-) -> OptimizationResult
+) -> OptimizationResult:
+    ...
 
 # All optimizers return the same result type
 result = optimizer.optimize_prompt(
@@ -167,14 +177,27 @@ result = optimizer.optimize_prompt(
 result.display()
 ```
 
-The `result` object contains the optimized prompt, evaluation scores, and other details from the optimization process. If `project_name` is provided on the optimizer and Opik is configured, results will also be logged to your Comet workspace.
+The `result` object contains the optimized prompt, evaluation scores, and other details from the optimization process. Runs are logged to the dataset's project in your configured Opik workspace.
 
 The optimizer automatically logs run metadata—including optimizer version, tool schemas, prompt messages, and the models used—so you get consistent experiment context without any additional arguments. If you still need custom tags (for example identifying the dataset or task), pass an `experiment_config` dictionary and your fields will be merged on top of the defaults.
+
+## Agent and optimizer models
+
+Set evaluated models and generation parameters on each `ChatPrompt`. The optimizer's `model` and
+`model_parameters` control its own reasoning calls and never replace prompt settings, including
+empty parameter dictionaries. Custom agents control their own calls and should honor the models
+and settings of the candidate prompts they receive.
+
+`ParameterOptimizer` has no reasoning model: configure the prompts, then call `optimize_parameter()`.
+Its constructor's `model` and `model_parameters` are deprecated and ignored. A search changes only
+selected fields and returns the winning prompts with their model settings.
 
 ## Tool & Prompt Optimization
 
 Opik separates prompt optimization, tool use, and tool optimization so you can target exactly what changes.
-Tool optimization is currently supported by all optimizers except `FewShotBayesianOptimizer`, `ParameterOptimizer` and `GEPAOptimizer`.
+Tool-description optimization is supported by `MetaPromptOptimizer`, `EvolutionaryOptimizer`,
+`GepaOptimizer`, and `HRPO`, including tools in agent prompt bundles. `FewShotBayesianOptimizer`
+and `ParameterOptimizer` can evaluate tool-using agents but do not rewrite tool descriptions.
 
 ### Prompt Optimization vs Tool Optimization
 
@@ -358,8 +381,13 @@ cursor_config = {
         }
     }
 }
-# ChatPrompt accepts Cursor style MCP config directly in `tools`.
-prompt = ChatPrompt(system="Use MCP tools", user="{user_query}", tools=cursor_config)
+from opik_optimizer.utils.toolcalling import cursor_mcp_config_to_tools
+
+prompt = ChatPrompt(
+    system="Use MCP tools",
+    user="{user_query}",
+    tools=cursor_mcp_config_to_tools(cursor_config),
+)
 ```
 
 ## Deprecation Warnings
@@ -438,8 +466,13 @@ cursor_config = {
         }
     }
 }
-# Cursor config can be passed directly as ChatPrompt.tools
-prompt = ChatPrompt(system="Use MCP tools", user="{user_query}", tools=cursor_config)
+from opik_optimizer.utils.toolcalling import cursor_mcp_config_to_tools
+
+prompt = ChatPrompt(
+    system="Use MCP tools",
+    user="{user_query}",
+    tools=cursor_mcp_config_to_tools(cursor_config),
+)
 ```
 
 <Note>

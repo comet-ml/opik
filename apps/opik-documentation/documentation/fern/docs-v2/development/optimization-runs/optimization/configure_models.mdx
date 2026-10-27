@@ -351,6 +351,40 @@ optimizer = MetaPromptOptimizer(
 )
 ```
 
+### Keeping agent and optimizer settings separate
+
+`ChatPrompt.model` and `model_parameters` control evaluation calls. An optimizer's `model` and
+`model_parameters` control its own generation and reflection calls. Setting the optimizer's
+parameters never fills in an empty prompt parameter dictionary. In a prompt bundle, configure
+each prompt independently.
+
+A custom `OptimizableAgent` owns its model calls. Read the supplied prompts' `model` and
+`model_kwargs` when invoking your framework so parameter search and per-prompt configuration take
+effect. See the [agent example](/development/optimization-runs/optimization/optimize_agents).
+
+### HRPO reasoning overrides
+
+HRPO accepts `reasoning_model` and `reasoning_model_parameters` for its internal analysis and
+prompt-improvement calls. An omitted reasoning model uses `model`; omitted reasoning parameters
+use `model_parameters`. An explicit empty dictionary selects the provider's defaults instead:
+
+```python wordWrap
+from opik_optimizer import HRPO
+
+optimizer = HRPO(
+    model="openai/gpt-4o",
+    model_parameters={"temperature": 0.6, "max_tokens": 4096},
+    reasoning_model_parameters={},  # Do not inherit those generation parameters
+)
+```
+
+### ParameterOptimizer
+
+`ParameterOptimizer` makes no internal reasoning calls. Set the evaluated model and baseline
+settings on each `ChatPrompt`, then call `optimize_parameter()`. Its constructor's `model` and
+`model_parameters` arguments are deprecated, ignored, and emit `DeprecationWarning`. Only settings
+selected in the parameter search space change; the other prompt settings remain intact.
+
 ## Mixing Providers
 
 You can use different providers for the ChatPrompt and Optimizer:

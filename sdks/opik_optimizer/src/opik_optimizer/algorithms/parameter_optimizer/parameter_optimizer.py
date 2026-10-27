@@ -254,9 +254,8 @@ class ParameterOptimizer(BaseOptimizer):
             parameter_space: Definition of the search space for tunable parameters.
                 For multi-prompt, params without a prefix are expanded per prompt.
                 Params already prefixed (e.g., 'analyze.temperature') are kept as-is.
-            validation_dataset: Optional validation dataset. Note: Due to the internal implementation
-                of ParameterOptimizer, this parameter is currently not fully utilized and we recommend
-                not using it for this optimizer.
+            validation_dataset: Optional dataset used instead of dataset to rank baseline
+                and trial configurations. Keep a separate test dataset for final evaluation.
             experiment_config: Optional experiment metadata
             max_trials: Total number of trials (if None, uses default_n_trials)
             n_samples: Number of dataset samples to evaluate per trial (None for all)
@@ -274,7 +273,7 @@ class ParameterOptimizer(BaseOptimizer):
                 run is reused; otherwise one is created with this ID (must be a valid UUIDv7).
 
         Returns:
-            AlgorithmResult with best prompts, score, history, and metadata.
+            OptimizationResult with best prompts, score, history, and metadata.
         """
         prompts, single = self._normalize_prompt_input(prompt)
         if not isinstance(parameter_space, ParameterSearchSpace):

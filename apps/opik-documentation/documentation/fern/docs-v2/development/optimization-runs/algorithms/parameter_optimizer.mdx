@@ -101,6 +101,18 @@ The key parameters are:
   `model_parameters` constructor arguments are deprecated, ignored, and emit a `DeprecationWarning`.
 </Note>
 
+## Trial results and stopping
+
+Call `optimize_parameter()` for parameter search; `optimize_prompt()` is not a supported entrypoint
+for this optimizer. Each prompt keeps its own model and settings, and a trial overrides only the
+fields in the search space. Use `"target": "model"` explicitly when searching model choices.
+
+The returned `result.prompt` contains the winning settings. `result.details["baseline_parameters"]`
+and `result.details["optimized_model_kwargs"]` are keyed by prompt name, including for a single
+prompt. They remain available when the run returns only the baseline, such as an immediate
+perfect-score stop. `result.details["finish_reason"]` reports why the search stopped; a timeout
+reports `"timeout"`. The `timeout` argument applies separately to the global and local search phases.
+
 ## Example Usage
 
 ### Basic Example
@@ -345,9 +357,9 @@ optimizer = ParameterOptimizer(default_n_trials=30, n_threads=8)
    - Consider fixing low-impact parameters to reduce search space
 
 7. **Validation**
-   - **Note**: While ParameterOptimizer accepts a `validation_dataset` parameter, it doesn't improve performance due to the optimizer's internal implementation and we don't recommend using it
-   - Instead, use the optimizer's `evaluate_prompt()` on a held-out test dataset after optimization completes
-   - This confirms that optimized parameters generalize to unseen data
+   - Pass `validation_dataset` to `optimize_parameter()` to rank baseline and trial configurations on that dataset instead of `dataset`.
+   - Keep a separate test dataset for the final check: the validation scores influence parameter selection.
+   - Use `evaluate_prompt()` on that untouched test dataset after optimization completes.
    - Example:
      ```python wordWrap
      # After optimization: result.prompt carries the tuned model settings

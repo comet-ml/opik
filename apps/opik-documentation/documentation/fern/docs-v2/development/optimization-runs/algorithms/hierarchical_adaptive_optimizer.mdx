@@ -135,6 +135,8 @@ The optimizer has the following parameters:
 <ParamField path="batch_size" type="int" optional={true} defaultValue="25" />
 <ParamField path="convergence_threshold" type="float" optional={true} defaultValue="0.01" />
 <ParamField path="model_parameters" type="dict[str, typing.Any] | None" optional={true}>Optional dict of LiteLLM parameters for optimizer's internal LLM calls.</ParamField>
+<ParamField path="reasoning_model" type="str | None" optional={true}>Model for analysis and prompt improvement. Defaults to `model`; the evaluated agent still uses its own model.</ParamField>
+<ParamField path="reasoning_model_parameters" type="dict[str, typing.Any] | None" optional={true}>Defaults to `model_parameters` when omitted. Pass an empty dictionary to use no explicit generation parameters.</ParamField>
 
 ### `optimize_prompt` parameters
 

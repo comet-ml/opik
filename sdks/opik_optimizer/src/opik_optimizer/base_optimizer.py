@@ -1698,11 +1698,11 @@ class BaseOptimizer(ABC):
         This method provides the standard optimization flow:
         1. Setup optimization context via _setup_optimization()
         2. Check for early stop if baseline score meets threshold
-        3. Run the algorithm-specific optimization via _run_optimization()
+        3. Run the algorithm-specific optimization via run_optimization()
         4. Finalize and update status via _finalize_optimization()
 
         Subclasses can override this method for custom behavior, but most
-        should only need to implement _run_optimization().
+        should only need to implement run_optimization().
 
         Args:
            prompt: The prompt to optimize (single ChatPrompt or dict of prompts)

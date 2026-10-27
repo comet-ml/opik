@@ -142,9 +142,13 @@ optimizer = MetaPromptOptimizer(
 
 ## MCP Tool Calling Support
 
-The MetaPrompt Optimizer is the only optimizer that currently supports **MCP (Model Context
-Protocol) tool calling optimization**. This means you can optimize prompts that include MCP tools
-and function calls.
+MetaPrompt supports optimizing MCP and function-tool descriptions, including tools in custom
+agent prompt bundles. This is also supported by `EvolutionaryOptimizer`, `GepaOptimizer`, and
+`HRPO`. Install `opik-optimizer[mcp]` when using MCP tools; plain function tools do not need the extra.
+
+Use `optimize_tools=True` for all tools, or a selector such as
+`optimize_tools={"planner.lookup": True}` for one tool in a prompt bundle. Set
+`optimize_prompts=False` to keep prompt text fixed while tuning descriptions.
 
 <Note>
   MCP tool calling optimization is a specialized feature that allows the optimizer to understand and optimize prompts
