@@ -365,9 +365,9 @@ component:
       # "true" runs each process-strategy worker as an unprivileged user with a minimal environment,
       # under a seccomp filter that refuses new sockets and access to other processes, forked from a
       # minimal template (started with an allowlisted environment) so it does not start from the backend's
-      # memory or environment. Needs python-backend running as root (CAP_SETUID/CAP_SETGID, default for
-      # root), no privileged mode; works under a RuntimeDefault seccomp profile. If it can't be applied no
-      # worker starts. Off by default.
+      # memory or environment. Needs Linux and Python 3.14 (as in the image), python-backend running as
+      # root (CAP_SETUID/CAP_SETGID, default for root), no privileged mode; works under a RuntimeDefault
+      # seccomp profile. If it can't be applied no worker starts. Off by default.
       PYTHON_CODE_EXECUTOR_PROCESS_NETWORK_ISOLATION: "false"
       PYTHON_CODE_EXECUTOR_CPU_SHARES: "512"
       PYTHON_CODE_EXECUTOR_MEM_LIMIT: "256m"

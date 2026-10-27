@@ -9,6 +9,7 @@ import importlib.util
 import json
 import logging
 import os
+import signal
 import socket
 import subprocess
 import sys
@@ -520,6 +521,66 @@ def test_worker_template_failure_is_logged_and_no_worker_joins_pool(monkeypatch,
     with caplog.at_level(logging.INFO):
         executor.create_worker_process()
         executor.create_worker_process()
+
+    assert executor.process_pool.qsize() == 0
+    _assert_single_isolation_error(caplog, "start worker template")
+
+
+def _isolation_error_record(caplog) -> logging.LogRecord:
+    records = [r for r in caplog.records if r.levelno >= logging.ERROR]
+    assert len(records) == 1, [r.getMessage() for r in records]
+    return records[0]
+
+
+def test_one_shot_worker_template_failure_is_an_isolation_error(monkeypatch, caplog):
+    monkeypatch.setattr(executor_process, "start_isolation_template", _failing_template)
+
+    with caplog.at_level(logging.INFO):
+        results = [run_user_code_in_isolated_worker(PROBE_METRIC, {"port": 1}) for _ in range(2)]
+
+    reason = "start worker template failed: template unavailable"
+    assert results == [{
+        "code": 500, "error": f"Worker isolation failed: {reason}", process_worker.ISOLATION_ERROR_KEY: reason,
+    }] * 2
+    _assert_single_isolation_error(caplog, "start worker template")
+    # The template failure's own traceback is on that line.
+    exc_type, exc, _ = _isolation_error_record(caplog).exc_info
+    assert (exc_type, str(exc)) == (OSError, "template unavailable")
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="the interpreter is checked where the template runs")
+def test_unsupported_interpreter_fails_closed(monkeypatch, caplog, workers):
+    monkeypatch.setenv(PROCESS_NETWORK_ISOLATION_ENV_VAR, "true")
+    monkeypatch.setattr(executor_process, "_python_version", lambda: (3, 12))
+    executor = ProcessExecutor()
+
+    with caplog.at_level(logging.INFO):
+        executor.create_worker_process()
+        one_shot = run_user_code_in_isolated_worker(PROBE_METRIC, {"port": 1})
+
+    reason = "check interpreter failed: needs Python 3.14, not 3.12"
+    assert executor.process_pool.qsize() == 0
+    assert one_shot == {"code": 500, "error": f"Worker isolation failed: {reason}", process_worker.ISOLATION_ERROR_KEY: reason}
+    assert workers == []
+    # Once for the executor and once for the one-shot path, both naming the interpreter.
+    errors = _isolation_errors(caplog)
+    assert len(errors) == 2 and all(f"cannot be isolated ({reason})." in e for e in errors), errors
+
+
+def test_start_services_logs_a_template_failure_once(monkeypatch, caplog):
+    monkeypatch.setenv(PROCESS_NETWORK_ISOLATION_ENV_VAR, "true")
+    monkeypatch.setattr(executor_process, "start_isolation_template", _failing_template)
+    # start_services installs its own handlers; they are put back for the rest of the run.
+    saved = {signum: signal.getsignal(signum) for signum in (signal.SIGINT, signal.SIGTERM)}
+    executor = ProcessExecutor()
+
+    try:
+        with caplog.at_level(logging.INFO):
+            executor.start_services()
+    finally:
+        executor.cleanup()
+        for signum, handler in saved.items():
+            signal.signal(signum, handler)
 
     assert executor.process_pool.qsize() == 0
     _assert_single_isolation_error(caplog, "start worker template")

@@ -120,6 +120,28 @@ class _IsolationUnavailable(Exception):
     pass
 
 
+# The interpreter the template launcher's copied fork_exec call was written for.
+_TEMPLATE_PYTHON = (3, 14)
+
+
+def _python_version() -> Tuple[int, int]:
+    return sys.version_info[:2]
+
+
+def _start_template() -> None:
+    """start_isolation_template, with any failure raised as _IsolationUnavailable naming the step."""
+    if sys.platform == "linux" and _python_version() != _TEMPLATE_PYTHON:
+        # The copied fork_exec call takes another argument list elsewhere, so refuse rather than guess.
+        version = ".".join(map(str, _python_version()))
+        raise _IsolationUnavailable(
+            f"check interpreter failed: needs Python {_TEMPLATE_PYTHON[0]}.{_TEMPLATE_PYTHON[1]}, not {version}"
+        )
+    try:
+        start_isolation_template()
+    except Exception as e:
+        raise _IsolationUnavailable(f"start worker template failed: {e}") from e
+
+
 class _IsolationFailureLog:
     """Every worker of one executor fails the same way, so the cause is logged once per executor."""
 
@@ -127,15 +149,17 @@ class _IsolationFailureLog:
         self._lock = Lock()
         self._logged = False
 
-    def log(self, reason: str) -> None:
+    def log(self, reason: str, cause: Optional[BaseException] = None) -> None:
         with self._lock:
             if self._logged:
                 return
             self._logged = True
+        # cause, when this process raised it, adds its traceback to the same line.
         logger.error(
             f"{PROCESS_NETWORK_ISOLATION_ENV_VAR}=true but process workers cannot be isolated ({reason}). "
-            f"It needs Linux, with python-backend running as root (CAP_SETUID and CAP_SETGID, granted by default). "
-            f"No process worker will start until then."
+            f"It needs Linux and Python {_TEMPLATE_PYTHON[0]}.{_TEMPLATE_PYTHON[1]}, with python-backend running as "
+            f"root (CAP_SETUID and CAP_SETGID, granted by default). No process worker will start until then.",
+            exc_info=cause,
         )
 
 
@@ -303,7 +327,11 @@ def _stop_idle_isolated_workers() -> None:
 def _start_isolated_worker() -> Union[dict, Tuple[multiprocessing.Process, Connection]]:
     """A READY isolated worker, or the error reply when it could not start."""
     # Idempotent; ensures the template was started with the reduced environment, not lazily by the fork.
-    start_isolation_template()
+    try:
+        _start_template()
+    except _IsolationUnavailable as e:
+        _one_shot_isolation_failures.log(str(e), e.__cause__)
+        return {"code": 500, "error": f"Worker isolation failed: {e}", process_worker.ISOLATION_ERROR_KEY: str(e)}
     parent_conn, child_conn = _isolated_context.Pipe()
     # Not daemonic, so metrics can start processes of their own. Idle workers are ended at the job's exit
     # by _stop_idle_isolated_workers; the template's death is a backstop through the parent-death signal.
@@ -391,10 +419,10 @@ class ProcessExecutor(CodeExecutorBase):
         # Before the first worker forks, so isolated workers start from the template, not from this backend.
         if self.isolate:
             try:
-                start_isolation_template()
-            except Exception as e:
+                _start_template()
+            except _IsolationUnavailable as e:
                 # each worker retries the template and is refused, so no worker starts from this backend
-                self._isolation_failures.log(f"start worker template failed: {e}")
+                self._isolation_failures.log(str(e), e.__cause__)
 
         self.releaser_executor = concurrent.futures.ThreadPoolExecutor(max_workers=self.max_parallel)
         self._pre_warm_process_pool()
@@ -520,10 +548,7 @@ class ProcessExecutor(CodeExecutorBase):
         try:
             if self.isolate:
                 # Idempotent; ensures the template was started with the reduced environment, not lazily by the fork.
-                try:
-                    start_isolation_template()
-                except Exception as e:
-                    raise _IsolationUnavailable(f"start worker template failed: {e}") from e
+                _start_template()
             ctx = _worker_context(self.isolate)
             parent_conn, child_conn = ctx.Pipe()
             process = ctx.Process(target=process_worker.worker_process_main, args=(child_conn, self.isolate))
@@ -548,7 +573,7 @@ class ProcessExecutor(CodeExecutorBase):
             logger.info(f"Created worker {worker_id} (PID: {process.pid}) in {latency:.3f}ms.")
         except Exception as e:
             if isinstance(e, _IsolationUnavailable):
-                self._isolation_failures.log(str(e))
+                self._isolation_failures.log(str(e), e.__cause__)
             else:
                 logger.error(
                     f"Failed to create worker process {worker_id} (PID: {process.pid if process and process.pid else 'N/A'}): {e}")

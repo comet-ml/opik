@@ -293,7 +293,11 @@ def main():
         # isolated worker forks from the template and not from this process once it holds them.
         from opik_backend.executor_process import isolation_enabled, start_isolation_template
         if isolation_enabled():
-            start_isolation_template()
+            try:
+                start_isolation_template()
+            except Exception:
+                # Only code metrics need it; each one returns the named isolation error, logged once per job.
+                pass
 
         # Read input from stdin
         input_data = sys.stdin.read()
