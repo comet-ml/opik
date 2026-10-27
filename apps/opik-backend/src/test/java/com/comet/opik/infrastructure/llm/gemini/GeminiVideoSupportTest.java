@@ -58,7 +58,7 @@ class GeminiVideoSupportTest {
     @Captor
     private ArgumentCaptor<ChatRequest> chatRequestCaptor;
 
-    // media URLs are downloaded and inlined before Gemini sees them, so they are served locally
+    /** Media URLs are downloaded and inlined before Gemini sees them, so they are served locally. */
     private static final WireMockUtils.WireMockRuntime WIRE_MOCK = WireMockUtils.startWireMock();
     private static final byte[] VIDEO_BYTES = RandomUtils.secure().randomBytes(64);
     private static final ImageContent INLINED_VIDEO = ImageContent.from(
@@ -425,10 +425,12 @@ class GeminiVideoSupportTest {
             verify(mockDelegate).chat(chatRequestCaptor.capture());
             var processedUserMessage = (UserMessage) chatRequestCaptor.getValue().messages().get(0);
 
-            assertThat(processedUserMessage.contents()).hasSize(2);
-            assertThat(processedUserMessage.contents().get(0)).isEqualTo(AudioContent.from(
-                    INLINED_VIDEO.image().base64Data(), INLINED_VIDEO.image().mimeType()));
-            assertThat(processedUserMessage.contents().get(1)).isEqualTo(INLINED_VIDEO);
+            var expectedContents = List.of(
+                    AudioContent.from(INLINED_VIDEO.image().base64Data(), INLINED_VIDEO.image().mimeType()),
+                    INLINED_VIDEO);
+            var actualContents = processedUserMessage.contents();
+
+            assertThat(actualContents).isEqualTo(expectedContents);
         }
 
         @Test

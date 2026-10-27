@@ -6,11 +6,14 @@ import com.comet.opik.infrastructure.llm.OpenAiCompatStatusCodes;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.validation.constraints.NotBlank;
+import lombok.Builder;
 
 import static com.comet.opik.infrastructure.llm.openai.OpenAiErrorMessage.OpenAiError;
 
+@Builder(toBuilder = true)
 public record OpenAiErrorMessage(OpenAiError error) implements LlmProviderError<OpenAiError> {
 
+    @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record OpenAiError(@NotBlank String message, @NotBlank String code, @NotBlank String type) {
     }

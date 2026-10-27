@@ -18,6 +18,7 @@ import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -48,14 +49,16 @@ import static com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefused
 @Singleton
 public class RemoteMediaInliner {
 
-    // Cloud Storage objects are read by Google, and data: URIs carry their own bytes; any other scheme is downloaded
-    // here or refused. Compared exactly, as the SDKs do: a differently cased scheme takes the restrictive path.
+    /**
+     * Cloud Storage objects are read by Google, and data: URIs carry their own bytes; any other scheme is downloaded
+     * here or refused. Compared exactly, as the SDKs do: a differently cased scheme takes the restrictive path.
+     */
     private static final Set<String> PASS_THROUGH_SCHEMES = Set.of("gs", "data");
-    // checked in every guard mode: the relaxed one skips the destination check, never this
+    /** Checked in every guard mode: the relaxed one skips the destination check, never this. */
     private static final Set<String> DOWNLOAD_SCHEMES = Set.of("http", "https");
 
-    private final @NonNull Client client;
-    private final @NonNull DestinationGuard destinationGuard;
+    private final Client client;
+    private final DestinationGuard destinationGuard;
     private final int timeoutMillis;
     private final int maxBytes;
 
@@ -127,6 +130,7 @@ public class RemoteMediaInliner {
         };
     }
 
+    @Builder(toBuilder = true)
     private record Media(String base64Data, String mimeType) {
     }
 
@@ -138,7 +142,7 @@ public class RemoteMediaInliner {
             destinationGuard.validate(url);
         } catch (DestinationGuardException exception) {
             // no exception detail: it describes a user-supplied URL and how our network resolves it
-            log.warn("Refused media URL: '{}'", VideoMimeTypeUtils.loggable(url));
+            log.warn("Refused media URL, url '{}'", VideoMimeTypeUtils.loggable(url));
             throw new ProviderRequestRefusedException(MEDIA_URL);
         }
         // a redirect is a failed download, so the only destination is the one just checked
@@ -159,7 +163,7 @@ public class RemoteMediaInliner {
         } catch (ExecutionException | TimeoutException | IOException | ProcessingException exception) {
             future.cancel(true);
             // the message can echo the full URL, credentials included, so only the type is logged
-            log.warn("Media URL download failed, error type '{}': '{}'", exception.getClass().getSimpleName(),
+            log.warn("Media URL download failed, error type '{}', url '{}'", exception.getClass().getSimpleName(),
                     VideoMimeTypeUtils.loggable(url));
             throw new ProviderRequestRefusedException(MEDIA_URL_DOWNLOAD);
         }
@@ -168,7 +172,7 @@ public class RemoteMediaInliner {
     private Media read(String url, String declaredMimeType, Response response) throws IOException {
         if (response.getStatusInfo().getFamily() != Response.Status.Family.SUCCESSFUL
                 || response.getLength() > maxBytes) {
-            log.warn("Media URL download failed, status '{}', length '{}': '{}'", response.getStatus(),
+            log.warn("Media URL download failed, status '{}', length '{}', url '{}'", response.getStatus(),
                     response.getLength(), VideoMimeTypeUtils.loggable(url));
             throw new ProviderRequestRefusedException(MEDIA_URL_DOWNLOAD);
         }
@@ -178,15 +182,17 @@ public class RemoteMediaInliner {
             bytes = body.readNBytes(maxBytes + 1);
         }
         if (bytes.length > maxBytes) {
-            log.warn("Media URL download failed, larger than '{}' bytes: '{}'", maxBytes,
+            log.warn("Media URL download failed, larger than the size limit, max bytes '{}', url '{}'", maxBytes,
                     VideoMimeTypeUtils.loggable(url));
             throw new ProviderRequestRefusedException(MEDIA_URL_DOWNLOAD);
         }
-        return new Media(Base64.getEncoder().encodeToString(bytes),
-                mimeType(declaredMimeType, response.getHeaderString(HttpHeaders.CONTENT_TYPE), url));
+        return Media.builder()
+                .base64Data(Base64.getEncoder().encodeToString(bytes))
+                .mimeType(mimeType(declaredMimeType, response.getHeaderString(HttpHeaders.CONTENT_TYPE), url))
+                .build();
     }
 
-    // the order the SDKs use, with the response's own type ahead of a guess from the extension
+    /** The order the SDKs use, with the response's own type ahead of a guess from the extension. */
     private static String mimeType(String declaredMimeType, String contentType, String url) {
         return Optional.ofNullable(declaredMimeType)
                 .or(() -> Optional.ofNullable(contentType)

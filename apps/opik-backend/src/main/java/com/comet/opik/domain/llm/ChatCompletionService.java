@@ -580,7 +580,7 @@ public class ChatCompletionService {
                 .orElse(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
     }
 
-    // Opik's own validation and failures; no provider client raises these types
+    /** Opik's own validation and failures; no provider client raises these types. */
     private static boolean isRaisedByOpik(Throwable throwable) {
         return ExceptionUtils.getThrowableList(throwable).stream()
                 .anyMatch(cause -> cause instanceof WebApplicationException

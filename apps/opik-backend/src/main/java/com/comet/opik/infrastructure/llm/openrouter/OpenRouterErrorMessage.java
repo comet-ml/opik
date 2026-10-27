@@ -34,8 +34,10 @@ public record OpenRouterErrorMessage(
         return DocumentedErrors.OPENROUTER.documents(error.code());
     }
 
-    // OpenRouter answers "Provider returned error" when the upstream fails, and keeps the upstream's own body in
-    // metadata.raw: usually that provider's JSON error as a string, sometimes plain text, which isn't passed on.
+    /**
+     * OpenRouter answers "Provider returned error" when the upstream fails, and keeps the upstream's own body in
+     * metadata.raw: usually that provider's JSON error as a string, sometimes plain text, which isn't passed on.
+     */
     private Optional<String> upstreamReason() {
         if (error.metadata() == null) {
             return Optional.empty();

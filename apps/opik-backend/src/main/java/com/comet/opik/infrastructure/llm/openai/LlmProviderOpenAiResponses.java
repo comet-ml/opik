@@ -112,13 +112,18 @@ public class LlmProviderOpenAiResponses implements LlmProviderService {
                 .map(OpenAiCompatStatusCodes::fromCode)
                 .or(() -> ex.type().map(OpenAiCompatStatusCodes::fromCode))
                 .orElseGet(ex::statusCode);
-        var envelope = new OpenAiErrorMessage(new OpenAiErrorMessage.OpenAiError(
-                messageOf(ex), ex.code().orElse(null), ex.type().orElse(null)));
+        var envelope = OpenAiErrorMessage.builder()
+                .error(OpenAiErrorMessage.OpenAiError.builder()
+                        .message(messageOf(ex))
+                        .code(ex.code().orElse(null))
+                        .type(ex.type().orElse(null))
+                        .build())
+                .build();
         var errorMessage = new ErrorMessage(status, envelope.error().message(), ex.code().orElse(null));
         return envelope.isDocumented() ? errorMessage : ProviderErrorMessageValidator.withoutProviderText(errorMessage);
     }
 
-    // the exception's own message prefixes the status, or is the whole body when the SDK couldn't parse it
+    /** The exception's own message prefixes the status, or is the whole body when the SDK couldn't parse it. */
     private static String messageOf(OpenAIServiceException ex) {
         return Optional.of(ex.body())
                 .filter(body -> !body.isMissing())

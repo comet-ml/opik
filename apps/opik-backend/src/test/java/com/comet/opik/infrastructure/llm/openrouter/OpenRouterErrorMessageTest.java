@@ -164,18 +164,20 @@ class OpenRouterErrorMessageTest {
                 Map.of("raw", JsonUtils.writeValueAsString(Map.of("error", Map.of("message",
                         "Bad gateway ".repeat(100)))), "provider_name", "Groq"))));
 
-        var message = provider.getLlmProviderError(new HttpException(502, body)).orElseThrow().getMessage();
+        var actualMessage = provider.getLlmProviderError(new HttpException(502, body)).orElseThrow().getMessage();
 
-        assertThat(message).startsWith("Groq: Bad gateway").endsWith("...").hasSize("Groq: ".length() + 500);
+        assertThat(actualMessage).startsWith("Groq: Bad gateway").endsWith("...").hasSize("Groq: ".length() + 500);
     }
 
     @Test
     void getLlmProviderErrorHidesTheTextOfAnUndocumentedCode() {
         var body = JsonUtils.writeValueAsString(Map.of("error", Map.of(
                 "message", UUID.randomUUID().toString(), "code", 418)));
+        var expectedError = new ErrorMessage(418, UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
 
-        assertThat(provider.getLlmProviderError(new HttpException(418, body)))
-                .contains(new ErrorMessage(418, UNEXPECTED_ERROR_CALLING_LLM_PROVIDER));
+        var actualError = provider.getLlmProviderError(new HttpException(418, body));
+
+        assertThat(actualError).contains(expectedError);
     }
 
     @Test

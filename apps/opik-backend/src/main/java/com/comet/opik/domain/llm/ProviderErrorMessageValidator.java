@@ -22,7 +22,9 @@ public class ProviderErrorMessageValidator {
 
     /** The error identifiers each provider documents for its error envelope. */
     public enum DocumentedErrors {
-        // https://developers.openai.com/api/docs/guides/error-codes, .../guides/agents-api/errors; error.type or code
+        /**
+         * https://developers.openai.com/api/docs/guides/error-codes, .../guides/agents-api/errors; error.type or code
+         */
         OPENAI(Set.of(
                 "invalid_request_error", "authentication_error", "not_found_error", "conflict_error",
                 "rate_limit_error", "insufficient_quota", "service_unavailable_error", "server_error",
@@ -31,16 +33,18 @@ public class ProviderErrorMessageValidator {
                 "slow_down", "credit_balance_exhausted", "usage_limit_exceeded",
                 "organization_spend_limit_exceeded", "project_spend_limit_exceeded",
                 "organization_usage_limit_exceeded", "server_is_overloaded", "request_timeout")),
-        // https://platform.claude.com/docs/en/api/errors; error.type
+        /** https://platform.claude.com/docs/en/api/errors; error.type */
         ANTHROPIC(Set.of(
                 "invalid_request_error", "authentication_error", "billing_error", "permission_error",
                 "not_found_error", "conflict_error", "request_too_large", "rate_limit_error", "api_error",
                 "timeout_error", "overloaded_error")),
-        // https://docs.cloud.google.com/vertex-ai/generative-ai/docs/model-reference/api-errors; error.status
+        /**
+         * https://docs.cloud.google.com/vertex-ai/generative-ai/docs/model-reference/api-errors; error.status
+         */
         GOOGLE(Set.of(
                 "INVALID_ARGUMENT", "FAILED_PRECONDITION", "UNAUTHENTICATED", "PERMISSION_DENIED", "NOT_FOUND",
                 "RESOURCE_EXHAUSTED", "CANCELLED", "UNKNOWN", "INTERNAL", "UNAVAILABLE", "DEADLINE_EXCEEDED")),
-        // https://openrouter.ai/docs/api-reference/errors; error.code
+        /** https://openrouter.ai/docs/api-reference/errors; error.code */
         OPENROUTER(Set.of(
                 "400", "401", "402", "403", "404", "408", "412", "413", "422", "429", "500", "502", "503", "504"));
 

@@ -105,8 +105,12 @@ class LlmProviderAnthropic implements LlmProviderService {
 
     private static String messageOf(Throwable throwable) {
         var providerError = throwable instanceof AnthropicStreamingException streamingError
-                ? Optional.of(new AnthropicErrorMessage(
-                        new AnthropicErrorMessage.AnthropicError(streamingError.type(), streamingError.getMessage())))
+                ? Optional.of(AnthropicErrorMessage.builder()
+                        .error(AnthropicErrorMessage.AnthropicError.builder()
+                                .type(streamingError.type())
+                                .message(streamingError.getMessage())
+                                .build())
+                        .build())
                         .filter(AnthropicErrorMessage::isDocumented)
                         .map(AnthropicErrorMessage::toErrorMessage)
                 : LlmProviderLangChainMapper.INSTANCE.getAnthropicErrorObject(throwable, log);
