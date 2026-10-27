@@ -97,6 +97,10 @@ class ChatCompletionServiceTest {
     @Mock
     private ChatModel chatModel;
 
+    private static final int PROVIDER_ERROR_MESSAGE_MAX_LENGTH = 300;
+
+    private ProviderErrorMessageValidator providerErrorMessageValidator;
+
     private ChatCompletionService chatCompletionService;
 
     @BeforeEach
@@ -107,8 +111,11 @@ class ChatCompletionServiceTest {
         when(llmProviderClientConfig.getJitterScale()).thenReturn(null);
         when(llmProviderClientConfig.getBackoffExp()).thenReturn(null);
 
+        when(llmProviderClientConfig.getProviderErrorMessageMaxLength()).thenReturn(PROVIDER_ERROR_MESSAGE_MAX_LENGTH);
+        providerErrorMessageValidator = new ProviderErrorMessageValidator(llmProviderClientConfig);
+
         chatCompletionService = new ChatCompletionService(llmProviderClientConfig, llmProviderFactory,
-                new ParamResolver(llmProviderFactory, bundledRegistry()));
+                new ParamResolver(llmProviderFactory, bundledRegistry()), providerErrorMessageValidator);
     }
 
     @Nested
@@ -461,7 +468,7 @@ class ChatCompletionServiceTest {
 
             when(llmProviderClientConfig.getMaxAttempts()).thenReturn(3);
             var retryingService = new ChatCompletionService(llmProviderClientConfig, llmProviderFactory,
-                    new ParamResolver(llmProviderFactory, bundledRegistry()));
+                    new ParamResolver(llmProviderFactory, bundledRegistry()), providerErrorMessageValidator);
 
             when(llmProviderFactory.getService(anyString(), anyString())).thenReturn(llmProviderService);
             when(llmProviderService.generate(any(), anyString()))
@@ -485,7 +492,7 @@ class ChatCompletionServiceTest {
 
             when(llmProviderClientConfig.getMaxAttempts()).thenReturn(3);
             var retryingService = new ChatCompletionService(llmProviderClientConfig, llmProviderFactory,
-                    new ParamResolver(llmProviderFactory, bundledRegistry()));
+                    new ParamResolver(llmProviderFactory, bundledRegistry()), providerErrorMessageValidator);
 
             when(llmProviderFactory.getService(anyString(), anyString())).thenReturn(llmProviderService);
             when(llmProviderService.generate(any(), anyString())).thenThrow(new RuntimeException("transient"));
@@ -636,7 +643,7 @@ class ChatCompletionServiceTest {
                             "upstream proxy 503 with a plain-text body",
                             new RuntimeException(new HttpException(503, "[PROXY] service temporarily unavailable")),
                             503,
-                            "[PROXY] service temporarily unavailable"),
+                            "provider responded with HTTP 503"),
                     Arguments.of(
                             "Anthropic billing rejection nested under a retry wrapper",
                             new NonRetriableException(new InvalidRequestException(
@@ -654,7 +661,7 @@ class ChatCompletionServiceTest {
                             "Cloudflare rate limit with a plain-text body",
                             new RuntimeException(new HttpException(429, "error code: 1015")),
                             429,
-                            "error code: 1015"),
+                            "provider responded with HTTP 429"),
                     Arguments.of(
                             "bare RateLimitException with no HttpException in the chain",
                             new RateLimitException("slow down"),
@@ -674,7 +681,7 @@ class ChatCompletionServiceTest {
                             "typed exception wrapping an HttpException",
                             new InternalServerException(new HttpException(503, "upstream is down")),
                             503,
-                            "upstream is down"),
+                            "provider responded with HTTP 503"),
                     Arguments.of(
                             "failure that never reached HTTP",
                             new RuntimeException("Connection error", new ConnectException("Connection refused")),
@@ -684,12 +691,12 @@ class ChatCompletionServiceTest {
                             "status outside the error families",
                             new RuntimeException(new HttpException(302, "moved")),
                             500,
-                            "moved"),
+                            "provider responded with HTTP 302"),
                     Arguments.of(
                             "status outside the valid HTTP range",
                             new RuntimeException(new HttpException(0, "no response")),
                             500,
-                            "no response"));
+                            "provider responded with HTTP 0"));
         }
 
         @ParameterizedTest(name = "create: when {0}, then report status {2}")
@@ -1020,7 +1027,7 @@ class ChatCompletionServiceTest {
         private Throwable scoreTraceWithBudget(int maxRetries, RuntimeException providerFailure) {
             when(llmProviderClientConfig.getMaxAttempts()).thenReturn(maxRetries);
             var retryingService = new ChatCompletionService(llmProviderClientConfig, llmProviderFactory,
-                    new ParamResolver(llmProviderFactory, bundledRegistry()));
+                    new ParamResolver(llmProviderFactory, bundledRegistry()), providerErrorMessageValidator);
             var chatRequest = ChatRequest.builder().messages(UserMessage.from("score this")).build();
             var modelParameters = podamFactory.manufacturePojo(LlmAsJudgeModelParameters.class);
 

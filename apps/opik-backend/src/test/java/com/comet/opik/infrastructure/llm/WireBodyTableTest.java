@@ -8,6 +8,7 @@ import com.comet.opik.api.resources.v1.events.OnlineScoringEngine;
 import com.comet.opik.domain.LlmProviderApiKeyService;
 import com.comet.opik.domain.llm.ChatCompletionService;
 import com.comet.opik.domain.llm.ParamResolver;
+import com.comet.opik.domain.llm.ProviderErrorMessageValidator;
 import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.FreeModelConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
@@ -202,7 +203,8 @@ class WireBodyTableTest {
                 openAiModule.clientGenerator(config.getLlmProviderClient(), LlmTestClients.RESPONSES_API_HTTP_CLIENT));
 
         chatCompletionService = new ChatCompletionService(config.getLlmProviderClient(), llmProviderFactory,
-                new ParamResolver(llmProviderFactory, registryService));
+                new ParamResolver(llmProviderFactory, registryService),
+                new ProviderErrorMessageValidator(config.getLlmProviderClient()));
     }
 
     @AfterAll

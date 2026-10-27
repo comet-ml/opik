@@ -69,6 +69,7 @@ import java.security.KeyPairGenerator;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.BiConsumer;
 import java.util.stream.Stream;
@@ -428,7 +429,7 @@ class ChatCompletionsResourceTest {
 
         @ParameterizedTest
         @MethodSource
-        @DisplayName("a body that isn't a provider error is not echoed back from a user-configured destination")
+        @DisplayName("a body that isn't a provider error is not echoed back")
         void rawUpstreamBodyIsNotEchoed(int upstreamStatus, String contentType, String upstreamBody,
                 int expectedStatus) {
             var workspaceName = RandomStringUtils.randomAlphanumeric(20);
@@ -449,6 +450,41 @@ class ChatCompletionsResourceTest {
             var streamed = ChatCompletionRequest.builder().stream(true).model(MODEL).addUserMessage("ping").build();
             assertThat(chatCompletionsClient.createAndGetStreamedError(API_KEY, workspaceName, streamed))
                     .containsExactly(expected);
+        }
+
+        private Stream<Arguments> providerErrorMessageIsValidated() {
+            var text = UUID.randomUUID().toString();
+            return Stream.of(
+                    arguments("deployment not found " + text, "deployment not found " + text),
+                    arguments("deployment not found\n" + text, null),
+                    arguments("deployment not found <b>" + text + "</b>", null),
+                    // one past providerErrorMessageMaxLength in config-test.yml
+                    arguments(RandomStringUtils.randomAlphanumeric(301), null));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("a provider error message is passed on only when it is a short plain message")
+        void providerErrorMessageIsValidated(String providerMessage, String expectedMessage) {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            mockTargetWorkspace(workspaceName, UUID.randomUUID().toString());
+            createCustomProvider(workspaceName);
+            WIRE_MOCK.server().stubFor(post(urlPathMatching(CHAT_COMPLETIONS_REGEX))
+                    .willReturn(aResponse()
+                            .withStatus(HttpStatus.SC_NOT_FOUND)
+                            .withHeader("Content-Type", "application/json")
+                            .withBody(JsonUtils.writeValueAsString(
+                                    Map.of("error", Map.of("message", providerMessage))))));
+            var message = Optional.ofNullable(expectedMessage)
+                    .orElse("provider responded with HTTP " + HttpStatus.SC_NOT_FOUND);
+
+            var request = ChatCompletionRequest.builder().stream(false).model(MODEL).addUserMessage("ping").build();
+            assertThat(chatCompletionsClient.create(API_KEY, workspaceName, request, HttpStatus.SC_BAD_REQUEST))
+                    .isEqualTo(new ErrorMessage(HttpStatus.SC_BAD_REQUEST, message));
+
+            var streamed = ChatCompletionRequest.builder().stream(true).model(MODEL).addUserMessage("ping").build();
+            assertThat(chatCompletionsClient.createAndGetStreamedError(API_KEY, workspaceName, streamed))
+                    .containsExactly(new ErrorMessage(HttpStatus.SC_BAD_REQUEST, message, "Custom Provider error"));
         }
 
         @Test
