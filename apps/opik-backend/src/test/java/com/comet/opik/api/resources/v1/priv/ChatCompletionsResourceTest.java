@@ -19,6 +19,7 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.ChatCompletionsClient;
 import com.comet.opik.api.resources.utils.resources.LlmProviderApiKeyResourceClient;
 import com.comet.opik.domain.llm.LlmProviderFactory;
+import com.comet.opik.domain.llm.MessageContentNormalizer;
 import com.comet.opik.domain.llm.langchain4j.AudioUrl;
 import com.comet.opik.domain.llm.langchain4j.OpikContent;
 import com.comet.opik.domain.llm.langchain4j.OpikContentType;
@@ -1972,6 +1973,101 @@ class ChatCompletionsResourceTest {
                     .close();
 
             WIRE_MOCK.server().verify(0, headRequestedFor(urlPathEqualTo(videoPath)));
+        }
+    }
+
+    /// What the provider receives on a key that sends chat completions through the
+    /// OpenAI Responses API: a user message's content reaches the provider's input
+    /// as text, whether the request sends it as a string or as an array of content
+    /// parts. Image parts are rendered the same way as an image placeholder in
+    /// string content.
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @DisplayName("OpenAI Responses API user content")
+    class OpenAiResponsesApiUserContent {
+
+        private static final String RESPONSES_BODY = """
+                {"id":"resp_1","object":"response","created_at":1,"status":"completed","error":null,\
+                "incomplete_details":null,"instructions":null,"max_output_tokens":null,"model":"gpt",\
+                "parallel_tool_calls":true,"previous_response_id":null,"reasoning":{"effort":null,\
+                "summary":null},"store":false,"temperature":1.0,"text":{"format":{"type":"text"}},\
+                "tool_choice":"auto","tools":[],"top_p":1.0,"truncation":"disabled","user":null,\
+                "metadata":{},"output":[{"type":"message","id":"msg_1","status":"completed",\
+                "role":"assistant","content":[{"type":"output_text","text":"ok","annotations":[]}]}],\
+                "usage":{"input_tokens":1,"input_tokens_details":{"cached_tokens":0},"output_tokens":1,\
+                "output_tokens_details":{"reasoning_tokens":0},"total_tokens":2}}""";
+
+        private Stream<Arguments> userContentReachesTheProviderAsText() {
+            var text = RandomStringUtils.randomAlphanumeric(20);
+            var imageUrl = "https://example.com/%s.png".formatted(RandomStringUtils.randomAlphanumeric(10));
+            var textWithImage = "%s%s%s%s".formatted(text, MessageContentNormalizer.IMAGE_PLACEHOLDER_START, imageUrl,
+                    MessageContentNormalizer.IMAGE_PLACEHOLDER_END);
+            var textPart = Content.builder().type(ContentType.TEXT).text(text).build();
+            var imagePart = Content.builder()
+                    .type(ContentType.IMAGE_URL)
+                    .imageUrl(ImageUrl.builder().url(imageUrl).build())
+                    .build();
+            // gpt-4o is vision-capable and gpt-3.5-turbo is not, so each takes its own MessageContentNormalizer path.
+            return Stream.of(OpenaiModelName.GPT_4O, OpenaiModelName.GPT_3_5_TURBO)
+                    .map(OpenaiModelName::toString)
+                    .flatMap(model -> Stream.of(
+                            arguments(named("a text part, %s".formatted(model), model),
+                                    UserMessage.builder().content(List.of(textPart)).build(), text),
+                            arguments(named("a text part and an image part, %s".formatted(model), model),
+                                    UserMessage.builder().content(List.of(textPart, imagePart)).build(), textWithImage),
+                            arguments(named("string content, %s".formatted(model), model),
+                                    UserMessage.builder().content(text).build(), text),
+                            arguments(named("string content with an image placeholder, %s".formatted(model), model),
+                                    UserMessage.builder().content(textWithImage).build(), textWithImage)));
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource
+        void userContentReachesTheProviderAsText(String model, UserMessage userMessage, String expectedText) {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            mockTargetWorkspace(workspaceName, UUID.randomUUID().toString());
+            var basePath = "/v1-%s".formatted(UUID.randomUUID());
+            WIRE_MOCK.server().stubFor(post(urlPathEqualTo("%s/responses".formatted(basePath)))
+                    .willReturn(okJson(RESPONSES_BODY)));
+            llmProviderApiKeyResourceClient.createProviderApiKey(ProviderApiKey.builder()
+                    .provider(LlmProvider.OPEN_AI)
+                    .apiKey(RandomStringUtils.randomAlphanumeric(20))
+                    .baseUrl("%s%s".formatted(WIRE_MOCK.runtimeInfo().getHttpBaseUrl(), basePath))
+                    .configuration(Map.of("openai_pipeline_mode", "responses_api"))
+                    .build(), API_KEY, workspaceName, HttpStatus.SC_CREATED);
+            var request = ChatCompletionRequest.builder()
+                    .stream(false)
+                    .model(model)
+                    .messages(List.<Message>of(userMessage))
+                    .build();
+
+            var chatCompletionsUrl = "%s/v1/private/chat/completions".formatted(TestUtils.getBaseUrl(clientSupport));
+            try (var actualResponse = clientSupport.target(chatCompletionsUrl)
+                    .request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                    .post(Entity.json(request))) {
+                assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            }
+
+            var actualProviderRequests = WIRE_MOCK.server().findAll(
+                    postRequestedFor(urlPathEqualTo("%s/responses".formatted(basePath))));
+            assertThat(actualProviderRequests).hasSize(1);
+            var actualInput = JsonUtils.getJsonNodeFromString(actualProviderRequests.getFirst().getBodyAsString())
+                    .get("input");
+            assertThat(actualInput).isEqualTo(expectedInput(expectedText));
+        }
+
+        private JsonNode expectedInput(String expectedText) {
+            var expectedPart = JsonUtils.createObjectNode()
+                    .put("type", "input_text")
+                    .put("text", expectedText);
+            var expectedMessage = JsonUtils.createObjectNode()
+                    .put("type", "message")
+                    .put("role", "user");
+            expectedMessage.set("content", JsonUtils.createArrayNode().add(expectedPart));
+            return JsonUtils.createArrayNode().add(expectedMessage);
         }
     }
 }

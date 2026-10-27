@@ -185,6 +185,59 @@ rows:
     # The caller sees the message Opik wrote, not that of the parse failure under it.
     rejected: Invalid custom_parameters.max_tokens for the OpenAI Responses API
 
+  # User content in array form, chat path. Every model gets the parts flattened to one input_text, with the image as
+  # a placeholder, the same as string content that carries one.
+  - name: array text content is sent as input_text
+    models: [gpt-4.1, gpt-3.5-turbo]
+    request:
+      messages:
+        - role: system
+          content: Be brief.
+        - role: user
+          content:
+            - type: text
+              text: Say hi.
+  - name: array content with an image is sent as one input_text
+    models: [gpt-4.1, gpt-3.5-turbo]
+    request:
+      messages:
+        - role: system
+          content: Be brief.
+        - role: user
+          content:
+            - type: text
+              text: Say hi.
+            - type: image_url
+              image_url: {url: 'https://example.com/cat.png'}
+    body:
+      input:
+        - type: message
+          role: system
+          content: Be brief.
+        - type: message
+          role: user
+          content:
+            - type: input_text
+              text: 'Say hi.<<<image>>>https://example.com/cat.png<<</image>>>'
+  - name: string content with an image placeholder is sent as one input_text
+    models: [gpt-4.1, gpt-3.5-turbo]
+    request:
+      messages:
+        - role: system
+          content: Be brief.
+        - role: user
+          content: 'Say hi.<<<image>>>https://example.com/cat.png<<</image>>>'
+    body:
+      input:
+        - type: message
+          role: system
+          content: Be brief.
+        - type: message
+          role: user
+          content:
+            - type: input_text
+              text: 'Say hi.<<<image>>>https://example.com/cat.png<<</image>>>'
+
   # Judge path. gpt-3.5-turbo and o3-mini have no structuredOutput in the registry, so only the row about that
   # uses them.
   - name: a judge sends temperature to a model that is not a reasoning model
