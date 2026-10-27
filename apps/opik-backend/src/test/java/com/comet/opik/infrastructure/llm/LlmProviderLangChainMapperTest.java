@@ -22,8 +22,11 @@ import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
+import java.util.function.BiFunction;
 import java.util.stream.Stream;
 
+import static com.comet.opik.domain.llm.ChatCompletionService.UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class LlmProviderLangChainMapperTest {
@@ -66,6 +69,58 @@ class LlmProviderLangChainMapperTest {
 
         assertThat(result).isPresent();
         assertThat(result.get().getCode()).isEqualTo(429);
+    }
+
+    private static Stream<Arguments> documentedErrors() {
+        var message = "provider says " + UUID.randomUUID();
+        BiFunction<LlmProviderLangChainMapper, Throwable, Optional<ErrorMessage>> openAi = (mapper,
+                throwable) -> mapper.getErrorObject(throwable, log);
+        BiFunction<LlmProviderLangChainMapper, Throwable, Optional<ErrorMessage>> gemini = (mapper,
+                throwable) -> mapper.getGeminiErrorObject(throwable, log);
+        BiFunction<LlmProviderLangChainMapper, Throwable, Optional<ErrorMessage>> customLlm = (mapper,
+                throwable) -> mapper.getCustomLlmErrorObject(throwable, log);
+        BiFunction<LlmProviderLangChainMapper, Throwable, Optional<ErrorMessage>> anthropic = (mapper,
+                throwable) -> mapper.getAnthropicErrorObject(throwable, log);
+        return Stream.of(
+                Arguments.of("OpenAI, documented type", openAi,
+                        "{\"error\":{\"message\":\"%s\",\"type\":\"invalid_request_error\",\"code\":\"unsupported_value\"}}"
+                                .formatted(message),
+                        new ErrorMessage(400, message)),
+                Arguments.of("OpenAI, undocumented type and code", openAi,
+                        "{\"error\":{\"message\":\"%s\",\"type\":\"gateway_error\",\"code\":\"blocked\"}}"
+                                .formatted(message),
+                        new ErrorMessage(500, UNEXPECTED_ERROR_CALLING_LLM_PROVIDER)),
+                Arguments.of("Gemini, documented status", gemini,
+                        "{\"error\":{\"code\":429,\"message\":\"%s\",\"status\":\"RESOURCE_EXHAUSTED\"}}"
+                                .formatted(message),
+                        new ErrorMessage(429, message, "RESOURCE_EXHAUSTED")),
+                Arguments.of("Gemini, undocumented status", gemini,
+                        "{\"error\":{\"code\":429,\"message\":\"%s\",\"status\":\"THROTTLED\"}}"
+                                .formatted(message),
+                        new ErrorMessage(429, UNEXPECTED_ERROR_CALLING_LLM_PROVIDER)),
+                Arguments.of("Custom LLM, documented code", customLlm,
+                        "{\"error\":{\"message\":\"%s\",\"code\":\"invalid_api_key\"}}".formatted(message),
+                        new ErrorMessage(401, message, "invalid_api_key")),
+                Arguments.of("Custom LLM, text shape", customLlm,
+                        "{\"error\":\"%s\"}".formatted(message),
+                        new ErrorMessage(400, UNEXPECTED_ERROR_CALLING_LLM_PROVIDER)),
+                Arguments.of("Anthropic, documented type", anthropic,
+                        "{\"type\":\"error\",\"error\":{\"type\":\"overloaded_error\",\"message\":\"%s\"},\"request_id\":\"req_1\"}"
+                                .formatted(message),
+                        new ErrorMessage(500, message)),
+                Arguments.of("Anthropic, undocumented type", anthropic,
+                        "{\"type\":\"error\",\"error\":{\"type\":\"proxy_error\",\"message\":\"%s\"}}"
+                                .formatted(message),
+                        new ErrorMessage(500, UNEXPECTED_ERROR_CALLING_LLM_PROVIDER)));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("documentedErrors")
+    @DisplayName("a parsed provider error keeps its text only when the provider documents its type, code or status")
+    void keepsTheTextOfDocumentedErrorsOnly(String shape,
+            BiFunction<LlmProviderLangChainMapper, Throwable, Optional<ErrorMessage>> parse, String body,
+            ErrorMessage expected) {
+        assertThat(parse.apply(mapper, providerErrorWith(body))).contains(expected);
     }
 
     @Test

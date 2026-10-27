@@ -1,7 +1,9 @@
 package com.comet.opik.infrastructure.llm;
 
+import com.comet.opik.domain.llm.ProviderErrorMessageValidator;
 import com.comet.opik.domain.llm.langchain4j.OpikContent;
 import com.comet.opik.domain.llm.langchain4j.OpikUserMessage;
+import com.comet.opik.infrastructure.llm.antropic.AnthropicErrorMessage;
 import com.comet.opik.infrastructure.llm.customllm.CustomLlmErrorMessage;
 import com.comet.opik.infrastructure.llm.gemini.GeminiErrorObject;
 import com.comet.opik.infrastructure.llm.openai.OpenAiErrorMessage;
@@ -204,18 +206,30 @@ public interface LlmProviderLangChainMapper {
         return getErrorMessage(throwable, log, CustomLlmErrorMessage.class);
     }
 
+    default Optional<ErrorMessage> getAnthropicErrorObject(@NonNull Throwable throwable, @NonNull Logger log) {
+        return getErrorMessage(throwable, log, AnthropicErrorMessage.class);
+    }
+
     private <E, T extends LlmProviderError<E>> Optional<ErrorMessage> getErrorMessage(Throwable throwable, Logger log,
             Class<T> errorType) {
         Optional<String> errorJson = extractErrorJson(throwable);
 
         String failToGetErrorMessage = "failed to parse %s message".formatted(errorType.getSimpleName());
 
+        // without the throwable, whose message is the provider's response; the caller logs it once
         if (errorJson.isEmpty()) {
-            log.warn(failToGetErrorMessage, throwable);
+            log.warn(failToGetErrorMessage);
             return Optional.empty();
         }
 
-        return parseError(log, errorJson.get(), errorType).map(LlmProviderError::toErrorMessage);
+        return parseError(log, errorJson.get(), errorType).flatMap(LlmProviderLangChainMapper::toCallerError);
+    }
+
+    private static Optional<ErrorMessage> toCallerError(LlmProviderError<?> error) {
+        return Optional.ofNullable(error.toErrorMessage())
+                .map(errorMessage -> error.isDocumented()
+                        ? errorMessage
+                        : ProviderErrorMessageValidator.withoutProviderText(errorMessage));
     }
 
     private <E, T extends LlmProviderError<E>> Optional<T> parseError(Logger log, String jsonPart, Class<T> errorType) {
@@ -229,7 +243,7 @@ public interface LlmProviderLangChainMapper {
             }
             return Optional.of(error);
         } catch (UncheckedIOException e) {
-            log.warn(failToGetErrorMessage, e);
+            log.warn(failToGetErrorMessage);
             return Optional.empty();
         }
     }

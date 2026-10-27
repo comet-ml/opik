@@ -2,8 +2,10 @@ package com.comet.opik.domain.llm;
 
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
+import com.comet.opik.infrastructure.llm.customllm.AuthTokenException;
 import com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterDecisionModel;
+import com.comet.opik.infrastructure.llm.vertexai.LlmProviderVertexAI.CutOffBeforeAnsweringException;
 import com.comet.opik.utils.ChunkedOutputHandlers;
 import com.comet.opik.utils.HttpStatusRetryability;
 import com.google.api.gax.rpc.ApiException;
@@ -32,6 +34,7 @@ import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.ServerErrorException;
+import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -563,71 +566,43 @@ public class ChatCompletionService {
     }
 
     private Optional<ErrorMessage> getLlmProviderError(LlmProviderService llmProviderClient, Throwable throwable) {
-        return llmProviderClient.getLlmProviderError(throwable)
-                .map(providerError -> providerErrorMessageValidator.validate(providerError,
-                        findProviderHttpStatus(throwable).orElse(providerError.getCode())));
+        return llmProviderClient.getLlmProviderError(throwable).map(providerErrorMessageValidator::validate);
     }
 
     /**
-     * Builds a detailed error message by combining the base error message with exception details.
-     * Extracts meaningful error information from the exception chain.
-     *
-     * @param throwable the exception to extract details from
-     * @return a detailed error message combining the base message with exception details
+     * Only text from a failure Opik raised is added to the generic message: what a provider answered reaches a caller
+     * solely through a documented error envelope, see {@link ProviderErrorMessageValidator}.
      */
     private String buildDetailedErrorMessage(Throwable throwable) {
-        String exceptionDetails = extractErrorDetails(throwable);
-        if (StringUtils.isNotBlank(exceptionDetails)) {
-            return UNEXPECTED_ERROR_CALLING_LLM_PROVIDER + ": " + exceptionDetails;
-        }
-        return UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
+        return extractErrorDetails(Throwables.getRootCause(throwable), isRaisedByOpik(throwable))
+                .filter(StringUtils::isNotBlank)
+                .map(details -> UNEXPECTED_ERROR_CALLING_LLM_PROVIDER + ": " + details)
+                .orElse(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
     }
 
-    /**
-     * Extracts meaningful error details from an exception chain.
-     * Walks through the exception chain to find the most informative error message,
-     * preferring root causes over wrapper exceptions.
-     * Provides user-friendly messages for common exception types.
-     *
-     * @param throwable the exception to extract details from
-     * @return the extracted error details, or null if no meaningful details found
-     */
-    private String extractErrorDetails(Throwable throwable) {
-        if (throwable == null) {
-            return null;
-        }
+    // Opik's own validation and failures; no provider client raises these types
+    private static boolean isRaisedByOpik(Throwable throwable) {
+        return ExceptionUtils.getThrowableList(throwable).stream()
+                .anyMatch(cause -> cause instanceof WebApplicationException
+                        || cause instanceof AuthTokenException
+                        || cause instanceof CutOffBeforeAnsweringException);
+    }
 
-        Throwable rootCause = Throwables.getRootCause(throwable);
-
-        // Use the most specific exception (root cause if available)
-        Throwable exceptionToHandle = (rootCause != throwable) ? rootCause : throwable;
-
-        // Provide user-friendly messages based on exception type
-        return switch (exceptionToHandle) {
+    private Optional<String> extractErrorDetails(Throwable rootCause, boolean raisedByOpik) {
+        return switch (rootCause) {
             case ConnectException connectException -> {
-                // Extract host/URL from the exception message if available
                 String message = connectException.getMessage();
                 if (message != null && message.contains("Connection refused")) {
-                    yield "Service is unreachable. Please check the provider URL.";
+                    yield Optional.of("Service is unreachable. Please check the provider URL.");
                 }
-                yield "Service is unreachable: " + message;
+                yield Optional.of("Service is unreachable: " + message);
             }
             case ClosedChannelException closedChannelException ->
-                "Service is unreachable. Please check the provider URL.";
-            // their message is the raw response, which only reaches a caller through a parsed provider error
-            case HttpException httpException ->
-                ProviderErrorMessageValidator.statusOnly(httpException.statusCode());
-            case OpenAIServiceException serviceException ->
-                ProviderErrorMessageValidator.statusOnly(serviceException.statusCode());
-            default -> {
-                // For other exceptions, use the exception message
-                String message = exceptionToHandle.getMessage();
-                if (StringUtils.isNotBlank(message)) {
-                    yield message;
-                }
-                // Fallback to exception class name if no message
-                yield exceptionToHandle.getClass().getSimpleName();
-            }
+                Optional.of("Service is unreachable. Please check the provider URL.");
+            default -> raisedByOpik
+                    ? Optional.of(StringUtils.defaultIfBlank(rootCause.getMessage(),
+                            rootCause.getClass().getSimpleName()))
+                    : Optional.empty();
         };
     }
 }

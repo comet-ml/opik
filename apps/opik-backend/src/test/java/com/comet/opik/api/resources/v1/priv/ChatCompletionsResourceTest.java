@@ -69,12 +69,12 @@ import java.security.KeyPairGenerator;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.function.BiConsumer;
 import java.util.stream.Stream;
 
 import static com.comet.opik.domain.llm.ChatCompletionService.ERROR_EMPTY_MESSAGES;
+import static com.comet.opik.domain.llm.ChatCompletionService.UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
 import static com.comet.opik.domain.llm.LlmProviderFactory.ERROR_MODEL_NOT_SUPPORTED;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.any;
@@ -440,8 +440,7 @@ class ChatCompletionsResourceTest {
                             .withStatus(upstreamStatus)
                             .withHeader("Content-Type", contentType)
                             .withBody(upstreamBody)));
-            var expected = new ErrorMessage(expectedStatus,
-                    "Unexpected error calling LLM provider: provider responded with HTTP " + upstreamStatus);
+            var expected = new ErrorMessage(expectedStatus, UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
 
             var request = ChatCompletionRequest.builder().stream(false).model(MODEL).addUserMessage("ping").build();
             assertThat(chatCompletionsClient.create(API_KEY, workspaceName, request, expectedStatus))
@@ -454,18 +453,23 @@ class ChatCompletionsResourceTest {
 
         private Stream<Arguments> providerErrorMessageIsValidated() {
             var text = UUID.randomUUID().toString();
+            var generic = UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
+            var details = "Custom Provider error";
             return Stream.of(
-                    arguments("deployment not found " + text, "deployment not found " + text),
-                    arguments("deployment not found\n" + text, null),
-                    arguments("deployment not found <b>" + text + "</b>", null),
+                    arguments("invalid_request_error", "deployment not found " + text, "deployment not found " + text,
+                            details),
+                    arguments("invalid_request_error", "deployment not found\n" + text, generic, details),
+                    arguments("invalid_request_error", "deployment not found <b>" + text + "</b>", generic, details),
                     // one past providerErrorMessageMaxLength in config-test.yml
-                    arguments(RandomStringUtils.randomAlphanumeric(301), null));
+                    arguments("invalid_request_error", RandomStringUtils.randomAlphanumeric(301), generic, details),
+                    // not a type OpenAI documents
+                    arguments("gateway_error", "deployment not found " + text, generic, null));
         }
 
         @ParameterizedTest
         @MethodSource
-        @DisplayName("a provider error message is passed on only when it is a short plain message")
-        void providerErrorMessageIsValidated(String providerMessage, String expectedMessage) {
+        @DisplayName("a provider error message is passed on only when its type is documented and it is a short plain message")
+        void providerErrorMessageIsValidated(String type, String providerMessage, String message, String details) {
             var workspaceName = RandomStringUtils.randomAlphanumeric(20);
             mockTargetWorkspace(workspaceName, UUID.randomUUID().toString());
             createCustomProvider(workspaceName);
@@ -474,9 +478,7 @@ class ChatCompletionsResourceTest {
                             .withStatus(HttpStatus.SC_NOT_FOUND)
                             .withHeader("Content-Type", "application/json")
                             .withBody(JsonUtils.writeValueAsString(
-                                    Map.of("error", Map.of("message", providerMessage))))));
-            var message = Optional.ofNullable(expectedMessage)
-                    .orElse("provider responded with HTTP " + HttpStatus.SC_NOT_FOUND);
+                                    Map.of("error", Map.of("message", providerMessage, "type", type))))));
 
             var request = ChatCompletionRequest.builder().stream(false).model(MODEL).addUserMessage("ping").build();
             assertThat(chatCompletionsClient.create(API_KEY, workspaceName, request, HttpStatus.SC_BAD_REQUEST))
@@ -484,12 +486,12 @@ class ChatCompletionsResourceTest {
 
             var streamed = ChatCompletionRequest.builder().stream(true).model(MODEL).addUserMessage("ping").build();
             assertThat(chatCompletionsClient.createAndGetStreamedError(API_KEY, workspaceName, streamed))
-                    .containsExactly(new ErrorMessage(HttpStatus.SC_BAD_REQUEST, message, "Custom Provider error"));
+                    .containsExactly(new ErrorMessage(HttpStatus.SC_BAD_REQUEST, message, details));
         }
 
         @Test
-        @DisplayName("OpenAI-style {error:string} body — message propagates, status collapses to 400")
-        void openAiStyleErrorBodyIsPropagated() {
+        @DisplayName("OpenAI-style {error:string} body — names no documented error, so only the status (400) is passed on")
+        void openAiStyleErrorBodyIsNotPropagated() {
             var workspaceName = RandomStringUtils.randomAlphanumeric(20);
             var workspaceId = UUID.randomUUID().toString();
             mockTargetWorkspace(workspaceName, workspaceId);
@@ -508,14 +510,9 @@ class ChatCompletionsResourceTest {
                     .addUserMessage("ping")
                     .build();
 
-            var raw = postChatCompletion(workspaceName, request);
-            var status = raw.getStatus();
-            var body = raw.readEntity(String.class);
-
-            // CustomLlmErrorMessage.toErrorMessage() hardcodes 400 regardless of upstream
-            // status. Message text does propagate cleanly.
-            assertThat(status).isEqualTo(HttpStatus.SC_BAD_REQUEST);
-            assertThat(body).contains("Invalid API key provided");
+            // CustomLlmErrorMessage.toErrorMessage() hardcodes 400 regardless of upstream status
+            assertThat(chatCompletionsClient.create(API_KEY, workspaceName, request, HttpStatus.SC_BAD_REQUEST))
+                    .isEqualTo(new ErrorMessage(HttpStatus.SC_BAD_REQUEST, UNEXPECTED_ERROR_CALLING_LLM_PROVIDER));
         }
 
         @Test
@@ -608,8 +605,8 @@ class ChatCompletionsResourceTest {
         }
 
         @Test
-        @DisplayName("Azure-style {error:{code,message}} body — surfaces as clean 4xx with extracted message")
-        void azureStyleErrorBodyIsPropagated() {
+        @DisplayName("Azure-style {error:{code,message}} body — an undocumented code surfaces as a clean 4xx without its message")
+        void azureStyleErrorBodyIsNotPropagated() {
             var workspaceName = RandomStringUtils.randomAlphanumeric(20);
             var workspaceId = UUID.randomUUID().toString();
             mockTargetWorkspace(workspaceName, workspaceId);
@@ -631,23 +628,10 @@ class ChatCompletionsResourceTest {
                     .addUserMessage("ping")
                     .build();
 
-            var raw = postChatCompletion(workspaceName, request);
-            var status = raw.getStatus();
-            var body = raw.readEntity(String.class);
-
-            // CustomLlmErrorMessage now understands both shapes: the historical
-            // {"error": "<string>"} form and Azure's nested {"error": {"code", "message"}}
-            // form. The gateway's human-readable message surfaces in the response
-            // message field. HTTP status is 400 because `InvalidAPIVersion` isn't in
-            // the OpenAI-compat code table, and CustomLlmErrorMessage defaults unknown
-            // codes to 400 (gateway errors are client errors). The code itself lives in
-            // ErrorMessage.details, which Dropwizard's default mapper drops when
-            // re-serializing via ClientErrorException; visible-through-API checks must
-            // focus on the message.
-            assertThat(status).isEqualTo(HttpStatus.SC_BAD_REQUEST);
-            assertThat(body).contains("The API version 2024-08-01-preview is not supported");
-            // The raw embedded JSON wrapper the old 500 path used is no longer present.
-            assertThat(body).doesNotContain("Unexpected error calling LLM provider");
+            // 400 because `InvalidAPIVersion` isn't in the OpenAI-compat code table and CustomLlmErrorMessage
+            // defaults unknown codes to 400; its text isn't passed on because OpenAI doesn't document the code.
+            assertThat(chatCompletionsClient.create(API_KEY, workspaceName, request, HttpStatus.SC_BAD_REQUEST))
+                    .isEqualTo(new ErrorMessage(HttpStatus.SC_BAD_REQUEST, UNEXPECTED_ERROR_CALLING_LLM_PROVIDER));
         }
 
         @Test
@@ -1022,6 +1006,140 @@ class ChatCompletionsResourceTest {
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
                     .header(RequestContext.WORKSPACE_HEADER, workspaceName)
                     .post(Entity.json(request));
+        }
+    }
+
+    /// What reaches a caller when OpenAI or Anthropic answers with an error: the
+    /// provider's message only for an error type or code it documents, otherwise the
+    /// generic message with the status unchanged.
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @DisplayName("Provider error messages")
+    class ProviderErrorMessages {
+
+        private static final String OPENAI_MODEL = "gpt-4o";
+        private static final String ANTHROPIC_MODEL = "claude-sonnet-4-6";
+        private static final String CHAT_COMPLETIONS_REGEX = ".*/chat/completions.*";
+        private static final String MESSAGES_PATH = "/v1/messages";
+
+        @BeforeEach
+        void resetUpstreamStubs() {
+            WIRE_MOCK.server().resetAll();
+        }
+
+        private Stream<Arguments> openAiErrors() {
+            var message = "provider says " + UUID.randomUUID();
+            return Stream.of(
+                    arguments(named("documented code", HttpStatus.SC_UNAUTHORIZED), "application/json",
+                            openAiError(message, "invalid_request_error", "invalid_api_key"),
+                            new ErrorMessage(HttpStatus.SC_UNAUTHORIZED, message)),
+                    // the 500 is what OpenAiErrorMessage reports for a code it can't map, as before
+                    arguments(named("undocumented type and code", HttpStatus.SC_BAD_REQUEST), "application/json",
+                            openAiError(message, "gateway_error", "blocked"),
+                            new ErrorMessage(HttpStatus.SC_INTERNAL_SERVER_ERROR,
+                                    UNEXPECTED_ERROR_CALLING_LLM_PROVIDER)),
+                    arguments(named("unparseable body", HttpStatus.SC_FORBIDDEN), "text/plain", message,
+                            new ErrorMessage(HttpStatus.SC_FORBIDDEN, UNEXPECTED_ERROR_CALLING_LLM_PROVIDER)));
+        }
+
+        @ParameterizedTest(name = "OpenAI {0}")
+        @MethodSource("openAiErrors")
+        void openAiError(int upstreamStatus, String contentType, String upstreamBody, ErrorMessage expected) {
+            var workspaceName = prepareWorkspace(LlmProvider.OPEN_AI, WIRE_MOCK.runtimeInfo().getHttpBaseUrl());
+            WIRE_MOCK.server().stubFor(post(urlPathMatching(CHAT_COMPLETIONS_REGEX))
+                    .willReturn(aResponse()
+                            .withStatus(upstreamStatus)
+                            .withHeader("Content-Type", contentType)
+                            .withBody(upstreamBody)));
+
+            assertErrors(workspaceName, OPENAI_MODEL, expected);
+        }
+
+        private Stream<Arguments> anthropicErrors() {
+            var message = "provider says " + UUID.randomUUID();
+            return Stream.of(
+                    arguments(named("documented type", HttpStatus.SC_NOT_FOUND), "application/json",
+                            anthropicError("not_found_error", message),
+                            new ErrorMessage(HttpStatus.SC_NOT_FOUND, message)),
+                    arguments(named("undocumented type", HttpStatus.SC_BAD_REQUEST), "application/json",
+                            anthropicError("proxy_error", message),
+                            new ErrorMessage(HttpStatus.SC_BAD_REQUEST, UNEXPECTED_ERROR_CALLING_LLM_PROVIDER)),
+                    arguments(named("unparseable body", HttpStatus.SC_BAD_REQUEST), "text/plain", message,
+                            new ErrorMessage(HttpStatus.SC_BAD_REQUEST, UNEXPECTED_ERROR_CALLING_LLM_PROVIDER)));
+        }
+
+        @ParameterizedTest(name = "Anthropic {0}")
+        @MethodSource("anthropicErrors")
+        void anthropicError(int upstreamStatus, String contentType, String upstreamBody, ErrorMessage expected) {
+            var workspaceName = prepareWorkspace(LlmProvider.ANTHROPIC,
+                    WIRE_MOCK.runtimeInfo().getHttpBaseUrl() + "/v1/");
+            WIRE_MOCK.server().stubFor(post(urlPathEqualTo(MESSAGES_PATH))
+                    .willReturn(aResponse()
+                            .withStatus(upstreamStatus)
+                            .withHeader("Content-Type", contentType)
+                            .withBody(upstreamBody)));
+
+            assertErrors(workspaceName, ANTHROPIC_MODEL, expected);
+        }
+
+        private Stream<Arguments> anthropicStreamErrors() {
+            var message = "provider says " + UUID.randomUUID();
+            return Stream.of(
+                    arguments(named("documented type", "overloaded_error"), message,
+                            new ErrorMessage(HttpStatus.SC_INTERNAL_SERVER_ERROR, message)),
+                    arguments(named("undocumented type", "proxy_error"), message,
+                            new ErrorMessage(HttpStatus.SC_INTERNAL_SERVER_ERROR,
+                                    UNEXPECTED_ERROR_CALLING_LLM_PROVIDER)));
+        }
+
+        @ParameterizedTest(name = "Anthropic error event, {0}")
+        @MethodSource("anthropicStreamErrors")
+        void anthropicErrorEventAfterTheStreamStarted(String type, String message, ErrorMessage expected) {
+            var workspaceName = prepareWorkspace(LlmProvider.ANTHROPIC,
+                    WIRE_MOCK.runtimeInfo().getHttpBaseUrl() + "/v1/");
+            WIRE_MOCK.server().stubFor(post(urlPathEqualTo(MESSAGES_PATH))
+                    .willReturn(aResponse()
+                            .withStatus(HttpStatus.SC_OK)
+                            .withHeader("Content-Type", MediaType.SERVER_SENT_EVENTS)
+                            .withBody("event: error\ndata: %s\n\n".formatted(anthropicError(type, message)))));
+
+            var streamed = ChatCompletionRequest.builder().stream(true).model(ANTHROPIC_MODEL)
+                    .maxCompletionTokens(100).addUserMessage("ping").build();
+            assertThat(chatCompletionsClient.createAndGetStreamedError(API_KEY, workspaceName, streamed))
+                    .containsExactly(expected);
+        }
+
+        private void assertErrors(String workspaceName, String model, ErrorMessage expected) {
+            var request = ChatCompletionRequest.builder().stream(false).model(model).maxCompletionTokens(100)
+                    .addUserMessage("ping").build();
+            assertThat(chatCompletionsClient.create(API_KEY, workspaceName, request, expected.getCode()))
+                    .isEqualTo(expected);
+
+            var streamed = ChatCompletionRequest.builder().stream(true).model(model).maxCompletionTokens(100)
+                    .addUserMessage("ping").build();
+            assertThat(chatCompletionsClient.createAndGetStreamedError(API_KEY, workspaceName, streamed))
+                    .containsExactly(expected);
+        }
+
+        private String prepareWorkspace(LlmProvider provider, String baseUrl) {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            mockTargetWorkspace(workspaceName, UUID.randomUUID().toString());
+            llmProviderApiKeyResourceClient.createProviderApiKey(ProviderApiKey.builder()
+                    .provider(provider)
+                    .apiKey("dummy-key")
+                    .baseUrl(baseUrl)
+                    .build(), API_KEY, workspaceName, HttpStatus.SC_CREATED);
+            return workspaceName;
+        }
+
+        private static String openAiError(String message, String type, String code) {
+            return JsonUtils.writeValueAsString(Map.of("error",
+                    Map.of("message", message, "type", type, "code", code)));
+        }
+
+        private static String anthropicError(String type, String message) {
+            return JsonUtils.writeValueAsString(Map.of("type", "error",
+                    "error", Map.of("type", type, "message", message), "request_id", "req_" + UUID.randomUUID()));
         }
     }
 

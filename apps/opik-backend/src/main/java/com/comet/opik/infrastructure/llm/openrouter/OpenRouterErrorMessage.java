@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.llm.openrouter;
 
+import com.comet.opik.domain.llm.ProviderErrorMessageValidator.DocumentedErrors;
 import com.comet.opik.infrastructure.llm.LlmProviderError;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -29,14 +30,18 @@ public record OpenRouterErrorMessage(
         return new ErrorMessage(error.code(), upstreamReason().map(this::withSource).orElse(error.message()));
     }
 
+    public boolean isDocumented() {
+        return DocumentedErrors.OPENROUTER.documents(error.code());
+    }
+
     // OpenRouter answers "Provider returned error" when the upstream fails, and keeps the upstream's own body in
-    // metadata.raw: usually that provider's JSON error as a string, sometimes plain text.
+    // metadata.raw: usually that provider's JSON error as a string, sometimes plain text, which isn't passed on.
     private Optional<String> upstreamReason() {
         if (error.metadata() == null) {
             return Optional.empty();
         }
         return text(error.metadata().path("raw"))
-                .map(raw -> parseObject(raw).flatMap(OpenRouterErrorMessage::reasonOf).orElse(raw))
+                .flatMap(raw -> parseObject(raw).flatMap(OpenRouterErrorMessage::reasonOf))
                 .map(StringUtils::normalizeSpace)
                 .map(reason -> StringUtils.abbreviate(reason, MAX_UPSTREAM_REASON_LENGTH));
     }
