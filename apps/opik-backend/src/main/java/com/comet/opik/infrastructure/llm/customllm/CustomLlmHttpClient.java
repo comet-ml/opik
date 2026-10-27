@@ -9,6 +9,7 @@ import dev.langchain4j.http.client.SuccessfulHttpResponse;
 import dev.langchain4j.http.client.sse.HttpResponseReceived;
 import dev.langchain4j.http.client.sse.HttpStreamingEvent;
 import dev.langchain4j.http.client.sse.ServerSentEvent;
+import dev.langchain4j.http.client.sse.ServerSentEventContext;
 import dev.langchain4j.http.client.sse.ServerSentEventListener;
 import dev.langchain4j.http.client.sse.ServerSentEventParser;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -43,6 +44,7 @@ import java.net.SocketTimeoutException;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Flow;
 import java.util.concurrent.TimeUnit;
@@ -72,31 +74,33 @@ class CustomLlmHttpClient implements HttpClient {
     @Getter(AccessLevel.PACKAGE)
     private final OkHttpClient client;
 
-    /** {@link #client} for streams, whose body has no read timeout once the headers arrived; same pool and dispatcher. */
+    /** {@link #client} for streams, whose body has the stream read timeout once the headers arrived; same pool. */
     private final OkHttpClient streamingClient;
 
     /** Most bytes read from a non-2xx response body; the rest is discarded. */
     private final int errorBodyMaxSize;
 
-    CustomLlmHttpClient(@NonNull OkHttpClient client, int errorBodyMaxSize) {
+    CustomLlmHttpClient(@NonNull OkHttpClient client, int errorBodyMaxSize, @NonNull Duration streamReadTimeout) {
         this.client = client;
+        int streamReadTimeoutMillis = Math.toIntExact(streamReadTimeout.toMillis());
         this.streamingClient = client.newBuilder()
-                .addNetworkInterceptor(CustomLlmHttpClient::untimedStreamBody)
+                .addNetworkInterceptor(chain -> withStreamReadTimeout(chain, streamReadTimeoutMillis))
                 .build();
         this.errorBodyMaxSize = errorBodyMaxSize;
     }
 
     /**
-     * As the JDK client did, the read timeout bounds the wait for a stream's response headers only. OkHttp also sets
-     * it as the socket's read timeout, which would end a stream that is silent for longer, as a model that reasons
-     * before answering can be, so a successful stream's socket has none. Each exchange on a pooled connection sets its
-     * own again.
+     * The read timeout bounds the wait for a stream's response headers. OkHttp also sets it as the socket's read
+     * timeout, which would end a stream that is silent for longer, as a model that reasons before answering can be, so
+     * a successful stream's socket takes the stream read timeout instead: long enough for that, short enough that a
+     * stalled stream can't hold its call forever. Each exchange on a pooled connection sets its own again.
      */
-    private static Response untimedStreamBody(Interceptor.Chain chain) throws IOException {
+    private static Response withStreamReadTimeout(Interceptor.Chain chain, int streamReadTimeoutMillis)
+            throws IOException {
         var response = chain.proceed(chain.request());
         var connection = chain.connection();
         if (connection != null && response.isSuccessful()) {
-            connection.socket().setSoTimeout(0);
+            connection.socket().setSoTimeout(streamReadTimeoutMillis);
         }
         return response;
     }
@@ -159,7 +163,7 @@ class CustomLlmHttpClient implements HttpClient {
                         return;
                     }
                     ignoringExceptions(() -> listener.onOpen(toResponse(response, null)));
-                    parser.parse(bodyStream, listener);
+                    parser.parse(bodyStream, new FailureMappingListener(listener));
                     ignoringExceptions(listener::onClose);
                 } catch (IOException | RuntimeException exception) {
                     ignoringExceptions(() -> listener.onError(
@@ -328,6 +332,28 @@ class CustomLlmHttpClient implements HttpClient {
             Thread.currentThread().interrupt();
         }
         return new RuntimeException(exception);
+    }
+
+    /** Passes on what the parser reports, a read failure mapped as any other transport failure, timeouts included. */
+    @RequiredArgsConstructor
+    private static class FailureMappingListener implements ServerSentEventListener {
+
+        private final ServerSentEventListener delegate;
+
+        @Override
+        public void onEvent(ServerSentEvent event, ServerSentEventContext context) {
+            delegate.onEvent(event, context);
+        }
+
+        @Override
+        public void onEvent(ServerSentEvent event) {
+            delegate.onEvent(event);
+        }
+
+        @Override
+        public void onError(Throwable throwable) {
+            delegate.onError(throwable instanceof IOException ioException ? failure(ioException) : throwable);
+        }
     }
 
     /**

@@ -1687,6 +1687,11 @@ llmProviderClient:
   # Description: Most bytes read from a custom provider's error response body; the rest is discarded, as only a
   #   short message parsed from it reaches callers; at most 1MiB
   providerErrorBodyMaxSize: ${LLM_PROVIDER_ERROR_BODY_MAX_SIZE:-64KB}
+  # Default: 120s
+  # Description: Longest a provider's stream may stay silent once its headers arrived; readTimeout bounds only the
+  #   wait for the headers. Above the 90s ingress idle timeout, as models that reason before answering can be silent
+  #   for a while; between 1s and 1h
+  streamReadTimeout: ${LLM_PROVIDER_STREAM_READ_TIMEOUT:-120s}
   # Default: 1024
   # Description: Most threads of the shared HTTP client for LLM provider calls. A call made asynchronously, a stream
   #   included, holds one from start to end, so it must be at least httpClientMaxRequests; at most 10000

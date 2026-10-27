@@ -73,13 +73,23 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.InetAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyPairGenerator;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 import java.util.stream.Stream;
@@ -419,6 +429,11 @@ class ChatCompletionsResourceTest {
         private static final String MODEL = "custom-llm/" + CUSTOM_PROVIDER_NAME + "/" + DEPLOYMENT;
         private static final String CHAT_COMPLETIONS_REGEX = ".*/chat/completions.*";
         private static final String CHAT_COMPLETIONS_PATH = "/v1/private/chat/completions";
+        /**
+         * The provider calls made, counted after the plain request and again after the stream: the plain request is
+         * attempted three times under ChatCompletionService's retry policy, and the stream once.
+         */
+        private static final List<Integer> EXPECTED_PROVIDER_CALLS = List.of(3, 4);
 
         @BeforeEach
         void resetUpstreamStubs() {
@@ -465,6 +480,81 @@ class ChatCompletionsResourceTest {
             assertThat(actualStreamedErrors).containsExactly(expectedError);
         }
 
+        /**
+         * A caller that goes away mid-stream: the provider call is cancelled instead of being read to its end. The
+         * provider is a raw server sending a chunk every 100 ms for 30 seconds, which notes when its writes start
+         * failing, that is when Opik closed the connection.
+         */
+        @Test
+        @DisplayName("a caller that disconnects mid-stream cancels the provider call")
+        void callerDisconnectCancelsTheProviderCall() throws Exception {
+            var providerClosed = new CompletableFuture<Long>();
+            long startNanos = System.nanoTime();
+            try (var provider = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
+                Thread.ofVirtual().start(() -> {
+                    try (Socket socket = provider.accept(); var out = socket.getOutputStream()) {
+                        var in = new BufferedReader(new InputStreamReader(socket.getInputStream(),
+                                StandardCharsets.UTF_8));
+                        int contentLength = 0;
+                        String line;
+                        while ((line = in.readLine()) != null && !line.isEmpty()) {
+                            if (line.regionMatches(true, 0, "Content-Length:", 0, 15)) {
+                                contentLength = Integer.parseInt(line.substring(15).trim());
+                            }
+                        }
+                        in.skip(contentLength);
+                        out.write("""
+                                HTTP/1.1 200 OK\r
+                                Content-Type: text/event-stream\r
+                                Connection: close\r
+                                \r
+                                """.getBytes(StandardCharsets.UTF_8));
+                        for (int i = 0; i < 300; i++) {
+                            out.write("""
+                                    data: {"id":"c","object":"chat.completion.chunk","created":1,"model":"gpt-4o",\
+                                    "choices":[{"index":0,"delta":{"content":"x"}}]}
+
+                                    """.getBytes(StandardCharsets.UTF_8));
+                            out.flush();
+                            Thread.sleep(100);
+                        }
+                        providerClosed.complete(-1L);
+                    } catch (IOException exception) {
+                        providerClosed.complete(System.nanoTime() - startNanos);
+                    } catch (InterruptedException exception) {
+                        Thread.currentThread().interrupt();
+                    }
+                });
+                var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+                mockTargetWorkspace(workspaceName, UUID.randomUUID().toString());
+                createCustomProvider(workspaceName, "http://localhost:%d".formatted(provider.getLocalPort()));
+                var request = ChatCompletionRequest.builder().stream(true).model(MODEL).addUserMessage("ping")
+                        .build();
+                var connection = (HttpURLConnection) URI.create(
+                        TestUtils.getBaseUrl(clientSupport) + CHAT_COMPLETIONS_PATH).toURL().openConnection();
+                connection.setRequestMethod("POST");
+                connection.setDoOutput(true);
+                connection.setRequestProperty(HttpHeaders.AUTHORIZATION, API_KEY);
+                connection.setRequestProperty(RequestContext.WORKSPACE_HEADER, workspaceName);
+                connection.setRequestProperty(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON);
+                connection.getOutputStream().write(JsonUtils.writeValueAsBytes(request));
+                var reader = new BufferedReader(new InputStreamReader(connection.getInputStream(),
+                        StandardCharsets.UTF_8));
+                var actualFirstLine = reader.readLine();
+
+                // the caller goes away after the first chunk
+                connection.disconnect();
+                long actualProviderClosedNanos = providerClosed.get(20, TimeUnit.SECONDS);
+
+                assertThat(actualFirstLine).startsWith("data: ");
+                assertThat(actualProviderClosedNanos).isBetween(0L, TimeUnit.SECONDS.toNanos(15));
+            }
+        }
+
+        private int providerCalls() {
+            return WIRE_MOCK.server().findAll(postRequestedFor(urlPathMatching(CHAT_COMPLETIONS_REGEX))).size();
+        }
+
         /** Every Opik log event while {@code call} runs, debug included, with its throwable rendered. */
         private List<String> opikLogEventsOf(Runnable call) {
             var logger = (Logger) LoggerFactory.getLogger("com.comet.opik");
@@ -489,20 +579,26 @@ class ChatCompletionsResourceTest {
 
         private Stream<Arguments> providerTextIsNeverLogged() {
             var marker = "upstream-marker-%s".formatted(RandomStringUtils.secure().nextAlphanumeric(16));
+            var generic = new ErrorMessage(HttpStatus.SC_BAD_GATEWAY, UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
             return Stream.of(
+                    // not a provider error: neither returned nor logged
                     arguments(HttpStatus.SC_BAD_GATEWAY, "text/html", "<html><body>%s</body></html>".formatted(marker),
-                            marker),
+                            marker, generic, generic),
+                    // a documented provider error: its validated message is returned, but never logged
                     arguments(HttpStatus.SC_BAD_REQUEST, "application/json",
                             JsonUtils.writeValueAsString(Map.of("error", Map.of("message", marker, "type",
                                     "invalid_request_error"))),
-                            marker));
+                            marker,
+                            new ErrorMessage(HttpStatus.SC_BAD_REQUEST, marker),
+                            new ErrorMessage(HttpStatus.SC_BAD_REQUEST, marker, "Custom Provider error")));
         }
 
         /** The provider's reply reaches the server logs neither as a message nor through a logged throwable. */
         @ParameterizedTest
         @MethodSource
         @DisplayName("what a provider answers is never written to the server logs, streamed or not")
-        void providerTextIsNeverLogged(int upstreamStatus, String contentType, String upstreamBody, String marker) {
+        void providerTextIsNeverLogged(int upstreamStatus, String contentType, String upstreamBody, String marker,
+                ErrorMessage expectedError, ErrorMessage expectedStreamedError) {
             var workspaceName = RandomStringUtils.randomAlphanumeric(20);
             mockTargetWorkspace(workspaceName, UUID.randomUUID().toString());
             createCustomProvider(workspaceName);
@@ -513,18 +609,20 @@ class ChatCompletionsResourceTest {
                             .withBody(upstreamBody)));
             var request = ChatCompletionRequest.builder().stream(false).model(MODEL).addUserMessage("ping").build();
             var streamed = ChatCompletionRequest.builder().stream(true).model(MODEL).addUserMessage("ping").build();
+            var actualErrors = new ArrayList<ErrorMessage>();
+            var actualProviderCalls = new ArrayList<Integer>();
 
             var actualEvents = opikLogEventsOf(() -> {
-                try (var response = clientSupport.target(TestUtils.getBaseUrl(clientSupport) + CHAT_COMPLETIONS_PATH)
-                        .request()
-                        .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                        .header(RequestContext.WORKSPACE_HEADER, workspaceName)
-                        .post(Entity.json(request))) {
-                    response.readEntity(String.class);
-                }
-                chatCompletionsClient.createAndGetStreamedError(API_KEY, workspaceName, streamed);
+                actualErrors.add(chatCompletionsClient.create(API_KEY, workspaceName, request,
+                        expectedError.getCode()));
+                actualProviderCalls.add(providerCalls());
+                actualErrors.addAll(chatCompletionsClient.createAndGetStreamedError(API_KEY, workspaceName,
+                        streamed));
+                actualProviderCalls.add(providerCalls());
             });
 
+            assertThat(actualErrors).isEqualTo(List.of(expectedError, expectedStreamedError));
+            assertThat(actualProviderCalls).isEqualTo(EXPECTED_PROVIDER_CALLS);
             assertThat(actualEvents).isNotEmpty().noneMatch(event -> event.contains(marker));
         }
 
@@ -587,12 +685,15 @@ class ChatCompletionsResourceTest {
                             details),
                     arguments("invalid_request_error", "deployment not found\u2029%s".formatted(text), generic,
                             details),
-                    // markup: a tag, a closing tag, a comment or a declaration
+                    // markup: a tag, a closing tag, a comment, a declaration or a processing instruction
                     arguments("invalid_request_error", "deployment not found </div> %s".formatted(text), generic,
                             details),
                     arguments("invalid_request_error", "deployment not found <!-- %s".formatted(text), generic,
                             details),
                     arguments("invalid_request_error", "deployment not found <é %s".formatted(text), generic, details),
+                    arguments("invalid_request_error",
+                            "deployment not found <?xml version=\"1.0\"?> %s".formatted(text),
+                            generic, details),
                     // and comparisons, which aren't markup
                     arguments("invalid_request_error", "Expected a value >= 1, got 0 %s".formatted(text),
                             "Expected a value >= 1, got 0 %s".formatted(text), details),

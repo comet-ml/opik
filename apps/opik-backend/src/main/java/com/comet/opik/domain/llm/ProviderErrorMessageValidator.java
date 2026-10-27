@@ -82,10 +82,10 @@ public class ProviderErrorMessageValidator {
             .or(CharMatcher.anyOf("\u2028\u2029"));
 
     /**
-     * The start of a tag, comment or declaration. A bare {@code <} or {@code >} is a comparison, as in a parameter
+     * The start of a tag, comment, declaration or processing instruction. A bare {@code <} or {@code >} is a comparison, as in a parameter
      * range ({@code >= 1}), so it is kept.
      */
-    private static final Pattern MARKUP = Pattern.compile("<[\\p{L}/!]");
+    private static final Pattern MARKUP = Pattern.compile("<[\\p{L}/!?]");
 
     private static final Pattern LINE_BREAK = Pattern.compile("\\R");
 

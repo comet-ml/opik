@@ -58,6 +58,7 @@ class CustomLlmHttpClientTest {
     private static final String PATH = "/v1/chat/completions";
     private static final int ERROR_BODY_MAX_SIZE = 64;
     private static final Duration WAIT = Duration.ofSeconds(10);
+    private static final Duration STREAM_READ_TIMEOUT = Duration.ofSeconds(120);
     private static final ProviderBaseUrlGuard RELAXED_GUARD = ProviderBaseUrlGuard.builder()
             .mode(DestinationGuard.Mode.RELAXED)
             .scheme(DestinationGuard.Scheme.PLAINTEXT_OR_TLS)
@@ -81,7 +82,7 @@ class CustomLlmHttpClientTest {
         wireMock.start();
         okHttpClient = new CustomLlmModule().llmHttpClient(TestConfigUtils.loadConfigTest().getLlmProviderClient(),
                 RELAXED_GUARD);
-        client = new CustomLlmHttpClientBuilder(okHttpClient, ERROR_BODY_MAX_SIZE)
+        client = new CustomLlmHttpClientBuilder(okHttpClient, ERROR_BODY_MAX_SIZE, STREAM_READ_TIMEOUT)
                 .readTimeout(WAIT)
                 .build();
     }
@@ -174,7 +175,14 @@ class CustomLlmHttpClientTest {
     }
 
     private static HttpClient clientWithReadTimeout(Duration readTimeout, OkHttpClient okHttpClient) {
-        return new CustomLlmHttpClientBuilder(okHttpClient, ERROR_BODY_MAX_SIZE).readTimeout(readTimeout).build();
+        return clientWithTimeouts(readTimeout, STREAM_READ_TIMEOUT, okHttpClient);
+    }
+
+    private static HttpClient clientWithTimeouts(Duration readTimeout, Duration streamReadTimeout,
+            OkHttpClient okHttpClient) {
+        return new CustomLlmHttpClientBuilder(okHttpClient, ERROR_BODY_MAX_SIZE, streamReadTimeout)
+                .readTimeout(readTimeout)
+                .build();
     }
 
     /** A body cut short reads as a fixed message: the read failure's own message can name the destination. */
@@ -203,18 +211,9 @@ class CustomLlmHttpClientTest {
         STREAM
     }
 
-    /**
-     * As the JDK client did, the read timeout bounds only the wait for a stream's headers: a model that reasons
-     * before it answers can send nothing for longer.
-     */
-    @ParameterizedTest
-    @EnumSource(StreamPath.class)
-    void aStreamSilentForLongerThanTheReadTimeoutCompletes(StreamPath streamPath) throws Exception {
-        var readTimeout = Duration.ofMillis(500);
-        var silence = Duration.ofMillis(2_000);
-        var data = RandomStringUtils.secure().nextAlphanumeric(10);
-        var silentClient = clientWithReadTimeout(readTimeout, okHttpClient);
-        try (var server = rawServer(out -> {
+    /** A stream that sends its headers, then nothing for {@code silence}, then one event. */
+    private static RawReply silentStream(Duration silence, String data) {
+        return out -> {
             out.write("""
                     HTTP/1.1 200 OK\r
                     Content-Type: text/event-stream\r
@@ -224,7 +223,22 @@ class CustomLlmHttpClientTest {
             out.flush();
             Thread.sleep(silence);
             out.write("data: %s\n\n".formatted(data).getBytes(StandardCharsets.UTF_8));
-        })) {
+        };
+    }
+
+    /**
+     * The read timeout bounds only the wait for a stream's headers: a model that reasons before it answers can send
+     * nothing for longer. Silent for less than the stream read timeout, the stream completes.
+     */
+    @ParameterizedTest
+    @EnumSource(StreamPath.class)
+    void aStreamSilentForLessThanTheStreamReadTimeoutCompletes(StreamPath streamPath) throws Exception {
+        var readTimeout = Duration.ofMillis(500);
+        var streamReadTimeout = Duration.ofSeconds(5);
+        var silence = Duration.ofMillis(2_000);
+        var data = RandomStringUtils.secure().nextAlphanumeric(10);
+        var silentClient = clientWithTimeouts(readTimeout, streamReadTimeout, okHttpClient);
+        try (var server = rawServer(silentStream(silence, data))) {
             var expectedEvents = List.of(new ServerSentEvent(null, data));
             long startNanos = System.nanoTime();
 
@@ -233,6 +247,25 @@ class CustomLlmHttpClientTest {
             var actualElapsed = Duration.ofNanos(System.nanoTime() - startNanos);
             assertThat(actualEvents).isEqualTo(expectedEvents);
             assertThat(actualElapsed).isGreaterThanOrEqualTo(silence);
+        }
+    }
+
+    /** A stream that stalls past the stream read timeout fails then, rather than holding its call. */
+    @ParameterizedTest
+    @EnumSource(StreamPath.class)
+    void aStreamSilentForLongerThanTheStreamReadTimeoutFailsAtIt(StreamPath streamPath) throws Exception {
+        var readTimeout = Duration.ofMillis(500);
+        var streamReadTimeout = Duration.ofSeconds(1);
+        var expectedMaxElapsed = Duration.ofSeconds(5);
+        var stalledClient = clientWithTimeouts(readTimeout, streamReadTimeout, okHttpClient);
+        try (var server = rawServer(silentStream(Duration.ofSeconds(30), "late"))) {
+            long startNanos = System.nanoTime();
+
+            Throwable actualError = failure(stalledClient, CallPath.valueOf(streamPath.name()), rawRequest(server));
+
+            var actualElapsed = Duration.ofNanos(System.nanoTime() - startNanos);
+            assertThat(actualError).isExactlyInstanceOf(TimeoutException.class);
+            assertThat(actualElapsed).isBetween(streamReadTimeout, expectedMaxElapsed);
         }
     }
 
@@ -389,7 +422,8 @@ class CustomLlmHttpClientTest {
         config.setHttpClientMaxRequestsPerHost(limit);
         var boundedOkHttpClient = new CustomLlmModule().llmHttpClient(config, RELAXED_GUARD);
         try {
-            var boundedClient = new CustomLlmHttpClientBuilder(boundedOkHttpClient, ERROR_BODY_MAX_SIZE)
+            var boundedClient = new CustomLlmHttpClientBuilder(boundedOkHttpClient, ERROR_BODY_MAX_SIZE,
+                    STREAM_READ_TIMEOUT)
                     .readTimeout(WAIT)
                     .build();
             var data = RandomStringUtils.secure().nextAlphanumeric(10);

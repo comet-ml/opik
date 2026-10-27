@@ -119,6 +119,15 @@ public class LlmProviderClientConfig {
     @NotNull @Positive @Max(1000) private Integer providerErrorMessageMaxLength;
 
     /**
+     * Longest a provider's stream may stay silent once its headers arrived; the read timeout bounds only the wait for
+     * the headers. Models that reason before answering can be silent for a while, so it is above the ingress idle
+     * timeout, beyond which the caller is gone anyway.
+     */
+    @NotNull @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+    @MaxDuration(value = 1, unit = TimeUnit.HOURS)
+    private Duration streamReadTimeout;
+
+    /**
      * Most threads of the shared LLM HTTP client. A call made asynchronously, a stream included, holds one from start
      * to end, so there are at least as many as {@link #httpClientMaxRequests}.
      */

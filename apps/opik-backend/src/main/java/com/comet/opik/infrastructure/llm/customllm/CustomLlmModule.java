@@ -15,6 +15,7 @@ import okhttp3.OkHttpClient;
 import okhttp3.Protocol;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -52,7 +53,8 @@ public class CustomLlmModule extends AbstractModule {
             @NonNull @Config("llmProviderClient") LlmProviderClientConfig config,
             @NonNull @Named("llmHttpClient") OkHttpClient client) {
         return new LlmHttpClientBuilders(client,
-                Math.toIntExact(config.getProviderErrorBodyMaxSize().toBytes()));
+                Math.toIntExact(config.getProviderErrorBodyMaxSize().toBytes()),
+                Duration.ofMillis(config.getStreamReadTimeout().toMilliseconds()));
     }
 
     @Provides

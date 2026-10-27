@@ -579,13 +579,15 @@ public class ChatCompletionService {
         };
     }
 
-    /** Without any text the provider sent: see {@link ProviderFailures}. */
+    /** A failure the provider's status or envelope explains, so its type is enough: see {@link ProviderFailures}. */
     private static void logProviderFailure(Throwable throwable) {
-        log.warn("{}, error type '{}'", UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, ProviderFailures.rootType(throwable),
-                ProviderFailures.redacted(throwable));
+        log.warn("{}, error type '{}'", UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, ProviderFailures.rootType(throwable));
     }
 
-    /** As {@link #logProviderFailure}, for a failure no provider status or envelope explains. */
+    /**
+     * A failure no provider status or envelope explains, with its stack and without any text the provider sent: see
+     * {@link ProviderFailures}.
+     */
     private static void logUnexpectedProviderFailure(Throwable throwable) {
         log.error("{}, error type '{}'", UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, ProviderFailures.rootType(throwable),
                 ProviderFailures.redacted(throwable));

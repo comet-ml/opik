@@ -17,6 +17,7 @@ import com.comet.opik.domain.evaluation.OnlineEvaluationRecorder;
 import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.domain.llm.ChatCompletionService;
 import com.comet.opik.domain.llm.LlmProviderFactory;
+import com.comet.opik.domain.llm.ProviderFailures;
 import com.comet.opik.domain.llm.structuredoutput.InstructionStrategy;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
@@ -146,10 +147,10 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
                 .doOnNext(withMdc(mdc, loggedScores -> userFacingLogger
                         .info("Scores for spanId '{}' stored successfully:\n\n{}", span.id(), loggedScores)))
                 .doOnError(withMdc(mdc, error -> userFacingLogger
-                        .error("Unexpected error while scoring spanId '{}' with rule '{}', error type '{}': \n\n{}",
+                        .error("Unexpected error while scoring spanId '{}' with rule '{}', error type '{}'",
                                 span.id(), message.ruleName(),
-                                // Opik's own message: a provider's text, in the cause, is never logged
-                                error.getClass().getSimpleName(), error.getMessage())))
+                                // the type only: a provider's text can be in any message of the chain
+                                ProviderFailures.rootType(error))))
                 .then();
     }
 
