@@ -31,6 +31,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.lang.reflect.Method;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.KeyPairGenerator;
@@ -39,6 +40,7 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -155,6 +157,7 @@ class VertexAIClientGeneratorTest {
 
         config.setVertexAIClient(config.getVertexAIClient().toBuilder()
                 .multiRegionApiEndpoints(Map.of("global", endpoint, "eu", endpoint, "us", endpoint))
+                .tokenUris(Set.of(URI.create("http://" + wireMockHost() + TOKEN_PATH)))
                 .build());
 
         return config;

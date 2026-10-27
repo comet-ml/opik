@@ -3,6 +3,7 @@ package com.comet.opik.domain.llm;
 import com.comet.opik.api.ModelParams;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
+import com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterDecisionModel;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.ChunkedOutputHandlers;
@@ -350,6 +351,26 @@ class ChatCompletionServiceTest {
                     .isExactlyInstanceOf(BadRequestException.class)
                     .hasMessageContaining("Unsupported feature for the selected LLM provider")
                     .hasMessageContaining(UNSUPPORTED_FEATURE_MESSAGE);
+            assertThat(((BadRequestException) thrown).getResponse().getStatus()).isEqualTo(400);
+        }
+
+        @Test
+        @DisplayName("scoreTrace maps a refusal raised while building the client to a 400")
+        void scoreTrace__whenClientRefusesRequest__thenThrowBadRequest() {
+            var chatRequest = ChatRequest.builder().messages(UserMessage.from("score this")).build();
+            var modelParameters = LlmAsJudgeModelParameters.builder()
+                    .name("vertex_ai/gemini-3.1-flash-lite")
+                    .temperature(0.0)
+                    .build();
+            when(llmProviderFactory.getLanguageModel(anyString(), any())).thenThrow(
+                    new ProviderRequestRefusedException(ProviderRequestRefusedException.Reason.VERTEX_AI_LOCATION));
+
+            var thrown = catchThrowable(
+                    () -> chatCompletionService.scoreTrace(chatRequest, modelParameters, "test-workspace-id"));
+
+            assertThat(thrown)
+                    .isExactlyInstanceOf(BadRequestException.class)
+                    .hasMessage("Vertex AI location is not a valid region");
             assertThat(((BadRequestException) thrown).getResponse().getStatus()).isEqualTo(400);
         }
 
