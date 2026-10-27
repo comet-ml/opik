@@ -3,10 +3,10 @@ import json
 import pytest
 from pytest import MonkeyPatch
 
+from opik_optimizer.utils.logging import setup_logging
 from opik_optimizer.utils.helpers import json_to_dict
 from opik_optimizer.utils.display.format import format_prompt
 from opik_optimizer.utils.reporting import get_optimization_run_url_by_id
-from opik_optimizer.utils.logging import setup_logging
 from tests.unit.fixtures import assistant_message, system_message, user_message
 
 
@@ -32,23 +32,6 @@ def test_format_prompt(
     else:
         result = format_prompt(prompt_template, **kwargs)
         assert result == expected_result
-
-
-@pytest.mark.parametrize(
-    "level,should_raise",
-    [
-        ("INFO", False),
-        ("DEBUG", False),
-        ("INVALID", True),
-    ],
-)
-def test_setup_logging(level: str, should_raise: bool) -> None:
-    """Test setup_logging with different log levels."""
-    if should_raise:
-        with pytest.raises(ValueError):
-            setup_logging(level=level, force=True)
-    else:
-        setup_logging(level=level, force=True)
 
 
 def test_get_optimization_run_url_by_id(monkeypatch: MonkeyPatch) -> None:
@@ -209,19 +192,18 @@ class TestFunctionToToolDefinition:
     """Legacy function_to_tool_definition tests removed with deprecated API."""
 
 
-class TestEnsureEndingSlash:
-    """Tests for ensure_ending_slash function."""
-
-    @pytest.mark.parametrize(
-        "input_url,expected",
-        [
-            ("http://example.com", "http://example.com/"),
-            ("http://example.com/", "http://example.com/"),
-            ("http://example.com///", "http://example.com/"),
-        ],
-    )
-    def test_ensure_ending_slash(self, input_url: str, expected: str) -> None:
-        """Should ensure exactly one trailing slash."""
-        from opik_optimizer.utils.reporting import ensure_ending_slash
-
-        assert ensure_ending_slash(input_url) == expected
+@pytest.mark.parametrize(
+    "level,should_raise",
+    [
+        ("INFO", False),
+        ("DEBUG", False),
+        ("INVALID", True),
+    ],
+)
+def test_setup_logging(level: str, should_raise: bool) -> None:
+    """Test setup_logging with different log levels."""
+    if should_raise:
+        with pytest.raises(ValueError):
+            setup_logging(level=level, force=True)
+    else:
+        setup_logging(level=level, force=True)

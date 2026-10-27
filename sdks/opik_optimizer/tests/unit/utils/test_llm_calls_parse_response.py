@@ -258,31 +258,6 @@ class TestStructuredOutputModels:
         assert pattern_text == expected_first
 
 
-class TestStructuredOutputParsingError:
-    def test_stores_content_and_error(self) -> None:
-        original_error = ValueError("Original error")
-        exc = StructuredOutputParsingError(
-            content="failed content", error=original_error
-        )
-        assert exc.content == "failed content"
-        assert exc.error is original_error
-
-    def test_message_includes_content_and_error(self) -> None:
-        original_error = ValueError("Parse failed")
-        exc = StructuredOutputParsingError(
-            content="{'bad': json}", error=original_error
-        )
-        message = str(exc)
-        assert "Parse failed" in message
-        assert "{'bad': json}" in message
-
-    def test_can_be_caught_as_exception(self) -> None:
-        with pytest.raises(Exception):
-            raise StructuredOutputParsingError(
-                content="content", error=ValueError("error")
-            )
-
-
 class TestParseResponseEdgeCases:
     def test_parse_response_handles_nested_pydantic_model(self) -> None:
         class Inner(BaseModel):

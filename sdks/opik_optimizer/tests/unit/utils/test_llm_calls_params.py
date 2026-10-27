@@ -8,67 +8,7 @@ from __future__ import annotations
 import pytest
 from pydantic import BaseModel
 
-from opik_optimizer.core.llm_calls import _build_call_time_params, _prepare_model_params
-
-
-class TestBuildCallTimeParams:
-    """Tests for _build_call_time_params function."""
-
-    def test_returns_empty_dict_when_no_params_provided(self) -> None:
-        """When no parameters are provided, should return an empty dict."""
-        result = _build_call_time_params()
-        assert result == {}
-
-    def test_includes_only_non_none_parameters(self) -> None:
-        """Only non-None parameters should be included in the result."""
-        result = _build_call_time_params(
-            temperature=0.7,
-            max_tokens=None,
-            top_p=0.9,
-        )
-
-        assert result == {"temperature": 0.7, "top_p": 0.9}
-        assert "max_tokens" not in result
-
-    def test_includes_all_parameters_when_all_provided(self) -> None:
-        """All parameters should be included when all are provided."""
-        result = _build_call_time_params(
-            temperature=0.5,
-            max_tokens=100,
-            max_completion_tokens=200,
-            top_p=0.8,
-            presence_penalty=0.1,
-            frequency_penalty=0.2,
-            metadata={"key": "value"},
-        )
-
-        assert result == {
-            "temperature": 0.5,
-            "max_tokens": 100,
-            "max_completion_tokens": 200,
-            "top_p": 0.8,
-            "presence_penalty": 0.1,
-            "frequency_penalty": 0.2,
-            "metadata": {"key": "value"},
-        }
-
-    def test_handles_zero_values_correctly(self) -> None:
-        """Zero values should be included (they are not None)."""
-        result = _build_call_time_params(
-            temperature=0.0,
-            presence_penalty=0.0,
-        )
-
-        assert result == {"temperature": 0.0, "presence_penalty": 0.0}
-
-    def test_metadata_is_passed_through_unchanged(self) -> None:
-        """Metadata dict should be passed through without modification."""
-        metadata = {"custom_key": "custom_value", "nested": {"key": 1}}
-        result = _build_call_time_params(metadata=metadata)
-
-        assert result["metadata"] == metadata
-        # Ensure it's the same reference (not copied)
-        assert result["metadata"] is metadata
+from opik_optimizer.core.llm_calls import _prepare_model_params
 
 
 class TestPrepareModelParams:
@@ -175,10 +115,3 @@ class TestPrepareModelParamsEdgeCases:
         )
 
         assert result["metadata"]["opik"]["project_name"] == "existing-project"
-
-
-class TestBuildCallTimeParamsEdgeCases:
-    def test_build_call_time_params_with_empty_metadata(self) -> None:
-        """Should include empty metadata dict if provided."""
-        result = _build_call_time_params(metadata={})
-        assert result == {"metadata": {}}

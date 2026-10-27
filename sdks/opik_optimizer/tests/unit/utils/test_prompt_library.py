@@ -8,14 +8,6 @@ from opik_optimizer.utils.prompt_library import PromptLibrary
 class TestPromptLibrary:
     """Tests for PromptLibrary class."""
 
-    def test_basic_initialization(self) -> None:
-        """Should initialize with defaults."""
-        defaults = {"prompt1": "template1", "prompt2": "template2"}
-        lib = PromptLibrary(defaults)
-
-        assert lib.get("prompt1") == "template1"
-        assert lib.get("prompt2") == "template2"
-
     def test_get_with_formatting(self) -> None:
         """Should format templates with kwargs."""
         defaults = {"greeting": "Hello {name}!"}

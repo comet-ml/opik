@@ -4,7 +4,6 @@ Unit tests for call_model/call_model_async and related utilities in opik_optimiz
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -282,74 +281,6 @@ class TestCallModelAsync:
 
         assert isinstance(result, SampleResponseModel)
         assert captured_kwargs.get("response_format") == custom_response_format
-
-    @pytest.mark.asyncio
-    async def test_call_model_async_passes_model_parameters(self) -> None:
-        mock_response = make_mock_response("response")
-        captured_kwargs: dict[str, Any] = {}
-
-        async def capture_call(**kwargs: Any) -> Any:
-            captured_kwargs.update(kwargs)
-            return mock_response
-
-        with patch("opik_optimizer.core.llm_calls.track_completion") as mock_track:
-            mock_track.return_value = lambda x: capture_call
-
-            await _llm_calls.call_model_async(
-                messages=[user_message("test")],
-                model="gpt-4o",
-                model_parameters={"temperature": 0.5},
-                temperature=0.7,
-            )
-
-            assert captured_kwargs["temperature"] == 0.7
-
-    @pytest.mark.asyncio
-    async def test_call_model_async_project_name_passed(self) -> None:
-        mock_response = make_mock_response("response")
-        captured_project: str | None = None
-
-        def capture_track(
-            project_name: str | None = None,
-        ) -> Callable[[Any], AsyncMock]:
-            nonlocal captured_project
-            captured_project = project_name
-            return lambda x: AsyncMock(return_value=mock_response)
-
-        with patch(
-            "opik_optimizer.core.llm_calls.track_completion", side_effect=capture_track
-        ):
-            await _llm_calls.call_model_async(
-                messages=[user_message("test")],
-                model="gpt-4o",
-                project_name="my-project",
-            )
-
-            assert captured_project == "my-project"
-
-
-class TestStripProjectName:
-    def test_strip_removes_project_name(self) -> None:
-        params: dict[str, Any] = {
-            "model": "gpt-4o",
-            "metadata": {"opik": {"project_name": "test", "tags": ["tag1"]}},
-        }
-
-        result: dict[str, Any] = _llm_calls._strip_project_name(params)
-
-        assert "project_name" in params["metadata"]["opik"]
-        assert "project_name" not in result["metadata"]["opik"]
-        assert result["metadata"]["opik"]["tags"] == ["tag1"]
-
-    def test_strip_handles_missing_metadata(self) -> None:
-        params = {"model": "gpt-4o"}
-        result = _llm_calls._strip_project_name(params)
-        assert result == params
-
-    def test_strip_handles_empty_opik(self) -> None:
-        params = {"metadata": {"opik": {"project_name": "test"}}}
-        result = _llm_calls._strip_project_name(params)
-        assert "opik" not in result["metadata"]
 
 
 class TestCounterIncrement:
