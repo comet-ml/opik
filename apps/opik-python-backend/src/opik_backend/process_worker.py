@@ -60,7 +60,7 @@ _SECCOMP_ARCHES = {
     "aarch64": (0xC00000B7, (198, 199, 425, 117, 270, 271)),
 }
 # Everything else in the inherited environment may carry credentials user code has no use for.
-_ISOLATED_ENV_KEYS = (
+ISOLATED_ENV_KEYS = (
     "PATH",
     "LANG",
     "LC_ALL",
@@ -588,7 +588,7 @@ def _strip_environment() -> None:
     # Imported here: posix exists only on POSIX systems, and this runs after the platform check.
     import posix
 
-    kept = {key: os.environ[key] for key in _ISOLATED_ENV_KEYS if key in os.environ}
+    kept = {key: os.environ[key] for key in ISOLATED_ENV_KEYS if key in os.environ}
     os.environ.clear()
     # os.environ is a copy; the posix module keeps the original mapping too.
     posix.environ.clear()

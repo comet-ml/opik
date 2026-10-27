@@ -5,6 +5,7 @@ runs under a seccomp filter refusing new sockets and process inspection. That ne
 and root, so those tests skip elsewhere, where the fail-closed tests run instead.
 """
 import builtins
+import importlib.util
 import json
 import logging
 import os
@@ -43,6 +44,9 @@ def _can_isolate() -> bool:
 CAN_ISOLATE = _can_isolate()
 needs_isolation = pytest.mark.skipif(not CAN_ISOLATE, reason="needs Linux with root")
 cannot_isolate = pytest.mark.skipif(CAN_ISOLATE, reason="isolation succeeds here")
+needs_opik_stubs = pytest.mark.skipif(
+    importlib.util.find_spec("_opik") is None, reason="opik build without the _opik stub layer"
+)
 
 PROBE_METRIC = """
 import ctypes
@@ -302,6 +306,38 @@ class LeakProbe(base_metric.BaseMetric):
 """
 
 ISOLATION_SETTINGS = ["false", pytest.param("true", marks=needs_isolation)]
+
+
+# Searches every place user code could read for a marker the parent set in its environment. Sources the
+# worker cannot read (its own non-dumpable /proc) count as "absent": the marker was not found there either.
+MARKER_SEARCH_METRIC = """
+import os
+
+from opik.evaluation.metrics import base_metric, score_result
+
+MARKER = "s3cr3t-marker"
+
+
+def _read(path):
+    try:
+        return open(path, "rb").read()
+    except OSError:
+        return b""
+
+
+class MarkerSearch(base_metric.BaseMetric):
+    def __init__(self):
+        super().__init__(name="marker_search", track=False)
+
+    def score(self, **ignored_kwargs):
+        blob = (
+            repr(dict(os.environ)).encode()
+            + repr(os.sys.argv).encode()
+            + _read(f"/proc/{os.getpid()}/environ")
+            + _read(f"/proc/{os.getpid()}/cmdline")
+        )
+        return score_result.ScoreResult(name=self.name, value=1.0, reason="found" if MARKER.encode() in blob else "absent")
+"""
 
 
 def _only_score(name: str, value: float) -> dict:
@@ -709,3 +745,106 @@ def test_isolated_pool_worker_forks_from_the_template(monkeypatch):
 
     worker = executor.process_pool.get_nowait()
     assert isinstance(worker["process"], ForkServerProcess)
+
+
+@needs_isolation
+def test_template_environment_excludes_a_parent_marker(monkeypatch):
+    monkeypatch.setenv("MARKER_SECRET", "s3cr3t-marker")
+    executor_process.start_isolation_template()
+
+    from multiprocessing import forkserver
+    environ = open(f"/proc/{forkserver._forkserver._forkserver_pid}/environ", "rb").read()
+    keys = {entry.split(b"=", 1)[0].decode() for entry in environ.split(b"\0") if entry}
+
+    assert b"s3cr3t-marker" not in environ and "MARKER_SECRET" not in keys
+    # Only the allowlisted keys the workers keep, plus the import path and HOME.
+    assert keys <= set(process_worker.ISOLATED_ENV_KEYS) | {"PYTHONPATH", "HOME"}
+    assert "PATH" in keys
+
+
+@needs_isolation
+def test_isolated_worker_cannot_find_a_parent_marker(monkeypatch):
+    monkeypatch.setenv(PROCESS_NETWORK_ISOLATION_ENV_VAR, "true")
+    monkeypatch.setenv("MARKER_SECRET", "s3cr3t-marker")
+    executor_process.start_isolation_template()
+
+    pool_result = _score_in_pool({}, MARKER_SEARCH_METRIC)
+    one_shot_result = run_user_code_in_isolated_worker(MARKER_SEARCH_METRIC, {})
+
+    assert pool_result["scores"][0]["reason"] == "absent"
+    assert one_shot_result["scores"][0]["reason"] == "absent"
+
+
+# A metric that only needs the metric interface, served by the light stub layer without loading real opik.
+STUB_ONLY_METRIC = """
+from opik.evaluation.metrics import base_metric, score_result
+
+
+class StubOnly(base_metric.BaseMetric):
+    def __init__(self):
+        super().__init__(name="stub_only", track=False)
+
+    def score(self, output=None, reference=None, **ignored_kwargs):
+        return score_result.ScoreResult(name=self.name, value=float(output == reference))
+"""
+
+# A metric that reaches another opik attribute, which the stub layer serves by loading the real opik once.
+SUBMODULE_FALLBACK_METRIC = """
+from opik.evaluation.metrics import base_metric, score_result
+
+
+class Fallback(base_metric.BaseMetric):
+    def __init__(self):
+        super().__init__(name="fallback", track=False)
+
+    def score(self, **ignored_kwargs):
+        import opik
+        return score_result.ScoreResult(name=self.name, value=1.0 if hasattr(opik, "__version__") else 0.0)
+"""
+
+# Reports the type of the inherited opik module; the stub is a _FallbackModule, the real one a plain module.
+OPIK_MODULE_KIND_METRIC = """
+import sys
+
+from opik.evaluation.metrics import base_metric, score_result
+
+
+class OpikKind(base_metric.BaseMetric):
+    def __init__(self):
+        super().__init__(name="opik_kind", track=False)
+
+    def score(self, **ignored_kwargs):
+        return score_result.ScoreResult(name=self.name, value=1.0, reason=type(sys.modules.get("opik")).__name__)
+"""
+
+
+@needs_isolation
+@needs_opik_stubs
+def test_stub_metric_scores_through_the_light_layer():
+    result = _score_in_pool({"output": "a", "reference": "a"}, STUB_ONLY_METRIC)
+
+    assert result == _only_score("stub_only", 1.0)
+
+
+@needs_isolation
+@needs_opik_stubs
+def test_metric_using_another_opik_submodule_works_through_the_fallback():
+    result = run_user_code_in_isolated_worker(SUBMODULE_FALLBACK_METRIC, {})
+
+    assert result == _only_score("fallback", 1.0)
+
+
+@needs_isolation
+@needs_opik_stubs
+def test_template_does_not_load_the_real_opik():
+    # The worker inherits the template's modules, so it sees the stub unless the template loaded real opik.
+    result = run_user_code_in_isolated_worker(OPIK_MODULE_KIND_METRIC, {})
+
+    assert result["scores"][0]["reason"] == "_FallbackModule"
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="the template launcher runs on Linux only")
+def test_template_launcher_mirrors_this_interpreter():
+    # start_isolation_template copies 3.14's util.spawnv_passfds call to _posixsubprocess.fork_exec,
+    # whose positional arguments change between versions; revisit that copy before upgrading.
+    assert sys.version_info[:2] == (3, 14), sys.version

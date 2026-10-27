@@ -38,8 +38,9 @@ _mp_context = multiprocessing.get_context("fork" if sys.platform == "linux" else
 # before that state exists (see start_isolation_template) and preloads what user code imports, so a
 # forked worker is still ready without re-importing. Off Linux isolation never runs, so this is unused.
 _isolated_context = multiprocessing.get_context("forkserver") if sys.platform == "linux" else _mp_context
-# process_worker imports opik's metrics; preloading it once in the template keeps each fork cheap.
-_ISOLATION_PRELOAD = ["opik_backend.process_worker"]
+# Preloads process_worker once so each fork is cheap; isolated_preload first installs the light metric
+# import stubs, so the template imports the stub layer rather than the full opik.
+_ISOLATION_PRELOAD = ["opik_backend.isolated_preload"]
 
 # filelock refuses os.fork while another thread is mid-fork, and the pool pre-warms its
 # workers from several threads at once, so forks are serialised.
@@ -55,9 +56,39 @@ def start_isolation_template() -> None:
     """
     if sys.platform != "linux":
         return
-    from multiprocessing import forkserver
+    import _posixsubprocess
+    import tempfile
+    from multiprocessing import forkserver, util
+
+    # Only what workers keep, plus the import path; HOME as in the workers.
+    keys = process_worker.ISOLATED_ENV_KEYS + ("PYTHONPATH",)
+    env = [f"{k}={os.environ[k]}".encode() for k in keys if k in os.environ]
+    env.append(f"HOME={tempfile.gettempdir()}".encode())
+
+    def spawn_with_env(path: str, args: list, passfds: Any) -> int:
+        # Python 3.14's util.spawnv_passfds with an explicit environment instead of the inherited one;
+        # fork_exec's arguments change between versions (a test pins the version).
+        passfds = tuple(sorted(map(int, passfds)))
+        errpipe_read, errpipe_write = os.pipe()
+        try:
+            return _posixsubprocess.fork_exec(
+                args, [path], True, passfds, None, env,
+                -1, -1, -1, -1, -1, -1, errpipe_read, errpipe_write,
+                False, False, -1, None, None, None, -1, None)
+        finally:
+            os.close(errpipe_read)
+            os.close(errpipe_write)
+
+    # The forkserver has no environment parameter, so its launcher is swapped for this call only; os.environ
+    # is left as is. Under the fork lock, so no other fork or spawn in this process uses the swapped launcher.
     forkserver.set_forkserver_preload(_ISOLATION_PRELOAD)
-    forkserver.ensure_running()
+    with _fork_lock:
+        original = util.spawnv_passfds
+        util.spawnv_passfds = spawn_with_env
+        try:
+            forkserver.ensure_running()
+        finally:
+            util.spawnv_passfds = original
 
 
 def _worker_context(isolate: bool):
@@ -270,6 +301,8 @@ def _stop_idle_isolated_workers() -> None:
 
 def _start_isolated_worker() -> Union[dict, Tuple[multiprocessing.Process, Connection]]:
     """A READY isolated worker, or the error reply when it could not start."""
+    # Idempotent; ensures the template was started with the reduced environment, not lazily by the fork.
+    start_isolation_template()
     parent_conn, child_conn = _isolated_context.Pipe()
     # Not daemonic, so metrics can start processes of their own. Idle workers are ended at the job's exit
     # by _stop_idle_isolated_workers; the template's death is a backstop through the parent-death signal.
@@ -478,6 +511,9 @@ class ProcessExecutor(CodeExecutorBase):
 
         start_time = time.time()
         worker_id = str(uuid.uuid4())[:8]
+        if self.isolate:
+            # Idempotent; ensures the template was started with the reduced environment, not lazily by the fork.
+            start_isolation_template()
         ctx = _worker_context(self.isolate)
         parent_conn, child_conn = ctx.Pipe()
         process = None
