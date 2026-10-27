@@ -20,6 +20,9 @@ public class LlmTestClients {
     public static final RemoteMediaInliner REMOTE_MEDIA_INLINER = remoteMediaInliner(
             CONFIG.getVideoUrlDestinationGuard());
 
+    public static final VideoMimeTypeUtils VIDEO_MIME_TYPE_UTILS = new VideoMimeTypeUtils(TestHttpClientUtils.client(),
+            CONFIG);
+
     public static final HttpClient RESPONSES_API_HTTP_CLIENT = new OpenAIModule().responsesApiHttpClient(CONFIG);
 
     /** For tests serving media from a local mock server, which the strict mode of config-test.yml refuses. */
@@ -27,5 +30,12 @@ public class LlmTestClients {
         var config = TestConfigUtils.loadConfigTest().getLlmProviderClient();
         config.setVideoUrlDestinationGuard(mode);
         return new RemoteMediaInliner(TestHttpClientUtils.client(), config);
+    }
+
+    /** As {@link #remoteMediaInliner(DestinationGuard.Mode)}, for the MIME type lookup of video URLs. */
+    public static VideoMimeTypeUtils videoMimeTypeUtils(DestinationGuard.Mode mode) {
+        var config = TestConfigUtils.loadConfigTest().getLlmProviderClient();
+        config.setVideoUrlDestinationGuard(mode);
+        return new VideoMimeTypeUtils(TestHttpClientUtils.client(), config);
     }
 }

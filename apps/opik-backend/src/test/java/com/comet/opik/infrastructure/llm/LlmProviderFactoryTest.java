@@ -132,7 +132,8 @@ class LlmProviderFactoryTest {
         anthropicModule.llmServiceProvider(llmProviderFactory, anthropicClientGenerator, registryService);
 
         GeminiClientGenerator geminiClientGenerator = geminiModule.clientGenerator(llmProviderClientConfig,
-                LlmTestClients.REMOTE_MEDIA_INLINER);
+                LlmTestClients.REMOTE_MEDIA_INLINER,
+                LlmTestClients.VIDEO_MIME_TYPE_UTILS);
         geminiModule.llmServiceProvider(llmProviderFactory, geminiClientGenerator);
 
         OpenAIClientGenerator openAIClientGenerator = openAIModule.clientGenerator(llmProviderClientConfig,
@@ -144,7 +145,8 @@ class LlmProviderFactoryTest {
         openRouterModule.llmServiceProvider(llmProviderFactory, openRouterClientGenerator);
 
         VertexAIClientGenerator vertexAIClientGenerator = vertexAIModule.clientGenerator(llmProviderClientConfig,
-                registryService, LlmTestClients.REMOTE_MEDIA_INLINER);
+                registryService, LlmTestClients.REMOTE_MEDIA_INLINER,
+                LlmTestClients.VIDEO_MIME_TYPE_UTILS);
         vertexAIModule.llmServiceProvider(llmProviderFactory, vertexAIClientGenerator);
 
         LlmProviderService actual = llmProviderFactory.getService(workspaceId, model);
@@ -588,7 +590,8 @@ class LlmProviderFactoryTest {
                 RELAXED_GUARD);
         var vertexAIModule = new VertexAIModule();
         vertexAIModule.llmServiceProvider(llmProviderFactory,
-                vertexAIModule.clientGenerator(llmProviderClientConfig, registry, LlmTestClients.REMOTE_MEDIA_INLINER));
+                vertexAIModule.clientGenerator(llmProviderClientConfig, registry, LlmTestClients.REMOTE_MEDIA_INLINER,
+                        LlmTestClients.VIDEO_MIME_TYPE_UTILS));
 
         assertThat(llmProviderFactory.getService(workspaceId, model)).isInstanceOf(LlmProviderVertexAI.class);
     }

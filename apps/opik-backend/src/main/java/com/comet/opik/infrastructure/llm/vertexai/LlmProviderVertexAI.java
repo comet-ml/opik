@@ -208,7 +208,7 @@ public class LlmProviderVertexAI implements LlmProviderService {
     }
 
     private List<ChatMessage> getChatMessages(ChatCompletionRequest request) {
-        List<ChatMessage> chatMessages = LlmProviderLangChainMapper.INSTANCE.mapMessages(request);
+        List<ChatMessage> chatMessages = llmProviderClientGenerator.mapMessages(request);
 
         // This is a workaround for the Vertex AI API, which requires at least one user or AI message in the request.
         if (chatMessages.stream().noneMatch(chatMessage -> chatMessage.type() == ChatMessageType.AI

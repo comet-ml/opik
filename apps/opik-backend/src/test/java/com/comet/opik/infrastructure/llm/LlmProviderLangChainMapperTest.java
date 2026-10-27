@@ -168,7 +168,7 @@ class LlmProviderLangChainMapperTest {
                                 .build()))
                 .build();
 
-        assertThat(mapper.toChatMessage(message)).isEqualTo(UserMessage.from(
+        assertThat(mapper.toChatMessage(message, LlmTestClients.VIDEO_MIME_TYPE_UTILS)).isEqualTo(UserMessage.from(
                 TextContent.from("Describe these"),
                 ImageContent.from(base64Data, "image/jpeg"),
                 VideoContent.from(base64Data, "video/mp4"),

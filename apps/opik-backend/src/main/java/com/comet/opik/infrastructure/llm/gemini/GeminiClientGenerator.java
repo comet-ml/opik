@@ -7,6 +7,7 @@ import com.comet.opik.infrastructure.llm.GeminiThinkingParams;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
 import com.comet.opik.infrastructure.llm.RemoteMediaInliner;
+import com.comet.opik.infrastructure.llm.VideoMimeTypeUtils;
 import com.google.common.base.Preconditions;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.model.chat.ChatModel;
@@ -28,10 +29,12 @@ public class GeminiClientGenerator implements LlmProviderClientGenerator<GoogleA
     private static final int MAX_RETRIES = 1;
     private final @NonNull LlmProviderClientConfig llmProviderClientConfig;
     private final @NonNull RemoteMediaInliner remoteMediaInliner;
+    private final @NonNull VideoMimeTypeUtils videoMimeTypeUtils;
 
     /** The request's messages for Gemini, with media URLs downloaded here rather than by the SDK. */
     public List<ChatMessage> mapMessages(@NonNull ChatCompletionRequest request) {
-        return remoteMediaInliner.inline(GeminiLangChainMapper.INSTANCE.mapMessagesForGemini(request));
+        return remoteMediaInliner.inline(GeminiLangChainMapper.INSTANCE.mapMessagesForGemini(request,
+                videoMimeTypeUtils));
     }
 
     public GoogleAiGeminiChatModel newGeminiClient(@NonNull String apiKey, @NonNull ChatCompletionRequest request) {
