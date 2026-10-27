@@ -10,6 +10,7 @@ import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 
 import java.math.BigDecimal;
+import java.math.MathContext;
 import java.util.Optional;
 
 @UtilityClass
@@ -142,10 +143,18 @@ class SpanCostCalculator {
                 .orElse(0);
     }
 
-    // Claude bills 1-hour cache writes at their own rate. One never bills below a 5-minute write, also above a tier
-    // without a 1-hour rate of its own, where LiteLLM keeps the base 1-hour rate.
+    // Claude bills 1-hour cache writes at their own rate, never below a 5-minute write. Above a tier that changes the
+    // 5-minute rate but publishes no 1-hour one, the 1-hour rate keeps its base ratio to the 5-minute rate, as Claude's
+    // own tiers do; LiteLLM keeps the base 1-hour rate there.
     private static BigDecimal oneHourWritePrice(ModelPrice modelPrice, int tierBasis, BigDecimal fiveMinuteWritePrice) {
-        return modelPrice.effectiveCacheCreationInputTokenPriceAbove1hr(tierBasis).max(fiveMinuteWritePrice);
+        BigDecimal baseOneHour = modelPrice.cacheCreationInputTokenPriceAbove1hr();
+        BigDecimal baseFiveMinute = modelPrice.cacheCreationInputTokenPrice();
+        BigDecimal oneHour = modelPrice
+                .applicableTier(tierBasis, ModelPrice.PromptTier::cacheCreationInputTokenPriceAbove1hr)
+                .orElse(isPositive(baseFiveMinute) && fiveMinuteWritePrice.compareTo(baseFiveMinute) != 0
+                        ? baseOneHour.multiply(fiveMinuteWritePrice).divide(baseFiveMinute, MathContext.DECIMAL64)
+                        : baseOneHour);
+        return oneHour.max(fiveMinuteWritePrice);
     }
 
     // A provider that publishes no cache rate bills its cached tokens as plain input.

@@ -324,9 +324,41 @@ class SpanCostCalculatorTest {
             assertThat(textCost(CACHE_PRICES, usage)).isEqualByComparingTo("14.25");
         }
 
+        /**
+         * The rates Claude Sonnet 4.5 published when a manual test on staging found a one-hour write above its 200K
+         * tier billed at the base one-hour rate, below the tier's five-minute rate.
+         */
         @Test
-        void textGenerationCostBillsOneHourCacheWritesAtLeastAtTheTiersWriteRate() {
-            // The tier's five-minute write rate is above the base one-hour rate, and the tier has no one-hour rate.
+        void textGenerationCostBillsOneHourCacheWritesAboveATierAtItsOneHourRate() {
+            var sonnet = ModelPrice.defaultBuilder()
+                    .inputPrice(new BigDecimal("0.000003"))
+                    .outputPrice(new BigDecimal("0.000015"))
+                    .cacheCreationInputTokenPrice(new BigDecimal("0.00000375"))
+                    .cacheReadInputTokenPrice(new BigDecimal("0.0000003"))
+                    .cacheCreationInputTokenPriceAbove1hr(new BigDecimal("0.000006"))
+                    .promptTiers(List.of(ModelPrice.PromptTier.builder()
+                            .threshold(ModelPrice.TIER_THRESHOLD_200K)
+                            .inputPrice(new BigDecimal("0.000006"))
+                            .outputPrice(new BigDecimal("0.0000225"))
+                            .cacheCreationInputTokenPrice(new BigDecimal("0.0000075"))
+                            .cacheReadInputTokenPrice(new BigDecimal("0.0000006"))
+                            .cacheCreationInputTokenPriceAbove1hr(new BigDecimal("0.000012"))
+                            .build()))
+                    .build();
+            var fiveMinuteWrites = spanUsage("anthropic", "input_tokens", 200_000, "output_tokens", 1_000,
+                    "cache_creation_input_tokens", 100_000, "cache_creation.ephemeral_5m_input_tokens", 100_000);
+            var oneHourWrites = spanUsage("anthropic", "input_tokens", 200_000, "output_tokens", 1_000,
+                    "cache_creation_input_tokens", 100_000, "cache_creation.ephemeral_1h_input_tokens", 100_000);
+
+            // 200,000 * 6e-6 + 100,000 * 7.5e-6 + 1,000 * 2.25e-5
+            assertThat(textCost(sonnet, fiveMinuteWrites)).isEqualByComparingTo("1.9725");
+            // 200,000 * 6e-6 + 100,000 * 1.2e-5 + 1,000 * 2.25e-5
+            assertThat(textCost(sonnet, oneHourWrites)).isEqualByComparingTo("2.4225");
+        }
+
+        @Test
+        void textGenerationCostScalesTheOneHourRateAboveATierWithoutOne() {
+            // The tier raises the five-minute write rate tenfold but publishes no one-hour rate.
             var tiered = CACHE_PRICES.toBuilder()
                     .cacheCreationInputTokenPriceAbove1hr(new BigDecimal("0.02"))
                     .promptTiers(List.of(ModelPrice.PromptTier.builder()
@@ -340,8 +372,9 @@ class SpanCostCalculatorTest {
             var usage = spanUsage("anthropic", "input_tokens", 200_000, "output_tokens", 10,
                     "cache_creation_input_tokens", 1_000, "cache_creation.ephemeral_1h_input_tokens", 1_000);
 
-            // 200,000 * 0.1 + 1,000 * 0.15 + 10 * 0.2
-            assertThat(textCost(tiered, usage)).isEqualByComparingTo("20152.00");
+            // The one-hour rate keeps its base ratio to the five-minute one, 0.02 * 0.15 / 0.015:
+            // 200,000 * 0.1 + 1,000 * 0.2 + 10 * 0.2
+            assertThat(textCost(tiered, usage)).isEqualByComparingTo("20202.00");
         }
 
         @Test

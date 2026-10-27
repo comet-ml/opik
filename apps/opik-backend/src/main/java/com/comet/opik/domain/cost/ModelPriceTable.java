@@ -49,10 +49,12 @@ public class ModelPriceTable {
     // The price file's sample_spec entry documents its fields instead of pricing a model.
     private static final String SAMPLE_SPEC_ENTRY = "sample_spec";
     // A token rate of one prompt-size tier, e.g. cache_creation_input_token_cost_above_1hr_above_200k_tokens. The name
-    // ends at "_tokens": service-tier variants (*_above_272k_tokens_priority) aren't billed.
+    // ends at "_tokens": service-tier variants (*_above_272k_tokens_priority) aren't billed. The threshold is parsed
+    // while the class loads, so it's capped at six digits: a malformed key can't overflow an int or stop the prices
+    // from loading, and PriceFileTest reports it instead.
     static final Pattern PROMPT_TIER_RATE = Pattern.compile("(input_cost_per_token|output_cost_per_token"
             + "|cache_creation_input_token_cost_above_1hr|cache_creation_input_token_cost|cache_read_input_token_cost)"
-            + "_above_(\\d+)(k?)_tokens");
+            + "_above_(\\d{1,6})(k?)_tokens");
 
     static {
         modelProviderPrices = Collections.unmodifiableMap(parseModelPrices());
@@ -270,7 +272,10 @@ public class ModelPriceTable {
      * Whole-prompt tiers: LiteLLM's {@code <rate>_above_<N>k_tokens} rates replace the base rate wholesale once the
      * prompt strictly exceeds the threshold, at whatever thresholds the price file uses. A tier is kept when one of
      * its rates is positive, and the list is sorted DESCENDING so the effective helpers on ModelPrice pick the highest
-     * applicable tier.
+     * applicable tier. A rate the matched tier doesn't publish falls back to the next lower tier that does, then to the
+     * base rate ({@link ModelPrice}'s rule), while LiteLLM takes the tier from the input rates alone and falls back to
+     * the base rate. The two agree on every model of today's price files; PriceFileTest follows LiteLLM's rule, so a
+     * model where they'd differ fails it, and the rule is chosen then.
      */
     private static List<ModelPrice.PromptTier> promptTiers(Map<String, JsonNode> fields) {
         var ratesByThreshold = new TreeMap<Integer, Map<String, BigDecimal>>(Comparator.reverseOrder());

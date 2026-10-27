@@ -77,7 +77,8 @@ jobs:
           
             ## Testing
             - Passed CI
-          
+            - The Opik Ops shift owns a failing run. When `PriceFileTest` fails, the new prices hold a field the backend doesn't bill or a rate it bills differently: bill it, or list it with the reason in `PriceFileTest.NOT_PRICED` (`apps/opik-backend/src/test/java/com/comet/opik/domain/cost/PriceFileTest.java`).
+
             ## Documentation
             - https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json
             - https://openrouter.ai/api/v1/models

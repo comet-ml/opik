@@ -12,6 +12,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.math.BigDecimal;
+import java.math.MathContext;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -41,10 +42,13 @@ class PriceFileTest {
     // Prices the backend doesn't bill, with the reason. A price a sync adds fails the coverage check until it's billed or
     // listed here.
     private static final Map<Pattern, String> NOT_PRICED = Map.of(
-            Pattern.compile(".+_(batches|flex|priority|ultrafast|balanced)(_above_\\d+k?_tokens)?"),
-            "service-tier prices: span usage doesn't say which service tier served the request",
+            Pattern.compile(".+_(batches|flex|priority|ultrafast|balanced|decisions)(_above_\\d+k?_tokens)?"),
+            "service-tier and processing-mode prices: span usage doesn't say which one served the request",
             Pattern.compile("input_cost_per_token_cache_hit"),
             "DeepSeek's cache-hit price, which its entries also publish as cache_read_input_token_cost",
+            Pattern.compile("explicit_cache_read_input_token_cost"),
+            "Qwen's explicit-cache read price: no usage format tells explicit-cache reads from implicit ones, so they "
+                    + "bill at cache_read_input_token_cost",
             Pattern.compile("(input|output)_dbu_cost_per_token"),
             "Databricks DBU units; the entries also publish dollar prices",
             Pattern.compile("(input|output)_cost_per_(image|video)_token|cache_read_input_(image|audio)_token_cost"
@@ -57,8 +61,9 @@ class PriceFileTest {
                     + "models are billed by their own calculators",
             Pattern.compile("search_context_cost_per_query|google_maps_grounding_cost_per_query|input_cost_per_query"
                     + "|input_cost_per_request|code_interpreter_cost_per_session|guardrail_cost_per_unit"
-                    + "|annotation_cost_per_page|ocr_cost_per_page|ocr_cost_per_credit"),
-            "per-request and per-tool prices: spans carry no count of searches, tool sessions, pages or requests");
+                    + "|annotation_cost_per_page|ocr_cost_per_page|ocr_cost_per_credit|input_cost_per_text_message"),
+            "per-request, per-message and per-tool prices: spans carry no count of searches, tool sessions, pages, "
+                    + "messages or requests");
 
     // Token rates a provider's usage format has no count for, with the reason.
     private static final Map<Format, Map<Pattern, String>> NOT_PRICED_IN_FORMAT = Map.of(
@@ -236,7 +241,8 @@ class PriceFileTest {
         /**
          * The cost from the price file's own fields: the highest tier the whole prompt exceeds, and each rate of that
          * tier, or the base rate when the tier doesn't publish it (LiteLLM's rule). A cache rate that isn't published
-         * bills as input, and a one-hour write never bills below a five-minute one.
+         * bills as input. A one-hour write never bills below a five-minute one, and above a tier without a one-hour
+         * rate keeps its base ratio to the five-minute rate.
          */
         private static BigDecimal expectedCost(PricedEntry entry, Tokens tokens) {
             var tier = Optional.ofNullable(entry.tiers().lowerEntry(Math.toIntExact(tokens.prompt())))
@@ -249,7 +255,15 @@ class PriceFileTest {
             BigDecimal output = entry.price(tiered.apply("output_cost_per_token"));
             BigDecimal cacheRead = orElse(entry.price(tiered.apply("cache_read_input_token_cost")), input);
             BigDecimal fiveMinuteWrite = orElse(entry.price(tiered.apply("cache_creation_input_token_cost")), input);
-            BigDecimal oneHourWrite = entry.price(tiered.apply("cache_creation_input_token_cost_above_1hr"))
+            String oneHourRate = tiered.apply("cache_creation_input_token_cost_above_1hr");
+            BigDecimal baseFiveMinuteWrite = entry.price("cache_creation_input_token_cost");
+            BigDecimal baseOneHourWrite = entry.price("cache_creation_input_token_cost_above_1hr");
+            BigDecimal oneHourWrite = (!oneHourRate.equals("cache_creation_input_token_cost_above_1hr")
+                    ? entry.price(oneHourRate)
+                    : baseFiveMinuteWrite.signum() > 0 && fiveMinuteWrite.compareTo(baseFiveMinuteWrite) != 0
+                            ? baseOneHourWrite.multiply(fiveMinuteWrite).divide(baseFiveMinuteWrite,
+                                    MathContext.DECIMAL64)
+                            : baseOneHourWrite)
                     .max(fiveMinuteWrite);
             BigDecimal reasoning = entry.price("output_cost_per_reasoning_token");
             BigDecimal audioInput = entry.price("input_cost_per_audio_token");

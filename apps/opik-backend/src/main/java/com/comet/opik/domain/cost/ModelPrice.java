@@ -91,11 +91,6 @@ public record ModelPrice(
                 .orElse(cacheCreationInputTokenPrice);
     }
 
-    public BigDecimal effectiveCacheCreationInputTokenPriceAbove1hr(int totalPromptTokens) {
-        return applicableTier(totalPromptTokens, PromptTier::cacheCreationInputTokenPriceAbove1hr)
-                .orElse(cacheCreationInputTokenPriceAbove1hr);
-    }
-
     public BigDecimal effectiveCacheReadInputTokenPrice(int totalPromptTokens) {
         return applicableTier(totalPromptTokens, PromptTier::cacheReadInputTokenPrice)
                 .orElse(cacheReadInputTokenPrice);
@@ -107,7 +102,7 @@ public record ModelPrice(
      * requested rate is greater than zero. Highest applicable tier wins; zero-valued rates never
      * suppress a lower tier's rate or the base rate.
      */
-    private Optional<BigDecimal> applicableTier(int totalPromptTokens, Function<PromptTier, BigDecimal> rate) {
+    Optional<BigDecimal> applicableTier(int totalPromptTokens, Function<PromptTier, BigDecimal> rate) {
         return promptTiers.stream()
                 .filter(tier -> totalPromptTokens > tier.threshold())
                 .map(rate)
