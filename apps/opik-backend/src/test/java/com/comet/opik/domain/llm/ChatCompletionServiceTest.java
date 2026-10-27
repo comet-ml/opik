@@ -1444,7 +1444,7 @@ class ChatCompletionServiceTest {
         }
 
         private ChatCompletionRequest requestSentByCreate(String model, boolean reasoning) {
-            when(llmProviderFactory.openAiParams(model)).thenReturn(openAiParams(reasoning));
+            when(llmProviderFactory.catalogParams(model)).thenReturn(openAiParams(reasoning));
             when(llmProviderFactory.getService(WORKSPACE_ID, model)).thenReturn(llmProviderService);
             var captor = ArgumentCaptor.forClass(ChatCompletionRequest.class);
             when(llmProviderService.generate(captor.capture(), anyString()))
@@ -1483,7 +1483,7 @@ class ChatCompletionServiceTest {
         @DisplayName("createAndStreamResponse: a reasoning model reaches the provider without sampling params or penalties")
         void stream__whenReasoningModel__thenDropSamplingParamsAndPenalties() {
             var model = "o3";
-            when(llmProviderFactory.openAiParams(model)).thenReturn(openAiParams(true));
+            when(llmProviderFactory.catalogParams(model)).thenReturn(openAiParams(true));
             when(llmProviderFactory.getService(WORKSPACE_ID, model)).thenReturn(llmProviderService);
             var captor = ArgumentCaptor.forClass(ChatCompletionRequest.class);
 
@@ -1499,7 +1499,7 @@ class ChatCompletionServiceTest {
         }
 
         private LlmAsJudgeModelParameters judgeParametersSentByScoreTrace(String model, boolean reasoning) {
-            when(llmProviderFactory.openAiParams(model)).thenReturn(openAiParams(reasoning));
+            when(llmProviderFactory.catalogParams(model)).thenReturn(openAiParams(reasoning));
             var captor = ArgumentCaptor.forClass(LlmAsJudgeModelParameters.class);
             when(llmProviderFactory.getLanguageModel(anyString(), captor.capture())).thenReturn(chatModel);
             when(chatModel.chat(any(ChatRequest.class))).thenReturn(mock(ChatResponse.class));
@@ -1549,7 +1549,7 @@ class ChatCompletionServiceTest {
                 .build();
 
         private void givenTheShippedCatalogAnd(String route) {
-            when(llmProviderFactory.openAiParams(MODEL))
+            when(llmProviderFactory.catalogParams(MODEL))
                     .thenReturn(Optional.ofNullable(bundledRegistry().paramsOf("openai", MODEL)));
             when(llmProviderFactory.getService(WORKSPACE_ID, MODEL)).thenReturn(llmProviderService);
             when(llmProviderService.paramsRoute()).thenReturn(route);

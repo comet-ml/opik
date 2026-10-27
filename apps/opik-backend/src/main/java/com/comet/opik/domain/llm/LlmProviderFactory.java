@@ -36,8 +36,8 @@ public interface LlmProviderFactory {
 
     StructuredOutputStrategy getStructuredOutputStrategy(String model);
 
-    /** The catalog params of a model the registry lists under OpenAI, or empty for any other model. */
-    Optional<ModelParams> openAiParams(String model);
+    /** The catalog params of a model the registry lists under OpenAI, Gemini or Vertex AI, or empty otherwise. */
+    Optional<ModelParams> catalogParams(String model);
 
     /**
      * Returns the resolved model info for the given model name.

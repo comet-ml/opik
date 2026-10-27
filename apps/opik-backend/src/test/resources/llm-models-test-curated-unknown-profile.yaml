@@ -1,5 +1,9 @@
 defaults:
   openai: {profile: openai, reasoningProfile: missing-reasoning}
+  gemini:
+    profile: openai
+    idProfiles:
+    - {match: '^gemini-', profile: missing-id-profile}
 profiles:
   openai:
     temperature: {min: 0, max: 2, default: 0}

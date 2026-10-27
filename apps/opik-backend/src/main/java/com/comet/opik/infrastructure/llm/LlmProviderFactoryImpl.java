@@ -31,6 +31,7 @@ import org.apache.commons.lang3.StringUtils;
 
 import java.util.Arrays;
 import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -82,6 +83,10 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
     private static final Set<LlmProvider> NAMED_PROVIDERS = Arrays.stream(LlmProvider.values())
             .filter(LlmProvider::supportsProviderName)
             .collect(Collectors.toUnmodifiableSet());
+
+    // Not Anthropic: ModelCapabilities applies the Claude rules, which read a param the catalog leaves out as refused.
+    private static final Set<LlmProvider> CATALOG_PARAMS_PROVIDERS = EnumSet.of(LlmProvider.OPEN_AI,
+            LlmProvider.GEMINI, LlmProvider.VERTEX_AI);
 
     /**
      * OPIK_FREE's URL is operator-configured; the others always build their client through
@@ -155,11 +160,11 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
     }
 
     @Override
-    public Optional<ModelParams> openAiParams(@NonNull String model) {
+    public Optional<ModelParams> catalogParams(@NonNull String model) {
         return registryService.findModel(model)
-                .filter(result -> result.provider() == LlmProvider.OPEN_AI)
+                .filter(result -> CATALOG_PARAMS_PROVIDERS.contains(result.provider()))
                 .map(result -> ObjectUtils.getIfNull(result.model().params(),
-                        () -> registryService.paramsOf(LlmProvider.OPEN_AI.getValue(), result.model().id())));
+                        () -> registryService.paramsOf(result.provider().getValue(), result.model().id())));
     }
 
     private LlmProvider getLlmProviderFromEnums(@NonNull String model) {
