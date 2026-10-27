@@ -24,6 +24,8 @@ import com.comet.opik.domain.ailabels.AiLabelStatusDAO;
 import com.comet.opik.domain.ailabels.AiLabelsDAO;
 import com.comet.opik.domain.topics.TopicVector;
 import com.comet.opik.domain.topics.TopicVectorsDAO;
+import com.comet.opik.domain.topics.TraceTopic;
+import com.comet.opik.domain.topics.TraceTopicsDAO;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
@@ -129,12 +131,14 @@ class RetentionPolicyServiceTest {
     private AiLabelsDAO aiLabelsDAO;
     private AiLabelStatusDAO aiLabelStatusDAO;
     private TopicVectorsDAO topicVectorsDAO;
+    private TraceTopicsDAO traceTopicsDAO;
 
     @BeforeAll
     void beforeAll(ClientSupport client, @Jit RetentionPolicyService retentionPolicyService,
             @Jit RetentionCatchUpService catchUpService, @Jit RetentionEstimationService estimationService,
             TransactionTemplateAsync templateAsync, IdGenerator idGenerator, @Jit AiLabelsDAO aiLabelsDAO,
-            @Jit AiLabelStatusDAO aiLabelStatusDAO, @Jit TopicVectorsDAO topicVectorsDAO) {
+            @Jit AiLabelStatusDAO aiLabelStatusDAO, @Jit TopicVectorsDAO topicVectorsDAO,
+            @Jit TraceTopicsDAO traceTopicsDAO) {
         var baseURI = TestUtils.getBaseUrl(client);
         ClientSupportUtils.config(client);
 
@@ -146,6 +150,7 @@ class RetentionPolicyServiceTest {
         this.aiLabelsDAO = aiLabelsDAO;
         this.aiLabelStatusDAO = aiLabelStatusDAO;
         this.topicVectorsDAO = topicVectorsDAO;
+        this.traceTopicsDAO = traceTopicsDAO;
         this.retentionClient = new RetentionRuleResourceClient(client, baseURI);
         this.traceClient = new TraceResourceClient(client, baseURI);
         this.spanClient = new SpanResourceClient(client, baseURI);
@@ -899,10 +904,19 @@ class RetentionPolicyServiceTest {
                 .text("summary")
                 .vector(List.of(0.6f, 0.8f))
                 .build())).block();
+        traceTopicsDAO.insert(List.of(TraceTopic.builder()
+                .workspaceId(workspaceId)
+                .projectId(projectId)
+                .traceId(traceId)
+                .traceCreatedAt(Instant.now())
+                .topicId(TraceTopic.OTHER)
+                .source(TraceTopic.Source.NIGHT)
+                .runId(UUID.randomUUID().toString())
+                .build())).block();
     }
 
     private void assertAiLabelRows(String workspaceId, UUID traceId, long expected) {
-        for (var table : List.of("ai_labels", "ai_label_status", "topic_vectors")) {
+        for (var table : List.of("ai_labels", "ai_label_status", "topic_vectors", "trace_topics")) {
             var actual = templateAsync.nonTransaction(connection -> Mono
                     .from(connection.createStatement(
                             "SELECT count() AS cnt FROM %s WHERE workspace_id = :workspace_id AND trace_id = :trace_id"

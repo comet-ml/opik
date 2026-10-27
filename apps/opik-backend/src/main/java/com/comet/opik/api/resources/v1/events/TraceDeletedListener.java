@@ -9,6 +9,7 @@ import com.comet.opik.domain.ailabels.AiLabelStatusDAO;
 import com.comet.opik.domain.ailabels.AiLabelsDAO;
 import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.domain.topics.TopicVectorsDAO;
+import com.comet.opik.domain.topics.TraceTopicsDAO;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.common.eventbus.Subscribe;
 import jakarta.inject.Inject;
@@ -35,10 +36,11 @@ public class TraceDeletedListener {
     private final @NonNull AiLabelsDAO aiLabelsDAO;
     private final @NonNull AiLabelStatusDAO aiLabelStatusDAO;
     private final @NonNull TopicVectorsDAO topicVectorsDAO;
+    private final @NonNull TraceTopicsDAO traceTopicsDAO;
 
     /**
      * Handles the TracesDeleted event by asynchronously deleting related entities.
-     * This includes feedback scores, comments, attachments, ai-labels, topic vectors and spans associated with the deleted traces.
+     * This includes feedback scores, comments, attachments, ai-labels, topic vectors, trace topics and spans associated with the deleted traces.
      *
      * @param event the TracesDeleted event containing the trace IDs that were deleted
      */
@@ -89,6 +91,15 @@ public class TraceDeletedListener {
                 .then(Mono.defer(() -> topicVectorsDAO.deleteByTraceIds(traceIds, projectId)
                         .onErrorResume(error -> {
                             log.warn("Failed to delete topic vectors for deleted traces, workspace '{}', project '{}', "
+                                    + "count '{}'; they stay until a retention delete", workspaceId, projectId,
+                                    traceIds.size(),
+                                    error);
+                            return Mono.empty();
+                        })))
+                // A trace's topic goes with it as its vector does, on its own for the same reason.
+                .then(Mono.defer(() -> traceTopicsDAO.deleteByTraceIds(traceIds, projectId)
+                        .onErrorResume(error -> {
+                            log.warn("Failed to delete trace topics for deleted traces, workspace '{}', project '{}', "
                                     + "count '{}'; they stay until a retention delete", workspaceId, projectId,
                                     traceIds.size(),
                                     error);
