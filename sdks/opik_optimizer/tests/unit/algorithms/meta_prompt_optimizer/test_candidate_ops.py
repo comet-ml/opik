@@ -288,7 +288,9 @@ def test_history_builder_assigns_trial_indices() -> None:
         ("", "Return a short answer."),
     ],
 )
-def test_ordinary_metric_words_do_not_reject_valid_candidates(metric_name, content):
+def test_ordinary_metric_words_do_not_reject_valid_candidates(
+    metric_name: str, content: str
+) -> None:
     result = _sanitize_system_prompts([content], metric_name=metric_name)
     assert len(result["prompts"]) == 1
 
@@ -297,7 +299,9 @@ def test_ordinary_metric_words_do_not_reject_valid_candidates(metric_name, conte
     "content",
     ["Optimize for exact.", "Maximize the exact metric.", "Call exact(output)."],
 )
-def test_explicit_references_to_a_common_word_metric_are_rejected(content):
+def test_explicit_references_to_a_common_word_metric_are_rejected(
+    content: str,
+) -> None:
     result = _sanitize_system_prompts(
         [content, "Return a short answer."], metric_name="exact"
     )

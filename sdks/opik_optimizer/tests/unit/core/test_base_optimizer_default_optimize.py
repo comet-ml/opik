@@ -258,7 +258,8 @@ class TestDefaultOptimizePrompt:
         class MinimalOptimizer(BaseOptimizer):
             def run_optimization(self, context: OptimizationContext):
                 return AlgorithmResult(
-                    best_prompts=context.prompts, best_score=context.baseline_score
+                    best_prompts=context.prompts,
+                    best_score=context.baseline_score or 0.0,
                 )
 
         optimizer = MinimalOptimizer(model="gpt-4", verbose=1)

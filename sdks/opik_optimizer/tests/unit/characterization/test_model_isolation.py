@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Any
 import copy
 
 import optuna
@@ -16,8 +17,12 @@ from tests.unit.characterization import harness
 @pytest.mark.parametrize("scenario_name", ["S1_single", "S2_multi"])
 @pytest.mark.parametrize("has_agent_parameters", [False, True])
 def test_agent_and_optimizer_models_are_independent(
-    optimizer_name, scenario_name, has_agent_parameters, install_fakes, monkeypatch
-):
+    optimizer_name: str,
+    scenario_name: str,
+    has_agent_parameters: bool,
+    install_fakes: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     scenario = harness.build_scenario(scenario_name)
     prompts = (
         scenario.prompt
@@ -71,13 +76,13 @@ def test_agent_and_optimizer_models_are_independent(
     trial_kwargs = []
     original_call, original_async = llm_calls.call_model, llm_calls.call_model_async
 
-    def reasoning(**kwargs):
+    def reasoning(**kwargs: Any) -> Any:
         reasoning_calls.append(
             (kwargs["model"], copy.deepcopy(kwargs.get("model_parameters") or {}))
         )
         return original_call(**kwargs)
 
-    async def reasoning_async(**kwargs):
+    async def reasoning_async(**kwargs: Any) -> Any:
         reasoning_calls.append(
             (kwargs["model"], copy.deepcopy(kwargs.get("model_parameters") or {}))
         )
@@ -88,7 +93,14 @@ def test_agent_and_optimizer_models_are_independent(
     if scenario.agent is None:
         original_complete = LiteLLMAgent._llm_complete
 
-        def complete(self, model, messages, tools, seed=None, model_kwargs=None):
+        def complete(
+            self: Any,
+            model: Any,
+            messages: Any,
+            tools: Any,
+            seed: Any = None,
+            model_kwargs: Any = None,
+        ) -> Any:
             agent_calls.append((model, copy.deepcopy(model_kwargs or {})))
             return original_complete(self, model, messages, tools, seed, model_kwargs)
 
@@ -96,7 +108,12 @@ def test_agent_and_optimizer_models_are_independent(
     else:
         original_invoke = scenario.agent.invoke_agent
 
-        def invoke(prompts, dataset_item, allow_tool_use=False, seed=None):
+        def invoke(
+            prompts: Any,
+            dataset_item: Any,
+            allow_tool_use: bool = False,
+            seed: Any = None,
+        ) -> Any:
             agent_calls.extend(
                 (prompt.model, copy.deepcopy(prompt.model_kwargs))
                 for prompt in prompts.values()
@@ -109,7 +126,7 @@ def test_agent_and_optimizer_models_are_independent(
 
     original_attr = optuna.trial.Trial.set_user_attr
 
-    def record_attr(trial, key, value):
+    def record_attr(trial: Any, key: str, value: Any) -> None:
         if key == "model":
             trial_models.append(copy.deepcopy(value))
         if key == "model_kwargs":

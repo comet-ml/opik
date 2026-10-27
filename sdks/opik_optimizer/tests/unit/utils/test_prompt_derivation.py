@@ -1,3 +1,4 @@
+from typing import Any
 from copy import deepcopy
 
 import pytest
@@ -17,8 +18,8 @@ from opik_optimizer.utils.prompt_roles import derive_prompt
         {"type": "image_url", "image_url": {"url": "data:image/png;base64,example"}},
     ],
 )
-def test_rewrite_keeps_media_and_prompt_configuration(media):
-    original = [
+def test_rewrite_keeps_media_and_prompt_configuration(media: dict[str, Any]) -> None:
+    original: list[dict[str, Any]] = [
         {"role": "system", "content": "Keep"},
         {
             "role": "user",
@@ -56,8 +57,8 @@ def test_rewrite_keeps_media_and_prompt_configuration(media):
     assert base.get_messages() == before
 
 
-def test_multitext_rewrite_is_inserted_once_and_extraction_keeps_all_text():
-    content = [
+def test_multitext_rewrite_is_inserted_once_and_extraction_keeps_all_text() -> None:
+    content: list[Any] = [
         {"type": "image_url", "image_url": {"url": "{a}"}},
         {"type": "text", "text": "First"},
         {"type": "image_url", "image_url": {"url": "{b}"}},
@@ -74,7 +75,7 @@ def test_multitext_rewrite_is_inserted_once_and_extraction_keeps_all_text():
     assert rebuild_content_with_new_text(content, "First\nSecond") == content
 
 
-def test_rederiving_an_unchanged_multitext_message_is_a_noop():
+def test_rederiving_an_unchanged_multitext_message_is_a_noop() -> None:
     from opik_optimizer.utils.multimodal import text_only_messages
 
     base = ChatPrompt(
@@ -97,7 +98,7 @@ def test_rederiving_an_unchanged_multitext_message_is_a_noop():
     assert derived.get_messages() == base.get_messages()
 
 
-def test_text_only_rewrite_input_keeps_all_text_and_excludes_media():
+def test_text_only_rewrite_input_keeps_all_text_and_excludes_media() -> None:
     from opik_optimizer.utils.multimodal import text_only_messages
 
     messages = [

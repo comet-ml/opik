@@ -24,7 +24,9 @@ def test_rewritten_prompts_and_agent_calls_have_no_empty_text_parts(
     agent_calls: list[str] = []
     original_complete = LiteLLMAgent._llm_complete
 
-    def complete(self: Any, model: Any, messages: Any, *args: Any, **kwargs: Any):
+    def complete(
+        self: Any, model: Any, messages: Any, *args: Any, **kwargs: Any
+    ) -> Any:
         agent_calls.append(json.dumps(messages))
         return original_complete(self, model, messages, *args, **kwargs)
 

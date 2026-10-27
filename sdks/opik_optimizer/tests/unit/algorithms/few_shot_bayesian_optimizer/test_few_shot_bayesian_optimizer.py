@@ -355,7 +355,7 @@ class TestFewShotBayesianOptimizerEvaluate:
 
         from opik_optimizer import BaseOptimizer
 
-        def default(cls: type) -> Any:
+        def default(cls: Any) -> Any:
             params = inspect.signature(cls.evaluate_prompt).parameters
             return params["allow_tool_use"].default
 

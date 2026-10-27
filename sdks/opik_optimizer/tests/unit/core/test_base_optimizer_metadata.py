@@ -5,6 +5,8 @@
 from __future__ import annotations
 
 
+from typing import Any
+
 import pytest
 
 from opik_optimizer.core import agent as agent_utils
@@ -20,7 +22,10 @@ def test_reasoning_settings_respect_empty_overrides_and_copy_inputs(
 ):
     import copy
 
-    optimizer_parameters = {"temperature": 0.9, "metadata": {"owner": "optimizer"}}
+    optimizer_parameters: dict[str, Any] = {
+        "temperature": 0.9,
+        "metadata": {"owner": "optimizer"},
+    }
     expected_optimizer = copy.deepcopy(optimizer_parameters)
     expected_reasoning = copy.deepcopy(
         optimizer_parameters if reasoning_parameters is None else reasoning_parameters

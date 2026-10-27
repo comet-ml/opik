@@ -437,46 +437,14 @@ class BaseOptimizer(ABC):
         )
         optimizable_roles = normalize_optimizable_roles(optimize_prompts)
 
-        from .utils.toolcalling.ops import toolcalling as toolcalling_utils
-
-        # Declining tool optimization is valid for every prompt shape.
-        if not toolcalling_utils.tool_optimization_requested(optimize_tools):
-            optimize_tools = None
-        # optimize_prompts=False with no tools is a deliberate no-op on content
-        # (ParameterOptimizer); every other combination must be validated.
-        if optimize_prompts is not False or optimize_tools is not None:
-            optimize_tools = toolcalling_utils.validate_optimization_flags(
-                optimize_prompts=bool(optimizable_roles),
-                optimize_tools=optimize_tools,
-                supports_tool_optimization=self.supports_tool_optimization,
-                warn_unsupported=True,
-            )
-        optimize_tools_provided = optimize_tools is not None
-        if optimize_tools_provided:
-            extra_params["optimize_tools"] = optimize_tools
-
-        tool_names: list[str] | dict[str, list[str]] | None = None
-        if optimize_tools_provided and is_single_prompt_optimization:
-            single_prompt = next(iter(optimizable_prompts.values()))
-            resolved_prompt, tool_names = self._resolve_toolcalling(
-                single_prompt, optimize_tools=optimize_tools
-            )
-            resolved_prompt = cast(chat_prompt.ChatPrompt, resolved_prompt)
-            optimizable_prompts = {resolved_prompt.name: resolved_prompt}
-        else:
-            resolved_prompts, tool_names = self._resolve_toolcalling(
-                optimizable_prompts, optimize_tools=optimize_tools
-            )
-            optimizable_prompts = cast(
-                dict[str, chat_prompt.ChatPrompt], resolved_prompts
-            )
-        if isinstance(tool_names, dict):
-            extra_params["tool_names_by_prompt"] = tool_names
-            extra_params["tool_names"] = sorted(
-                {tool for names in tool_names.values() for tool in names}
-            )
-        elif tool_names is not None:
-            extra_params["tool_names"] = tool_names
+        optimizable_prompts = self._prepare_tool_optimization(
+            optimizable_prompts,
+            is_single_prompt_optimization=is_single_prompt_optimization,
+            optimize_prompts=optimize_prompts,
+            optimizable_roles=optimizable_roles,
+            optimize_tools=optimize_tools,
+            extra_params=extra_params,
+        )
 
         # Validate optimization inputs
         self._validate_optimization_inputs(
@@ -490,20 +458,7 @@ class BaseOptimizer(ABC):
 
         self._validate_metric_requirements(evaluation_dataset, metric)
 
-        # Validate n_samples against evaluation dataset size
-        total_items = len(evaluation_dataset.get_items())
-        if total_items == 0:
-            raise ValueError(
-                f"dataset: {evaluation_dataset.name} is empty in project: {getattr(evaluation_dataset, 'project_name', None)}"
-            )
-        if isinstance(n_samples, int) and n_samples > total_items:
-            logger.warning(
-                "Requested n_samples (%s) is larger than evaluation dataset size (%s). "
-                "Using full evaluation dataset.",
-                n_samples,
-                total_items,
-            )
-            n_samples = None
+        n_samples = self._validated_n_samples(evaluation_dataset, n_samples)
 
         # Resolve project name
         project_name = resolve_project_name(project_name)
@@ -518,23 +473,9 @@ class BaseOptimizer(ABC):
         # Reset counters
         self._reset_counters()
 
-        # Reuse the given optimization if it exists, otherwise create it with that ID.
-        opik_optimization = None
-        if optimization_id:
-            try:
-                opik_optimization = self.opik_client.get_optimization_by_id(
-                    optimization_id
-                )
-            except ApiError as e:
-                if e.status_code != 404:
-                    raise
-        if opik_optimization is not None:
-            self.current_optimization_id = opik_optimization.id
-            logger.debug(f"Using existing optimization with ID: {opik_optimization.id}")
-        else:
-            opik_optimization = self._create_optimization_run(
-                dataset, metric, optimization_id
-            )
+        opik_optimization = self._get_or_create_optimization(
+            dataset, metric, optimization_id
+        )
 
         # Default dataset split for history/logging (overridden by optimizers as needed)
         dataset_split = "validation" if validation_dataset is not None else "train"
@@ -568,15 +509,11 @@ class BaseOptimizer(ABC):
         if hasattr(self, "allow_user_prompt_optimization"):
             setattr(self, "allow_user_prompt_optimization", "user" in optimizable_roles)
 
-        # Return optimization context
-        allow_tool_use_flag = bool(extra_params.get("allow_tool_use", True))
-        # A custom agent can own tools no ChatPrompt declares; don't veto it then.
-        declares_tools = any(p.tools for p in optimizable_prompts.values())
-        if declares_tools or not custom_agent:
-            allow_tool_use_flag = (
-                allow_tool_use_flag
-                and toolcalling_utils.should_allow_tool_use(optimizable_prompts)
-            )
+        allow_tool_use_flag = self._resolve_allow_tool_use(
+            optimizable_prompts,
+            requested=bool(extra_params.get("allow_tool_use", True)),
+            custom_agent=custom_agent,
+        )
         extra_params["allow_tool_use"] = allow_tool_use_flag
 
         context = OptimizationContext(
@@ -606,6 +543,114 @@ class BaseOptimizer(ABC):
         self.set_default_dataset_split(dataset_split)
         self.n_samples_strategy = resolved_strategy
         return context
+
+    def _prepare_tool_optimization(
+        self,
+        optimizable_prompts: dict[str, chat_prompt.ChatPrompt],
+        *,
+        is_single_prompt_optimization: bool,
+        optimize_prompts: bool | str | list[str] | None,
+        optimizable_roles: set[str],
+        optimize_tools: bool | dict[str, bool] | None,
+        extra_params: dict[str, Any],
+    ) -> dict[str, chat_prompt.ChatPrompt]:
+        """Validate the tool flags, resolve tool selections and record them in extra_params."""
+        from .utils.toolcalling.ops import toolcalling as toolcalling_utils
+
+        # Declining tool optimization is valid for every prompt shape.
+        if not toolcalling_utils.tool_optimization_requested(optimize_tools):
+            optimize_tools = None
+        # optimize_prompts=False with no tools is a deliberate no-op on content
+        # (ParameterOptimizer); every other combination must be validated.
+        if optimize_prompts is not False or optimize_tools is not None:
+            optimize_tools = toolcalling_utils.validate_optimization_flags(
+                optimize_prompts=bool(optimizable_roles),
+                optimize_tools=optimize_tools,
+                supports_tool_optimization=self.supports_tool_optimization,
+                warn_unsupported=True,
+            )
+        if optimize_tools is not None:
+            extra_params["optimize_tools"] = optimize_tools
+
+        tool_names: list[str] | dict[str, list[str]] | None
+        if optimize_tools is not None and is_single_prompt_optimization:
+            single_prompt = next(iter(optimizable_prompts.values()))
+            resolved_prompt, tool_names = self._resolve_toolcalling(
+                single_prompt, optimize_tools=optimize_tools
+            )
+            resolved_prompt = cast(chat_prompt.ChatPrompt, resolved_prompt)
+            optimizable_prompts = {resolved_prompt.name: resolved_prompt}
+        else:
+            resolved_prompts, tool_names = self._resolve_toolcalling(
+                optimizable_prompts, optimize_tools=optimize_tools
+            )
+            optimizable_prompts = cast(
+                dict[str, chat_prompt.ChatPrompt], resolved_prompts
+            )
+        if isinstance(tool_names, dict):
+            extra_params["tool_names_by_prompt"] = tool_names
+            extra_params["tool_names"] = sorted(
+                {tool for names in tool_names.values() for tool in names}
+            )
+        elif tool_names is not None:
+            extra_params["tool_names"] = tool_names
+        return optimizable_prompts
+
+    @staticmethod
+    def _validated_n_samples(
+        evaluation_dataset: Dataset, n_samples: int | float | str | None
+    ) -> int | float | str | None:
+        """Reject an empty evaluation dataset and drop an n_samples larger than it."""
+        total_items = len(evaluation_dataset.get_items())
+        if total_items == 0:
+            raise ValueError(
+                f"dataset: {evaluation_dataset.name} is empty in project: {getattr(evaluation_dataset, 'project_name', None)}"
+            )
+        if isinstance(n_samples, int) and n_samples > total_items:
+            logger.warning(
+                "Requested n_samples (%s) is larger than evaluation dataset size (%s). "
+                "Using full evaluation dataset.",
+                n_samples,
+                total_items,
+            )
+            return None
+        return n_samples
+
+    def _get_or_create_optimization(
+        self, dataset: Dataset, metric: MetricFunction, optimization_id: str | None
+    ) -> Any:
+        """Reuse the given optimization if it exists, otherwise create it with that ID."""
+        opik_optimization = None
+        if optimization_id:
+            try:
+                opik_optimization = self.opik_client.get_optimization_by_id(
+                    optimization_id
+                )
+            except ApiError as e:
+                if e.status_code != 404:
+                    raise
+        if opik_optimization is None:
+            return self._create_optimization_run(dataset, metric, optimization_id)
+        self.current_optimization_id = opik_optimization.id
+        logger.debug(f"Using existing optimization with ID: {opik_optimization.id}")
+        return opik_optimization
+
+    @staticmethod
+    def _resolve_allow_tool_use(
+        optimizable_prompts: dict[str, chat_prompt.ChatPrompt],
+        *,
+        requested: bool,
+        custom_agent: bool,
+    ) -> bool:
+        from .utils.toolcalling.ops import toolcalling as toolcalling_utils
+
+        # A custom agent can own tools no ChatPrompt declares; don't veto it then.
+        declares_tools = any(p.tools for p in optimizable_prompts.values())
+        if declares_tools or not custom_agent:
+            return requested and toolcalling_utils.should_allow_tool_use(
+                optimizable_prompts
+            )
+        return requested
 
     def _resolve_toolcalling(
         self,

@@ -99,8 +99,10 @@ class TestOptimizerWiring:
             )
 
     def test_non_string_override_fails_with_the_same_context(self) -> None:
-        """A non-string override must not escape as a bare TypeError from gepa's
-        validator — it fails at construction with the documented message."""
+        """A non-string override fails at construction with the documented message.
+
+        It must not escape as a bare TypeError from gepa's validator.
+        """
         with pytest.raises(
             ValueError, match="Invalid reflection_prompt_template override"
         ):

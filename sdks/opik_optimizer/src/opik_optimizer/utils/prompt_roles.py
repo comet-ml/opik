@@ -95,10 +95,10 @@ def count_disallowed_role_updates(
 
 
 def derive_prompt(
-    base: "ChatPrompt",
+    base: ChatPrompt,
     new_messages: list[dict[str, Any]],
     allowed_roles: set[str] | None = None,
-) -> "ChatPrompt":
+) -> ChatPrompt:
     """Apply a text rewrite while retaining the prompt's media and configuration."""
     from .multimodal import preserve_multimodal_message_structure
 

@@ -230,6 +230,7 @@ class TestSharedLifecycle:
         assert result.score == 1.0
         assert result.details["trials_completed"] == 1
         assert result.details["finish_reason"] == "perfect_score"
+        assert isinstance(result.prompt, dict)
         assert {key: value.model for key, value in result.prompt.items()} == {
             "a": "agent-a",
             "b": "agent-b",

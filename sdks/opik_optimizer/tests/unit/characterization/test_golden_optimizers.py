@@ -16,6 +16,7 @@ from typing import Any
 
 import pytest
 
+from opik_optimizer import ChatPrompt
 from tests.unit.characterization import harness
 
 # Pairs whose golden snapshot pins a known bug or degraded output. The note is
@@ -122,6 +123,8 @@ def test_bundle_tools_can_select_one_prompt(optimizer_name, install_fakes):
 
     scenario = harness.build_scenario("S2_multi")
     tool_prompt = harness.build_scenario("S4_tools").prompt
+    assert isinstance(scenario.prompt, dict)
+    assert isinstance(tool_prompt, ChatPrompt)
     for prompt in scenario.prompt.values():
         prompt.tools = copy.deepcopy(tool_prompt.tools)
         prompt.function_map = tool_prompt.function_map
@@ -136,6 +139,7 @@ def test_bundle_tools_can_select_one_prompt(optimizer_name, install_fakes):
         max_trials=3,
         optimize_tools={f"planner.{harness.TOOL_NAME}": True},
     )
+    assert isinstance(result.prompt, dict)
     assert set(result.prompt) == {"planner", "answerer"}
     assert result.prompt["answerer"].tools == scenario.prompt["answerer"].tools
     assert result.prompt["planner"].function_map == tool_prompt.function_map

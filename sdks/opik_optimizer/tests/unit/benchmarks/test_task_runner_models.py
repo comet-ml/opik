@@ -242,5 +242,6 @@ def test_parameter_optimizer_prompt_gets_runner_model(
     )
 
     assert constructed == [{"seed": 1}]
+    assert isinstance(result.initial_prompt, ChatPrompt)
     assert result.initial_prompt.model == "custom-model"
     assert result.initial_prompt.model_kwargs == {"temperature": 0.7}

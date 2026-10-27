@@ -1,8 +1,12 @@
+from typing import Any
+
 from opik_optimizer.utils.feedback import format_evaluation_feedback, sanitize_feedback
 
 
-def test_media_payloads_are_hidden_but_custom_dataset_fields_and_reasons_remain():
-    item = {
+def test_media_payloads_are_hidden_but_custom_dataset_fields_and_reasons_remain() -> (
+    None
+):
+    item: dict[str, Any] = {
         "ticket": "Printer broken",
         "attachment": "data:image/png;base64,aGVsbG8=",
         "parts": [{"type": "image_url", "image_url": {"url": "{image}"}}],
@@ -17,14 +21,14 @@ def test_media_payloads_are_hidden_but_custom_dataset_fields_and_reasons_remain(
     assert item["attachment"].endswith("aGVsbG8=")
 
 
-def test_embedded_media_strings_are_redacted():
+def test_embedded_media_strings_are_redacted() -> None:
     assert (
         sanitize_feedback("before data:audio/wav;base64,aGVsbG8= after")
         == "before [media] after"
     )
 
 
-def test_input_fields_drop_labels_and_cap_values():
+def test_input_fields_drop_labels_and_cap_values() -> None:
     from opik_optimizer.utils.feedback import input_fields
 
     fields = input_fields(
@@ -42,10 +46,10 @@ def test_input_fields_drop_labels_and_cap_values():
     assert len(fields["context"]) < 500
 
 
-def test_redact_inline_media_keeps_structure_and_placeholders():
+def test_redact_inline_media_keeps_structure_and_placeholders() -> None:
     from opik_optimizer.utils.multimodal import redact_inline_media
 
-    messages = [
+    messages: list[dict[str, Any]] = [
         {
             "role": "user",
             "content": [

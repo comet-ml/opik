@@ -162,7 +162,7 @@ def test_toolcalling__build_tool_blocks_redacts_sensitive_metadata() -> None:
     assert "secret" not in blocks
 
 
-def test_bundle_selector_scopes_duplicate_tool_names_to_one_prompt():
+def test_bundle_selector_scopes_duplicate_tool_names_to_one_prompt() -> None:
     from copy import deepcopy
 
     tools = [
@@ -183,6 +183,7 @@ def test_bundle_selector_scopes_duplicate_tool_names_to_one_prompt():
         bundle, optimize_tools={"planner.lookup": True}
     )
     assert names == {"planner": ["lookup"]}
+    assert isinstance(resolved, dict)
     assert resolved["answerer"].tools == bundle["answerer"].tools
     with pytest.raises(ValueError, match="not found"):
         toolcalling.resolve_prompt_tools(
@@ -216,14 +217,16 @@ def _two_prompt_tool_bundle() -> dict[str, ChatPrompt]:
         {"planner.lookup": False, "lookup": True},
     ],
 )
-def test_bundle_qualified_selectors_override_unqualified_in_any_order(selector):
+def test_bundle_qualified_selectors_override_unqualified_in_any_order(
+    selector: dict[str, bool],
+) -> None:
     _, names = toolcalling.resolve_prompt_tools(
         _two_prompt_tool_bundle(), optimize_tools=selector
     )
     assert names == {"answerer": ["lookup"]}
 
 
-def test_bundle_selectors_accept_tool_prefix():
+def test_bundle_selectors_accept_tool_prefix() -> None:
     _, names = toolcalling.resolve_prompt_tools(
         _two_prompt_tool_bundle(),
         optimize_tools={"tool:lookup": True, "planner.tool:search": True},
@@ -232,7 +235,9 @@ def test_bundle_selectors_accept_tool_prefix():
 
 
 @pytest.mark.parametrize("selector", [{"nope": True}, {"answerer.search": True}])
-def test_bundle_selector_errors_list_available_tools(selector):
+def test_bundle_selector_errors_list_available_tools(
+    selector: dict[str, bool],
+) -> None:
     with pytest.raises(ValueError) as error:
         toolcalling.resolve_prompt_tools(
             _two_prompt_tool_bundle(), optimize_tools=selector
@@ -241,8 +246,11 @@ def test_bundle_selector_errors_list_available_tools(selector):
 
 
 @pytest.mark.parametrize("selector", [{"planner.lookup": False}, {}, False])
-def test_bundle_selector_enabling_nothing_is_not_a_request(selector):
+def test_bundle_selector_enabling_nothing_is_not_a_request(
+    selector: dict[str, bool] | bool,
+) -> None:
     bundle = _two_prompt_tool_bundle()
     resolved, names = toolcalling.resolve_prompt_tools(bundle, optimize_tools=selector)
     assert names is None
+    assert isinstance(resolved, dict)
     assert resolved["planner"].tools == bundle["planner"].tools

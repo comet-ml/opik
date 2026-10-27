@@ -47,7 +47,9 @@ def test_selected_bundle_tool_is_rewritten_by_key(
     seen: dict[str, set[str]] = {"planner": set(), "answerer": set()}
     original_invoke = harness.TwoStepAgent.invoke_agent
 
-    def invoke(self: Any, prompts: Any, dataset_item: Any, *args: Any, **kwargs: Any):
+    def invoke(
+        self: Any, prompts: Any, dataset_item: Any, *args: Any, **kwargs: Any
+    ) -> Any:
         for key in seen:
             seen[key].add(prompts[key].tools[0]["function"]["description"])
         return original_invoke(self, prompts, dataset_item, *args, **kwargs)
@@ -76,7 +78,9 @@ def test_bundle_selector_that_enables_nothing_leaves_tools_alone(
     descriptions: set[str] = set()
     original_invoke = harness.TwoStepAgent.invoke_agent
 
-    def invoke(self: Any, prompts: Any, dataset_item: Any, *args: Any, **kwargs: Any):
+    def invoke(
+        self: Any, prompts: Any, dataset_item: Any, *args: Any, **kwargs: Any
+    ) -> Any:
         descriptions.update(
             p.tools[0]["function"]["description"] for p in prompts.values()
         )
