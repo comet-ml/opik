@@ -6,6 +6,7 @@ import com.comet.opik.domain.llm.ParamResolver;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import dev.langchain4j.model.chat.request.ChatRequestParameters;
+import io.dropwizard.util.DataSize;
 import okhttp3.OkHttpClient;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -30,7 +31,9 @@ class CustomLlmClientGeneratorTemperatureTest {
     private static final ParamResolver RESOLVER = new ParamResolver(mock(LlmProviderFactory.class), bundledRegistry());
 
     private ChatRequestParameters judgeParametersFor(String modelName, Double temperature) {
-        var generator = new CustomLlmClientGenerator(new LlmProviderClientConfig(), mock(ProviderBaseUrlGuard.class),
+        var clientConfig = new LlmProviderClientConfig();
+        clientConfig.setProviderErrorBodyMaxSize(DataSize.kilobytes(64));
+        var generator = new CustomLlmClientGenerator(clientConfig, mock(ProviderBaseUrlGuard.class),
                 mock(AuthTokenProvider.class), new OkHttpClient());
         var config = LlmProviderClientApiConfig.builder()
                 .apiKey("test-key")

@@ -114,7 +114,8 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
      */
     private HttpClientBuilder newHttpClientBuilder(LlmProviderClientApiConfig config) {
         // innermost, so it sees the URL after InterceptingHttpClient's mutations
-        var guardedBuilder = new DestinationGuardHttpClientBuilder(new CustomLlmHttpClientBuilder(httpClient),
+        var guardedBuilder = new DestinationGuardHttpClientBuilder(new CustomLlmHttpClientBuilder(httpClient,
+                Math.toIntExact(llmProviderClientConfig.getProviderErrorBodyMaxSize().toBytes())),
                 providerBaseUrlGuard);
 
         if (!requiresInterceptingBuilder(config)) {

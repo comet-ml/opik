@@ -13,6 +13,7 @@ import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import dev.langchain4j.data.message.TextContent;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.openai.internal.chat.UserMessage;
+import io.dropwizard.util.DataSize;
 import jakarta.ws.rs.BadRequestException;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.AfterAll;
@@ -72,6 +73,7 @@ class CustomLlmProviderTest {
         var clientConfig = new LlmProviderClientConfig();
         clientConfig.setLogRequests(false);
         clientConfig.setLogResponses(false);
+        clientConfig.setProviderErrorBodyMaxSize(DataSize.kilobytes(64));
         var relaxedGuard = ProviderBaseUrlGuard.builder()
                 .mode(DestinationGuard.Mode.RELAXED)
                 .scheme(DestinationGuard.Scheme.PLAINTEXT_OR_TLS)

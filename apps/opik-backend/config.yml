@@ -1682,6 +1682,10 @@ llmProviderClient:
   # Description: Longest provider error message passed on to a caller. Provider error messages are one or two
   #   sentences; a longer, multi-line or markup-bearing message is replaced by "Unexpected error calling LLM provider"
   providerErrorMessageMaxLength: ${LLM_PROVIDER_ERROR_MESSAGE_MAX_LENGTH:-300}
+  # Default: 64KB
+  # Description: Most bytes read from a custom provider's error response body; the rest is discarded, as only a
+  #   short message parsed from it reaches callers; at most 1MiB
+  providerErrorBodyMaxSize: ${LLM_PROVIDER_ERROR_BODY_MAX_SIZE:-64KB}
   # Configuration for OpenAI client
   openAiClient:
     # Default:

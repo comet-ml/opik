@@ -97,6 +97,14 @@ public class LlmProviderClientConfig {
     @MaxDataSize(value = 1, unit = DataSizeUnit.GIBIBYTES)
     private DataSize mediaDownloadMaxSize;
 
+    /**
+     * Most bytes read from a custom provider's non-2xx response body; the rest is discarded. Only a short message
+     * parsed from it reaches callers, so a larger body is never needed.
+     */
+    @NotNull @MinDataSize(1)
+    @MaxDataSize(value = 1, unit = DataSizeUnit.MEBIBYTES)
+    private DataSize providerErrorBodyMaxSize;
+
     /** Longest provider error message passed on to a caller; a longer one is replaced by the generic one. */
     @NotNull @Positive private Integer providerErrorMessageMaxLength;
 }
