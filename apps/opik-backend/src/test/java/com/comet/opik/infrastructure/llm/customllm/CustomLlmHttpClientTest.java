@@ -5,6 +5,7 @@ import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import dev.langchain4j.exception.HttpException;
+import dev.langchain4j.exception.TimeoutException;
 import dev.langchain4j.http.client.HttpClient;
 import dev.langchain4j.http.client.HttpMethod;
 import dev.langchain4j.http.client.HttpRequest;
@@ -26,7 +27,9 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InterruptedIOException;
+import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -121,37 +124,198 @@ class CustomLlmHttpClientTest {
         assertThat(((HttpException) actualError).statusCode()).isEqualTo(400);
     }
 
+    /** What a raw server sends on its one connection, once it has read the request. */
+    @FunctionalInterface
+    private interface RawReply {
+        void send(OutputStream out) throws IOException, InterruptedException;
+    }
+
+    /**
+     * A server on a loopback port that answers one connection as scripted: WireMock can't send headers and then stay
+     * silent, nor never answer at all. The request is read first, so closing doesn't reset the connection.
+     */
+    private static ServerSocket rawServer(RawReply reply) throws IOException {
+        var server = new ServerSocket(0, 1, InetAddress.getLoopbackAddress());
+        Thread.ofVirtual().start(() -> {
+            try (Socket socket = server.accept(); var out = socket.getOutputStream()) {
+                readRequest(socket.getInputStream());
+                reply.send(out);
+                out.flush();
+            } catch (IOException | InterruptedException ignored) {
+                // the call reports what it got
+            }
+        });
+        return server;
+    }
+
+    private static void readRequest(InputStream in) throws IOException {
+        var head = new StringBuilder();
+        while (!head.toString().endsWith("\r\n\r\n")) {
+            int read = in.read();
+            if (read == -1) {
+                return;
+            }
+            head.append((char) read);
+        }
+        var contentLength = head.toString().lines()
+                .filter(line -> line.regionMatches(true, 0, "Content-Length:", 0, 15))
+                .map(line -> Integer.parseInt(line.substring(15).trim()))
+                .findFirst()
+                .orElse(0);
+        in.readNBytes(contentLength);
+    }
+
+    private static HttpRequest rawRequest(ServerSocket server) {
+        return HttpRequest.builder()
+                .method(HttpMethod.POST)
+                .url("http://localhost:%d%s".formatted(server.getLocalPort(), PATH))
+                .body("{}")
+                .build();
+    }
+
+    private static HttpClient clientWithReadTimeout(Duration readTimeout, OkHttpClient okHttpClient) {
+        return new CustomLlmHttpClientBuilder(okHttpClient, ERROR_BODY_MAX_SIZE).readTimeout(readTimeout).build();
+    }
+
     /** A body cut short reads as a fixed message: the read failure's own message can name the destination. */
     @ParameterizedTest
     @EnumSource(CallPath.class)
     void anUnreadableErrorBodyIsReportedWithoutItsReadFailure(CallPath callPath) throws Exception {
         var partialBody = RandomStringUtils.secure().nextAlphanumeric(ERROR_BODY_MAX_SIZE / 2);
-        try (var server = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
-            // the body is shorter than its declared length, then the connection closes
-            Thread.ofVirtual().start(() -> {
-                try (Socket socket = server.accept()) {
-                    socket.getOutputStream().write("""
-                            HTTP/1.1 400 Bad Request\r
-                            Content-Length: %d\r
-                            \r
-                            %s""".formatted(ERROR_BODY_MAX_SIZE, partialBody).getBytes(StandardCharsets.UTF_8));
-                    socket.getOutputStream().flush();
-                } catch (IOException ignored) {
-                    // the call reports what it read
-                }
-            });
-            var request = HttpRequest.builder()
-                    .method(HttpMethod.POST)
-                    .url("http://localhost:%d%s".formatted(server.getLocalPort(), PATH))
-                    .body("{}")
-                    .build();
+        // the body is shorter than its declared length, then the connection closes
+        try (var server = rawServer(out -> out.write("""
+                HTTP/1.1 400 Bad Request\r
+                Content-Length: %d\r
+                \r
+                %s""".formatted(ERROR_BODY_MAX_SIZE, partialBody).getBytes(StandardCharsets.UTF_8)))) {
 
-            Throwable actualError = failure(callPath, request);
+            Throwable actualError = failure(callPath, rawRequest(server));
 
             assertThat(actualError).isExactlyInstanceOf(HttpException.class)
                     .hasMessage(CustomLlmHttpClient.UNREADABLE_ERROR_BODY);
             assertThat(((HttpException) actualError).statusCode()).isEqualTo(400);
         }
+    }
+
+    /** The two ways a stream is read. */
+    enum StreamPath {
+        LISTENER_STREAM,
+        STREAM
+    }
+
+    /**
+     * As the JDK client did, the read timeout bounds only the wait for a stream's headers: a model that reasons
+     * before it answers can send nothing for longer.
+     */
+    @ParameterizedTest
+    @EnumSource(StreamPath.class)
+    void aStreamSilentForLongerThanTheReadTimeoutCompletes(StreamPath streamPath) throws Exception {
+        var readTimeout = Duration.ofMillis(500);
+        var silence = Duration.ofMillis(2_000);
+        var data = RandomStringUtils.secure().nextAlphanumeric(10);
+        var silentClient = clientWithReadTimeout(readTimeout, okHttpClient);
+        try (var server = rawServer(out -> {
+            out.write("""
+                    HTTP/1.1 200 OK\r
+                    Content-Type: text/event-stream\r
+                    Connection: close\r
+                    \r
+                    """.getBytes(StandardCharsets.UTF_8));
+            out.flush();
+            Thread.sleep(silence);
+            out.write("data: %s\n\n".formatted(data).getBytes(StandardCharsets.UTF_8));
+        })) {
+            var expectedEvents = List.of(new ServerSentEvent(null, data));
+            long startNanos = System.nanoTime();
+
+            var actualEvents = streamedEvents(silentClient, streamPath, rawRequest(server));
+
+            var actualElapsed = Duration.ofNanos(System.nanoTime() - startNanos);
+            assertThat(actualEvents).isEqualTo(expectedEvents);
+            assertThat(actualElapsed).isGreaterThanOrEqualTo(silence);
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(StreamPath.class)
+    void aStreamWhoseHeadersNeverArriveFailsAtTheReadTimeout(StreamPath streamPath) throws Exception {
+        var readTimeout = Duration.ofMillis(500);
+        var expectedMaxElapsed = Duration.ofSeconds(5);
+        var silentClient = clientWithReadTimeout(readTimeout, okHttpClient);
+        try (var server = rawServer(out -> Thread.sleep(30_000))) {
+            long startNanos = System.nanoTime();
+
+            Throwable actualError = failure(silentClient, CallPath.valueOf(streamPath.name()), rawRequest(server));
+
+            var actualElapsed = Duration.ofNanos(System.nanoTime() - startNanos);
+            assertThat(actualError).isExactlyInstanceOf(TimeoutException.class);
+            assertThat(actualElapsed).isBetween(readTimeout, expectedMaxElapsed);
+        }
+    }
+
+    /** A non-2xx body read as a whole within the read timeout, however slowly each byte comes. */
+    @ParameterizedTest
+    @EnumSource(CallPath.class)
+    void aTricklingErrorBodyIsCutAtTheReadTimeout(CallPath callPath) throws Exception {
+        var readTimeout = Duration.ofMillis(500);
+        var expectedMaxElapsed = Duration.ofSeconds(5);
+        var trickleClient = clientWithReadTimeout(readTimeout, okHttpClient);
+        // a byte every 100 ms, within the read timeout each time, for 100 seconds in all
+        try (var server = rawServer(out -> {
+            out.write("""
+                    HTTP/1.1 400 Bad Request\r
+                    Content-Length: 1000\r
+                    \r
+                    """.getBytes(StandardCharsets.UTF_8));
+            for (int i = 0; i < 1_000; i++) {
+                out.write('x');
+                out.flush();
+                Thread.sleep(100);
+            }
+        })) {
+            long startNanos = System.nanoTime();
+
+            Throwable actualError = failure(trickleClient, callPath, rawRequest(server));
+
+            var actualElapsed = Duration.ofNanos(System.nanoTime() - startNanos);
+            assertThat(actualError).isExactlyInstanceOf(HttpException.class)
+                    .hasMessage(CustomLlmHttpClient.UNREADABLE_ERROR_BODY);
+            assertThat(((HttpException) actualError).statusCode()).isEqualTo(400);
+            assertThat(actualElapsed).isLessThan(expectedMaxElapsed);
+        }
+    }
+
+    /** The events of a stream, without its response head. */
+    private static List<ServerSentEvent> streamedEvents(HttpClient client, StreamPath streamPath, HttpRequest request)
+            throws Exception {
+        return switch (streamPath) {
+            case LISTENER_STREAM -> {
+                var events = new ArrayList<ServerSentEvent>();
+                var done = new CompletableFuture<List<ServerSentEvent>>();
+                client.execute(request, new ServerSentEventListener() {
+                    @Override
+                    public void onEvent(ServerSentEvent event) {
+                        events.add(event);
+                    }
+
+                    @Override
+                    public void onError(Throwable throwable) {
+                        done.completeExceptionally(throwable);
+                    }
+
+                    @Override
+                    public void onClose() {
+                        done.complete(events);
+                    }
+                });
+                yield done.get(10, TimeUnit.SECONDS);
+            }
+            case STREAM -> {
+                var events = collect(client.stream(request, new DefaultServerSentEventParser()), Long.MAX_VALUE)
+                        .get(10, TimeUnit.SECONDS);
+                yield events.subList(1, events.size()).stream().map(ServerSentEvent.class::cast).toList();
+            }
+        };
     }
 
     @Test
@@ -335,6 +499,10 @@ class CustomLlmHttpClientTest {
     }
 
     private Throwable failure(CallPath callPath, HttpRequest request) throws Exception {
+        return failure(client, callPath, request);
+    }
+
+    private static Throwable failure(HttpClient client, CallPath callPath, HttpRequest request) throws Exception {
         return switch (callPath) {
             case EXECUTE -> catchFailure(() -> client.execute(request));
             case EXECUTE_ASYNC -> catchFailure(() -> client.executeAsync(request).orTimeout(10, TimeUnit.SECONDS)

@@ -24,6 +24,7 @@ import mutiny.zero.ZeroPublisher;
 import okhttp3.Call;
 import okhttp3.Callback;
 import okhttp3.HttpUrl;
+import okhttp3.Interceptor;
 import okhttp3.MediaType;
 import okhttp3.MultipartBody;
 import okhttp3.OkHttpClient;
@@ -44,6 +45,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Flow;
+import java.util.concurrent.TimeUnit;
 
 import static dev.langchain4j.http.client.sse.ServerSentEventListenerUtils.ignoringExceptions;
 
@@ -55,7 +57,6 @@ import static dev.langchain4j.http.client.sse.ServerSentEventListenerUtils.ignor
  * short message parsed from it.
  */
 @Slf4j
-@RequiredArgsConstructor
 class CustomLlmHttpClient implements HttpClient {
 
     /** The buffer between a {@link #stream} and its subscriber, in events: the JDK client's default. */
@@ -69,10 +70,36 @@ class CustomLlmHttpClient implements HttpClient {
 
     /** Derived from one of the shared clients, whose connection pool and dispatcher it uses. */
     @Getter(AccessLevel.PACKAGE)
-    private final @NonNull OkHttpClient client;
+    private final OkHttpClient client;
+
+    /** {@link #client} for streams, whose body has no read timeout once the headers arrived; same pool and dispatcher. */
+    private final OkHttpClient streamingClient;
 
     /** Most bytes read from a non-2xx response body; the rest is discarded. */
     private final int errorBodyMaxSize;
+
+    CustomLlmHttpClient(@NonNull OkHttpClient client, int errorBodyMaxSize) {
+        this.client = client;
+        this.streamingClient = client.newBuilder()
+                .addNetworkInterceptor(CustomLlmHttpClient::untimedStreamBody)
+                .build();
+        this.errorBodyMaxSize = errorBodyMaxSize;
+    }
+
+    /**
+     * As the JDK client did, the read timeout bounds the wait for a stream's response headers only. OkHttp also sets
+     * it as the socket's read timeout, which would end a stream that is silent for longer, as a model that reasons
+     * before answering can be, so a successful stream's socket has none. Each exchange on a pooled connection sets its
+     * own again.
+     */
+    private static Response untimedStreamBody(Interceptor.Chain chain) throws IOException {
+        var response = chain.proceed(chain.request());
+        var connection = chain.connection();
+        if (connection != null && response.isSuccessful()) {
+            connection.socket().setSoTimeout(0);
+        }
+        return response;
+    }
 
     @Override
     public SuccessfulHttpResponse execute(@NonNull HttpRequest request) {
@@ -116,7 +143,7 @@ class CustomLlmHttpClient implements HttpClient {
     @Override
     public void execute(@NonNull HttpRequest request, @NonNull ServerSentEventParser parser,
             @NonNull ServerSentEventListener listener) {
-        client.newCall(toOkHttpRequest(request)).enqueue(new Callback() {
+        streamingClient.newCall(toOkHttpRequest(request)).enqueue(new Callback() {
             @Override
             public void onFailure(@NonNull Call call, @NonNull IOException exception) {
                 ignoringExceptions(() -> listener.onError(failure(exception)));
@@ -124,14 +151,15 @@ class CustomLlmHttpClient implements HttpClient {
 
             @Override
             public void onResponse(@NonNull Call call, @NonNull Response response) {
-                try (response; InputStream body = untimedBody(response).byteStream()) {
+                var body = untimedBody(response);
+                try (response; InputStream bodyStream = body.byteStream()) {
                     if (!response.isSuccessful()) {
                         var exception = new HttpException(response.code(), readErrorBody(call, body));
                         ignoringExceptions(() -> listener.onError(exception));
                         return;
                     }
                     ignoringExceptions(() -> listener.onOpen(toResponse(response, null)));
-                    parser.parse(body, listener);
+                    parser.parse(bodyStream, listener);
                     ignoringExceptions(listener::onClose);
                 } catch (IOException | RuntimeException exception) {
                     ignoringExceptions(() -> listener.onError(
@@ -154,7 +182,7 @@ class CustomLlmHttpClient implements HttpClient {
                 .withBackpressureStrategy(BackpressureStrategy.BUFFER)
                 .withBufferSize(STREAMING_BUFFER_SIZE);
         return ZeroPublisher.create(configuration, tube -> {
-            var call = client.newCall(okHttpRequest);
+            var call = streamingClient.newCall(okHttpRequest);
             tube.whenTerminates(call::cancel);
             call.enqueue(new Callback() {
                 @Override
@@ -181,7 +209,7 @@ class CustomLlmHttpClient implements HttpClient {
             Tube<HttpStreamingEvent> tube) throws IOException {
         var body = untimedBody(response);
         if (!response.isSuccessful()) {
-            tube.fail(new HttpException(response.code(), readErrorBody(call, body.byteStream())));
+            tube.fail(new HttpException(response.code(), readErrorBody(call, body)));
             return;
         }
         tube.send(new HttpResponseReceived(toResponse(response, null)));
@@ -246,7 +274,7 @@ class CustomLlmHttpClient implements HttpClient {
         try (response) {
             var body = untimedBody(response);
             if (!response.isSuccessful()) {
-                throw new HttpException(response.code(), readErrorBody(call, body.byteStream()));
+                throw new HttpException(response.code(), readErrorBody(call, body));
             }
             return toResponse(response, body.bytes());
         }
@@ -261,12 +289,16 @@ class CustomLlmHttpClient implements HttpClient {
     }
 
     /**
-     * At most {@link #errorBodyMaxSize} bytes of a non-2xx body. When the body may hold more, the call is cancelled,
-     * so the rest is neither read nor drained for connection reuse.
+     * At most {@link #errorBodyMaxSize} bytes of a non-2xx body, read within the read timeout as a whole, so a body
+     * that trickles in can't hold the call past it. When the body may hold more, the call is cancelled, so the rest
+     * is neither read nor drained for connection reuse.
      */
-    private String readErrorBody(Call call, InputStream body) {
+    private String readErrorBody(Call call, ResponseBody body) {
+        if (client.readTimeoutMillis() > 0) {
+            body.source().timeout().deadline(client.readTimeoutMillis(), TimeUnit.MILLISECONDS);
+        }
         try {
-            byte[] bytes = body.readNBytes(errorBodyMaxSize);
+            byte[] bytes = body.byteStream().readNBytes(errorBodyMaxSize);
             if (bytes.length == errorBodyMaxSize) {
                 call.cancel();
             }
