@@ -45,16 +45,11 @@ public class WebhookHttpClient {
     private static final String USER_AGENT_VALUE = "Opik-Webhook/1.0";
     public static final String BEARER_PREFIX = "Bearer ";
 
-    /**
-     * A webhook destination is caller-supplied, so its response body is arbitrary content we should not let flood
-     * the logs or memory. Same cap as the other diagnostic body reads in this service.
-     */
-    private static final int MAX_LOGGED_BODY_LENGTH = 512;
-
     private final @NonNull Client httpClient;
     private final @NonNull WebhookConfig webhookConfig;
     private final Logger userFacingLog;
     private final DestinationGuard destinationGuard;
+    private final int responseBodyMaxSize;
 
     @Inject
     public WebhookHttpClient(@NonNull Client httpClient, @NonNull WebhookConfig webhookConfig) {
@@ -67,6 +62,7 @@ public class WebhookHttpClient {
                 .mode(webhookConfig.getDestinationGuard())
                 .scheme(webhookConfig.getDestinationScheme())
                 .build();
+        this.responseBodyMaxSize = Math.toIntExact(webhookConfig.getResponseBodyMaxSize().toBytes());
     }
 
     /**
@@ -192,13 +188,13 @@ public class WebhookHttpClient {
         return Response.Status.Family.SUCCESSFUL.equals(response.getStatusInfo().getFamily());
     }
 
-    /** At most the first {@link #MAX_LOGGED_BODY_LENGTH} bytes of the body: it is only logged. */
+    /** At most the first {@link WebhookConfig#getResponseBodyMaxSize()} bytes of the body: it is only logged. */
     private Optional<String> readResponseBody(Response response) {
         if (!response.hasEntity()) {
             return Optional.empty();
         }
         try (var body = response.readEntity(InputStream.class)) {
-            String text = new String(body.readNBytes(MAX_LOGGED_BODY_LENGTH), StandardCharsets.UTF_8);
+            String text = new String(body.readNBytes(responseBodyMaxSize), StandardCharsets.UTF_8);
             return StringUtils.isNotBlank(text) ? Optional.of(text) : Optional.empty();
         } catch (IOException | RuntimeException exception) {
             log.debug("Failed to read response body for webhook", exception);

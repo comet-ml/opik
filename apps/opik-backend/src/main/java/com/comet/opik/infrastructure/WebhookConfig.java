@@ -4,8 +4,12 @@ import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.comet.opik.infrastructure.redis.RedisStreamCodec;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.dropwizard.util.DataSize;
+import io.dropwizard.util.DataSizeUnit;
 import io.dropwizard.util.Duration;
+import io.dropwizard.validation.MaxDataSize;
 import io.dropwizard.validation.MaxDuration;
+import io.dropwizard.validation.MinDataSize;
 import io.dropwizard.validation.MinDuration;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
@@ -81,6 +85,15 @@ public class WebhookConfig implements StreamConfiguration {
     /** Schemes allowed for webhook URLs, checked in strict mode only. */
     @Valid @JsonProperty
     @NotNull private DestinationGuard.Scheme destinationScheme;
+
+    /**
+     * Most bytes read from a webhook response body; the rest is discarded. The destination is caller-supplied and the
+     * body is only logged, so it must not flood the logs or memory.
+     */
+    @Valid @JsonProperty
+    @NotNull @MinDataSize(1)
+    @MaxDataSize(value = 64, unit = DataSizeUnit.KIBIBYTES)
+    private DataSize responseBodyMaxSize;
 
     // Debouncing configuration
     @Valid @JsonProperty

@@ -2230,6 +2230,9 @@ webhook:
   #   - https_only: https only
   # Description: Schemes allowed for webhook URLs, checked in strict mode only
   destinationScheme: ${WEBHOOK_DESTINATION_SCHEME:-plaintext_or_tls}
+  # Default: 512B
+  # Description: Most bytes read from a webhook response body, which is only logged; the rest is discarded (at most 64KiB)
+  responseBodyMaxSize: ${WEBHOOK_RESPONSE_BODY_MAX_SIZE:-512B}
   # Default: 10
   # Description: Claim pending messages every N polling intervals
   claimIntervalRatio: ${WEBHOOK_CLAIM_INTERVAL_RATIO:-10}

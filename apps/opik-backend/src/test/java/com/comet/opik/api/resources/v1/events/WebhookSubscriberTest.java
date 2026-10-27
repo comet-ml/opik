@@ -9,6 +9,7 @@ import com.comet.opik.infrastructure.WebhookConfig;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.github.tomakehurst.wiremock.WireMockServer;
+import io.dropwizard.util.DataSize;
 import io.dropwizard.util.Duration;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -197,6 +198,7 @@ class WebhookSubscriberTest {
         config.setRequestTimeout(Duration.seconds(5));
         config.setConnectionTimeout(Duration.seconds(2));
         config.setDestinationScheme(DestinationGuard.Scheme.PLAINTEXT_OR_TLS);
+        config.setResponseBodyMaxSize(DataSize.bytes(512));
         config.setConsumerBatchSize(10);
         config.setPoolingInterval(Duration.seconds(1));
         return config;

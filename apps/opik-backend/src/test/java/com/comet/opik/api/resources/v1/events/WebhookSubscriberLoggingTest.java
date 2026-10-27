@@ -21,6 +21,7 @@ import com.comet.opik.infrastructure.log.tables.UserLogTableFactory;
 import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.redis.testcontainers.RedisContainer;
+import io.dropwizard.util.DataSize;
 import io.dropwizard.util.Duration;
 import io.r2dbc.spi.ConnectionFactory;
 import jakarta.ws.rs.client.Client;
@@ -206,6 +207,7 @@ class WebhookSubscriberLoggingTest {
         config.setRequestTimeout(Duration.seconds(2));
         config.setConnectionTimeout(Duration.seconds(1));
         config.setDestinationScheme(DestinationGuard.Scheme.PLAINTEXT_OR_TLS);
+        config.setResponseBodyMaxSize(DataSize.bytes(512));
         config.setConsumerBatchSize(10);
         config.setPoolingInterval(Duration.milliseconds(500));
         return config;
