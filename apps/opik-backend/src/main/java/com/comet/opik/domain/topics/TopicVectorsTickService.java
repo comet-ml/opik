@@ -3,6 +3,7 @@ package com.comet.opik.domain.topics;
 import com.comet.opik.domain.ailabels.AiLabelTask;
 import com.comet.opik.domain.ailabels.AiLabelTaskRegistry;
 import com.comet.opik.domain.ailabels.AiLabelWorkspaceDAO;
+import com.comet.opik.infrastructure.AiLabelsConfig;
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.inference.EmbedRequest;
 import com.comet.opik.infrastructure.inference.EmbedResponse;
@@ -15,6 +16,7 @@ import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.DoubleHistogram;
 import io.opentelemetry.api.metrics.LongCounter;
+import io.opentelemetry.api.metrics.Meter;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.Builder;
@@ -51,9 +53,10 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
  *
  * <p>Nothing is kept between ticks: each reads the done statuses written in a window, less the keys already in
  * {@code topic_vectors}, so a repeated, overlapping or late tick changes nothing, and a leader change loses nothing.
- * Once per {@code longWindowInterval} (a cluster-wide lock held until it expires) the window is the long one, which
- * picks up rows the short window missed. Work per tick is bounded by {@code maxTracesPerTick}, oldest first, and by the
- * tick budget, which every query and embed call stops at; what is left is found again by the next tick.
+ * Once per {@code longWindowInterval} the window is the long one (or the backfill window), which picks up rows the short
+ * window missed; the pass stays on, tick after tick, until one of its ticks drains it. Work per tick is bounded per
+ * workspace by {@code maxTracesPerTick}, oldest first, and in total by the tick budget; what is left is found again by
+ * the next tick. Workspaces are visited from an offset that moves every tick, so none is always last.
  */
 @Slf4j
 @Singleton
@@ -68,24 +71,35 @@ public class TopicVectorsTickService {
     static final String INVALID_VECTOR = "invalid_vector";
     static final String OVER_BUDGET = "over_budget";
     static final String INSERT_FAILED = "insert_failed";
+    static final String READ_FAILED = "read_failed";
 
-    private static final Lock LONG_WINDOW_LOCK = new Lock("topics:vectors:long_window");
-    // A query or embed call started just before the budget ends still finishes within this past it.
-    private static final Duration LEASE_SLACK = Duration.ofSeconds(10);
+    /**
+     * Present while the long-window pass is not due. A tick that finds it absent sets it for one lease and runs the
+     * pass; when the pass drains, the tick sets it again for {@code longWindowInterval}, otherwise it deletes it so the
+     * next tick runs the pass again. A leader that dies mid-pass leaves it to expire with its lease.
+     */
+    static final Lock LONG_WINDOW_LOCK = new Lock("topics:vectors:long_window");
+    // An insert after the last embed call, which has no deadline of its own, still ends within this past the rest.
+    private static final Duration LEASE_SLACK = Duration.ofSeconds(5);
 
     private final TopicsConfig config;
+    private final AiLabelsConfig aiLabelsConfig;
     private final TransactionTemplate template;
     private final TopicVectorsDAO dao;
     private final InferenceClient client;
     private final LockService lockService;
     private final AiLabelTaskRegistry registry;
 
-    // The oldest done status without a vector, per workspace, as the latest tick found it; null before the first tick.
-    private volatile Map<String, Instant> lastOldest;
+    /**
+     * The oldest done status without a vector, per workspace, as this pod's latest tick found it, and when. Only the
+     * leader ticks, so on any other pod it is null or goes stale; a stale one is not published.
+     */
+    private volatile OldestSnapshot lastOldest;
 
     private final LongCounter written;
     private final LongCounter skipped;
     private final LongCounter embedFailures;
+    private final LongCounter readFailures;
     private final LongCounter longWindowMissed;
     private final DoubleHistogram embedDuration;
     private final DoubleHistogram phaseDuration;
@@ -100,16 +114,33 @@ public class TopicVectorsTickService {
         }
     }
 
+    private record OldestSnapshot(@NonNull Instant at, @NonNull Map<String, Instant> oldest) {
+    }
+
+    /**
+     * The window read's outcome: the candidates, each workspace's oldest first, in visiting order, and whether it saw
+     * everything in the window: every workspace read and none at its cap.
+     */
+    private record Found(@NonNull List<TopicVectorCandidate> candidates, boolean complete) {
+    }
+
     /** The counts one tick keeps while it runs, reported both as metrics and in its {@link TickResult}. */
     private final class Tally {
         private final Map<String, Integer> skipped = new HashMap<>();
         private int written;
+        // Candidates were left for the next tick for want of time, a read, a back-off or an insert.
+        private boolean cut;
 
         void skip(String reason, int traces) {
             if (traces > 0) {
                 skipped.merge(reason, traces, Integer::sum);
                 TopicVectorsTickService.this.skipped.add(traces, Attributes.of(stringKey("reason"), reason));
             }
+        }
+
+        void cut(String reason, int traces) {
+            skip(reason, traces);
+            cut = cut || traces > 0;
         }
 
         void written(int rows) {
@@ -123,23 +154,32 @@ public class TopicVectorsTickService {
 
     @Inject
     public TopicVectorsTickService(@NonNull @Config("topics") TopicsConfig config,
+            @NonNull @Config("aiLabels") AiLabelsConfig aiLabelsConfig, @NonNull TransactionTemplate template,
+            @NonNull TopicVectorsDAO dao, @NonNull InferenceClient client, @NonNull LockService lockService,
+            @NonNull AiLabelTaskRegistry registry) {
+        this(config, aiLabelsConfig, template, dao, client, lockService, registry,
+                GlobalOpenTelemetry.get().getMeter("opik.topics"));
+    }
+
+    TopicVectorsTickService(@NonNull TopicsConfig config, @NonNull AiLabelsConfig aiLabelsConfig,
             @NonNull TransactionTemplate template, @NonNull TopicVectorsDAO dao, @NonNull InferenceClient client,
-            @NonNull LockService lockService, @NonNull AiLabelTaskRegistry registry) {
+            @NonNull LockService lockService, @NonNull AiLabelTaskRegistry registry, @NonNull Meter meter) {
         this.config = config;
+        this.aiLabelsConfig = aiLabelsConfig;
         this.template = template;
         this.dao = dao;
         this.client = client;
         this.lockService = lockService;
         this.registry = registry;
 
-        var meter = GlobalOpenTelemetry.get().getMeter("opik.topics");
         meter.gaugeBuilder("topics.vectors.oldest_unvectored_seconds").setUnit("s")
                 .setDescription("Age of the oldest done trace_summary without a vector, per enabled workspace, as the "
-                        + "latest tick's window found it; 0 with none")
-                .buildWithCallback(measurement -> Optional.ofNullable(lastOldest)
-                        .ifPresent(oldest -> {
+                        + "latest tick's window found it; 0 with none. Published only by the pod that ticked within "
+                        + "two tick intervals; a workspace whose read failed has no value")
+                .buildWithCallback(measurement -> fresh(Instant.now())
+                        .ifPresent(snapshot -> {
                             var now = Instant.now();
-                            oldest.forEach((workspaceId, statusAt) -> measurement.record(
+                            snapshot.oldest().forEach((workspaceId, statusAt) -> measurement.record(
                                     statusAt.equals(Instant.MAX) ? 0 : seconds(statusAt, now),
                                     Attributes.of(stringKey("workspace_id"), workspaceId)));
                         }));
@@ -152,8 +192,13 @@ public class TopicVectorsTickService {
         this.embedFailures = meter.counterBuilder("topics.vectors.embed.failures")
                 .setDescription("Embed calls that failed, by HTTP status (0 without a response) and code")
                 .build();
+        this.readFailures = meter.counterBuilder("topics.vectors.read.failures")
+                .setDescription("ClickHouse reads that failed, by phase: find (one workspace's window read) or "
+                        + "summaries (one workspace's summary read)")
+                .build();
         this.longWindowMissed = meter.counterBuilder("topics.vectors.long_window.missed")
-                .setDescription("Traces the long-window pass found outside the short window; should stay near zero")
+                .setDescription("Vectors the long-window pass wrote for statuses older than the short window, that is, "
+                        + "rows the short window missed; should stay near zero")
                 .build();
         this.embedDuration = meter.histogramBuilder("topics.vectors.embed.duration_seconds").setUnit("s")
                 .setDescription("Wall time of one embed call, by outcome: ok or the error code")
@@ -163,9 +208,17 @@ public class TopicVectorsTickService {
                 .build();
     }
 
-    /** How long the leader lock must last: the tick budget, plus a query or call started just before it ends. */
+    /**
+     * How long the leader lock must last: the tick budget, plus what can run past its end: an embed call started with
+     * {@code embedTimeout} left, a window read started just before it, and the insert after the last call. The same
+     * shape as {@code AiLabelsTickService.leaderLease()}.
+     */
     public Duration leaderLease() {
-        return config.getVectors().getTickBudget().toJavaDuration().plus(LEASE_SLACK);
+        var vectors = config.getVectors();
+        return vectors.getTickBudget().toJavaDuration()
+                .plus(vectors.getEmbedTimeout().toJavaDuration())
+                .plus(vectors.getFind().getMaxExecutionTime().toJavaDuration())
+                .plus(LEASE_SLACK);
     }
 
     public TickResult tick(@NonNull Instant start) {
@@ -176,79 +229,118 @@ public class TopicVectorsTickService {
             log.warn("Topic vectors tick skipped, ai-labels has no task '{}'", TASK);
             return TickResult.NONE;
         }
-        boolean longWindow = lockService.bestEffortLock(LONG_WINDOW_LOCK, Mono.just(true), Mono.empty(),
-                vectors.getLongWindowInterval().toJavaDuration(), Duration.ZERO, true)
-                .blockOptional()
-                .orElse(false);
-        var window = (longWindow ? vectors.getLongWindow() : vectors.getWindow()).toJavaDuration();
+        boolean longWindow = startLongWindowIfDue();
+        var window = (longWindow ? longWindow(vectors) : vectors.getWindow()).toJavaDuration();
         var lowerBound = lowerBound(earliestAppliesFrom(task.get()), start, window);
         if (lowerBound.isAfter(start)) {
+            if (longWindow) {
+                finishLongWindow(true);
+            }
             return TickResult.builder().skipped(Map.of()).longWindow(longWindow).build();
         }
+        var createdAfter = createdAfter(lowerBound, aiLabelsConfig.getHorizon().toJavaDuration(),
+                vectors.getFind().getCreatedAtSlack().toJavaDuration());
 
-        var candidates = timed("find", () -> find(lowerBound, start, deadline));
-        if (longWindow) {
-            var shortLowerBound = start.minus(vectors.getWindow().toJavaDuration());
-            longWindowMissed.add(candidates.stream()
-                    .filter(candidate -> candidate.statusUpdatedAt().isBefore(shortLowerBound))
-                    .count());
-        }
+        var found = timed("find", () -> find(start, lowerBound, createdAfter, deadline));
         var tally = new Tally();
-        timed("embed", () -> embedAndWrite(candidates, deadline, tally));
+        // Only the long-window pass can write a status older than the short window: those are the rows it recovers.
+        var missedBefore = longWindow ? start.minus(vectors.getWindow().toJavaDuration()) : null;
+        timed("embed", () -> embedAndWrite(found.candidates(), deadline, missedBefore, tally));
+        if (longWindow) {
+            finishLongWindow(found.complete() && !tally.cut);
+        }
         return TickResult.builder().written(tally.written).skipped(tally.skipped).longWindow(longWindow).build();
     }
 
+    /** The long-window pass's window: the backfill window when one is set, else {@code longWindow}. */
+    static io.dropwizard.util.Duration longWindow(@NonNull TopicsConfig.VectorsConfig vectors) {
+        return vectors.getBackfillWindow().toMilliseconds() > 0 ? vectors.getBackfillWindow() : vectors.getLongWindow();
+    }
+
+    /** True when the long-window pass is due; it is then held by this tick for one lease. Redis down: not due. */
+    private boolean startLongWindowIfDue() {
+        return lockService.lockUsingToken(LONG_WINDOW_LOCK, leaderLease())
+                .onErrorResume(error -> {
+                    log.warn("Topic vectors long-window lock unavailable, running the short window", error);
+                    return Mono.just(false);
+                })
+                .blockOptional()
+                .orElse(false);
+    }
+
     /**
-     * The oldest {@code maxTracesPerTick} candidates across the enabled workspaces, one window read per workspace. A
+     * Drained: the pass is not due again for {@code longWindowInterval}. Otherwise it stays due, so the next tick runs
+     * it again: until a long-window tick reads every workspace, finds fewer than the cap in each, and leaves nothing for
+     * want of time, a read, a back-off or an insert.
+     */
+    private void finishLongWindow(boolean drained) {
+        var release = lockService.unlockUsingToken(LONG_WINDOW_LOCK);
+        var finish = drained
+                ? release.then(lockService.lockUsingToken(LONG_WINDOW_LOCK,
+                        config.getVectors().getLongWindowInterval().toJavaDuration()))
+                : release;
+        try {
+            finish.block();
+        } catch (RuntimeException exception) {
+            log.warn("Topic vectors long-window lock update failed, drained '{}'", drained, exception);
+        }
+        if (!drained) {
+            log.info("Topic vectors long-window pass not drained, running it again next tick");
+        }
+    }
+
+    /**
+     * Per enabled workspace, from a rotating offset, the oldest {@code maxTracesPerTick} candidates of its window. A
      * workspace whose read fails, or isn't reached before the deadline, is read again next tick.
      */
-    private List<TopicVectorCandidate> find(Instant lowerBound, Instant upperBound, Instant deadline) {
+    private Found find(Instant start, Instant lowerBound, Instant createdAfter, Instant deadline) {
         int limit = config.getVectors().getMaxTracesPerTick();
-        var workspaceIds = template.inTransaction(READ_ONLY,
-                handle -> handle.attach(AiLabelWorkspaceDAO.class).enabledWorkspaceIds());
+        var workspaceIds = rotated(template.inTransaction(READ_ONLY,
+                handle -> handle.attach(AiLabelWorkspaceDAO.class).enabledWorkspaceIds()), tickSequence(start));
         var oldest = new LinkedHashMap<String, Instant>();
         var found = new ArrayList<TopicVectorCandidate>();
-        for (var workspaceId : workspaceIds) {
+        boolean complete = true;
+        for (int i = 0; i < workspaceIds.size(); i++) {
+            var workspaceId = workspaceIds.get(i);
             if (!Instant.now().isBefore(deadline)) {
+                complete = false;
+                log.warn("Topic vectors window reads ran out of the tick budget, workspaces not read '{}' of '{}'",
+                        workspaceIds.size() - i, workspaceIds.size());
                 break;
             }
             try {
-                var candidates = dao.findUnvectored(workspaceId, TASK, lowerBound, upperBound, limit,
-                        secondsLeft(deadline)).collectList().block();
+                var candidates = dao.findUnvectored(workspaceId, TASK, lowerBound, start, createdAfter, limit,
+                        maxExecutionSeconds(deadline)).collectList().block();
                 oldest.put(workspaceId,
                         candidates.isEmpty() ? Instant.MAX : candidates.getFirst().statusUpdatedAt());
                 found.addAll(candidates);
+                complete = complete && candidates.size() < limit;
             } catch (RuntimeException exception) {
+                complete = false;
+                readFailures.add(1, Attributes.of(stringKey("phase"), "find"));
                 log.warn("Topic vectors window read failed, workspace '{}'; reading it again next tick", workspaceId,
                         exception);
             }
         }
-        lastOldest = Map.copyOf(oldest);
-        return found.stream()
-                .sorted(Comparator.comparing(TopicVectorCandidate::statusUpdatedAt)
-                        .thenComparing(TopicVectorCandidate::traceId))
-                .limit(limit)
-                .toList();
+        lastOldest = new OldestSnapshot(Instant.now(), Map.copyOf(oldest));
+        return new Found(List.copyOf(found), complete);
     }
 
     /**
-     * Per workspace, oldest first: read the summaries, embed them in chunks and write each chunk's vectors. Stops
-     * starting chunks at the deadline, and stops calling opik-inference for the rest of the tick once a call fails
-     * with a retryable error (429, 5xx, timeout).
+     * Per workspace, oldest first: read the summaries, embed them in chunks and write each chunk's vectors. A chunk
+     * starts only with at least {@code embedTimeout} left in the tick, so a call never ends on the tick's deadline; the
+     * rest is {@code over_budget}. After an embed call fails with a 429, a 5xx, a timeout or a retryable code, the
+     * workspace is not called again this tick; other workspaces go on.
      */
-    private Void embedAndWrite(List<TopicVectorCandidate> candidates, Instant deadline, Tally tally) {
-        boolean backOff = false;
+    private Void embedAndWrite(List<TopicVectorCandidate> candidates, Instant deadline, Instant missedBefore,
+            Tally tally) {
         var byWorkspace = candidates.stream().collect(Collectors.groupingBy(TopicVectorCandidate::workspaceId,
                 LinkedHashMap::new, Collectors.toList()));
         for (var entry : byWorkspace.entrySet()) {
             var workspaceId = entry.getKey();
             var group = entry.getValue();
-            if (backOff) {
-                tally.skip(EMBED_FAILED, group.size());
-                continue;
-            }
-            if (!Instant.now().isBefore(deadline)) {
-                tally.skip(OVER_BUDGET, group.size());
+            if (!hasTimeForChunk(deadline)) {
+                tally.cut(OVER_BUDGET, group.size());
                 continue;
             }
             Map<UUID, TopicSummary> summaries;
@@ -259,55 +351,89 @@ public class TopicVectorsTickService {
                         .collectMap(TopicSummary::traceId, Function.identity())
                         .block();
             } catch (RuntimeException exception) {
-                log.warn("Topic vectors summary read failed, workspace '{}'; reading it again next tick",
-                        workspaceId, exception);
+                tally.cut(READ_FAILED, group.size());
+                readFailures.add(1, Attributes.of(stringKey("phase"), "summaries"));
+                log.warn("Topic vectors summary read failed, workspace '{}', traces '{}'; reading it again next tick",
+                        workspaceId, group.size(), exception);
                 continue;
             }
             var pending = new ArrayList<Pending>();
+            var missing = new ArrayList<TopicVectorCandidate>();
             for (var candidate : group) {
                 summaryText(candidate, summaries.get(candidate.traceId())).ifPresentOrElse(
                         text -> pending.add(new Pending(candidate, text)),
-                        () -> tally.skip(MISSING_SUMMARY, 1));
+                        () -> missing.add(candidate));
             }
-            var chunks = Lists.partition(pending, config.getVectors().getEmbedBatchSize());
-            for (int i = 0; i < chunks.size(); i++) {
-                var chunk = chunks.get(i);
+            if (!missing.isEmpty()) {
+                tally.skip(MISSING_SUMMARY, missing.size());
+                // They stay at the head of this workspace's queue until a summary arrives or they leave the window.
+                log.warn("Topic vectors found done statuses without a usable summary, workspace '{}', traces '{}', "
+                        + "oldest trace '{}', status at '{}'; skipped until one arrives", workspaceId, missing.size(),
+                        missing.getFirst().traceId(), missing.getFirst().statusUpdatedAt());
+            }
+            boolean backOff = false;
+            for (var chunk : Lists.partition(pending, config.getVectors().getEmbedBatchSize())) {
                 if (backOff) {
                     tally.skip(EMBED_FAILED, chunk.size());
                     continue;
                 }
-                if (!Instant.now().isBefore(deadline)) {
-                    tally.skip(OVER_BUDGET, chunk.size());
+                if (!hasTimeForChunk(deadline)) {
+                    tally.cut(OVER_BUDGET, chunk.size());
                     continue;
                 }
                 List<TopicVector> vectors;
                 try {
-                    vectors = embed(workspaceId, chunk, deadline, tally);
+                    vectors = embed(workspaceId, chunk, tally);
                 } catch (InferenceException exception) {
                     tally.skip(EMBED_FAILED, chunk.size());
-                    backOff = exception.isRetryable() || exception.isOutOfTime();
-                    log.warn("Topic vectors embed failed, workspace '{}', code '{}', status '{}', traces '{}'",
-                            workspaceId, exception.getCode(), exception.getHttpStatus(), chunk.size(), exception);
+                    backOff = backsOff(exception);
+                    tally.cut = tally.cut || backOff;
+                    log.warn("Topic vectors embed failed, workspace '{}', code '{}', status '{}', traces '{}', "
+                            + "backing off the workspace for the tick '{}'", workspaceId, exception.getCode(),
+                            exception.getHttpStatus(), chunk.size(), backOff, exception);
                     continue;
                 }
                 try {
                     dao.insert(vectors).block();
                 } catch (RuntimeException exception) {
-                    tally.skip(INSERT_FAILED, vectors.size());
-                    log.error("Topic vectors insert failed, workspace '{}', rows '{}'; embedding them again next tick",
+                    tally.cut(INSERT_FAILED, vectors.size());
+                    log.warn("Topic vectors insert failed, workspace '{}', rows '{}'; embedding them again next tick",
                             workspaceId, vectors.size(), exception);
                     continue;
                 }
                 tally.written(vectors.size());
+                if (missedBefore != null) {
+                    var missed = chunk.stream().map(Pending::candidate)
+                            .filter(candidate -> candidate.statusUpdatedAt().isBefore(missedBefore))
+                            .map(TopicVectorCandidate::traceId)
+                            .collect(Collectors.toSet());
+                    longWindowMissed.add(vectors.stream().filter(vector -> missed.contains(vector.traceId())).count());
+                }
             }
         }
         return null;
     }
 
-    /** One embed call; vectors that aren't {@value #EMBED_DIMENSIONS} non-zero numbers are dropped and counted. */
-    private List<TopicVector> embed(String workspaceId, List<Pending> chunk, Instant tickDeadline, Tally tally) {
-        var timeout = Instant.now().plus(config.getVectors().getEmbedTimeout().toJavaDuration());
-        var callDeadline = timeout.isBefore(tickDeadline) ? timeout : tickDeadline;
+    /**
+     * Whether to stop calling for this workspace for the rest of the tick: any 429 or 5xx, whatever its code, a
+     * transport failure or timeout, a retryable code, or no time left for an attempt.
+     */
+    static boolean backsOff(@NonNull InferenceException exception) {
+        int status = exception.getHttpStatus();
+        return exception.isRetryable() || exception.isOutOfTime() || status == 429 || status >= 500;
+    }
+
+    private boolean hasTimeForChunk(Instant deadline) {
+        return Duration.between(Instant.now(), deadline)
+                .compareTo(config.getVectors().getEmbedTimeout().toJavaDuration()) >= 0;
+    }
+
+    /**
+     * One embed call with its full {@code embedTimeout}; vectors that aren't {@value #EMBED_DIMENSIONS} non-zero
+     * numbers are dropped and counted.
+     */
+    private List<TopicVector> embed(String workspaceId, List<Pending> chunk, Tally tally) {
+        var callDeadline = Instant.now().plus(config.getVectors().getEmbedTimeout().toJavaDuration());
         var request = EmbedRequest.builder()
                 .orgId(workspaceId)
                 .workspaceId(workspaceId)
@@ -418,6 +544,44 @@ public class TopicVectorsTickService {
         } finally {
             phaseDuration.record((System.nanoTime() - started) / 1e9, Attributes.of(stringKey("phase"), phase));
         }
+    }
+
+    /**
+     * The window read's {@code trace_created_at} bound: ai-labels labels only traces created within its horizon, so a
+     * status written at or after {@code lowerBound} belongs to a trace created at or after {@code lowerBound - horizon};
+     * {@code slack} covers the time from the sweep to the status write.
+     */
+    static Instant createdAfter(@NonNull Instant lowerBound, @NonNull Duration horizon, @NonNull Duration slack) {
+        return lowerBound.minus(horizon).minus(slack);
+    }
+
+    /** The tick's number since the epoch, in tick intervals: the same on every pod for the same minute. */
+    private long tickSequence(Instant start) {
+        return start.toEpochMilli() / Math.max(1, config.getVectors().getTickInterval().toMilliseconds());
+    }
+
+    /** {@code items} starting at {@code sequence} modulo their count, wrapping around. */
+    static <T> List<T> rotated(@NonNull List<T> items, long sequence) {
+        if (items.isEmpty()) {
+            return items;
+        }
+        int offset = (int) Math.floorMod(sequence, (long) items.size());
+        var rotated = new ArrayList<T>(items.size());
+        rotated.addAll(items.subList(offset, items.size()));
+        rotated.addAll(items.subList(0, offset));
+        return rotated;
+    }
+
+    /** The snapshot, unless this pod last ticked more than two tick intervals ago. */
+    private Optional<OldestSnapshot> fresh(Instant now) {
+        var maxAge = config.getVectors().getTickInterval().toJavaDuration().multipliedBy(2);
+        return Optional.ofNullable(lastOldest)
+                .filter(snapshot -> Duration.between(snapshot.at(), now).compareTo(maxAge) <= 0);
+    }
+
+    /** A window read's {@code max_execution_time}: the configured one, cut to the whole seconds left in the tick. */
+    private long maxExecutionSeconds(Instant deadline) {
+        return Math.min(config.getVectors().getFind().getMaxExecutionTime().toSeconds(), secondsLeft(deadline));
     }
 
     /** ClickHouse's {@code max_execution_time} for a query started now: the whole seconds left, at least 1. */

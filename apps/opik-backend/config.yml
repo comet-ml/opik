@@ -2543,18 +2543,38 @@ topics:
     #  before the task's applies_from
     window: ${TOPICS_VECTORS_WINDOW:-24h}
     #  Default: 7d
-    #  Description: The window of the pass run once per longWindowInterval, for rows the short window missed. At least
-    #  window
+    #  Description: The window of the long-window pass, for rows the short window missed. At least window
     longWindow: ${TOPICS_VECTORS_LONG_WINDOW:-7d}
     #  Default: 1d
-    #  Description: How often a tick uses longWindow instead of window; a cluster-wide Redis lock
+    #  Description: How often the long-window pass starts (a cluster-wide Redis lock). The pass stays on, tick after
+    #  tick, until one of its ticks drains it (every workspace read, each under maxTracesPerTick, nothing left for want
+    #  of time, a read, a back-off or an insert); the interval runs from that tick
     longWindowInterval: ${TOPICS_VECTORS_LONG_WINDOW_INTERVAL:-1d}
+    #  Default: 0 (off)
+    #  Description: When above zero, the long-window pass uses this window instead of longWindow, to catch up after a
+    #  late start or a re-enabled workspace. The window read's cost grows with it. 0 or at least window; at most 365d
+    backfillWindow: ${TOPICS_VECTORS_BACKFILL_WINDOW:-0s}
     #  Default: 5000
-    #  Description: The most traces one tick embeds, oldest first; the rest wait for the next tick
+    #  Description: The most traces one tick embeds per workspace, oldest first; the tick budget bounds the total
     maxTracesPerTick: ${TOPICS_VECTORS_MAX_TRACES_PER_TICK:-5000}
     #  Default: 256 (the most /v1/embed takes)
     #  Description: Texts per embed call
     embedBatchSize: ${TOPICS_VECTORS_EMBED_BATCH_SIZE:-256}
     #  Default: 10s
-    #  Description: Each embed call's deadline, cut to the time left in the tick. At most 60s
+    #  Description: Each embed call's deadline. A chunk starts only with at least this much of tickBudget left. Under
+    #  tickBudget, at most 60s
     embedTimeout: ${TOPICS_VECTORS_EMBED_TIMEOUT:-10s}
+    find:
+      #  Default: 30000000
+      #  Description: Per window read on the shared ClickHouse; a trip fails that workspace's read for the tick
+      maxRowsToRead: ${TOPICS_VECTORS_FIND_MAX_ROWS_TO_READ:-30000000}
+      #  Default: 1073741824 (1 GiB)
+      #  Description: Per window read on the shared ClickHouse; a trip fails that workspace's read for the tick
+      maxMemoryUsage: ${TOPICS_VECTORS_FIND_MAX_MEMORY_USAGE:-1073741824}
+      #  Default: 30s
+      #  Description: Per window read, cut to the time left in the tick. Lengthens the leader lease
+      maxExecutionTime: ${TOPICS_VECTORS_FIND_MAX_EXECUTION_TIME:-30s}
+      #  Default: 1d
+      #  Description: The window read skips traces created before its lower bound minus aiLabels.horizon minus this
+      #  margin, which covers the time from the ai-labels sweep to the status write
+      createdAtSlack: ${TOPICS_VECTORS_FIND_CREATED_AT_SLACK:-1d}

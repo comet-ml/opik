@@ -106,17 +106,64 @@ no separate opt-in. It is off by default everywhere.
 | Env var | Default | Meaning |
 |---|---|---|
 | `TOPICS_ENABLED` | `false` | Runs the job. The backend refuses to start with it on unless `AI_LABELS_ENABLED=true` and `AI_LABELS_INFERENCE_URL` is set: it uses the same opik-inference URL and credential. |
-| `TOPICS_VECTORS_TICK_INTERVAL` | `1m` | How often the leader ticks. |
-| `TOPICS_VECTORS_TICK_BUDGET` | `50s` | Every query and embed call of a tick ends within this. Must be under the tick interval. |
+| `TOPICS_VECTORS_TICK_INTERVAL` | `1m` | How often the job ticks. At most one tick runs per interval across all pods (see "How ticks run"). |
+| `TOPICS_VECTORS_TICK_BUDGET` | `50s` | Every query and embed call of a tick starts within this. Must be under the tick interval. |
 | `TOPICS_VECTORS_WINDOW` | `24h` | How far back, by `ai_label_status` write time, a normal tick looks. Never before the task's `applies_from`. |
-| `TOPICS_VECTORS_LONG_WINDOW` | `7d` | The window of the catch-up pass, for rows a normal tick missed. At least `TOPICS_VECTORS_WINDOW`. |
-| `TOPICS_VECTORS_LONG_WINDOW_INTERVAL` | `1d` | How often one tick uses the long window instead (a cluster-wide Redis lock). |
-| `TOPICS_VECTORS_MAX_TRACES_PER_TICK` | `5000` | The most traces one tick embeds, oldest first. The rest wait for the next tick. |
+| `TOPICS_VECTORS_LONG_WINDOW` | `7d` | The window of the long-window pass, for rows a normal tick missed. At least `TOPICS_VECTORS_WINDOW`. |
+| `TOPICS_VECTORS_LONG_WINDOW_INTERVAL` | `1d` | How often the long-window pass starts. The pass stays on until it drains (see "How ticks run"); the interval runs from the tick that drained it. |
+| `TOPICS_VECTORS_BACKFILL_WINDOW` | `0s` (off) | When above zero, the long-window pass uses this window instead of `TOPICS_VECTORS_LONG_WINDOW`. 0, or at least `TOPICS_VECTORS_WINDOW`; at most `365d`. See "Backfill". |
+| `TOPICS_VECTORS_MAX_TRACES_PER_TICK` | `5000` | The most traces one tick embeds **per workspace**, oldest first. The tick budget bounds the total. The rest wait for the next tick. |
 | `TOPICS_VECTORS_EMBED_BATCH_SIZE` | `256` | Texts per embed call. 256 is the most `/v1/embed` takes. |
-| `TOPICS_VECTORS_EMBED_TIMEOUT` | `10s` | Each embed call's deadline, cut to the time left in the tick. At most 60s. |
+| `TOPICS_VECTORS_EMBED_TIMEOUT` | `10s` | Each embed call's deadline. A chunk starts only with at least this much of the tick budget left; the rest is `over_budget`. Under the tick budget, at most 60s. |
+| `TOPICS_VECTORS_FIND_MAX_ROWS_TO_READ` | `30000000` | ClickHouse `max_rows_to_read` of one workspace's window read. A trip fails that workspace's read for the tick. |
+| `TOPICS_VECTORS_FIND_MAX_MEMORY_USAGE` | `1073741824` | ClickHouse `max_memory_usage` of one window read (1 GiB). |
+| `TOPICS_VECTORS_FIND_MAX_EXECUTION_TIME` | `30s` | ClickHouse `max_execution_time` of one window read, cut to the time left in the tick. |
+| `TOPICS_VECTORS_FIND_CREATED_AT_SLACK` | `1d` | The window read skips traces created before its lower bound minus `AI_LABELS_HORIZON` minus this margin. The margin covers the time from the ai-labels sweep to the status write. |
 
 To turn it off, set `TOPICS_ENABLED=false` and restart. Stored vectors stay. When it is turned on again, the next
-ticks write the vectors that are missing in the window (and in the long window, once a day).
+ticks write the vectors that are missing in the window, and the long-window pass writes the ones in the long window.
+Older ones need a backfill.
+
+### How ticks run
+
+- Every pod fires the job every tick interval, each at its own second. Two Redis locks make that one tick per interval
+  across the cluster:
+  - `topics:vectors:leader` is held for the tick and released when it ends, so two ticks never overlap. Its lease is
+    tick budget + embed timeout + find max execution time + 5s (95s by default). It matters only when the pod dies
+    mid-tick: the next tick starts when the lease expires.
+  - `topics:vectors:tick` is taken by the leader before it ticks and never released. It expires one interval (less up to
+    1s for trigger jitter) after the tick started, so a pod that fires sooner skips.
+- A skipped tick logs `Topic vectors tick skipped, lock '<name>' ...` at INFO. With several pods, expect most firings
+  to skip on `topics:vectors:tick`. Ticks skipped on `topics:vectors:leader` for longer than one lease mean a tick
+  is stuck.
+- Each tick reads the enabled workspaces in turn, starting at an offset that moves by one every interval, so no
+  workspace is always last. A workspace that is not reached before the budget ends is read the next tick (one WARN).
+- After an embed call fails with a 429 or a 5xx (whatever the error code), a timeout or a retryable code, the job stops
+  calling for **that workspace** for the rest of the tick (`embed_failed`). Other workspaces go on.
+- **Long-window pass.** Once per `TOPICS_VECTORS_LONG_WINDOW_INTERVAL` a tick uses the long window (Redis key
+  `topics:vectors:long_window`). The pass stays on, tick after tick, until one of its ticks drains it: every workspace
+  read with no failure, each under the per-workspace cap, and no candidate left for want of time (`over_budget`), a
+  read (`read_failed`), a back-off or an insert (`insert_failed`). Then the interval starts. After an outage longer than
+  the short window, the pass therefore runs every tick until the backlog in the long window is written. A summary that
+  makes `/v1/embed` fail with a 5xx every time keeps the pass on until its status leaves the long window: each pass
+  tick costs one long-window read per workspace.
+
+### Backfill
+
+The job only looks back as far as the long window (7 days). To write vectors for older labels, for example when
+topics is turned on weeks after ai-labels or a workspace is opted in again:
+
+1. Set `TOPICS_VECTORS_BACKFILL_WINDOW` to the age to cover (for example `30d`), and restart.
+2. Delete the Redis key `topics:vectors:long_window` to start the pass now. Otherwise it starts at the next interval.
+3. Watch `topics.vectors.long_window.missed` and `topics.vectors.written`. The pass stays on until it drains.
+4. Set `TOPICS_VECTORS_BACKFILL_WINDOW=0s` again, and restart.
+
+Cost: the window read's cost grows with the window, not with what it finds. In the load test (one workspace, 2.07M
+statuses) a 24h read took 220–440 ms and read 0.9–2.7M rows; a 7d read took 570–750 ms, read 2.4–5.0M rows and used
+about 300 MiB. A 30d or 90d read of a large workspace reads proportionally more and can trip
+`TOPICS_VECTORS_FIND_MAX_ROWS_TO_READ` or `..._MAX_MEMORY_USAGE`; the read then fails every pass tick for that workspace
+(`topics.vectors.read.failures{phase=find}`). Raise the guards for the backfill, or backfill in steps (7d, 14d, 30d).
+While the pass is on, every tick does this read for every enabled workspace.
 
 ### Checking that vectors flow
 
@@ -165,13 +212,17 @@ FROM (
 
 | Metric | Meaning |
 |---|---|
-| `topics.vectors.oldest_unvectored_seconds` by `workspace_id` | Age of the oldest done label without a vector that the last tick found. The headline. It grows when the job falls behind or stops. |
+| `topics.vectors.oldest_unvectored_seconds` by `workspace_id` | Age of the oldest done label without a vector that the last tick found in its window. The headline. It grows when the job falls behind or stops. Only the pod that ticked within the last two tick intervals publishes it, so read it with `max` across pods. A workspace whose window read failed, or was not reached, has no value for that tick: watch `topics.vectors.read.failures` with it. It sees only the window: after an outage longer than the short window it stays near the window's length until the long-window pass runs. |
 | `topics.vectors.written` | Vectors stored. |
-| `topics.vectors.skipped` by `reason` | `missing_summary` (no output row or an empty summary for that task version), `embed_failed` (the call failed or timed out: the next tick retries), `invalid_vector` (a missing, null, zero or wrong-dimension vector), `over_budget` (the tick ran out of time: the next tick continues), `insert_failed` (the ClickHouse insert failed: the next tick embeds them again). |
+| `topics.vectors.skipped` by `reason` | `missing_summary` (no output row, or an empty or whitespace-only summary, for that task version; a WARN per workspace per tick names the count and the oldest trace), `embed_failed` (the call failed, or the workspace backed off: the next tick retries), `invalid_vector` (a missing, null, zero or wrong-dimension vector), `over_budget` (not enough of the tick left to start a call: the next tick continues), `insert_failed` (the ClickHouse insert failed: the next tick embeds them again), `read_failed` (the summary read failed: the next tick reads them again). |
+| `topics.vectors.read.failures` by `phase` | Failed ClickHouse reads: `find` (one workspace's window read, for example a guard trip) or `summaries` (one workspace's summary read). |
 | `topics.vectors.embed.failures` by `http_status`, `code` | Failed embed calls. 429 `quota_exceeded` means the embed pool is full. |
 | `topics.vectors.embed.duration_seconds` by `outcome` | Wall time per embed call: `ok`, or the error code. |
-| `topics.vectors.tick.phase_seconds` by `phase` | Time in `find` (ClickHouse reads) and `embed` (embed calls and inserts). |
-| `topics.vectors.long_window.missed` | Rows that only the daily long-window pass found. Above zero means normal ticks miss rows, for example after an outage longer than the window. |
+| `topics.vectors.tick.phase_seconds` by `phase` | Time in `find` (ClickHouse window reads) and `embed` (summary reads, embed calls and inserts). |
+| `topics.vectors.long_window.missed` | Vectors the long-window pass wrote for statuses older than the short window: rows normal ticks missed, for example after an outage longer than the window. Above zero outside a backfill or an outage means normal ticks miss rows. |
+
+A done status whose summary is empty or only whitespace (the model's output, not a bug) is `missing_summary` on every
+tick while it is in the window. It does not block other traces: the cap is per workspace, and the WARN names it.
 
 ClickHouse queries of the job have a `log_comment` that starts with `topics:`.
 
@@ -182,3 +233,8 @@ trace delete deletes its vectors. There is no project or workspace delete path, 
 a project or a workspace leaves its vectors until retention removes them. A trace deleted between a tick's read and its
 insert (at most one tick) can leave a vector row behind, exactly like `ai_labels`. The retention sweep removes such rows
 by trace id range and week.
+
+A trace delete deletes the vectors before the ai-labels rows, each on its own, so neither failure skips the other.
+If the ai-labels delete fails, the trace's `done` status stays in `ai_label_status`, and the next tick writes its vector
+again from the label (the job reads only `ai_label_status` and `ai_labels`). Retention removes both, in workspaces with
+a retention policy.

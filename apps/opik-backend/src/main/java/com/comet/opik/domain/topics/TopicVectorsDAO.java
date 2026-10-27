@@ -1,5 +1,6 @@
 package com.comet.opik.domain.topics;
 
+import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.WeeklyPartitions;
@@ -15,6 +16,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.lang.reflect.Array;
 import java.time.Instant;
@@ -49,6 +51,12 @@ public class TopicVectorsDAO {
      * The window read: the latest {@code ai_label_status} row of every (trace, task) updated in the window, kept when
      * done, minus the (trace, version) keys that already have a vector, oldest first. {@code updated_at} only grows per
      * key, so its lower bound is safe before the dedup; the status and the upper bound go after it.
+     *
+     * <p>Both sides are bounded by the same {@code trace_created_at >= :created_after}: {@code trace_created_at} is
+     * copied from the trace and is the same on every row of a key in both tables, so the bound drops whole keys from
+     * both sides alike and the anti-join stays exact. It lets the {@code idx_trace_created_at} minmax indexes skip the
+     * workspace's older history, which the {@code updated_at} filter alone cannot. The guards are
+     * {@code AiLabelSweepDAO}'s.
      */
     private static final String FIND_UNVECTORED = """
             WITH done AS (
@@ -58,6 +66,7 @@ public class TopicVectorsDAO {
                     FROM ai_label_status
                     WHERE workspace_id = :workspace_id
                     AND task = :task
+                    AND trace_created_at >= fromUnixTimestamp64Micro(:created_after_micros, 'UTC')
                     AND updated_at >= fromUnixTimestamp64Micro(:lower_bound_micros, 'UTC')
                     ORDER BY workspace_id, project_id, task, trace_id, updated_at DESC
                     LIMIT 1 BY workspace_id, project_id, task, trace_id
@@ -71,11 +80,13 @@ public class TopicVectorsDAO {
                 SELECT project_id, trace_id, task_version
                 FROM topic_vectors
                 WHERE workspace_id = :workspace_id
+                AND trace_created_at >= fromUnixTimestamp64Micro(:created_after_micros, 'UTC')
                 AND trace_id IN (SELECT trace_id FROM done)
             )
             ORDER BY updated_at, trace_id
             LIMIT :limit
-            SETTINGS log_comment = '<log_comment>', max_execution_time = <max_execution_time>
+            SETTINGS max_threads = 2, max_rows_to_read = <max_rows_to_read>, max_memory_usage = <max_memory_usage>,
+                max_execution_time = <max_execution_time>, priority = 100, log_comment = '<log_comment>'
             """;
 
     /** The runbook's summary read: each trace's latest output row, its text extracted in SQL exactly as stored. */
@@ -161,6 +172,7 @@ public class TopicVectorsDAO {
 
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull JsonEachRowBulkInsert jsonBulkInsert;
+    private final @NonNull @Config("topics") TopicsConfig config;
 
     public Mono<Long> insert(List<TopicVector> rows) {
         if (CollectionUtils.isEmpty(rows)) {
@@ -186,16 +198,26 @@ public class TopicVectorsDAO {
                 });
     }
 
-    /** Done statuses of {@code task} updated in {@code [lowerBound, upperBound]} without a vector, oldest first. */
+    /**
+     * Done statuses of {@code task} updated in {@code [lowerBound, upperBound]}, of traces created at or after
+     * {@code createdAfter}, without a vector, oldest first.
+     */
     public Flux<TopicVectorCandidate> findUnvectored(@NonNull String workspaceId, @NonNull String task,
-            @NonNull Instant lowerBound, @NonNull Instant upperBound, int limit, long maxExecutionSeconds) {
+            @NonNull Instant lowerBound, @NonNull Instant upperBound, @NonNull Instant createdAfter, int limit,
+            long maxExecutionSeconds) {
+        var find = config.getVectors().getFind();
+        // The guards go into the SETTINGS clause, which ClickHouse can't take as bound parameters. The values are
+        // validated config numbers, never input.
         var template = getSTWithLogComment(FIND_UNVECTORED, "topics:find_unvectored", workspaceId, null,
-                "lower_bound=%s, limit=%d".formatted(lowerBound, limit))
+                "lower_bound=%s, created_after=%s, limit=%d".formatted(lowerBound, createdAfter, limit))
+                .add("max_rows_to_read", find.getMaxRowsToRead())
+                .add("max_memory_usage", find.getMaxMemoryUsage())
                 .add("max_execution_time", maxExecutionSeconds);
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> connection.createStatement(template.render())
                         .bind("workspace_id", workspaceId)
                         .bind("task", task)
+                        .bind("created_after_micros", toEpochMicros(createdAfter))
                         .bind("lower_bound_micros", toEpochMicros(lowerBound))
                         .bind("upper_bound_micros", toEpochMicros(upperBound))
                         .bind("limit", limit)

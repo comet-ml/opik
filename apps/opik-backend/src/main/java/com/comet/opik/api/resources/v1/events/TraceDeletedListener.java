@@ -53,7 +53,7 @@ public class TraceDeletedListener {
                 "Received TracesDeleted event for workspace: '{}', trace count: '{}'. Processing related entity deletion",
                 workspaceId, traceIds.size());
 
-        processTraceDeletion(traceIds, projectId)
+        processTraceDeletion(traceIds, projectId, workspaceId)
                 .doOnError(error -> {
                     log.error(
                             "Failed to process TracesDeleted event for workspace: '{}', trace count: '{}', error: '{}'",
@@ -74,15 +74,26 @@ public class TraceDeletedListener {
      *
      * @param traceIds the set of trace IDs whose related entities should be deleted
      * @param projectId the owning project the event resolved; required, so the span cascade is never workspace-wide
+     * @param workspaceId the event's workspace, for the logs only; the deletes read it from the reactive context
      * @return a Mono that completes when all related entities have been deleted
      */
-    private Mono<Void> processTraceDeletion(Set<UUID> traceIds, @NonNull UUID projectId) {
+    private Mono<Void> processTraceDeletion(Set<UUID> traceIds, @NonNull UUID projectId, String workspaceId) {
         log.info("Starting deletion of related entities for traces, count '{}'", traceIds.size());
 
         return feedbackScoreService.deleteByTraceIds(traceIds, projectId)
                 .then(Mono.defer(() -> commentService.deleteByEntityIds(CommentDAO.EntityType.TRACE, traceIds,
                         projectId)))
                 .then(Mono.defer(() -> attachmentService.deleteByEntityIds(TRACE, traceIds, projectId)))
+                // Topic vectors hold the summary text, so they go with the trace too. Before ai-labels and on their own,
+                // so neither delete's failure can skip the other; neither ever blocks the span cascade.
+                .then(Mono.defer(() -> topicVectorsDAO.deleteByTraceIds(traceIds, projectId)
+                        .onErrorResume(error -> {
+                            log.warn("Failed to delete topic vectors for deleted traces, workspace '{}', project '{}', "
+                                    + "count '{}'; they stay until a retention delete", workspaceId, projectId,
+                                    traceIds.size(),
+                                    error);
+                            return Mono.empty();
+                        })))
                 // Unconditional, even with ai-labels off: labels hold trace-derived text and must not outlive the trace.
                 // A failure there must not skip the span cascade; retention removes any rows left behind.
                 .then(Mono.defer(() -> aiLabelsDAO.deleteByTraceIds(traceIds, projectId)
@@ -90,13 +101,6 @@ public class TraceDeletedListener {
                         .onErrorResume(error -> {
                             log.error("Failed to delete ai-labels for deleted traces, count '{}'", traceIds.size(),
                                     error);
-                            return Mono.empty();
-                        })))
-                // Topic vectors hold the summary text, so they go with the trace too, and never block the span cascade.
-                .then(Mono.defer(() -> topicVectorsDAO.deleteByTraceIds(traceIds, projectId)
-                        .onErrorResume(error -> {
-                            log.error("Failed to delete topic vectors for deleted traces, count '{}'",
-                                    traceIds.size(), error);
                             return Mono.empty();
                         })))
                 .then(Mono.defer(() -> spanService.deleteByTraceIds(traceIds, projectId)));

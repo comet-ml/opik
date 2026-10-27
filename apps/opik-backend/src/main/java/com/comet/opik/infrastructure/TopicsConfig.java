@@ -53,11 +53,24 @@ public class TopicsConfig {
         @MaxDuration(value = 90, unit = TimeUnit.DAYS)
         private Duration longWindow = Duration.days(7);
 
+        /**
+         * How often the long-window pass starts. A pass stays on, tick after tick, until one of its ticks drains it;
+         * this interval runs from that tick.
+         */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.SECONDS)
         private Duration longWindowInterval = Duration.days(1);
 
-        /** The most traces one tick embeds, oldest first. */
+        /**
+         * When above zero, the long-window pass uses this window instead of {@code longWindow}, to catch up after a late
+         * start or a re-enabled workspace. 0 is off. The find cost grows with it.
+         */
+        @NotNull @JsonProperty
+        @MinDuration(value = 0, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 365, unit = TimeUnit.DAYS)
+        private Duration backfillWindow = Duration.seconds(0);
+
+        /** The most traces one tick embeds per workspace, oldest first; the tick budget bounds the total. */
         @JsonProperty
         @Min(1) @Max(100_000) private int maxTracesPerTick = 5_000;
 
@@ -65,11 +78,17 @@ public class TopicsConfig {
         @JsonProperty
         @Min(1) @Max(256) private int embedBatchSize = 256;
 
-        /** Each embed call's deadline, cut to the tick's. */
+        /**
+         * Each embed call's deadline. A chunk starts only with at least this much of the tick budget left, so a call
+         * that starts always gets all of it. Must be under {@code tickBudget}.
+         */
         @NotNull @JsonProperty
         @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
         @MaxDuration(value = 60, unit = TimeUnit.SECONDS)
         private Duration embedTimeout = Duration.seconds(10);
+
+        @Valid @NotNull @JsonProperty
+        private FindConfig find = new FindConfig();
 
         @JsonIgnore
         @AssertTrue(message = "topics.vectors.tickBudget must be shorter than topics.vectors.tickInterval") public boolean isTickBudgetValid() {
@@ -81,5 +100,45 @@ public class TopicsConfig {
         @AssertTrue(message = "topics.vectors.longWindow must not be shorter than topics.vectors.window") public boolean isLongWindowValid() {
             return window == null || longWindow == null || longWindow.toMilliseconds() >= window.toMilliseconds();
         }
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.vectors.embedTimeout must be shorter than topics.vectors.tickBudget") public boolean isEmbedTimeoutValid() {
+            return embedTimeout == null || tickBudget == null
+                    || embedTimeout.toMilliseconds() < tickBudget.toMilliseconds();
+        }
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.vectors.backfillWindow must be 0 or not shorter than topics.vectors.window") public boolean isBackfillWindowValid() {
+            return backfillWindow == null || window == null || backfillWindow.toMilliseconds() == 0
+                    || backfillWindow.toMilliseconds() >= window.toMilliseconds();
+        }
+    }
+
+    /**
+     * Guards of the window read on the shared ClickHouse, as {@code aiLabels.sweep}'s. A trip fails that workspace's read
+     * for the tick.
+     */
+    @Data
+    public static class FindConfig {
+
+        @JsonProperty
+        @Min(1) private long maxRowsToRead = 30_000_000L;
+
+        @JsonProperty
+        @Min(1) private long maxMemoryUsage = 1024L * 1024 * 1024;
+
+        /** Cut to the time left in the tick; lengthens the leader lease. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        private Duration maxExecutionTime = Duration.seconds(30);
+
+        /**
+         * ai-labels labels only traces created within {@code aiLabels.horizon}, so a status written at or after the
+         * window's lower bound has {@code trace_created_at} at or after {@code lowerBound - horizon}. This margin covers
+         * the time from the sweep to the status write (inference, load, retries) and a horizon changed since.
+         */
+        @NotNull @JsonProperty
+        @MinDuration(value = 0, unit = TimeUnit.SECONDS)
+        private Duration createdAtSlack = Duration.days(1);
     }
 }
