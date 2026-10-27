@@ -9,6 +9,7 @@ cover the wrapping seam in optimizer_runner.
 """
 
 import asyncio
+import logging
 import sys
 import types
 
@@ -20,8 +21,9 @@ from opik_backend.jobs.optimizer_runner import route_litellm_calls_through_gatew
 
 @pytest.fixture(autouse=True)
 def reset_gateway_state(monkeypatch):
-    """Isolate the module-level workspace container between tests."""
+    """Isolate the module-level workspace container and drop log between tests."""
     monkeypatch.setattr(optimizer_runner, "_gateway_workspace", {"name": None})
+    monkeypatch.setattr(optimizer_runner, "_dropped_params_logged", set())
 
 
 @pytest.fixture
@@ -173,3 +175,124 @@ class TestRouteLitellmCallsThroughGateway:
                 "api_base": "http://gateway/v1/private",
                 "extra_headers": {"Comet-Workspace": "my-workspace"},
             }
+
+
+# Model parameters LiteLLM reads as a destination, a handler or a credential, none of them named by the old
+# blocklist: fallbacks and model_list route the call to other deployments, and the SageMaker handler takes its
+# URL from sagemaker_base_url, not api_base.
+REROUTING_PARAMS = {
+    "sagemaker_base_url": "http://10.0.0.1/invocations",
+    "fallbacks": [{"model": "openai/other", "api_base": "http://10.0.0.2/v1"}],
+    "model_list": [{"model_name": "m", "litellm_params": {"model": "openai/m", "api_base": "http://10.0.0.3"}}],
+    "extra_body": {"url": "http://10.0.0.4"},
+    "aws_region_name": "us-east-1",
+    "vertex_project": "p",
+}
+
+# Every parameter a Studio call keeps, with a value of its own type.
+GENERATION_PARAMS = {
+    "temperature": 0.2, "top_p": 0.9, "max_tokens": 100, "max_completion_tokens": 100, "stop": ["\\n"],
+    "presence_penalty": 0.1, "frequency_penalty": 0.1, "reasoning_effort": "low", "seed": 1, "n": 2,
+    "response_format": {"type": "json_object"}, "logprobs": True, "top_logprobs": 3, "stream": False,
+    "timeout": 30, "num_retries": 6, "metadata": {"opik": {}}, "tools": [], "tool_choice": "auto",
+    "parallel_tool_calls": False, "custom_parameters": {"thinking_level": "low"},
+    "top_k": 40, "min_p": 0.1, "top_a": 0.1, "repetition_penalty": 1.1,
+}
+
+
+class TestModelParameterAllowlist:
+    def test_drops_parameters_that_reroute_the_call(self, fake_litellm, gateway_env):
+        route_litellm_calls_through_gateway("my-workspace")
+
+        fake_litellm.completion(model="openai/m", messages=[], **REROUTING_PARAMS)
+        asyncio.run(fake_litellm.acompletion(model="openai/m", messages=[], **REROUTING_PARAMS))
+
+        assert fake_litellm.calls == [{
+            "model": "openai/m",
+            "messages": [],
+            "api_base": "http://gateway/v1/private",
+            "extra_headers": {"Comet-Workspace": "my-workspace"},
+        }] * 2
+
+    def test_keeps_generation_parameters(self, fake_litellm, gateway_env):
+        route_litellm_calls_through_gateway("my-workspace")
+
+        fake_litellm.completion(model="openai/m", messages=[], **GENERATION_PARAMS, **REROUTING_PARAMS)
+
+        assert fake_litellm.calls == [{
+            "model": "openai/m",
+            "messages": [],
+            **GENERATION_PARAMS,
+            "api_base": "http://gateway/v1/private",
+            "extra_headers": {"Comet-Workspace": "my-workspace"},
+        }]
+
+    def test_logs_dropped_names_once_without_values(self, fake_litellm, gateway_env, caplog):
+        route_litellm_calls_through_gateway("my-workspace")
+
+        with caplog.at_level(logging.WARNING, logger=optimizer_runner.__name__):
+            for _ in range(3):
+                fake_litellm.completion(model="openai/m", messages=[], **REROUTING_PARAMS)
+
+        assert [r.getMessage() for r in caplog.records] == [
+            f"Dropped model parameters a Studio LLM call does not take: {sorted(REROUTING_PARAMS)}"]
+
+
+@pytest.fixture
+def recorded_litellm(monkeypatch, gateway_env):
+    """The real litellm, with completion and acompletion replaced by recorders, then wrapped for the gateway."""
+    import litellm
+
+    calls = []
+
+    def completion(*args, **kwargs):
+        calls.append(kwargs)
+        return litellm.ModelResponse(choices=[{"message": {"role": "assistant", "content": '{"score": 1, "reason": "ok"}'}}])
+
+    async def acompletion(*args, **kwargs):
+        return completion(*args, **kwargs)
+
+    monkeypatch.setattr(litellm, "completion", completion)
+    monkeypatch.setattr(litellm, "acompletion", acompletion)
+    route_litellm_calls_through_gateway("my-workspace")
+    return calls
+
+
+# The generation settings the Studio form saves, as the runner hands them to opik_optimizer.
+STUDIO_MODEL_PARAMS = {"temperature": 0.2, "max_tokens": 100, "top_p": 0.9, "frequency_penalty": 0.1,
+                       "presence_penalty": 0.1, "reasoning_effort": "low", "stream": False,
+                       "custom_parameters": {"thinking_level": "low"}}
+
+
+def _call_optimizer():
+    from opik_optimizer.core import llm_calls
+
+    llm_calls.call_model(messages=[{"role": "user", "content": "hi"}], model="openai/m",
+                         model_parameters=dict(STUDIO_MODEL_PARAMS))
+
+
+def _call_agent():
+    from opik_optimizer import ChatPrompt
+    from opik_optimizer.agents.litellm_agent import LiteLLMAgent
+
+    prompt = ChatPrompt(messages=[{"role": "user", "content": "{q}"}], model="openai/m",
+                        model_parameters=dict(STUDIO_MODEL_PARAMS))
+    LiteLLMAgent(project_name="p").invoke_agent(prompts={"p": prompt}, dataset_item={"q": "x"})
+
+
+def _call_geval():
+    from opik_backend.studio.metrics import MetricFactory
+
+    MetricFactory.build("geval", {"task_introduction": "t", "evaluation_criteria": "c"}, "openai/m",
+                        project_name="p")({"answer": "a"}, "output")
+
+
+@pytest.mark.parametrize("call", [_call_optimizer, _call_agent, _call_geval])
+def test_studio_call_sites_lose_no_parameter(recorded_litellm, caplog, call):
+    with caplog.at_level(logging.WARNING, logger=optimizer_runner.__name__):
+        call()
+
+    assert recorded_litellm, "the call site made no LLM call"
+    assert not [r for r in caplog.records if r.getMessage().startswith("Dropped model parameters")]
+    for kwargs in recorded_litellm:
+        assert kwargs["api_base"] == "http://gateway/v1/private"

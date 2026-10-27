@@ -130,8 +130,22 @@ def reconfigure_rich_console():
 # workspace without needing to be torn down and rebuilt.
 _gateway_workspace = {"name": None}
 
-# LiteLLM parameters that choose where a completion goes or how it authenticates, other than api_base
-_DESTINATION_PARAMS = ("base_url", "custom_llm_provider", "api_key", "api_version", "organization")
+# The only LiteLLM parameters a gateway call keeps; api_base is then set to the gateway. Model parameters come from
+# the caller's optimization config and reach LiteLLM as they are, and LiteLLM reads many of them as a destination,
+# a handler or a credential (fallbacks, model_list, sagemaker_base_url, ...), so anything not listed is dropped.
+_ALLOWED_PARAMS = frozenset({
+    # What Studio's call sites (opik_optimizer, LiteLLMAgent, the GEval and JSON schema metrics) pass themselves.
+    "model", "messages", "tools", "tool_choice", "parallel_tool_calls", "response_format", "metadata",
+    "num_retries", "timeout", "stream", "extra_headers", "n", "seed", "logprobs", "top_logprobs",
+    # Generation settings the Studio form saves under the API's own names; custom_parameters carries the
+    # provider-specific ones (thinking level, Anthropic effort, OpenRouter sampling) in the gateway's request body.
+    "temperature", "top_p", "max_tokens", "max_completion_tokens", "stop", "presence_penalty",
+    "frequency_penalty", "reasoning_effort", "custom_parameters",
+    # The same OpenRouter sampling settings, as older saved runs carry them, flat.
+    "top_k", "min_p", "top_a", "repetition_penalty",
+})
+# Names already logged as dropped; one job runs in one process, so this logs each name once per job.
+_dropped_params_logged = set()
 
 
 def route_litellm_calls_through_gateway(workspace_name):
@@ -169,10 +183,14 @@ def route_litellm_calls_through_gateway(workspace_name):
         return
 
     def _add_workspace_header(kwargs):
-        # Model parameters come from the caller's optimization config and reach this call as they are, so the
-        # destination is pinned to the gateway: nothing passed in can pick another host, handler or credential.
-        for name in _DESTINATION_PARAMS:
-            kwargs.pop(name, None)
+        # Pinned to the gateway: nothing passed in can pick another host, handler or credential.
+        dropped = kwargs.keys() - _ALLOWED_PARAMS
+        for name in dropped:
+            del kwargs[name]
+        if dropped - _dropped_params_logged:
+            _dropped_params_logged.update(dropped)
+            # Names only: values can be credentials or URLs.
+            logger.warning(f"Dropped model parameters a Studio LLM call does not take: {sorted(dropped)}")
         kwargs["api_base"] = OPENAI_API_BASE
         extra_headers = dict(kwargs.get("extra_headers") or {})
         extra_headers.setdefault("Comet-Workspace", _gateway_workspace["name"])
