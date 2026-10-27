@@ -92,7 +92,7 @@ public class AuthTokenProvider {
     private static final AttributeKey<String> ORIGIN = AttributeKey.stringKey("origin");
     private static final String ORIGIN_REQUEST = "request";
     private static final String ORIGIN_TEST = "test";
-    private static final String RELAXED_HINT = """
+    private static final String RELAXED_DESTINATION_GUARD_HINT = """
             (self-hosted deployments with internal auth services can set \
             LLM_PROVIDER_TOKEN_AUTH_DESTINATION_GUARD=relaxed)""";
 
@@ -267,7 +267,8 @@ public class AuthTokenProvider {
             destinationGuard.validate(authConfig.tokenUrl());
         } catch (DestinationGuardException exception) {
             recordFetchMetric(startNanos, "destination_refused", origin);
-            throw new AuthTokenException("%s %s".formatted(exception.getMessage(), RELAXED_HINT), exception);
+            throw new AuthTokenException("%s %s".formatted(exception.getMessage(), RELAXED_DESTINATION_GUARD_HINT),
+                    exception);
         }
         Invocation request = buildRequest(authConfig);
         int status;
@@ -283,7 +284,8 @@ public class AuthTokenProvider {
             var refused = ExceptionUtils.throwableOfType(exception, RefusedHostException.class);
             if (refused != null) {
                 recordFetchMetric(startNanos, "destination_refused", origin);
-                throw new AuthTokenException("%s %s".formatted(refused.getMessage(), RELAXED_HINT), exception);
+                throw new AuthTokenException("%s %s".formatted(refused.getMessage(), RELAXED_DESTINATION_GUARD_HINT),
+                        exception);
             }
             recordFetchMetric(startNanos, "unreachable", origin);
             throw new AuthTokenException("token fetch failed: could not reach '%s': %s"

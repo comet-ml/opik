@@ -1593,7 +1593,7 @@ llmProviderTokenAuth:
   # Description: Refresh the cached token once its remaining lifetime drops below this fraction of the total lifetime
   refreshFraction: ${LLM_PROVIDER_TOKEN_AUTH_REFRESH_FRACTION:-0.25}
   # Default: 10s
-  # Description: Timeout for the token fetch call to the configured auth service
+  # Description: Timeout for the token fetch call to the configured auth service. Capped at 1m
   fetchTimeout: ${LLM_PROVIDER_TOKEN_AUTH_FETCH_TIMEOUT:-10s}
   # Default: 15s
   # Description: Lease time for the cross-pod single-flight lock around a token fetch
