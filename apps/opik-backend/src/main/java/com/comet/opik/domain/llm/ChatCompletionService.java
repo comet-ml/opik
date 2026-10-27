@@ -608,14 +608,17 @@ public class ChatCompletionService {
                 .findFirst();
     }
 
+    /** The message of a failure Opik raised, which wins over its cause; a blank one adds nothing. */
     private Optional<String> extractErrorDetails(Throwable throwable) {
+        var raisedByOpik = findRaisedByOpik(throwable);
+        if (raisedByOpik.isPresent()) {
+            return raisedByOpik.map(Throwable::getMessage);
+        }
         return switch (Throwables.getRootCause(throwable)) {
             // the connection error names the resolved address, which stays server-side
             case ConnectException connectException -> Optional.of(SERVICE_UNREACHABLE);
             case ClosedChannelException closedChannelException -> Optional.of(SERVICE_UNREACHABLE);
-            default -> findRaisedByOpik(throwable)
-                    .map(raised -> StringUtils.defaultIfBlank(raised.getMessage(),
-                            raised.getClass().getSimpleName()));
+            default -> Optional.empty();
         };
     }
 }

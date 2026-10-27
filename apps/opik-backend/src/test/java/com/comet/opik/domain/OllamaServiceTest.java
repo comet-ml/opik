@@ -1,5 +1,9 @@
 package com.comet.opik.domain;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.comet.opik.api.OllamaConnectionTestResponse;
 import com.comet.opik.api.OllamaModel;
 import com.comet.opik.api.resources.utils.TestHttpClientUtils;
@@ -15,10 +19,14 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.stream.Stream;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
@@ -26,6 +34,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @DisplayName("Ollama Service Test")
 class OllamaServiceTest {
@@ -103,6 +112,40 @@ class OllamaServiceTest {
 
         // Then: the URL the caller gave is not echoed back
         assertThat(actualResponse).isEqualTo(expectedResponse);
+    }
+
+    private static Stream<Arguments> testConnection__logsUrlWithoutSecrets() {
+        var secret = RandomStringUtils.secure().nextAlphanumeric(16);
+        return Stream.of(
+                arguments("http://localhost:%d/?token=%s#%s".formatted(wireMockServer.port(), secret, secret),
+                        List.of("Testing Ollama connection at: 'http://localhost/'",
+                                "Failed to connect to Ollama at 'http://localhost/': HTTP '404'")),
+                // the HTTP client refuses a URL with userinfo before any request
+                arguments("http://user-%s:%s@localhost:%d/".formatted(secret, secret, wireMockServer.port()),
+                        List.of("Testing Ollama connection at: 'http://localhost/api/version'",
+                                "Failed to connect to Ollama")));
+    }
+
+    @ParameterizedTest
+    @MethodSource
+    @DisplayName("Logs the URL without its credentials, query or fragment")
+    void testConnection__logsUrlWithoutSecrets(String urlWithSecrets, List<String> expectedMessages) {
+        var logger = (Logger) LoggerFactory.getLogger(OllamaService.class);
+        var appender = new ListAppender<ILoggingEvent>();
+        var previousLevel = logger.getLevel();
+        appender.start();
+        logger.addAppender(appender);
+        logger.setLevel(Level.DEBUG);
+
+        try {
+            ollamaService.testConnection(urlWithSecrets, null).block();
+        } finally {
+            logger.detachAppender(appender);
+            logger.setLevel(previousLevel);
+        }
+
+        var actualMessages = appender.list.stream().map(ILoggingEvent::getFormattedMessage).toList();
+        assertThat(actualMessages).isEqualTo(expectedMessages);
     }
 
     @Test

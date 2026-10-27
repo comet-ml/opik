@@ -698,6 +698,16 @@ class ChatCompletionServiceTest {
                             500,
                             "%s: %s".formatted(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, OPIK_FAILURE)),
                     Arguments.of(
+                            "Opik failure over a refused connection keeps the message Opik wrote",
+                            new AuthTokenException(OPIK_FAILURE, new ConnectException("Connection refused")),
+                            500,
+                            "%s: %s".formatted(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, OPIK_FAILURE)),
+                    Arguments.of(
+                            "Opik failure with a blank message adds nothing to the generic one",
+                            new AuthTokenException(" ", new ConnectException("Connection refused")),
+                            500,
+                            UNEXPECTED_ERROR_CALLING_LLM_PROVIDER),
+                    Arguments.of(
                             "status outside the error families",
                             new RuntimeException(new HttpException(302, "moved")),
                             500,

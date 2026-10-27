@@ -224,33 +224,39 @@ class CustomLlmHttpClientTest {
         config.setHttpClientMaxRequests(limit);
         config.setHttpClientMaxRequestsPerHost(limit);
         var boundedOkHttpClient = new CustomLlmModule().llmHttpClient(config, RELAXED_GUARD);
-        var boundedClient = new CustomLlmHttpClientBuilder(boundedOkHttpClient, ERROR_BODY_MAX_SIZE)
-                .readTimeout(WAIT)
-                .build();
-        var data = RandomStringUtils.secure().nextAlphanumeric(10);
-        wireMock.stubFor(post(urlEqualTo(PATH)).willReturn(aResponse().withStatus(200)
-                .withHeader("Content-Type", "text/event-stream")
-                .withBody("data: %s\n\n".formatted(data))
-                .withFixedDelay(1_000)));
+        try {
+            var boundedClient = new CustomLlmHttpClientBuilder(boundedOkHttpClient, ERROR_BODY_MAX_SIZE)
+                    .readTimeout(WAIT)
+                    .build();
+            var data = RandomStringUtils.secure().nextAlphanumeric(10);
+            wireMock.stubFor(post(urlEqualTo(PATH)).willReturn(aResponse().withStatus(200)
+                    .withHeader("Content-Type", "text/event-stream")
+                    .withBody("data: %s\n\n".formatted(data))
+                    .withFixedDelay(1_000)));
 
-        var actualStreams = IntStream.range(0, streams)
-                .mapToObj(i -> collect(boundedClient.stream(request("{}"), new DefaultServerSentEventParser()),
-                        Long.MAX_VALUE))
-                .toList();
+            var actualStreams = IntStream.range(0, streams)
+                    .mapToObj(i -> collect(boundedClient.stream(request("{}"), new DefaultServerSentEventParser()),
+                            Long.MAX_VALUE))
+                    .toList();
 
-        assertThat(DispatcherLimits.of(boundedOkHttpClient)).isEqualTo(new DispatcherLimits(limit, limit));
-        await().atMost(WAIT).until(() -> boundedOkHttpClient.dispatcher().runningCallsCount() == limit
-                && boundedOkHttpClient.dispatcher().queuedCallsCount() == streams - limit);
-        var expectedEvents = IntStream.range(0, streams)
-                .mapToObj(i -> List.of(new ServerSentEvent(null, data)))
-                .toList();
-        var actualEvents = new ArrayList<List<HttpStreamingEvent>>();
-        for (var stream : actualStreams) {
-            var events = stream.get(30, TimeUnit.SECONDS);
-            actualEvents.add(events.subList(1, events.size()));
+            assertThat(DispatcherLimits.of(boundedOkHttpClient)).isEqualTo(new DispatcherLimits(limit, limit));
+            await().atMost(WAIT).until(() -> boundedOkHttpClient.dispatcher().runningCallsCount() == limit
+                    && boundedOkHttpClient.dispatcher().queuedCallsCount() == streams - limit);
+            var expectedEvents = IntStream.range(0, streams)
+                    .mapToObj(i -> List.of(new ServerSentEvent(null, data)))
+                    .toList();
+            var actualEvents = new ArrayList<List<HttpStreamingEvent>>();
+            for (var stream : actualStreams) {
+                var events = stream.get(30, TimeUnit.SECONDS);
+                actualEvents.add(events.subList(1, events.size()));
+            }
+            assertThat(actualEvents).isEqualTo(expectedEvents);
+            await().atMost(WAIT).until(() -> boundedOkHttpClient.dispatcher().runningCallsCount() == 0);
+        } finally {
+            // this test's own threads and connections, which nothing else releases
+            boundedOkHttpClient.dispatcher().executorService().shutdownNow();
+            boundedOkHttpClient.connectionPool().evictAll();
         }
-        assertThat(actualEvents).isEqualTo(expectedEvents);
-        await().atMost(WAIT).until(() -> boundedOkHttpClient.dispatcher().runningCallsCount() == 0);
     }
 
     @Test
