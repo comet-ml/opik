@@ -12,15 +12,6 @@ from ...utils.display import (
     display_renderable_with_prefix,
     display_text_block,
 )
-from .display_utils import (
-    compute_message_diff_order,  # noqa: F401
-)
-from .types import MessageDiffItem  # noqa: F401
-
-__all__ = [
-    "MessageDiffItem",
-    "compute_message_diff_order",
-]
 
 
 def _display_box(

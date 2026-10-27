@@ -183,39 +183,6 @@ def format_message_content(content: str | list[dict[str, Any]]) -> rich.text.Tex
     return result
 
 
-def content_to_string(content: str | list[dict[str, Any]]) -> str:
-    """
-    Convert message content to a string representation for diff display.
-
-    Args:
-        content: Message content, either a string or a list of content parts.
-
-    Returns:
-        String representation of the content.
-    """
-    if isinstance(content, str):
-        return content
-
-    parts: list[str] = []
-    for part in content:
-        part_type = part.get("type")
-        if part_type == "text":
-            text_content = part.get("text", "")
-            if text_content:
-                parts.append(f"[text] {text_content}")
-        elif part_type == "image_url":
-            url = _extract_url_from_part(part, "image_url")
-            parts.append(_format_url_for_string(url, "image_url", "data:image"))
-        elif part_type == "audio_url":
-            url = _extract_url_from_part(part, "audio_url")
-            parts.append(_format_url_for_string(url, "audio_url", "data:audio"))
-        elif part_type == "video_url":
-            url = _extract_url_from_part(part, "video_url")
-            parts.append(_format_url_for_string(url, "video_url", "data:video"))
-
-    return "\n".join(parts) if parts else "(empty content)"
-
-
 def preserve_multimodal_message_structure(
     *,
     original_messages: list[dict[str, Any]],
