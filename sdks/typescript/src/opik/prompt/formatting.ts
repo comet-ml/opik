@@ -64,7 +64,7 @@ function resolveSafeProperty<T>(
   return resolve(obj, key);
 }
 
-function ownProperty(obj: unknown, key: string | number): unknown {
+function resolveFilterAttr(obj: unknown, key: string | number): unknown {
   return resolveSafeProperty(
     obj,
     key,
@@ -80,10 +80,10 @@ function ownProperty(obj: unknown, key: string | number): unknown {
 // as the member lookups in renderJinja2Template.
 const jinja2Env = new nunjucks.Environment([], { autoescape: true });
 jinja2Env.addFilter("selectattr", (arr: unknown[], attr: string) =>
-  arr.filter((item) => Boolean(ownProperty(item, attr)))
+  arr.filter((item) => Boolean(resolveFilterAttr(item, attr)))
 );
 jinja2Env.addFilter("rejectattr", (arr: unknown[], attr: string) =>
-  arr.filter((item) => !ownProperty(item, attr))
+  arr.filter((item) => !resolveFilterAttr(item, attr))
 );
 
 // Cap range() like the Python SandboxedEnvironment (MAX_RANGE = 100000) so an
