@@ -3,6 +3,7 @@ package com.comet.opik.infrastructure.llm;
 import com.comet.opik.domain.LlmProviderApiKeyService;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.llm.customllm.ProviderBaseUrlGuard;
 import com.google.inject.AbstractModule;
 import com.google.inject.Provides;
 import jakarta.inject.Singleton;
@@ -16,15 +17,18 @@ public class LlmModule extends AbstractModule {
     public LlmProviderFactory llmProviderFactory(
             @NonNull LlmProviderApiKeyService llmProviderApiKeyService,
             @NonNull @Config OpikConfiguration configuration,
-            @NonNull LlmModelRegistryService registryService) {
-        return createInstance(llmProviderApiKeyService, configuration, registryService);
+            @NonNull LlmModelRegistryService registryService,
+            @NonNull ProviderBaseUrlGuard providerBaseUrlGuard) {
+        return createInstance(llmProviderApiKeyService, configuration, registryService, providerBaseUrlGuard);
     }
 
     public LlmProviderFactory createInstance(
             LlmProviderApiKeyService llmProviderApiKeyService,
             OpikConfiguration configuration,
-            LlmModelRegistryService registryService) {
-        return new LlmProviderFactoryImpl(llmProviderApiKeyService, configuration, registryService);
+            LlmModelRegistryService registryService,
+            ProviderBaseUrlGuard providerBaseUrlGuard) {
+        return new LlmProviderFactoryImpl(llmProviderApiKeyService, configuration, registryService,
+                providerBaseUrlGuard);
     }
 
 }

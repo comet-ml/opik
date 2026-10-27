@@ -155,13 +155,31 @@ export class OnlineEvaluationPage {
     await this.nameInput.waitFor({ state: 'detached' });
   }
 
-  async openCreateRulePanel(type: EvaluatorType = 'LLM-as-a-Judge'): Promise<void> {
+  /**
+   * Opens the create panel. A new judge or decision model starts on cards, so
+   * this also picks one: the given template, or the card to write your own.
+   */
+  async openCreateRulePanel(type: EvaluatorType = 'LLM-as-a-Judge', startCard?: string): Promise<void> {
     return test.step(`open the create panel for a ${type} evaluator`, async () => {
       await this.page.getByTestId('online-evaluation-create-rule-button').click();
       await this.page.getByRole('menuitem', { name: new RegExp(`^${type}`) }).click();
       // The Evaluator menu animates out over the panel; clicks land on it until it is gone.
       await expect(this.page.getByRole('menu')).toHaveCount(0);
       await this.waitForPanelOpen();
+      if (type !== 'Code evaluator') {
+        await this.chooseStartCard(startCard ?? (type === 'Decision model' ? 'Write your own' : 'Type your prompt'));
+      }
+    });
+  }
+
+  get startCards(): Locator {
+    return this.panel.getByTestId('rule-editor-start-cards');
+  }
+
+  async chooseStartCard(label: string): Promise<void> {
+    return test.step(`start from the "${label}" card`, async () => {
+      await this.startCards.getByRole('button', { name: new RegExp(`^${label}`) }).click();
+      await expect(this.startCards).toHaveCount(0);
     });
   }
 

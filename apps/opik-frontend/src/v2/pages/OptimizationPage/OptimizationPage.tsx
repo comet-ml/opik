@@ -12,6 +12,7 @@ import { IN_PROGRESS_OPTIMIZATION_STATUSES } from "@/lib/optimizations";
 import { formatDate } from "@/lib/date";
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
 import { useOptimizationData } from "./useOptimizationData";
+import { useRedirectToOwnProject } from "@/v2/hooks/useRedirectToOwnProject";
 import { useOptimizationColumns } from "./useOptimizationColumns";
 import OptimizationHeader from "./OptimizationHeader";
 import OptimizationTrialsControls from "./OptimizationTrialsControls";
@@ -83,6 +84,8 @@ const OptimizationPage: React.FC = () => {
     handleRefresh,
     trialSidebar,
   } = useOptimizationData();
+
+  useRedirectToOwnProject(optimization?.project_id);
 
   const [selectedTrialId, setSelectedTrialId] = useState<string | undefined>();
   const [activeTab, setActiveTab] = useState<string>(OPTIMIZATION_TAB.OVERVIEW);

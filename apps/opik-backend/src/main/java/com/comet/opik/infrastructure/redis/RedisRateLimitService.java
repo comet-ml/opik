@@ -1,13 +1,16 @@
 package com.comet.opik.infrastructure.redis;
 
 import com.comet.opik.infrastructure.ratelimit.RateLimitService;
+import com.google.common.base.Throwables;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.redisson.api.RBucketReactive;
 import org.redisson.api.RRateLimiterReactive;
 import org.redisson.api.RateType;
 import org.redisson.api.RedissonReactiveClient;
 import org.redisson.client.RedisException;
+import org.redisson.client.codec.LongCodec;
 import reactor.core.publisher.Mono;
 import reactor.util.retry.Retry;
 
@@ -28,35 +31,113 @@ class RedisRateLimitService implements RateLimitService {
 
         return setLimitIfNecessary(limitConfig.limit(), limitConfig.durationInSeconds(), rateLimit)
                 .then(Mono.defer(() -> rateLimit.tryAcquire(events).retryWhen(configureRetry(limitConfig, rateLimit))))
-                .map(Boolean.FALSE::equals);
+                .map(Boolean.FALSE::equals)
+                // Fail open: once the retries above are exhausted, a limiter/Lua script failure must not take
+                // down ingestion. Redisson 4.8.0's throttle branch can error with "arithmetic on a nil value"
+                // when the permit counter and the permits sorted-set desync; treating that as "not limited"
+                // keeps writes flowing. keepAliveTime (see setLimitIfNecessary) keeps the acquire-path keys on
+                // one TTL and availableEvents now reads the counter directly instead of the mutating
+                // availablePermits, so no code path strips the counter's TTL any more; this fail-open stays as
+                // defense-in-depth for any other limiter/Lua failure. The error surfaces here as a
+                // RetryExhaustedException wrapping the RedisException, so catch broadly rather than by type.
+                .onErrorResume(error -> {
+                    log.warn("Rate limiter errored, failing open (request allowed), exception '{}'", errorType(error),
+                            sanitized(error));
+                    return Mono.just(false);
+                });
     }
 
     private Retry configureRetry(LimitConfig limitConfig, RRateLimiterReactive rateLimit) {
         return Retry.fixedDelay(2, Duration.ofMillis(5))
                 .filter(RedisException.class::isInstance)
                 .doBeforeRetryAsync(signal -> {
-                    log.warn("Retrying due to error", signal.failure());
+                    log.warn("Rate limiter errored, retrying, exception '{}'", errorType(signal.failure()),
+                            sanitized(signal.failure()));
                     return setLimitIfNecessary(limitConfig.limit(), limitConfig.durationInSeconds(), rateLimit).then();
                 });
     }
 
     private Mono<Boolean> setLimitIfNecessary(long limit, long limitDurationInSeconds, RRateLimiterReactive rateLimit) {
-        return rateLimit.trySetRate(RateType.OVERALL, limit, Duration.ofSeconds(limitDurationInSeconds))
-                .flatMap(__ -> rateLimit.expireIfNotSet(Duration.ofSeconds(limitDurationInSeconds)));
+        // keepAliveTime makes Redisson pexpire the config hash, the permit counter and the permits
+        // sorted-set to the same TTL inside the atomic acquire script, so they can no longer expire
+        // independently on the acquire path. It equals the rate interval, so idle buckets are still reclaimed
+        // after one interval of inactivity.
+        // expireIfNotSet is the self-heal: RRateLimiter applies it (PEXPIRE NX) to every limiter key, not just
+        // the hash. The acquire script errors with "arithmetic on a nil value" before its own pexpire when the
+        // counter is low and the permits sorted-set is empty, so a counter left without a TTL (e.g. by the
+        // previous availablePermits header path) would otherwise never expire and the bucket would fail
+        // forever (OPIK-8923). NX leaves keys that already carry the keepAliveTime TTL untouched.
+        Duration interval = Duration.ofSeconds(limitDurationInSeconds);
+        return rateLimit.trySetRate(RateType.OVERALL, limit, interval, interval)
+                .flatMap(__ -> rateLimit.expireIfNotSet(interval));
     }
+
+    // availableEvents and getRemainingTTL feed the rate-limit response headers, which the interceptor sets
+    // from a finally block. They run on every request and must be read-only and best-effort: a limiter error
+    // here must never replace the request's real outcome with a 500 (OPIK-8923), so both fall back to a safe
+    // value, logged at debug so a Redis outage doesn't flood the logs on every request.
 
     @Override
     public Mono<Long> availableEvents(@NonNull String bucketName, @NonNull LimitConfig limitConfig) {
-        RRateLimiterReactive rateLimit = redisClient.getRateLimiter(bucketName);
-        return setLimitIfNecessary(limitConfig.limit(), limitConfig.durationInSeconds(), rateLimit)
-                .then(Mono.defer(rateLimit::availablePermits).retryWhen(configureRetry(limitConfig, rateLimit)));
+        // Read the counter directly, read-only. NOT RRateLimiter.availablePermits(): its Lua rewrites the
+        // counter with a plain SET and no pexpire, which strips the key's TTL and reopens the OPIK-8923
+        // desync. The counter is the permits left in the window; an absent key means a fresh/idle bucket, so
+        // the full limit is available. This is a conservative floor — it can under-report until the next
+        // acquire runs Redisson's permit release — which is acceptable for a header.
+        return permitCounter(bucketName).get()
+                .defaultIfEmpty(limitConfig.limit())
+                .onErrorResume(error -> {
+                    log.debug("Rate limiter available-events lookup failed, reporting the configured limit, "
+                            + "exception '{}'", errorType(error), sanitized(error));
+                    return Mono.just(limitConfig.limit());
+                });
     }
 
     @Override
     public Mono<Long> getRemainingTTL(@NonNull String bucketName, @NonNull LimitConfig limitConfig) {
+        // remainTimeToLive is a read-only PTTL on the limiter's config hash (RedissonExpirable); it does not
+        // rewrite the counter, so unlike availablePermits it never strips the counter's TTL. setLimitIfNecessary
+        // stays so an expired bucket is re-initialised and the reset header reflects a fresh window rather than
+        // "key missing".
         RRateLimiterReactive rateLimit = redisClient.getRateLimiter(bucketName);
         return setLimitIfNecessary(limitConfig.limit(), limitConfig.durationInSeconds(), rateLimit)
-                .then(Mono.defer(rateLimit::remainTimeToLive).retryWhen(configureRetry(limitConfig, rateLimit)));
+                .then(Mono.defer(rateLimit::remainTimeToLive).retryWhen(configureRetry(limitConfig, rateLimit)))
+                .onErrorResume(error -> {
+                    // Report the full window, not 0: the interceptor turns 0 into a RateLimit-Reset of 1s,
+                    // which would make a rejected client retry after a second and spin on 429s.
+                    log.debug("Rate limiter TTL lookup failed, reporting the configured window, exception '{}'",
+                            errorType(error), sanitized(error));
+                    return Mono.just(Duration.ofSeconds(limitConfig.durationInSeconds()).toMillis());
+                });
+    }
+
+    // Never log the original throwable or its message: Redisson's exception messages list the command's keys,
+    // and the general and custom bucket names embed the caller's API key. Only the root cause's type and its
+    // stack frames (class, method, line; no data) are logged.
+    private static String errorType(Throwable error) {
+        return Throwables.getRootCause(error).getClass().getSimpleName();
+    }
+
+    static Throwable sanitized(Throwable error) {
+        return new SanitizedLimiterException(Throwables.getRootCause(error));
+    }
+
+    private static final class SanitizedLimiterException extends RuntimeException {
+
+        SanitizedLimiterException(Throwable root) {
+            // No cause and no suppressed exceptions: their messages could carry the keys.
+            super(root.getClass().getName(), null, false, true);
+            setStackTrace(root.getStackTrace());
+        }
+    }
+
+    // Redisson 4.8.0 keeps the live permit counter in a String at the rate limiter's value key, named by
+    // RedissonObject.suffixName: "{name}:value", or "name:value" when the name already holds a hash tag.
+    // We bind to that layout on purpose so the header path can read the counter without the mutating
+    // availablePermits script (see availableEvents). Re-verify this naming if Redisson is upgraded (OPIK-8923).
+    private RBucketReactive<Long> permitCounter(@NonNull String bucketName) {
+        String valueKey = bucketName.contains("{") ? bucketName + ":value" : "{" + bucketName + "}:value";
+        return redisClient.getBucket(valueKey, LongCodec.INSTANCE);
     }
 
 }

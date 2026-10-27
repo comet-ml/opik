@@ -21,6 +21,7 @@ const OutOfCreditsButton: React.FC<OutOfCreditsButtonProps> = ({
     <HoverCard openDelay={100}>
       <HoverCardTrigger asChild>
         <Button
+          type="button"
           variant="outline"
           size="2xs"
           className={cn(

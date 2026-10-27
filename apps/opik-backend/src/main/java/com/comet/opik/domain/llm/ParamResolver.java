@@ -92,7 +92,7 @@ public class ParamResolver {
             changes.add(new ParamChange(TOP_P, ParamChange.Reason.EXCLUSIVE_SAMPLING));
         }
 
-        var params = openAiParams(model, route);
+        var params = catalogParams(model, route);
         if (params.isPresent()) {
             var modelParams = params.get();
             var effectiveParams = route == null || modelParams.routes() == null
@@ -142,7 +142,7 @@ public class ParamResolver {
         }
         var model = parameters.name();
         var refused = ModelCapabilities.rejectsTemperature(model, registryService)
-                || openAiParams(model, null).map(ModelParams::temperature).filter(this::isRefused).isPresent();
+                || catalogParams(model, null).map(ModelParams::temperature).filter(this::isRefused).isPresent();
         // Thinking costs a judge its temperature only on a Claude (the exclusive-sampling rule's loose match), unlike
         // the chat path: a judge on another provider's thinking model keeps the temperature it was saved with.
         var claudeThinks = ModelCapabilities.requiresExclusiveSamplingParams(model)
@@ -157,11 +157,11 @@ public class ParamResolver {
     }
 
     // Only OpenAI keys have a route, so an id the registry doesn't list still gets the OpenAI profile there.
-    private Optional<ModelParams> openAiParams(String model, String route) {
+    private Optional<ModelParams> catalogParams(String model, String route) {
         if (model == null) {
             return Optional.empty();
         }
-        return llmProviderFactory.openAiParams(model)
+        return llmProviderFactory.catalogParams(model)
                 .or(() -> route == null
                         ? Optional.empty()
                         : Optional.ofNullable(registryService.paramsOf(LlmProvider.OPEN_AI.getValue(), model)));
@@ -171,8 +171,8 @@ public class ParamResolver {
         return refusedByModel ? ParamChange.Reason.REFUSED_BY_MODEL : ParamChange.Reason.REFUSED_BY_ROUTE;
     }
 
-    // A param the catalog leaves out counts as accepted: an OpenAI model keeps every setting its catalog row doesn't
-    // refuse. ModelCapabilities.isAccepted reads a missing Claude param the other way on purpose.
+    // A param the catalog leaves out counts as accepted: an OpenAI, Gemini or Vertex AI model keeps every setting its
+    // catalog row doesn't refuse. ModelCapabilities.isAccepted reads a missing Claude param the other way on purpose.
     private boolean isRefused(NumberParam param) {
         return param != null && Boolean.FALSE.equals(param.accepted());
     }

@@ -41,6 +41,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -120,7 +121,26 @@ public class LlmModelRegistryService {
 
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
-    record ProviderDefaults(String profile, String reasoningProfile) {
+    record ProviderDefaults(String profile, String reasoningProfile, List<IdProfile> idProfiles) {
+
+        ProviderDefaults {
+            idProfiles = idProfiles == null ? List.of() : idProfiles;
+        }
+
+        String idProfile(String modelId) {
+            if (modelId == null) {
+                return null;
+            }
+            return idProfiles.stream()
+                    .filter(idProfile -> idProfile.match().matcher(modelId).find())
+                    .map(IdProfile::profile)
+                    .findFirst()
+                    .orElse(null);
+        }
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record IdProfile(@NonNull Pattern match, @NonNull String profile) {
     }
 
     @Builder(toBuilder = true)
@@ -161,14 +181,15 @@ public class LlmModelRegistryService {
         }
 
         /**
-         * Provider profile, then the reasoning profile, then the model's own params, into which
-         * {@link #foldProfiles} has already merged the model's own profile.
+         * Provider profile, then the profile its id matches, then the reasoning profile, then the model's own params,
+         * into which {@link #foldProfiles} has already merged the model's own profile.
          */
         ModelParams resolve(String provider, ModelEntry entry) {
             var providerDefaults = defaults.get(provider);
             ModelParams resolved = null;
             if (providerDefaults != null) {
                 resolved = profile(providerDefaults.profile());
+                resolved = ModelParams.overlay(resolved, profile(providerDefaults.idProfile(entry.id())));
                 if (BooleanUtils.isTrue(entry.reasoning())) {
                     resolved = ModelParams.overlay(resolved, profile(providerDefaults.reasoningProfile()));
                 }
@@ -193,7 +214,8 @@ public class LlmModelRegistryService {
             var named = Stream.concat(
                     defaults.values().stream()
                             .filter(Objects::nonNull)
-                            .flatMap(d -> Stream.of(d.profile(), d.reasoningProfile())),
+                            .flatMap(d -> Stream.concat(Stream.of(d.profile(), d.reasoningProfile()),
+                                    d.idProfiles().stream().map(IdProfile::profile))),
                     models.values().stream()
                             .filter(Objects::nonNull)
                             .flatMap(List::stream)
@@ -213,6 +235,17 @@ public class LlmModelRegistryService {
 
     public Map<String, List<LlmModelDefinition>> getRegistry() {
         return registry;
+    }
+
+    public Map<String, ModelParams> getProfiles() {
+        var profiles = new LinkedHashMap<String, ModelParams>();
+        for (var provider : LlmProvider.values()) {
+            var params = paramsOf(provider.getValue(), null);
+            if (params != null) {
+                profiles.put(provider.getValue(), params);
+            }
+        }
+        return profiles;
     }
 
     public Optional<ModelLookupResult> findModel(@NonNull String model) {

@@ -10,6 +10,10 @@ import ChartSkeleton from "@/shared/VegaChart/ChartSkeleton";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { cn } from "@/lib/utils";
 import OllieChartActionsMenu from "./OllieChartActionsMenu";
+import OllieKpi, { parseKpiSpec } from "./OllieKpi";
+import { QueryError, queryErrorStatus } from "./helpers";
+import useKpiComparison from "./useKpiComparison";
+import useRefetchOnceSaved from "./useRefetchOnceSaved";
 import {
   useDashboardStore,
   selectRuntimeConfig,
@@ -48,11 +52,6 @@ const QUERY_ERRORS: Record<number, { title: string; message: string }> = {
     message: "Ollie charts are turned off for this workspace",
   },
 };
-
-type QueryError = Error & { status?: number; response?: { status?: number } };
-
-const queryErrorStatus = (error: QueryError) =>
-  error.status ?? error.response?.status;
 
 const describeQueryError = (error: QueryError) =>
   QUERY_ERRORS[queryErrorStatus(error) ?? 0] ?? {
@@ -135,6 +134,7 @@ const OllieChartWidget: React.FunctionComponent<
 
   const config = (widget?.config ?? {}) as OllieChartWidgetType["config"];
   const { spec, query, rows: snapshotRows } = config;
+  const kpi = parseKpiSpec(spec);
 
   const { intervalStart, intervalEnd } = useMemo(
     () =>
@@ -146,6 +146,13 @@ const OllieChartWidget: React.FunctionComponent<
 
   // `live` also covers the moment before the dashboard id arrives (skeleton); only `canQuery` may hit the endpoint.
   const canQuery = Boolean(query?.id && dashboardId && queryWidgetId);
+  // The value and its comparison run the widget's saved query; only their windows differ.
+  const savedQuery = {
+    dashboardId: dashboardId ?? "",
+    scope: dashboardScope ?? DASHBOARD_SCOPE.WORKSPACE,
+    widgetId: queryWidgetId ?? "",
+    queryId: query?.id ?? "",
+  };
   const {
     data: rows,
     isPending,
@@ -154,33 +161,25 @@ const OllieChartWidget: React.FunctionComponent<
     refetch,
     dataUpdatedAt,
   } = useDashboardWidgetQuery(
-    {
-      dashboardId: dashboardId ?? "",
-      scope: dashboardScope ?? DASHBOARD_SCOPE.WORKSPACE,
-      widgetId: queryWidgetId ?? "",
-      queryId: query?.id ?? "",
-      intervalStart,
-      intervalEnd,
-    },
+    { ...savedQuery, intervalStart, intervalEnd },
     // Only an unsaved widget falls back to the rows the chart was made with.
     { enabled: canQuery, retryNotFound },
   );
   const live = Boolean(query?.id && queryWidgetId);
+  useRefetchOnceSaved(retryNotFound, error, refetch);
+  const comparison = useKpiComparison({
+    savedQuery,
+    enabled: canQuery && Boolean(kpi?.window_days),
+    retryNotFound,
+    intervalStart,
+    intervalEnd,
+    value: { dataUpdatedAt, isFetching },
+  });
 
-  // An autosave slower than the 404 retries saves the widget after its query already gave up; run it once more then.
-  const wasSavedRef = useRef(!retryNotFound);
-  useEffect(() => {
-    const saved = !retryNotFound;
-    if (
-      saved &&
-      !wasSavedRef.current &&
-      error &&
-      queryErrorStatus(error) === 404
-    ) {
-      refetch();
-    }
-    wasSavedRef.current = saved;
-  }, [retryNotFound, error, refetch]);
+  const refresh = () => {
+    refetch();
+    comparison.refetch();
+  };
 
   // Once per failed load: the same error object survives re-renders. An unsaved widget's 404 is expected and stays
   // unreported after the save that ends it; masked data and charts turned off are states the widget explains.
@@ -239,6 +238,23 @@ const OllieChartWidget: React.FunctionComponent<
         }
       : undefined;
 
+  // A copy refined with Ollie and added as a new widget; this one stays as it is.
+  const duplicateInOllie =
+    ollieEnabled && spec && query?.id
+      ? () => {
+          window.opikBridge?.editChart?.({
+            widgetId: widget.id,
+            title,
+            description: config.description,
+            spec,
+            query: { id: query.id },
+            rows: live ? rows : snapshotRows,
+            entryId: uuidv4(),
+            duplicate: true,
+          });
+        }
+      : undefined;
+
   const renderContent = () => {
     if (!spec) {
       return (
@@ -267,6 +283,17 @@ const OllieChartWidget: React.FunctionComponent<
       );
     }
 
+    if (kpi) {
+      return (
+        <OllieKpi
+          kpi={kpi}
+          rows={chartRows}
+          previousRows={live ? comparison.previousRows : null}
+          comparedWith={comparison.comparedWith}
+        />
+      );
+    }
+
     return (
       <div className="size-full p-2">
         <VegaChart spec={spec} rows={chartRows} />
@@ -281,7 +308,8 @@ const OllieChartWidget: React.FunctionComponent<
       ) : (
         <DashboardWidget.Header
           title={widget.title || widget.generatedTitle || ""}
-          subtitle={widget.subtitle}
+          // Ollie writes the chart's scope as its description; an editor's own subtitle wins, an empty one included.
+          subtitle={(widget.subtitle ?? config.description) || undefined}
           readOnly={readOnly}
           titleAdornment={<OllieBadge />}
           meta={
@@ -292,7 +320,7 @@ const OllieChartWidget: React.FunctionComponent<
                   <button
                     type="button"
                     className="flex size-4 items-center justify-center text-light-slate hover:text-foreground"
-                    onClick={() => refetch()}
+                    onClick={refresh}
                   >
                     <RefreshCw
                       className={cn("size-3", isFetching && "animate-spin")}
@@ -308,7 +336,8 @@ const OllieChartWidget: React.FunctionComponent<
               widgetId={widgetId!}
               widgetTitle={title}
               onEditInOllie={editInOllie}
-              onRefresh={canQuery ? () => refetch() : undefined}
+              onDuplicateInOllie={duplicateInOllie}
+              onRefresh={canQuery ? refresh : undefined}
             />
           }
           dragHandle={<DashboardWidget.DragHandle />}
