@@ -51,7 +51,7 @@ class ReportFailureServiceImpl implements ReportFailureService {
                 failure.type().getValue(), failure.projectId(), workspaceId, failure.reason());
 
         transactionTemplate.inTransaction(WRITE, handle -> {
-            handle.attach(ReportFailureDAO.class).insert(id, workspaceId, failure.type().getValue(),
+            AgentInsightsJobService.recordFailure(handle, id, workspaceId, failure.type().getValue(),
                     failure.projectId(), failure.reason(), failure.detail(), userName);
             return null;
         });

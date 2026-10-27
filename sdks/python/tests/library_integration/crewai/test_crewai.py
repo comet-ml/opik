@@ -54,7 +54,7 @@ _GEMINI_MODEL = (
             ),
         ),
         (f"bedrock/{llm_constants.BEDROCK_CLAUDE_SONNET}", "bedrock"),
-        (f"anthropic/{llm_constants.ANTHROPIC_CLAUDE_SONNET}", "anthropic"),
+        (llm_constants.LITELLM_ANTHROPIC_CLAUDE_HAIKU, "anthropic"),
     ],
 )
 def test_crewai__sequential_agent__cyclic_reference_inside_one_of_the_tasks__data_is_serialized_correctly(

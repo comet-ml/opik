@@ -11,4 +11,7 @@ export interface ClientRegistrationRequest {
     clientName: string;
     redirectUris: string[];
     logoUri?: string;
+    softwareId?: string;
+    softwareVersion?: string;
+    clientUri?: string;
 }

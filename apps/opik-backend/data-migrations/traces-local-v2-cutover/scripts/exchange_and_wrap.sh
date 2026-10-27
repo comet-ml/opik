@@ -112,6 +112,12 @@ SETTLE_POLL_SECONDS=5
 SETTLE_STUCK_AGE_SECONDS=60
 SETTLE_STUCK_NUM_TRIES=3
 
+# The scope 000003's shared settle-* blocks are rendered with. Pre-swap that is both tables for the queue (either could
+# leave a replica short of a part the swap then exposes) and the shadow alone for mutations (the only table this step
+# has mutated). reconcile.sh renders the same blocks with its own post-swap scope.
+SETTLE_QUEUE_TABLES="'traces', 'traces_local_v2'"
+SETTLE_MUTATION_TABLES="'traces_local_v2'"
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --database) DATABASE="${2:?"$1 requires a value"}"; shift 2 ;;
@@ -223,8 +229,12 @@ if [[ "$WRAP_ONLY" != "1" && "$CONFIRM_RETENTION_PAUSED" != "1" ]]; then
     exit 2
 fi
 
+# --format TabSeparated is explicit, not redundant: clickhouse-client takes a default format from the user's own client
+# config, and a pretty/bordered default would put headers and box-drawing into every scalar read below. Those are parsed
+# as engines, counts and timestamps, so the failure would not be an error — it would be a wrong verdict.
 ch() {
-    clickhouse-client "${CH_ARGS[@]}" --log_comment 'traces_local_v2_cutover:exchange_and_wrap' --query "$1"
+    clickhouse-client "${CH_ARGS[@]}" --log_comment 'traces_local_v2_cutover:exchange_and_wrap' \
+        --format TabSeparated --query "$1"
 }
 
 # Same connection, but rendered for a human — used only for the settle gate's detail blocks, whose interesting columns
@@ -249,6 +259,16 @@ extract() {
 #
 # RETURN, not exit: `render` calls this inside a command substitution, where an exit would end only that subshell and
 # hand the caller partial SQL. Every caller assigns first and adds `|| exit 2`, so a refusal still stops the run.
+# KEEP IN STEP WITH reconcile.sh's require_rendered. The two copies are the SAME validation contract, and a
+# gap between them is SILENT: drop the out-of-order check and a reordered END captures to end of file past every
+# remaining guard, which is then read as a verdict. The checks, and their ORDER, must stay identical — exactly one
+# BEGIN and one END, the END after its BEGIN, executable SQL after comments are stripped, the caller's identity token
+# present, and no surviving ${...} placeholder. The marker grammar they parse is shared too, so a change to one is a
+# change to both.
+#
+# The one allowed difference is how a refusal propagates: the return above, versus an exit in reconcile.sh, where the
+# primary call site is at top level. The duplication is deliberate: this directory has no sourced helpers, and ch(),
+# extract() and the settle gate are duplicated the same way.
 require_rendered() {
     local sql="$1" what="$2" must_contain="$3" file="$4" masked begins ends begin_line end_line
     # Both structural checks read the FILE, not the extraction, because the content checks below cannot see a run-on
@@ -300,6 +320,8 @@ render() {
     local sql
     sql="$(extract "$1" "$2")"
     sql="${sql//'${ANALYTICS_DB_DATABASE_NAME}'/$DATABASE}"
+    sql="${sql//'${SETTLE_QUEUE_TABLES}'/$SETTLE_QUEUE_TABLES}"
+    sql="${sql//'${SETTLE_MUTATION_TABLES}'/$SETTLE_MUTATION_TABLES}"
     [[ -z "$BACKFILL_START" ]] || sql="${sql//'${BACKFILL_START}'/$BACKFILL_START}"
     require_rendered "$sql" "$1" "$3" "$2" || return 2
     printf '%s' "$sql"
@@ -394,6 +416,14 @@ assert_pre_wrap_topology() {
 #     SETTLE_STUCK_NUM_TRIES, or any last_exception means a replica is genuinely lagging, and the gate fails naming the
 #     offending entries per replica. The sample counts only the entry types that mean a replica lacks data, so ordinary
 #     merge activity neither holds the gate open nor trips it (see the settle-sample block for why).
+ # KEEP IN STEP WITH reconcile.sh's assert_replication_settled. The two drivers run the SAME GATE on opposite
+# sides of the swap, and the half that decides a verdict — the three settle-* blocks — is already shared, from
+# 000003_exchange_and_wrap.sql, each driver rendering its own table scope. What is duplicated is the control flow around
+# it, and these parts MUST NOT DRIFT: the stuck thresholds and the poll interval, the requirement that the sample be
+# SEVEN NUMERIC FIELDS ON ONE ROW before any arithmetic reads it, the polling bound (iteration cap AND deadline), and
+# the two verdicts (mutations unconditional, queue on stuck-ness). Only the table scope and the operator messages may
+# legitimately differ, being specific to what each side is about to do. The driver rehearsal exercises BOTH copies, so a
+# behavioural drift fails there rather than going unnoticed.
 assert_replication_settled() {
     local cluster deadline polls poll row
     local sample_sql queue_detail_sql mutation_detail_sql
@@ -422,7 +452,29 @@ assert_replication_settled() {
     for (( poll = 1; poll <= polls; poll++ )); do
         row="$(ch "$sample_sql")" || row=""
         [[ -n "$row" ]] || { echo "ERROR: the settle gate could not read system.replication_queue / system.mutations across cluster '$cluster'. Grant SELECT ON system.* plus REMOTE and CLUSTER, or confirm settlement out of band and pass --force." >&2; exit 1; }
+        # ONE row: `read` consumes only the first line, so a second row would be discarded in silence and the gate
+        # would reach a verdict on a fragment. The settle-sample is a 1x1 CROSS JOIN of two single-row aggregates, so
+        # more than one row means the markers moved onto a different statement, not that the cluster said more.
+        [[ "$row" != *$'\n'* ]] || {
+            echo "ERROR: the settle gate read MORE THAN ONE ROW from cluster '$cluster'. settle-sample returns exactly" >&2
+            echo "       one row; extra rows mean the markers are around a different statement. Refusing to reach a" >&2
+            echo "       verdict on the first line of it." >&2
+            exit 1
+        }
         read -r queue age tries failures mutations mut_age mut_failed <<<"$row"
+        # A short or non-numeric row must not be read as a settled cluster. `read` leaves the unfilled variables EMPTY,
+        # and bash arithmetic evaluates an empty string as 0 — so a header line, a truncated row or a changed block
+        # would sail through every comparison below as "queue drained, no unfinished mutations" and pass the gate
+        # silently, immediately before the EXCHANGE. Seven numeric fields or nothing.
+        for _field in "$queue" "$age" "$tries" "$failures" "$mutations" "$mut_age" "$mut_failed"; do
+            [[ "$_field" =~ ^[0-9]+$ ]] || {
+                echo "ERROR: the settle gate read '$row' from cluster '$cluster', which is not the seven numeric fields the" >&2
+                echo "       settle-sample block returns. Refusing to reach a verdict on it — an unparsed field would be" >&2
+                echo "       treated as 0 and pass the gate. Check the block's markers in $SQL_FILE, and that no client" >&2
+                echo "       config overrides the output format." >&2
+                exit 1
+            }
+        done
 
         if (( queue == 0 && mutations == 0 )); then
             echo "Replication settled across cluster '$cluster': queue drained, no unfinished mutations on the shadow."
@@ -510,8 +562,9 @@ run_block() {
 # is captured HERE, so a delete bridged in that final gap would be covered by neither the forward replay nor the rollback
 # reverse-replay (which starts at cutover_start) and would leak live across the swap. Re-running the deletion-replay block
 # (from the single-source 000002) right after capturing cutover_start extends forward coverage to it — the arm is
-# idempotent and user-scale (retention off), so it is cheap. Deletions only: the writes in that gap, and those that land
-# in the old table during the cross-node EXCHANGE skew, are the open tail write-gap (OPIK-8238), not this step's job.
+# idempotent and user-scale (retention off), so it is cheap. Deletions only: the writes in that gap, and those that
+# land in the old table during the cross-node EXCHANGE skew, are swept back AFTER the swap by reconcile.sh
+# (OPIK-8238) — not this step's job, and not something an ingestion-side setting can hold.
 run_final_deletion_replay() {
     local sql
     # A silent no-op here is the worst failure in this script: the deletes it masks are covered by neither the forward
@@ -572,6 +625,14 @@ run_block exchange
 EXCHANGE_SECONDS=$SECONDS
 echo "EXCHANGE done: 'traces' is now the partitioned data; the old data is parked as 'traces_pre_cutover_backup'."
 
+# exchange_done: captured AFTER the swap statement returned, which is what makes it usable as the sweep's "do not
+# resurrect" bound. It must NOT be cutover_start: that instant precedes the final deletion replay and the swap itself, so
+# using it would wrongly exclude a trace deleted and then re-created in between — a trace that is legitimately live in
+# the parked backup and has to be swept back. Captured in UTC, because 000006 parses it as UTC.
+EXCHANGE_DONE="$(clickhouse-client "${CH_ARGS[@]}" --log_comment 'traces_local_v2_cutover:exchange_and_wrap' --query "SELECT toString(now64(6, 'UTC'))")"
+echo "RECORD exchange_done=$EXCHANGE_DONE UTC  (the sweep's exclusion bound; pass it with the marker:"
+echo "       reconcile.sh --swap-done '$EXCHANGE_DONE UTC')"
+
 if [[ "$WITH_WRAP" == "1" ]]; then
     run_block wrap
     echo "Distributed wrap done: 'traces' fronts 'traces_local' via sipHash64(project_id)."
@@ -581,15 +642,25 @@ else
 fi
 
 echo
-echo "TAIL WRITE-GAP: traces written between the last delta and this swap — and any routed at a not-yet-swapped node"
-echo "during it — are in traces_pre_cutover_backup, NOT in live traces. Nothing in this procedure carries them across"
-echo "yet (OPIK-8238)."
-echo "  Length: ${EXCHANGE_SECONDS}s from this driver's start through the EXCHANGE, of which ${SETTLE_SECONDS}s was the"
-echo "  settle gate. Add the final delta_replay's replay time (its --time output) for the whole gap."
-echo "  Size it now with the post-EXCHANGE compare and --drill-down. TWO of its three key shapes are gap rows: keys"
-echo "  shown backup-only (created in the tail), and keys on BOTH sides whose hashes differ with the newer"
-echo "  last_updated_at in the backup (updated in the tail — sizing by key presence alone misses these). Differing"
-echo "  hashes whose newer version is live are ordinary post-swap writes. The drill-down prints hashes, not versions,"
-echo "  so compare last_updated_at per key. Then accept the gap, or recover from the backup BEFORE finalize.sh retires it."
-echo "Then verify, and keep traces_pre_cutover_backup for the soak. No ingestion-side config was changed, so there is"
-echo "nothing to restore."
+# The banner, not a footnote. Everything written to the old table between the last delta pass and the swap is sitting in
+# traces_pre_cutover_backup and is NOT live. The cutover is not done until reconcile.sh has swept it back and its
+# postcondition has returned 0; finalize.sh refuses to retire the backup without --confirm-gap-reconciled for exactly
+# that reason.
+echo "================================================================================"
+echo "  CUTOVER INCOMPLETE — the gap between the last delta and this swap is NOT live."
+echo "================================================================================"
+echo "Traces written to the old table since the last delta_replay.sh pass — and any routed at a not-yet-swapped node"
+echo "during the EXCHANGE — are in 'traces_pre_cutover_backup' and absent from live 'traces'. Reconcile it NOW, before"
+echo "the soak and before any verify verdict is trusted:"
+echo
+echo "  ./reconcile.sh --database $DATABASE ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} \\"
+echo "      --gap-start '<delta_start printed by the last delta_replay.sh run> UTC' \\"
+echo "      --swap-done '$EXCHANGE_DONE UTC'"
+echo
+echo "  Gap length: ${EXCHANGE_SECONDS}s from this driver's start through the EXCHANGE, of which ${SETTLE_SECONDS}s was"
+echo "  the settle gate. Add the final delta_replay's replay time (its --time output) for the whole gap. Add"
+echo "  --report-only to size the gap in keys before sweeping it."
+echo "If delta_start was not recorded, pass backfill_start instead: widening the gap window is free (the sweep is"
+echo "mask-honored and idempotent), so a lost delta_start is never an escalation."
+echo "Then keep traces_pre_cutover_backup for the soak — finalize.sh refuses to retire it without"
+echo "--confirm-gap-reconciled. No ingestion-side config was changed, so there is nothing to restore."

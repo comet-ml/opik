@@ -1,18 +1,29 @@
 package com.comet.opik.domain.cost;
 
+import com.comet.opik.api.ModelCostData;
+import com.comet.opik.domain.token_usage.SpanUsageFactory;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.Mockito;
 
 import java.math.BigDecimal;
+import java.util.HashMap;
 import java.util.Map;
+import java.util.TreeMap;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.mockito.ArgumentMatchers.any;
 
 class CostServiceTest {
 
@@ -43,8 +54,8 @@ class CostServiceTest {
      * Covers every branch of the new audio-token handling in
      * {@link SpanCostCalculator#textGenerationCost}:
      * <ul>
-     *   <li>{@code gpt-4o-audio-preview} publishes {@code input_cost_per_audio_token} (4e-5),
-     *       which is 16x the standard input rate (2.5e-6). The Python SDK
+     *   <li>{@code gpt-audio-1.5} publishes {@code input_cost_per_audio_token} (3.2e-5),
+     *       which is 12.8x the standard input rate (2.5e-6). The Python SDK
      *       ({@code openai_chat_completions_usage.PromptTokensDetails.audio_tokens}) flattens the
      *       count under {@code original_usage.prompt_tokens_details.audio_tokens}; the bare OTel
      *       key {@code prompt_tokens_details.audio_tokens} is the documented fallback.</li>
@@ -68,16 +79,16 @@ class CostServiceTest {
     }
 
     private static Stream<Arguments> provideAudioPromptTokenCases() {
-        // gpt-4o-audio-preview: input 2.5e-6, output 1e-5, input_audio 4e-5
+        // gpt-audio-1.5: input 2.5e-6, output 1e-5, input_audio 3.2e-5
         // non-audio prompt = 1000 - 300 = 700
-        // 700 * 2.5e-6 + 300 * 4e-5 + 200 * 1e-5 = 0.00175 + 0.012 + 0.002 = 0.01575
+        // 700 * 2.5e-6 + 300 * 3.2e-5 + 200 * 1e-5 = 0.00175 + 0.0096 + 0.002 = 0.01335
         // gpt-4o-mini: input 1.5e-7, output 6e-7 (no audio rate; audio key is ignored)
         // 1000 * 1.5e-7 + 200 * 6e-7 = 0.00015 + 0.00012 = 0.00027
         return Stream.of(
-                Arguments.of("gpt-4o-audio-preview",
-                        "original_usage.prompt_tokens_details.audio_tokens", "0.01575"),
-                Arguments.of("gpt-4o-audio-preview",
-                        "prompt_tokens_details.audio_tokens", "0.01575"),
+                Arguments.of("gpt-audio-1.5",
+                        "original_usage.prompt_tokens_details.audio_tokens", "0.01335"),
+                Arguments.of("gpt-audio-1.5",
+                        "prompt_tokens_details.audio_tokens", "0.01335"),
                 Arguments.of("gpt-4o-mini",
                         "original_usage.prompt_tokens_details.audio_tokens", "0.00027"));
     }
@@ -86,8 +97,8 @@ class CostServiceTest {
      * Covers every branch of the new audio-completion handling in
      * {@link SpanCostCalculator#textGenerationCost}:
      * <ul>
-     *   <li>{@code gpt-4o-audio-preview} publishes {@code output_cost_per_audio_token} (8e-5),
-     *       which is 8x the standard output rate (1e-5). The Python SDK
+     *   <li>{@code gpt-audio-1.5} publishes {@code output_cost_per_audio_token} (6.4e-5),
+     *       which is 6.4x the standard output rate (1e-5). The Python SDK
      *       ({@code openai_chat_completions_usage.CompletionTokensDetails.audio_tokens}) flattens
      *       the count under {@code original_usage.completion_tokens_details.audio_tokens}; the
      *       bare OTel key {@code completion_tokens_details.audio_tokens} is the documented
@@ -112,16 +123,16 @@ class CostServiceTest {
     }
 
     private static Stream<Arguments> provideAudioCompletionTokenCases() {
-        // gpt-4o-audio-preview: input 2.5e-6, output 1e-5, output_audio 8e-5
+        // gpt-audio-1.5: input 2.5e-6, output 1e-5, output_audio 6.4e-5
         // non-audio completion = 500 - 200 = 300
-        // 200 * 2.5e-6 + 300 * 1e-5 + 200 * 8e-5 = 0.0005 + 0.003 + 0.016 = 0.0195
+        // 200 * 2.5e-6 + 300 * 1e-5 + 200 * 6.4e-5 = 0.0005 + 0.003 + 0.0128 = 0.0163
         // gpt-4o-mini: input 1.5e-7, output 6e-7 (no audio rate; audio key is ignored)
         // 200 * 1.5e-7 + 500 * 6e-7 = 0.00003 + 0.0003 = 0.00033
         return Stream.of(
-                Arguments.of("gpt-4o-audio-preview",
-                        "original_usage.completion_tokens_details.audio_tokens", "0.0195"),
-                Arguments.of("gpt-4o-audio-preview",
-                        "completion_tokens_details.audio_tokens", "0.0195"),
+                Arguments.of("gpt-audio-1.5",
+                        "original_usage.completion_tokens_details.audio_tokens", "0.0163"),
+                Arguments.of("gpt-audio-1.5",
+                        "completion_tokens_details.audio_tokens", "0.0163"),
                 Arguments.of("gpt-4o-mini",
                         "original_usage.completion_tokens_details.audio_tokens", "0.00033"));
     }
@@ -183,31 +194,29 @@ class CostServiceTest {
     /**
      * Whole-prompt tier semantics for {@code *_above_128k_tokens} rates: once the prompt strictly
      * exceeds 128K every token bills at the tier rate; exactly at the threshold the base rate
-     * still applies. {@code gemini-1.5-flash} is the reachable model at this threshold (input
-     * 7.5e-8 base, 1.5e-7 above 128k — 2x).
+     * still applies. Only OpenRouter rows still publish a priced 128K tier, since LiteLLM retired
+     * the Gemini 1.5 generation that used to carry it.
      */
     @ParameterizedTest(name = "{0}")
-    @MethodSource("provideGeminiAbove128kTierCases")
-    void calculateCostAppliesAbove128kTierPricingForGemini(String description, int promptTokens,
-            String expectedCost) {
+    @MethodSource("provideAbove128kTierCases")
+    void calculateCostAppliesAbove128kTierPricing(String description, int promptTokens, String expectedCost) {
         Map<String, Integer> usage = Map.of(
                 "prompt_tokens", promptTokens,
-                "completion_tokens", 1_000,
-                "original_usage.prompt_token_count", promptTokens,
-                "original_usage.candidates_token_count", 1_000);
+                "completion_tokens", 1_000);
 
-        BigDecimal cost = CostService.calculateCost("gemini/gemini-1.5-flash", "google_ai", usage, null);
+        BigDecimal cost = CostService.calculateCost("openrouter/bytedance-seed/seed-2.0-lite", "openrouter", usage,
+                null);
 
         assertThat(cost).isEqualByComparingTo(expectedCost);
     }
 
-    private static Stream<Arguments> provideGeminiAbove128kTierCases() {
-        // gemini-1.5-flash base: input 7.5e-8 / output 0; above_128k: input 1.5e-7 (output stays 0).
+    private static Stream<Arguments> provideAbove128kTierCases() {
+        // bytedance-seed/seed-2.0-lite base: input 2.5e-7 / output 2e-6; above_128k: input 5e-7 / output 4e-6.
         return Stream.of(
-                // 128_000 * 7.5e-8 + 1_000 * 0 = 0.0096
-                Arguments.of("at threshold uses base rate", 128_000, "0.0096"),
-                // 200_000 * 1.5e-7 + 1_000 * 0 = 0.030
-                Arguments.of("above threshold uses tier rate", 200_000, "0.030"));
+                // 128_000 * 2.5e-7 + 1_000 * 2e-6 = 0.032 + 0.002 = 0.034
+                Arguments.of("at threshold uses base rate", 128_000, "0.034"),
+                // 200_000 * 5e-7 + 1_000 * 4e-6 = 0.1 + 0.004 = 0.104
+                Arguments.of("above threshold uses tier rate", 200_000, "0.104"));
     }
 
     /**
@@ -257,6 +266,132 @@ class CostServiceTest {
         // non-cached input = 1000 - 400 = 600 -> 600*3e-7 + 100*2.5e-6 + 400*3e-8
         // = 0.00018 + 0.00025 + 0.000012 = 0.000442
         assertThat(cost).isEqualByComparingTo("0.000442");
+    }
+
+    /**
+     * Cache tokens are read from whichever usage shape the client sent, whatever the provider (issue #7773). The
+     * payloads are the ones of PR #8723.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("provideCacheUsageShapeCases")
+    void calculateCostReadsCacheTokensFromAnyUsageShape_issue7773(String description, String model,
+            String provider, Map<String, Integer> usage, String expectedCost) {
+        BigDecimal cost = CostService.calculateCost(model, provider, usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideCacheUsageShapeCases() {
+        // claude-haiku-4-5 (anthropic): input 1e-6, output 5e-6, cache_read 1e-7, cache_creation 1.25e-6
+        // gpt-4o (openai): input 2.5e-6, output 1e-5, cache_read 1.25e-6, no cache_creation rate
+        // deepinfra/anthropic/claude-3-7-sonnet-latest: input 3.3e-6, output 1.65e-5, cache_read 3.3e-7,
+        // no cache_creation rate
+        // anthropic.claude-3-5-haiku-20241022-v1:0 (bedrock): input 8e-7, output 4e-6, cache_read 8e-8,
+        // cache_creation 1e-6
+        return Stream.of(
+                // 800*1e-6 + 200*1e-7 + 100*5e-6
+                Arguments.of("OpenAI shape on anthropic provider", "claude-haiku-4-5", "anthropic",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 100,
+                                "original_usage.prompt_tokens", 1000,
+                                "original_usage.completion_tokens", 100,
+                                "original_usage.prompt_tokens_details.cached_tokens", 200),
+                        "0.00132"),
+                Arguments.of("OpenAI shape with zero Anthropic cache key", "claude-haiku-4-5", "anthropic",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 100,
+                                "original_usage.prompt_tokens", 1000,
+                                "original_usage.completion_tokens", 100,
+                                "original_usage.prompt_tokens_details.cached_tokens", 200,
+                                "original_usage.cache_read_input_tokens", 0),
+                        "0.00132"),
+                // OpenAI Responses usage: input_tokens includes input_tokens_details.cached_tokens.
+                Arguments.of("OpenAI responses shape on anthropic provider", "claude-haiku-4-5", "anthropic",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 100,
+                                "original_usage.input_tokens", 1000,
+                                "original_usage.output_tokens", 100,
+                                "original_usage.input_tokens_details.cached_tokens", 200),
+                        "0.00132"),
+                // The SDK's prompt_tokens (1200) is input_tokens plus the cache, so input_tokens excludes it:
+                // 1000*3.3e-6 + 200*3.3e-7 + 100*1.65e-5
+                Arguments.of("Anthropic shape on deepinfra provider",
+                        "deepinfra/anthropic/claude-3-7-sonnet-latest", "deepinfra",
+                        Map.of("prompt_tokens", 1200, "completion_tokens", 100,
+                                "original_usage.input_tokens", 1000,
+                                "original_usage.output_tokens", 100,
+                                "original_usage.cache_read_input_tokens", 200),
+                        "0.005016"),
+                // Cache writes without a rate of their own bill at the input rate:
+                // 1000*3.3e-6 + 200*3.3e-7 + 50*3.3e-6 + 100*1.65e-5. #8723 expected 0.005775, which bills the
+                // 200 cache reads at the full input rate.
+                Arguments.of("Anthropic shape with unpriced cache creation falls back",
+                        "deepinfra/anthropic/claude-3-7-sonnet-latest", "deepinfra",
+                        Map.of("prompt_tokens", 1250, "completion_tokens", 100,
+                                "original_usage.input_tokens", 1000,
+                                "original_usage.output_tokens", 100,
+                                "original_usage.cache_read_input_tokens", 200,
+                                "original_usage.cache_creation_input_tokens", 50),
+                        "0.005181"),
+                Arguments.of("Bedrock shape on anthropic provider", "claude-haiku-4-5", "anthropic",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 100,
+                                "original_usage.inputTokens", 800,
+                                "original_usage.outputTokens", 100,
+                                "original_usage.cacheReadInputTokens", 200),
+                        "0.00132"),
+                // 800*1e-6 + 200*1e-7 + 50*1.25e-6 + 100*5e-6
+                Arguments.of("Bedrock shape with cache writes on anthropic provider", "claude-haiku-4-5",
+                        "anthropic",
+                        Map.of("prompt_tokens", 1050, "completion_tokens", 100,
+                                "original_usage.inputTokens", 800,
+                                "original_usage.outputTokens", 100,
+                                "original_usage.cacheReadInputTokens", 200,
+                                "original_usage.cacheWriteInputTokens", 50),
+                        "0.0013825"),
+                // 1000*8e-7 + 200*8e-8 + 50*1e-6 + 100*4e-6
+                Arguments.of("Anthropic shape with cache creation on bedrock provider",
+                        "anthropic.claude-3-5-haiku-20241022-v1:0", "bedrock",
+                        Map.of("prompt_tokens", 1250, "completion_tokens", 100,
+                                "original_usage.input_tokens", 1000,
+                                "original_usage.output_tokens", 100,
+                                "original_usage.cache_read_input_tokens", 200,
+                                "original_usage.cache_creation_input_tokens", 50),
+                        "0.001266"),
+                Arguments.of("OpenAI responses shape without aliases", "claude-haiku-4-5", "anthropic",
+                        Map.of("original_usage.input_tokens", 1000,
+                                "original_usage.output_tokens", 100,
+                                "original_usage.input_tokens_details.cached_tokens", 200),
+                        "0.00132"),
+                // 800*2.5e-6 + 200*1.25e-6 + 100*1e-5
+                Arguments.of("Gemini shape on openai provider", "gpt-4o", "openai",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 100,
+                                "original_usage.prompt_token_count", 1000,
+                                "original_usage.candidates_token_count", 100,
+                                "original_usage.cached_content_token_count", 200),
+                        "0.00325"),
+                Arguments.of("OpenAI shape without cache tokens unchanged", "claude-haiku-4-5", "anthropic",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 100,
+                                "original_usage.prompt_tokens", 1000,
+                                "original_usage.completion_tokens", 100,
+                                "original_usage.prompt_tokens_details.cached_tokens", 0),
+                        "0.0015"),
+                // Bare keys on an Anthropic span read as Anthropic's, cache on top of the input:
+                // 1000*1e-6 + 200*1e-7 + 100*5e-6
+                Arguments.of("bare cache key unchanged", "claude-haiku-4-5", "anthropic",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 100,
+                                "cache_read_input_tokens", 200),
+                        "0.00152"),
+                // Without an input count of its own, the prompt count is taken to include the cache:
+                // 800*2.5e-6 + 200*1.25e-6 + 100*1e-5. #8723 expected 0.0035, which ignores the cache reads.
+                Arguments.of("Anthropic cache key without its input count", "gpt-4o", "openai",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 100,
+                                "original_usage.cache_read_input_tokens", 200),
+                        "0.00325"),
+                // LiteLLM reports one cache read under both names, and its prompt_tokens includes it:
+                // 1000*1e-6 + 200*1e-7 + 100*5e-6. #8723 expected 0.00172, which bills the cache twice.
+                Arguments.of("mixed shapes", "claude-haiku-4-5", "anthropic",
+                        Map.of("prompt_tokens", 1200, "completion_tokens", 100,
+                                "original_usage.prompt_tokens", 1200,
+                                "original_usage.prompt_tokens_details.cached_tokens", 200,
+                                "original_usage.cache_read_input_tokens", 200),
+                        "0.00152"));
     }
 
     @ParameterizedTest
@@ -326,27 +461,27 @@ class CostServiceTest {
     private static Stream<Arguments> provideModelNamesForNormalization() {
         return Stream.of(
                 // Dot notation should work (normalized to hyphens)
-                Arguments.of("claude-3.7-sonnet-20250219", "anthropic", true),
+                Arguments.of("claude-opus-4.5-20251101", "anthropic", true),
                 Arguments.of("claude-sonnet-4.5", "anthropic", true),
                 Arguments.of("claude-haiku-4.5", "anthropic", true),
                 Arguments.of("claude-sonnet-4.5-20250929", "anthropic", true),
                 Arguments.of("claude-haiku-4.5-20251001", "anthropic", true),
 
                 // Case insensitivity should work
-                Arguments.of("Claude-3.7-Sonnet-20250219", "anthropic", true),
+                Arguments.of("Claude-Opus-4.5-20251101", "anthropic", true),
                 Arguments.of("CLAUDE-SONNET-4.5", "anthropic", true),
 
                 // Backwards compatibility - exact matches still work
-                Arguments.of("claude-3-7-sonnet-20250219", "anthropic", true),
+                Arguments.of("claude-opus-4-5-20251101", "anthropic", true),
                 Arguments.of("claude-haiku-4-5", "anthropic", true),
                 Arguments.of("claude-sonnet-4-5", "anthropic", true),
 
                 // Provider prefix + dot notation should work (prefix stripped, then dots normalized)
-                Arguments.of("anthropic/claude-3.7-sonnet-20250219", "anthropic", true),
+                Arguments.of("anthropic/claude-opus-4.5-20251101", "anthropic", true),
                 Arguments.of("anthropic/claude-sonnet-4.5", "anthropic", true),
 
                 // Provider prefix + case variation should work
-                Arguments.of("anthropic/Claude-3.7-Sonnet-20250219", "anthropic", true),
+                Arguments.of("anthropic/Claude-Opus-4.5-20251101", "anthropic", true),
 
                 // Unknown models should gracefully return zero
                 Arguments.of("claude-3.5.1", "anthropic", false),
@@ -461,7 +596,7 @@ class CostServiceTest {
         return Stream.of(
                 Arguments.of("openai/gpt-4o", "openai"),
                 Arguments.of("openai/gpt-4o-mini", "openai"),
-                Arguments.of("anthropic/claude-3-7-sonnet-20250219", "anthropic"),
+                Arguments.of("anthropic/claude-opus-4-5-20251101", "anthropic"),
                 Arguments.of("anthropic/claude-haiku-4-5-20251001", "anthropic"));
     }
 
@@ -566,7 +701,7 @@ class CostServiceTest {
     }
 
     /**
-     * Mistral cost tracking: until `mistral` was added to PROVIDERS_MAPPING the entire set of
+     * Mistral cost tracking: until `mistral` was registered in CostService the entire set of
      * upstream LiteLLM `litellm_provider: "mistral"` rows was dropped at startup, so every
      * Mistral span returned cost = 0. This locks in both the upstream-sourced rows and the
      * two override-only rows (Medium 3.5, Small 4) added alongside the registry fix.
@@ -583,12 +718,13 @@ class CostServiceTest {
 
     private static Stream<Arguments> provideMistralModels() {
         return Stream.of(
-                // Upstream LiteLLM row: $6e-08 in / $1.8e-07 out → 0.06 + 0.18 = 0.24
-                // Pinned to the dated id rather than the `mistral-small-latest` alias: aliases are
-                // re-priced upstream whenever Mistral ships a new generation (Small 4 moved
-                // `mistral-small-latest` to 1.5e-07 / 6e-07), which breaks an exact-cost assertion
-                // on every automated model-prices update.
-                Arguments.of("mistral-small-3-2-2506", "0.24"),
+                // Upstream LiteLLM row: $1.5e-07 in / $1.5e-07 out → 0.15 + 0.15 = 0.30
+                // Pinned to a dated id rather than a `-latest` alias: aliases are re-priced upstream
+                // whenever Mistral ships a new generation (Small 4 moved `mistral-small-latest` to
+                // 1.5e-07 / 6e-07), which breaks an exact-cost assertion on every automated
+                // model-prices update. The dated id must also carry no `deprecation_date`, because
+                // LiteLLM drops retired rows (it removed `mistral-small-3-2-2506`).
+                Arguments.of("ministral-8b-2512", "0.30"),
                 // Upstream LiteLLM row: $5e-07 in / $1.5e-06 out → 0.5 + 1.5 = 2.00
                 Arguments.of("mistral-large-3", "2.00"),
                 // Upstream LiteLLM row: $3e-07 in / $9e-07 out → 0.3 + 0.9 = 1.20
@@ -600,9 +736,9 @@ class CostServiceTest {
     }
 
     /**
-     * Overrides file: `litellm_provider: "microsoft"` is remapped to canonical `azure` via
-     * PROVIDERS_MAPPING. A span emitted with provider=`azure` and the model name must hit
-     * the override row for `azure/multilingual-e5-large`.
+     * Overrides file: the Elastic Inference Service resolver stores `microsoft` models under
+     * provider=`azure`, so the override row for `azure/multilingual-e5-large` is filed under
+     * `azure` and a span emitted with provider=`azure` and the model name must hit it.
      */
     @Test
     void calculateCost_overrideMicrosoftProviderMapsToAzure() {
@@ -807,7 +943,7 @@ class CostServiceTest {
 
     /**
      * Covers both branches of registering {@code moonshot} as a canonical provider so that the
-     * 22 non-zero-cost entries in {@code model_prices_and_context_window.json} tagged with
+     * non-zero-cost entries in {@code model_prices_and_context_window.json} tagged with
      * {@code litellm_provider: "moonshot"} (the {@code moonshot-v1-*} legacy models and the
      * {@code kimi-*} family) are no longer silently dropped at load time:
      * <ul>
@@ -833,20 +969,20 @@ class CostServiceTest {
     private static Stream<Arguments> provideMoonshotProviderCases() {
         // moonshot/moonshot-v1-8k: input 2e-7, output 2e-6 (no cache rates) -> textGenerationCost
         // 1000 * 2e-7 + 200 * 2e-6 = 0.0002 + 0.0004 = 0.0006
-        // moonshot/kimi-k2-0711-preview: input 6e-7, output 2.5e-6, cache_read 1.5e-7
+        // moonshot/kimi-k2.5: input 6e-7, output 3e-6, cache_read 1e-7
         // -> textGenerationWithCacheCostOpenAI
         // non-cached input = 1000 - 300 = 700
-        // 700 * 6e-7 + 200 * 2.5e-6 + 300 * 1.5e-7 = 0.00042 + 0.0005 + 0.000045 = 0.000965
+        // 700 * 6e-7 + 200 * 3e-6 + 300 * 1e-7 = 0.00042 + 0.0006 + 0.00003 = 0.00105
         return Stream.of(
                 Arguments.of("plain text-generation route",
                         "moonshot/moonshot-v1-8k",
                         Map.of("prompt_tokens", 1000, "completion_tokens", 200), "0.0006"),
                 Arguments.of("cache-aware route via OpenAI calc",
-                        "moonshot/kimi-k2-0711-preview",
+                        "moonshot/kimi-k2.5",
                         Map.of("original_usage.prompt_tokens", 1000,
                                 "original_usage.completion_tokens", 200,
                                 "original_usage.prompt_tokens_details.cached_tokens", 300),
-                        "0.000965"));
+                        "0.00105"));
     }
 
     @Test
@@ -972,16 +1108,28 @@ class CostServiceTest {
                 Arguments.of("perplexity/sonar", "custom-llm", "0.0012"));
     }
 
+    @ParameterizedTest(name = "{0} via provider={1}")
+    @CsvSource({
+            "llama-3.3-70b, api.cerebras.ai, 0.00109",
+            "deepseek-chat, api.deepseek.com, 0.000364",
+            "grok-4.3, api.x.ai:443, 0.00175"})
+    void calculateCostPricesAProviderSentAsItsApiHost(String model, String provider, String expectedCost) {
+        Map<String, Integer> usage = Map.of("prompt_tokens", 1000, "completion_tokens", 200);
+
+        BigDecimal cost = CostService.calculateCost(model, provider, usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
     /**
      * OpenRouter exposes Moonshot's Kimi family under a different namespace prefix
      * ({@code moonshotai/*}) than LiteLLM's canonical ({@code moonshot/*}) — see the
      * {@code MOONSHOTAI_*} entries in {@code OpenRouterModelName}. Without a
-     * {@code moonshotai -> moonshot} alias in {@link CostService#PROVIDERS_MAPPING}, the
+     * {@code moonshotai -> moonshot} alias in {@link ProviderRegistry}, the
      * provider-prefix fallback returns null and the aggregator-routed request resolves to
      * {@code DEFAULT_COST}, silently under-charging every Kimi call routed through OpenRouter.
      * With the alias, the fallback maps {@code moonshotai} to the canonical {@code moonshot}
-     * and the pricing row is found. Mirrors the existing {@code microsoft -> azure} override
-     * pattern in the same map.
+     * and the pricing row is found.
      */
     @ParameterizedTest(name = "{0} via provider={1}")
     @MethodSource("provideAggregatorRoutedMoonshotCases")
@@ -995,19 +1143,19 @@ class CostServiceTest {
     }
 
     private static Stream<Arguments> provideAggregatorRoutedMoonshotCases() {
-        // moonshot/kimi-k2-0711-preview: input 6e-7, output 2.5e-6 (cache rates ignored here
+        // moonshot/kimi-k2.5: input 6e-7, output 3e-6 (cache rates ignored here
         // because usage carries no cached_tokens key -> textGenerationCost path)
-        // 1000 * 6e-7 + 200 * 2.5e-6 = 0.0006 + 0.0005 = 0.0011
+        // 1000 * 6e-7 + 200 * 3e-6 = 0.0006 + 0.0006 = 0.0012
         // moonshot/moonshot-v1-8k: input 2e-7, output 2e-6
         // 1000 * 2e-7 + 200 * 2e-6 = 0.0002 + 0.0004 = 0.0006
         return Stream.of(
                 // OpenRouter-style routing: model carries the moonshotai/ prefix and caller
                 // passes provider="openrouter" (or any non-canonical). Alias makes the lookup
                 // find the underlying moonshot/ price row.
-                Arguments.of("moonshotai/kimi-k2-0711-preview", "openrouter", "0.0011"),
+                Arguments.of("moonshotai/kimi-k2.5", "openrouter", "0.0012"),
                 Arguments.of("moonshotai/moonshot-v1-8k", "openrouter", "0.0006"),
                 // custom-llm and other pass-through providers hit the same fallback.
-                Arguments.of("moonshotai/kimi-k2-0711-preview", "custom-llm", "0.0011"));
+                Arguments.of("moonshotai/kimi-k2.5", "custom-llm", "0.0012"));
     }
 
     /**
@@ -1058,15 +1206,14 @@ class CostServiceTest {
     /**
      * Same gap as the {@code moonshotai} alias, for five more vendors OpenRouter resells.
      * {@code ai21}, {@code morph}, {@code inception}, {@code meta} and {@code zai} all carry
-     * non-zero-cost rows in {@code model_prices_and_context_window.json}, but none were in
-     * {@link CostService#PROVIDERS_MAPPING}, so {@code buildModelPrice} dropped every one of
-     * them at load time and the provider-prefix fallback had nothing to resolve against. Any
-     * call routed through OpenRouter fell through to {@code DEFAULT_COST}.
+     * non-zero-cost rows in {@code model_prices_and_context_window.json}, but none were registered
+     * in {@link CostService}, so {@code buildModelPrice} dropped every one of them at load time and
+     * the provider-prefix fallback had nothing to resolve against. Any call routed through
+     * OpenRouter fell through to {@code DEFAULT_COST}.
      * <p>
-     * {@code z-ai} needs two entries for the same reason {@code moonshot} does: the map is read
-     * both with the price file's {@code litellm_provider} ({@code zai}) when loading rows, and
-     * with the model-name prefix OpenRouter uses ({@code z-ai}) when resolving the fallback.
-     * The other four spell both the same way, so one entry each.
+     * Every provider in the price file now loads under its own name. {@code z-ai} still needs an
+     * alias for the same reason {@code moonshotai} does: OpenRouter's model-name prefix
+     * ({@code z-ai}) differs from the price file's {@code litellm_provider} ({@code zai}).
      * <p>
      * All of these take the {@link SpanCostCalculator#textGenerationCost} path. Four of the
      * models below publish a {@code cache_read_input_token_cost}, but none of these providers is
@@ -1150,5 +1297,260 @@ class CostServiceTest {
                                 "original_usage.completion_tokens", 200,
                                 "original_usage.prompt_tokens_details.cached_tokens", 300),
                         "0.005709"));
+    }
+
+    /**
+     * Registers {@code typesafe} as a canonical provider so the LiteLLM rows tagged
+     * {@code litellm_provider: "typesafe"} ({@code jev-latest}, {@code jev-preview} and the
+     * served version names such as {@code jev-1.13.0}) load instead of being dropped at startup.
+     * TypeSafe bills input tokens only (output tokens are free), and the rows use
+     * {@code mode: "evaluation"}, which falls back to the default text-generation calculator.
+     * The Opik TypeSafe integration logs the served model name returned by the API
+     * ({@code jev-1.13.0}), not the requested alias, so that name must price directly.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("provideTypeSafeProviderCases")
+    void calculateCostHandlesTypeSafeModels(String description, String model, String expectedCost) {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1000,
+                "completion_tokens", 200,
+                "original_usage.input_tokens", 1000,
+                "original_usage.output_tokens", 200);
+
+        BigDecimal cost = CostService.calculateCost(model, "typesafe", usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideTypeSafeProviderCases() {
+        // typesafe/jev-*: input 4.2e-8, output 0 -> 1000 * 4.2e-8 + 200 * 0 = 0.000042
+        return Stream.of(
+                Arguments.of("served version name as logged by the SDK", "jev-1.13.0", "0.000042"),
+                Arguments.of("requested alias", "jev-latest", "0.000042"),
+                Arguments.of("preview alias with provider prefix", "typesafe/jev-preview", "0.000042"));
+    }
+
+    /**
+     * Covers providers that were once registered by hand, plus {@code cohere_chat}, which prices
+     * {@code cohere} spans as its sibling provider, so that their entries in
+     * {@code model_prices_and_context_window.json} load instead of being silently dropped at startup.
+     * Each case pins one representative token-priced model routed through
+     * {@link SpanCostCalculator#textGenerationCost}. Image, duration and per-second priced models
+     * under these providers use pricing shapes that calculator does not cover and stay out of scope.
+     */
+    @ParameterizedTest(name = "provider={0}, model={1}")
+    @MethodSource("provideNewlyRegisteredProviderCases")
+    void calculateCostHandlesNewlyRegisteredProviderModels(String provider, String model, String expectedCost) {
+        BigDecimal cost = CostService.calculateCost(model, provider,
+                Map.of("prompt_tokens", 1000, "completion_tokens", 200), null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideNewlyRegisteredProviderCases() {
+        return Stream.of(
+                // hyperbolic/Qwen/QwQ-32B: input 2e-07, output 2e-07 -> 1000*2e-07 + 200*2e-07 = 0.00024
+                Arguments.of("hyperbolic", "hyperbolic/Qwen/QwQ-32B", "0.00024"),
+                // baseten/zai-org/GLM-5: input 9.5e-07, output 3.15e-06 -> 1000*9.5e-07 + 200*3.15e-06 = 0.00158
+                Arguments.of("baseten", "baseten/zai-org/GLM-5", "0.00158"),
+                // lambda_ai/lfm-7b: input 2.5e-08, output 4e-08 -> 1000*2.5e-08 + 200*4e-08 = 0.000033
+                Arguments.of("lambda_ai", "lambda_ai/lfm-7b", "0.000033"),
+                // nscale/Qwen/QwQ-32B: input 1.8e-07, output 2e-07 -> 1000*1.8e-07 + 200*2e-07 = 0.00022
+                Arguments.of("nscale", "nscale/Qwen/QwQ-32B", "0.00022"),
+                // oci/xai.grok-3: input 3e-06, output 1.5e-05 -> 1000*3e-06 + 200*1.5e-05 = 0.006
+                Arguments.of("oci", "oci/xai.grok-3", "0.006"),
+                // replicate/openai/o1: input 1.5e-05, output 6e-05 -> 1000*1.5e-05 + 200*6e-05 = 0.027
+                Arguments.of("replicate", "replicate/openai/o1", "0.027"),
+                // watsonx/openai/gpt-oss-120b: input 1.59e-07, output 6.36e-07
+                // -> 1000*1.59e-07 + 200*6.36e-07 = 0.0002862
+                Arguments.of("watsonx", "watsonx/openai/gpt-oss-120b", "0.0002862"),
+                // command-nightly: input 1e-06, output 2e-06 -> 1000*1e-06 + 200*2e-06 = 0.0014
+                Arguments.of("cohere", "command-nightly", "0.0014"),
+                // The price file splits Cohere across two litellm_provider values: `cohere` and
+                // `cohere_chat` (including command-r and command-r-plus). A `cohere` span finds the chat
+                // rows because the two are sibling providers, which this case pins.
+                // command-r-08-2024: input 1.5e-07, output 6e-07 -> 1000*1.5e-07 + 200*6e-07 = 0.00027
+                Arguments.of("cohere", "command-r-08-2024", "0.00027"),
+                // novita/zai-org/autoglm-phone-9b-multilingual: input 3.5e-08, output 1.38e-07
+                // -> 1000*3.5e-08 + 200*1.38e-07 = 0.0000626
+                Arguments.of("novita", "novita/zai-org/autoglm-phone-9b-multilingual", "0.0000626"),
+                // cloudflare/@cf/meta/llama-2-7b-chat-fp16: input 1.923e-06, output 1.923e-06
+                // -> 1000*1.923e-06 + 200*1.923e-06 = 0.0023076
+                Arguments.of("cloudflare", "cloudflare/@cf/meta/llama-2-7b-chat-fp16", "0.0023076"),
+                // anyscale/HuggingFaceH4/zephyr-7b-beta: input 1.5e-07, output 1.5e-07
+                // -> 1000*1.5e-07 + 200*1.5e-07 = 0.00018
+                Arguments.of("anyscale", "anyscale/HuggingFaceH4/zephyr-7b-beta", "0.00018"),
+                // scaleway/qwen/qwen3.5-397b-a17b: input 6e-07, output 3.6e-06 -> 1000*6e-07 + 200*3.6e-06 = 0.00132
+                Arguments.of("scaleway", "scaleway/qwen/qwen3.5-397b-a17b", "0.00132"),
+                // ovhcloud/DeepSeek-R1-Distill-Llama-70B: input 6.7e-07, output 6.7e-07
+                // -> 1000*6.7e-07 + 200*6.7e-07 = 0.000804
+                Arguments.of("ovhcloud", "ovhcloud/DeepSeek-R1-Distill-Llama-70B", "0.000804"),
+                // gmi/anthropic/claude-opus-4.5: input 5e-06, output 2.5e-05 -> 1000*5e-06 + 200*2.5e-05 = 0.01
+                Arguments.of("gmi", "gmi/anthropic/claude-opus-4.5", "0.01"),
+                // gradient_ai/anthropic-claude-3-opus: input 1.5e-05, output 7.5e-05
+                // -> 1000*1.5e-05 + 200*7.5e-05 = 0.03
+                Arguments.of("gradient_ai", "gradient_ai/anthropic-claude-3-opus", "0.03"),
+                // libertai/hermes-3-8b-tee: input 1.5e-07, output 6e-07 -> 1000*1.5e-07 + 200*6e-07 = 0.00027
+                Arguments.of("libertai", "libertai/hermes-3-8b-tee", "0.00027"),
+                // azure_ai/gpt-oss-120b: input 1.5e-07, output 6e-07 -> 1000*1.5e-07 + 200*6e-07 = 0.00027
+                Arguments.of("azure_ai", "azure_ai/gpt-oss-120b", "0.00027"),
+                // vercel_ai_gateway/alibaba/qwen-3-14b: input 8e-08, output 2.4e-07
+                // -> 1000*8e-08 + 200*2.4e-07 = 0.000128
+                Arguments.of("vercel_ai_gateway", "vercel_ai_gateway/alibaba/qwen-3-14b", "0.000128"),
+                // openrouter/anthropic/claude-sonnet-4.5: input 3e-06, output 1.5e-05
+                // -> 1000*3e-06 + 200*1.5e-05 = 0.006
+                Arguments.of("openrouter", "openrouter/anthropic/claude-sonnet-4.5", "0.006"));
+    }
+
+    /**
+     * Every provider in the bundled LiteLLM and OpenRouter price files is priced under its exact
+     * {@code litellm_provider} name, with no per-provider registration in {@link CostService}.
+     * Covers providers that used to be dropped at load time, and price-file names that used to be
+     * folded into another provider ({@code bedrock_converse}, {@code vertex_ai-language-models}, ...).
+     * Each provider with a token-priced row must price at least one of its models at exactly that row's
+     * rates, so a provider resolved to the wrong rows fails too.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("provideTokenPricedProviders")
+    void calculateCostPricesEveryProviderInThePriceFile(String provider, Map<String, ModelCostData> rowsByModel) {
+        Map<String, Integer> usage = Map.of("prompt_tokens", 1000, "completion_tokens", 1000);
+
+        assertThat(rowsByModel).anySatisfy((model, row) -> assertThat(
+                CostService.calculateCost(model, provider, usage, null))
+                .isEqualByComparingTo(price(row.inputCostPerToken()).add(price(row.outputCostPerToken()))
+                        .multiply(BigDecimal.valueOf(1000))));
+    }
+
+    private static Stream<Arguments> provideTokenPricedProviders() {
+        var modelCosts = ModelPriceTable.readModelCosts();
+        Map<String, Map<String, ModelCostData>> rowsByModelByProvider = modelCosts.entrySet().stream()
+                .filter(entry -> StringUtils.isNotBlank(entry.getValue().litellmProvider()))
+                .filter(entry -> price(entry.getValue().inputCostPerToken()).signum() > 0
+                        || price(entry.getValue().outputCostPerToken()).signum() > 0)
+                .collect(Collectors.groupingBy(entry -> entry.getValue().litellmProvider(), TreeMap::new,
+                        Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)));
+        return rowsByModelByProvider.entrySet().stream()
+                .map(entry -> Arguments.of(entry.getKey(), entry.getValue()));
+    }
+
+    private static BigDecimal price(String price) {
+        return StringUtils.isBlank(price) ? BigDecimal.ZERO : new BigDecimal(price);
+    }
+
+    /**
+     * LiteLLM files some of a vendor's models under a sibling provider only, so a span is priced from its provider's
+     * siblings when the model isn't under the provider itself.
+     */
+    @ParameterizedTest(name = "{0} span, {1}")
+    @CsvSource({
+            // Most Bedrock models are only under bedrock_converse.
+            "bedrock, anthropic.claude-haiku-4-5-20251001-v1:0",
+            // The newer Vertex Gemini models are only under vertex_ai, which used to be dropped at load time.
+            "google_vertexai, gemini-2.0-flash",
+            "vertex_ai-language-models, gemini-2.0-flash",
+            "vertex-ai, gemini-2.0-flash"})
+    void calculateCostPricesAModelFiledUnderASiblingProvider(String provider, String model) {
+        Map<String, Integer> usage = Map.of("prompt_tokens", 1000, "completion_tokens", 1000);
+
+        assertThat(CostService.calculateCost(model, provider, usage, null)).isPositive();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"OpenAI", "OPENAI", " openai "})
+    void calculateCostResolvesTheProviderIgnoringCaseAndSurroundingSpaces(String provider) {
+        Map<String, Integer> usage = Map.of("prompt_tokens", 1000, "completion_tokens", 1000);
+
+        assertThat(CostService.calculateCost("gpt-4o", provider, usage, null))
+                .isEqualByComparingTo(CostService.calculateCost("gpt-4o", "openai", usage, null))
+                .isPositive();
+    }
+
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = {"  "})
+    void calculateCostTakesTheProviderFromAnExplicitModelPrefixWhenNoneIsSent(String provider) {
+        Map<String, Integer> usage = Map.of("prompt_tokens", 1000, "completion_tokens", 1000);
+
+        assertThat(CostService.calculateCost("anthropic/claude-sonnet-4-5", provider, usage, null))
+                .isEqualByComparingTo(CostService.calculateCost("claude-sonnet-4-5", "anthropic", usage, null))
+                .isPositive();
+    }
+
+    @Test
+    void calculateCostWithoutProviderNeverInfersItFromTheModelName() {
+        Map<String, Integer> usage = Map.of("prompt_tokens", 1000, "completion_tokens", 1000);
+
+        assertThat(CostService.calculateCost("claude-sonnet-4-5", null, usage, null)).isZero();
+    }
+
+    /** Pricing runs while spans are ingested: a failure leaves the span without an estimated cost, never fails it. */
+    @Test
+    void calculateCostGivesNoEstimateWhenPricingFails() {
+        try (var spanUsageFactory = Mockito.mockStatic(SpanUsageFactory.class)) {
+            spanUsageFactory.when(() -> SpanUsageFactory.create(any(), any()))
+                    .thenThrow(new IllegalStateException("unreadable usage"));
+
+            assertThat(CostService.calculateCost("gpt-4o", "openai", Map.of("prompt_tokens", 1000), null)).isZero();
+        }
+    }
+
+    @Test
+    void calculateCostFallsBackToTheMetadataCostWhenPricingFails() {
+        ObjectNode metadata = new ObjectMapper().createObjectNode();
+        metadata.putObject("cost").put("currency", "USD").put("total_cost", 0.42);
+
+        try (var spanUsageFactory = Mockito.mockStatic(SpanUsageFactory.class)) {
+            spanUsageFactory.when(() -> SpanUsageFactory.create(any(), any()))
+                    .thenThrow(new IllegalStateException("unreadable usage"));
+
+            assertThat(CostService.calculateCost("gpt-4o", "openai", Map.of("prompt_tokens", 1000), metadata))
+                    .isEqualByComparingTo("0.42");
+        }
+    }
+
+    /** Usage clients really send, malformed or extreme, always prices without an error. */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource
+    void calculateCostNeverFailsOnOddUsage(String description, String provider, Map<String, Integer> usage) {
+        assertThatCode(() -> CostService.calculateCost("gpt-4o", provider, usage, null)).doesNotThrowAnyException();
+        assertThatCode(() -> CostService.calculateCost("claude-sonnet-4-5", provider, usage, null))
+                .doesNotThrowAnyException();
+    }
+
+    private static Stream<Arguments> calculateCostNeverFailsOnOddUsage() {
+        var nullCounts = new HashMap<String, Integer>();
+        nullCounts.put("prompt_tokens", null);
+        nullCounts.put("original_usage.input_tokens", null);
+        return Stream.of("openai", "anthropic", "gemini", "bedrock", "unknown-provider")
+                .flatMap(provider -> Stream.of(
+                        Arguments.of("null usage", provider, null),
+                        Arguments.of("empty usage", provider, Map.of()),
+                        Arguments.of("null counts", provider, nullCounts),
+                        Arguments.of("negative counts", provider, Map.of("prompt_tokens", -5,
+                                "completion_tokens", -1, "cache_read_input_tokens", -3, "input_tokens", -7)),
+                        Arguments.of("counts at the integer limit", provider, Map.of("prompt_tokens",
+                                Integer.MAX_VALUE, "completion_tokens", Integer.MAX_VALUE, "cache_read_input_tokens",
+                                Integer.MAX_VALUE, "cache_creation_input_tokens", Integer.MAX_VALUE)),
+                        Arguments.of("bare original_usage prefix", provider, Map.of("original_usage.", 5,
+                                "original_usage.original_usage.", 3)),
+                        Arguments.of("non-token keys", provider, Map.of("characters", 10, "latency_ms", 300)),
+                        Arguments.of("malformed list items", provider, Map.of("iterations.x.input_tokens", 5,
+                                "iterations..output_tokens", 2, "iterations.0", 1)),
+                        Arguments.of("cache larger than the prompt", provider, Map.of("prompt_tokens", 1,
+                                "cache_read_input_tokens", 1_000_000, "prompt_tokens_details.cached_tokens", 1_000_000,
+                                "completion_tokens", 1))));
+    }
+
+    /**
+     * A model routed through an aggregator is priced under the provider its prefix names, with the same name
+     * normalization as a direct lookup: a dated release name finds its base model.
+     */
+    @Test
+    void calculateCostNormalizesTheModelNameUnderTheProviderItsPrefixNames() {
+        Map<String, Integer> usage = Map.of("prompt_tokens", 1000, "completion_tokens", 1000);
+
+        // perplexity/sonar-pro: input 3e-6, output 1.5e-5 -> 1000 * 3e-6 + 1000 * 1.5e-5 = 0.018
+        assertThat(CostService.calculateCost("perplexity/sonar-pro-2025-06-01", "openrouter", usage, null))
+                .isEqualByComparingTo("0.018");
     }
 }

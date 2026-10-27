@@ -22,6 +22,10 @@ export type TooltipWrapperProps = {
   // programmatically (e.g. a Select/Popover restoring focus to it on close),
   // which would otherwise pop the tooltip open unexpectedly.
   hoverOnly?: boolean;
+  // Let pointer events fall through to whatever is underneath. For triggers
+  // that sit close together, where Radix's positioning wrapper swallows the
+  // click meant for a neighbour. The content stops being hoverable in return.
+  nonInteractive?: boolean;
 };
 
 const TooltipWrapper: React.FunctionComponent<TooltipWrapperProps> = ({
@@ -33,6 +37,7 @@ const TooltipWrapper: React.FunctionComponent<TooltipWrapperProps> = ({
   defaultOpen,
   stopClickPropagation,
   hoverOnly = false,
+  nonInteractive = false,
 }) => {
   const [open, setOpen] = useState(false);
   const timerRef = useRef<number | null>(null);
@@ -56,6 +61,14 @@ const TooltipWrapper: React.FunctionComponent<TooltipWrapperProps> = ({
     if (!next) {
       if (timerRef.current) window.clearTimeout(timerRef.current);
       setOpen(false);
+    }
+  }, []);
+
+  // The wrapper Radix owns is wider than the visible tooltip and there is no
+  // prop for it, so reach for it through the content.
+  const nonInteractiveRef = useCallback((node: HTMLDivElement | null) => {
+    if (node?.parentElement) {
+      node.parentElement.style.pointerEvents = "none";
     }
   }, []);
 
@@ -83,6 +96,7 @@ const TooltipWrapper: React.FunctionComponent<TooltipWrapperProps> = ({
           side={side}
           variant={hotkeys?.length ? "hotkey" : "default"}
           collisionPadding={16}
+          ref={nonInteractive ? nonInteractiveRef : undefined}
           {...(stopClickPropagation && {
             onClick: (event) => event.stopPropagation(),
           })}

@@ -4,6 +4,7 @@ import com.clickhouse.client.api.Client;
 import com.clickhouse.client.api.insert.InsertSettings;
 import com.clickhouse.client.api.metrics.ServerMetrics;
 import com.clickhouse.data.ClickHouseFormat;
+import com.comet.opik.utils.AsyncUtils;
 import com.comet.opik.utils.ClickHouseDateTimeFormat;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -323,7 +324,12 @@ public class CipxSpendBlockDAO {
          * intentional differences, so the two tables can't drift apart on a future category addition.
          */
         private static String bdLane(String category, String toolServer) {
-            if (category.equals("mcp_tools_deferred") || category.equals("mcp_server_instructions")) {
+            // MCP instructions and deferred listings join a server's row only when the engine named the
+            // server (OPIK-8721). Blocks from older engines, and from harnesses whose wire format names no
+            // server, stay in the lane total alone, which the breakdown reports as not attributable to a
+            // server.
+            if (toolServer.isEmpty()
+                    && (category.equals("mcp_tools_deferred") || category.equals("mcp_server_instructions"))) {
                 return "";
             }
             String baseLane = lane(category, toolServer);
@@ -342,7 +348,8 @@ public class CipxSpendBlockDAO {
                 case "tool_io" -> toolServer.isEmpty() ? toolName : toolServer;
                 case "system_tools", "system_tools_deferred" -> toolName.isEmpty() ? "(unattributed)" : toolName;
                 case "prior_assistant" -> kind;
-                case "mcp_tools_active", "mcp_tool_calls" -> toolServer;
+                case "mcp_tools_active", "mcp_tool_calls", "mcp_server_instructions", "mcp_tools_deferred" ->
+                    toolServer;
                 case "system_prompt", "env_info", "auto_classifier", "agent_overhead", "identity_context" -> category;
                 case "thinking" -> "thinking";
                 case "assistant_text" -> "assistant_text";
@@ -354,8 +361,9 @@ public class CipxSpendBlockDAO {
         /** 1 = cost of carrying the thing (schemas, menus, standing context); 0 = cost of using it. */
         private static int isDefinition(String category) {
             return switch (category) {
-                case "skills_menu", "custom_agents", "memory", "mcp_tools_active",
-                        "system_prompt", "env_info", "system_tools", "system_tools_deferred" ->
+                case "skills_menu", "custom_agents", "memory", "mcp_tools_active", "mcp_tools_deferred",
+                        "mcp_server_instructions", "system_prompt", "env_info", "system_tools",
+                        "system_tools_deferred" ->
                     1;
                 default -> 0;
             };
@@ -393,7 +401,7 @@ public class CipxSpendBlockDAO {
     }
 
     private Mono<Long> insertChunk(List<BlockRow> rows, String workspaceId, String userName) {
-        return Mono.fromFuture(() -> {
+        return AsyncUtils.usingClickHouseFuture(() -> {
             StringBuilder body = new StringBuilder();
             for (BlockRow row : rows) {
                 appendJsonRow(body, workspaceId, row);
@@ -410,11 +418,7 @@ public class CipxSpendBlockDAO {
                     new ByteArrayInputStream(payload),
                     ClickHouseFormat.JSONEachRow,
                     settings);
-        }).map(response -> {
-            try (response) {
-                return response.getMetrics().getMetric(ServerMetrics.NUM_ROWS_WRITTEN).getLong();
-            }
-        });
+        }, response -> response.getMetrics().getMetric(ServerMetrics.NUM_ROWS_WRITTEN).getLong());
     }
 
     private void appendJsonRow(StringBuilder out, String workspaceId, BlockRow row) {

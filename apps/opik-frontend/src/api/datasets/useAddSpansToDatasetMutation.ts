@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import get from "lodash/get";
+import isEmpty from "lodash/isEmpty";
 import api, { DATASETS_REST_ENDPOINT } from "@/api/api";
 import { AxiosError } from "axios";
 import { useToast } from "@/ui/use-toast";
@@ -21,6 +22,7 @@ type UseAddSpansToDatasetMutationParams = {
   workspaceName: string;
   evaluators?: Evaluator[];
   executionPolicy?: ExecutionPolicy;
+  fieldMappings?: Record<string, string>;
 };
 
 const useAddSpansToDatasetMutation = () => {
@@ -35,6 +37,7 @@ const useAddSpansToDatasetMutation = () => {
       workspaceName,
       evaluators,
       executionPolicy,
+      fieldMappings,
     }: UseAddSpansToDatasetMutationParams) => {
       const { data } = await api.post(
         `${DATASETS_REST_ENDPOINT}${datasetId}/items/from-spans`,
@@ -44,6 +47,7 @@ const useAddSpansToDatasetMutation = () => {
           workspace_name: workspaceName,
           ...(evaluators && { evaluators }),
           ...(executionPolicy && { execution_policy: executionPolicy }),
+          ...(!isEmpty(fieldMappings) && { field_mappings: fieldMappings }),
         },
       );
       return data;

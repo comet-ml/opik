@@ -199,9 +199,13 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
   /**
    * Retrieve a fixed number of dataset items.
    *
+   * To look at a dataset's items without writing code, AI coding assistants connected to the
+   * Opik MCP server can call `list("dataset_item", dataset_id=...)`.
+   *
    * @param nbSamples The number of samples to retrieve. If not set - all items are returned
    * @param lastRetrievedId Optional ID of the last retrieved item for pagination
    * @returns A list of objects representing the dataset items
+   * @see https://www.comet.com/docs/opik/mcp-server
    */
   public async getItems(nbSamples?: number, lastRetrievedId?: string) {
     const datasetItems = await getDatasetItems<T>(this.opik, {
@@ -217,9 +221,13 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
   /**
    * Retrieve raw DatasetItem objects with full metadata (evaluators, executionPolicy) preserved.
    *
+   * To look at a dataset's items without writing code, AI coding assistants connected to the
+   * Opik MCP server can call `list("dataset_item", dataset_id=...)`.
+   *
    * @param nbSamples The number of samples to retrieve. If not set - all items are returned
    * @param lastRetrievedId Optional ID of the last retrieved item for pagination
    * @returns A list of DatasetItem objects
+   * @see https://www.comet.com/docs/opik/mcp-server
    */
   public async getRawItems(
     nbSamples?: number,

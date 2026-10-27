@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure;
 
+import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -10,6 +11,7 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.TestIdGeneratorFactory;
@@ -40,6 +42,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.api.resources.utils.AuthTestUtils.mockTargetWorkspace;
@@ -121,6 +124,7 @@ class TracesUnwrappedMutationTest {
     }
 
     private TraceResourceClient traceResourceClient;
+    private ExperimentResourceClient experimentResourceClient;
     private TransactionTemplateAsync template;
     private TraceDAO traceDAO;
 
@@ -131,6 +135,7 @@ class TracesUnwrappedMutationTest {
         mockTargetWorkspace(wireMock.server(), API_KEY, WORKSPACE_NAME, WORKSPACE_ID, USER);
         mockTargetWorkspace(wireMock.server(), API_KEY_2, WORKSPACE_NAME_2, WORKSPACE_ID_2, USER);
         traceResourceClient = new TraceResourceClient(clientSupport, baseUrl);
+        experimentResourceClient = new ExperimentResourceClient(clientSupport, baseUrl, factory);
         this.template = template;
         this.traceDAO = traceDAO;
     }
@@ -222,6 +227,39 @@ class TracesUnwrappedMutationTest {
     }
 
     /**
+     * Both sweeps spare a trace listed in {@code experiment_items}: experiment-linked data is excluded from
+     * retention by design, and a lightweight delete is not recoverable.
+     * <p>
+     * This is the one clause in either sweep whose breakage is <b>silent</b>. A wrong table name fails loudly (the
+     * routing guard, or code 36/60 at the server) and an unbound parameter fails at execution, but a {@code NOT IN}
+     * that stops excluding renders, executes and reports success while deleting rows retention exists to keep. So the
+     * spared trace is asserted alongside a sibling that <b>is</b> deleted from the same window — asserting survival
+     * alone would also pass if the sweep had quietly deleted nothing at all.
+     * <p>
+     * Covered here rather than in {@code RetentionPolicyServiceTest}, which drives the same sweeps end-to-end: that
+     * suite can only reach {@code applyToPast=true}, because the bounded path derives each workspace's floor from
+     * {@code rule.createdAt()}, so a freshly created rule floors at {@code now} and sweeps nothing.
+     */
+    @Test
+    void deleteForRetentionSparesTracesLinkedToAnExperiment() {
+        var fixture = seedExperimentExclusionFixture();
+
+        traceDAO.deleteForRetention(List.of(WORKSPACE_ID), fixture.cutoff(), fixture.floor()).block();
+
+        assertExperimentLinkedTraceSurvived(fixture);
+    }
+
+    @Test
+    void deleteForRetentionBoundedSparesTracesLinkedToAnExperiment() {
+        var fixture = seedExperimentExclusionFixture();
+
+        traceDAO.deleteForRetentionBounded(Map.of(WORKSPACE_ID, fixture.floor()), fixture.cutoff(), fixture.floor())
+                .block();
+
+        assertExperimentLinkedTraceSurvived(fixture);
+    }
+
+    /**
      * The guard that keeps the deletes above honest: pre-cutover {@code traces} must be the local
      * {@code ReplicatedReplacingMergeTree} and
      * {@code traces_local} must not exist, so a mutation routed to the shard could not have silently succeeded.
@@ -236,6 +274,64 @@ class TracesUnwrappedMutationTest {
         assertThat(engineOf("traces_local"))
                 .as("`traces_local` is created by the cutover runbook and must not exist pre-cutover")
                 .isEmpty();
+    }
+
+    private Trace.TraceBuilder newTrace() {
+        return factory.manufacturePojo(Trace.class).toBuilder()
+                .feedbackScores(null)
+                .usage(null);
+    }
+
+    /**
+     * Two traces in one retention window, one of them linked to an experiment. Both ids are minted at the same
+     * instant, so only the experiment link can separate their fates. The experiment and dataset item need not exist:
+     * the item insert only validates the ids are UUIDv7 and resolves the project, which is all the sweeps'
+     * {@code id NOT IN (SELECT trace_id FROM experiment_items ...)} reads.
+     */
+    private ExperimentExclusionFixture seedExperimentExclusionFixture() {
+        var now = Instant.now();
+        var fixture = ExperimentExclusionFixture.builder()
+                .floor(ID_GENERATOR.generateId(now.minusSeconds(1)))
+                .cutoff(ID_GENERATOR.generateId(now.plusSeconds(1)))
+                .linkedTrace(newTrace().id(ID_GENERATOR.generateId(now)).build())
+                .unlinkedTrace(newTrace().id(ID_GENERATOR.generateId(now)).build())
+                .build();
+
+        traceResourceClient.createTrace(fixture.linkedTrace(), API_KEY, WORKSPACE_NAME);
+        traceResourceClient.createTrace(fixture.unlinkedTrace(), API_KEY, WORKSPACE_NAME);
+
+        var experimentItem = factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                .traceId(fixture.linkedTrace().id())
+                .projectName(fixture.linkedTrace().projectName())
+                .feedbackScores(null)
+                .comments(null)
+                .build();
+        experimentResourceClient.createExperimentItem(Set.of(experimentItem), API_KEY, WORKSPACE_NAME);
+
+        assertThat(getTraceIds(fixture.linkedTrace().projectName())).contains(fixture.linkedTrace().id());
+        assertThat(getTraceIds(fixture.unlinkedTrace().projectName())).contains(fixture.unlinkedTrace().id());
+        return fixture;
+    }
+
+    private List<UUID> getTraceIds(String projectName) {
+        return getTraceIds(projectName, API_KEY, WORKSPACE_NAME);
+    }
+
+    private List<UUID> getTraceIds(String projectName, String apiKey, String workspaceName) {
+        return traceResourceClient
+                .getTraces(projectName, null, apiKey, workspaceName, List.of(), List.of(), 100, Map.of())
+                .content().stream()
+                .map(Trace::id)
+                .toList();
+    }
+
+    private void assertExperimentLinkedTraceSurvived(ExperimentExclusionFixture fixture) {
+        assertThat(getTraceIds(fixture.unlinkedTrace().projectName()))
+                .as("a trace in the window with no experiment link must be swept")
+                .doesNotContain(fixture.unlinkedTrace().id());
+        assertThat(getTraceIds(fixture.linkedTrace().projectName()))
+                .as("the experiment_items exclusion must spare this trace from the same sweep")
+                .contains(fixture.linkedTrace().id());
     }
 
     private String engineOf(String table) {
@@ -265,21 +361,7 @@ class TracesUnwrappedMutationTest {
         }
     }
 
-    private Trace.TraceBuilder newTrace() {
-        return factory.manufacturePojo(Trace.class).toBuilder()
-                .feedbackScores(null)
-                .usage(null);
-    }
-
-    private List<UUID> getTraceIds(String projectName) {
-        return getTraceIds(projectName, API_KEY, WORKSPACE_NAME);
-    }
-
-    private List<UUID> getTraceIds(String projectName, String apiKey, String workspaceName) {
-        return traceResourceClient
-                .getTraces(projectName, null, apiKey, workspaceName, List.of(), List.of(), 100, Map.of())
-                .content().stream()
-                .map(Trace::id)
-                .toList();
+    @Builder(toBuilder = true)
+    private record ExperimentExclusionFixture(Trace linkedTrace, Trace unlinkedTrace, UUID floor, UUID cutoff) {
     }
 }

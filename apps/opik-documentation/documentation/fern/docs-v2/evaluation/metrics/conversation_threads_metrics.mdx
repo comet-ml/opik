@@ -26,7 +26,7 @@ Opik provides two families of conversation metrics:
 
 `KnowledgeRetentionMetric` operates on a conversation and compares how well the last assistant message preserves facts the user injected earlier. This is useful for guardrailing agents that should respect instructions or keep important constraints.
 
-```python
+```python wordWrap
 from opik.evaluation.metrics import KnowledgeRetentionMetric
 
 metric = KnowledgeRetentionMetric(turns_to_consider=5)
@@ -38,7 +38,9 @@ print(score.value, score.reason)
 
 `ConversationDegenerationMetric` detects repetitive phrases, lack of variance, or low-entropy responses across a conversation. It is a lightweight guard against models that fall into loops or short-circuit the dialogue.
 
-```python
+Each assistant turn gets a score between `0.0` and `1.0` from four equally weighted signals: repeated n-grams, overlap with the previous reply, known fallback phrases, and low lexical diversity. The metric value is the highest turn score, and the per-turn breakdown is in `metadata["per_turn"]`. A reply with no words, such as `"..."` or only whitespace, is scored like a one-word reply and marked with `is_wordless: 1.0`. It is skipped when comparing the next reply with the previous one, so a loop interrupted by filler is still detected.
+
+```python wordWrap
 from opik.evaluation.metrics import ConversationDegenerationMetric
 
 metric = ConversationDegenerationMetric()
@@ -79,7 +81,7 @@ These metrics are based on the idea of using an LLM to evaluate the turns of the
 
 `ConversationalCoherenceMetric` evaluates the logical flow of a dialogue. It builds a sliding window of turns and asks an LLM to rate whether the final assistant message is coherent and relevant. It returns a score between 0.0 and 1.0 and can optionally return detailed reasons.
 
-```python title="Conversational coherence example"
+```python title="Conversational coherence example" wordWrap
 from opik.evaluation.metrics import ConversationalCoherenceMetric
 
 conversation = [
@@ -119,7 +121,7 @@ print(result.reason)
 
 `SessionCompletenessQuality` captures whether a conversation fulfilled the user’s top-level goals. The metric asks an LLM to extract intentions from the thread, judge completion, and aggregate the results.
 
-```python title="Session completeness example"
+```python title="Session completeness example" wordWrap
 from opik.evaluation.metrics import SessionCompletenessQuality
 
 conversation = [
@@ -159,7 +161,7 @@ print(result.reason)
 
 `UserFrustrationMetric` estimates how likely it is that the user became frustrated (e.g. because of repetition or ignored requests). It scans windows of the conversation with an LLM and reports a value between 0.0 (not frustrated) and 1.0 (very frustrated).
 
-```python title="User frustration example"
+```python title="User frustration example" wordWrap
 from opik.evaluation.metrics import UserFrustrationMetric
 
 conversation = [
@@ -219,7 +221,7 @@ available when it wrote it. What the metric measures does not change - every tur
 answer is relevant to the turns preceding it. Populate the documents with the `trace_context_transform` argument of
 [`evaluate_threads`](/evaluation/evaluate_threads), or attach them directly to the agent messages under a `context` key:
 
-```python title="Context-aware coherence example"
+```python title="Context-aware coherence example" wordWrap
 from opik.evaluation.metrics import ConversationalCoherenceMetric
 
 conversation = [

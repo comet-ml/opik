@@ -13,8 +13,10 @@ import { EvaluatorsRule } from "@/types/automations";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import DropdownEmptyState from "@/v2/pages-shared/DropdownEmptyState/DropdownEmptyState";
-import AddEditRuleDialog from "@/v2/pages-shared/automations/AddEditRuleDialog/AddEditRuleDialog";
+import RuleEditorPanel from "@/v2/pages-shared/automations/RuleEditorPanel/RuleEditorPanel";
 import {
+  isAlwaysRunRule,
+  isTraceRule,
   toggleAllMetrics,
   toggleMetricSelection,
 } from "@/v2/pages/PlaygroundPage/metricSelection";
@@ -32,10 +34,12 @@ interface MetricSelectorProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onRuleCreated?: (rule: EvaluatorsRule) => void;
+  disabled?: boolean;
 }
 
 const MetricSelector: React.FC<MetricSelectorProps> = ({
-  rules,
+  rules: allRules,
+  disabled,
   selectedRuleIds,
   onSelectionChange,
   projectId,
@@ -56,17 +60,33 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
   const canCreateRule =
     canUsePlayground && canUpdateOnlineEvaluationRules && Boolean(projectId);
 
+  // Thread and span rules cannot score a playground run
+  const rules = useMemo(() => allRules.filter(isTraceRule), [allRules]);
+
   const selectedRuleIdsSet = useMemo(
     () => new Set(selectedRuleIds ?? []),
     [selectedRuleIds],
   );
 
-  const selectedRules = useMemo(() => {
-    if (!selectedRuleIds) return rules;
-    return rules.filter((rule) => selectedRuleIdsSet.has(rule.id));
-  }, [rules, selectedRuleIds, selectedRuleIdsSet]);
+  // Enabled rules that target experiments score every run regardless of the pick, so they show
+  // as checked and cannot be unchecked. The pick list itself only holds the user's own choices.
+  const alwaysRunIds = useMemo(
+    () => new Set(rules.filter(isAlwaysRunRule).map((rule) => rule.id)),
+    [rules],
+  );
 
-  const selectedCount = selectedRules.length;
+  const toggleableRules = useMemo(
+    () => rules.filter((rule) => !alwaysRunIds.has(rule.id)),
+    [rules, alwaysRunIds],
+  );
+
+  const isSelected = useCallback(
+    (ruleId: string) =>
+      selectedRuleIdsSet.has(ruleId) || alwaysRunIds.has(ruleId),
+    [selectedRuleIdsSet, alwaysRunIds],
+  );
+
+  const selectedCount = rules.filter((rule) => isSelected(rule.id)).length;
   const isAllSelected = rules.length > 0 && selectedCount === rules.length;
   const selectAllCheckedState = getSelectAllCheckedState(
     selectedCount,
@@ -81,20 +101,20 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
 
   const handleSelect = useCallback(
     (ruleId: string) => {
-      onSelectionChange(
-        toggleMetricSelection(
-          selectedRuleIds,
-          ruleId,
-          rules.map((r) => r.id),
-        ),
-      );
+      if (alwaysRunIds.has(ruleId)) return;
+      onSelectionChange(toggleMetricSelection(selectedRuleIds, ruleId));
     },
-    [selectedRuleIds, rules, onSelectionChange],
+    [selectedRuleIds, onSelectionChange, alwaysRunIds],
   );
 
   const handleSelectAll = useCallback(() => {
-    onSelectionChange(toggleAllMetrics(isAllSelected));
-  }, [onSelectionChange, isAllSelected]);
+    onSelectionChange(
+      toggleAllMetrics(
+        isAllSelected,
+        toggleableRules.map((r) => r.id),
+      ),
+    );
+  }, [onSelectionChange, isAllSelected, toggleableRules]);
 
   const openChangeHandler = useCallback(
     (newOpen: boolean) => {
@@ -102,14 +122,6 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
       if (!newOpen) setSearch("");
     },
     [onOpenChange],
-  );
-
-  const isSelected = useCallback(
-    (ruleId: string) => {
-      if (isAllSelected) return true;
-      return selectedRuleIdsSet.has(ruleId);
-    },
-    [isAllSelected, selectedRuleIdsSet],
   );
 
   const openCreateDialog = useCallback(() => {
@@ -152,12 +164,13 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
 
   return (
     <>
-      <Popover onOpenChange={openChangeHandler} open={open}>
+      <Popover onOpenChange={openChangeHandler} open={open && !disabled}>
         <PopoverTrigger asChild>
           <div
-            tabIndex={0}
+            tabIndex={disabled ? -1 : 0}
             className={cn(
-              "flex h-full w-[120px] cursor-pointer items-center gap-1 px-2 text-xs focus:outline-none",
+              "flex h-full w-[120px] items-center gap-1 px-2 text-xs focus:outline-none",
+              disabled ? "pointer-events-none opacity-50" : "cursor-pointer",
               open
                 ? "text-foreground"
                 : selectedCount > 0
@@ -209,13 +222,26 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
               filteredRules.map((rule) => (
                 <div
                   key={rule.id}
-                  className="group flex h-8 cursor-pointer items-center gap-2 rounded-md px-3 hover:bg-primary-foreground"
+                  className={cn(
+                    "group flex h-8 items-center gap-2 rounded-md px-3",
+                    alwaysRunIds.has(rule.id)
+                      ? "cursor-default"
+                      : "cursor-pointer hover:bg-primary-foreground",
+                  )}
                   onClick={() => handleSelect(rule.id)}
                 >
-                  <Checkbox
-                    checked={isSelected(rule.id)}
-                    className="shrink-0"
-                  />
+                  {alwaysRunIds.has(rule.id) ? (
+                    <TooltipWrapper content="Always runs on experiment traces">
+                      <span className="flex shrink-0">
+                        <Checkbox checked disabled className="shrink-0" />
+                      </span>
+                    </TooltipWrapper>
+                  ) : (
+                    <Checkbox
+                      checked={isSelected(rule.id)}
+                      className="shrink-0"
+                    />
+                  )}
                   <TooltipWrapper content={rule.name}>
                     <div className="min-w-0 flex-1">
                       <div className="comet-body-s truncate">{rule.name}</div>
@@ -248,7 +274,7 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
 
           {!hasNoRules && (
             <div className="shrink-0">
-              {filteredRules.length > 0 && (
+              {filteredRules.length > 0 && toggleableRules.length > 0 && (
                 <>
                   <Separator className="my-1" />
                   <div
@@ -286,16 +312,15 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
         </PopoverContent>
       </Popover>
 
-      <AddEditRuleDialog
+      <RuleEditorPanel
         key={ruleToEdit ? `edit-${ruleToEdit.id}` : "create"}
         open={isRuleDialogOpen}
         setOpen={handleDialogOpenChange}
-        projectId={projectId || ""}
+        projectId={projectId}
         rule={ruleToEdit ?? undefined}
-        mode={ruleToEdit ? "edit" : "create"}
-        datasetColumnNames={datasetColumnNames}
-        hideScopeSelector
         onRuleCreated={onRuleCreated}
+        datasetColumnNames={datasetColumnNames}
+        traceScopeOnly
       />
     </>
   );

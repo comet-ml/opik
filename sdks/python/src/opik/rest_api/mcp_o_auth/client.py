@@ -214,6 +214,9 @@ class McpOAuthClient:
         client_name: str,
         redirect_uris: typing.Sequence[str],
         logo_uri: typing.Optional[str] = OMIT,
+        software_id: typing.Optional[str] = OMIT,
+        software_version: typing.Optional[str] = OMIT,
+        client_uri: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> ClientRegistrationResponse:
         """
@@ -226,6 +229,12 @@ class McpOAuthClient:
         redirect_uris : typing.Sequence[str]
 
         logo_uri : typing.Optional[str]
+
+        software_id : typing.Optional[str]
+
+        software_version : typing.Optional[str]
+
+        client_uri : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -242,7 +251,13 @@ class McpOAuthClient:
         client.mcp_o_auth.register_o_auth_client(client_name='client_name', redirect_uris=['redirect_uris'], )
         """
         _response = self._raw_client.register_o_auth_client(
-            client_name=client_name, redirect_uris=redirect_uris, logo_uri=logo_uri, request_options=request_options
+            client_name=client_name,
+            redirect_uris=redirect_uris,
+            logo_uri=logo_uri,
+            software_id=software_id,
+            software_version=software_version,
+            client_uri=client_uri,
+            request_options=request_options,
         )
         return _response.data
 
@@ -565,6 +580,9 @@ class AsyncMcpOAuthClient:
         client_name: str,
         redirect_uris: typing.Sequence[str],
         logo_uri: typing.Optional[str] = OMIT,
+        software_id: typing.Optional[str] = OMIT,
+        software_version: typing.Optional[str] = OMIT,
+        client_uri: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> ClientRegistrationResponse:
         """
@@ -577,6 +595,12 @@ class AsyncMcpOAuthClient:
         redirect_uris : typing.Sequence[str]
 
         logo_uri : typing.Optional[str]
+
+        software_id : typing.Optional[str]
+
+        software_version : typing.Optional[str]
+
+        client_uri : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -596,7 +620,13 @@ class AsyncMcpOAuthClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.register_o_auth_client(
-            client_name=client_name, redirect_uris=redirect_uris, logo_uri=logo_uri, request_options=request_options
+            client_name=client_name,
+            redirect_uris=redirect_uris,
+            logo_uri=logo_uri,
+            software_id=software_id,
+            software_version=software_version,
+            client_uri=client_uri,
+            request_options=request_options,
         )
         return _response.data
 

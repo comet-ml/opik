@@ -47,6 +47,16 @@ Please review the CLA before contributing:
 5. Open a draft PR with GitHub CLI: `gh pr create --draft`.
 6. Fill `.github/pull_request_template.md` completely.
 
+## Pull request policy for external contributors
+These rules apply to contributors without write access to this repository. They help us review every pull request with care.
+
+- **Up to 3 open pull requests at a time.** If you open more, we reserve the right to close them. A pull request that you open (or reopen) while you already have 3 open is closed automatically.
+- **Respond within 2 weeks of a review.** If a pull request has no update (new commits or replies) for 2 weeks after our latest review, it is closed automatically. Reviews from maintainers and from the Baz review bot both count. We post a reminder comment a few days before we close it. An approved pull request is not affected.
+
+When you are ready to continue, open a new pull request or ask a maintainer to reopen the closed one.
+
+Both rules are enforced by [`.github/workflows/external_pr_policy.yml`](.github/workflows/external_pr_policy.yml). Maintainers can add the `keep-open` label to a pull request to exclude it from the 2-week rule.
+
 ## GitHub Actions workflows
 Workflow files in `.github/workflows/` are validated with [actionlint](https://github.com/rhysd/actionlint), which runs as a hook in the unified `🐙 Code Quality` workflow (and locally via pre-commit) on changed workflow files. The pre-commit framework builds the pinned actionlint from source automatically — no manual install needed. Run `make hooks` once per clone to enable it locally.
 
@@ -58,17 +68,29 @@ Workflows are also scanned for **security** issues with [zizmor](https://github.
 - **Suppressing a finding** must be explicit and justified — never silent. Use an inline `# zizmor: ignore[<audit-id>]` comment with a short rationale (see the `pull_request_target` exemption in [`.github/workflows/labeler.yml`](.github/workflows/labeler.yml) for the pattern), or a scoped entry in `.github/zizmor.yml`.
 - **Fixing `template-injection`.** Don't interpolate `${{ … }}` directly into a `run:` shell body; hoist the expression into the step's `env:` block and reference it as a shell variable (`"${MY_VAR}"`, quoted). This keeps attacker-influenceable values (branch names, PR titles, usernames) out of the shell's parse phase.
 
+### E2E tests on pull requests from forks
+E2E workflows are skipped on pull requests opened from a fork, and their checks will show as **skipped** rather than passed or failed. This is expected and is not something your PR can fix.
+
+GitHub issues a read-only `GITHUB_TOKEN` to fork-originated `pull_request` events regardless of a workflow's `permissions:` block, and regardless of whether a maintainer approved the run. The shared E2E build pushes images to GHCR, so on a fork it fails with a 403 before any test executes. Skipping keeps that structural failure from showing up as a red check you cannot act on.
+
+A maintainer can run the E2E suite against your branch before merging. The skip is temporary and will be removed once fork PRs can run E2E directly.
+
 ## Dockerfiles
 Dockerfiles are linted with [hadolint](https://github.com/hadolint/hadolint), which runs as a hook in the unified `🐙 Code Quality` workflow (and locally via pre-commit) on changed Dockerfiles. It uses hadolint's default rule set; the handful of intentionally-suppressed rules are annotated inline in each Dockerfile with a `# hadolint ignore=` comment and a reason. The hook runs hadolint via its Docker image, so it needs only Docker — no manual install. To run it directly on a single file: `docker run --rm -i ghcr.io/hadolint/hadolint < path/to/Dockerfile`.
 
 ## SQL query construction (Java backend)
 Production Java under `apps/opik-backend/src/main/java/` is scanned with [semgrep](https://semgrep.dev/) for SQL assembled by string formatting, as a hook in the unified `🐙 Code Quality` workflow (and locally via pre-commit). The rules live in [`.semgrep/`](.semgrep/), with the conventions they enforce documented in [`.agents/rules/security.mdc`](.agents/rules/security.mdc) and the backend skill.
 
+## OpenAPI spec resolution (Java backend)
+Changes to the backend's main sources, resources or `pom.xml` run `swagger:resolve` (via `mvn compile`) as a hook in the unified `🐙 Code Quality` workflow, so a change that breaks OpenAPI spec generation fails the PR. It needs a full backend compile, so it is a CI-only hook (`stages: [manual]`) and does not run on `git commit`. To run it locally (needs the backend toolchain: JDK 25 and Maven, as for building the backend): `pre-commit run swagger-resolve --hook-stage manual --all-files`.
+
 ## Generated files (do not edit manually)
 - `apps/opik-backend/src/main/resources/model_prices_and_context_window.json`
 - `apps/opik-frontend/src/data/model_prices_and_context_window.json`
+- `apps/opik-backend/src/main/resources/model_prices_openrouter.json`
+- `apps/opik-frontend/src/data/model_prices_openrouter.json`
 
-These files are regenerated by automation from upstream `BerriAI/litellm`. Use the updater workflow or approved automation, not direct edits.
+These files are regenerated by automation from upstream `BerriAI/litellm` and, for OpenRouter models, from OpenRouter's model list (`scripts/update_openrouter_model_prices.py`). Use the updater workflow or approved automation, not direct edits.
 
 ## Commit and PR conventions
 - First commit (used as PR title source):

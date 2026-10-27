@@ -1,6 +1,68 @@
-import { parseCompletionOutput, parseUsage } from "../src/parsers";
+import type OpenAI from "openai";
+import {
+  buildStreamOutput,
+  getToolCallOutput,
+  parseChunk,
+  parseCompletionOutput,
+  parseInputArgs,
+  parseUsage,
+} from "../src/parsers";
+
+type ToolCallDelta =
+  OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta.ToolCall;
+
+const toolCallChunk = (
+  toolCalls: ToolCallDelta[]
+): OpenAI.Chat.Completions.ChatCompletionChunk => ({
+  id: "chatcmpl-1",
+  object: "chat.completion.chunk",
+  created: 0,
+  model: "gpt-5.5",
+  choices: [
+    {
+      index: 0,
+      delta: { tool_calls: toolCalls },
+      finish_reason: null,
+      logprobs: null,
+    },
+  ],
+});
+
+const collectToolCalls = (
+  chunks: OpenAI.Chat.Completions.ChatCompletionChunk[]
+): ToolCallDelta[] =>
+  chunks.flatMap((chunk) => {
+    const parsed = parseChunk(chunk);
+    return parsed.isToolCall ? parsed.data : [];
+  });
 
 describe("OpenAI Parsers", () => {
+  describe("parseInputArgs", () => {
+    describe("decisions requests", () => {
+      const questions = [
+        {
+          name: "is_complaint",
+          type: "predicate",
+          instructions: "Is the customer complaining?",
+        },
+      ];
+
+      it("should log input and questions", () => {
+        const result = parseInputArgs({
+          model: "gpt-6-luna",
+          input: "I was charged twice!",
+          questions,
+        });
+
+        expect(result.model).toBe("gpt-6-luna");
+        expect(result.input).toEqual({
+          input: "I was charged twice!",
+          questions,
+        });
+      });
+    });
+  });
+
   describe("parseCompletionOutput", () => {
     describe("embedding responses", () => {
       it("should parse single embedding response", () => {
@@ -149,6 +211,24 @@ describe("OpenAI Parsers", () => {
       });
     });
 
+    describe("decisions responses", () => {
+      it("should parse answers format", () => {
+        const answers = [
+          { name: "is_complaint", type: "predicate", probability: 0.98 },
+          { name: "topic", type: "refusal" },
+        ];
+        const decision = {
+          answers,
+          model: "gpt-6-luna",
+          usage: { input_tokens: 120, output_tokens: 0, total_tokens: 120 },
+        };
+
+        const result = parseCompletionOutput(decision);
+
+        expect(result).toEqual({ answers });
+      });
+    });
+
     describe("edge cases", () => {
       it("should return undefined for unrecognized formats", () => {
         const unknownResponse = { foo: "bar" };
@@ -236,8 +316,8 @@ describe("OpenAI Parsers", () => {
         const result = parseUsage(responseApiUsage);
 
         expect(result).toBeDefined();
-        expect(result?.prompt_tokens).toBe(25);
-        expect(result?.completion_tokens).toBe(15);
+        expect(result?.prompt_tokens).toBe(15);
+        expect(result?.completion_tokens).toBe(25);
         expect(result?.total_tokens).toBe(40);
       });
     });
@@ -308,6 +388,120 @@ describe("OpenAI Parsers", () => {
         expect(result?.total_tokens).toBe(30);
         expect(result?.["original_usage.completion_tokens_details.reasoning_tokens"]).toBe(5);
         expect(result?.["original_usage.completion_tokens_details.accepted_prediction_tokens"]).toBe(3);
+      });
+    });
+  });
+
+  describe("streamed tool calls", () => {
+    const callFor = (index: number) => ({
+      index,
+      id: `call_${crypto.randomUUID()}`,
+      type: "function" as const,
+      function: {
+        name: `fn_${crypto.randomUUID()}`,
+        arguments: JSON.stringify({ value: crypto.randomUUID() }),
+      },
+    });
+
+    const expectedCall = (call: ReturnType<typeof callFor>) => ({
+      id: call.id,
+      type: call.type,
+      function: { ...call.function },
+    });
+
+    it("keeps parallel tool calls apart, matching fragments by index", () => {
+      const first = callFor(0);
+      const second = callFor(1);
+      const cut = (args: string) => Math.floor(args.length / 2);
+      const firstArgs = first.function.arguments;
+      const secondArgs = second.function.arguments;
+
+      const fragments = collectToolCalls([
+        toolCallChunk([
+          { ...first, function: { name: first.function.name, arguments: "" } },
+        ]),
+        toolCallChunk([
+          {
+            index: 0,
+            function: { arguments: firstArgs.slice(0, cut(firstArgs)) },
+          },
+        ]),
+        toolCallChunk([
+          {
+            ...second,
+            function: { name: second.function.name, arguments: "" },
+          },
+        ]),
+        toolCallChunk([
+          {
+            index: 0,
+            function: { arguments: firstArgs.slice(cut(firstArgs)) },
+          },
+        ]),
+        toolCallChunk([{ index: 1, function: { arguments: secondArgs } }]),
+      ]);
+
+      expect(getToolCallOutput(fragments)).toEqual({
+        tool_calls: [expectedCall(first), expectedCall(second)],
+      });
+    });
+
+    it("keeps every tool call carried by a single chunk", () => {
+      const first = callFor(0);
+      const second = callFor(1);
+
+      const fragments = collectToolCalls([toolCallChunk([first, second])]);
+
+      expect(getToolCallOutput(fragments)).toEqual({
+        tool_calls: [expectedCall(first), expectedCall(second)],
+      });
+    });
+
+    it("keeps streamed text next to the tool calls", () => {
+      const call = callFor(0);
+      const fragments = collectToolCalls([toolCallChunk([call])]);
+
+      expect(
+        buildStreamOutput(["Checking ", "the weather."], fragments)
+      ).toEqual({
+        message: "Checking the weather.",
+        tool_calls: [expectedCall(call)],
+      });
+    });
+
+    it("orders tool calls by index when fragments arrive out of order", () => {
+      const first = callFor(0);
+      const second = callFor(1);
+
+      const fragments = collectToolCalls([
+        toolCallChunk([second]),
+        toolCallChunk([first]),
+      ]);
+
+      expect(getToolCallOutput(fragments)).toEqual({
+        tool_calls: [expectedCall(first), expectedCall(second)],
+      });
+    });
+
+    it("keeps the text of a chunk that also carries tool calls", () => {
+      const call = callFor(0);
+      const text = `text_${crypto.randomUUID()}`;
+      const chunk = toolCallChunk([call]);
+      chunk.choices[0].delta.content = text;
+
+      expect(parseChunk(chunk)).toEqual({
+        isToolCall: true,
+        data: [call],
+        text,
+      });
+    });
+
+    it("returns only the message for a text stream", () => {
+      const first = crypto.randomUUID();
+      const second = crypto.randomUUID();
+
+      expect(buildStreamOutput([first, second], [])).toEqual({
+        message: `${first}${second}`,
       });
     });
   });

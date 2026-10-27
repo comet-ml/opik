@@ -3,6 +3,8 @@
 import type * as OpikApi from "../../api/index.js";
 import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
+import { AnnotationQueueAnnotatorViewWrite } from "./AnnotationQueueAnnotatorViewWrite.js";
+import { AnnotationQueueAutomationWrite } from "./AnnotationQueueAutomationWrite.js";
 import { AnnotationQueueWriteScope } from "./AnnotationQueueWriteScope.js";
 
 export const AnnotationQueueWrite: core.serialization.ObjectSchema<
@@ -22,6 +24,8 @@ export const AnnotationQueueWrite: core.serialization.ObjectSchema<
     ),
     annotatorsPerItem: core.serialization.property("annotators_per_item", core.serialization.number().optional()),
     lockTimeoutSeconds: core.serialization.property("lock_timeout_seconds", core.serialization.number().optional()),
+    automation: AnnotationQueueAutomationWrite.optional(),
+    annotatorView: core.serialization.property("annotator_view", AnnotationQueueAnnotatorViewWrite.optional()),
 });
 
 export declare namespace AnnotationQueueWrite {
@@ -36,5 +40,7 @@ export declare namespace AnnotationQueueWrite {
         feedback_definition_names?: string[] | null;
         annotators_per_item?: number | null;
         lock_timeout_seconds?: number | null;
+        automation?: AnnotationQueueAutomationWrite.Raw | null;
+        annotator_view?: AnnotationQueueAnnotatorViewWrite.Raw | null;
     }
 }

@@ -1,4 +1,10 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { ChartLine, ChevronDown, Plus } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
 import { Button } from "@/ui/button";
@@ -16,7 +22,7 @@ import {
 } from "./ProjectDashboardViewItems";
 import useInsightsViewsList from "@/api/insights-views/useInsightsViewsList";
 import useInsightsViewBatchDeleteMutation from "@/api/insights-views/useInsightsViewBatchDeleteMutation";
-import useAppStore from "@/store/AppStore";
+import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import {
   Dashboard,
   DASHBOARD_TYPE,
@@ -37,6 +43,8 @@ interface ProjectDashboardViewSelectorProps {
   onChange: (id: string | null) => void;
   onViewCreated?: (dashboardId: string) => void;
   onViewDeleted?: (deletedDashboardId: string) => void;
+  renameRequestId?: string | null;
+  onRenameRequestHandled?: () => void;
 }
 
 interface DialogState {
@@ -92,7 +100,14 @@ const buildDashboardOption = (
 
 const ProjectDashboardViewSelector: React.FC<
   ProjectDashboardViewSelectorProps
-> = ({ value, onChange, onViewCreated, onViewDeleted }) => {
+> = ({
+  value,
+  onChange,
+  onViewCreated,
+  onViewDeleted,
+  renameRequestId,
+  onRenameRequestHandled,
+}) => {
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
   const [search, setSearch] = useState("");
   const resetDialogKeyRef = useRef(0);
@@ -107,6 +122,7 @@ const ProjectDashboardViewSelector: React.FC<
   });
 
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const projectId = useActiveProjectId();
   const { mutate: deleteMutate } = useInsightsViewBatchDeleteMutation();
 
   const {
@@ -124,12 +140,13 @@ const ProjectDashboardViewSelector: React.FC<
   const { data: dashboardsData } = useInsightsViewsList(
     {
       workspaceName,
+      projectId,
       filters: processedFilters,
       page: 1,
       size: 1000,
     },
     {
-      enabled: Boolean(workspaceName),
+      enabled: Boolean(workspaceName) && Boolean(projectId),
     },
   );
 
@@ -190,6 +207,19 @@ const ProjectDashboardViewSelector: React.FC<
     setDialogState({ isOpen: true, mode: "edit", dashboard });
     setIsPopoverOpen(false);
   }, []);
+
+  useEffect(() => {
+    if (!renameRequestId) return;
+    const target = dashboards.find((d) => d.id === renameRequestId);
+    if (!target) return;
+    handleEditDashboard(target);
+    onRenameRequestHandled?.();
+  }, [
+    renameRequestId,
+    dashboards,
+    handleEditDashboard,
+    onRenameRequestHandled,
+  ]);
 
   const handleDuplicateDashboard = useCallback((dashboard: Dashboard) => {
     resetDialogKeyRef.current += 1;

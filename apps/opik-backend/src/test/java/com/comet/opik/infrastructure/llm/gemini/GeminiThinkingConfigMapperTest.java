@@ -40,6 +40,17 @@ class GeminiThinkingConfigMapperTest {
     }
 
     @Test
+    @DisplayName("a Gemini 3 level sends only the level: the two fields are mutually exclusive upstream")
+    void gemini3LevelSendsNoBudget() {
+        var config = GeminiThinkingConfigMapper.toThinkingConfig(GEMINI_3,
+                new GeminiThinkingParams(Level.MEDIUM, null, null));
+
+        assertThat(config).isPresent();
+        assertThat(config.get().thinkingLevel()).isEqualTo("medium");
+        assertThat(config.get().thinkingBudget()).isNull();
+    }
+
+    @Test
     @DisplayName("the playground entry point decodes straight from custom parameters")
     void decodesFromPlaygroundCustomParameters() {
         var config = GeminiThinkingConfigMapper.fromCustomParameters(GEMINI_3,

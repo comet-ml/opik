@@ -1,5 +1,7 @@
 package com.comet.opik.api.resources.utils.resources;
 
+import com.comet.opik.api.AgentInsightsEnrollment;
+import com.comet.opik.api.AgentInsightsGuidanceUpdate;
 import com.comet.opik.api.AgentInsightsJob;
 import com.comet.opik.api.AgentInsightsJobUpdate;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -9,12 +11,14 @@ import jakarta.ws.rs.core.Response;
 import lombok.RequiredArgsConstructor;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 
+import java.util.List;
 import java.util.UUID;
 
 @RequiredArgsConstructor
 public class AgentInsightsJobResourceClient {
 
     private static final String RESOURCE_PATH = "%s/v1/private/agent-insights/jobs";
+    private static final String ENROLLMENT_PATH = "%s/v1/internal/agent-insights/enrollment";
 
     private final ClientSupport client;
     private final String baseURI;
@@ -41,6 +45,29 @@ public class AgentInsightsJobResourceClient {
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
                 .method("PATCH", Entity.json(AgentInsightsJobUpdate.builder().status(status).build()));
+    }
+
+    public Response enrolInAutoFirstRun(boolean enrolled, List<UUID> projectIds) {
+        return client.target(ENROLLMENT_PATH.formatted(baseURI))
+                .request()
+                .post(Entity.json(new AgentInsightsEnrollment.Request(enrolled, projectIds)));
+    }
+
+    public Response updateGuidance(UUID projectId, String guidance, String apiKey, String workspaceName) {
+        return updateGuidance(projectId, Entity.json(AgentInsightsGuidanceUpdate.builder().guidance(guidance).build()),
+                apiKey, workspaceName);
+    }
+
+    public Response updateGuidanceWithBody(UUID projectId, Object body, String apiKey, String workspaceName) {
+        return updateGuidance(projectId, Entity.json(body), apiKey, workspaceName);
+    }
+
+    private Response updateGuidance(UUID projectId, Entity<?> body, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI) + "/" + projectId + "/guidance")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .put(body);
     }
 
     public Response trigger(UUID projectId, String apiKey, String workspaceName) {

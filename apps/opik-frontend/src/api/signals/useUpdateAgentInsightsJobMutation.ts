@@ -19,6 +19,8 @@ const useUpdateAgentInsightsJobMutation = () => {
   const { toast } = useToast();
 
   return useMutation({
+    // PATCH 404s before the project has a job; create it (disabled) and retry,
+    // like the trigger mutation does.
     mutationFn: async ({
       projectId,
       status,
@@ -28,11 +30,8 @@ const useUpdateAgentInsightsJobMutation = () => {
         const { data } = await api.patch(url, { status });
         return data;
       } catch (error) {
-        // No job row yet (404) → create it (backend creates it enabled), then
-        // apply the requested status if it isn't already enabled.
         if ((error as AxiosError)?.response?.status !== 404) throw error;
         await api.post(url);
-        if (status === AGENT_INSIGHTS_JOB_STATUS.enabled) return undefined;
         const { data } = await api.patch(url, { status });
         return data;
       }

@@ -17,7 +17,11 @@ import java.time.Instant;
 import java.util.UUID;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
+import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
+import static com.github.tomakehurst.wiremock.client.WireMock.notMatching;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
+import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.assertj.core.api.Assertions.assertThatNoException;
@@ -54,15 +58,57 @@ class PlatformAgentInsightsReportClientTest {
         wireMock.server().stubFor(post(urlPathEqualTo(TRIGGER_PATH)).willReturn(aResponse().withStatus(status)));
     }
 
+    private void stubTriggerResponse(int status, String contentType, String body) {
+        wireMock.server().stubFor(post(urlPathEqualTo(TRIGGER_PATH)).willReturn(aResponse().withStatus(status)
+                .withHeader("Content-Type", contentType)
+                .withBody(body)));
+    }
+
     private void trigger() {
-        client.triggerAgentInsights(UUID.randomUUID().toString(), UUID.randomUUID(), "workspace-id",
-                Instant.now().minusSeconds(86_400), Instant.now(), "manual");
+        trigger(UUID.randomUUID().toString(), null);
+    }
+
+    private void trigger(String reportId, String guidance) {
+        client.triggerAgentInsights(AgentInsightsReportClient.Trigger.builder()
+                .reportId(reportId)
+                .projectId(UUID.randomUUID())
+                .workspaceId("workspace-id")
+                .periodStart(Instant.now().minusSeconds(86_400))
+                .periodEnd(Instant.now())
+                .triggerSource("manual")
+                .guidance(guidance)
+                .build());
     }
 
     @Test
     @DisplayName("A 402 rejection is named out of credits, so the run is not recorded as never started")
     void triggerAgentInsights__paymentRequired__namesOutOfCredits() {
         stubTriggerStatus(402);
+
+        assertThatExceptionOfType(AgentInsightsTriggerException.class)
+                .isThrownBy(this::trigger)
+                .extracting(AgentInsightsTriggerException::getReason)
+                .isEqualTo(AgentInsightsJob.FailureReason.OUT_OF_CREDITS);
+    }
+
+    @Test
+    @DisplayName("A 402 for Comet's free budget is named as such, so the rollout is cancelled rather than the customer blamed")
+    void triggerAgentInsights__paymentRequiredForFreeBudget__namesFreePoolExhausted() {
+        stubTriggerResponse(402, "application/json", JsonUtils.writeValueAsString(
+                new PlatformAgentInsightsReportClient.PaymentRequiredBody("Free diagnostics budget unavailable",
+                        AgentInsightsJob.FailureReason.FREE_POOL_EXHAUSTED)));
+
+        assertThatExceptionOfType(AgentInsightsTriggerException.class)
+                .isThrownBy(this::trigger)
+                .extracting(AgentInsightsTriggerException::getReason)
+                .isEqualTo(AgentInsightsJob.FailureReason.FREE_POOL_EXHAUSTED);
+    }
+
+    @Test
+    @DisplayName("A 402 whose body cannot be read is named out of credits, the reading that surfaces to the user")
+    void triggerAgentInsights__paymentRequiredWithUnreadableBody__namesOutOfCredits() {
+        // Falling back the other way would silently cancel the whole rollout over a malformed response.
+        stubTriggerResponse(402, "text/html", "<html>Payment required</html>");
 
         assertThatExceptionOfType(AgentInsightsTriggerException.class)
                 .isThrownBy(this::trigger)
@@ -89,5 +135,31 @@ class PlatformAgentInsightsReportClientTest {
         stubTriggerStatus(202);
 
         assertThatNoException().isThrownBy(this::trigger);
+    }
+
+    @Test
+    @DisplayName("The project guidance is sent as custom_prompt, the platform field reserved for it")
+    void triggerAgentInsights__withGuidance__sendsItAsCustomPrompt() {
+        stubTriggerStatus(202);
+        var reportId = UUID.randomUUID().toString();
+
+        trigger(reportId, "Only report billing failures");
+
+        wireMock.server().verify(postRequestedFor(urlPathEqualTo(TRIGGER_PATH))
+                .withRequestBody(matchingJsonPath("$.report_id", equalTo(reportId)))
+                .withRequestBody(matchingJsonPath("$.custom_prompt", equalTo("Only report billing failures"))));
+    }
+
+    @Test
+    @DisplayName("Without guidance no custom_prompt is sent")
+    void triggerAgentInsights__withoutGuidance__sendsNoCustomPrompt() {
+        stubTriggerStatus(202);
+        var reportId = UUID.randomUUID().toString();
+
+        trigger(reportId, null);
+
+        wireMock.server().verify(postRequestedFor(urlPathEqualTo(TRIGGER_PATH))
+                .withRequestBody(matchingJsonPath("$.report_id", equalTo(reportId)))
+                .withRequestBody(notMatching(".*custom_prompt.*")));
     }
 }

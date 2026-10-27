@@ -12,6 +12,7 @@ import { processFilters } from "@/lib/filters";
 
 type UseInsightsViewsListParams = {
   workspaceName: string;
+  projectId?: string | null;
   sorting?: Sorting;
   search?: string;
   filters?: Filter[];
@@ -29,6 +30,7 @@ const getInsightsViewsList = async (
   { signal }: QueryFunctionContext,
   {
     workspaceName,
+    projectId,
     sorting,
     search,
     filters,
@@ -40,6 +42,7 @@ const getInsightsViewsList = async (
     signal,
     params: {
       workspace_name: workspaceName,
+      ...(projectId && { project_id: projectId }),
       ...processSorting(sorting),
       ...(search && { name: search }),
       ...processFilters(filters),

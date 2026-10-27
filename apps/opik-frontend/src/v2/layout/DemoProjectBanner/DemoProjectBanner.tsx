@@ -1,19 +1,11 @@
-import React, { useEffect, useRef } from "react";
+import React, { useLayoutEffect, useRef } from "react";
 import { Link } from "@tanstack/react-router";
-import useLocalStorageState from "use-local-storage-state";
-import { useFeatureFlagVariantKey } from "posthog-js/react";
 
-import { useActiveProjectId, useActiveWorkspaceName } from "@/store/AppStore";
+import { useActiveWorkspaceName } from "@/store/AppStore";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
-import useProjectById from "@/api/projects/useProjectById";
-import { DEMO_PROJECT_NAME } from "@/constants/shared";
-import {
-  AGENT_ONBOARDING_KEY,
-  AGENT_ONBOARDING_STEPS,
-  AgentOnboardingState,
-  AI_ASSISTED_OPIK_SKILLS_FEATURE_FLAG_KEY,
-  DEFAULT_ONBOARDING_FLOW,
-} from "@/v2/pages/GetStartedPage/AgentOnboarding/AgentOnboardingContext";
+import { AGENT_ONBOARDING_STEPS } from "@/v2/pages/GetStartedPage/AgentOnboarding/AgentOnboardingContext";
+import { DEMO_BANNER_HEIGHT } from "./constants";
+import { useDemoProjectBannerVisibility } from "./useDemoProjectBannerVisibility";
 import useAutoCompleteAgentOnboarding from "./useAutoCompleteAgentOnboarding";
 
 interface DemoProjectBannerProps {
@@ -23,47 +15,36 @@ interface DemoProjectBannerProps {
 const DemoProjectBanner: React.FC<DemoProjectBannerProps> = ({
   onChangeHeight,
 }) => {
-  const heightRef = useRef(0);
-  const activeProjectId = useActiveProjectId();
+  const heightRef = useRef(DEMO_BANNER_HEIGHT);
   const workspaceName = useActiveWorkspaceName();
 
-  const { data: project } = useProjectById(
-    { projectId: activeProjectId! },
-    { enabled: !!activeProjectId },
-  );
-
-  const [onboardingState, setOnboardingState] =
-    useLocalStorageState<AgentOnboardingState>(
-      `${AGENT_ONBOARDING_KEY}-${workspaceName}`,
-    );
+  const {
+    isBannerVisible,
+    isDemoProjectActive,
+    isOnboardingActive,
+    isManualFlow,
+    onboardingState,
+    setOnboardingState,
+  } = useDemoProjectBannerVisibility();
 
   const { ref } = useObserveResizeNode<HTMLDivElement>((node) => {
     heightRef.current = node.clientHeight;
     onChangeHeight(node.clientHeight);
   });
 
-  const variant =
-    useFeatureFlagVariantKey(AI_ASSISTED_OPIK_SKILLS_FEATURE_FLAG_KEY) ??
-    DEFAULT_ONBOARDING_FLOW;
-  const isManualFlow = variant === "manual";
-
-  const isDemoProject = project?.name === DEMO_PROJECT_NAME;
-  const isOnboardingActive =
-    !!onboardingState?.step &&
-    onboardingState.step !== AGENT_ONBOARDING_STEPS.DONE;
-
+  // Sticky active project on purpose: this must keep running after the user
+  // leaves the demo project.
   useAutoCompleteAgentOnboarding({
     agentName: onboardingState?.agentName,
-    enabled: isDemoProject && isOnboardingActive,
+    enabled: isDemoProjectActive && isOnboardingActive,
   });
 
-  const hideBanner = !isDemoProject || (!isOnboardingActive && !isManualFlow);
+  // Before paint, with the known height, or the bar overlaps the content.
+  useLayoutEffect(() => {
+    onChangeHeight(isBannerVisible ? heightRef.current : 0);
+  }, [isBannerVisible, onChangeHeight]);
 
-  useEffect(() => {
-    onChangeHeight(!hideBanner ? heightRef.current : 0);
-  }, [hideBanner, onChangeHeight]);
-
-  if (hideBanner) {
+  if (!isBannerVisible) {
     return null;
   }
 

@@ -36,6 +36,7 @@ import {
 } from "@/lib/dashboard/utils";
 import { Dashboard, DASHBOARD_TYPE } from "@/types/dashboard";
 import { useDashboardStore } from "@/store/DashboardStore";
+import { useActiveProjectId } from "@/store/AppStore";
 
 export type ProjectDashboardViewDialogMode = "create" | "edit" | "clone";
 
@@ -80,6 +81,7 @@ const ProjectDashboardViewDialog: React.FC<ProjectDashboardViewDialogProps> = ({
   onCreateSuccess,
 }) => {
   const { toast } = useToast();
+  const projectId = useActiveProjectId();
   const config = MODE_CONFIG[mode];
 
   const { mutate: createMutate, isPending: isCreating } =
@@ -210,6 +212,7 @@ const ProjectDashboardViewDialog: React.FC<ProjectDashboardViewDialogProps> = ({
                 mode === "create"
                   ? DASHBOARD_TYPE.MULTI_PROJECT
                   : dashboard?.type,
+              ...(projectId && { project_id: projectId }),
             },
           },
           {
@@ -229,6 +232,7 @@ const ProjectDashboardViewDialog: React.FC<ProjectDashboardViewDialogProps> = ({
     [
       mode,
       dashboard,
+      projectId,
       updateMutate,
       createMutate,
       setOpen,

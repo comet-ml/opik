@@ -4,12 +4,24 @@ from typing import Any, Optional
 from .. import base_metric, score_result
 
 
+def _reject_non_standard_constant(constant: str) -> None:
+    """Refuse the ``NaN``/``Infinity``/``-Infinity`` extensions ``json.loads`` accepts.
+
+    They are not part of the JSON grammar (RFC 8259), so a strict parser such as
+    JavaScript's ``JSON.parse`` rejects them; the metric should agree with it.
+    """
+    raise ValueError(f"{constant} is not valid JSON")
+
+
 class IsJson(base_metric.BaseMetric):
     """
     A metric that checks if a given output string is valid JSON.
 
-    This metric returns a score of 1.0 if the output string can be parsed as JSON,
-    and 0.0 otherwise.
+    This metric returns a score of 1.0 if the output string can be parsed as
+    standard JSON (RFC 8259), and 0.0 otherwise. The ``NaN``, ``Infinity`` and
+    ``-Infinity`` literals that Python's ``json`` module accepts by default are
+    treated as invalid, since they are not JSON and are rejected by other
+    parsers (for example JavaScript's ``JSON.parse``).
 
     Args:
         name: The name of the metric. Defaults to "is_json_metric".
@@ -48,7 +60,7 @@ class IsJson(base_metric.BaseMetric):
                 is valid JSON, 0.0 otherwise.
         """
         try:
-            json.loads(output)
+            json.loads(output, parse_constant=_reject_non_standard_constant)
             return score_result.ScoreResult(value=1.0, name=self.name)
         except Exception:
             return score_result.ScoreResult(value=0.0, name=self.name)

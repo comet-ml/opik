@@ -79,14 +79,71 @@ public interface WorkspaceMetricsDAO {
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
 
+    /**
+     * Scores live in both the legacy {@code feedback_scores} table and {@code authored_feedback_scores} (every write
+     * with an author, e.g. SDK, UI and online scoring). Both are read with the same dedup key as
+     * {@code ProjectMetricsDAO}'s {@code feedback_scores_deduped}, keeping the latest value per key, then averaged per
+     * trace and score name before the window aggregate. The latest value is taken with {@code argMax} over a
+     * {@code GROUP BY} rather than {@code ORDER BY ... LIMIT 1 BY}: same result, but no global sort, which made the
+     * heaviest workspace-wide windows about 40% faster on prod. The legacy table keeps {@code FINAL} because its
+     * {@code last_updated_by}, used as the author, can differ between versions of one row. A trace score's
+     * {@code entity_id} is the trace id, so the {@code entity_id} range bounds both scans to the traces in the window.
+     */
     private static final String GET_FEEDBACK_SCORES_SUMMARY = """
+            WITH feedback_scores_deduped AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       argMax(value, last_updated_at) AS value,
+                       author,
+                       source_queue_id
+                FROM (
+                    SELECT workspace_id,
+                           project_id,
+                           entity_id,
+                           name,
+                           value,
+                           last_updated_at,
+                           last_updated_by AS author,
+                           CAST('' AS FixedString(36)) AS source_queue_id
+                    FROM feedback_scores FINAL
+                    WHERE workspace_id = :workspace_id
+                      <if(project_ids)> AND project_id IN :project_ids <endif>
+                      AND entity_type = 'trace'
+                      AND entity_id BETWEEN :id_prior_start AND :id_end
+                    UNION ALL
+                    SELECT workspace_id,
+                           project_id,
+                           entity_id,
+                           name,
+                           value,
+                           last_updated_at,
+                           author,
+                           source_queue_id
+                    FROM authored_feedback_scores
+                    WHERE workspace_id = :workspace_id
+                      <if(project_ids)> AND project_id IN :project_ids <endif>
+                      AND entity_type = 'trace'
+                      AND entity_id BETWEEN :id_prior_start AND :id_end
+                )
+                GROUP BY workspace_id, project_id, entity_id, name, author, source_queue_id
+            ), feedback_scores_final AS (
+                SELECT project_id,
+                       entity_id,
+                       name,
+                       avg(value) AS value
+                FROM feedback_scores_deduped
+                GROUP BY workspace_id, project_id, entity_id, name
+            )
             SELECT
                 AVGIf(fs.value, t.id >= :id_start AND t.id \\<= :id_end) AS current,
                 AVGIf(fs.value, t.id >= :id_prior_start AND t.id \\< :id_start) AS previous,
                 fs.name
-            FROM feedback_scores fs final
+            FROM feedback_scores_final fs
             JOIN (
                 SELECT
+                    project_id,
                     id
                 FROM traces final
                 WHERE workspace_id = :workspace_id
@@ -96,11 +153,7 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                       >= (toDate32(UUIDv7ToDateTime(toUUID(:id_prior_start), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:id_prior_start), 'UTC'), 1)))
                   AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                       \\<= (toDate32(UUIDv7ToDateTime(toUUID(:id_end), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:id_end), 'UTC'), 1)))
-                  AND start_time BETWEEN parseDateTime64BestEffort(:timestamp_prior_start, 9) AND parseDateTime64BestEffort(:timestamp_end, 9)
-            ) t ON t.id = fs.entity_id
-            WHERE workspace_id = :workspace_id
-                <if(project_ids)> AND project_id IN :project_ids <endif>
-                AND entity_type = 'trace'
+            ) t ON t.project_id = fs.project_id AND t.id = fs.entity_id
             GROUP BY fs.name;
             """;
 
@@ -113,21 +166,69 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
             WHERE workspace_id = :workspace_id
                 <if(project_ids)> AND project_id IN :project_ids <endif>
                 AND id BETWEEN :id_prior_start AND :id_end
-                AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:id_prior_start), 'UTC'))
-                AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:id_end), 'UTC'))
-                AND start_time BETWEEN parseDateTime64BestEffort(:timestamp_prior_start, 9) AND parseDateTime64BestEffort(:timestamp_end, 9);
+                AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                    >= (toDate32(UUIDv7ToDateTime(toUUID(:id_prior_start), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:id_prior_start), 'UTC'), 1)))
+                AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                    \\<= (toDate32(UUIDv7ToDateTime(toUUID(:id_end), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:id_end), 'UTC'), 1)));
             """;
 
+    /** Same score sources and dedup as {@link #GET_FEEDBACK_SCORES_SUMMARY}. */
     private static final String GET_FEEDBACK_SCORES_DAILY_BY_PROJECT = """
-            WITH feedback_scores_daily AS (
+            WITH feedback_scores_deduped AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       argMax(value, last_updated_at) AS value,
+                       author,
+                       source_queue_id
+                FROM (
+                    SELECT workspace_id,
+                           project_id,
+                           entity_id,
+                           name,
+                           value,
+                           last_updated_at,
+                           last_updated_by AS author,
+                           CAST('' AS FixedString(36)) AS source_queue_id
+                    FROM feedback_scores FINAL
+                    WHERE workspace_id = :workspace_id
+                      AND project_id IN :project_ids
+                      AND entity_type = 'trace'
+                      AND entity_id BETWEEN :id_start AND :id_end
+                      AND name = :name
+                    UNION ALL
+                    SELECT workspace_id,
+                           project_id,
+                           entity_id,
+                           name,
+                           value,
+                           last_updated_at,
+                           author,
+                           source_queue_id
+                    FROM authored_feedback_scores
+                    WHERE workspace_id = :workspace_id
+                      AND project_id IN :project_ids
+                      AND entity_type = 'trace'
+                      AND entity_id BETWEEN :id_start AND :id_end
+                      AND name = :name
+                )
+                GROUP BY workspace_id, project_id, entity_id, name, author, source_queue_id
+            ), feedback_scores_final AS (
+                SELECT project_id,
+                       entity_id,
+                       avg(value) AS value
+                FROM feedback_scores_deduped
+                GROUP BY workspace_id, project_id, entity_id, name
+            ), feedback_scores_daily AS (
                 SELECT fs.project_id AS project_id,
-                       toStartOfInterval(t.start_time, toIntervalDay(1)) AS bucket,
+                       toStartOfInterval(UUIDv7ToDateTime(toUUID(t.id)), toIntervalDay(1)) AS bucket,
                        if(COUNT(1) = 0, NULL, avg(fs.value)) AS value
-                FROM feedback_scores fs final
+                FROM feedback_scores_final fs
                 JOIN (
                     SELECT
-                        id,
-                        start_time
+                        project_id,
+                        id
                     FROM traces final
                     WHERE workspace_id = :workspace_id
                       AND project_id IN :project_ids
@@ -136,12 +237,7 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                           >= (toDate32(UUIDv7ToDateTime(toUUID(:id_start), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:id_start), 'UTC'), 1)))
                       AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                           <= (toDate32(UUIDv7ToDateTime(toUUID(:id_end), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:id_end), 'UTC'), 1)))
-                      AND start_time BETWEEN parseDateTime64BestEffort(:timestamp_start, 9) AND parseDateTime64BestEffort(:timestamp_end, 9)
-                ) t ON t.id = fs.entity_id
-                WHERE workspace_id = :workspace_id
-                  AND project_id IN :project_ids
-                  AND entity_type = 'trace'
-                  AND name = :name
+                ) t ON t.project_id = fs.project_id AND t.id = fs.entity_id
                 GROUP BY fs.project_id, bucket
                 ORDER BY fs.project_id, bucket
                 WITH FILL
@@ -158,15 +254,60 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
             ;
             """;
 
+    /** Same score sources and dedup as {@link #GET_FEEDBACK_SCORES_SUMMARY}. */
     private static final String GET_FEEDBACK_SCORES_DAILY = """
-            WITH feedback_scores_daily AS (
-                SELECT toStartOfInterval(t.start_time, toIntervalDay(1)) AS bucket,
+            WITH feedback_scores_deduped AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       argMax(value, last_updated_at) AS value,
+                       author,
+                       source_queue_id
+                FROM (
+                    SELECT workspace_id,
+                           project_id,
+                           entity_id,
+                           name,
+                           value,
+                           last_updated_at,
+                           last_updated_by AS author,
+                           CAST('' AS FixedString(36)) AS source_queue_id
+                    FROM feedback_scores FINAL
+                    WHERE workspace_id = :workspace_id
+                      AND entity_type = 'trace'
+                      AND entity_id BETWEEN :id_start AND :id_end
+                      AND name = :name
+                    UNION ALL
+                    SELECT workspace_id,
+                           project_id,
+                           entity_id,
+                           name,
+                           value,
+                           last_updated_at,
+                           author,
+                           source_queue_id
+                    FROM authored_feedback_scores
+                    WHERE workspace_id = :workspace_id
+                      AND entity_type = 'trace'
+                      AND entity_id BETWEEN :id_start AND :id_end
+                      AND name = :name
+                )
+                GROUP BY workspace_id, project_id, entity_id, name, author, source_queue_id
+            ), feedback_scores_final AS (
+                SELECT project_id,
+                       entity_id,
+                       avg(value) AS value
+                FROM feedback_scores_deduped
+                GROUP BY workspace_id, project_id, entity_id, name
+            ), feedback_scores_daily AS (
+                SELECT toStartOfInterval(UUIDv7ToDateTime(toUUID(t.id)), toIntervalDay(1)) AS bucket,
                        if(COUNT(1) = 0, NULL, avg(fs.value)) AS value
-                FROM feedback_scores fs final
+                FROM feedback_scores_final fs
                 JOIN (
                     SELECT
-                        id,
-                        start_time
+                        project_id,
+                        id
                     FROM traces final
                     WHERE workspace_id = :workspace_id
                       AND id BETWEEN :id_start AND :id_end
@@ -174,11 +315,7 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                           >= (toDate32(UUIDv7ToDateTime(toUUID(:id_start), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:id_start), 'UTC'), 1)))
                       AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                           <= (toDate32(UUIDv7ToDateTime(toUUID(:id_end), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:id_end), 'UTC'), 1)))
-                      AND start_time BETWEEN parseDateTime64BestEffort(:timestamp_start, 9) AND parseDateTime64BestEffort(:timestamp_end, 9)
-                ) t ON t.id = fs.entity_id
-                WHERE workspace_id = :workspace_id
-                  AND entity_type = 'trace'
-                  AND name = :name
+                ) t ON t.project_id = fs.project_id AND t.id = fs.entity_id
                 GROUP BY bucket
                 ORDER BY bucket
                 WITH FILL
@@ -196,16 +333,17 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
 
     private static final String GET_COSTS_DAILY_BY_PROJECT = """
             WITH costs_daily AS (
-                SELECT toStartOfInterval(start_time, toIntervalDay(1)) AS bucket,
+                SELECT toStartOfInterval(UUIDv7ToDateTime(toUUID(id)), toIntervalDay(1)) AS bucket,
                        if(COUNT(1) = 0, NULL, sum(total_estimated_cost)) AS value,
                        project_id
                 FROM spans final
                 WHERE workspace_id = :workspace_id
                   AND project_id IN :project_ids
                   AND id BETWEEN :id_start AND :id_end
-                  AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:id_start), 'UTC'))
-                  AND toMonday(id_at) <= toMonday(UUIDv7ToDateTime(toUUID(:id_end), 'UTC'))
-                  AND start_time BETWEEN parseDateTime64BestEffort(:timestamp_start, 9) AND parseDateTime64BestEffort(:timestamp_end, 9)
+                  AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                      >= (toDate32(UUIDv7ToDateTime(toUUID(:id_start), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:id_start), 'UTC'), 1)))
+                  AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                      <= (toDate32(UUIDv7ToDateTime(toUUID(:id_end), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:id_end), 'UTC'), 1)))
                 GROUP BY project_id, bucket
                 ORDER BY project_id, bucket
                 WITH FILL
@@ -224,14 +362,15 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
 
     private static final String GET_COSTS_DAILY = """
             WITH costs_daily AS (
-                SELECT toStartOfInterval(start_time, toIntervalDay(1)) AS bucket,
+                SELECT toStartOfInterval(UUIDv7ToDateTime(toUUID(id)), toIntervalDay(1)) AS bucket,
                        if(COUNT(1) = 0, NULL, sum(total_estimated_cost)) AS value
                 FROM spans final
                 WHERE workspace_id = :workspace_id
                   AND id BETWEEN :id_start AND :id_end
-                  AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:id_start), 'UTC'))
-                  AND toMonday(id_at) <= toMonday(UUIDv7ToDateTime(toUUID(:id_end), 'UTC'))
-                  AND start_time BETWEEN parseDateTime64BestEffort(:timestamp_start, 9) AND parseDateTime64BestEffort(:timestamp_end, 9)
+                  AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                      >= (toDate32(UUIDv7ToDateTime(toUUID(:id_start), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:id_start), 'UTC'), 1)))
+                  AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                      <= (toDate32(UUIDv7ToDateTime(toUUID(:id_end), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:id_end), 'UTC'), 1)))
                 GROUP BY bucket
                 ORDER BY bucket
                 WITH FILL
@@ -273,7 +412,7 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                 ORDER BY name, bucket
                 <if(with_fill)>WITH FILL
                     FROM <fill_from>
-                    TO toDateTime(UUIDv7ToDateTime(toUUID(:uuid_to_time)))
+                    TO <fill_to>
                     STEP <step><endif>
             )
             SELECT NULL AS project_id,
@@ -325,7 +464,6 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
             FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY, "feedback_scores_empty_filters");
 
     private final @NonNull TransactionTemplateAsync template;
-    private final @NonNull IdGenerator idGenerator;
     private final @NonNull InstantToUUIDMapper instantToUUIDMapper;
     private final @NonNull OpikConfiguration configuration;
 
@@ -414,12 +552,15 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                     userName, request.projectIds().size());
 
             if (isTotal) {
-                stTemplate.add("bucket", "toDateTime(UUIDv7ToDateTime(toUUID(:uuid_from_time)))");
+                stTemplate.add("bucket", "toDateTime64(UUIDv7ToDateTime(toUUID(:uuid_from_time)), 0, 'UTC')");
             } else {
+                var fillTo = fillTo(request.intervalEnd() != null);
                 stTemplate.add("step", intervalToSql(interval))
-                        .add("bucket", wrapWeekly(interval,
-                                "toStartOfInterval(span_time, %s)".formatted(intervalToSql(interval))))
-                        .add("fill_from", wrapWeekly(interval,
+                        .add("fill_to", fillTo)
+                        .add("bucket", pinBucket(
+                                "toStartOfInterval(least(span_time, %s), %s)".formatted(fillTo,
+                                        intervalToSql(interval))))
+                        .add("fill_from", pinBucket(
                                 "toStartOfInterval(UUIDv7ToDateTime(toUUID(:uuid_from_time)), %s)"
                                         .formatted(intervalToSql(interval))));
             }
@@ -437,17 +578,23 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                                     .ifPresent(rendered -> stTemplate.add(placeholder, rendered))));
 
             stTemplate.add("uuid_from_time", true);
-            stTemplate.add("uuid_to_time", true);
+            if (spanColumnsNonNullable()) {
+                stTemplate.add("spans_partitioned", true);
+            }
+            if (request.intervalEnd() != null) {
+                stTemplate.add("uuid_to_time", true);
+            }
             if (!isTotal) {
                 stTemplate.add("with_fill", true);
             }
 
-            var intervalEnd = request.intervalEnd() != null ? request.intervalEnd() : Instant.now();
             var statement = connection.createStatement(stTemplate.render())
                     .bind("uuid_from_time", instantToUUIDMapper.toLowerBound(request.intervalStart()).toString())
-                    .bind("uuid_to_time", instantToUUIDMapper.toUpperBound(intervalEnd).toString())
                     .bind("workspace_id", workspaceId)
                     .bind("project_ids", request.projectIds().toArray(new UUID[0]));
+            if (request.intervalEnd() != null) {
+                statement.bind("uuid_to_time", instantToUUIDMapper.toUpperBound(request.intervalEnd()).toString());
+            }
 
             if (request.hasBreakdown() && request.breakdown().field() == BreakdownField.METADATA) {
                 statement.bind("metadata_key", request.breakdown().metadataKey());
@@ -469,11 +616,21 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
         });
     }
 
-    private String wrapWeekly(TimeInterval interval, String stmt) {
-        if (interval == TimeInterval.WEEKLY) {
-            return "toDateTime(%s)".formatted(stmt);
-        }
-        return stmt;
+    /**
+     * Pins a {@code WITH FILL} time expression to {@code DateTime64(0, 'UTC')}, so {@code bucket},
+     * {@code fill_from} and the {@code TO} clause share one width; ClickHouse rejects a {@code WITH FILL} whose
+     * three disagree (code 475). See {@code ProjectMetricsDAO.pinBucket} for why every interval needs it, and for
+     * what it does <em>not</em> fix.
+     */
+    /** See {@code ProjectMetricsDAO#fillTo}. */
+    private String fillTo(boolean hasEnd) {
+        return hasEnd
+                ? "toDateTime64(UUIDv7ToDateTime(toUUID(:uuid_to_time)), 0, 'UTC')"
+                : "toDateTime64(now64(0, 'UTC'), 0, 'UTC')";
+    }
+
+    private String pinBucket(String stmt) {
+        return "toDateTime64(%s, 0, 'UTC')".formatted(stmt);
     }
 
     private String intervalToSql(TimeInterval interval) {
@@ -494,9 +651,8 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
         var statement = connection.createStatement(query)
                 .bind("timestamp_start", request.intervalStart().toString())
                 .bind("timestamp_end", request.intervalEnd().toString())
-                .bind("id_start",
-                        idGenerator.getTimeOrderedEpoch(request.intervalStart().toEpochMilli()))
-                .bind("id_end", idGenerator.getTimeOrderedEpoch(request.intervalEnd().toEpochMilli()))
+                .bind("id_start", instantToUUIDMapper.toLowerBound(request.intervalStart()))
+                .bind("id_end", instantToUUIDMapper.toUpperBound(request.intervalEnd()))
                 .bind("name", request.name());
 
         if (CollectionUtils.isNotEmpty(request.projectIds())) {
@@ -529,14 +685,10 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
         }
 
         var statement = connection.createStatement(template.render())
-                .bind("timestamp_prior_start", getPriorStart(request.intervalStart(), request.intervalEnd()).toString())
-                .bind("timestamp_end", request.intervalEnd().toString())
-                .bind("id_start",
-                        idGenerator.getTimeOrderedEpoch(request.intervalStart().toEpochMilli()))
-                .bind("id_end", idGenerator.getTimeOrderedEpoch(request.intervalEnd().toEpochMilli()))
-                .bind("id_prior_start",
-                        idGenerator.getTimeOrderedEpoch(
-                                getPriorStart(request.intervalStart(), request.intervalEnd()).toEpochMilli()));
+                .bind("id_start", instantToUUIDMapper.toLowerBound(request.intervalStart()))
+                .bind("id_end", instantToUUIDMapper.toUpperBound(request.intervalEnd()))
+                .bind("id_prior_start", instantToUUIDMapper.toLowerBound(
+                        getPriorStart(request.intervalStart(), request.intervalEnd())));
 
         if (CollectionUtils.isNotEmpty(request.projectIds())) {
             statement.bind("project_ids", request.projectIds());
@@ -579,8 +731,12 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
         return dataItems.isEmpty() ? null : dataItems;
     }
 
-    // Bucket timestamps come back as OffsetDateTime for DateTime64 columns (e.g. the cost query's start_time) but as
-    // LocalDateTime for plain DateTime expressions (e.g. UUIDv7ToDateTime-derived span_time). Both represent UTC.
+    /**
+     * Both bucket shapes this DAO produces, read as one {@code Instant}: the span-metric buckets are
+     * {@code DateTime64} — {@link #pinBucket} casts them — and arrive as {@code OffsetDateTime}, while the daily
+     * cost and feedback buckets are a bare {@code toStartOfInterval} and arrive as {@code LocalDateTime}. Both
+     * represent UTC.
+     */
     private Instant toInstant(Object bucket) {
         return switch (bucket) {
             case OffsetDateTime offsetDateTime -> offsetDateTime.toInstant();

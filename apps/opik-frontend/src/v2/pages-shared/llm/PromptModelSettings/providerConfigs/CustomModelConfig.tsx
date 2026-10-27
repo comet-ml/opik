@@ -5,22 +5,52 @@ import { jsonLanguage } from "@codemirror/lang-json";
 
 import SliderInputControl from "@/shared/SliderInputControl/SliderInputControl";
 import PromptModelSettingsTooltipContent from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
-import { LLMCustomConfigsType } from "@/types/providers";
+import {
+  LLMCustomConfigsType,
+  LLMPromptConfigsType,
+  PROVIDER_MODEL_TYPE,
+  PROVIDER_TYPE,
+} from "@/types/providers";
 import { DEFAULT_CUSTOM_CONFIGS } from "@/constants/llm";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import useJsonInput from "@/hooks/useJsonInput";
 import { Label } from "@/ui/label";
 import { FormErrorSkeleton } from "@/ui/form";
 import isUndefined from "lodash/isUndefined";
+import { getRequestParameters, resolveSamplingParams } from "@/lib/modelUtils";
+import {
+  getExtraBodySliderOverlap,
+  isSentToProvider,
+} from "@/lib/extraBodyParameters";
+import ExclusiveSamplingParams, {
+  resolveSamplingPresentation,
+} from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/ExclusiveSamplingParams";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { Info } from "lucide-react";
+import { ModelConfigParam } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
+import {
+  NO_OUTPUT_LIMIT_TOOLTIP,
+  getNoOutputLimitHint,
+} from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/noOutputLimit";
 
 interface CustomModelConfigProps {
   configs: Partial<LLMCustomConfigsType>;
   onChange: (configs: Partial<LLMCustomConfigsType>) => void;
+  model?: PROVIDER_MODEL_TYPE | "";
+  provider?: PROVIDER_TYPE;
+  unsupportedParams?: ReadonlySet<ModelConfigParam>;
 }
 
-const CustomModelConfig = ({ configs, onChange }: CustomModelConfigProps) => {
+const CustomModelConfig = ({
+  configs,
+  onChange,
+  model,
+  provider,
+  unsupportedParams,
+}: CustomModelConfigProps) => {
+  const supports = (param: ModelConfigParam) => !unsupportedParams?.has(param);
+  const sampling = resolveSamplingPresentation(model);
+  const { temperature, topP } = resolveSamplingParams(model ?? "", configs);
   const theme = useCodemirrorTheme({ editable: true });
 
   const handleExtraBodyParametersChange = useCallback(
@@ -35,64 +65,109 @@ const CustomModelConfig = ({ configs, onChange }: CustomModelConfigProps) => {
       value: configs.custom_parameters,
       onChange: handleExtraBodyParametersChange,
     });
+  const requestParameters = getRequestParameters(
+    model ?? "",
+    configs as LLMPromptConfigsType,
+  );
+  const isSentToRequest = (key: string) =>
+    isSentToProvider(provider, key, requestParameters[key]);
+  const {
+    sliderKeysInExtraBody,
+    sliderKeyNextToExtraBody,
+    extraBodyKeyNextToSlider,
+  } = getExtraBodySliderOverlap({
+    extraBody: configs.custom_parameters,
+    provider,
+    exclusiveSampling: sampling === "exclusive",
+    sentSliders: {
+      temperature: isSentToRequest("temperature"),
+      top_p: supports("topP") && isSentToRequest("top_p"),
+      max_completion_tokens:
+        supports("maxCompletionTokens") &&
+        isSentToRequest("max_completion_tokens"),
+      frequency_penalty: isSentToRequest("frequency_penalty"),
+      presence_penalty: isSentToRequest("presence_penalty"),
+    },
+  });
 
   return (
     <div className="flex w-72 flex-col gap-6">
-      {!isUndefined(configs.temperature) && (
-        <SliderInputControl
-          value={configs.temperature}
-          onChange={(v) => onChange({ temperature: v })}
-          id="temperature"
-          min={0}
-          max={1}
-          step={0.01}
-          defaultValue={DEFAULT_CUSTOM_CONFIGS.TEMPERATURE}
-          label="Temperature"
-          tooltip={
-            <PromptModelSettingsTooltipContent text="Controls randomness: Lowering results in less random completions. As the temperature approaches zero, the model will become deterministic and repetitive." />
-          }
+      {sampling === "none" ? null : sampling === "exclusive" ? (
+        <ExclusiveSamplingParams
+          temperature={temperature}
+          topP={topP}
+          temperatureDefault={DEFAULT_CUSTOM_CONFIGS.TEMPERATURE}
+          topPDefault={DEFAULT_CUSTOM_CONFIGS.TOP_P}
+          temperatureMin={0}
+          offerChoice={supports("topP")}
+          onChange={onChange}
         />
+      ) : (
+        <>
+          {!isUndefined(configs.temperature) && (
+            <SliderInputControl
+              value={configs.temperature}
+              onChange={(v) => onChange({ temperature: v })}
+              id="temperature"
+              min={0}
+              max={2}
+              step={0.01}
+              defaultValue={DEFAULT_CUSTOM_CONFIGS.TEMPERATURE}
+              label="Temperature"
+              tooltip={
+                <PromptModelSettingsTooltipContent text="Controls randomness: Lowering results in less random completions. As the temperature approaches zero, the model will become deterministic and repetitive." />
+              }
+            />
+          )}
+        </>
       )}
 
-      {!isUndefined(configs.maxCompletionTokens) && (
-        <SliderInputControl
-          value={configs.maxCompletionTokens}
-          onChange={(v) => onChange({ maxCompletionTokens: v })}
-          id="maxCompletionTokens"
-          min={0}
-          max={10000}
-          step={1}
-          defaultValue={DEFAULT_CUSTOM_CONFIGS.MAX_COMPLETION_TOKENS}
-          label="Max output tokens"
-          tooltip={
-            <PromptModelSettingsTooltipContent text="The maximum number of tokens to generate shared between the prompt and completion. The exact limit varies by model. (One token is roughly 4 characters for standard English text)." />
-          }
-        />
-      )}
+      {supports("maxCompletionTokens") &&
+        !isUndefined(configs.maxCompletionTokens) && (
+          <SliderInputControl
+            value={configs.maxCompletionTokens}
+            onChange={(v) => onChange({ maxCompletionTokens: v })}
+            id="maxCompletionTokens"
+            min={0}
+            max={10000}
+            step={1}
+            integer
+            hint={getNoOutputLimitHint(configs.maxCompletionTokens)}
+            defaultValue={DEFAULT_CUSTOM_CONFIGS.MAX_COMPLETION_TOKENS}
+            label="Max output tokens"
+            tooltip={
+              <PromptModelSettingsTooltipContent
+                text={`The maximum number of tokens the model can generate in its response. The prompt does not count toward it. On reasoning models, reasoning tokens count toward it too, so a low limit can leave the response empty. The exact limit varies by model. ${NO_OUTPUT_LIMIT_TOOLTIP} (One token is roughly 4 characters for standard English text).`}
+              />
+            }
+          />
+        )}
 
-      {!isUndefined(configs.topP) && (
-        <SliderInputControl
-          value={configs.topP}
-          onChange={(v) => onChange({ topP: v })}
-          id="topP"
-          min={0}
-          max={1}
-          step={0.01}
-          defaultValue={DEFAULT_CUSTOM_CONFIGS.TOP_P}
-          label="Top P"
-          tooltip={
-            <PromptModelSettingsTooltipContent text="Controls diversity via nucleus sampling: 0.5 means half of all likelihood-weighted options are considered" />
-          }
-        />
-      )}
+      {sampling === "independent" &&
+        supports("topP") &&
+        !isUndefined(configs.topP) && (
+          <SliderInputControl
+            value={configs.topP}
+            onChange={(v) => onChange({ topP: v })}
+            id="topP"
+            min={0}
+            max={1}
+            step={0.01}
+            defaultValue={DEFAULT_CUSTOM_CONFIGS.TOP_P}
+            label="Top P"
+            tooltip={
+              <PromptModelSettingsTooltipContent text="Controls diversity via nucleus sampling: 0.5 means half of all likelihood-weighted options are considered" />
+            }
+          />
+        )}
 
       {!isUndefined(configs.frequencyPenalty) && (
         <SliderInputControl
           value={configs.frequencyPenalty}
           onChange={(v) => onChange({ frequencyPenalty: v })}
           id="frequencyPenalty"
-          min={0}
-          max={1}
+          min={-2}
+          max={2}
           step={0.01}
           defaultValue={DEFAULT_CUSTOM_CONFIGS.FREQUENCY_PENALTY}
           label="Frequency penalty"
@@ -107,8 +182,8 @@ const CustomModelConfig = ({ configs, onChange }: CustomModelConfigProps) => {
           value={configs.presencePenalty}
           onChange={(v) => onChange({ presencePenalty: v })}
           id="presencePenalty"
-          min={0}
-          max={1}
+          min={-2}
+          max={2}
           step={0.01}
           defaultValue={DEFAULT_CUSTOM_CONFIGS.PRESENCE_PENALTY}
           label="Presence penalty"
@@ -118,36 +193,40 @@ const CustomModelConfig = ({ configs, onChange }: CustomModelConfigProps) => {
         />
       )}
 
-      <SliderInputControl
-        value={configs.throttling ?? DEFAULT_CUSTOM_CONFIGS.THROTTLING}
-        onChange={(v) => onChange({ throttling: v })}
-        id="throttling"
-        min={0}
-        max={10}
-        step={0.1}
-        defaultValue={DEFAULT_CUSTOM_CONFIGS.THROTTLING}
-        label="Throttling (seconds)"
-        tooltip={
-          <PromptModelSettingsTooltipContent text="Minimum time in seconds between consecutive requests to avoid rate limiting" />
-        }
-      />
+      {supports("throttling") && (
+        <SliderInputControl
+          value={configs.throttling ?? DEFAULT_CUSTOM_CONFIGS.THROTTLING}
+          onChange={(v) => onChange({ throttling: v })}
+          id="throttling"
+          min={0}
+          max={10}
+          step={0.1}
+          defaultValue={DEFAULT_CUSTOM_CONFIGS.THROTTLING}
+          label="Throttling (seconds)"
+          tooltip={
+            <PromptModelSettingsTooltipContent text="Minimum time in seconds between consecutive requests to avoid rate limiting" />
+          }
+        />
+      )}
 
-      <SliderInputControl
-        value={
-          configs.maxConcurrentRequests ??
-          DEFAULT_CUSTOM_CONFIGS.MAX_CONCURRENT_REQUESTS
-        }
-        onChange={(v) => onChange({ maxConcurrentRequests: v })}
-        id="maxConcurrentRequests"
-        min={1}
-        max={20}
-        step={1}
-        defaultValue={DEFAULT_CUSTOM_CONFIGS.MAX_CONCURRENT_REQUESTS}
-        label="Max concurrent requests"
-        tooltip={
-          <PromptModelSettingsTooltipContent text="Maximum number of requests that can run simultaneously. Set to 1 for sequential execution, higher values for parallel processing" />
-        }
-      />
+      {supports("maxConcurrentRequests") && (
+        <SliderInputControl
+          value={
+            configs.maxConcurrentRequests ??
+            DEFAULT_CUSTOM_CONFIGS.MAX_CONCURRENT_REQUESTS
+          }
+          onChange={(v) => onChange({ maxConcurrentRequests: v })}
+          id="maxConcurrentRequests"
+          min={1}
+          max={20}
+          step={1}
+          defaultValue={DEFAULT_CUSTOM_CONFIGS.MAX_CONCURRENT_REQUESTS}
+          label="Max concurrent requests"
+          tooltip={
+            <PromptModelSettingsTooltipContent text="Maximum number of requests that can run simultaneously. Set to 1 for sequential execution, higher values for parallel processing" />
+          }
+        />
+      )}
 
       <div className="flex flex-col gap-2">
         <Label htmlFor="custom_parameters" className="flex items-center gap-1">
@@ -177,7 +256,27 @@ const CustomModelConfig = ({ configs, onChange }: CustomModelConfigProps) => {
             }}
           />
         </div>
-        {showInvalidJSON && <FormErrorSkeleton>Invalid JSON</FormErrorSkeleton>}
+        {showInvalidJSON ? (
+          <FormErrorSkeleton>
+            {configs.custom_parameters
+              ? "Invalid JSON, not saved. Runs keep the last valid JSON."
+              : "Invalid JSON, not saved."}
+          </FormErrorSkeleton>
+        ) : (
+          <>
+            {sliderKeysInExtraBody.length > 0 && (
+              <p className="comet-body-xs text-light-slate">
+                Sent instead of the slider: {sliderKeysInExtraBody.join(", ")}
+              </p>
+            )}
+            {extraBodyKeyNextToSlider && (
+              <p className="comet-body-xs text-light-slate">
+                {extraBodyKeyNextToSlider} is sent next to{" "}
+                {sliderKeyNextToExtraBody}. Claude may reject the two together.
+              </p>
+            )}
+          </>
+        )}
       </div>
     </div>
   );

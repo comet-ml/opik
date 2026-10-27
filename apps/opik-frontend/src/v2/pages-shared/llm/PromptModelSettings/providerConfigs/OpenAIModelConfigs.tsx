@@ -3,17 +3,26 @@ import React from "react";
 import SliderInputControl from "@/shared/SliderInputControl/SliderInputControl";
 import PromptModelSettingsTooltipContent from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
 import {
+  createSupports,
+  getOpenAIVisibleControls,
+  isAnyControlVisible,
+} from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/visibleControls";
+import {
   LLMOpenAIConfigsType,
+  OpenAiPipelineMode,
+  OpenAIReasoningEffort,
   PROVIDER_MODEL_TYPE,
-  ReasoningEffort,
+  PROVIDER_TYPE,
 } from "@/types/providers";
 import { DEFAULT_OPEN_AI_CONFIGS } from "@/constants/llm";
 import {
+  getMaxCompletionTokensRange,
   getOpenAIReasoningEffortOptions,
-  isReasoningModel,
-  supportsOpenAIReasoningEffort,
+  resolveEffort,
+  resolveMaxCompletionTokens,
+  resolveSamplingParams,
 } from "@/lib/modelUtils";
-import isUndefined from "lodash/isUndefined";
+import { ModelConfigParam } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
 import {
   Select,
   SelectContent,
@@ -28,62 +37,82 @@ interface OpenAIModelSettingsProps {
   configs: Partial<LLMOpenAIConfigsType>;
   model?: PROVIDER_MODEL_TYPE | "";
   onChange: (configs: Partial<LLMOpenAIConfigsType>) => void;
+  unsupportedParams?: ReadonlySet<ModelConfigParam>;
+  openAiPipelineMode?: OpenAiPipelineMode;
 }
 
 const OpenAIModelConfigs = ({
   configs,
   model,
   onChange,
+  unsupportedParams,
+  openAiPipelineMode,
 }: OpenAIModelSettingsProps) => {
-  // Reasoning models (GPT-5.2, GPT-5.1, GPT-5, O1, O3, O4-mini) require temperature = 1.0
-  const isReasoning = isReasoningModel(model);
+  const { temperature, topP } = resolveSamplingParams(model ?? "", configs);
+  const { reasoningEffort } = resolveEffort(
+    model ?? "",
+    configs,
+    openAiPipelineMode,
+  );
+  const visible = getOpenAIVisibleControls({
+    model,
+    configs,
+    supports: createSupports(unsupportedParams),
+    openAiPipelineMode,
+  });
+  const maxCompletionTokensRange = getMaxCompletionTokensRange(
+    PROVIDER_TYPE.OPEN_AI,
+    model ?? "",
+    openAiPipelineMode,
+  );
+
+  if (!isAnyControlVisible(visible)) return null;
 
   return (
     <div className="flex w-72 flex-col gap-6">
-      {!isUndefined(configs.temperature) && (
+      {visible.temperature && (
         <SliderInputControl
-          value={configs.temperature}
+          value={temperature}
           onChange={(v) => onChange({ temperature: v })}
           id="temperature"
-          min={isReasoning ? 1 : 0}
-          max={1}
+          min={0}
+          max={2}
           step={0.01}
-          defaultValue={isReasoning ? 1 : DEFAULT_OPEN_AI_CONFIGS.TEMPERATURE}
+          defaultValue={DEFAULT_OPEN_AI_CONFIGS.TEMPERATURE}
           label="Temperature"
           tooltip={
+            <PromptModelSettingsTooltipContent text="Controls randomness: Lowering results in less random completions. As the temperature approaches zero, the model will become deterministic and repetitive." />
+          }
+        />
+      )}
+
+      {visible.maxCompletionTokens && (
+        <SliderInputControl
+          value={resolveMaxCompletionTokens(
+            PROVIDER_TYPE.OPEN_AI,
+            model ?? "",
+            configs.maxCompletionTokens,
+            openAiPipelineMode,
+          )}
+          onChange={(v) => onChange({ maxCompletionTokens: v })}
+          id="maxCompletionTokens"
+          min={maxCompletionTokensRange.min}
+          max={maxCompletionTokensRange.max}
+          step={1}
+          integer
+          defaultValue={DEFAULT_OPEN_AI_CONFIGS.MAX_COMPLETION_TOKENS}
+          label="Max output tokens"
+          tooltip={
             <PromptModelSettingsTooltipContent
-              text={
-                isReasoning
-                  ? "Reasoning models require temperature = 1.0. This setting controls randomness in completions."
-                  : "Controls randomness: Lowering results in less random completions. As the temperature approaches zero, the model will become deterministic and repetitive."
-              }
+              text={`The maximum number of tokens the model can generate in its response. The prompt does not count toward it. On reasoning models, reasoning tokens count toward it too, so a low limit can leave the response empty. The exact limit varies by model. The minimum is ${maxCompletionTokensRange.min}. (One token is roughly 4 characters for standard English text).`}
             />
           }
         />
       )}
 
-      {!isUndefined(configs.maxCompletionTokens) && (
+      {visible.topP && (
         <SliderInputControl
-          value={configs.maxCompletionTokens}
-          onChange={(v) => onChange({ maxCompletionTokens: v })}
-          id="maxCompletionTokens"
-          min={0}
-          max={128000}
-          step={1}
-          defaultValue={DEFAULT_OPEN_AI_CONFIGS.MAX_COMPLETION_TOKENS}
-          label="Max output tokens"
-          tooltip={
-            <PromptModelSettingsTooltipContent text="The maximum number of tokens to generate shared between the prompt and completion. The exact limit varies by model. (One token is roughly 4 characters for standard English text)." />
-          }
-        />
-      )}
-
-      {!isUndefined(configs.topP) && !isReasoning && (
-        // OpenAI rejects top_p with "Unsupported parameter: 'top_p' is not supported with this
-        // model." on reasoning models (gpt-5.x, o-series). Hide the slider rather than send a
-        // value the backend will surface as a 400. Mirrors the temperature pinning above.
-        <SliderInputControl
-          value={configs.topP}
+          value={topP}
           onChange={(v) => onChange({ topP: v })}
           id="topP"
           min={0}
@@ -97,13 +126,13 @@ const OpenAIModelConfigs = ({
         />
       )}
 
-      {!isUndefined(configs.frequencyPenalty) && (
+      {visible.frequencyPenalty && (
         <SliderInputControl
           value={configs.frequencyPenalty}
           onChange={(v) => onChange({ frequencyPenalty: v })}
           id="frequencyPenalty"
-          min={0}
-          max={1}
+          min={-2}
+          max={2}
           step={0.01}
           defaultValue={DEFAULT_OPEN_AI_CONFIGS.FREQUENCY_PENALTY}
           label="Frequency penalty"
@@ -113,13 +142,13 @@ const OpenAIModelConfigs = ({
         />
       )}
 
-      {!isUndefined(configs.presencePenalty) && (
+      {visible.presencePenalty && (
         <SliderInputControl
           value={configs.presencePenalty}
           onChange={(v) => onChange({ presencePenalty: v })}
           id="presencePenalty"
-          min={0}
-          max={1}
+          min={-2}
+          max={2}
           step={0.01}
           defaultValue={DEFAULT_OPEN_AI_CONFIGS.PRESENCE_PENALTY}
           label="Presence penalty"
@@ -129,7 +158,7 @@ const OpenAIModelConfigs = ({
         />
       )}
 
-      {supportsOpenAIReasoningEffort(model) && (
+      {visible.reasoningEffort && (
         <div className="space-y-2">
           <div className="flex items-center space-x-2">
             <Label htmlFor="reasoningEffort" className="text-sm font-medium">
@@ -138,8 +167,8 @@ const OpenAIModelConfigs = ({
             <ExplainerIcon description="Controls how much effort the model puts into reasoning before responding. Higher effort may result in more thoughtful but slower responses." />
           </div>
           <Select
-            value={configs.reasoningEffort ?? "high"}
-            onValueChange={(value: ReasoningEffort) =>
+            value={reasoningEffort}
+            onValueChange={(value: OpenAIReasoningEffort) =>
               onChange({ reasoningEffort: value })
             }
           >
@@ -147,46 +176,52 @@ const OpenAIModelConfigs = ({
               <SelectValue placeholder="Select reasoning effort" />
             </SelectTrigger>
             <SelectContent>
-              {getOpenAIReasoningEffortOptions(model).map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>
-                  {opt.label}
-                </SelectItem>
-              ))}
+              {getOpenAIReasoningEffortOptions(model, openAiPipelineMode).map(
+                (opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ),
+              )}
             </SelectContent>
           </Select>
         </div>
       )}
 
-      <SliderInputControl
-        value={configs.throttling ?? DEFAULT_OPEN_AI_CONFIGS.THROTTLING}
-        onChange={(v) => onChange({ throttling: v })}
-        id="throttling"
-        min={0}
-        max={10}
-        step={0.1}
-        defaultValue={DEFAULT_OPEN_AI_CONFIGS.THROTTLING}
-        label="Throttling (seconds)"
-        tooltip={
-          <PromptModelSettingsTooltipContent text="Minimum time in seconds between consecutive requests to avoid rate limiting" />
-        }
-      />
+      {visible.throttling && (
+        <SliderInputControl
+          value={configs.throttling ?? DEFAULT_OPEN_AI_CONFIGS.THROTTLING}
+          onChange={(v) => onChange({ throttling: v })}
+          id="throttling"
+          min={0}
+          max={10}
+          step={0.1}
+          defaultValue={DEFAULT_OPEN_AI_CONFIGS.THROTTLING}
+          label="Throttling (seconds)"
+          tooltip={
+            <PromptModelSettingsTooltipContent text="Minimum time in seconds between consecutive requests to avoid rate limiting" />
+          }
+        />
+      )}
 
-      <SliderInputControl
-        value={
-          configs.maxConcurrentRequests ??
-          DEFAULT_OPEN_AI_CONFIGS.MAX_CONCURRENT_REQUESTS
-        }
-        onChange={(v) => onChange({ maxConcurrentRequests: v })}
-        id="maxConcurrentRequests"
-        min={1}
-        max={20}
-        step={1}
-        defaultValue={DEFAULT_OPEN_AI_CONFIGS.MAX_CONCURRENT_REQUESTS}
-        label="Max concurrent requests"
-        tooltip={
-          <PromptModelSettingsTooltipContent text="Maximum number of requests that can run simultaneously. Set to 1 for sequential execution, higher values for parallel processing" />
-        }
-      />
+      {visible.maxConcurrentRequests && (
+        <SliderInputControl
+          value={
+            configs.maxConcurrentRequests ??
+            DEFAULT_OPEN_AI_CONFIGS.MAX_CONCURRENT_REQUESTS
+          }
+          onChange={(v) => onChange({ maxConcurrentRequests: v })}
+          id="maxConcurrentRequests"
+          min={1}
+          max={20}
+          step={1}
+          defaultValue={DEFAULT_OPEN_AI_CONFIGS.MAX_CONCURRENT_REQUESTS}
+          label="Max concurrent requests"
+          tooltip={
+            <PromptModelSettingsTooltipContent text="Maximum number of requests that can run simultaneously. Set to 1 for sequential execution, higher values for parallel processing" />
+          }
+        />
+      )}
     </div>
   );
 };

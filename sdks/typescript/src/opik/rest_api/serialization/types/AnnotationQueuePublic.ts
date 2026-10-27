@@ -3,6 +3,8 @@
 import type * as OpikApi from "../../api/index.js";
 import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
+import { AnnotationQueueAnnotatorViewPublic } from "./AnnotationQueueAnnotatorViewPublic.js";
+import { AnnotationQueueAutomationPublic } from "./AnnotationQueueAutomationPublic.js";
 import { AnnotationQueuePublicScope } from "./AnnotationQueuePublicScope.js";
 import { AnnotationQueueReviewerPublic } from "./AnnotationQueueReviewerPublic.js";
 import { FeedbackScoreAveragePublic } from "./FeedbackScoreAveragePublic.js";
@@ -25,6 +27,8 @@ export const AnnotationQueuePublic: core.serialization.ObjectSchema<
     ),
     annotatorsPerItem: core.serialization.property("annotators_per_item", core.serialization.number().optional()),
     lockTimeoutSeconds: core.serialization.property("lock_timeout_seconds", core.serialization.number().optional()),
+    automation: AnnotationQueueAutomationPublic.optional(),
+    annotatorView: core.serialization.property("annotator_view", AnnotationQueueAnnotatorViewPublic.optional()),
     reviewers: core.serialization.list(AnnotationQueueReviewerPublic).optional(),
     feedbackScores: core.serialization.property(
         "feedback_scores",
@@ -50,6 +54,8 @@ export declare namespace AnnotationQueuePublic {
         feedback_definition_names?: string[] | null;
         annotators_per_item?: number | null;
         lock_timeout_seconds?: number | null;
+        automation?: AnnotationQueueAutomationPublic.Raw | null;
+        annotator_view?: AnnotationQueueAnnotatorViewPublic.Raw | null;
         reviewers?: AnnotationQueueReviewerPublic.Raw[] | null;
         feedback_scores?: FeedbackScoreAveragePublic.Raw[] | null;
         items_count?: number | null;

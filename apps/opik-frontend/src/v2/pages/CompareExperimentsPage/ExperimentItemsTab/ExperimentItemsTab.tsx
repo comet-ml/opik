@@ -36,7 +36,6 @@ import TraceDetailsPanel from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceD
 import CompareExperimentsPanel from "@/v2/pages/CompareExperimentsPage/CompareExperimentsPanel/CompareExperimentsPanel";
 import CompareExperimentsActionsPanel from "@/v2/pages/CompareExperimentsPage/CompareExperimentsActionsPanel";
 import CompareExperimentsNameCell from "@/v2/pages-shared/experiments/CompareExperimentsNameCell/CompareExperimentsNameCell";
-import CompareExperimentsNameHeader from "@/v2/pages-shared/experiments/CompareExperimentsNameHeader/CompareExperimentsNameHeader";
 import ColumnsButton from "@/shared/ColumnsButton/ColumnsButton";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
 import useAppStore from "@/store/AppStore";
@@ -64,11 +63,11 @@ import SectionHeader from "@/shared/DataTableHeaders/SectionHeader";
 import CommentsCell from "@/shared/DataTableCells/CommentsCell";
 import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/v2/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import DurationCell from "@/shared/DataTableCells/DurationCell";
 import CostCell from "@/shared/DataTableCells/CostCell";
 import useExperimentItemsState from "@/v2/pages-shared/experiments/useExperimentItemsState";
 import useExperimentItemsData from "@/v2/pages-shared/experiments/useExperimentItemsData";
+import getAllCompareExperimentsItems from "@/api/datasets/getAllCompareExperimentsItems";
 import useExperimentItemsSidebar from "@/v2/pages-shared/experiments/useExperimentItemsSidebar";
 import PassedCell from "@/v2/pages-shared/experiments/TestSuiteExperiment/PassedCell";
 import TestSuiteExperimentPanel from "@/v2/pages-shared/experiments/TestSuiteExperiment/ExperimentItemSidebar/TestSuiteExperimentPanel";
@@ -221,7 +220,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
 
   const columnPinning = useMemo<ColumnPinningState>(
     () => ({
-      left: [COLUMN_SELECT_ID],
+      left: [COLUMN_SELECT_ID, COLUMN_EXPERIMENT_NAME_ID],
       right: isTestSuite ? [COLUMN_PASSED_ID] : [],
     }),
     [isTestSuite],
@@ -252,7 +251,6 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         verticalAlignment: calculateVerticalAlignment(experimentsCount),
         size: 180,
         sortable: isColumnSortable(COLUMN_ID_ID, sortableColumns),
-        explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_the_test_suite_item],
       } as ColumnData<ExperimentsCompare>,
       ...dynamicDatasetColumns.map(
         ({ label, id, columnType }) =>
@@ -382,9 +380,22 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     return rows.filter((row) => rowSelection[row.id]);
   }, [rowSelection, rows]);
 
+  // With rows selected, export just those - they are already on screen, so one refetch of this page is enough.
+  // With nothing selected, export the whole result set behind the current filters, which needs every page.
   const getDataForExport = useCallback(async (): Promise<
     ExperimentsCompare[]
   > => {
+    if (!selectedRows.length) {
+      return getAllCompareExperimentsItems({
+        workspaceName,
+        datasetId,
+        experimentsIds,
+        filters,
+        sorting,
+        search: search as string,
+      });
+    }
+
     const result = await refetchExportData();
 
     if (result.error) {
@@ -399,7 +410,17 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     const selectedIds = Object.keys(rowSelection);
 
     return allRows.filter((row) => selectedIds.includes(row.id));
-  }, [refetchExportData, rowSelection]);
+  }, [
+    selectedRows.length,
+    workspaceName,
+    datasetId,
+    experimentsIds,
+    filters,
+    sorting,
+    search,
+    refetchExportData,
+    rowSelection,
+  ]);
 
   const columns = useMemo(() => {
     const retVal = [
@@ -444,7 +465,6 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
               {
                 id: COLUMN_EXPERIMENT_NAME_ID,
                 label: "Name",
-                header: CompareExperimentsNameHeader as never,
                 cell: CompareExperimentsNameCell as never,
                 customMeta: {
                   experiments,
@@ -617,6 +637,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         setExpandedCommentSections([String(idx)]);
       },
       columnsStatistic,
+      subRowHighlightColor: "var(--tag-lavender-bg)",
     }),
     [handleRowClick, setExpandedCommentSections, columnsStatistic],
   );
@@ -682,6 +703,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
             selectedRows={selectedRows}
             columnsToExport={columnsToExport}
             experiments={experiments}
+            totalRows={total}
           />
           <Separator orientation="vertical" className="mx-[2px] h-4" />
           <DataTableRowHeightSelector

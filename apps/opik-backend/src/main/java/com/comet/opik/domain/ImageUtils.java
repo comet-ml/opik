@@ -12,7 +12,7 @@ public class ImageUtils {
     public static final String PREFIX_TIFF1 = "TU0A"; // big endian tiff
     public static final String PREFIX_WEBP = "UklGR";
 
-    private static final String IMAGE_CHARS = "[A-Za-z0-9+/]+={0,2}";
+    public static final String IMAGE_CHARS = "[A-Za-z0-9+/]+={0,2}";
     private static final String IMAGE_TRUNCATION_REGEX =
             // capture images with general base64 prefix in case it is present
             "\"(data:image/[^;]{3,4};base64,)?"

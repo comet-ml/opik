@@ -1,29 +1,84 @@
 import React from "react";
-import isUndefined from "lodash/isUndefined";
+import {
+  getOpenRouterDefaultMaxTokens,
+  getOpenRouterReasoningEffortOptions,
+  resolveEffort,
+  getOpenRouterMaxTokensLimit,
+  resolveOpenRouterMaxTokens,
+  resolveSamplingParams,
+} from "@/lib/modelUtils";
+import ExclusiveSamplingParams from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/ExclusiveSamplingParams";
+import {
+  createSupports,
+  getOpenRouterVisibleControls,
+  isAnyControlVisible,
+  offersOpenRouterTopP,
+} from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/visibleControls";
 
 import SliderInputControl from "@/shared/SliderInputControl/SliderInputControl";
-import { LLMOpenRouterConfigsType } from "@/types/providers";
+import {
+  LLMOpenRouterConfigsType,
+  OpenAIReasoningEffort,
+  PROVIDER_MODEL_TYPE,
+} from "@/types/providers";
 import { DEFAULT_OPEN_ROUTER_CONFIGS } from "@/constants/llm";
 import PromptModelConfigsTooltipContent from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
+import {
+  NO_OUTPUT_LIMIT_TOOLTIP,
+  getNoOutputLimitHint,
+} from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/noOutputLimit";
+import { ModelConfigParam } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/ui/select";
+import { Label } from "@/ui/label";
+import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
+
+const DEFAULT_EFFORT = "default";
 
 interface OpenRouterModelConfigsProps {
   configs: LLMOpenRouterConfigsType;
   onChange: (configs: Partial<LLMOpenRouterConfigsType>) => void;
+  model?: PROVIDER_MODEL_TYPE | "";
+  unsupportedParams?: ReadonlySet<ModelConfigParam>;
 }
 
 const OpenRouterModelConfigs = ({
   configs,
   onChange,
+  model,
+  unsupportedParams,
 }: OpenRouterModelConfigsProps) => {
+  const supports = createSupports(unsupportedParams);
+  const { temperature, topP } = resolveSamplingParams(model ?? "", configs);
+  const { reasoningEffort } = resolveEffort(model ?? "", configs);
+  const visible = getOpenRouterVisibleControls({ model, configs, supports });
+
+  if (!isAnyControlVisible(visible)) return null;
+
   return (
     <div className="flex w-72 flex-col gap-4">
-      {!isUndefined(configs.temperature) && (
+      {visible.samplingParams && (
+        <ExclusiveSamplingParams
+          temperature={temperature}
+          topP={topP}
+          temperatureDefault={DEFAULT_OPEN_ROUTER_CONFIGS.TEMPERATURE}
+          topPDefault={DEFAULT_OPEN_ROUTER_CONFIGS.TOP_P}
+          offerChoice={offersOpenRouterTopP(model, supports)}
+          onChange={onChange}
+        />
+      )}
+      {visible.temperature && (
         <SliderInputControl
           value={configs.temperature}
           onChange={(v) => onChange({ temperature: v })}
           id="temperature"
-          min={-1}
-          max={1}
+          min={0}
+          max={2}
           step={0.01}
           defaultValue={DEFAULT_OPEN_ROUTER_CONFIGS.TEMPERATURE}
           label="Temperature"
@@ -32,22 +87,26 @@ const OpenRouterModelConfigs = ({
           }
         />
       )}
-      {!isUndefined(configs.maxTokens) && (
+      {visible.maxTokens && (
         <SliderInputControl
-          value={configs.maxTokens}
+          value={resolveOpenRouterMaxTokens(model, configs.maxTokens)}
           onChange={(v) => onChange({ maxTokens: v })}
           id="maxTokens"
           min={0}
-          max={10000}
+          max={getOpenRouterMaxTokensLimit(model)}
           step={1}
-          defaultValue={DEFAULT_OPEN_ROUTER_CONFIGS.MAX_TOKENS}
+          integer
+          hint={getNoOutputLimitHint(configs.maxTokens)}
+          defaultValue={getOpenRouterDefaultMaxTokens(model)}
           label="Max tokens"
           tooltip={
-            <PromptModelConfigsTooltipContent text="The maximum number of tokens to generate shared between the prompt and completion. The exact limit varies by model. (One token is roughly 4 characters for standard English text)." />
+            <PromptModelConfigsTooltipContent
+              text={`The maximum number of tokens to generate. The exact limit varies by model. ${NO_OUTPUT_LIMIT_TOOLTIP} (One token is roughly 4 characters for standard English text).`}
+            />
           }
         />
       )}
-      {!isUndefined(configs.topP) && (
+      {visible.topP && (
         <SliderInputControl
           value={configs.topP}
           onChange={(v) => onChange({ topP: v })}
@@ -62,14 +121,14 @@ const OpenRouterModelConfigs = ({
           }
         />
       )}
-      {!isUndefined(configs.topK) && (
+      {visible.topK && (
         <SliderInputControl
           value={configs.topK}
           onChange={(v) => onChange({ topK: v })}
           id="topK"
           min={0}
           max={100}
-          step={0.01}
+          step={1}
           defaultValue={DEFAULT_OPEN_ROUTER_CONFIGS.TOP_K}
           label="Top K"
           tooltip={
@@ -77,7 +136,7 @@ const OpenRouterModelConfigs = ({
           }
         />
       )}
-      {!isUndefined(configs.frequencyPenalty) && (
+      {visible.frequencyPenalty && (
         <SliderInputControl
           value={configs.frequencyPenalty}
           onChange={(v) => onChange({ frequencyPenalty: v })}
@@ -92,7 +151,7 @@ const OpenRouterModelConfigs = ({
           }
         />
       )}
-      {!isUndefined(configs.presencePenalty) && (
+      {visible.presencePenalty && (
         <SliderInputControl
           value={configs.presencePenalty}
           onChange={(v) => onChange({ presencePenalty: v })}
@@ -107,7 +166,7 @@ const OpenRouterModelConfigs = ({
           }
         />
       )}
-      {!isUndefined(configs.repetitionPenalty) && (
+      {visible.repetitionPenalty && (
         <SliderInputControl
           value={configs.repetitionPenalty}
           onChange={(v) => onChange({ repetitionPenalty: v })}
@@ -122,7 +181,7 @@ const OpenRouterModelConfigs = ({
           }
         />
       )}
-      {!isUndefined(configs.minP) && (
+      {visible.minP && (
         <SliderInputControl
           value={configs.minP}
           onChange={(v) => onChange({ minP: v })}
@@ -137,7 +196,7 @@ const OpenRouterModelConfigs = ({
           }
         />
       )}
-      {!isUndefined(configs.topA) && (
+      {visible.topA && (
         <SliderInputControl
           value={configs.topA}
           onChange={(v) => onChange({ topA: v })}
@@ -156,35 +215,71 @@ const OpenRouterModelConfigs = ({
           }
         />
       )}
-      <SliderInputControl
-        value={configs.throttling ?? DEFAULT_OPEN_ROUTER_CONFIGS.THROTTLING}
-        onChange={(v) => onChange({ throttling: v })}
-        id="throttling"
-        min={0}
-        max={10}
-        step={0.1}
-        defaultValue={DEFAULT_OPEN_ROUTER_CONFIGS.THROTTLING}
-        label="Throttling (seconds)"
-        tooltip={
-          <PromptModelConfigsTooltipContent text="Minimum time in seconds between consecutive requests to avoid rate limiting" />
-        }
-      />
-      <SliderInputControl
-        value={
-          configs.maxConcurrentRequests ??
-          DEFAULT_OPEN_ROUTER_CONFIGS.MAX_CONCURRENT_REQUESTS
-        }
-        onChange={(v) => onChange({ maxConcurrentRequests: v })}
-        id="maxConcurrentRequests"
-        min={1}
-        max={20}
-        step={1}
-        defaultValue={DEFAULT_OPEN_ROUTER_CONFIGS.MAX_CONCURRENT_REQUESTS}
-        label="Max concurrent requests"
-        tooltip={
-          <PromptModelConfigsTooltipContent text="Maximum number of requests that can run simultaneously. Set to 1 for sequential execution, higher values for parallel processing" />
-        }
-      />
+      {visible.reasoningEffort && (
+        <div className="space-y-2">
+          <div className="flex items-center space-x-2">
+            <Label htmlFor="reasoningEffort" className="text-sm font-medium">
+              Reasoning effort
+            </Label>
+            <ExplainerIcon description="Controls how much effort the model puts into reasoning before responding. Higher effort may result in more thoughtful but slower responses. Default sends no effort: a model that always reasons uses its usual level, and a model where reasoning is optional may not reason at all." />
+          </div>
+          <Select
+            value={reasoningEffort ?? DEFAULT_EFFORT}
+            onValueChange={(
+              value: OpenAIReasoningEffort | typeof DEFAULT_EFFORT,
+            ) =>
+              onChange({
+                reasoningEffort: value === DEFAULT_EFFORT ? undefined : value,
+              })
+            }
+          >
+            <SelectTrigger id="reasoningEffort">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={DEFAULT_EFFORT}>Default</SelectItem>
+              {getOpenRouterReasoningEffortOptions(model).map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+      {visible.throttling && (
+        <SliderInputControl
+          value={configs.throttling ?? DEFAULT_OPEN_ROUTER_CONFIGS.THROTTLING}
+          onChange={(v) => onChange({ throttling: v })}
+          id="throttling"
+          min={0}
+          max={10}
+          step={0.1}
+          defaultValue={DEFAULT_OPEN_ROUTER_CONFIGS.THROTTLING}
+          label="Throttling (seconds)"
+          tooltip={
+            <PromptModelConfigsTooltipContent text="Minimum time in seconds between consecutive requests to avoid rate limiting" />
+          }
+        />
+      )}
+      {visible.maxConcurrentRequests && (
+        <SliderInputControl
+          value={
+            configs.maxConcurrentRequests ??
+            DEFAULT_OPEN_ROUTER_CONFIGS.MAX_CONCURRENT_REQUESTS
+          }
+          onChange={(v) => onChange({ maxConcurrentRequests: v })}
+          id="maxConcurrentRequests"
+          min={1}
+          max={20}
+          step={1}
+          defaultValue={DEFAULT_OPEN_ROUTER_CONFIGS.MAX_CONCURRENT_REQUESTS}
+          label="Max concurrent requests"
+          tooltip={
+            <PromptModelConfigsTooltipContent text="Maximum number of requests that can run simultaneously. Set to 1 for sequential execution, higher values for parallel processing" />
+          }
+        />
+      )}
     </div>
   );
 };

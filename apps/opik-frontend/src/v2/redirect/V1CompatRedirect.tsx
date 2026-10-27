@@ -7,11 +7,12 @@ import {
 } from "@/store/AppStore";
 import Loader from "@/shared/Loader/Loader";
 
-type V1CompatRedirectProps = {
+export type V1CompatRedirectProps = {
   toPath: string;
+  projectId?: string;
 };
 
-const V1CompatRedirect = ({ toPath }: V1CompatRedirectProps) => {
+const V1CompatRedirect = ({ toPath, projectId }: V1CompatRedirectProps) => {
   const workspaceName = useActiveWorkspaceName();
   const activeProjectId = useActiveProjectId();
   const isLoading = useIsProjectLoading();
@@ -20,12 +21,14 @@ const V1CompatRedirect = ({ toPath }: V1CompatRedirectProps) => {
   const location = useLocation();
   const splat = (params as Record<string, string>)["_splat"] ?? "";
 
+  const targetProjectId = projectId ?? activeProjectId;
+
   useEffect(() => {
     if (isLoading) return;
 
-    if (activeProjectId) {
+    if (targetProjectId) {
       const suffix = splat ? `/${splat}` : "";
-      const target = `/${workspaceName}/projects/${activeProjectId}${toPath}${suffix}`;
+      const target = `/${workspaceName}/projects/${targetProjectId}${toPath}${suffix}`;
       navigate({
         to: target,
         search: location.search as Record<string, unknown>,
@@ -39,7 +42,7 @@ const V1CompatRedirect = ({ toPath }: V1CompatRedirectProps) => {
       });
     }
   }, [
-    activeProjectId,
+    targetProjectId,
     isLoading,
     workspaceName,
     toPath,

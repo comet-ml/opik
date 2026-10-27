@@ -134,3 +134,50 @@ def test_worker__queue_full__events_dropped_instead_of_blocking():
     finally:
         release.set()
         worker.close(timeout=5)
+
+
+def test_worker__run_context__is_fixed_when_the_event_is_enqueued(
+    worker_factory, monkeypatch
+):
+    """At enqueue, not at send: the context changes mid-run."""
+    sent = []
+    worker = worker_factory(sent.extend)
+    monkeypatch.setattr(environment_details, "_RUN_CONTEXT", {})
+    environment_details.set_run_context(invoked_via="direct")
+
+    worker.enqueue(_event("before_the_handover"))
+    environment_details.set_run_context(invoked_via="opik_configure")
+    worker.enqueue(_event("after_the_handover"))
+    assert worker.flush(timeout=5)
+
+    assert [event.properties["invoked_via"] for event in sent] == [
+        "direct",
+        "opik_configure",
+    ]
+
+
+def test_worker__event_properties__beat_the_run_context(worker_factory, monkeypatch):
+    """The run context is a default, not an override of what a call site said."""
+    sent = []
+    worker = worker_factory(sent.extend)
+    monkeypatch.setattr(environment_details, "_RUN_CONTEXT", {})
+    environment_details.set_run_context(invoked_via="direct")
+
+    worker.enqueue(_event(invoked_via="something_the_caller_knows_better"))
+    assert worker.flush(timeout=5)
+
+    assert sent[0].properties["invoked_via"] == "something_the_caller_knows_better"
+
+
+def test_run_context__an_earlier_snapshot_is_not_changed_by_a_later_update(
+    monkeypatch,
+):
+    """Updates publish a new dict, so a reader's copy can never change under it."""
+    monkeypatch.setattr(environment_details, "_RUN_CONTEXT", {})
+    environment_details.set_run_context(invoked_via="direct")
+    published = environment_details._RUN_CONTEXT
+
+    environment_details.set_run_context(invoked_via="opik_configure")
+
+    assert published == {"invoked_via": "direct"}
+    assert environment_details.run_context()["invoked_via"] == "opik_configure"

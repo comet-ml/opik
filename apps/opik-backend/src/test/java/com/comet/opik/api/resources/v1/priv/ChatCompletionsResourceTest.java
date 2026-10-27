@@ -14,6 +14,11 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.ChatCompletionsClient;
 import com.comet.opik.api.resources.utils.resources.LlmProviderApiKeyResourceClient;
 import com.comet.opik.domain.llm.LlmProviderFactory;
+import com.comet.opik.domain.llm.langchain4j.AudioUrl;
+import com.comet.opik.domain.llm.langchain4j.OpikContent;
+import com.comet.opik.domain.llm.langchain4j.OpikContentType;
+import com.comet.opik.domain.llm.langchain4j.OpikUserMessage;
+import com.comet.opik.domain.llm.langchain4j.VideoUrl;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -21,14 +26,19 @@ import com.comet.opik.infrastructure.llm.antropic.AnthropicModelName;
 import com.comet.opik.infrastructure.llm.gemini.GeminiModelName;
 import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterModelName;
+import com.comet.opik.infrastructure.llm.vertexai.VertexAIModelName;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.redis.testcontainers.RedisContainer;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.openai.internal.chat.Content;
 import dev.langchain4j.model.openai.internal.chat.ContentType;
+import dev.langchain4j.model.openai.internal.chat.ImageUrl;
 import dev.langchain4j.model.openai.internal.chat.Message;
 import dev.langchain4j.model.openai.internal.chat.Role;
 import dev.langchain4j.model.openai.internal.chat.UserMessage;
+import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
@@ -44,6 +54,7 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
@@ -54,6 +65,8 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.security.KeyPairGenerator;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -63,9 +76,14 @@ import java.util.stream.Stream;
 import static com.comet.opik.domain.llm.ChatCompletionService.ERROR_EMPTY_MESSAGES;
 import static com.comet.opik.domain.llm.LlmProviderFactory.ERROR_MODEL_NOT_SUPPORTED;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
+import static com.github.tomakehurst.wiremock.client.WireMock.any;
+import static com.github.tomakehurst.wiremock.client.WireMock.anyRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.head;
+import static com.github.tomakehurst.wiremock.client.WireMock.headRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathMatching;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assumptions.assumeThat;
@@ -394,6 +412,43 @@ class ChatCompletionsResourceTest {
             // stubs from one case don't intercept another. Each test re-registers its
             // own workspace auth stub via mockTargetWorkspace().
             WIRE_MOCK.server().resetAll();
+        }
+
+        private Stream<Arguments> rawUpstreamBodyIsNotEchoed() {
+            var text = UUID.randomUUID().toString();
+            return Stream.of(
+                    arguments(HttpStatus.SC_BAD_GATEWAY, "text/plain", "internal page " + text,
+                            HttpStatus.SC_BAD_GATEWAY),
+                    arguments(HttpStatus.SC_BAD_GATEWAY, "application/json", "{\"internal\": \"%s\"}".formatted(text),
+                            HttpStatus.SC_BAD_GATEWAY),
+                    // redirects aren't followed, and a 3xx is no provider error status, so the call fails as Opik's
+                    arguments(HttpStatus.SC_MOVED_TEMPORARILY, "text/html", "<a href=\"/%s\">moved</a>".formatted(text),
+                            HttpStatus.SC_INTERNAL_SERVER_ERROR));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("a body that isn't a provider error is not echoed back from a user-configured destination")
+        void rawUpstreamBodyIsNotEchoed(int upstreamStatus, String contentType, String upstreamBody,
+                int expectedStatus) {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            mockTargetWorkspace(workspaceName, UUID.randomUUID().toString());
+            createCustomProvider(workspaceName);
+            WIRE_MOCK.server().stubFor(post(urlPathMatching(CHAT_COMPLETIONS_REGEX))
+                    .willReturn(aResponse()
+                            .withStatus(upstreamStatus)
+                            .withHeader("Content-Type", contentType)
+                            .withBody(upstreamBody)));
+            var expected = new ErrorMessage(expectedStatus,
+                    "Unexpected error calling LLM provider: provider responded with HTTP " + upstreamStatus);
+
+            var request = ChatCompletionRequest.builder().stream(false).model(MODEL).addUserMessage("ping").build();
+            assertThat(chatCompletionsClient.create(API_KEY, workspaceName, request, expectedStatus))
+                    .isEqualTo(expected);
+
+            var streamed = ChatCompletionRequest.builder().stream(true).model(MODEL).addUserMessage("ping").build();
+            assertThat(chatCompletionsClient.createAndGetStreamedError(API_KEY, workspaceName, streamed))
+                    .containsExactly(expected);
         }
 
         @Test
@@ -934,4 +989,587 @@ class ChatCompletionsResourceTest {
         }
     }
 
+    /// Claude rejects temperature and top_p in the same request; Bedrock answers
+    /// "temperature and top_p cannot both be specified for this model" (OPIK-8386).
+    /// The rule used to live only in the Anthropic provider's mapper, but a Claude
+    /// model reached through a custom gateway is dispatched by
+    /// OpenAICompatibleServiceProvider, which has no such rule. These assert on what
+    /// actually leaves Opik, through the real dispatch path.
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @DisplayName("Custom LLM provider — Claude sampling parameter exclusivity")
+    class CustomLlmClaudeSamplingParams {
+
+        private static final String PROVIDER_NAME = "claude-gw";
+        private static final String CLAUDE_MODEL = "custom-llm/" + PROVIDER_NAME + "/claude-opus-4-6";
+        private static final String OTHER_MODEL = "custom-llm/" + PROVIDER_NAME + "/mistral-large-2411";
+        private static final String CHAT_COMPLETIONS_REGEX = ".*/chat/completions.*";
+        private static final String OK_BODY = """
+                {"id":"chatcmpl-x","object":"chat.completion","created":1,"model":"claude-opus-4-6",\
+                "choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}""";
+
+        @BeforeEach
+        void resetUpstreamStubs() {
+            WIRE_MOCK.server().resetAll();
+        }
+
+        @Test
+        @DisplayName("Claude through a custom gateway: temperature is forwarded, top_p is dropped")
+        void dropsTopPForClaude() {
+            var body = upstreamBodyFor(CLAUDE_MODEL);
+
+            assertThat(body.path("temperature").asDouble()).isEqualTo(0.7);
+            assertThat(body.has("top_p")).isFalse();
+        }
+
+        @Test
+        @DisplayName("A model without the constraint on the same gateway keeps both")
+        void keepsBothForOtherModels() {
+            var body = upstreamBodyFor(OTHER_MODEL);
+
+            assertThat(body.path("temperature").asDouble()).isEqualTo(0.7);
+            assertThat(body.path("top_p").asDouble()).isEqualTo(0.9);
+        }
+
+        private JsonNode upstreamBodyFor(String model) {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(workspaceName, workspaceId);
+            createProviderFor(workspaceName, model);
+
+            WIRE_MOCK.server().stubFor(post(urlPathMatching(CHAT_COMPLETIONS_REGEX))
+                    .willReturn(aResponse()
+                            .withStatus(HttpStatus.SC_OK)
+                            .withHeader("Content-Type", "application/json")
+                            .withBody(OK_BODY)));
+
+            var request = ChatCompletionRequest.builder()
+                    .stream(false)
+                    .model(model)
+                    .temperature(0.7)
+                    .topP(0.9)
+                    .addUserMessage("ping")
+                    .build();
+
+            postChatCompletionFor(workspaceName, request);
+
+            var upstream = WIRE_MOCK.server().findAll(postRequestedFor(
+                    urlPathMatching(CHAT_COMPLETIONS_REGEX)));
+            assertThat(upstream).as("Opik should have forwarded the request upstream").isNotEmpty();
+            return JsonUtils.getJsonNodeFromString(upstream.getFirst().getBodyAsString());
+        }
+
+        private void createProviderFor(String workspaceName, String model) {
+            var providerApiKey = ProviderApiKey.builder()
+                    .provider(LlmProvider.CUSTOM_LLM)
+                    .providerName(PROVIDER_NAME)
+                    .apiKey("dummy-key")
+                    .baseUrl(WIRE_MOCK.runtimeInfo().getHttpBaseUrl())
+                    .configuration(Map.of("provider_name", PROVIDER_NAME, "models", model))
+                    .build();
+            llmProviderApiKeyResourceClient.createProviderApiKey(providerApiKey, API_KEY, workspaceName,
+                    HttpStatus.SC_CREATED);
+        }
+
+        private jakarta.ws.rs.core.Response postChatCompletionFor(String workspaceName,
+                ChatCompletionRequest request) {
+            return clientSupport.target(TestUtils.getBaseUrl(clientSupport) + "/v1/private/chat/completions")
+                    .request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                    .post(Entity.json(request));
+        }
+    }
+
+    /// The playground sends the Anthropic effort as
+    /// custom_parameters.output_config.effort, which the langchain4j request DTO
+    /// keeps, while Anthropic reads output_config.effort at the top level of its own
+    /// body. A flat thinking_effort used to be dropped here without a trace
+    /// (OPIK-8605). These post the body exactly as the frontend writes it and assert
+    /// on what reaches Anthropic.
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @DisplayName("Anthropic provider — output_config.effort")
+    class AnthropicOutputConfigEffort {
+
+        private static final String MESSAGES_PATH = "/v1/messages";
+        private static final String MESSAGES_RESPONSE = """
+                {"id":"msg_1","type":"message","role":"assistant","model":"claude-sonnet-4-6",\
+                "content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn",\
+                "usage":{"input_tokens":1,"output_tokens":1}}""";
+
+        private static final String MESSAGES_STREAM = """
+                event: message_start
+                data: {"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant",\
+                "model":"claude-sonnet-4-6","content":[],"stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}
+
+                event: content_block_start
+                data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}
+
+                event: content_block_delta
+                data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"ok"}}
+
+                event: content_block_stop
+                data: {"type":"content_block_stop","index":0}
+
+                event: message_delta
+                data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":1}}
+
+                event: message_stop
+                data: {"type":"message_stop"}
+
+                """;
+
+        @BeforeEach
+        void resetUpstreamStubs() {
+            WIRE_MOCK.server().resetAll();
+        }
+
+        @ParameterizedTest(name = "{0} at {1}")
+        @CsvSource({"claude-sonnet-4-6, low", "claude-sonnet-5, xhigh"})
+        void forwardsThePlaygroundEffortToAnthropic(String model, String effort) {
+            var workspaceName = prepareWorkspace();
+
+            var response = postFrontendBody(workspaceName, model, effortParameters(effort), false);
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            var sent = WIRE_MOCK.server().findAll(postRequestedFor(urlPathEqualTo(MESSAGES_PATH)));
+            assertThat(sent).hasSize(1);
+            assertThat(JsonUtils.getJsonNodeFromString(sent.getFirst().getBodyAsString()).path("output_config"))
+                    .isEqualTo(JsonUtils.getJsonNodeFromString("{\"effort\": \"%s\"}".formatted(effort)));
+        }
+
+        @Test
+        void rejectsAStoredAdaptiveEffortWithABadRequest() {
+            var workspaceName = prepareWorkspace();
+
+            var response = postFrontendBody(workspaceName, "claude-sonnet-4-6", effortParameters("adaptive"), false);
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            assertThat(response.readEntity(String.class))
+                    .contains("Unsupported custom_parameters.output_config.effort for the model, "
+                            + "model 'claude-sonnet-4-6', effort 'adaptive', supported '[low, medium, high, max]'");
+            assertThat(WIRE_MOCK.server().findAll(postRequestedFor(urlPathEqualTo(MESSAGES_PATH)))).isEmpty();
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource
+        void rejectsAMalformedOutputConfigWithABadRequest(
+                String description, String customParameters, String expectedMessage) {
+            var workspaceName = prepareWorkspace();
+
+            var response = postFrontendBody(workspaceName, "claude-sonnet-4-6", customParameters, false);
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            assertThat(response.readEntity(String.class)).contains(expectedMessage);
+            assertThat(WIRE_MOCK.server().findAll(postRequestedFor(urlPathEqualTo(MESSAGES_PATH)))).isEmpty();
+        }
+
+        Stream<Arguments> rejectsAMalformedOutputConfigWithABadRequest() {
+            var notAnObject = "custom_parameters.output_config must be an object, model 'claude-sonnet-4-6'";
+            return Stream.of(
+                    arguments("output_config as a string", "{\"output_config\": \"low\"}", notAnObject),
+                    arguments("output_config as an array", "{\"output_config\": [\"low\"]}", notAnObject),
+                    arguments("effort as a number", "{\"output_config\": {\"effort\": 1}}",
+                            "custom_parameters.output_config.effort must be a string, "
+                                    + "model 'claude-sonnet-4-6', effort '1'"),
+                    arguments("effort as an object", "{\"output_config\": {\"effort\": {\"level\": \"low\"}}}",
+                            "custom_parameters.output_config.effort must be a string, "
+                                    + "model 'claude-sonnet-4-6', effort '{level=low}'"));
+        }
+
+        @Test
+        void streamsThePlaygroundEffortToAnthropic() {
+            var workspaceName = prepareWorkspace();
+            WIRE_MOCK.server().stubFor(post(urlPathEqualTo(MESSAGES_PATH))
+                    .willReturn(aResponse()
+                            .withStatus(HttpStatus.SC_OK)
+                            .withHeader("Content-Type", MediaType.SERVER_SENT_EVENTS)
+                            .withBody(MESSAGES_STREAM)));
+
+            var response = postFrontendBody(workspaceName, "claude-sonnet-4-6", effortParameters("low"), true);
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            assertThat(response.readEntity(String.class)).contains("\"content\":\"ok\"");
+            var sent = WIRE_MOCK.server().findAll(postRequestedFor(urlPathEqualTo(MESSAGES_PATH)));
+            assertThat(sent).hasSize(1);
+            var body = JsonUtils.getJsonNodeFromString(sent.getFirst().getBodyAsString());
+            assertThat(body.path("stream").asBoolean()).isTrue();
+            assertThat(body.path("output_config"))
+                    .isEqualTo(JsonUtils.getJsonNodeFromString("{\"effort\": \"low\"}"));
+        }
+
+        @Test
+        void rejectsAnUnsupportedStreamedEffortWithABadRequest() {
+            var workspaceName = prepareWorkspace();
+
+            var response = postFrontendBody(workspaceName, "claude-sonnet-4-6", effortParameters("xhigh"), true);
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            assertThat(response.readEntity(String.class))
+                    .contains("Unsupported custom_parameters.output_config.effort for the model, "
+                            + "model 'claude-sonnet-4-6', effort 'xhigh', supported '[low, medium, high, max]'");
+            assertThat(WIRE_MOCK.server().findAll(postRequestedFor(urlPathEqualTo(MESSAGES_PATH)))).isEmpty();
+        }
+
+        private String prepareWorkspace() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            mockTargetWorkspace(workspaceName, UUID.randomUUID().toString());
+            llmProviderApiKeyResourceClient.createProviderApiKey(ProviderApiKey.builder()
+                    .provider(LlmProvider.ANTHROPIC)
+                    .apiKey("dummy-key")
+                    .baseUrl(WIRE_MOCK.runtimeInfo().getHttpBaseUrl() + "/v1/")
+                    .build(), API_KEY, workspaceName, HttpStatus.SC_CREATED);
+            WIRE_MOCK.server().stubFor(post(urlPathEqualTo(MESSAGES_PATH))
+                    .willReturn(aResponse()
+                            .withStatus(HttpStatus.SC_OK)
+                            .withHeader("Content-Type", "application/json")
+                            .withBody(MESSAGES_RESPONSE)));
+            return workspaceName;
+        }
+
+        private String effortParameters(String effort) {
+            return "{\"output_config\": {\"effort\": \"%s\"}}".formatted(effort);
+        }
+
+        private jakarta.ws.rs.core.Response postFrontendBody(
+                String workspaceName, String model, String customParameters, boolean stream) {
+            var body = """
+                    {"model": "%s", "messages": [{"role": "user", "content": "ping"}], "stream": %s,
+                    "max_completion_tokens": 100, "custom_parameters": %s}"""
+                    .formatted(model, stream, customParameters);
+            return clientSupport.target(TestUtils.getBaseUrl(clientSupport) + "/v1/private/chat/completions")
+                    .request()
+                    .accept(stream ? MediaType.SERVER_SENT_EVENTS_TYPE : MediaType.APPLICATION_JSON_TYPE)
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                    .post(Entity.json(JsonUtils.getJsonNodeFromString(body)));
+        }
+    }
+
+    /// OpenAI reasoning models take temperature only at its default and reject
+    /// top_p and both penalties. The frontend leaves them out, but anything else
+    /// that calls the endpoint relied on that. These assert on what actually leaves
+    /// Opik, classified by the real model registry.
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @DisplayName("OpenAI reasoning models — sampling params and penalties")
+    class OpenAiReasoningSamplingParams {
+
+        private static final String CHAT_COMPLETIONS_REGEX = ".*/chat/completions.*";
+        private static final String OK_BODY = """
+                {"id":"chatcmpl-x","object":"chat.completion","created":1,"model":"gpt-5-mini",\
+                "choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}""";
+        private static final List<String> STRIPPED_FIELDS = List.of(
+                "temperature", "top_p", "frequency_penalty", "presence_penalty");
+
+        @BeforeEach
+        void resetUpstreamStubs() {
+            WIRE_MOCK.server().resetAll();
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"gpt-5-mini", "o3"})
+        @DisplayName("A reasoning model on the OpenAI provider reaches it without sampling params or penalties")
+        void dropsSamplingParamsAndPenalties(String model) {
+            var body = upstreamBodyFor(LlmProvider.OPEN_AI, model);
+
+            STRIPPED_FIELDS.forEach(field -> assertThat(body.has(field)).as(field).isFalse());
+            assertThat(body.path("max_completion_tokens").asInt()).isEqualTo(100);
+        }
+
+        static Stream<Arguments> modelsThatKeepTheirParams() {
+            return Stream.of(
+                    arguments(LlmProvider.OPEN_AI, "gpt-4o"),
+                    arguments(LlmProvider.OPEN_AI, "gpt-5-chat-latest"),
+                    arguments(LlmProvider.OPEN_ROUTER, "openai/gpt-5-mini"));
+        }
+
+        @ParameterizedTest
+        @MethodSource("modelsThatKeepTheirParams")
+        @DisplayName("Any other model keeps every param")
+        void keepsParamsForOtherModels(LlmProvider provider, String model) {
+            var body = upstreamBodyFor(provider, model);
+
+            assertThat(body.path("temperature").asDouble()).isEqualTo(0.7);
+            assertThat(body.path("top_p").asDouble()).isEqualTo(0.9);
+            assertThat(body.path("frequency_penalty").asDouble()).isEqualTo(0.5);
+            assertThat(body.path("presence_penalty").asDouble()).isEqualTo(0.4);
+        }
+
+        private JsonNode upstreamBodyFor(LlmProvider provider, String model) {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(workspaceName, workspaceId);
+            llmProviderApiKeyResourceClient.createProviderApiKey(ProviderApiKey.builder()
+                    .provider(provider)
+                    .apiKey("dummy-key")
+                    .baseUrl(WIRE_MOCK.runtimeInfo().getHttpBaseUrl())
+                    .build(), API_KEY, workspaceName, HttpStatus.SC_CREATED);
+
+            WIRE_MOCK.server().stubFor(post(urlPathMatching(CHAT_COMPLETIONS_REGEX))
+                    .willReturn(aResponse()
+                            .withStatus(HttpStatus.SC_OK)
+                            .withHeader("Content-Type", "application/json")
+                            .withBody(OK_BODY)));
+
+            var request = ChatCompletionRequest.builder()
+                    .stream(false)
+                    .model(model)
+                    .temperature(0.7)
+                    .topP(0.9)
+                    .frequencyPenalty(0.5)
+                    .presencePenalty(0.4)
+                    .maxCompletionTokens(100)
+                    .addUserMessage("ping")
+                    .build();
+
+            try (var response = clientSupport
+                    .target(TestUtils.getBaseUrl(clientSupport) + "/v1/private/chat/completions")
+                    .request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                    .post(Entity.json(request))) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            }
+
+            var upstream = WIRE_MOCK.server().findAll(postRequestedFor(urlPathMatching(CHAT_COMPLETIONS_REGEX)));
+            assertThat(upstream).as("Opik should have forwarded the request upstream").isNotEmpty();
+            return JsonUtils.getJsonNodeFromString(upstream.getFirst().getBodyAsString());
+        }
+    }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @DisplayName("Provider destinations")
+    class ProviderDestinations {
+
+        private Stream<Arguments> modelSubstitutedIntoTheAuthorityCannotMoveTheHost() {
+            return Stream.of(
+                    arguments("https://{model}.gw.example.com/v1", "attacker.example/#"),
+                    arguments("https://{model}.gw.example.com/v1", "x@attacker.example"),
+                    arguments("https://{model}.gw.example.com/v1", "attacker.example:443"),
+                    arguments("https://{model}.gw.example.com/v1", "[::1]"),
+                    arguments("https://{model}@gw.example.com/v1", "attacker.example/#"),
+                    arguments("https://gw.example.com:{model}/v1", "443@attacker.example"));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("a model substituted into the provider authority can't move the request to another host")
+        void modelSubstitutedIntoTheAuthorityCannotMoveTheHost(String baseUrl, String deployment) {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            mockTargetWorkspace(workspaceName, UUID.randomUUID().toString());
+            var providerName = RandomStringUtils.randomAlphanumeric(20);
+            var model = "custom-llm/%s/%s".formatted(providerName, deployment);
+            llmProviderApiKeyResourceClient.createProviderApiKey(ProviderApiKey.builder()
+                    .provider(LlmProvider.CUSTOM_LLM)
+                    .providerName(providerName)
+                    .apiKey("dummy-key")
+                    .baseUrl(baseUrl)
+                    .configuration(Map.of("provider_name", providerName, "models", model))
+                    .build(), API_KEY, workspaceName, HttpStatus.SC_CREATED);
+            var expected = new ErrorMessage(HttpStatus.SC_BAD_REQUEST,
+                    "model can't be substituted into the provider host or port, only letters, digits, '.' and '-'"
+                            + " are allowed");
+
+            var request = ChatCompletionRequest.builder().stream(false).model(model).addUserMessage("ping").build();
+            assertThat(chatCompletionsClient.create(API_KEY, workspaceName, request, HttpStatus.SC_BAD_REQUEST))
+                    .isEqualTo(expected);
+
+            var streamed = ChatCompletionRequest.builder().stream(true).model(model).addUserMessage("ping").build();
+            assertThat(chatCompletionsClient.createAndGetStreamedError(API_KEY, workspaceName, streamed))
+                    .containsExactly(expected);
+        }
+
+        private Stream<Arguments> vertexAiDestinationsAreRefused() {
+            return Stream.of(
+                    arguments("attacker.example/#", "https://oauth2.googleapis.com/token",
+                            "Vertex AI location is not a valid region"),
+                    arguments("us-central1", "https://attacker.example/token",
+                            "Vertex AI service account token_uri must be a Google token endpoint"));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("a Vertex AI location or token_uri that could send the request elsewhere is refused")
+        void vertexAiDestinationsAreRefused(String location, String tokenUri, String message) throws Exception {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            mockTargetWorkspace(workspaceName, UUID.randomUUID().toString());
+            llmProviderApiKeyResourceClient.createProviderApiKey(ProviderApiKey.builder()
+                    .provider(LlmProvider.VERTEX_AI)
+                    .apiKey(serviceAccountJson(tokenUri))
+                    .configuration(Map.of("location", location))
+                    .build(), API_KEY, workspaceName, HttpStatus.SC_CREATED);
+            var expected = new ErrorMessage(HttpStatus.SC_BAD_REQUEST, message);
+            var model = VertexAIModelName.GEMINI_2_5_FLASH.qualifiedName();
+
+            var request = ChatCompletionRequest.builder().stream(false).model(model).addUserMessage("ping").build();
+            assertThat(chatCompletionsClient.create(API_KEY, workspaceName, request, HttpStatus.SC_BAD_REQUEST))
+                    .isEqualTo(expected);
+
+            var streamed = ChatCompletionRequest.builder().stream(true).model(model).addUserMessage("ping").build();
+            assertThat(chatCompletionsClient.createAndGetStreamedError(API_KEY, workspaceName, streamed))
+                    .containsExactly(expected);
+        }
+
+        /** A key generated for the test: it never authenticates, the request is refused before any token call. */
+        private String serviceAccountJson(String tokenUri) throws Exception {
+            var keyPairGenerator = KeyPairGenerator.getInstance("RSA");
+            keyPairGenerator.initialize(2048);
+            var privateKey = Base64.getEncoder()
+                    .encodeToString(keyPairGenerator.generateKeyPair().getPrivate().getEncoded());
+            return """
+                    {"type": "service_account", "project_id": "test-project", "private_key_id": "test-key-id",
+                    "private_key": "-----BEGIN PRIVATE KEY-----\\n%s\\n-----END PRIVATE KEY-----\\n",
+                    "client_email": "test@test-project.iam.gserviceaccount.com", "client_id": "1234567890",
+                    "token_uri": "%s"}"""
+                    .formatted(privateKey, tokenUri);
+        }
+
+        private Stream<Arguments> mediaUrlOnInternalAddressIsNeverDownloaded() {
+            return Stream.of(
+                    arguments(LlmProvider.GEMINI, OpikContentType.IMAGE_URL, ".png"),
+                    arguments(LlmProvider.GEMINI, OpikContentType.VIDEO_URL, ".mp4"),
+                    arguments(LlmProvider.VERTEX_AI, OpikContentType.IMAGE_URL, ".png"),
+                    arguments(LlmProvider.VERTEX_AI, OpikContentType.VIDEO_URL, ".mp4"),
+                    arguments(LlmProvider.VERTEX_AI, OpikContentType.AUDIO_URL, ".wav"));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("a media URL on an internal address is refused before Gemini or Vertex AI can download it")
+        void mediaUrlOnInternalAddressIsNeverDownloaded(LlmProvider provider, OpikContentType type, String extension)
+                throws Exception {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            mockTargetWorkspace(workspaceName, UUID.randomUUID().toString());
+            var model = provider == LlmProvider.GEMINI
+                    ? GeminiModelName.GEMINI_2_5_FLASH.toString()
+                    : VertexAIModelName.GEMINI_2_5_FLASH.qualifiedName();
+            llmProviderApiKeyResourceClient.createProviderApiKey(ProviderApiKey.builder()
+                    .provider(provider)
+                    .apiKey(provider == LlmProvider.GEMINI
+                            ? RandomStringUtils.randomAlphanumeric(20)
+                            : serviceAccountJson("https://oauth2.googleapis.com/token"))
+                    .configuration(provider == LlmProvider.GEMINI ? Map.of() : Map.of("location", "us-central1"))
+                    .build(), API_KEY, workspaceName, HttpStatus.SC_CREATED);
+            var mediaPath = "/media-%s%s".formatted(UUID.randomUUID(), extension);
+            var mediaUrl = WIRE_MOCK.runtimeInfo().getHttpBaseUrl() + mediaPath;
+            WIRE_MOCK.server().stubFor(any(urlPathEqualTo(mediaPath))
+                    .willReturn(aResponse().withBody(RandomStringUtils.randomAlphanumeric(32))));
+            var media = switch (type) {
+                case IMAGE_URL -> OpikContent.builder().type(type)
+                        .imageUrl(ImageUrl.builder().url(mediaUrl).build()).build();
+                case VIDEO_URL -> OpikContent.builder().type(type)
+                        .videoUrl(VideoUrl.builder().url(mediaUrl).build()).build();
+                case AUDIO_URL -> OpikContent.builder().type(type)
+                        .audioUrl(AudioUrl.builder().url(mediaUrl).build()).build();
+                default -> throw new IllegalArgumentException(type.toString());
+            };
+            var message = OpikUserMessage.builder()
+                    .content(List.of(OpikContent.builder().type(OpikContentType.TEXT).text("describe").build(), media))
+                    .build();
+            var expected = new ErrorMessage(HttpStatus.SC_BAD_REQUEST,
+                    "a media URL was refused: it must be an http or https URL that resolves to a public address"
+                            + " (self-hosted deployments serving media from internal networks can set"
+                            + " LLM_PROVIDER_VIDEO_URL_DESTINATION_GUARD=relaxed)");
+
+            var request = ChatCompletionRequest.builder().stream(false).model(model).messages(message).build();
+            assertThat(chatCompletionsClient.create(API_KEY, workspaceName, request, HttpStatus.SC_BAD_REQUEST))
+                    .isEqualTo(expected);
+
+            var streamed = ChatCompletionRequest.builder().stream(true).model(model).messages(message).build();
+            assertThat(chatCompletionsClient.createAndGetStreamedError(API_KEY, workspaceName, streamed))
+                    .containsExactly(expected);
+
+            WIRE_MOCK.server().verify(0, anyRequestedFor(urlPathEqualTo(mediaPath)));
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"file:///etc/hosts", "jar:file:///app.jar!/image.png", "ftp://example.com/image.png"})
+        @DisplayName("a media URL that isn't http or https is refused before Gemini or Vertex AI can read it")
+        void mediaUrlWithOtherSchemeIsRefused(String mediaUrl) throws Exception {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            mockTargetWorkspace(workspaceName, UUID.randomUUID().toString());
+            llmProviderApiKeyResourceClient.createProviderApiKey(ProviderApiKey.builder()
+                    .provider(LlmProvider.VERTEX_AI)
+                    .apiKey(serviceAccountJson("https://oauth2.googleapis.com/token"))
+                    .configuration(Map.of("location", "us-central1"))
+                    .build(), API_KEY, workspaceName, HttpStatus.SC_CREATED);
+            var message = OpikUserMessage.builder()
+                    .content(List.of(OpikContent.builder().type(OpikContentType.IMAGE_URL)
+                            .imageUrl(ImageUrl.builder().url(mediaUrl).build()).build()))
+                    .build();
+            var request = ChatCompletionRequest.builder().stream(false)
+                    .model(VertexAIModelName.GEMINI_2_5_FLASH.qualifiedName()).messages(message).build();
+
+            assertThat(chatCompletionsClient.create(API_KEY, workspaceName, request, HttpStatus.SC_BAD_REQUEST))
+                    .isEqualTo(new ErrorMessage(HttpStatus.SC_BAD_REQUEST,
+                            "a media URL was refused: it must be an http or https URL that resolves to a public"
+                                    + " address (self-hosted deployments serving media from internal networks can set"
+                                    + " LLM_PROVIDER_VIDEO_URL_DESTINATION_GUARD=relaxed)"));
+        }
+
+        @Test
+        @DisplayName("the OpenAI Responses API client doesn't follow a redirect from the provider")
+        void responsesApiDoesNotFollowRedirects() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            mockTargetWorkspace(workspaceName, UUID.randomUUID().toString());
+            var basePath = "/v1-" + UUID.randomUUID();
+            var redirectTarget = "/elsewhere-" + UUID.randomUUID();
+            WIRE_MOCK.server().stubFor(any(urlPathMatching(basePath + "/.*"))
+                    .willReturn(aResponse().withStatus(307).withHeader("Location", redirectTarget)));
+            WIRE_MOCK.server().stubFor(any(urlPathEqualTo(redirectTarget)).willReturn(aResponse().withStatus(200)));
+            llmProviderApiKeyResourceClient.createProviderApiKey(ProviderApiKey.builder()
+                    .provider(LlmProvider.OPEN_AI)
+                    .apiKey(RandomStringUtils.randomAlphanumeric(20))
+                    .baseUrl(WIRE_MOCK.runtimeInfo().getHttpBaseUrl() + basePath)
+                    .configuration(Map.of("openai_pipeline_mode", "responses_api"))
+                    .build(), API_KEY, workspaceName, HttpStatus.SC_CREATED);
+            var request = ChatCompletionRequest.builder().stream(false)
+                    .model(OpenaiModelName.GPT_4O.toString()).addUserMessage("ping").build();
+
+            clientSupport.target(TestUtils.getBaseUrl(clientSupport) + "/v1/private/chat/completions")
+                    .request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                    .post(Entity.json(request))
+                    .close();
+
+            // the provider was reached, so the redirect was answered and not followed
+            assertThat(WIRE_MOCK.server().findAll(anyRequestedFor(urlPathMatching(basePath + "/.*")))).isNotEmpty();
+            WIRE_MOCK.server().verify(0, anyRequestedFor(urlPathEqualTo(redirectTarget)));
+        }
+
+        @Test
+        @DisplayName("an extensionless video URL on an internal address is never probed for its MIME type")
+        void videoMimeTypeLookupSkipsInternalAddress() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            mockTargetWorkspace(workspaceName, UUID.randomUUID().toString());
+            createLlmProviderApiKey(workspaceName, LlmProvider.GEMINI, "invalid-key");
+            var videoPath = "/video-" + UUID.randomUUID();
+            WIRE_MOCK.server().stubFor(head(urlPathEqualTo(videoPath))
+                    .willReturn(aResponse().withHeader("Content-Type", "video/mp4")));
+            var request = JsonUtils.getJsonNodeFromString(
+                    """
+                            {"model": "%s", "stream": false, "max_completion_tokens": 10, "messages": [{"role": "user",
+                            "content": [{"type": "text", "text": "describe"}, {"type": "video_url", "video_url": {"url": "%s"}}]}]}"""
+                            .formatted(GeminiModelName.GEMINI_2_5_FLASH,
+                                    WIRE_MOCK.runtimeInfo().getHttpBaseUrl() + videoPath));
+
+            // the model call itself fails on the invalid key, the MIME lookup comes before it
+            clientSupport.target(TestUtils.getBaseUrl(clientSupport) + "/v1/private/chat/completions")
+                    .request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                    .post(Entity.json(request))
+                    .close();
+
+            WIRE_MOCK.server().verify(0, headRequestedFor(urlPathEqualTo(videoPath)));
+        }
+    }
 }

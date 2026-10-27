@@ -24,7 +24,10 @@ def test_json_compression__compressed_if_json(respx_mock):
         None, None, check_tls_certificate=False, compress_json_requests=True
     )
 
-    json_data = {"a": 1}
+    # Past the entity-size floor, below which the body is sent as it is -- the same
+    # rule the backend applies to responses. The floor itself is covered in
+    # test_request_compression.py.
+    json_data = {"a": "padding" * 64}
     client.post(rx_url, json=json_data)
 
     assert len(respx_mock.calls) == 1

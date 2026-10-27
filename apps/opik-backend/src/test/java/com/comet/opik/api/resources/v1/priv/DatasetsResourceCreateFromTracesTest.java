@@ -293,6 +293,178 @@ class DatasetsResourceCreateFromTracesTest {
         assertThat(usageNode.isObject()).isTrue();
     }
 
+    @Nested
+    @DisplayName("Field mappings:")
+    class FieldMappings {
+
+        private UUID createTrace(String apiKey, String workspaceName) {
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(GENERATOR.generate().toString())
+                    .input(JsonUtils.getJsonNodeFromString(
+                            "{\"input_text\": \"bonjour\", \"bucket\": \"greeting\"}"))
+                    .output(JsonUtils.getJsonNodeFromString("{\"verdict\": \"correct\", \"score\": 0.94}"))
+                    .tags(Set.of("translation"))
+                    .build();
+            traceResourceClient.createTrace(trace, apiKey, workspaceName);
+            return trace.id();
+        }
+
+        @Test
+        @DisplayName("Success - mapped fields replace the enriched input and expected output")
+        void createDatasetItemsFromTraces__withFieldMappings() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+            var datasetId = createAndAssert(buildDataset().toBuilder().id(null).build(), apiKey, workspaceName);
+            var traceId = createTrace(apiKey, workspaceName);
+
+            datasetResourceClient.createDatasetItemsFromTraces(datasetId,
+                    CreateDatasetItemsFromTracesRequest.builder()
+                            .traceIds(Set.of(traceId))
+                            .enrichmentOptions(TraceEnrichmentOptions.builder().includeTags(true).build())
+                            .fieldMappings(Map.of(
+                                    "input", "input.input_text",
+                                    "expected_output", "output.verdict",
+                                    "bucket", "input.bucket"))
+                            .build(),
+                    apiKey, workspaceName);
+
+            var items = datasetResourceClient.getDatasetItems(datasetId, Map.of(), apiKey, workspaceName).content();
+
+            assertThat(items).hasSize(1);
+            var data = items.getFirst().data();
+            assertThat(data.get("input").asText()).isEqualTo("bonjour");
+            assertThat(data.get("expected_output").asText()).isEqualTo("correct");
+            assertThat(data.get("bucket").asText()).isEqualTo("greeting");
+            assertThat(data).containsKey("tags");
+        }
+
+        @Test
+        @DisplayName("Success - a mapped path that does not resolve leaves the field out")
+        void createDatasetItemsFromTraces__whenMappedPathDoesNotResolve__thenFieldIsAbsent() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+            var datasetId = createAndAssert(buildDataset().toBuilder().id(null).build(), apiKey, workspaceName);
+            var traceId = createTrace(apiKey, workspaceName);
+
+            datasetResourceClient.createDatasetItemsFromTraces(datasetId,
+                    CreateDatasetItemsFromTracesRequest.builder()
+                            .traceIds(Set.of(traceId))
+                            .enrichmentOptions(TraceEnrichmentOptions.builder().build())
+                            .fieldMappings(Map.of("input", "input.input_text", "tone", "input.tone"))
+                            .build(),
+                    apiKey, workspaceName);
+
+            var data = datasetResourceClient.getDatasetItems(datasetId, Map.of(), apiKey, workspaceName)
+                    .content().getFirst().data();
+
+            assertThat(data).doesNotContainKey("tone");
+            assertThat(data.get("input").asText()).isEqualTo("bonjour");
+        }
+
+        @Test
+        @DisplayName("Success - a test suite ignores field mappings")
+        void createDatasetItemsFromTraces__whenTestSuite__thenFieldMappingsAreIgnored() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+            var testSuite = DatasetResourceClient.buildDataset(factory).toBuilder()
+                    .id(null)
+                    .type(DatasetType.TEST_SUITE)
+                    .build();
+            var datasetId = createAndAssert(testSuite, apiKey, workspaceName);
+            var traceId = createTrace(apiKey, workspaceName);
+
+            datasetResourceClient.createDatasetItemsFromTraces(datasetId,
+                    CreateDatasetItemsFromTracesRequest.builder()
+                            .traceIds(Set.of(traceId))
+                            .enrichmentOptions(TraceEnrichmentOptions.builder().build())
+                            .fieldMappings(Map.of(
+                                    "input", "input.input_text",
+                                    "expected_output", "output.verdict"))
+                            .build(),
+                    apiKey, workspaceName);
+
+            var data = datasetResourceClient.getDatasetItems(datasetId, Map.of(), apiKey, workspaceName)
+                    .content().getFirst().data();
+
+            // Unchanged test-suite behaviour: the trace input is unwrapped to top-level keys and
+            // everything else, mapped or not, is dropped.
+            assertThat(data).containsOnlyKeys("input_text", "bucket");
+            assertThat(data.get("input_text").asText()).isEqualTo("bonjour");
+        }
+
+        @Test
+        @DisplayName("Success - a trace where no mapped path resolves creates no item")
+        void createDatasetItemsFromTraces__whenNoMappedPathResolves__thenNoItemIsCreated() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+            var datasetId = createAndAssert(buildDataset().toBuilder().id(null).build(), apiKey, workspaceName);
+            var traceId = createTrace(apiKey, workspaceName);
+
+            datasetResourceClient.createDatasetItemsFromTraces(datasetId,
+                    CreateDatasetItemsFromTracesRequest.builder()
+                            .traceIds(Set.of(traceId))
+                            .enrichmentOptions(TraceEnrichmentOptions.builder().build())
+                            .fieldMappings(Map.of("input", "input.nope", "expected_output", "output.nope"))
+                            .build(),
+                    apiKey, workspaceName);
+
+            assertThat(datasetResourceClient.getDatasetItems(datasetId, Map.of(), apiKey, workspaceName).content())
+                    .isEmpty();
+        }
+
+        @Test
+        @DisplayName("when a mapping path is malformed, then return 422")
+        void createDatasetItemsFromTraces__whenMappingPathIsMalformed__thenReturn422() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+            var datasetId = createAndAssert(buildDataset().toBuilder().id(null).build(), apiKey, workspaceName);
+
+            var request = CreateDatasetItemsFromTracesRequest.builder()
+                    .traceIds(Set.of(GENERATOR.generate()))
+                    .enrichmentOptions(TraceEnrichmentOptions.builder().build())
+                    .fieldMappings(Map.of("bucket", "input.[[["))
+                    .build();
+
+            try (var actualResponse = datasetResourceClient.callCreateDatasetItemsFromTraces(datasetId, request,
+                    apiKey, workspaceName)) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
+            }
+        }
+
+        @Test
+        @DisplayName("when a mapping uses a banned construct, then return 422")
+        void createDatasetItemsFromTraces__whenMappingUsesBannedConstruct__thenReturn422() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+            var datasetId = createAndAssert(buildDataset().toBuilder().id(null).build(), apiKey, workspaceName);
+
+            var request = CreateDatasetItemsFromTracesRequest.builder()
+                    .traceIds(Set.of(GENERATOR.generate()))
+                    .enrichmentOptions(TraceEnrichmentOptions.builder().build())
+                    .fieldMappings(Map.of("anything", "input..content"))
+                    .build();
+
+            try (var actualResponse = datasetResourceClient.callCreateDatasetItemsFromTraces(datasetId, request,
+                    apiKey, workspaceName)) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
+            }
+        }
+    }
+
     private Dataset buildDataset() {
         // Force DATASET (not TEST_SUITE) so DatasetItemService.filterDataForDatasetType keeps the
         // enriched data wrapped under "input"/"expected_output" — the assertions in this class

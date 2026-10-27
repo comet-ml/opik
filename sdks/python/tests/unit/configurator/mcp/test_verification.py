@@ -181,7 +181,10 @@ class TestVerifyHostedEndpoint:
         )
 
         assert result.succeeded is True
-        assert "sign in" in result.detail
+        # Reachability only: whether a sign-in is still owed is the closing
+        # block's business, because some clients are signed in during install.
+        assert "reachable" in result.detail
+        assert "sign in" not in result.detail
 
     def test_verify_hosted_endpoint__not_found__fails(self, patch_client):
         patch_client(_FakeClient(_response(404)))

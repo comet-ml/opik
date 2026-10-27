@@ -1,5 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import dayjs from "dayjs";
+import React, { useCallback, useMemo, useState } from "react";
 import { Database, FlaskConical, ListChecks, X } from "lucide-react";
 
 import { Button } from "@/ui/button";
@@ -19,18 +18,20 @@ import { DEFAULT_LOADED_DATASETS } from "@/v2/pages-shared/DatasetVersionSelectB
 import { useActiveProjectId } from "@/store/AppStore";
 import {
   useDatasetType,
+  useIsRunning,
   useScoresByDatasetId,
   useSelectedRuleIds,
   useResetDatasetFilters,
   useResetOutputMap,
   useSetDatasetType,
-  useSetExperimentNamePrefix,
+  useSetExperimentName,
   useSetScoresForDataset,
   useSetSelectedRuleIds,
 } from "@/store/PlaygroundStore";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { DATASET_TYPE } from "@/types/datasets";
 import { EvaluatorsRule } from "@/types/automations";
+import { isTraceRule } from "@/v2/pages/PlaygroundPage/metricSelection";
 import {
   parseDatasetVersionKey,
   toPlainDatasetId,
@@ -80,7 +81,7 @@ const RunExperimentControl: React.FC<RunExperimentControlProps> = ({
   const selectedRuleIds = useSelectedRuleIds();
   const setSelectedRuleIds = useSetSelectedRuleIds();
   const setDatasetType = useSetDatasetType();
-  const setExperimentNamePrefix = useSetExperimentNamePrefix();
+  const setExperimentName = useSetExperimentName();
   const setScoresForDataset = useSetScoresForDataset();
   const resetDatasetFilters = useResetDatasetFilters();
   const resetOutputMap = useResetOutputMap();
@@ -142,13 +143,11 @@ const RunExperimentControl: React.FC<RunExperimentControlProps> = ({
           : [];
       setSelectedRuleIds(ruleIds);
 
-      if (isDifferentDataset) resetDatasetFilters();
+      if (isDifferentDataset) {
+        resetDatasetFilters();
+        setExperimentName(null);
+      }
 
-      const name = dataset?.name ?? "";
-      const date = dayjs().format("YYYY-MM-DD");
-      setExperimentNamePrefix(
-        name ? `${name.replace(/\s+/g, "-")}-${date}` : date,
-      );
       setDatasetType(type);
       if (type === DATASET_TYPE.DATASET) {
         setScoresForDataset(newPlainId, ruleIds);
@@ -166,7 +165,7 @@ const RunExperimentControl: React.FC<RunExperimentControlProps> = ({
       resetOutputMap,
       resetDatasetFilters,
       setSelectedRuleIds,
-      setExperimentNamePrefix,
+      setExperimentName,
       setDatasetType,
       setScoresForDataset,
     ],
@@ -181,34 +180,18 @@ const RunExperimentControl: React.FC<RunExperimentControlProps> = ({
     [datasetId, setSelectedRuleIds, setScoresForDataset],
   );
 
-  // Resolve null (="all rules") to actual IDs so the backend can score non-SDK traces
-  useEffect(() => {
-    if (
-      isExperimentMode &&
-      activeType === DATASET_TYPE.DATASET &&
-      selectedRuleIds === null &&
-      rules.length > 0
-    ) {
-      setSelectedRuleIds(rules.map((r) => r.id));
-    }
-  }, [
-    isExperimentMode,
-    activeType,
-    selectedRuleIds,
-    rules,
-    setSelectedRuleIds,
-  ]);
-
   const handleRuleCreated = useCallback(
     (rule: EvaluatorsRule) => {
-      if (selectedRuleIds === null) return;
-      const next = [...selectedRuleIds, rule.id];
+      if (!isTraceRule(rule)) return;
+      const next = [...(selectedRuleIds ?? []), rule.id];
       setSelectedRuleIds(next);
       const plainId = toPlainDatasetId(datasetId);
       if (plainId) setScoresForDataset(plainId, next);
     },
     [selectedRuleIds, datasetId, setSelectedRuleIds, setScoresForDataset],
   );
+
+  const isRunning = useIsRunning();
 
   const handleClickX = useCallback(() => {
     if (isExperimentMode) {
@@ -234,6 +217,7 @@ const RunExperimentControl: React.FC<RunExperimentControlProps> = ({
         onChange={handleDatasetChange}
         projectId={activeProjectId ?? undefined}
         datasetType={type}
+        disabled={isRunning}
         autoOpen={!isExperimentMode}
         onDismiss={() => !isExperimentMode && setPendingType(null)}
       />
@@ -250,13 +234,15 @@ const RunExperimentControl: React.FC<RunExperimentControlProps> = ({
             open={metricsOpen}
             onOpenChange={setMetricsOpen}
             onRuleCreated={handleRuleCreated}
+            disabled={isRunning}
           />
         </>
       )}
       <Separator orientation="vertical" />
       <button
-        className="flex h-full items-center px-1 text-light-slate hover:text-primary-hover"
+        className="flex h-full items-center px-1 text-light-slate hover:text-primary-hover disabled:pointer-events-none disabled:opacity-50"
         onClick={handleClickX}
+        disabled={isRunning}
         aria-label="Clear selection"
       >
         <X className="size-3.5" />

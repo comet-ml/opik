@@ -1,0 +1,53 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["github>comet-ml/renovate-config:security"],
+  "enabledManagers": [
+    "github-actions",
+    "custom.regex",
+    "dockerfile",
+    "maven",
+    "npm",
+    "pip_requirements",
+    "pep621",
+    "helm-values",
+    "helmv3"
+  ],
+  "includePaths": [
+    ".github/**",
+    "apps/opik-backend/**",
+    "apps/opik-frontend/**",
+    "apps/opik-python-backend/**",
+    "apps/opik-sandbox-executor-python/**",
+    "deployment/helm_chart/opik/**",
+    "tests_end_to_end/e2e/**"
+  ],
+  "packageRules": [
+    {
+      "description": "The e2e suite is test tooling: its own group, kept apart from the shipped frontend",
+      "matchFileNames": ["tests_end_to_end/e2e/**"],
+      "groupName": "e2e npm"
+    },
+    {
+      "description": "Opik's own images in the chart are set by the release, not Renovate",
+      "matchManagers": ["helm-values"],
+      "matchPackageNames": ["opik-*", "**/opik-*", "comet-ml/**"],
+      "enabled": false
+    },
+    {
+      "description": "comet-mysql-helm is Comet's own chart",
+      "matchManagers": ["helmv3"],
+      "matchDepNames": ["mysql"],
+      "enabled": false
+    },
+    {
+      "description": "Altinity tags are <year>.<month>.<patch>.<build>.altinitystable; a new year.month line is an upgrade, so it waits for a Dependency Dashboard tick",
+      "matchDepNames": ["altinity/clickhouse-server"],
+      "versioning": "regex:^(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)\\.(?<build>\\d+)(?<compatibility>\\.altinitystable)$"
+    },
+    {
+      "matchDepNames": ["altinity/clickhouse-server"],
+      "matchUpdateTypes": ["major", "minor"],
+      "dependencyDashboardApproval": true
+    }
+  ]
+}

@@ -22,7 +22,8 @@ type TraceLogsSidebarButtonProps = {
   scopeLabel?: string;
   // "tag": green icon + label transparent tag. "nav": bordered nav pill with a
   // trailing arrow (matches the sibling dataset NavigationTag). "icon": icon-only.
-  variant?: "tag" | "nav" | "icon";
+  // "link": underlined table link with a trailing arrow.
+  variant?: "tag" | "nav" | "icon" | "link";
   textSize?: TagTextSize;
   title?: string;
   label?: string;
@@ -31,6 +32,7 @@ type TraceLogsSidebarButtonProps = {
   // display. Used by per-row triggers (e.g. the online-evaluation rules table) so the sidebar is
   // mounted once for the page instead of once per row (which would race on the shared tls_* state).
   renderSidebar?: boolean;
+  stopClickPropagation?: boolean;
 };
 
 const TraceLogsSidebarButton: React.FunctionComponent<
@@ -47,16 +49,19 @@ const TraceLogsSidebarButton: React.FunctionComponent<
   label = "Go to logs",
   viewConfig,
   renderSidebar = true,
+  stopClickPropagation = false,
 }) => {
   const { open, openSidebar, closeSidebar } = useTraceLogsSidebarControls();
 
   const handleOpen = useCallback(
-    () =>
+    (event: React.MouseEvent) => {
+      if (stopClickPropagation) event.stopPropagation();
       openSidebar(
         sourceFilters,
         lockScope ? { locked: true, label: scopeLabel } : undefined,
-      ),
-    [openSidebar, sourceFilters, lockScope, scopeLabel],
+      );
+    },
+    [openSidebar, sourceFilters, lockScope, scopeLabel, stopClickPropagation],
   );
 
   const labelClassName = cn(
@@ -65,7 +70,12 @@ const TraceLogsSidebarButton: React.FunctionComponent<
   );
 
   const trigger =
-    variant === "icon" ? (
+    variant === "link" ? (
+      <Button variant="tableLink" size="sm" onClick={handleOpen}>
+        {label}
+        <ArrowUpRight className="ml-1 size-3.5 shrink-0" />
+      </Button>
+    ) : variant === "icon" ? (
       <TooltipWrapper content={label}>
         <Button
           data-testid="playground-logs-sidebar-button"

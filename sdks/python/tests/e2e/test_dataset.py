@@ -1,11 +1,18 @@
+import datetime
+import decimal
+import enum
+import json
 import logging
 import time
+import uuid
+from typing import Any, Dict, List
 
 import opik
 import opik.exceptions
 from opik import synchronization
 
-from opik.api_objects.dataset import dataset_item
+from opik.api_objects.dataset import dataset, dataset_item
+from opik.rest_api import client as rest_api_client
 from opik.api_objects import constants, helpers
 from . import verifiers
 from ..testlib import generate_project_name
@@ -14,6 +21,10 @@ import pytest
 LOGGER = logging.getLogger(__name__)
 
 PROJECT_NAME = generate_project_name("e2e", __name__)
+
+
+class _Colour(enum.Enum):
+    RED = "red"
 
 
 def test_create_and_populate_dataset__happyflow(
@@ -193,15 +204,16 @@ def test_insert_parallel__same_data_regardless_of_thread_count(
 
     # Shared batch_group_id => a single version, no matter the thread count.
     # (Unique-per-chunk grouping would create one version per batch.)
-    # Skipped when versioning is disabled on the backend (get_version_info
-    # returns None); the count + content checks above already prove correctness.
     stored_dataset = opik_client.get_dataset(name=name, project_name=PROJECT_NAME)
     version_info = stored_dataset.get_version_info()
-    if version_info is not None:
-        assert version_info.version_name == "v1", (
-            "Parallel insert must fold all batches into one version regardless of thread count"
-        )
-        assert version_info.items_total == N_ITEMS
+    if version_info is None:
+        # As above: a supported backend configuration, skipped loudly rather than passed
+        # over in silence. The count and content checks above have already run.
+        pytest.skip("dataset versioning is disabled on this backend")
+    assert version_info.version_name == "v1", (
+        "Parallel insert must fold all batches into one version regardless of thread count"
+    )
+    assert version_info.items_total == N_ITEMS
 
 
 def test_dataset_clearing(opik_client: opik.Opik, dataset_name: str):
@@ -625,3 +637,206 @@ def test_stream_items__dataset_version__reads_that_version_snapshot(
     assert len(v1_items) == 1
     assert v1_items[0]["input"] == {"question": "What is the capital of France?"}
     assert len(v2_items) == 2
+
+
+def _streamed_content(dataset) -> List[Dict[str, Any]]:
+    """Every stored item minus its id, ordered so two datasets can be compared."""
+    items = _stream_all_items(dataset)
+    content = [{k: v for k, v in item.items() if k != "id"} for item in items]
+    return sorted(content, key=lambda item: json.dumps(item, sort_keys=True))
+
+
+def _wait_for_item_count(dataset, expected: int) -> None:
+    success = synchronization.until(
+        lambda: len(_stream_all_items(dataset)) == expected,
+        max_try_seconds=60,
+    )
+    assert success, (
+        f"Only {len(_stream_all_items(dataset))} of {expected} items became readable"
+    )
+
+
+@pytest.mark.parametrize("num_threads", [1, 4])
+def test_insert__generator_source__every_item_lands_in_a_single_version(
+    opik_client: opik.Opik, dataset_name: str, num_threads: int
+):
+    """A one-shot generator uploaded to a real backend, across several requests.
+
+    This is the streaming upload end to end: the request envelope the writer
+    builds by hand, the gzip level it compresses at and the header that labels
+    it are only ever asserted against a captured body in the unit tests, so a
+    body the backend rejects would not fail any of them. 2,500 items is three
+    requests at the 1000-row cap, and both thread counts are covered because
+    one sends inline and the other hands bodies to the send pool.
+
+    A generator is the input main could not take at all: `insert` typed its
+    argument `Sequence` and the splitter called `len()` on it.
+    """
+    name = f"{dataset_name}-gen-t{num_threads}"
+    item_count = 2_500
+
+    def source():
+        for i in range(item_count):
+            yield {
+                "input": {"question": f"question {i}"},
+                "expected_output": {"output": f"answer {i}"},
+            }
+
+    dataset = opik_client.create_dataset(
+        name, description="E2E streaming insert", project_name=PROJECT_NAME
+    )
+    dataset.insert(source(), num_threads=num_threads)
+
+    _wait_for_item_count(dataset, item_count)
+
+    stored = _stream_all_items(dataset)
+    assert {item["input"]["question"] for item in stored} == {
+        f"question {i}" for i in range(item_count)
+    }, "Every item the generator yielded must be stored, exactly once"
+
+    # One batch_group_id across every request, so the upload is one version
+    # however many requests it took and whoever sent them.
+    version_info = opik_client.get_dataset(
+        name=name, project_name=PROJECT_NAME
+    ).get_version_info()
+    if version_info is None:
+        # Versioning is a backend toggle (TOGGLE_DATASET_VERSIONING_ENABLED), so None is a
+        # supported deployment rather than a failure -- but skipping loudly, because the
+        # assertions below are the point of this test and must not pass by not running.
+        pytest.skip("dataset versioning is disabled on this backend")
+    assert version_info.version_name == "v1"
+    assert version_info.items_total == item_count
+
+
+@pytest.mark.parametrize("payload_kind", ["json_native", "flexible_types"])
+def test_insert__dataset_built_from_a_rest_client__stores_identical_items(
+    opik_client: opik.Opik, dataset_name: str, payload_kind: str
+):
+    """A `Dataset` built from a REST client alone must store what any other does.
+
+    It resolves its transport from the REST client's own wrapper rather than from
+    an owning client, so this is the construction that would break first if that
+    resolution were wrong -- and it is the one third-party code uses.
+
+    `flexible_types` is the payload most likely to expose a difference: those
+    values are normalised by `encode_flexible` on the way out, and a mismatch
+    with what the backend stored would show up here rather than in a unit test
+    that only reads back the body it captured.
+    """
+    if payload_kind == "json_native":
+        data = {"question": "What is the capital of France?", "n": 1, "ok": True}
+    else:
+        data = {
+            "when": datetime.datetime(2024, 1, 2, 3, 4, 5),
+            "day": datetime.date(2024, 1, 2),
+            "uid": uuid.UUID("00000000-0000-0000-0000-00000000002a"),
+            "amount": decimal.Decimal("12.34"),
+            "colour": _Colour.RED,
+            "tags": ("a", "b"),
+        }
+
+    items = [{"input": data, "expected_output": {"output": "Paris"}}]
+
+    owning_client_name = f"{dataset_name}-owning-client-{payload_kind}"
+    rest_client_only_name = f"{dataset_name}-rest-client-only-{payload_kind}"
+
+    owning_client_dataset = opik_client.create_dataset(
+        owning_client_name,
+        description="E2E owning-client path",
+        project_name=PROJECT_NAME,
+    )
+    owning_client_dataset.insert(items)
+
+    opik_client.create_dataset(
+        rest_client_only_name,
+        description="E2E rest-client-only path",
+        project_name=PROJECT_NAME,
+    )
+    # Deliberately without `client=`: the transport has to come from the REST
+    # client's own wrapper for this to upload at all.
+    rest_client_only_dataset = dataset.Dataset(
+        name=rest_client_only_name,
+        description="E2E rest-client-only path",
+        project_name=PROJECT_NAME,
+        rest_client=opik_client.rest_client,
+    )
+    rest_client_only_dataset.insert(items)
+
+    _wait_for_item_count(owning_client_dataset, 1)
+    _wait_for_item_count(rest_client_only_dataset, 1)
+
+    assert _streamed_content(owning_client_dataset) == _streamed_content(
+        rest_client_only_dataset
+    ), "A Dataset built from a REST client alone must store the same item"
+
+
+def test_insert__standalone_rest_client__uploads_authenticated(
+    opik_client: opik.Opik, dataset_name: str
+):
+    """A REST client configured on its own must upload with its own credentials.
+
+    `Opik` puts auth and workspace headers on the httpx client, so a Dataset built from
+    its REST client would upload authenticated no matter what the sender did. A public
+    `OpikApi` built directly keeps them on the wrapper and the generated client applies
+    them per request -- so this is the construction that catches a prepared-body sender
+    that forgets them, and the only one that reaches a real server to prove it.
+    """
+    config = opik_client.config
+    rest_client = rest_api_client.OpikApi(
+        base_url=config.url_override,
+        api_key=config.api_key,
+        workspace_name=config.workspace,
+    )
+    try:
+        name = f"{dataset_name}-standalone-rest-client"
+        opik_client.create_dataset(
+            name, description="E2E standalone REST client", project_name=PROJECT_NAME
+        )
+        standalone = dataset.Dataset(
+            name=name,
+            description="E2E standalone REST client",
+            project_name=PROJECT_NAME,
+            rest_client=rest_client,
+        )
+
+        items = [{"input": {"question": f"question {i}"}} for i in range(3)]
+        standalone.insert(items)
+
+        _wait_for_item_count(standalone, len(items))
+        assert {
+            item["input"]["question"] for item in _stream_all_items(standalone)
+        } == {f"question {i}" for i in range(len(items))}
+    finally:
+        rest_client._client_wrapper.httpx_client.httpx_client.close()
+
+
+def test_insert__request_compression_disabled__items_are_still_stored(
+    dataset_name: str, monkeypatch
+):
+    """An uncompressed body has to be accepted too, and labelled as such.
+
+    With compression off the writer emits plain bytes and `send_prepared_json`
+    omits `Content-Encoding`. Getting that pairing wrong -- gzipped bytes
+    labelled plain, or the reverse -- is invisible to a test that decodes the
+    body it captured, and is exactly the kind of thing only a real server
+    notices.
+    """
+    monkeypatch.setenv("OPIK_ENABLE_JSON_REQUEST_COMPRESSION", "false")
+
+    uncompressed_client = opik.Opik()
+    try:
+        name = f"{dataset_name}-uncompressed"
+        items = [{"input": {"question": f"question {i}"}} for i in range(3)]
+
+        uncompressed_dataset = uncompressed_client.create_dataset(
+            name, description="E2E uncompressed upload", project_name=PROJECT_NAME
+        )
+        uncompressed_dataset.insert(items)
+
+        _wait_for_item_count(uncompressed_dataset, len(items))
+        assert {
+            item["input"]["question"]
+            for item in _stream_all_items(uncompressed_dataset)
+        } == {f"question {i}" for i in range(3)}
+    finally:
+        uncompressed_client.end(flush=False)

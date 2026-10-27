@@ -100,7 +100,7 @@ public class AuthTokenProvider {
         this.redisClient = redisClient;
         this.lockService = lockService;
         this.config = config;
-        this.destinationGuard = new DestinationGuard(config.getDestinationGuard());
+        this.destinationGuard = DestinationGuard.builder().mode(config.getDestinationGuard()).build();
         // Same posture as the LLM clients: HTTP/1.1 and no redirect following (a token endpoint
         // redirecting elsewhere is a misconfiguration or an attack, never a flow to honor).
         this.httpClient = HttpClient.newBuilder()
@@ -240,6 +240,16 @@ public class AuthTokenProvider {
     }
 
     // --- recipe execution ---
+
+    /**
+     * The same destination check {@link #fetchToken(ProviderAuthConfig)} applies, for callers validating a recipe
+     * before saving it.
+     *
+     * @throws DestinationGuardException when the token endpoint is refused
+     */
+    public void validateTokenUrl(@NonNull String tokenUrl) {
+        destinationGuard.validate(tokenUrl);
+    }
 
     FetchedToken fetchToken(@NonNull ProviderAuthConfig authConfig) {
         return fetchToken(authConfig, ORIGIN_REQUEST);

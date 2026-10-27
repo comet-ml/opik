@@ -12,6 +12,7 @@ import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.comet.opik.utils.JsonUtils;
 import io.dropwizard.util.Duration;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.AfterEach;
@@ -36,6 +37,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorUserDefinedMetricPython.UserDefinedMetricPythonCode;
@@ -44,14 +47,25 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.mockingDetails;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class OnlineScoringUserDefinedMetricPythonScorerTest {
+
+    // Restated independently and byte-identical to the span scorer's copy: that is what makes one search
+    // catch both scorers, so a divergence between them fails here rather than passing quietly.
+    private static final String UNRESOLVED_ARGUMENTS_LOG = "None of the metric's declared arguments resolved,"
+            + " so there is no data to evaluate. Check the declared paths against the input, output and"
+            + " metadata present on the entity. {} '{}', rule '{}', unresolved arguments: {}";
+
+    private static final String EVALUATING_LOG = "Evaluating {} '{}' sampled by rule '{}'";
+    private static final String SENDING_LOG = "Sending {} '{}' to Python evaluator: '{}'";
 
     private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
 
@@ -204,6 +218,36 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
         }
 
         @Test
+        void dropsAScoreTheMetricFlaggedAsFailedBeforeStoring() {
+            // The SDK pairs scoring_failed with a placeholder 0.0, so such a score is storable and would be
+            // recorded as a genuine zero. The split classifies it; this pins that the scorer stores what the
+            // split kept, rather than the list it was handed.
+            var message = sampleMessage();
+            var valued = PythonScoreResult.builder()
+                    .name("answer_relevance")
+                    .value(BigDecimal.valueOf(0.75))
+                    .reason("relevant")
+                    .build();
+            var failed = PythonScoreResult.builder()
+                    .name("hallucination")
+                    .value(BigDecimal.ZERO)
+                    .scoringFailed(true)
+                    .reason("upstream call failed")
+                    .build();
+
+            when(pythonEvaluatorService.evaluate(eq(message.code().metric()), any()))
+                    .thenReturn(Mono.just(List.of(valued, failed)));
+            when(feedbackScoreService.scoreBatchOfTraces(any())).thenReturn(Mono.empty());
+
+            scorer.score(message).block();
+
+            var captor = ArgumentCaptor.forClass(List.class);
+            verify(feedbackScoreService).scoreBatchOfTraces(captor.capture());
+            assertThat(captor.getValue()).usingRecursiveComparison().isEqualTo(List.of(
+                    traceScore("answer_relevance", BigDecimal.valueOf(0.75), "relevant", message.trace())));
+        }
+
+        @Test
         void reportsTheDroppedScoreOnTheRuleLog() {
             var message = sampleMessage();
             var valueless = PythonScoreResult.builder().name("hallucination").build();
@@ -299,6 +343,96 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
         }
 
         @Test
+        void reportsUnresolvedArgumentsOnTheRuleLogInsteadOfCallingTheEvaluator() {
+            // Declared fields the trace does not carry resolve to an empty map; the evaluator must not be
+            // called with it, and the user must be told which arguments to fix.
+            var message = sampleMessageWithUnresolvableArguments();
+
+            scorer.score(message).block();
+
+            verify(pythonEvaluatorService, never()).evaluate(any(), any());
+            verify(userFacingLogger).warn(
+                    eq(UNRESOLVED_ARGUMENTS_LOG),
+                    eq("traceId"),
+                    eq(traceId),
+                    eq(ruleName),
+                    eq("'expects_sql' -> 'input.expects_sql', 'plan' -> 'output.execution_plan'"));
+            verify(feedbackScoreService, never()).scoreBatchOfTraces(any());
+        }
+
+        @Test
+        void sanitisesAndCapsTheArgumentsItReports() {
+            // User-controlled text that persists in automation_rule_evaluator_logs.message: a newline must
+            // not forge an entry there, nor one long value flood it.
+            var longPath = "input." + RandomStringUtils.secure().nextAlphanumeric(200);
+            var message = sampleMessageWithArguments(Map.of(
+                    "a_newline", "input.first\nWARN forged entry",
+                    "b_long", longPath));
+
+            scorer.score(message).block();
+
+            var reported = ArgumentCaptor.forClass(String.class);
+            verify(userFacingLogger).warn(
+                    eq(UNRESOLVED_ARGUMENTS_LOG),
+                    eq("traceId"), eq(traceId), eq(ruleName), reported.capture());
+
+            // Whole string, not fragments, so separator, ordering, truncation and the absence of extras hold.
+            assertThat(reported.getValue()).isEqualTo(
+                    "'a_newline' -> 'input.first WARN forged entry', 'b_long' -> '%s…'"
+                            .formatted(longPath.substring(0, 100)));
+        }
+
+        @Test
+        void capsHowManyArgumentsItReports() {
+            // The count comes from the rule, so one rule would otherwise decide how much this path carries.
+            var arguments = IntStream.range(0, 13).boxed()
+                    .collect(Collectors.toMap("arg_%02d"::formatted, index -> "input.absent_%02d".formatted(index)));
+            var message = sampleMessageWithArguments(arguments);
+
+            scorer.score(message).block();
+
+            var reported = ArgumentCaptor.forClass(String.class);
+            verify(userFacingLogger).warn(
+                    eq(UNRESOLVED_ARGUMENTS_LOG),
+                    eq("traceId"), eq(traceId), eq(ruleName), reported.capture());
+
+            // Built independently so ordering, which ten survive the cap, and the omitted count are pinned.
+            var expected = IntStream.range(0, 10)
+                    .mapToObj(index -> "'arg_%02d' -> 'input.absent_%02d'".formatted(index, index))
+                    .collect(Collectors.joining(", ")) + " and 3 more";
+            assertThat(reported.getValue()).isEqualTo(expected);
+        }
+
+        @Test
+        void doesNotClaimItSentDataWhenNoDeclaredArgumentResolves() {
+            // Asserted as a sequence: checking only that the warning is present would still pass with the
+            // contradictory "Sending" line back. isInfoEnabled() must be stubbed true or a mock Logger
+            // suppresses that line by itself and the assertion holds with or without the fix; lenient()
+            // because the fixed path short-circuits before the level check.
+            lenient().when(userFacingLogger.isInfoEnabled()).thenReturn(true);
+            var message = sampleMessageWithUnresolvableArguments();
+
+            scorer.score(message).block();
+
+            assertThat(userFacingMessages()).containsExactly(EVALUATING_LOG, UNRESOLVED_ARGUMENTS_LOG);
+        }
+
+        @Test
+        void stillReportsSendingWhenThereIsDataToSend() {
+            // The suppression has to be conditional on emptiness, not unconditional — a run that really
+            // does send still has to say so, and still after the "Evaluating" line.
+            when(userFacingLogger.isInfoEnabled()).thenReturn(true);
+            var message = sampleMessage();
+            when(pythonEvaluatorService.evaluate(eq(message.code().metric()), any()))
+                    .thenReturn(Mono.just(List.of()));
+            when(feedbackScoreService.scoreBatchOfTraces(any())).thenReturn(Mono.empty());
+
+            scorer.score(message).block();
+
+            assertThat(userFacingMessages()).containsSubsequence(EVALUATING_LOG, SENDING_LOG);
+        }
+
+        @Test
         void propagatesEvaluatorErrorAndLogsMessage() {
             var message = sampleMessage();
             var error = new RuntimeException("Python BE timeout");
@@ -317,6 +451,18 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
         }
     }
 
+    /**
+     * Every format string the user-facing sink received, in call order. Level checks such as
+     * {@code isInfoEnabled()} are recorded as zero-argument invocations and carry no message, so they are
+     * skipped rather than read as one.
+     */
+    private List<String> userFacingMessages() {
+        return mockingDetails(userFacingLogger).getInvocations().stream()
+                .filter(invocation -> invocation.getArguments().length > 0)
+                .map(invocation -> invocation.getArgument(0, String.class))
+                .toList();
+    }
+
     private TraceToScoreUserDefinedMetricPython sampleMessage() {
         return sampleMessageWithArguments(Map.of("input", "input.question", "output", "output.answer"));
     }
@@ -326,10 +472,26 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
                 Map.of("input", "input.question", "output", "output.answer", "spans", "spans"));
     }
 
+    /**
+     * Mirrors the production shape: the metric declares `expects_sql` and `execution_plan`, the trace
+     * carries neither, so every declared argument resolves to null and the replacement map comes back
+     * empty.
+     */
+    private TraceToScoreUserDefinedMetricPython sampleMessageWithUnresolvableArguments() {
+        return sampleMessageWithArguments(
+                Map.of("expects_sql", "input.expects_sql", "plan", "output.execution_plan"));
+    }
+
     private TraceToScoreUserDefinedMetricPython sampleMessageWithArguments(Map<String, String> arguments) {
+        // Pinned, not Podam-filled: the declared paths must actually resolve, or every test here hands the
+        // evaluator an empty map and silently stops covering what it means to.
         var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
                 .id(traceId)
                 .projectId(projectId)
+                .input(JsonUtils.getJsonNodeFromString(
+                        "{\"question\":\"%s\"}".formatted(RandomStringUtils.secure().nextAlphanumeric(16))))
+                .output(JsonUtils.getJsonNodeFromString(
+                        "{\"answer\":\"%s\"}".formatted(RandomStringUtils.secure().nextAlphanumeric(16))))
                 .build();
         return podamFactory.manufacturePojo(TraceToScoreUserDefinedMetricPython.class).toBuilder()
                 .trace(trace)

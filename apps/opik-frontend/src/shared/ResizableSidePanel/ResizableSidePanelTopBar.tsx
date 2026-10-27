@@ -9,6 +9,7 @@ type ResizableSidePanelTopBarVariant = "form" | "info";
 type ResizableSidePanelTopBarProps = {
   variant?: ResizableSidePanelTopBarVariant;
   title?: React.ReactNode;
+  titleSuffix?: React.ReactNode;
   leftIcon?: React.ReactNode;
   children?: React.ReactNode;
   onClose: () => void;
@@ -16,7 +17,7 @@ type ResizableSidePanelTopBarProps = {
 
 const ResizableSidePanelTopBar: React.FunctionComponent<
   ResizableSidePanelTopBarProps
-> = ({ variant = "info", title, leftIcon, children, onClose }) => {
+> = ({ variant = "info", title, titleSuffix, leftIcon, children, onClose }) => {
   const CloseIcon = variant === "form" ? X : ChevronsRight;
   return (
     <div className="flex flex-auto items-center justify-between">
@@ -31,6 +32,7 @@ const ResizableSidePanelTopBar: React.FunctionComponent<
         {title !== undefined && (
           <span className="comet-body-s-accented truncate">{title}</span>
         )}
+        {titleSuffix}
       </div>
       {children !== undefined && (
         <div className="flex shrink-0 items-center gap-2 pl-4">{children}</div>

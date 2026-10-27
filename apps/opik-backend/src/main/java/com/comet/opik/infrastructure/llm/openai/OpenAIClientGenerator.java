@@ -2,15 +2,26 @@ package com.comet.opik.infrastructure.llm.openai;
 
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
+import com.comet.opik.infrastructure.llm.CustomParametersOverrides;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
 import com.comet.opik.infrastructure.llm.OpenAiClientConfig;
+import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.openai.client.OpenAIClient;
+import com.openai.core.http.HttpClient;
+import com.openai.models.ReasoningEffort;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import dev.langchain4j.model.openai.internal.OpenAiClient;
+import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.openaiofficial.OpenAiOfficialResponsesChatModel;
 import dev.langchain4j.model.openaiofficial.OpenAiOfficialResponsesStreamingChatModel;
+import dev.langchain4j.model.openaiofficial.setup.OpenAiOfficialSetup;
+import io.dropwizard.util.Duration;
+import jakarta.annotation.Nullable;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -34,12 +45,17 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
     // ChatRequest.parameters().modelName(...), so this placeholder never reaches OpenAI.
     private static final String PROXY_MODEL_NAME_PLACEHOLDER = "placeholder-model-value";
 
+    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
+    };
+
     public enum ApiPipelineMode {
         CHAT_COMPLETIONS_API, // Uses traditional /v1/chat/completions
         RESPONSES_API // Uses modern /v1/responses
     }
 
     private final @NonNull LlmProviderClientConfig llmProviderClientConfig;
+    // see OpenAIModule: no redirects, every connection resolved through the destination guard
+    private final @NonNull HttpClient responsesApiHttpClient;
 
     public OpenAiClient newOpenAiClient(@NonNull LlmProviderClientApiConfig config) {
         var openAiClientBuilder = OpenAiClient.builder()
@@ -116,8 +132,8 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
                 // Treat insufficient_quota (429, out-of-credits) as non-retryable so neither the model's
                 // internal retry nor the outer retry policy keeps hitting an exhausted key.
                 .httpClientBuilder(QuotaAwareHttpClient.builder())
-                .logRequests(true)
-                .logResponses(true);
+                .logRequests(llmProviderClientConfig.getLogRequests())
+                .logResponses(llmProviderClientConfig.getLogResponses());
 
         Optional.ofNullable(llmProviderClientConfig.getConnectTimeout())
                 .ifPresent(connectTimeout -> builder.timeout(connectTimeout.toJavaDuration()));
@@ -135,8 +151,20 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
                 .filter(MapUtils::isNotEmpty)
                 .ifPresent(builder::customHeaders);
 
-        Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
-        Optional.ofNullable(modelParameters.seed()).ifPresent(builder::seed);
+        var judgeRequest = ChatCompletionRequest.builder()
+                .temperature(modelParameters.temperature())
+                .seed(modelParameters.seed());
+        Optional.ofNullable(modelParameters.customParameters())
+                .filter(JsonNode::isObject)
+                .map(customParameters -> JsonUtils.getMapper().convertValue(customParameters, MAP_TYPE))
+                .ifPresent(judgeRequest::customParameters);
+
+        // Round-tripped through a request so an extra body key replaces the typed field of the same name
+        // by the chat path's rule; langchain4j would otherwise send that key twice.
+        var request = CustomParametersOverrides.apply(judgeRequest.build());
+        Optional.ofNullable(request.temperature()).ifPresent(builder::temperature);
+        Optional.ofNullable(request.seed()).ifPresent(builder::seed);
+        Optional.ofNullable(request.customParameters()).ifPresent(builder::customParameters);
 
         return builder.build();
     }
@@ -151,76 +179,79 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
      * {@code response_format.json_schema.strict} per request and picks the right variant here, since
      * langchain4j has no per-request strict slot.
      */
-    ChatModel newResponsesApiChatModel(@NonNull LlmProviderClientApiConfig config, boolean strictJsonSchema) {
-        return newResponsesApiChatModel(
+    ChatModel newResponsesApiChatModel(@NonNull LlmProviderClientApiConfig config, boolean strictJsonSchema,
+            @Nullable Map<String, Object> extraBody) {
+        return newResponsesApiChatModelBuilder(
                 config,
                 LlmAsJudgeModelParameters.builder().name(PROXY_MODEL_NAME_PLACEHOLDER).build(),
-                strictJsonSchema);
+                strictJsonSchema,
+                extraBody)
+                .build();
     }
 
     ChatModel newResponsesApiChatModel(@NonNull LlmProviderClientApiConfig config,
             @NonNull LlmAsJudgeModelParameters modelParameters) {
-        return newResponsesApiChatModel(config, modelParameters, false);
-    }
-
-    ChatModel newResponsesApiChatModel(@NonNull LlmProviderClientApiConfig config,
-            @NonNull LlmAsJudgeModelParameters modelParameters, boolean strictJsonSchema) {
-        var builder = OpenAiOfficialResponsesChatModel.builder()
-                .modelName(modelParameters.name())
-                .apiKey(config.apiKey())
-                .strictJsonSchema(strictJsonSchema);
-
-        Optional.ofNullable(llmProviderClientConfig.getConnectTimeout())
-                .ifPresent(connectTimeout -> builder.timeout(connectTimeout.toJavaDuration()));
-
-        Optional.ofNullable(llmProviderClientConfig.getOpenAiClient())
-                .map(OpenAiClientConfig::url)
+        var judgeRequest = OpenAiResponsesExtraBody.toResponsesRequest(ChatCompletionRequest.builder()
+                .customParameters(
+                        OpenAiResponsesExtraBody.fromJudgeCustomParameters(modelParameters.customParameters()))
+                .build());
+        var builder = newResponsesApiChatModelBuilder(config, modelParameters, false,
+                judgeRequest.customParameters());
+        // A judge sets its own response_format on every request, which wins over a model default, so of the moved
+        // settings only these two can apply.
+        Optional.ofNullable(judgeRequest.maxCompletionTokens()).ifPresent(builder::maxOutputTokens);
+        Optional.ofNullable(judgeRequest.reasoningEffort())
                 .filter(StringUtils::isNotBlank)
-                .ifPresent(builder::baseUrl);
-
-        if (StringUtils.isNotEmpty(config.baseUrl())) {
-            builder.baseUrl(config.baseUrl());
-        }
-
-        Optional.ofNullable(config.headers())
-                .filter(MapUtils::isNotEmpty)
-                .ifPresent(builder::customHeaders);
-
-        Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
-
+                .map(ReasoningEffort::of)
+                .ifPresent(builder::reasoningEffort);
         return builder.build();
     }
 
+    private OpenAiOfficialResponsesChatModel.Builder newResponsesApiChatModelBuilder(
+            LlmProviderClientApiConfig config, LlmAsJudgeModelParameters modelParameters, boolean strictJsonSchema,
+            @Nullable Map<String, Object> extraBody) {
+        var builder = OpenAiOfficialResponsesChatModel.builder()
+                .client(newResponsesApiClient(config, modelParameters.name(), extraBody))
+                .modelName(modelParameters.name())
+                .strictJsonSchema(strictJsonSchema);
+
+        Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
+
+        return builder;
+    }
+
     /**
-     * Proxy-path streaming counterpart to {@link #newResponsesApiChatModel(LlmProviderClientApiConfig, boolean)}.
+     * Proxy-path streaming counterpart to {@link #newResponsesApiChatModel(LlmProviderClientApiConfig, boolean, Map)}.
      * Like the non-streaming variant, the real model name is supplied per request via
      * {@code ChatRequest.parameters().modelName(...)}; a placeholder is used at build time only to
      * satisfy langchain4j's required-field validation. {@code strictJsonSchema} is a build-time
      * setting on the langchain4j model — the proxy passes the per-request {@code strict} bit here.
      */
     StreamingChatModel newResponsesApiStreamingChatModel(@NonNull LlmProviderClientApiConfig config,
-            boolean strictJsonSchema) {
-        var builder = OpenAiOfficialResponsesStreamingChatModel.builder()
+            boolean strictJsonSchema, @Nullable Map<String, Object> extraBody) {
+        return OpenAiOfficialResponsesStreamingChatModel.builder()
+                .client(newResponsesApiClient(config, PROXY_MODEL_NAME_PLACEHOLDER, extraBody))
                 .modelName(PROXY_MODEL_NAME_PLACEHOLDER)
-                .apiKey(config.apiKey())
-                .strictJsonSchema(strictJsonSchema);
+                .strictJsonSchema(strictJsonSchema)
+                .build();
+    }
 
-        Optional.ofNullable(llmProviderClientConfig.getConnectTimeout())
-                .ifPresent(connectTimeout -> builder.timeout(connectTimeout.toJavaDuration()));
-
-        Optional.ofNullable(llmProviderClientConfig.getOpenAiClient())
-                .map(OpenAiClientConfig::url)
-                .filter(StringUtils::isNotBlank)
-                .ifPresent(builder::baseUrl);
-
-        if (StringUtils.isNotEmpty(config.baseUrl())) {
-            builder.baseUrl(config.baseUrl());
-        }
-
-        Optional.ofNullable(config.headers())
-                .filter(MapUtils::isNotEmpty)
-                .ifPresent(builder::customHeaders);
-
-        return builder.build();
+    // Built here, with the settings the langchain4j builder would pass to this same setup call, so that the extra
+    // body can wrap the client; a builder given its own client ignores the connection settings.
+    private OpenAIClient newResponsesApiClient(LlmProviderClientApiConfig config, String modelName,
+            @Nullable Map<String, Object> extraBody) {
+        var baseUrl = Optional.ofNullable(config.baseUrl())
+                .filter(StringUtils::isNotEmpty)
+                .or(() -> Optional.ofNullable(llmProviderClientConfig.getOpenAiClient())
+                        .map(OpenAiClientConfig::url)
+                        .filter(StringUtils::isNotBlank))
+                .orElse(null);
+        var timeout = Optional.ofNullable(llmProviderClientConfig.getConnectTimeout())
+                .map(Duration::toJavaDuration)
+                .orElse(null);
+        var client = OpenAiOfficialSetup.setupSyncClient(baseUrl, config.apiKey(), null, null, null, null, false,
+                false, modelName, timeout, null, null, config.headers())
+                .withOptions(options -> options.httpClient(responsesApiHttpClient));
+        return OpenAiResponsesExtraBody.withExtraBody(client, extraBody);
     }
 }

@@ -96,13 +96,15 @@ public class OnlineScoringUserDefinedMetricPythonScorer
 
         return spansMono
                 .flatMap(spans -> Mono.fromCallable(() -> prepareData(message, spans, mdc)))
-                .flatMap(data -> pythonEvaluatorService.evaluate(message.code().metric(), data))
+                .flatMap(data -> data.isEmpty()
+                        ? reportUnresolvedArguments(message, mdc)
+                        : pythonEvaluatorService.evaluate(message.code().metric(), data))
                 .doOnNext(withMdc(mdc, scoreResults -> userFacingLogger
                         .info("Received response for traceId '{}':\n\n{}", trace.id(), scoreResults)))
                 .flatMap(scoreResults -> {
-                    var pythonScores = OnlineScoringEngine.toStorablePythonScores(scoreResults);
-                    OnlineScoringEngine.logValuelessPythonScores(userFacingLogger, mdc,
-                            pythonScores.valuelessNames(), "traceId", trace.id());
+                    var pythonScores = OnlineScoringEngine.splitPythonScores(scoreResults);
+                    OnlineScoringEngine.logDroppedPythonScores(userFacingLogger, mdc, pythonScores,
+                            "traceId", trace.id());
                     return storeScores(toFeedbackScores(pythonScores.storable(), trace), trace,
                             message.userName(), message.workspaceId());
                 })
@@ -112,6 +114,14 @@ public class OnlineScoringUserDefinedMetricPythonScorer
                         .error("Unexpected error while scoring traceId '{}' with rule '{}': \n\n{}",
                                 trace.id(), message.ruleName(), error.getMessage())))
                 .then();
+    }
+
+    // Completes empty so the message is acked and removed rather than retried: the mismatch is deterministic.
+    private Mono<List<PythonScoreResult>> reportUnresolvedArguments(
+            TraceToScoreUserDefinedMetricPython message, Map<String, String> mdc) {
+        OnlineScoringEngine.logUnresolvedEvaluatorArguments(userFacingLogger, log, mdc, "traceId",
+                message.trace().id(), message.ruleName(), message.code().arguments());
+        return Mono.empty();
     }
 
     private Map<String, Object> prepareData(TraceToScoreUserDefinedMetricPython message, List<Span> spans,

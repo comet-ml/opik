@@ -16,6 +16,11 @@ on:
         required: false
         type: boolean
         default: false
+      ignore_pypi_preflight_failure:
+        description: "Don't block the release when the PyPI Trusted Publishing preflight fails (e.g. a PyPI outage). Re-publish the SDK afterwards by dispatching build_and_publish_sdk.yaml."
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   trigger-release:
@@ -28,7 +33,7 @@ jobs:
     #                      the GitHub release
     #   packages: write  — every Docker build/merge job logs in to ghcr.io with
     #                      secrets.GITHUB_TOKEN (build_and_push_docker.yaml)
-    #   id-token: write  — npm trusted publishing (OIDC). Unlike the other two
+    #   id-token: write  — npm and PyPI trusted publishing (OIDC). Unlike the other two
     #                      this is NEVER part of the repo default, so before this
     #                      block existed the `id-token: write` declared in
     #                      release.yaml / typescript_sdk_publish.yml was silently
@@ -47,6 +52,7 @@ jobs:
     secrets: inherit
     with:
       reuse_existing_tag: ${{ inputs.reuse_existing_tag }}
+      ignore_pypi_preflight_failure: ${{ inputs.ignore_pypi_preflight_failure }}
 
   notify-release-n-deploy-agent:
     runs-on: ubuntu-latest

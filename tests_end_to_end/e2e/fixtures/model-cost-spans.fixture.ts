@@ -16,8 +16,15 @@ import type { SpanSeedUsage } from '../core/sdk';
  * the assertion would pass for the wrong reason. Spans that genuinely carry
  * bare OTel keys arrive via OTel ingestion rather than the SDK, so those seeds
  * are written straight to `POST /v1/private/spans` instead.
+ *
+ * `raw-usage-rest` is the same bypass for a different reason: a usage key that
+ * is not a token count at all. `input_characters` is what a per-character model
+ * prices from, and the SDK's usage builders model provider token shapes — so a
+ * seed sent through the bridge can arrive with the key dropped, and a span that
+ * prices at nothing is indistinguishable from the negative control it is
+ * supposed to be discriminated against.
  */
-export type ModelCostSpanWriter = 'python-sdk' | 'otel-rest';
+export type ModelCostSpanWriter = 'python-sdk' | 'otel-rest' | 'raw-usage-rest';
 
 export interface ModelCostSpanSeed {
   /** Stable, namespace-free handle a spec can look a vector up by. */
@@ -34,6 +41,14 @@ export interface ModelCostSpanSeed {
    * answer and this is only what the test compares it against.
    */
   expectedCost: number;
+  /**
+   * Why a vector with `expectedCost: 0` must not be billed, for the assertion
+   * message. The controls do not all fail the same way — one is a model id the
+   * table must not match, another is a model it does match but whose priced
+   * quantity is absent — and a shared message would mis-describe whichever one
+   * actually broke.
+   */
+  zeroCostReason?: string;
   /**
    * Usage keys this span carries on top of the shared prompt/completion counts,
    * spelled exactly as they must reach the backend.
@@ -64,10 +79,20 @@ export interface ModelCostSpansFixtures {
 const PROMPT_TOKENS = 1_000_000;
 const COMPLETION_TOKENS = 1_000_000;
 
+/**
+ * The `usage` key an audio-speech model's price is multiplied by. The backend
+ * reads it under the `original_usage.` prefix first and bare second, so a seed
+ * carrying the bare key exercises the same arithmetic either way.
+ */
+const INPUT_CHARACTERS_KEY = 'input_characters';
+
 /** The `usage` key SDK 1.6.0+ logs reasoning/thinking tokens under. */
 const SDK_REASONING_KEY = 'original_usage.completion_tokens_details.reasoning_tokens';
 /** The bare OTel GenAI key the backend falls back to when the prefixed one is absent. */
 const OTEL_REASONING_KEY = 'completion_tokens_details.reasoning_tokens';
+
+/** The `usage` key SDK 1.6.0+ logs audio INPUT tokens under. */
+const SDK_AUDIO_INPUT_KEY = 'original_usage.prompt_tokens_details.audio_tokens';
 
 /**
  * Five vectors over one model, covering reasoning-token billing
@@ -154,9 +179,114 @@ const REASONING_SEEDS: Array<Omit<ModelCostSpanSeed, 'name'>> = [
 ];
 
 /**
- * Ten LLM spans: five whose model ids each exercise one step of server-side
- * price resolution (with the two ways it could go wrong), and five that cover
- * reasoning-token billing over a single model.
+ * Two vectors over one model whose price has no token term at all
+ * (`SpanCostCalculator.audioSpeechCost`).
+ *
+ * `mistral/voxtral-mini-tts-latest` is priced at $1.6e-05 per INPUT CHARACTER
+ * and publishes no input or output token rate, so its cost comes from a usage
+ * key the other eleven spans do not carry. This is the class of price entry
+ * `ModelCostData` has to model field by field: a key it does not declare reads
+ * as no price at all, and the span renders with a token count and no cost chip
+ * while the trace above it still rolls up a plausible-looking total. Release
+ * 2.2.57 moved this model onto `input_cost_per_character`, which is a field the
+ * backend does read; three `twelvelabs.marengo-embed-2-7` entries moved onto
+ * `input_cost_per_query`, which is not — see the PR description.
+ *
+ * The two vectors differ ONLY in the character count:
+ *
+ *   1M input_characters x $1.6e-05  -> $16.00
+ *   no input_characters             -> nothing billed
+ *
+ * Both carry the same 1M prompt + 1M completion tokens as every other seed
+ * here, which is what makes the pair discriminating: a cost that came from the
+ * token counts rather than the character count would price them identically.
+ */
+const CHARACTER_PRICE_SEEDS: Array<Omit<ModelCostSpanSeed, 'name'>> = [
+  {
+    key: 'characters-priced',
+    model: 'mistral/voxtral-mini-tts-latest',
+    provider: 'mistral',
+    usageExtras: { [INPUT_CHARACTERS_KEY]: 1_000_000 },
+    expectedCost: 16,
+    // Not `python-sdk`: input_characters is not a token count, and a builder
+    // that drops it would leave this vector indistinguishable from the control
+    // below. See ModelCostSpanWriter.
+    writer: 'raw-usage-rest',
+  },
+  {
+    key: 'characters-absent',
+    model: 'mistral/voxtral-mini-tts-latest',
+    provider: 'mistral',
+    expectedCost: 0,
+    zeroCostReason:
+      'this model is priced per input character and this span reports none; a cost here means the ' +
+      'token counts were billed at some rate the model does not publish',
+    writer: 'raw-usage-rest',
+  },
+];
+
+/**
+ * Two vectors over one model that publishes `input_cost_per_audio_token`
+ * (`SpanCostCalculator.textGenerationCost`, the audio-input branch).
+ *
+ * Audio input tokens are a SUBSET of `prompt_tokens`, so the calculator bills
+ * them at `input_cost_per_audio_token` and subtracts them from the standard
+ * prompt bucket rather than billing them at both rates — the same shape as
+ * reasoning tokens on the completion side, and the same silent failure if the
+ * key is not read: the span prices at the plain token rate and the difference
+ * is a number nobody can sanity-check by eye.
+ *
+ * `gemini/gemini-embedding-2-preview` is the vector 2.2.65 made testable. Its
+ * price row is one of the six `gemini-embedding-2*` rows that release re-priced,
+ * and it is the one this assertion can reach: `litellm_provider: "gemini"` maps
+ * to `google_ai` in `CostService.PROVIDERS_MAPPING`, it publishes no cache rate
+ * (a cache rate routes to `textGenerationWithCacheCostGoogle`, which does not
+ * read the audio key at all), and its audio rate is 32.5x its token rate, so the
+ * split is arithmetically visible rather than a rounding difference.
+ *
+ *   gemini/gemini-embedding-2-preview  $2e-07/token in, $6.5e-06/audio token in,
+ *                                      $0/token out
+ *
+ * At 1M prompt + 1M completion tokens that gives, per vector:
+ *
+ *   200k audio  800k x 2e-07 + 200k x 6.5e-06   -> $1.46
+ *   no audio    1.0M x 2e-07                    -> $0.20
+ *
+ * The pair is discriminating in both directions. Both carry the identical 1M
+ * prompt + 1M completion tokens and differ ONLY in the audio count, so a backend
+ * that ignored `input_cost_per_audio_token` would price them the same $0.20; and
+ * the $1.26 delta between them is exactly the rate this release added, so a
+ * table row that moved fails here rather than drifting unnoticed. The control
+ * pins one more thing on its own: 1M completion tokens must bill nothing,
+ * because this model publishes `output_cost_per_token: 0`.
+ */
+const AUDIO_TOKEN_SEEDS: Array<Omit<ModelCostSpanSeed, 'name'>> = [
+  {
+    key: 'audio-input-priced',
+    model: 'gemini/gemini-embedding-2-preview',
+    provider: 'google_ai',
+    usageExtras: { [SDK_AUDIO_INPUT_KEY]: 200_000 },
+    expectedCost: 1.46,
+    writer: 'python-sdk',
+  },
+  {
+    key: 'audio-input-absent',
+    model: 'gemini/gemini-embedding-2-preview',
+    provider: 'google_ai',
+    // Not a zero-cost control: the same 1M prompt tokens still bill at the
+    // plain input rate. What must be absent is the $1.26 audio premium.
+    expectedCost: 0.2,
+    writer: 'python-sdk',
+  },
+];
+
+/**
+ * Fourteen LLM spans: five that exercise server-side price resolution from the
+ * model id — three ids that must resolve, covering four normalisation steps
+ * between them, and two controls for the two ways it could go wrong — five
+ * that cover reasoning-token billing over a single model, two over a model
+ * priced per input character rather than per token, and two over a model that
+ * prices audio input tokens at their own rate.
  *
  * Costs are the shipped price table's own numbers at 1M prompt + 1M completion
  * tokens (`model_prices_and_context_window.json` / `model_prices_overrides.json`):
@@ -170,7 +300,8 @@ const REASONING_SEEDS: Array<Omit<ModelCostSpanSeed, 'name'>> = [
  * them would silently bill another model's rate, and the failure would look
  * exactly like an ordinary cost.
  *
- * See REASONING_SEEDS above for the reasoning half.
+ * See REASONING_SEEDS, CHARACTER_PRICE_SEEDS and AUDIO_TOKEN_SEEDS above for
+ * the other three groups.
  */
 const SPAN_SEEDS: Array<Omit<ModelCostSpanSeed, 'name'>> = [
   {
@@ -203,6 +334,9 @@ const SPAN_SEEDS: Array<Omit<ModelCostSpanSeed, 'name'>> = [
     model: 'gpt-5.2-99999999',
     provider: 'openai',
     expectedCost: 0,
+    zeroCostReason:
+      'this model id has no price in the table; a cost here means the date strip ran on a build ' +
+      "number and billed another model's rate",
     writer: 'python-sdk',
   },
   {
@@ -211,13 +345,18 @@ const SPAN_SEEDS: Array<Omit<ModelCostSpanSeed, 'name'>> = [
     model: 'gpt-5.2-20251345',
     provider: 'openai',
     expectedCost: 0,
+    zeroCostReason:
+      'this model id has no price in the table; a cost here means the date strip ran on a build ' +
+      "number and billed another model's rate",
     writer: 'python-sdk',
   },
   ...REASONING_SEEDS,
+  ...CHARACTER_PRICE_SEEDS,
+  ...AUDIO_TOKEN_SEEDS,
 ];
 
 /**
- * One trace carrying ten LLM spans that report token `usage` and **no**
+ * One trace carrying fourteen LLM spans that report `usage` and **no**
  * `total_cost`, so the backend has to price them itself.
  *
  * Every other cost fixture in the estate (`tracedAgent`, the thread seeds)
@@ -225,14 +364,18 @@ const SPAN_SEEDS: Array<Omit<ModelCostSpanSeed, 'name'>> = [
  * resolution path has never been exercised end to end — a wrong price there is
  * invisible, because the number still renders as a perfectly ordinary cost.
  *
- * Most spans go through the bridge; the ones carrying bare OTel usage keys are
- * written straight to `POST /v1/private/spans` afterwards, because the SDK
- * would normalise exactly the key they exist to test. Both land on the same
- * trace, so the rolled-up total covers all ten either way.
+ * Most spans go through the bridge; the ones whose usage key the SDK would
+ * normalise or drop are written straight to `POST /v1/private/spans`
+ * afterwards, because that key is exactly what they exist to test. Both land on
+ * the same trace, so the rolled-up total covers all fourteen either way.
  *
  * Teardown deletes the trace (and with it its spans) here rather than in the
  * test: an assertion failure must not leave priced spans behind, since the
- * project's own rolled-up cost is one of the things asserted.
+ * project's own rolled-up cost is one of the things asserted. It runs from a
+ * `finally` that opens the moment the trace exists, because the REST seeds and
+ * the span-count check all run BEFORE `use()` — a failure in any of them would
+ * otherwise skip the only cleanup and leave a half-seeded, already-priced trace
+ * behind.
  */
 export const test = baseTest.extend<ModelCostSpansFixtures>({
   modelCostSpans: async ({ sdkClient, backendClient, project, testNamespace }, use, testInfo) => {
@@ -250,7 +393,7 @@ export const test = baseTest.extend<ModelCostSpansFixtures>({
     });
 
     const sdkSpans = spans.filter((s) => s.writer === 'python-sdk');
-    const otelSpans = spans.filter((s) => s.writer === 'otel-rest');
+    const restSpans = spans.filter((s) => s.writer !== 'python-sdk');
 
     const created = await sdkClient.python.createNestedTrace({
       project_name: project.name,
@@ -266,46 +409,50 @@ export const test = baseTest.extend<ModelCostSpansFixtures>({
       })),
     });
 
-    if (created.span_count !== sdkSpans.length) {
-      throw new Error(
-        `[modelCostSpans fixture] expected ${sdkSpans.length} spans, bridge reported ${created.span_count}`,
-      );
-    }
+    try {
+      if (created.span_count !== sdkSpans.length) {
+        throw new Error(
+          `[modelCostSpans fixture] expected ${sdkSpans.length} spans, bridge reported ${created.span_count}`,
+        );
+      }
 
-    for (const span of otelSpans) {
-      await backendClient.createSpan({
-        id: uuid7(),
+      for (const span of restSpans) {
+        await backendClient.createSpan({
+          id: uuid7(),
+          traceId: created.id,
+          projectName: project.name,
+          name: span.name,
+          source: 'sdk',
+          type: 'llm',
+          model: span.model,
+          provider: span.provider,
+          usage: usageFor(span),
+        });
+      }
+
+      const ref: ModelCostSpansRef = {
         traceId: created.id,
-        projectName: project.name,
-        name: span.name,
-        source: 'sdk',
-        type: 'llm',
-        model: span.model,
-        provider: span.provider,
-        usage: usageFor(span),
+        spans,
+        promptTokens: PROMPT_TOKENS,
+        completionTokens: COMPLETION_TOKENS,
+        expectedTraceCost: spans.reduce((acc, s) => acc + s.expectedCost, 0),
+      };
+
+      await testInfo.attach('opik.modelCostSpans', {
+        body: JSON.stringify(ref, null, 2),
+        contentType: 'application/json',
       });
-    }
 
-    const ref: ModelCostSpansRef = {
-      traceId: created.id,
-      spans,
-      promptTokens: PROMPT_TOKENS,
-      completionTokens: COMPLETION_TOKENS,
-      expectedTraceCost: spans.reduce((acc, s) => acc + s.expectedCost, 0),
-    };
-
-    await testInfo.attach('opik.modelCostSpans', {
-      body: JSON.stringify(ref, null, 2),
-      contentType: 'application/json',
-    });
-
-    await use(ref);
-
-    if (!shouldLeaveArtifacts(testInfo)) {
-      try {
-        await backendClient.deleteTraces([created.id]);
-      } catch (err) {
-        console.warn(`[modelCostSpans fixture] delete warning for trace ${created.id}:`, err);
+      await use(ref);
+    } finally {
+      // Swallow-and-warn, never rethrow: a delete that fails here would replace
+      // whichever seeding or assertion error actually broke the test.
+      if (!shouldLeaveArtifacts(testInfo)) {
+        try {
+          await backendClient.deleteTraces([created.id]);
+        } catch (err) {
+          console.warn(`[modelCostSpans fixture] delete warning for trace ${created.id}:`, err);
+        }
       }
     }
   },

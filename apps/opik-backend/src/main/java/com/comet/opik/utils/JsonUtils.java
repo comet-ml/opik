@@ -24,6 +24,7 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.io.ByteArrayOutputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -352,6 +353,9 @@ public class JsonUtils {
 
     public <T> T readJsonFile(@NonNull String fileName, @NonNull TypeReference<T> valueTypeRef) throws IOException {
         try (InputStream inputStream = JsonUtils.class.getClassLoader().getResourceAsStream(fileName)) {
+            if (inputStream == null) {
+                throw new FileNotFoundException("Resource not found: '%s'".formatted(fileName));
+            }
             return MAPPER.readValue(inputStream, valueTypeRef);
         }
     }

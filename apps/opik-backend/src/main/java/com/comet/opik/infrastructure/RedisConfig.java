@@ -4,6 +4,7 @@ import com.comet.opik.infrastructure.aws.AwsIamCredentialsResolver;
 import com.comet.opik.infrastructure.redis.RedisUrl;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.google.common.base.Preconditions;
 import io.dropwizard.util.Duration;
 import io.dropwizard.validation.MaxDuration;
 import io.dropwizard.validation.MinDuration;
@@ -13,6 +14,7 @@ import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.codec.JsonJacksonCodec;
+import org.redisson.config.BaseConfig;
 import org.redisson.config.Config;
 
 import java.util.Objects;
@@ -33,24 +35,35 @@ public class RedisConfig {
     @Valid @JsonProperty
     private AwsIamAuthConfig awsIamAuth = new AwsIamAuthConfig();
 
+    @Valid @JsonProperty
+    @NotNull private RedisSentinelConfig sentinel = RedisSentinelConfig.builder().build();
+
     public Config build() {
         Objects.requireNonNull(singleNodeUrl, "singleNodeUrl must not be null");
-        var redisUrl = RedisUrl.parse(singleNodeUrl);
+        // ElastiCache and MemoryDB, where IAM auth applies, offer no Sentinel, and Redisson would send IAM tokens to sentinels
+        Preconditions.checkArgument(!(sentinel.enabled() && awsIamAuth.isEnabled()),
+                "redis.sentinel and redis.awsIamAuth cannot both be enabled");
+        var redisUrl = sentinel.enabled()
+                ? RedisUrl.parse(singleNodeUrl, RedisUrl.NO_DEFAULT_PORT)
+                : RedisUrl.parse(singleNodeUrl);
         var config = new Config();
-        var singleServerConfig = config.useSingleServer()
-                .setAddress(redisUrl.address())
-                .setDatabase(redisUrl.database());
+        BaseConfig<?> serverConfig = sentinel.enabled()
+                ? sentinel.useSentinelServers(config, redisUrl)
+                : config.useSingleServer()
+                        .setAddress(redisUrl.address())
+                        .setDatabase(redisUrl.database());
         if (awsIamAuth.isEnabled()) {
             // Configure Redis with AWS IAM authentication using DefaultCredentialsProvider
             // This will read from environment variables, system properties, IAM roles, etc.
-            singleServerConfig.setCredentialsResolver(new AwsIamCredentialsResolver(awsIamAuth));
+            serverConfig.setCredentialsResolver(new AwsIamCredentialsResolver(awsIamAuth));
         } else {
-            // Set username and password from URL if present
-            redisUrl.username().ifPresent(singleServerConfig::setUsername);
-            redisUrl.password().ifPresent(singleServerConfig::setPassword);
+            // Set username and password from URL if present, in sentinel mode they apply to the master data nodes
+            redisUrl.username().ifPresent(serverConfig::setUsername);
+            redisUrl.password().ifPresent(serverConfig::setPassword);
         }
         config.setCodec(new JsonJacksonCodec(JsonUtils.getMapper()));
-        log.info("Built redis config with address '{}', database '{}'", redisUrl.address(), redisUrl.database());
+        log.info("Built redis config with address '{}', database '{}', sentinel '{}'", redisUrl.address(),
+                redisUrl.database(), sentinel.enabled());
         return config;
     }
 

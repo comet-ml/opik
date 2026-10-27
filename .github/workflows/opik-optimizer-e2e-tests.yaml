@@ -9,18 +9,27 @@ on:
         paths:
           - 'sdks/opik_optimizer/**'
           - '.github/workflows/opik-optimizer-e2e-tests.yaml'
+          - 'opik.sh'
+          - 'opik.ps1'
     push:
         branches:
           - 'main'
         paths:
           - 'sdks/opik_optimizer/**'
           - '.github/workflows/opik-optimizer-e2e-tests.yaml'
+          - 'opik.sh'
+          - 'opik.ps1'
 
 permissions:
   contents: read
   packages: read
 
 env:
+  # Retry transient PyPI/network failures longer before failing the build.
+  PIP_RETRIES: 8
+  PIP_DEFAULT_TIMEOUT: 30
+  UV_HTTP_TIMEOUT: 30
+  UV_HTTP_RETRIES: 8
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
   OPIK_SENTRY_ENABLE: False
   OPIK_ANALYTICS_ENABLE: False
@@ -33,6 +42,9 @@ env:
 
 jobs:
     build-opik:
+        # Fork PRs get a read-only GITHUB_TOKEN, so the GHCR push below always
+        # 403s. Skip rather than fail; delete once fork PRs can run E2E.
+        if: ${{ github.event.pull_request.head.repo.fork != true }}
         # The reusable build workflow pushes images to GHCR; pass down the
         # packages: write grant here rather than at the workflow level (a
         # called workflow's permissions can only be maintained or reduced from
@@ -41,11 +53,12 @@ jobs:
           contents: read
           packages: write
         uses: ./.github/workflows/build_e2e_docker.yaml
-        with:
-          include_guardrails: true
 
     run-e2e-tests:
         name: Opik Optimizer E2E Tests Python ${{matrix.python_version}}
+        # No explicit if: needed here -- the default success() check skips this
+        # whenever build-opik is skipped, and dataset-source-check in turn
+        # skips on this.
         needs: build-opik
         runs-on: ubuntu-latest
         timeout-minutes: 40
@@ -76,10 +89,8 @@ jobs:
           run: |
             docker pull "ghcr.io/comet-ml/opik/opik-backend:$TAG"
             docker pull "ghcr.io/comet-ml/opik/opik-python-backend:$TAG"
-            docker pull "ghcr.io/comet-ml/opik/opik-guardrails-backend:$TAG"
             docker tag "ghcr.io/comet-ml/opik/opik-backend:$TAG" ghcr.io/comet-ml/opik/opik-backend:latest
             docker tag "ghcr.io/comet-ml/opik/opik-python-backend:$TAG" ghcr.io/comet-ml/opik/opik-python-backend:latest
-            docker tag "ghcr.io/comet-ml/opik/opik-guardrails-backend:$TAG" ghcr.io/comet-ml/opik/opik-guardrails-backend:latest
 
         - name: Setup Python ${{matrix.python_version}}
           uses: actions/setup-python@v7
@@ -87,7 +98,7 @@ jobs:
             python-version: ${{matrix.python_version}}
 
         - name: Set up uv
-          uses: astral-sh/setup-uv@v10.0.1
+          uses: astral-sh/setup-uv@v10.3.0
 
         - name: Run latest Opik server
           env:
@@ -97,10 +108,9 @@ jobs:
             TOGGLE_RUNNERS_ENABLED: "true"
             OPIK_BACKEND_PULL_POLICY: never
             PYTHON_BACKEND_PULL_POLICY: never
-            OPIK_GUARDRAILS_BACKEND_PULL_POLICY: never
           run: |
             cd ${{ github.workspace }}
-            ./opik.sh --backend --port-mapping --guardrails
+            ./opik.sh --backend --port-mapping
 
         - name: Check Opik server availability
           shell: bash
@@ -153,7 +163,7 @@ jobs:
           if: always()
           run: |
             cd ${{ github.workspace }}
-            ./opik.sh --stop --guardrails
+            ./opik.sh --stop
 
     dataset-source-check:
         name: Opik Optimizer Integration Smoke Tests
@@ -177,7 +187,7 @@ jobs:
             python-version: "3.12"
 
         - name: Set up uv
-          uses: astral-sh/setup-uv@v10.0.1
+          uses: astral-sh/setup-uv@v10.3.0
 
         - name: Cache HuggingFace datasets
           uses: actions/cache@v6

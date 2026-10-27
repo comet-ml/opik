@@ -28,6 +28,7 @@ readability and avoids false-coupling with real model identifiers.
 # the value here.
 OPENAI_GPT_NANO = "gpt-5-nano"
 OPENAI_SORA = "sora-2"
+OPENAI_DECISIONS = "gpt-6-luna"
 
 # gpt-4o-mini kept only for CrewAI v0 — v0's hard pin on litellm==1.74.9
 # reports `stop` as supported for gpt-5-nano, which CrewAI's ReAct loop
@@ -49,20 +50,16 @@ OPENAI_REASONING_EFFORT = "minimal"
 # ---------------------------------------------------------------------------
 # Anthropic
 # ---------------------------------------------------------------------------
-# Using Anthropic's moving aliases (e.g. "claude-sonnet-4-0") rather than
-# pinned timestamped releases so upgrades don't require touching this file
-# every few weeks.
-ANTHROPIC_CLAUDE_SONNET = "claude-sonnet-4-6"
+# Haiku — the cheapest Claude tier Anthropic still serves — is the only model
+# used for direct Anthropic API calls (Bedrock has its own constants below).
 ANTHROPIC_CLAUDE_HAIKU = "claude-haiku-4-5-20251001"
 
-# Short prefixes for version checking in tests (e.g. ANY_STRING.starting_with(...))
-ANTHROPIC_CLAUDE_SONNET_SHORT = "claude-sonnet-4"
+# Short prefix for version checking in tests (e.g. ANY_STRING.starting_with(...))
 ANTHROPIC_CLAUDE_HAIKU_SHORT = "claude-haiku-4"
 
-LITELLM_ANTHROPIC_CLAUDE_SONNET = f"anthropic/{ANTHROPIC_CLAUDE_SONNET}"
 LITELLM_ANTHROPIC_CLAUDE_HAIKU = f"anthropic/{ANTHROPIC_CLAUDE_HAIKU}"
 
-AISUITE_ANTHROPIC_CLAUDE_SONNET = f"anthropic:{ANTHROPIC_CLAUDE_SONNET}"
+AISUITE_ANTHROPIC_CLAUDE_HAIKU = f"anthropic:{ANTHROPIC_CLAUDE_HAIKU}"
 
 # ---------------------------------------------------------------------------
 # Google Gemini
@@ -76,6 +73,10 @@ LITELLM_VERTEX_GEMINI_FLASH = f"vertex_ai/{GEMINI_FLASH}"
 # AWS Bedrock
 # ---------------------------------------------------------------------------
 BEDROCK_CLAUDE_SONNET = "us.anthropic.claude-sonnet-4-6"
+BEDROCK_AMAZON_NOVA = "us.amazon.nova-pro-v1:0"
+BEDROCK_META_LLAMA = "us.meta.llama3-1-8b-instruct-v1:0"
+BEDROCK_DEEPSEEK_R1 = "us.deepseek.r1-v1:0"
+BEDROCK_OPENAI_GPT_OSS = "openai.gpt-oss-20b-1:0"
 BEDROCK_MISTRAL_PIXTRAL = "us.mistral.pixtral-large-2502-v1:0"
 BEDROCK_MISTRAL_PIXTRAL_REGION = "us-east-2"
 
@@ -86,3 +87,17 @@ LITELLM_BEDROCK_CLAUDE_SONNET = f"bedrock/{BEDROCK_CLAUDE_SONNET}"
 # ---------------------------------------------------------------------------
 # Default chat model: mistral-small-latest — the cheap+fast tier.
 MISTRAL_SMALL = "mistral-small-latest"
+
+# ---------------------------------------------------------------------------
+# Together AI
+# ---------------------------------------------------------------------------
+# The integration tests mock the transport and never reach Together, but this
+# is still the id the client is called with and the value asserted on the span.
+TOGETHER_LLAMA = "meta-llama/Llama-3.3-70B-Instruct-Turbo"
+
+# ---------------------------------------------------------------------------
+# Cohere
+# ---------------------------------------------------------------------------
+# The integration tests mock the transport and never reach Cohere, but this is
+# still the id the client is called with and the value asserted on the span.
+COHERE_COMMAND = "command-r-plus"

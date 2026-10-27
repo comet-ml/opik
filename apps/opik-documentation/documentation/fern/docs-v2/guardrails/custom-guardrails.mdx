@@ -72,7 +72,7 @@ Open **Guardrails** in the sidebar, switch to the **Models** tab, and choose **C
 
 Fine-tuning takes a `.jsonl` file — one JSON object per line — of up to 50 MB:
 
-```json
+```json wordWrap
 {"text": "Get lost, nobody wants you around here.", "label": true}
 {"text": "Thanks so much for your help today!", "label": false}
 ```
@@ -111,7 +111,7 @@ The guard fails when the model's score is at or above the threshold. Lower it to
 
 From then on, any application that references the policy runs your model along with the policy's other checks — no application change needed to roll it out:
 
-```python
+```python wordWrap
 from opik.guardrails import Guardrail
 
 guardrail = Guardrail.from_stored_policies(names=["support-tone"])
@@ -128,7 +128,7 @@ Fine-tuning is also a single SDK call, which is what you want when the dataset l
 
 Each example is `text` plus a binary `label`, where `1` means the check holds and the guardrail should fail. The `description` completes the sentence "Determine whether it ...".
 
-```python
+```python wordWrap
 from opik.guardrails import create_custom_guardrail
 
 result = create_custom_guardrail(
@@ -150,7 +150,7 @@ By default the call blocks until training finishes and returns evaluation metric
   <Accordion title="Following a training run as it progresses">
     Pass a `callback` to be called on each poll with the current status. The status carries a `progress` dict — percent complete, epoch, latest training loss, and the latest validation metrics:
 
-    ```python
+    ```python wordWrap
     def on_progress(status):
         p = status.get("progress", {})
         print(

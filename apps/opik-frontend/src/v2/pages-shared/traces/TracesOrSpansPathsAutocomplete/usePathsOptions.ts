@@ -3,7 +3,7 @@ import uniq from "lodash/uniq";
 import isObject from "lodash/isObject";
 import isArray from "lodash/isArray";
 
-import { getJSONPaths } from "@/lib/utils";
+import { getJSONPaths, JSON_PATH_FORMAT } from "@/lib/utils";
 import useTracesOrSpansList, {
   TRACE_DATA_TYPE,
 } from "@/hooks/useTracesOrSpansList";
@@ -20,6 +20,7 @@ interface UsePathsOptionsArgs {
   includeIntermediateNodes?: boolean;
   datasetColumnNames?: string[];
   logsSource?: LOGS_SOURCE;
+  pathFormat?: JSON_PATH_FORMAT;
 }
 
 export const usePathsOptions = (
@@ -33,6 +34,7 @@ export const usePathsOptions = (
     includeIntermediateNodes = false,
     datasetColumnNames,
     logsSource,
+    pathFormat = JSON_PATH_FORMAT.dot,
   } = args;
   const hasProjectId = Boolean(projectId);
 
@@ -73,11 +75,14 @@ export const usePathsOptions = (
           (internalAcc, key) =>
             internalAcc.concat(
               isObject(d[key]) || isArray(d[key])
-                ? getJSONPaths(d[key], key, [], includeIntermediateNodes).map(
-                    (path) =>
-                      excludeRoot
-                        ? path.substring(path.indexOf(".") + 1)
-                        : path,
+                ? getJSONPaths(
+                    d[key],
+                    key,
+                    [],
+                    includeIntermediateNodes,
+                    pathFormat,
+                  ).map((path) =>
+                    excludeRoot ? path.substring(path.indexOf(".") + 1) : path,
                   )
                 : [],
             ),
@@ -106,6 +111,7 @@ export const usePathsOptions = (
     excludeRoot,
     includeIntermediateNodes,
     datasetColumnNames,
+    pathFormat,
   ]);
 
   const effectiveLoading = hasProjectId && (isPending || isPendingNonTruncated);

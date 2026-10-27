@@ -22,6 +22,8 @@ import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.ExperimentItemRef;
 import com.comet.opik.domain.ExperimentItemService;
 import com.comet.opik.domain.ExperimentTraceRef;
+import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesService;
 import com.comet.opik.domain.experiments.aggregations.ExperimentAggregationPublisher;
 import com.comet.opik.infrastructure.ExperimentDenormalizationConfig;
@@ -64,6 +66,8 @@ class ExperimentAggregateEventListenerTest {
     private static final int AWAIT_TIMEOUT_SECONDS = 2;
     private static final String WORKSPACE_ID = "workspace-test";
     private static final String USER_NAME = "user-test";
+
+    private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
 
     @Mock
     private ExperimentItemService experimentItemService;
@@ -108,6 +112,17 @@ class ExperimentAggregateEventListenerTest {
 
             listener.onExperimentUpdated(
                     new ExperimentUpdated(experimentId, ExperimentStatus.CANCELLED, WORKSPACE_ID, USER_NAME));
+
+            verify(publisher).publish(Set.of(experimentId), WORKSPACE_ID, USER_NAME);
+        }
+
+        @Test
+        void publishWhenStatusIsFailed() {
+            when(config.isEnabled()).thenReturn(true);
+            var experimentId = UUID.randomUUID();
+
+            listener.onExperimentUpdated(
+                    new ExperimentUpdated(experimentId, ExperimentStatus.FAILED, WORKSPACE_ID, USER_NAME));
 
             verify(publisher).publish(Set.of(experimentId), WORKSPACE_ID, USER_NAME);
         }
@@ -311,7 +326,12 @@ class ExperimentAggregateEventListenerTest {
 
         @Test
         void doesNotCallServiceWhenTraceIdsEmpty() {
-            listener.onTracesDeleted(new TracesDeleted(Set.of(), null, WORKSPACE_ID, USER_NAME));
+            listener.onTracesDeleted(TracesDeleted.builder()
+                    .traceIds(Set.of())
+                    .projectId(ID_GENERATOR.generateId())
+                    .workspaceId(WORKSPACE_ID)
+                    .userName(USER_NAME)
+                    .build());
 
             verify(experimentItemService, never()).getExperimentRefsByTraceIds(any(), any(), any());
             verify(publisher, never()).publish(any(), anyString(), anyString());

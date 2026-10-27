@@ -36,6 +36,148 @@ export class PromptDetailPage {
     });
   }
 
+  /**
+   * Open the prompt's Experiments tab directly, at a chosen page size.
+   *
+   * `size` is a real query param (`useTablePageSize` prefers a valid `?size=`
+   * over the stored value and over the deployment default), so a pagination
+   * spec can pin the page size without touching localStorage or driving the
+   * rows-per-page menu — and without inheriting whatever size the last spec in
+   * this worker happened to leave behind.
+   */
+  async gotoExperimentsTab(
+    projectId: string,
+    promptId: string,
+    opts: { size?: number } = {},
+  ): Promise<void> {
+    return test.step(`open prompt ${promptId} Experiments tab`, async () => {
+      const env = loadEnvConfig();
+      const query = new URLSearchParams({ tab: 'experiments' });
+      if (opts.size !== undefined) query.set('size', String(opts.size));
+      await this.page.goto(
+        `${env.baseUrl}/${env.workspace}/projects/${projectId}/prompts/${promptId}?${query}`,
+      );
+    });
+  }
+
+  /** Wait until the Experiments tab has rendered `expected` rows. */
+  async waitForExperimentRows(expected: number, timeoutMs = 30_000): Promise<void> {
+    return test.step(`wait for ${expected} experiment row(s)`, async () => {
+      await expect(this.experimentRows()).toHaveCount(expected, { timeout: timeoutMs });
+    });
+  }
+
+  /**
+   * Every experiment row currently rendered, in DOM order.
+   *
+   * `data-row-id` is the experiment id here (`getExperimentRowId` returns the
+   * bare id while no grouping is active), so this is both the ORDER the tab
+   * presents and the identity of each row — which is what a pinning assertion
+   * needs: "first" and "exactly once" are claims about this list.
+   */
+  experimentRows(): Locator {
+    return this.page.locator('tbody tr[data-row-id]');
+  }
+
+  /** One experiment's row, by id. Never `.first()` — callers assert the count. */
+  experimentRow(experimentId: string): Locator {
+    return this.page.locator(`tbody tr[data-row-id="${experimentId}"]`);
+  }
+
+  async experimentRowIds(): Promise<string[]> {
+    return test.step('read the rendered experiment row ids', async () => {
+      return this.experimentRows().evaluateAll((rows) =>
+        rows
+          .map((row) => row.getAttribute('data-row-id'))
+          .filter((id): id is string => Boolean(id)),
+      );
+    });
+  }
+
+  /**
+   * Pin or unpin an experiment from its row.
+   *
+   * The pin button is `hidden group-hover/row:inline-flex` while unpinned — it
+   * is not in the layout at all until the row is hovered — so the hover is a
+   * precondition, not a flake workaround. Once pinned it renders
+   * unconditionally, which is what makes the confirmations below reliable.
+   *
+   * The two directions confirm differently, because they do not leave the page
+   * in the same shape. Pinning keeps the row and flips its control to "Unpin".
+   * UNPINNING a row that was on this page only BECAUSE it was pinned takes the
+   * row away with it — so the row itself may vanish, and asserting a flipped
+   * control on it would fail on a correct app. What holds either way is that
+   * no "Unpin" control remains for this experiment on this page.
+   */
+  async setExperimentPinned(experimentId: string, pinned: boolean): Promise<void> {
+    return test.step(`${pinned ? 'pin' : 'unpin'} experiment ${experimentId}`, async () => {
+      const row = this.experimentRow(experimentId);
+      await expect(row, 'exactly one row for the experiment being pinned').toHaveCount(1);
+      await row.hover();
+      await row.getByRole('button', { name: pinned ? 'Pin to the top' : 'Unpin' }).click();
+      await expect(
+        row.getByRole('button', { name: 'Unpin' }),
+        pinned
+          ? 'the row now offers Unpin, so the pin registered'
+          : 'no Unpin control remains, so the unpin registered',
+      ).toHaveCount(pinned ? 1 : 0);
+    });
+  }
+
+  /** The experiments table's "Showing 1-10 of 12" pagination label. */
+  private paginationSummary(): Locator {
+    return this.page.getByText(/^Showing [\d,]+-[\d,]+ of [\d,]+$/);
+  }
+
+  /**
+   * Page the experiments table forward or back.
+   *
+   * The pager buttons are icon-only with no accessible name, so the rendered
+   * lucide icon is the only handle — and the first/last buttons render
+   * `chevron-first`/`chevron-last`, which these class names do not match. A
+   * `data-testid` would be better, but these specs run against a deployed
+   * Opik, so one added alongside them would not exist in the version under
+   * test.
+   *
+   * Scoped to the element holding the "Showing …" label, the same way
+   * `LogsPage.nextPageButton` is: a page-wide chevron lookup matches any other
+   * chevron button the page happens to render and fails on strict mode rather
+   * than on behaviour.
+   */
+  async goToPage(direction: 'next' | 'previous'): Promise<void> {
+    return test.step(`go to the ${direction} page`, async () => {
+      const icon = direction === 'next' ? 'lucide-chevron-right' : 'lucide-chevron-left';
+      await this.paginationSummary()
+        .locator('xpath=..')
+        .locator(`button:has(svg.${icon})`)
+        .click();
+    });
+  }
+
+  /**
+   * The experiment ids a localStorage pinning key currently holds.
+   *
+   * Read directly because the key is the whole point of the per-prompt half of
+   * this behaviour: pins on this tab are stored under the PROMPT id, and pins
+   * on the project Experiments page under the PROJECT id. A wrong key still
+   * looks correct on the surface that wrote it, and only shows up as a
+   * stranger's row on top of the other one.
+   *
+   * Returns `null` when the key is absent, which is a different fact from an
+   * empty array: never written and written-then-emptied are both legitimate,
+   * and a caller asserting "no longer pinned" should accept either explicitly
+   * rather than have this collapse them.
+   */
+  async pinnedIdsInStorage(key: string): Promise<string[] | null> {
+    return test.step(`read localStorage["${key}"]`, async () => {
+      return this.page.evaluate((storageKey) => {
+        const raw = window.localStorage.getItem(storageKey);
+        if (raw === null) return null;
+        return JSON.parse(raw) as string[];
+      }, key);
+    });
+  }
+
   promptNameHeading(): Locator {
     return this.page.getByRole('heading', { level: 1 });
   }
@@ -56,29 +198,64 @@ export class PromptDetailPage {
     return this.page.getByTestId(`version-history-item-${label}`);
   }
 
-  async editTextPrompt(newTemplate: string): Promise<void> {
-    return test.step(`edit text prompt template`, async () => {
+  /**
+   * Open the Edit sheet and return it, committing nothing.
+   *
+   * Separate from the two `edit*` methods below so a spec can inspect the
+   * sheet's own state — whether its commit control is enabled for a given
+   * draft — without saving a version as a side effect.
+   */
+  async openEditSheet(): Promise<Locator> {
+    return test.step('open the prompt Edit sheet', async () => {
       await this.page.getByRole('button', { name: 'Edit' }).click();
       const sheet = this.page.getByRole('dialog');
       await sheet.waitFor({ state: 'visible' });
-      const editor = sheet.getByPlaceholder('Type your prompt...');
-      await editor.fill(newTemplate);
-      await sheet.getByRole('button', { name: 'Create new version' }).click();
+      return sheet;
+    });
+  }
+
+  /**
+   * The Edit sheet's commit control.
+   *
+   * Disabled while the draft still matches the active version, which is the
+   * UI half of opik#8923 — the API answers a no-op save with the existing
+   * latest version, and the form declines to send one at all.
+   */
+  editSheetSubmit(sheet: Locator): Locator {
+    return sheet.getByRole('button', { name: 'Create new version' });
+  }
+
+  /** The Edit sheet's template editor, for a TEXT prompt. */
+  editSheetTemplateEditor(sheet: Locator): Locator {
+    return sheet.getByPlaceholder('Type your prompt...');
+  }
+
+  /** Dismiss the Edit sheet without committing, and wait until it is really gone. */
+  async closeEditSheet(sheet: Locator): Promise<void> {
+    return test.step('close the prompt Edit sheet without saving', async () => {
+      await this.page.keyboard.press('Escape');
+      await sheet.waitFor({ state: 'hidden' });
+    });
+  }
+
+  async editTextPrompt(newTemplate: string): Promise<void> {
+    return test.step(`edit text prompt template`, async () => {
+      const sheet = await this.openEditSheet();
+      await this.editSheetTemplateEditor(sheet).fill(newTemplate);
+      await this.editSheetSubmit(sheet).click();
       await sheet.waitFor({ state: 'hidden' });
     });
   }
 
   async editChatFirstMessage(newContent: string): Promise<void> {
     return test.step(`edit first chat message`, async () => {
-      await this.page.getByRole('button', { name: 'Edit' }).click();
-      const sheet = this.page.getByRole('dialog');
-      await sheet.waitFor({ state: 'visible' });
+      const sheet = await this.openEditSheet();
       const firstMessageRow = sheet.getByTestId('playground-message-row').first();
       const editor = firstMessageRow.getByTestId('playground-message-editor').locator('.cm-content').first();
       await editor.click();
       await editor.press('ControlOrMeta+a');
       await editor.pressSequentially(newContent);
-      await sheet.getByRole('button', { name: 'Create new version' }).click();
+      await this.editSheetSubmit(sheet).click();
       await sheet.waitFor({ state: 'hidden' });
     });
   }

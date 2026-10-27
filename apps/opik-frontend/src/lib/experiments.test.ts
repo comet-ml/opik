@@ -1,12 +1,20 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildExperimentName,
   EXPERIMENT_TAB,
+  formatExperimentPromptVersions,
   formatPromptVersionLabel,
   getAvailableExperimentTabs,
+  sortPromptVersions,
   isExperimentTabId,
+  suggestNextExperimentName,
 } from "./experiments";
-import { EVALUATION_METHOD, Experiment } from "@/types/datasets";
+import {
+  EVALUATION_METHOD,
+  Experiment,
+  ExperimentPromptVersion,
+} from "@/types/datasets";
 
 const experiment = (overrides: Partial<Experiment> = {}) =>
   ({
@@ -109,5 +117,210 @@ describe("experiments utilities", () => {
         }),
       ).toBe("My Prompt");
     });
+
+    // The backend keeps the link to a deleted prompt but omits its name,
+    // commit and version number. Every table and widget passes this label to
+    // ResourceLink, which only renders its disabled deleted state for an
+    // undefined name.
+    it("leaves a deleted prompt unlabelled", () => {
+      expect(formatPromptVersionLabel({})).toBeUndefined();
+    });
+  });
+
+  // The compare Configuration tab renders this as a table row, so an absent
+  // value has to stay undefined (rendered as "No value") rather than becoming
+  // an empty string that would compare equal to another experiment's prompt.
+  describe("formatExperimentPromptVersions", () => {
+    const promptVersion = (overrides: Partial<ExperimentPromptVersion> = {}) =>
+      ({
+        id: "pv1",
+        prompt_id: "p1",
+        prompt_name: "My Prompt",
+        commit: "c96aa875",
+        version_number: "v1",
+        ...overrides,
+      }) as ExperimentPromptVersion;
+
+    it("labels a single linked prompt version", () => {
+      expect(
+        formatExperimentPromptVersions(
+          experiment({ prompt_versions: [promptVersion()] }),
+        ),
+      ).toBe("My Prompt (v1)");
+    });
+
+    it("joins every linked prompt version", () => {
+      expect(
+        formatExperimentPromptVersions(
+          experiment({
+            prompt_versions: [
+              promptVersion(),
+              promptVersion({
+                id: "pv2",
+                prompt_name: "Guardrail",
+                version_number: "v4",
+              }),
+            ],
+          }),
+        ),
+      ).toBe("Guardrail (v4), My Prompt (v1)");
+    });
+
+    // The compare view diffs these strings, so two experiments on the same
+    // prompt versions must read as identical no matter what order the backend
+    // returned them in — otherwise they show up as a spurious difference.
+    it("orders labels independently of the backend's ordering", () => {
+      const first = promptVersion();
+      const second = promptVersion({
+        id: "pv2",
+        prompt_name: "Guardrail",
+        version_number: "v4",
+      });
+
+      expect(
+        formatExperimentPromptVersions(
+          experiment({ prompt_versions: [first, second] }),
+        ),
+      ).toBe(
+        formatExperimentPromptVersions(
+          experiment({ prompt_versions: [second, first] }),
+        ),
+      );
+    });
+
+    it("orders labels case-insensitively", () => {
+      expect(
+        formatExperimentPromptVersions(
+          experiment({
+            prompt_versions: [
+              promptVersion({ prompt_name: "Zeta" }),
+              promptVersion({ id: "pv2", prompt_name: "alpha" }),
+            ],
+          }),
+        ),
+      ).toBe("alpha (v1), Zeta (v1)");
+    });
+
+    it("orders version numbers numerically", () => {
+      expect(
+        formatExperimentPromptVersions(
+          experiment({
+            prompt_versions: [
+              promptVersion({ version_number: "v10" }),
+              promptVersion({ id: "pv2", version_number: "v2" }),
+            ],
+          }),
+        ),
+      ).toBe("My Prompt (v2), My Prompt (v10)");
+    });
+
+    // Whether a null label reaches the comparator depends on its position, so
+    // both orders are checked.
+    it("labels a deleted prompt alongside live ones, in any order", () => {
+      const deleted: ExperimentPromptVersion = { id: "pv1", prompt_id: "p1" };
+      const live = promptVersion({ id: "pv2" });
+
+      for (const prompt_versions of [
+        [deleted, live],
+        [live, deleted],
+      ]) {
+        expect(
+          formatExperimentPromptVersions(experiment({ prompt_versions })),
+        ).toBe("Deleted prompt, My Prompt (v1)");
+      }
+    });
+
+    it("sorts the versions themselves in label order", () => {
+      expect(
+        sortPromptVersions([
+          promptVersion({ id: "pv10", version_number: "v10" }),
+          promptVersion({ id: "pvZ", prompt_name: "Zeta" }),
+          promptVersion({ id: "pv2", version_number: "v2" }),
+          promptVersion({ id: "pvA", prompt_name: "alpha" }),
+        ]).map((pv) => pv.id),
+      ).toEqual(["pvA", "pv2", "pv10", "pvZ"]);
+    });
+
+    // Prompt names are only unique per project, so two linked prompts can
+    // share a label while linking to different prompts.
+    it("breaks label ties by prompt id, then version id", () => {
+      const sorted = (versions: ExperimentPromptVersion[]) =>
+        sortPromptVersions(versions).map((pv) => pv.id);
+      const inP2 = promptVersion({ id: "pv1", prompt_id: "p2" });
+      const inP1 = promptVersion({ id: "pv2", prompt_id: "p1" });
+      const deletedB: ExperimentPromptVersion = { id: "pvB", prompt_id: "p1" };
+      const deletedA: ExperimentPromptVersion = { id: "pvA", prompt_id: "p1" };
+
+      expect(sorted([inP2, inP1])).toEqual(["pv2", "pv1"]);
+      expect(sorted([inP1, inP2])).toEqual(["pv2", "pv1"]);
+      expect(sorted([deletedB, deletedA])).toEqual(["pvA", "pvB"]);
+    });
+
+    it("returns undefined when the experiment has no linked prompt", () => {
+      expect(formatExperimentPromptVersions(experiment())).toBeUndefined();
+      expect(
+        formatExperimentPromptVersions(experiment({ prompt_versions: [] })),
+      ).toBeUndefined();
+    });
+
+    it("returns undefined for a missing experiment", () => {
+      expect(formatExperimentPromptVersions(undefined)).toBeUndefined();
+    });
+  });
+});
+
+describe("buildExperimentName", () => {
+  it("appends the lowercase column letter", () => {
+    expect(buildExperimentName("concise", 0)).toBe("concise_a");
+    expect(buildExperimentName("concise", 1)).toBe("concise_b");
+    expect(buildExperimentName("concise", 2)).toBe("concise_c");
+  });
+
+  it("trims surrounding whitespace", () => {
+    expect(buildExperimentName("  concise  ", 0)).toBe("concise_a");
+  });
+
+  it("keeps a run number the user typed, letter last", () => {
+    expect(buildExperimentName("concise_02", 0)).toBe("concise_02_a");
+  });
+});
+
+describe("suggestNextExperimentName", () => {
+  it("starts repeats at 02", () => {
+    expect(suggestNextExperimentName("concise", null)).toBe("concise_02");
+  });
+
+  it("increments only a counter it suggested itself", () => {
+    expect(suggestNextExperimentName("concise_02", "concise_02")).toBe(
+      "concise_03",
+    );
+    expect(suggestNextExperimentName("concise_09", "concise_09")).toBe(
+      "concise_10",
+    );
+    expect(suggestNextExperimentName("concise_99", "concise_99")).toBe(
+      "concise_100",
+    );
+  });
+
+  it("leaves a number the user typed alone", () => {
+    expect(suggestNextExperimentName("prompt_gpt_4", null)).toBe(
+      "prompt_gpt_4_02",
+    );
+    expect(suggestNextExperimentName("llama_70", null)).toBe("llama_70_02");
+    expect(suggestNextExperimentName("eval_2026", null)).toBe("eval_2026_02");
+  });
+
+  it("stops incrementing once the user edits the name", () => {
+    expect(suggestNextExperimentName("gpt_4", "concise_03")).toBe("gpt_4_02");
+  });
+
+  it("keeps the padding width it already used", () => {
+    expect(suggestNextExperimentName("concise_002", "concise_002")).toBe(
+      "concise_003",
+    );
+  });
+
+  it("trims before suggesting", () => {
+    expect(suggestNextExperimentName("  concise  ", null)).toBe("concise_02");
   });
 });

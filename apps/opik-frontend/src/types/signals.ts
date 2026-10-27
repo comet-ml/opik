@@ -57,6 +57,11 @@ export interface AgentInsightsIssue {
   created_at?: string;
   last_updated_by?: string;
   last_updated_at?: string;
+  // Who/when last changed the status (resolve, close, reopen); set by the user, not by runs.
+  status_changed_by?: string;
+  status_changed_at?: string;
+  // The team's reason for closing as not useful; only present on closed issues.
+  close_note?: string;
 }
 
 // Detail response: the issue plus its per-day breakdown within the window.
@@ -73,6 +78,11 @@ export interface AgentInsightsIssueWithDetails {
   created_at?: string;
   last_updated_by?: string;
   last_updated_at?: string;
+  // Who/when last changed the status (resolve, close, reopen); set by the user, not by runs.
+  status_changed_by?: string;
+  status_changed_at?: string;
+  // The team's reason for closing as not useful; only present on closed issues.
+  close_note?: string;
   details: AgentInsightsIssueDetail[];
 }
 
@@ -93,6 +103,9 @@ export interface AgentInsightsJob {
   id: string;
   project_id: string;
   status: AGENT_INSIGHTS_JOB_STATUS;
+  auto_first_run_enrolled?: boolean;
+  // When that automatic run was enqueued; manual runs don't set it
+  auto_first_run_at?: string;
   // When a diagnostic report was last generated (incl. "all clear"); unaffected
   // by resolving/reopening issues. Used for the "Last scan" header.
   last_scan_at?: string;
@@ -104,4 +117,12 @@ export interface AgentInsightsJob {
   created_by?: string;
   last_updated_at?: string;
   last_updated_by?: string;
+  // Project guidance; returned only when the guidance feature toggle is on.
+  guidance?: string | null;
+  guidance_updated_by?: string | null;
+  guidance_updated_at?: string | null;
+  // 0 = never saved; bumped only when the text changes.
+  guidance_version?: number;
+  // Version the current results were produced with; null = no run since the feature.
+  results_guidance_version?: number | null;
 }

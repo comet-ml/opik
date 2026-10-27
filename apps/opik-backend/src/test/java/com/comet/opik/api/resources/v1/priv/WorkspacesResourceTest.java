@@ -51,7 +51,6 @@ import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -107,6 +106,9 @@ class WorkspacesResourceTest {
     private static final String USER = UUID.randomUUID().toString();
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String WORKSPACE_NAME = RandomStringUtils.randomAlphabetic(10);
+
+    /** Usage every span from {@link #createSpansWithUsage} carries, so a total can be asserted exactly. */
+    private static final int TOKENS_PER_SPAN = 10;
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
@@ -257,7 +259,6 @@ class WorkspacesResourceTest {
 
         @ParameterizedTest
         @ValueSource(booleans = {true, false})
-        @Disabled
         void metricsSummary_happyPath(boolean withProjectIds) {
             var workspaceName = UUID.randomUUID().toString();
             var workspaceId = UUID.randomUUID().toString();
@@ -289,11 +290,11 @@ class WorkspacesResourceTest {
 
             var expectedMetricsSummary = prepareMetricsSummary(previousScores, currentScores);
 
-            assertThat(actualMetricsSummary.results())
+            assertThat(actualMetricsSummary)
                     .usingRecursiveComparison()
-                    .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "current", "previous")
+                    .withComparatorForType(StatsUtils::closeToEpsilonComparator, Double.class)
                     .ignoringCollectionOrder()
-                    .isEqualTo(expectedMetricsSummary);
+                    .isEqualTo(WorkspaceMetricsSummaryResponse.builder().results(expectedMetricsSummary).build());
         }
 
         @ParameterizedTest
@@ -318,7 +319,6 @@ class WorkspacesResourceTest {
 
         @ParameterizedTest
         @ValueSource(booleans = {true, false})
-        @Disabled
         void metricsDaily_happyPath(boolean withProjectIds) {
             var workspaceName = UUID.randomUUID().toString();
             var workspaceId = UUID.randomUUID().toString();
@@ -357,11 +357,11 @@ class WorkspacesResourceTest {
                     : prepareMetricsDailyPerWorkspace(project1Scores.values(), project2Scores.values(), name,
                             WorkspacesResourceTest.this::getAvg);
 
-            assertThat(actualMetrics.results())
+            assertThat(actualMetrics)
                     .usingRecursiveComparison()
                     .ignoringCollectionOrder()
                     .withComparatorForType(StatsUtils::closeToEpsilonComparator, Double.class)
-                    .isEqualTo(expectedMetricsDaily);
+                    .isEqualTo(WorkspaceMetricResponse.builder().results(expectedMetricsDaily).build());
         }
 
         @ParameterizedTest
@@ -394,6 +394,278 @@ class WorkspacesResourceTest {
                         .isEqualTo(expectedMetricsSummary);
             }
         }
+
+        @Test
+        void metricsSummary_averagesAuthorsPerTraceAndKeepsEachAuthorsLatestScore() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var otherAuthorApiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+            AuthTestUtils.mockTargetWorkspace(wireMock.server(), otherAuthorApiKey, workspaceName, workspaceId,
+                    UUID.randomUUID().toString());
+
+            var projectName = RandomStringUtils.randomAlphabetic(10);
+            var name = RandomStringUtils.randomAlphabetic(10);
+            var startTime = Instant.now();
+
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                    .map(trace -> trace.toBuilder()
+                            .id(idGenerator.generateId())
+                            .projectName(projectName)
+                            .startTime(Instant.now())
+                            .build())
+                    .toList();
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            var staleScores = createTraceScores(traces, projectName, name);
+            var latestScores = createTraceScores(traces, projectName, name);
+            var otherAuthorScores = createTraceScores(traces, projectName, name);
+            traceResourceClient.feedbackScores(staleScores, apiKey, workspaceName);
+            traceResourceClient.feedbackScores(latestScores, apiKey, workspaceName);
+            traceResourceClient.feedbackScores(otherAuthorScores, otherAuthorApiKey, workspaceName);
+
+            var actualMetricsSummary = workspaceResourceClient.getMetricsSummary(
+                    WorkspaceMetricsSummaryRequest.builder()
+                            .intervalStart(startTime)
+                            .intervalEnd(Instant.now())
+                            .build(),
+                    apiKey, workspaceName);
+
+            var perTraceAverages = IntStream.range(0, traces.size())
+                    .mapToObj(i -> calcAverage(List.of(latestScores.get(i).value(), otherAuthorScores.get(i).value())))
+                    .toList();
+            var expectedMetricsSummary = List.of(WorkspaceMetricsSummaryResponse.Result.builder()
+                    .name(name)
+                    .current(getAvg(perTraceAverages))
+                    .previous(null)
+                    .build());
+
+            assertThat(actualMetricsSummary)
+                    .usingRecursiveComparison()
+                    .withComparatorForType(StatsUtils::closeToEpsilonComparator, Double.class)
+                    .isEqualTo(WorkspaceMetricsSummaryResponse.builder().results(expectedMetricsSummary).build());
+        }
+
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void metricsDaily_averagesAuthorsPerTraceAndKeepsEachAuthorsLatestScore(boolean withProjectIds) {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var otherAuthorApiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+            AuthTestUtils.mockTargetWorkspace(wireMock.server(), otherAuthorApiKey, workspaceName, workspaceId,
+                    UUID.randomUUID().toString());
+
+            var projectName = RandomStringUtils.randomAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+            var name = RandomStringUtils.randomAlphabetic(10);
+
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                    .map(trace -> trace.toBuilder()
+                            .id(idGenerator.generateId())
+                            .projectName(projectName)
+                            .startTime(Instant.now())
+                            .build())
+                    .toList();
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            var staleScores = createTraceScores(traces, projectName, name);
+            var latestScores = createTraceScores(traces, projectName, name);
+            var otherAuthorScores = createTraceScores(traces, projectName, name);
+            traceResourceClient.feedbackScores(staleScores, apiKey, workspaceName);
+            traceResourceClient.feedbackScores(latestScores, apiKey, workspaceName);
+            traceResourceClient.feedbackScores(otherAuthorScores, otherAuthorApiKey, workspaceName);
+
+            var endTime = Instant.now();
+            var actualMetrics = workspaceResourceClient.getMetricsDaily(
+                    WorkspaceMetricRequest.builder()
+                            .intervalStart(endTime.minus(Duration.ofDays(1)))
+                            .intervalEnd(endTime)
+                            .projectIds(withProjectIds ? Set.of(projectId) : null)
+                            .name(name)
+                            .build(),
+                    apiKey, workspaceName);
+
+            var perTraceAverages = IntStream.range(0, traces.size())
+                    .mapToObj(i -> calcAverage(List.of(latestScores.get(i).value(), otherAuthorScores.get(i).value())))
+                    .toList();
+            var expectedMetrics = WorkspaceMetricResponse.builder()
+                    .results(List.of(WorkspaceMetricResponse.Result.builder()
+                            .projectId(withProjectIds ? projectId : null)
+                            .name(name)
+                            .data(prepareMetricsAverageDailyData(perTraceAverages,
+                                    WorkspacesResourceTest.this::getAvg))
+                            .build()))
+                    .build();
+
+            assertThat(actualMetrics)
+                    .usingRecursiveComparison()
+                    .withComparatorForType(StatsUtils::closeToEpsilonComparator, Double.class)
+                    .isEqualTo(expectedMetrics);
+        }
+
+        @Test
+        void metricsSummary_countsTraceIdReusedAcrossProjectsOnce() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+            var projectName = RandomStringUtils.randomAlphabetic(10);
+            var otherProjectName = RandomStringUtils.randomAlphabetic(10);
+            var name = RandomStringUtils.randomAlphabetic(10);
+            var startTime = Instant.now();
+
+            var reusedId = idGenerator.generateId();
+            var traces = Stream.of(
+                    factory.manufacturePojo(Trace.class).toBuilder().id(reusedId).projectName(projectName),
+                    factory.manufacturePojo(Trace.class).toBuilder().id(reusedId).projectName(otherProjectName),
+                    factory.manufacturePojo(Trace.class).toBuilder().id(idGenerator.generateId())
+                            .projectName(projectName))
+                    .map(builder -> builder.startTime(Instant.now()).build())
+                    .toList();
+            // Separate requests: a single batch dedups traces by id.
+            traceResourceClient.batchCreateTraces(List.of(traces.get(0), traces.get(2)), apiKey, workspaceName);
+            traceResourceClient.batchCreateTraces(List.of(traces.get(1)), apiKey, workspaceName);
+
+            // Only the reused id's copy in projectName is scored, so a join on the id alone would count it twice.
+            var scores = createTraceScores(List.of(traces.get(0), traces.get(2)), projectName, name);
+            traceResourceClient.feedbackScores(scores, apiKey, workspaceName);
+
+            var actualMetricsSummary = workspaceResourceClient.getMetricsSummary(
+                    WorkspaceMetricsSummaryRequest.builder()
+                            .intervalStart(startTime)
+                            .intervalEnd(Instant.now())
+                            .build(),
+                    apiKey, workspaceName);
+
+            var expectedMetricsSummary = List.of(WorkspaceMetricsSummaryResponse.Result.builder()
+                    .name(name)
+                    .current(calcAverage(scores.stream().map(FeedbackScoreItem::value).toList()))
+                    .previous(null)
+                    .build());
+
+            assertThat(actualMetricsSummary)
+                    .usingRecursiveComparison()
+                    .withComparatorForType(StatsUtils::closeToEpsilonComparator, Double.class)
+                    .isEqualTo(WorkspaceMetricsSummaryResponse.builder().results(expectedMetricsSummary).build());
+        }
+
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void metricsDaily_countsTraceIdReusedAcrossProjectsOnce(boolean withProjectIds) {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+            var projectName = RandomStringUtils.randomAlphabetic(10);
+            var otherProjectName = RandomStringUtils.randomAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+            var otherProjectId = projectResourceClient.createProject(otherProjectName, apiKey, workspaceName);
+            var name = RandomStringUtils.randomAlphabetic(10);
+
+            var reusedId = idGenerator.generateId();
+            var traces = Stream.of(
+                    factory.manufacturePojo(Trace.class).toBuilder().id(reusedId).projectName(projectName),
+                    factory.manufacturePojo(Trace.class).toBuilder().id(reusedId).projectName(otherProjectName),
+                    factory.manufacturePojo(Trace.class).toBuilder().id(idGenerator.generateId())
+                            .projectName(projectName))
+                    .map(builder -> builder.startTime(Instant.now()).build())
+                    .toList();
+            // Separate requests: a single batch dedups traces by id.
+            traceResourceClient.batchCreateTraces(List.of(traces.get(0), traces.get(2)), apiKey, workspaceName);
+            traceResourceClient.batchCreateTraces(List.of(traces.get(1)), apiKey, workspaceName);
+
+            // Only the reused id's copy in projectName is scored, so a join on the id alone would count it twice.
+            var scores = createTraceScores(List.of(traces.get(0), traces.get(2)), projectName, name);
+            traceResourceClient.feedbackScores(scores, apiKey, workspaceName);
+
+            var endTime = Instant.now();
+            var actualMetrics = workspaceResourceClient.getMetricsDaily(
+                    WorkspaceMetricRequest.builder()
+                            .intervalStart(endTime.minus(Duration.ofDays(1)))
+                            .intervalEnd(endTime)
+                            .projectIds(withProjectIds ? Set.of(projectId, otherProjectId) : null)
+                            .name(name)
+                            .build(),
+                    apiKey, workspaceName);
+
+            var expectedMetrics = WorkspaceMetricResponse.builder()
+                    .results(List.of(WorkspaceMetricResponse.Result.builder()
+                            .projectId(withProjectIds ? projectId : null)
+                            .name(name)
+                            .data(prepareMetricsAverageDailyData(
+                                    List.of(calcAverage(scores.stream().map(FeedbackScoreItem::value).toList())),
+                                    WorkspacesResourceTest.this::getAvg))
+                            .build()))
+                    .build();
+
+            assertThat(actualMetrics)
+                    .usingRecursiveComparison()
+                    .withComparatorForType(StatsUtils::closeToEpsilonComparator, Double.class)
+                    .isEqualTo(expectedMetrics);
+        }
+
+        @Test
+        void metrics_isolatesByWorkspace() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var otherWorkspaceName = UUID.randomUUID().toString();
+            var otherApiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+            mockTargetWorkspace(otherApiKey, otherWorkspaceName, UUID.randomUUID().toString());
+
+            var projectName = RandomStringUtils.randomAlphabetic(10);
+            var name = RandomStringUtils.randomAlphabetic(10);
+            var startTime = Instant.now().minus(Duration.ofDays(1));
+
+            var scores = createFeedbackScores(projectName, List.of(name), apiKey, workspaceName);
+            createFeedbackScores(projectName, List.of(name), otherApiKey, otherWorkspaceName);
+            var endTime = Instant.now();
+
+            var actualMetricsSummary = workspaceResourceClient.getMetricsSummary(
+                    WorkspaceMetricsSummaryRequest.builder()
+                            .intervalStart(startTime)
+                            .intervalEnd(endTime)
+                            .build(),
+                    apiKey, workspaceName);
+            var actualMetrics = workspaceResourceClient.getMetricsDaily(
+                    WorkspaceMetricRequest.builder()
+                            .intervalStart(startTime)
+                            .intervalEnd(endTime)
+                            .name(name)
+                            .build(),
+                    apiKey, workspaceName);
+
+            assertThat(actualMetricsSummary)
+                    .usingRecursiveComparison()
+                    .withComparatorForType(StatsUtils::closeToEpsilonComparator, Double.class)
+                    .isEqualTo(WorkspaceMetricsSummaryResponse.builder()
+                            .results(prepareMetricsSummary(Map.of(), scores))
+                            .build());
+            assertThat(actualMetrics)
+                    .usingRecursiveComparison()
+                    .withComparatorForType(StatsUtils::closeToEpsilonComparator, Double.class)
+                    .isEqualTo(WorkspaceMetricResponse.builder()
+                            .results(prepareMetricsDailyPerWorkspace(scores.values(), List.of(), name,
+                                    WorkspacesResourceTest.this::getAvg))
+                            .build());
+        }
+    }
+
+    private List<FeedbackScoreBatchItem> createTraceScores(List<Trace> traces, String projectName, String name) {
+        return traces.stream()
+                .map(trace -> factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                        .id(trace.id())
+                        .projectName(projectName)
+                        .name(name)
+                        .build())
+                .collect(Collectors.toList());
     }
 
     @Nested
@@ -433,6 +705,39 @@ class WorkspacesResourceTest {
             assertThat(actualCostsSummary)
                     .usingComparatorForFields(StatsUtils::closeToEpsilonComparator, "current", "previous")
                     .isEqualTo(expectedCostsSummary);
+        }
+
+        @Test
+        void costsSummary_rangeIsIdBased() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+            Instant startTime = Instant.now().minus(Duration.ofMinutes(10));
+            Instant endTime = Instant.now();
+            Instant inWindow = startTime.plus(Duration.ofMinutes(5));
+            Instant outOfWindow = startTime.minus(Duration.ofHours(12));
+
+            // id in window, start_time far outside: counted
+            var idInWindow = createSpans(projectName, apiKey, workspaceName, inWindow, outOfWindow);
+            // start_time in window, id far outside: not counted
+            createSpans(projectName, apiKey, workspaceName, outOfWindow, inWindow);
+
+            var actualCostsSummary = workspaceResourceClient.getCostsSummary(
+                    WorkspaceMetricsSummaryRequest.builder()
+                            .intervalStart(startTime)
+                            .intervalEnd(endTime)
+                            .build(),
+                    apiKey, workspaceName);
+
+            assertThat(actualCostsSummary)
+                    .usingComparatorForFields(StatsUtils::closeToEpsilonComparator, "current", "previous")
+                    .isEqualTo(prepareCostsSummary(List.of(), idInWindow));
         }
 
         @ParameterizedTest
@@ -642,6 +947,38 @@ class WorkspacesResourceTest {
 
             assertThat(sumValues(all.results())).isPositive();
             assertSeriesMatch(seriesFromWorkspace(all.results()), seriesFromWorkspace(selected.results()));
+        }
+
+        /**
+         * Every interval the endpoint accepts, because each renders a different bucket expression and ClickHouse
+         * rejects a {@code WITH FILL} whose bucket, {@code FROM} and {@code TO} disagree in width (code 475).
+         * {@code HOURLY} — the only interval the rest of this class uses — cannot detect that on its own:
+         * {@code toStartOfInterval} returns a {@code Date} for {@code WEEKLY} where it returns a {@code DateTime} for
+         * the other two, and {@code TOTAL} emits no {@code WITH FILL} at all, so only running all four reaches every
+         * branch of the bucket pinning (OPIK-8241).
+         *
+         * <p>The token total does not depend on how the window is bucketed, so one expectation covers every interval.
+         */
+        @ParameterizedTest
+        @EnumSource(TimeInterval.class)
+        void spanTokenUsage_totalIsIndependentOfTheInterval(TimeInterval interval) {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+            var projectName = RandomStringUtils.randomAlphabetic(10);
+            projectResourceClient.createProject(projectName, apiKey, workspaceName);
+            var spans = createSpansWithUsage(projectName, apiKey, workspaceName, Instant.now(), "completion_tokens",
+                    List.of("openai", "anthropic", "openai"));
+
+            var endTime = Instant.now();
+            var startTime = endTime.minus(Duration.ofDays(1));
+
+            var actual = workspaceResourceClient.getWorkspaceSpanMetric(
+                    spanRequest(MetricType.SPAN_TOKEN_USAGE, null, startTime, endTime, null, interval),
+                    apiKey, workspaceName);
+
+            assertThat(sumValues(actual.results())).isEqualTo(spans.size() * TOKENS_PER_SPAN);
         }
 
         @Test
@@ -953,9 +1290,14 @@ class WorkspacesResourceTest {
 
     private WorkspaceSpanMetricRequest spanRequest(MetricType metricType, Set<UUID> projectIds, Instant startTime,
             Instant endTime, BreakdownConfig breakdown) {
+        return spanRequest(metricType, projectIds, startTime, endTime, breakdown, TimeInterval.HOURLY);
+    }
+
+    private WorkspaceSpanMetricRequest spanRequest(MetricType metricType, Set<UUID> projectIds, Instant startTime,
+            Instant endTime, BreakdownConfig breakdown, TimeInterval interval) {
         return WorkspaceSpanMetricRequest.builder()
                 .metricType(metricType)
-                .interval(TimeInterval.HOURLY)
+                .interval(interval)
                 .intervalStart(startTime)
                 .intervalEnd(endTime)
                 .projectIds(projectIds)
@@ -1012,7 +1354,7 @@ class WorkspacesResourceTest {
                         .projectId(null)
                         .projectName(projectName)
                         .provider(provider)
-                        .usage(Map.of(usageKey, 10))
+                        .usage(Map.of(usageKey, TOKENS_PER_SPAN))
                         .feedbackScores(null)
                         .build())
                 .toList();
@@ -1024,11 +1366,16 @@ class WorkspacesResourceTest {
 
     private List<Span> createSpans(String projectName, String apiKey,
             String workspaceName, Instant time) {
+        return createSpans(projectName, apiKey, workspaceName, time, time);
+    }
+
+    private List<Span> createSpans(String projectName, String apiKey,
+            String workspaceName, Instant idTime, Instant startTime) {
         var spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class)
                 .stream()
                 .map(span -> span.toBuilder()
-                        .startTime(time)
-                        .id(idGenerator.getTimeOrderedEpoch(time.toEpochMilli()))
+                        .startTime(startTime)
+                        .id(idGenerator.getTimeOrderedEpoch(idTime.toEpochMilli()))
                         .projectId(null)
                         .projectName(projectName)
                         .feedbackScores(null)

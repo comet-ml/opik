@@ -1,3 +1,5 @@
+import useAppStore from "@/store/AppStore";
+
 const EVENT_PREFIX = "opik_";
 
 export const OpikEvent = {
@@ -34,6 +36,29 @@ export const OpikEvent = {
   DIAGNOSTICS_ISSUE_RESOLVED: "opik_diagnostics_issue_resolved",
   DIAGNOSTICS_ISSUE_REOPENED: "opik_diagnostics_issue_reopened",
   DIAGNOSTICS_CONTINUE_WITH_OLLIE: "opik_diagnostics_continue_with_ollie",
+  TRACE_ERROR_EXPANDED: "opik_trace_error_expanded",
+  // Named after the surface they come from, not the control they sit on: the
+  // MCP entry points will multiply, and `opik_mcp_popover_opened` would not say
+  // which one opened. `opik_mcp_banner_*` below is the same shape.
+  MCP_HINT_SHOWN: "opik_mcp_hint_shown",
+  MCP_HINT_OPENED: "opik_mcp_hint_opened",
+  MCP_HINT_CLOSED: "opik_mcp_hint_closed",
+  MCP_HINT_CLIENT_CLICKED: "opik_mcp_hint_client_clicked",
+  MCP_HINT_PROMPT_COPIED: "opik_mcp_hint_prompt_copied",
+  MCP_HINT_DOCS_CLICKED: "opik_mcp_hint_docs_clicked",
+  MCP_BANNER_SHOWN: "opik_mcp_banner_shown",
+  MCP_BANNER_CTA_CLICKED: "opik_mcp_banner_cta_clicked",
+  MCP_BANNER_DISMISSED: "opik_mcp_banner_dismissed",
+  // Ollie charts on dashboards. The adds and saves happen in Ollie, which reports them itself.
+  DASHBOARD_ASK_OLLIE_CLICKED: "opik_dashboard_ask_ollie_clicked",
+  DASHBOARD_EDIT_IN_OLLIE_CLICKED: "opik_dashboard_edit_in_ollie_clicked",
+  DASHBOARD_OLLIE_WIDGET_REMOVED: "opik_dashboard_ollie_widget_removed",
+  DASHBOARD_OLLIE_WIDGET_LOAD_FAILED: "opik_dashboard_ollie_widget_load_failed",
+  DASHBOARD_WITH_OLLIE_WIDGETS_OPENED:
+    "opik_dashboard_with_ollie_widgets_opened",
+  ANNOTATION_QUEUE_VIEW_OLLIE_CLICKED:
+    "opik_annotation_queue_view_ollie_clicked",
+  ANNOTATION_QUEUE_VIEW_FAILED: "opik_annotation_queue_view_failed",
 } as const;
 
 type OpikEventValues = (typeof OpikEvent)[keyof typeof OpikEvent];
@@ -54,9 +79,8 @@ export const trackEvent = (
 
     const environment =
       window.environmentVariablesOverwrite?.OPIK_ANALYTICS_ENVIRONMENT;
-    const enrichedProperties = environment
-      ? { ...properties, environment }
-      : properties;
+    const workspace = useAppStore.getState().activeWorkspaceName || undefined;
+    const enrichedProperties = { ...properties, workspace, environment };
 
     window.analytics.track(prefixedEvent, enrichedProperties);
   } catch {

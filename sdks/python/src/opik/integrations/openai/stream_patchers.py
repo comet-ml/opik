@@ -67,11 +67,11 @@ def patch_sync_stream(
                 if hasattr(self, "opik_tracked_instance"):
                     delattr(self, "opik_tracked_instance")
                     output = (
-                        generations_aggregator(accumulated_items)
+                        self.opik_generations_aggregator(accumulated_items)
                         if error_info is None
                         else None
                     )
-                    finally_callback(
+                    self.opik_finally_callback(
                         output=output,
                         error_info=error_info,
                         capture_output=True,
@@ -86,6 +86,11 @@ def patch_sync_stream(
     stream.opik_tracked_instance = True
     stream.span_to_end = span_to_end
     stream.trace_to_end = trace_to_end
+    # Kept on the instance, not in the class-level wrapper: Chat Completions and
+    # Responses streams share this class but need different aggregators, and the
+    # wrapper is replaced on every call.
+    stream.opik_generations_aggregator = generations_aggregator
+    stream.opik_finally_callback = finally_callback
 
     return stream
 
@@ -130,11 +135,11 @@ def patch_async_stream(
                 if hasattr(self, "opik_tracked_instance"):
                     delattr(self, "opik_tracked_instance")
                     output = (
-                        generations_aggregator(accumulated_items)
+                        self.opik_generations_aggregator(accumulated_items)
                         if error_info is None
                         else None
                     )
-                    finally_callback(
+                    self.opik_finally_callback(
                         output=output,
                         error_info=error_info,
                         capture_output=True,
@@ -151,6 +156,11 @@ def patch_async_stream(
     stream.opik_tracked_instance = True
     stream.span_to_end = span_to_end
     stream.trace_to_end = trace_to_end
+    # Kept on the instance, not in the class-level wrapper: Chat Completions and
+    # Responses streams share this class but need different aggregators, and the
+    # wrapper is replaced on every call.
+    stream.opik_generations_aggregator = generations_aggregator
+    stream.opik_finally_callback = finally_callback
 
     return stream
 

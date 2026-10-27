@@ -14,14 +14,25 @@ import type { BackendClient, SpanCostRef } from '@e2e/core/backend';
  * too eagerly reads as some other model's price. Both render as a perfectly
  * ordinary number on a page people read to decide what their LLM spend is.
  *
- * The fixture logs ten LLM spans with `usage` and **no** `total_cost`:
+ * The fixture logs fourteen LLM spans with `usage` and **no** `total_cost`:
  *
- *  - Five for id normalisation. Three exercise a step each (provider-prefix
- *    strip, dot-normalising, compact-date strip, and an alias); two are controls
- *    whose eight trailing digits are not dates and must not be stripped onto
- *    another model's row.
+ *  - Five for id normalisation. Three carry ids that must resolve, covering
+ *    four steps between them (provider-prefix strip, dot-normalising,
+ *    compact-date strip, and an alias — the first id needs three of them at
+ *    once); two are controls whose eight trailing digits are not dates and
+ *    must not be stripped onto another model's row.
  *  - Five for reasoning tokens, all on one model, differing only in the
  *    reasoning count and the usage key it arrives under.
+ *  - Two for a model priced per input character rather than per token
+ *    (OPIK-7791), differing only in whether the character count is there. A
+ *    price key the backend does not read is the same silent failure as a model
+ *    id it cannot resolve: no cost chip on the span, and a trace total that
+ *    still looks like a number.
+ *  - Two for audio INPUT tokens, on a `gemini-embedding-2*` row re-priced in
+ *    2.2.65, differing only in whether the audio count is there. Audio tokens
+ *    come out of the prompt bucket and bill at their own rate, so a backend
+ *    that ignored the key would price the pair identically — at a number that
+ *    is 86% too low and looks entirely ordinary.
  *
  * The expected amounts are the shipped price table's own numbers — see the
  * fixture. They are asserted at both surfaces because that is where the two can
@@ -134,11 +145,11 @@ test.describe('Span cost — server-side price resolution', { tag: ['@t2-cuj', '
       }
     });
 
-    await test.step('The two undated look-alikes are billed nothing', async () => {
+    await test.step('Every control is billed nothing', async () => {
       for (const seed of controls(modelCostSpans.spans)) {
         expect(
           attributedCost(byName.get(seed.name)!),
-          `${seed.model} has no price in the table; a cost here means the date strip ran on a build number and billed another model's rate`,
+          `${seed.key} (${seed.model}): ${seed.zeroCostReason ?? 'this vector must not be billed'}`,
         ).toBe(0);
       }
     });
@@ -230,6 +241,99 @@ test.describe('Span cost — server-side price resolution', { tag: ['@t2-cuj', '
         cost('reasoning-negative'),
         'a negative reasoning count must floor at 0, pricing identically to the absent-key control',
       ).toBeCloseTo(cost('reasoning-absent'), 6);
+    });
+  });
+
+  test('A model priced per input character bills from its character count, not from its tokens', { tag: ['@cap:traces.span-model-cost-tokens'] }, async ({
+    modelCostSpans,
+    project,
+    backendClient,
+  }) => {
+    // No page, for the same reason as the reasoning-token test above: the
+    // subject is which usage key the backend multiplies a price by. The
+    // panel's rendering of the priced one is covered by the UI test below.
+
+    const byName = await test.step('Read the seeded spans back once all of them are queryable', async () =>
+      readSeededSpans(backendClient, project.id, modelCostSpans));
+
+    await test.step('The character-priced span is billed at the table rate', async () => {
+      // mistral/voxtral-mini-tts-latest publishes input_cost_per_character and
+      // no token rate at all: 1M characters x $1.6e-05 -> $16.00. A model whose
+      // price key ModelCostData does not declare resolves to nothing instead,
+      // and nothing is what this assertion exists to tell apart from $16.
+      expect(
+        costOf(byName, modelCostSpans, 'characters-priced'),
+        'characters-priced: 1.0M input_characters x $1.6e-05/character',
+      ).toBeCloseTo(16, 6);
+    });
+
+    await test.step('The same model without a character count is billed nothing', async () => {
+      // The discriminating half. Both vectors carry the identical 1M prompt +
+      // 1M completion tokens and differ only in `input_characters`, so a cost
+      // that had come from the token counts would price them the same.
+      const control = modelCostSpans.spans.find((s) => s.key === 'characters-absent');
+      expect(control, "the fixture must seed a 'characters-absent' vector").toBeDefined();
+      const span = byName.get(control!.name);
+      expect(span, `span ${control!.name} was seeded`).toBeDefined();
+      expect(
+        attributedCost(span!),
+        `characters-absent: ${control!.zeroCostReason}`,
+      ).toBe(0);
+    });
+  });
+
+  test('Audio input tokens bill at the audio rate and come out of the standard prompt bucket', { tag: ['@cap:traces.span-model-cost-tokens'] }, async ({
+    modelCostSpans,
+    project,
+    backendClient,
+  }) => {
+    // No page, for the same reason as the two tests above: the subject is which
+    // bucket the backend puts a prompt token in before multiplying. The panel's
+    // rendering of both these spans is covered by the UI test below, which walks
+    // every priced span — and both of these are priced, so both are walked.
+
+    const byName = await test.step('Read the seeded spans back once all of them are queryable', async () =>
+      readSeededSpans(backendClient, project.id, modelCostSpans));
+
+    const cost = (key: string) => costOf(byName, modelCostSpans, key);
+
+    await test.step('Each vector is priced at the hand-computed table amount', async () => {
+      // Absolute amounts first, from gemini/gemini-embedding-2-preview's own
+      // shipped rates ($2e-07/token in, $6.5e-06/audio token in, $0/token out)
+      // at the fixture's 1M prompt + 1M completion tokens. These are what pin
+      // the arithmetic to the price table rather than merely to itself.
+      expect(
+        cost('audio-input-priced'),
+        'audio-input-priced: 800k x $2e-07 (prompt less audio) + 200k x $6.5e-06 (audio)',
+      ).toBeCloseTo(1.46, 6);
+      expect(
+        cost('audio-input-absent'),
+        'audio-input-absent: 1.0M x $2e-07, and nothing for the 1.0M completion tokens — this model publishes output_cost_per_token: 0',
+      ).toBeCloseTo(0.2, 6);
+    });
+
+    await test.step('Audio tokens are billed at their own rate, not at the plain input rate', async () => {
+      // The discriminating comparison, and the reason the absent-key control is
+      // seeded. Both spans report identical prompt and completion totals, so a
+      // backend that never read input_cost_per_audio_token would price them
+      // the same. An absolute assertion alone could not tell that apart from
+      // the price table moving.
+      expect(
+        cost('audio-input-priced'),
+        'a span reporting audio input tokens must cost MORE than an identical one that reports none, because $6.5e-06/audio token is 32.5x the $2e-07 token rate',
+      ).toBeGreaterThan(cost('audio-input-absent'));
+    });
+
+    await test.step('Audio tokens are not billed twice — they leave the standard prompt bucket', async () => {
+      // The delta is the whole assertion: 200k tokens moved from the $2e-07
+      // bucket to the $6.5e-06 one is 200k x (6.5e-06 - 2e-07) = $1.26. Billing
+      // them at BOTH rates — the failure `nonAudioPromptTokens` exists to
+      // prevent — would put the delta at 200k x 6.5e-06 = $1.30 instead, which
+      // is a 3% difference on a page nobody re-derives by hand.
+      expect(
+        cost('audio-input-priced') - cost('audio-input-absent'),
+        'the premium for 200k audio tokens must be the RATE DIFFERENCE over those tokens, not the audio rate on top of the input rate',
+      ).toBeCloseTo(1.26, 6);
     });
   });
 
