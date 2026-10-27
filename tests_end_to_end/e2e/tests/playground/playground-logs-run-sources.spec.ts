@@ -27,8 +27,10 @@ import type { BackendFilter } from '@e2e/core/backend';
  * rather than something only a human would notice.
  *
  * Deterministic by construction. Every row is seeded over REST, one per
- * (source, created_from) cell — no model is called, no run is launched, no
- * provider key is needed, and the row set is a pure function of the seed. The
+ * (source, created_from) cell — no model is called, no run is launched, and
+ * the row set is a pure function of the seed. The one provider key seeded
+ * below exists only to keep the Playground's setup modal shut; it points at a
+ * refused loopback port and nothing ever calls it. The
  * candidate's flow sketched seeding a dataset and a Custom provider so a real
  * run could produce the rows; that is unnecessary once the rows are written
  * directly, and it would have made the assertion depend on a provider
@@ -66,7 +68,7 @@ test.describe('Playground logs — which runs are listed', { tag: ['@area:playgr
   test(
     'the sidebar lists dataset and test-suite runs and excludes SDK evaluate() traces',
     { tag: ['@t2-cuj', '@cap:playground.playground-logs-sidebar'] },
-    async ({ project, playgroundLogsTraces, backendClient, page }) => {
+    async ({ project, playgroundLogsTraces, backendClient, providerKeys, testNamespace, page }) => {
       test.setTimeout(180_000);
 
       const expectedIds = sorted(playgroundLogsTraces.expectedIds);
@@ -139,6 +141,21 @@ test.describe('Playground logs — which runs are listed', { tag: ['@area:playgr
           sorted(apiAnswer.ids.filter((id) => !preFix.ids.includes(id))),
           'the rows the fix added are the non-playground-sourced playground runs',
         ).toEqual(sorted(playgroundLogsTraces.addedByFixIds));
+      });
+
+      await test.step('Seed a provider, only so the Playground mounts past its setup modal', async () => {
+        // A precondition rather than a detail, and the reason this step exists
+        // at all: with no provider key in the workspace the Playground
+        // auto-opens the "Add provider configuration" dialog, whose overlay
+        // covers the page — the logs-sidebar button resolves but can never be
+        // clicked. Every other spec in this directory establishes a provider
+        // first for the same reason. It points at a refused loopback port and
+        // is never called: nothing here runs a prompt, and every row under
+        // test is seeded over REST.
+        await providerKeys.createUnreachable({
+          providerName: `${testNamespace}-unreachable`,
+          modelName: `${testNamespace}-dead-model`,
+        });
       });
 
       await test.step('The sidebar renders exactly the rows that answer describes', async () => {
