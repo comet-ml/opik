@@ -89,4 +89,7 @@ public class LlmProviderClientConfig {
     @NotNull @MinDataSize(1)
     @MaxDataSize(value = 1, unit = DataSizeUnit.GIBIBYTES)
     private DataSize mediaDownloadMaxSize;
+
+    /** Longest provider error message passed on to a caller; a longer one is replaced by the HTTP status. */
+    @NotNull @Positive private Integer providerErrorMessageMaxLength;
 }
