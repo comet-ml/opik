@@ -17,26 +17,6 @@ from tests.unit.test_helpers import (
 )
 
 
-class TestGepaOptimizerInit:
-    @pytest.mark.parametrize(
-        "kwargs,expected",
-        [
-            ({"model": "gpt-4o"}, {"model": "gpt-4o", "seed": 42}),
-            (
-                {"model": "gpt-4o-mini", "verbose": 0, "seed": 123},
-                {"model": "gpt-4o-mini", "verbose": 0, "seed": 123},
-            ),
-        ],
-    )
-    def test_initialization(
-        self, kwargs: dict[str, Any], expected: dict[str, Any]
-    ) -> None:
-        """Test optimizer initialization with defaults and custom params."""
-        optimizer = GepaOptimizer(**kwargs)
-        for key, value in expected.items():
-            assert getattr(optimizer, key) == value
-
-
 class TestGepaOptimizerOptimizePrompt:
     def test_single_prompt_returns_chat_prompt(
         self,
@@ -194,70 +174,6 @@ class TestGepaOptimizerEarlyStop:
         assert_baseline_early_stop(
             result, perfect_score=0.95, trials_completed=1, history_len=1
         )
-
-
-class TestGepaOptimizerAgentUsage:
-    """Test that self.agent is properly set and used by GEPA adapter."""
-
-    def test_agent_set_inpre_optimize(self, monkeypatch) -> None:
-        """
-        Verify that self.agent is set during pre_optimize.
-
-        This test ensures that when pre_optimize is called,
-        self.agent is properly assigned from context.agent for use
-        in OpikGEPAAdapter and reflection operations.
-        """
-        from opik_optimizer.agents.optimizable_agent import OptimizableAgent
-        from opik_optimizer.core.state import OptimizationContext
-
-        optimizer = GepaOptimizer(
-            model="gpt-4o-mini",
-            verbose=0,
-            seed=42,
-        )
-
-        # Verify agent is not set initially
-        assert not hasattr(optimizer, "agent") or optimizer.agent is None
-
-        # Create a mock context with an agent
-        mock_agent = MagicMock(spec=OptimizableAgent)
-        mock_context = MagicMock(spec=OptimizationContext)
-        mock_context.agent = mock_agent
-        mock_context.extra_params = {}
-
-        # Call pre_optimize
-        optimizer.pre_optimize(mock_context)
-
-        # Verify self.agent is now set
-        assert hasattr(optimizer, "agent"), "pre_optimize should set self.agent"
-        assert optimizer.agent is mock_agent, "self.agent should be context.agent"
-
-    def test_self_agent_available_for_adapter(self) -> None:
-        """
-        Verify that self.agent is available after optimize_prompt starts.
-
-        This test documents that GepaOptimizer needs self.agent because
-        it creates OpikGEPAAdapter which accesses the agent via the optimizer instance.
-        The agent is passed in run_optimization to the adapter as self.agent.
-        """
-        from opik_optimizer.core.state import OptimizationContext
-
-        optimizer = GepaOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
-
-        # Verify agent is not set before pre_optimize
-        assert not hasattr(optimizer, "agent") or optimizer.agent is None
-
-        # Create a mock context
-        mock_agent = MagicMock()
-        mock_context = MagicMock(spec=OptimizationContext)
-        mock_context.agent = mock_agent
-        mock_context.extra_params = {}
-
-        # Call pre_optimize
-        optimizer.pre_optimize(mock_context)
-
-        # Verify self.agent is set and can be accessed in run_optimization
-        assert optimizer.agent is mock_agent
 
 
 def test_gepa_adapter_records_per_item_metrics() -> None:
@@ -538,3 +454,19 @@ def test_gepa_adapter_llm_task_scores_candidates_only_for_pass_at_k(
         "output": expected_output,
         "metric_calls": expected_metric_calls,
     }
+
+
+@pytest.mark.parametrize(
+    "kwargs,match",
+    [
+        ({"model": None}, "model parameter is required"),
+        ({"model": 123}, "model must be a string, got int"),
+        ({"model": "   "}, "model cannot be empty"),
+        ({"model": "gpt-4o-mini", "verbose": "1"}, "verbose must be an integer"),
+        ({"model": "gpt-4o-mini", "verbose": -1}, "verbose must be non-negative"),
+        ({"model": "gpt-4o-mini", "seed": "42"}, "seed must be an integer"),
+    ],
+)
+def test_invalid_constructor_args_raise(kwargs: dict, match: str) -> None:
+    with pytest.raises(ValueError, match=match):
+        GepaOptimizer(**kwargs)

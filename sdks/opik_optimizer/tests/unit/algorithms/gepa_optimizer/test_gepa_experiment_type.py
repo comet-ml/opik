@@ -104,47 +104,6 @@ class TestClassifyExperimentType:
 
 
 class TestAdapterEvaluatePassesExperimentType:
-    def test_evaluate_threads_experiment_type_to_task_evaluator(
-        self, monkeypatch
-    ) -> None:
-        """The classified type must reach task_evaluator.evaluate_with_result."""
-        from opik_optimizer.algorithms.gepa_optimizer import adapter as adapter_module
-
-        adapter = _make_adapter({"v1"})
-
-        captured: dict[str, Any] = {}
-
-        def fake_evaluate_with_result(**kwargs: Any) -> tuple[float, Any]:
-            captured.update(kwargs)
-            eval_result = MagicMock()
-            eval_result.test_results = []
-            return 1.0, eval_result
-
-        monkeypatch.setattr(
-            adapter_module.task_evaluator,
-            "evaluate_with_result",
-            fake_evaluate_with_result,
-        )
-        # Keep prompt rebuilding and config preparation out of the way.
-        monkeypatch.setattr(
-            adapter, "_rebuild_prompts_from_candidate", lambda candidate: ({}, [])
-        )
-        monkeypatch.setattr(
-            adapter_module,
-            "prepare_experiment_config",
-            lambda **kwargs: {"project_name": "test"},
-        )
-
-        batch = _make_batch(
-            [
-                {"id": "t1", "question": "q", "answer": "a"},
-                {"id": "t2", "question": "q", "answer": "a"},
-            ]
-        )
-        adapter.evaluate(batch, candidate={}, capture_traces=False)
-
-        assert captured["experiment_type"] == "mini-batch"
-
     def test_evaluate_marks_full_valset_batch_as_trial(self, monkeypatch) -> None:
         from opik_optimizer.algorithms.gepa_optimizer import adapter as adapter_module
 

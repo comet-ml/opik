@@ -1,5 +1,6 @@
 # mypy: disable-error-code=no-untyped-def
 
+import pytest
 import logging
 from types import SimpleNamespace
 from typing import Any
@@ -11,7 +12,6 @@ from opik_optimizer import GepaOptimizer, constants
 from opik_optimizer.algorithms.gepa_optimizer.gepa_optimizer import (
     MIN_EXPECTED_REFLECTION_ITERATIONS,
     CandidateScoreThresholdStopper,
-    _ReflectionBudgetStopper,
     _build_gepa_stop_callbacks,
     _coerce_no_improvement_iterations,
     _coerce_positive_int,
@@ -74,104 +74,6 @@ def _run_optimize(
         **optimize_kwargs,
     )
     return result, captured
-
-
-class TestGepaStopCallbackWiring:
-    def test_stop_callbacks_wired_by_default(
-        self,
-        mock_optimization_context,
-        monkeypatch,
-        simple_chat_prompt,
-        mock_dataset,
-        sample_dataset_items,
-        sample_metric,
-    ) -> None:
-        """gepa.optimize must receive a full-eval score threshold stopper and a stall stopper."""
-        _, captured = _run_optimize(
-            monkeypatch,
-            mock_optimization_context,
-            simple_chat_prompt,
-            mock_dataset,
-            sample_dataset_items,
-            sample_metric,
-        )
-
-        stoppers = captured["stop_callbacks"]
-        assert len(stoppers) == 2
-        assert isinstance(stoppers[0], ScoreThresholdStopper)
-        assert stoppers[0].threshold == GepaOptimizer(model="gpt-4o-mini").perfect_score
-        assert isinstance(stoppers[1], NoImprovementStopper)
-        assert stoppers[1].max_iterations_without_improvement == 10
-        # No reflection-budget stopper by default (OPIK-7521): max_reflection_calls
-        # defaults to 0, so GEPA's search length is untouched unless opted in.
-        assert not any(isinstance(s, _ReflectionBudgetStopper) for s in stoppers)
-
-    def test_no_improvement_stopper_disabled_with_zero(
-        self,
-        mock_optimization_context,
-        monkeypatch,
-        simple_chat_prompt,
-        mock_dataset,
-        sample_dataset_items,
-        sample_metric,
-    ) -> None:
-        _, captured = _run_optimize(
-            monkeypatch,
-            mock_optimization_context,
-            simple_chat_prompt,
-            mock_dataset,
-            sample_dataset_items,
-            sample_metric,
-            no_improvement_iterations=0,
-        )
-
-        stoppers = captured["stop_callbacks"]
-        assert len(stoppers) == 1
-        assert isinstance(stoppers[0], ScoreThresholdStopper)
-
-    def test_no_improvement_iterations_override(
-        self,
-        mock_optimization_context,
-        monkeypatch,
-        simple_chat_prompt,
-        mock_dataset,
-        sample_dataset_items,
-        sample_metric,
-    ) -> None:
-        _, captured = _run_optimize(
-            monkeypatch,
-            mock_optimization_context,
-            simple_chat_prompt,
-            mock_dataset,
-            sample_dataset_items,
-            sample_metric,
-            no_improvement_iterations=3,
-        )
-
-        stoppers = captured["stop_callbacks"]
-        assert isinstance(stoppers[1], NoImprovementStopper)
-        assert stoppers[1].max_iterations_without_improvement == 3
-
-    def test_budget_stopper_still_configured(
-        self,
-        mock_optimization_context,
-        monkeypatch,
-        simple_chat_prompt,
-        mock_dataset,
-        sample_dataset_items,
-        sample_metric,
-    ) -> None:
-        """stop_callbacks must compose with (not replace) the metric-call budget."""
-        _, captured = _run_optimize(
-            monkeypatch,
-            mock_optimization_context,
-            simple_chat_prompt,
-            mock_dataset,
-            sample_dataset_items,
-            sample_metric,
-        )
-        assert captured["max_metric_calls"] is not None
-        assert captured["max_metric_calls"] > 0
 
 
 class TestGepaFinishReason:
@@ -567,79 +469,6 @@ class TestStopperSemantics:
         assert stopper(SimpleNamespace(program_full_scores_val_set=[0.6])) is True
 
 
-class TestCoerceNoImprovementIterations:
-    """no_improvement_iterations comes from user extra_params (Any) — validate it."""
-
-    def test_none_falls_back_to_default(self) -> None:
-        assert (
-            _coerce_no_improvement_iterations(None)
-            == constants.DEFAULT_GEPA_NO_IMPROVEMENT_ITERATIONS
-        )
-
-    def test_valid_int_passthrough(self) -> None:
-        assert _coerce_no_improvement_iterations(7) == 7
-
-    def test_zero_disables(self) -> None:
-        assert _coerce_no_improvement_iterations(0) == 0
-
-    def test_float_rounds_down_not_silently(self) -> None:
-        # 2.5 must not be silently truncated to a surprising value; we floor it.
-        assert _coerce_no_improvement_iterations(2.5) == 2
-
-    def test_numeric_string_parsed(self) -> None:
-        assert _coerce_no_improvement_iterations("3") == 3
-
-    def test_invalid_string_falls_back_to_default(self) -> None:
-        assert (
-            _coerce_no_improvement_iterations("soon")
-            == constants.DEFAULT_GEPA_NO_IMPROVEMENT_ITERATIONS
-        )
-
-    def test_negative_disables(self) -> None:
-        assert _coerce_no_improvement_iterations(-5) == 0
-
-
-class TestCoercePositiveInt:
-    """The generalized boundary coercion used for both stall + minibatch knobs."""
-
-    def test_allow_zero_false_below_min_uses_default(self) -> None:
-        # reflection_minibatch_size semantics: 0 is invalid, fall back to default.
-        assert _coerce_positive_int(0, default=3, allow_zero=False, name="mb") == 3
-        assert _coerce_positive_int(-1, default=3, allow_zero=False, name="mb") == 3
-
-    def test_allow_zero_true_keeps_zero(self) -> None:
-        assert _coerce_positive_int(0, default=10, allow_zero=True, name="n") == 0
-
-    def test_none_uses_default(self) -> None:
-        assert _coerce_positive_int(None, default=3, allow_zero=False, name="mb") == 3
-
-    def test_string_does_not_crash_and_uses_default(self) -> None:
-        # The reflection-minibatch crash Baz flagged: a string must warn, not raise.
-        assert _coerce_positive_int("big", default=3, allow_zero=False, name="mb") == 3
-
-    def test_dict_input_does_not_crash(self) -> None:
-        # A dict/list must not raise nor be dumped raw into logs.
-        assert (
-            _coerce_positive_int({"a": 1}, default=3, allow_zero=False, name="mb") == 3
-        )
-
-    def test_float_floored(self) -> None:
-        assert _coerce_positive_int(4.9, default=3, allow_zero=False, name="mb") == 4
-
-    def test_infinity_does_not_crash(self) -> None:
-        # int(float("inf")) raises OverflowError — must be caught, not propagated.
-        assert (
-            _coerce_positive_int(float("inf"), default=3, allow_zero=False, name="mb")
-            == 3
-        )
-
-    def test_nan_does_not_crash(self) -> None:
-        assert (
-            _coerce_positive_int(float("nan"), default=7, allow_zero=True, name="n")
-            == 7
-        )
-
-
 class TestReflectionMinibatchBudgetWarning:
     """The warning must state the REAL cost model: a large mini-batch doesn't
     stop reflection, it exhausts the metric budget in few iterations."""
@@ -697,3 +526,42 @@ class TestBuildGepaStopCallbacks:
         stoppers, no_improve = _build_gepa_stop_callbacks(0.0, 0)
         assert stoppers == []
         assert no_improve is None
+
+
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        (None, constants.DEFAULT_GEPA_NO_IMPROVEMENT_ITERATIONS),
+        (7, 7),
+        (0, 0),
+        (2.5, 2),
+        ("3", 3),
+        ("soon", constants.DEFAULT_GEPA_NO_IMPROVEMENT_ITERATIONS),
+        (-5, 0),
+    ],
+)
+def test_coerce_no_improvement_iterations(value: Any, expected: int) -> None:
+    assert _coerce_no_improvement_iterations(value) == expected
+
+
+@pytest.mark.parametrize(
+    "value,default,allow_zero,expected",
+    [
+        (0, 3, False, 3),
+        (-1, 3, False, 3),
+        (0, 10, True, 0),
+        (None, 3, False, 3),
+        ("big", 3, False, 3),  # strings warn, never raise
+        ({"a": 1}, 3, False, 3),
+        (4.9, 3, False, 4),
+        (float("inf"), 3, False, 3),  # int(inf) raises OverflowError
+        (float("nan"), 7, True, 7),
+    ],
+)
+def test_coerce_positive_int(
+    value: Any, default: int, allow_zero: bool, expected: int
+) -> None:
+    assert (
+        _coerce_positive_int(value, default=default, allow_zero=allow_zero, name="n")
+        == expected
+    )

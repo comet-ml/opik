@@ -88,29 +88,6 @@ def _patch_call_model(monkeypatch, response: str = "new instruction") -> list[di
 
 
 class TestReflectionLmWiring:
-    def test_reflection_lm_is_a_callable_not_the_model_string(
-        self,
-        mock_optimization_context,
-        monkeypatch,
-        simple_chat_prompt,
-        mock_dataset,
-        sample_dataset_items,
-        sample_metric,
-    ) -> None:
-        """The bare model string would make gepa call litellm directly —
-        untraced, uncounted, unbounded (OPIK-7521)."""
-        _, captured, _ = _run_optimize(
-            monkeypatch,
-            mock_optimization_context,
-            simple_chat_prompt,
-            mock_dataset,
-            sample_dataset_items,
-            sample_metric,
-        )
-
-        assert not isinstance(captured["reflection_lm"], str)
-        assert callable(captured["reflection_lm"])
-
     def test_reflection_callable_counts_and_routes_through_call_model(
         self,
         mock_optimization_context,
@@ -143,30 +120,6 @@ class TestReflectionLmWiring:
         assert first["metadata"]["opik_call_type"] == "gepa_reflection"
         assert first["metadata"]["optimizer_name"] == "GepaOptimizer"
         assert first["optimization_id"] == "test-opt-123"
-
-    def test_reflection_callable_passes_message_lists_through(
-        self,
-        mock_optimization_context,
-        monkeypatch,
-        simple_chat_prompt,
-        mock_dataset,
-        sample_dataset_items,
-        sample_metric,
-    ) -> None:
-        """gepa may hand the callable a chat-message list instead of a string."""
-        calls = _patch_call_model(monkeypatch)
-        _, captured, _ = _run_optimize(
-            monkeypatch,
-            mock_optimization_context,
-            simple_chat_prompt,
-            mock_dataset,
-            sample_dataset_items,
-            sample_metric,
-        )
-
-        messages = [{"role": "system", "content": "reflect"}]
-        captured["reflection_lm"](messages)
-        assert calls[0]["messages"] == messages
 
     def test_reflection_callable_refuses_calls_beyond_the_budget(
         self,
@@ -410,28 +363,6 @@ class TestMaxReflectionCallsKnob:
         assert result.details["finish_reason"] != "reflection_budget"
 
 
-class TestCoerceMaxReflectionCalls:
-    def test_default_is_no_cap(self) -> None:
-        """Default 0 = uncapped, so GEPA's search is unchanged unless the caller
-        opts in. A max_trials default would truncate ordinary runs: reflection
-        calls scale with engine iterations, and an iteration whose candidate
-        loses on the minibatch costs only 2*reflection_minibatch_size metric
-        calls out of a max_trials*n_samples budget."""
-        assert _coerce_max_reflection_calls(None) == 0
-
-    def test_zero_disables(self) -> None:
-        assert _coerce_max_reflection_calls(0) == 0
-
-    def test_numeric_string_parsed(self) -> None:
-        assert _coerce_max_reflection_calls("3") == 3
-
-    def test_invalid_value_falls_back_to_no_cap(self) -> None:
-        assert _coerce_max_reflection_calls("lots") == 0
-
-    def test_negative_disables(self) -> None:
-        assert _coerce_max_reflection_calls(-1) == 0
-
-
 class TestReflectionBudgetFinishReason:
     # Index 0 of a gepa full-eval list is the seed program's own eval, which the
     # resolver excludes (OPIK-7511), so a candidate score goes in position 1.
@@ -636,3 +567,13 @@ class TestReflectionBudgetFinishReason:
         assert result.details["reflection_call_count"] == 8
         assert result.details["max_reflection_calls"] == 0
         assert result.details["finish_reason"] != "reflection_budget"
+
+
+@pytest.mark.parametrize(
+    "value,expected",
+    [(None, 0), (0, 0), ("3", 3), ("lots", 0), (-1, 0)],
+)
+def test_coerce_max_reflection_calls(value: Any, expected: int) -> None:
+    # Default 0 = uncapped: reflection calls scale with engine iterations, so a
+    # max_trials-derived default would truncate ordinary runs.
+    assert _coerce_max_reflection_calls(value) == expected

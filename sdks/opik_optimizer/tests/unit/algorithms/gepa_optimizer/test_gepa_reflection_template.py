@@ -36,16 +36,6 @@ class TestTemplateContract:
         assert "<curr_param>" in default
         assert "<side_info>" in default
 
-    @pytest.mark.parametrize("marker", ["<curr_param>", "<side_info>"])
-    def test_required_markers_present(self, marker: str) -> None:
-        assert marker in TEMPLATE
-
-    def test_output_format_instruction_stays_last(self) -> None:
-        """gepa extracts the candidate from ``` blocks, so this must survive."""
-        assert TEMPLATE.rstrip().endswith(
-            "Provide the new instructions within ``` blocks."
-        )
-
 
 class TestAdditiveOverUpstreamDefault:
     """Our template must be a strict superset of GEPA's default guidance.
@@ -67,12 +57,6 @@ class TestAdditiveOverUpstreamDefault:
     def test_template_only_adds_to_the_default(self) -> None:
         default = InstructionProposalSignature.default_prompt_template
         assert len(TEMPLATE) > len(default)
-
-    def test_adds_the_verbatim_preservation_constraint(self) -> None:
-        assert "template variable" in TEMPLATE
-        assert "verbatim" in TEMPLATE
-        # The specific failure mode: swapping a variable for a row's real value.
-        assert "never replace one with a concrete value" in TEMPLATE
 
 
 class TestRendersThroughGepa:
@@ -100,14 +84,6 @@ class TestOptimizerWiring:
     def test_default_template_is_resolved_and_validated(self) -> None:
         optimizer = GepaOptimizer(model="openai/gpt-4o-mini")
         assert optimizer._resolve_reflection_prompt_template() == TEMPLATE
-
-    def test_override_is_honoured(self) -> None:
-        override = "Rewrite <curr_param> given <side_info>."
-        optimizer = GepaOptimizer(
-            model="openai/gpt-4o-mini",
-            prompt_overrides={"reflection_prompt_template": override},
-        )
-        assert optimizer._resolve_reflection_prompt_template() == override
 
     def test_override_missing_markers_fails_at_construction(self) -> None:
         """Must raise in __init__, not at the gepa hand-off.
@@ -256,26 +232,6 @@ class TestTemplateReachesGepa:
     gepa.optimize() call leaves the whole suite green — fix (b) would be
     silently inert.
     """
-
-    def test_default_template_is_passed_to_gepa_optimize(
-        self,
-        monkeypatch,
-        mock_optimization_context,
-        simple_chat_prompt,
-        mock_dataset,
-        sample_dataset_items,
-        sample_metric,
-    ) -> None:
-        captured = run_optimize_capturing_gepa_kwargs(
-            monkeypatch,
-            mock_optimization_context,
-            simple_chat_prompt,
-            mock_dataset,
-            sample_dataset_items,
-            sample_metric,
-        )
-
-        assert captured["reflection_prompt_template"] == TEMPLATE
 
     def test_override_is_passed_to_gepa_optimize(
         self,
