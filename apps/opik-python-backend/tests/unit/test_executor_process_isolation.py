@@ -984,9 +984,8 @@ from opik_backend.jobs import optimizer_runner
 
 try:
     optimizer_runner.main()
-except SystemExit:
-    pass
-print("EVENTS " + json.dumps(events), file=sys.stderr)
+finally:
+    print("EVENTS " + json.dumps(events), file=sys.stderr)
 """
 
 
@@ -1002,6 +1001,10 @@ def test_runner_starts_the_template_before_reading_the_job(tmp_path, outcome):
 
     # The job and its credentials come from stdin, so the template starts before either is read.
     assert f'EVENTS ["template", "read job"]' in run.stderr, run.stderr[-3000:]
+    # The empty job is the only failure: the template outcome neither ends the run nor changes its result.
+    actual_reply = json.loads(run.stdout.strip().splitlines()[-1])
+    assert (run.returncode, actual_reply["success"], actual_reply["error"]) == (
+        1, False, "No input data received from stdin"), run.stderr[-3000:]
     errors = [line for line in run.stderr.splitlines() if "cannot be isolated (" in line]
     if outcome == "start":
         assert errors == [], errors
