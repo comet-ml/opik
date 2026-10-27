@@ -1,6 +1,6 @@
 --liquibase formatted sql
---changeset aliaksandrk:000112_create_guardrail_policies
---comment: Create guardrail_policies — named, workspace-scoped guardrail policies the SDK references by name (OPIK-8803)
+--changeset aliaksandrk:000112_create_guardrail_policies_tables
+--comment: Create guardrail_policies and guardrail_policy_rules — named, workspace-scoped guardrail policies and their per-type rules (OPIK-8803)
 
 -- A policy is what the SDK names on a check and what the UI edits. Its rules are rows in the child table
 -- below rather than a JSON column, so each rule can be read on its own and a new rule type needs no
@@ -13,9 +13,9 @@ CREATE TABLE IF NOT EXISTS guardrail_policies
     workspace_id    VARCHAR(150)                 NOT NULL,
     name            VARCHAR(255)                 NOT NULL,
     description     VARCHAR(1000)                NULL,
-    -- ON_REQUEST applies when the SDK names the policy; GLOBAL applies to every check in the workspace. A new
+    -- on_request applies when the SDK names the policy; global applies to every check in the workspace. A new
     -- scope is a MODIFY COLUMN migration, forward-only like every ENUM widening in this changelog (000019, 000063).
-    execution_scope ENUM('ON_REQUEST', 'GLOBAL') NOT NULL,
+    execution_scope ENUM('on_request', 'global') NOT NULL,
     created_at      TIMESTAMP(6)                 NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     created_by      VARCHAR(100)                 NOT NULL DEFAULT 'admin',
     last_updated_at TIMESTAMP(6)                 NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
@@ -29,22 +29,19 @@ CREATE TABLE IF NOT EXISTS guardrail_policies
     -- The default list order, `WHERE workspace_id = ? ORDER BY id DESC`, which the unique key above
     -- (ordered by name) cannot serve.
     INDEX guardrail_policies_workspace_id_idx (workspace_id, id),
-    -- The check path runs on every SDK validate call and loads the named policies plus every GLOBAL policy
-    -- of the workspace. The GLOBAL half has no name to look up, so without this index it reads the
+    -- The check path runs on every SDK validate call and loads the named policies plus every global policy
+    -- of the workspace. The global half has no name to look up, so without this index it reads the
     -- workspace's every policy; with it, only the global ones. It is used when that half is its own lookup
     -- (a UNION with the names lookup, or a second statement): MySQL 8.4 answers a single `name IN (...) OR
-    -- execution_scope = 'GLOBAL'` by scanning the workspace prefix of the unique key instead. id is not
+    -- execution_scope = 'global'` by scanning the workspace prefix of the unique key instead. id is not
     -- listed: InnoDB appends the primary key to every secondary index.
     INDEX guardrail_policies_workspace_execution_scope_idx (workspace_id, execution_scope)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
 
---rollback DROP TABLE IF EXISTS guardrail_policies;
-
---changeset aliaksandrk:000112_create_guardrail_policy_rules
---comment: Create guardrail_policy_rules — one row per check type of a policy, holding only what the user set (OPIK-8803)
-
+-- One row per check type of a policy, holding only what the user set.
+--
 -- No foreign key to guardrail_policies, like every other state table since 000042: the service writes and
 -- deletes a policy's rules with the policy in one transaction. workspace_id is deliberately absent: a rule
 -- is only ever reached through its policy, which carries the workspace.
@@ -52,11 +49,11 @@ CREATE TABLE IF NOT EXISTS guardrail_policy_rules
 (
     id              CHAR(36)     NOT NULL,
     policy_id       CHAR(36)     NOT NULL,
-    -- The GuardrailType values in the Java enum's order: the same names the ClickHouse guardrails results table
-    -- stores in `name`, so a result is readable against its rule. Which of them a policy may hold is the
-    -- service's call (milestone 1: TOPIC, PII, PROMPT_INJECTION); a new Java value gets a MODIFY COLUMN
-    -- migration, as in 000019 and 000063.
-    type            ENUM('TOPIC', 'PII', 'LLM_JUDGE', 'PROMPT_INJECTION', 'CUSTOM_CLASSIFIER') NOT NULL,
+    -- The GuardrailType values in the Java enum's order, lower-cased like every ENUM in this schema: the same
+    -- enum the ClickHouse guardrails results table stores in `name`, so a result is readable against its rule.
+    -- Which of them a policy may hold is the service's call (milestone 1: topic, pii, prompt_injection); a new
+    -- Java value gets a MODIFY COLUMN migration, as in 000019 and 000063.
+    type            ENUM('topic', 'pii', 'llm_judge', 'prompt_injection', 'custom_classifier') NOT NULL,
     -- Exactly what the user set: PII classes, allowed and restricted topics. An empty object for a type with
     -- no settings (prompt injection). Never thresholds, model names or question templates.
     config          JSON         NOT NULL,
@@ -74,3 +71,4 @@ CREATE TABLE IF NOT EXISTS guardrail_policy_rules
   COLLATE = utf8mb4_unicode_ci;
 
 --rollback DROP TABLE IF EXISTS guardrail_policy_rules;
+--rollback DROP TABLE IF EXISTS guardrail_policies;
