@@ -30,13 +30,13 @@ export default function useKpiComparison({
   value,
 }: UseKpiComparisonParams) {
   // An open-ended range ends when the value was fetched, to the minute, so refetches within one share the comparison.
-  const fetchedMinute = Math.floor(value.dataUpdatedAt / MINUTE) * MINUTE;
+  const fetchedAtMinute = Math.floor(value.dataUpdatedAt / MINUTE) * MINUTE;
   const window = useMemo(
     () =>
-      enabled && intervalStart && (intervalEnd || fetchedMinute)
-        ? comparisonWindow(intervalStart, intervalEnd, fetchedMinute)
+      enabled && intervalStart && (intervalEnd || fetchedAtMinute)
+        ? comparisonWindow(intervalStart, intervalEnd, fetchedAtMinute)
         : null,
-    [enabled, intervalStart, intervalEnd, fetchedMinute],
+    [enabled, intervalStart, intervalEnd, fetchedAtMinute],
   );
 
   // A past window's rows don't change, so the comparison never refetches on its own: a new window brings a new run.
@@ -66,9 +66,10 @@ export default function useKpiComparison({
         ? data ?? null
         : null,
     comparedWith: window ? `previous ${window.label}` : undefined,
-    // A closed range compares with the same window after a refresh, so it runs again; an open one moves with the value.
+    // A closed range compares with the same window after a refresh, so it runs again; an open one moves with the value,
+    // unless it failed: then it runs again too, or a refresh within the minute would leave the change missing.
     refetch: () => {
-      if (window && intervalEnd) refetch();
+      if (window && (intervalEnd || error)) refetch();
     },
   };
 }
