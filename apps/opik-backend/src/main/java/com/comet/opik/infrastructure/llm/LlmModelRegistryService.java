@@ -9,6 +9,11 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import com.google.common.base.Suppliers;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheLoader;
+import com.google.common.cache.LoadingCache;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.client.Client;
@@ -18,6 +23,7 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.BooleanUtils;
 import org.apache.commons.lang3.ObjectUtils;
+import org.apache.commons.lang3.StringUtils;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.io.IOException;
@@ -34,6 +40,8 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Supplier;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -47,12 +55,22 @@ public class LlmModelRegistryService {
 
     private final LlmModelRegistryConfig config;
     private final Client httpClient;
+    private final Supplier<CuratedCatalog> shippedCatalog = Suppliers.memoize(
+            () -> readCuratedCatalog(new LlmModelRegistryConfig().getCuratedResource()));
     private final CuratedCatalog catalog;
     // volatile: reload() is called from the scheduled job thread
     private volatile Map<String, List<LlmModelDefinition>> registry;
     private volatile Map<String, List<ModelEntry>> lastGoodRemote;
     private final Set<String> reportedAwaitingSyncRows = ConcurrentHashMap.newKeySet();
     private final Set<String> reportedUnknownProfiles = ConcurrentHashMap.newKeySet();
+    // Kept across reloads because the curated files ship with the release; the reasoning flag, which a reload can
+    // change, is part of the key. Bounded because the effort check asks with whatever model name a request carries.
+    private final LoadingCache<CuratedParamsKey, Optional<ModelParams>> curatedParams = CacheBuilder.newBuilder()
+            .maximumSize(1_000)
+            .build(CacheLoader.from(this::resolveCuratedParams));
+
+    private record CuratedParamsKey(String provider, String modelId, boolean reasoning) {
+    }
 
     @Inject
     public LlmModelRegistryService(@NonNull @Config OpikConfiguration configuration,
@@ -84,7 +102,8 @@ public class LlmModelRegistryService {
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
     record ModelEntry(String id, String qualifiedName, String label, Boolean structuredOutput, Boolean reasoning,
-            String profile, ModelParams params, Boolean awaitingSync) {
+            List<String> supportedParameters, List<String> reasoningEfforts, String profile, ModelParams params,
+            Boolean awaitingSync) {
 
         LlmModelDefinition toDefinition(ModelParams resolvedParams) {
             return LlmModelDefinition.builder()
@@ -93,6 +112,8 @@ public class LlmModelRegistryService {
                     .label(label)
                     .structuredOutput(BooleanUtils.isTrue(structuredOutput))
                     .reasoning(BooleanUtils.isTrue(reasoning))
+                    .supportedParameters(supportedParameters)
+                    .reasoningEfforts(reasoningEfforts)
                     .params(resolvedParams)
                     .build();
         }
@@ -100,7 +121,26 @@ public class LlmModelRegistryService {
 
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
-    record ProviderDefaults(String profile, String reasoningProfile) {
+    record ProviderDefaults(String profile, String reasoningProfile, List<IdProfile> idProfiles) {
+
+        ProviderDefaults {
+            idProfiles = idProfiles == null ? List.of() : idProfiles;
+        }
+
+        String idProfile(String modelId) {
+            if (modelId == null) {
+                return null;
+            }
+            return idProfiles.stream()
+                    .filter(idProfile -> idProfile.match().matcher(modelId).find())
+                    .map(IdProfile::profile)
+                    .findFirst()
+                    .orElse(null);
+        }
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record IdProfile(@NonNull Pattern match, @NonNull String profile) {
     }
 
     @Builder(toBuilder = true)
@@ -141,14 +181,15 @@ public class LlmModelRegistryService {
         }
 
         /**
-         * Provider profile, then the reasoning profile, then the model's own params, into which
-         * {@link #foldProfiles} has already merged the model's own profile.
+         * Provider profile, then the profile its id matches, then the reasoning profile, then the model's own params,
+         * into which {@link #foldProfiles} has already merged the model's own profile.
          */
         ModelParams resolve(String provider, ModelEntry entry) {
             var providerDefaults = defaults.get(provider);
             ModelParams resolved = null;
             if (providerDefaults != null) {
                 resolved = profile(providerDefaults.profile());
+                resolved = ModelParams.overlay(resolved, profile(providerDefaults.idProfile(entry.id())));
                 if (BooleanUtils.isTrue(entry.reasoning())) {
                     resolved = ModelParams.overlay(resolved, profile(providerDefaults.reasoningProfile()));
                 }
@@ -161,13 +202,20 @@ public class LlmModelRegistryService {
             return name == null ? null : profiles.get(name);
         }
 
+        Optional<ModelEntry> row(String provider, String modelId) {
+            return models.getOrDefault(provider, List.of()).stream()
+                    .filter(row -> row != null && row.id() != null && row.id().equals(modelId))
+                    .findFirst();
+        }
+
         // The file ships with the release, so a name it gets wrong is a bug to stop at startup, not a warning
         // to repeat on every reload.
         CuratedCatalog requireKnownProfiles() {
             var named = Stream.concat(
                     defaults.values().stream()
                             .filter(Objects::nonNull)
-                            .flatMap(d -> Stream.of(d.profile(), d.reasoningProfile())),
+                            .flatMap(d -> Stream.concat(Stream.of(d.profile(), d.reasoningProfile()),
+                                    d.idProfiles().stream().map(IdProfile::profile))),
                     models.values().stream()
                             .filter(Objects::nonNull)
                             .flatMap(List::stream)
@@ -187,6 +235,17 @@ public class LlmModelRegistryService {
 
     public Map<String, List<LlmModelDefinition>> getRegistry() {
         return registry;
+    }
+
+    public Map<String, ModelParams> getProfiles() {
+        var profiles = new LinkedHashMap<String, ModelParams>();
+        for (var provider : LlmProvider.values()) {
+            var params = paramsOf(provider.getValue(), null);
+            if (params != null) {
+                profiles.put(provider.getValue(), params);
+            }
+        }
+        return profiles;
     }
 
     public Optional<ModelLookupResult> findModel(@NonNull String model) {
@@ -239,8 +298,7 @@ public class LlmModelRegistryService {
 
     boolean isRemoteConfigured() {
         return config.isRemoteEnabled()
-                && config.getRemoteUrl() != null
-                && !config.getRemoteUrl().isBlank();
+                && StringUtils.isNotBlank(config.getRemoteUrl());
     }
 
     private Map<String, List<LlmModelDefinition>> load() {
@@ -268,7 +326,7 @@ public class LlmModelRegistryService {
         reportSyncedAwaitingRows(result, catalog.models());
 
         var overridePath = config.getLocalOverridePath();
-        if (overridePath == null || overridePath.isBlank()) {
+        if (StringUtils.isBlank(overridePath)) {
             return toRegistry(result);
         }
 
@@ -291,14 +349,78 @@ public class LlmModelRegistryService {
     private Map<String, List<LlmModelDefinition>> toRegistry(Map<String, List<ModelEntry>> merged) {
         var copy = new LinkedHashMap<String, List<LlmModelDefinition>>(merged.size());
         merged.forEach((provider, models) -> copy.put(provider,
-                models.stream().map(m -> m.toDefinition(catalog.resolve(provider, m))).toList()));
+                models.stream().map(m -> m.toDefinition(resolve(provider, m))).toList()));
         // Not Map.copyOf: its iteration order changes between JVM starts, and the API lists providers in it.
         return Collections.unmodifiableMap(copy);
     }
 
+    /**
+     * A deployment that turns the curated layer off still resolves against the shipped profiles and rows, placed
+     * under every other layer. Without them a row that a layer gives only some params keeps only those, and a
+     * missing field reads as refused: a Claude model would lose its temperature and every effort level.
+     */
+    private ModelParams resolve(String provider, ModelEntry entry) {
+        if (!curatedLayerOff()) {
+            return catalog.resolve(provider, entry);
+        }
+        var shipped = shippedCatalog.get();
+        var shippedParams = shipped.row(provider, entry.id())
+                .map(shipped::foldProfile)
+                .map(ModelEntry::params)
+                .orElse(null);
+        return shipped.resolve(provider,
+                entry.toBuilder().params(ModelParams.overlay(shippedParams, entry.params())).build());
+    }
+
+    /**
+     * The params the registry serves for a model id, the same ones the API lists; an unlisted or null id gets its
+     * provider's profile. Null when no layer and no profile says anything about the model, as for a provider the
+     * catalog has no profile for.
+     */
+    public @Nullable ModelParams paramsOf(@NonNull String provider, @Nullable String modelId) {
+        var listed = listed(provider, modelId);
+        if (listed.isPresent() && listed.get().params() != null) {
+            return listed.get().params();
+        }
+        var reasoning = listed.map(LlmModelDefinition::reasoning).orElse(false);
+        return resolve(provider, ModelEntry.builder().id(modelId).reasoning(reasoning).build());
+    }
+
+    /**
+     * The params the release's own rules give a model: the curated row and profiles (the shipped ones when the
+     * curated layer is off), without the generated, CDN or local-override layers. The effort check, which rejects
+     * a request, reads these instead of {@link #paramsOf}, and the Claude sampling rules read them next to it as a
+     * veto, so a bad row in remote data can cost a param but never fail every request for a model.
+     */
+    public @Nullable ModelParams curatedParamsOf(@NonNull String provider, @Nullable String modelId) {
+        var reasoning = listed(provider, modelId).map(LlmModelDefinition::reasoning).orElse(false);
+        return curatedParams.getUnchecked(new CuratedParamsKey(provider, modelId, reasoning)).orElse(null);
+    }
+
+    private Optional<ModelParams> resolveCuratedParams(CuratedParamsKey key) {
+        var rules = curatedLayerOff() ? shippedCatalog.get() : catalog;
+        var row = rules.row(key.provider(), key.modelId())
+                .map(curated -> curated.toBuilder().reasoning(key.reasoning()).build())
+                .orElseGet(() -> ModelEntry.builder().id(key.modelId()).reasoning(key.reasoning()).build());
+        return Optional.ofNullable(rules.resolve(key.provider(), rules.foldProfile(row)));
+    }
+
+    private boolean curatedLayerOff() {
+        return StringUtils.isBlank(config.getCuratedResource());
+    }
+
+    private Optional<LlmModelDefinition> listed(String provider, String modelId) {
+        return registry.getOrDefault(provider, List.of()).stream()
+                .filter(model -> model.id() != null && model.id().equals(modelId))
+                .findFirst();
+    }
+
     private CuratedCatalog loadCuratedCatalog() {
-        var resourceName = config.getCuratedResource();
-        if (resourceName == null || resourceName.isBlank()) {
+        return readCuratedCatalog(config.getCuratedResource());
+    }
+
+    private static CuratedCatalog readCuratedCatalog(String resourceName) {
+        if (StringUtils.isBlank(resourceName)) {
             return CuratedCatalog.EMPTY;
         }
         return readClasspathYaml(resourceName, new TypeReference<CuratedCatalog>() {
@@ -344,7 +466,7 @@ public class LlmModelRegistryService {
             }
             var byId = new LinkedHashMap<String, ModelEntry>();
             rows.forEach(row -> {
-                if (row == null || row.id() == null || row.id().isBlank()) {
+                if (row == null || StringUtils.isBlank(row.id())) {
                     log.warn("Skipping curated row with missing id for provider '{}'", provider);
                     return;
                 }
@@ -441,7 +563,7 @@ public class LlmModelRegistryService {
             var existing = result.getOrDefault(provider, List.of());
             var existingIds = new LinkedHashMap<String, ModelEntry>();
             existing.forEach(m -> {
-                if (m.id() == null || m.id().isBlank()) {
+                if (StringUtils.isBlank(m.id())) {
                     log.warn("Skipping default model with missing id for provider '{}'", provider);
                     return;
                 }
@@ -449,7 +571,7 @@ public class LlmModelRegistryService {
             });
 
             overrideModels.forEach(m -> {
-                if (m.id() == null || m.id().isBlank()) {
+                if (StringUtils.isBlank(m.id())) {
                     log.warn("Skipping override model with missing id for provider '{}'", provider);
                     return;
                 }
@@ -464,13 +586,16 @@ public class LlmModelRegistryService {
 
     // An upper layer can lag the classpath file a release ships (the remote copy) or set only a few fields
     // (a local override). A field it leaves out keeps the lower layer's value, so only an entry that sets a
-    // field may change it.
+    // field may change it. An empty list is set: it says the model takes none of the panel's parameters.
     private static ModelEntry inheritUnsetFields(ModelEntry existing, ModelEntry override) {
         return override.toBuilder()
                 .qualifiedName(ObjectUtils.getIfNull(override.qualifiedName(), existing.qualifiedName()))
                 .label(ObjectUtils.getIfNull(override.label(), existing.label()))
                 .structuredOutput(ObjectUtils.getIfNull(override.structuredOutput(), existing.structuredOutput()))
                 .reasoning(ObjectUtils.getIfNull(override.reasoning(), existing.reasoning()))
+                .supportedParameters(
+                        ObjectUtils.getIfNull(override.supportedParameters(), existing.supportedParameters()))
+                .reasoningEfforts(ObjectUtils.getIfNull(override.reasoningEfforts(), existing.reasoningEfforts()))
                 .profile(ObjectUtils.getIfNull(override.profile(), existing.profile()))
                 .params(ModelParams.overlay(existing.params(), override.params()))
                 .build();

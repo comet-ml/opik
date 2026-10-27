@@ -9,6 +9,10 @@ import {
 } from "@/types/providers";
 import { DEFAULT_ANTHROPIC_CONFIGS } from "@/constants/llm";
 import PromptModelConfigsTooltipContent from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
+import {
+  getAnthropicEffortDescription,
+  getSamplingOffNote,
+} from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/anthropicPanelText";
 import ExclusiveSamplingParams from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/ExclusiveSamplingParams";
 import {
   createSupports,
@@ -18,9 +22,13 @@ import {
 import {
   getAnthropicThinkingEffortOptions,
   getMaxCompletionTokensRange,
+  hasEffortWithoutThinking,
+  hasThinkingInCustomParameters,
+  isAnthropicThinkingRequested,
   resolveEffort,
   resolveMaxCompletionTokens,
   resolveSamplingParams,
+  supportsSamplingParams,
 } from "@/lib/modelUtils";
 import SelectBox from "@/shared/SelectBox/SelectBox";
 import { Label } from "@/ui/label";
@@ -51,6 +59,9 @@ const AnthropicModelConfigs = ({
     PROVIDER_TYPE.ANTHROPIC,
     model ?? "",
   );
+  const samplingOffWhileThinking =
+    supportsSamplingParams(model) &&
+    isAnthropicThinkingRequested(model ?? "", configs);
 
   if (!isAnyControlVisible(visible)) return null;
 
@@ -65,6 +76,15 @@ const AnthropicModelConfigs = ({
           offerChoice={supports("topP")}
           onChange={onChange}
         />
+      )}
+
+      {samplingOffWhileThinking && (
+        <p className="comet-body-xs text-muted-slate">
+          {getSamplingOffNote(
+            supports("topP"),
+            hasThinkingInCustomParameters(configs),
+          )}
+        </p>
       )}
 
       {visible.maxCompletionTokens && (
@@ -129,9 +149,9 @@ const AnthropicModelConfigs = ({
         <div className="space-y-2">
           <div className="flex items-center space-x-2">
             <Label htmlFor="thinkingEffort" className="text-sm font-medium">
-              Thinking effort
+              {hasEffortWithoutThinking(model) ? "Effort" : "Thinking effort"}
             </Label>
-            <ExplainerIcon description="Controls how many tokens Claude spends on the whole response, thinking included. Lower effort is faster and cheaper; higher effort is more thorough." />
+            <ExplainerIcon description={getAnthropicEffortDescription(model)} />
           </div>
           <SelectBox
             id="thinkingEffort"

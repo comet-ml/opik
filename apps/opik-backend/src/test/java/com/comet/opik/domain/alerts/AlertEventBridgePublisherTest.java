@@ -115,6 +115,38 @@ class AlertEventBridgePublisherTest {
     }
 
     @Test
+    void publishAddsCustomFieldsAsTopLevelDetailKeys() {
+        when(client.putEvents(any(PutEventsRequest.class))).thenReturn(successResponse());
+        var alert = alert(null).toBuilder()
+                .customFields(Map.of("impact", "1", "urgency", "2", "level", "Error"))
+                .build();
+
+        StepVerifier.create(publisher.publish(alert, EVENT_ID, WORKSPACE_ID, WORKSPACE_NAME, AlertEventType.TRACE_COST,
+                TRIGGERED_AT, payload(alert, List.of("event-1"), List.of()))).verifyComplete();
+
+        JsonNode detail = JsonUtils.getJsonNodeFromString(captureEntries(1).getFirst().detail());
+        assertThat(detail.get("impact").asText()).isEqualTo("1");
+        assertThat(detail.get("urgency").asText()).isEqualTo("2");
+        assertThat(detail.get("level").asText()).isEqualTo("Error");
+        assertThat(detail.has("customFields")).isFalse();
+        assertThat(detail.get("opik").has("impact")).isFalse();
+    }
+
+    @Test
+    void publishWithoutCustomFieldsSendsOnlyEnvelopeKeys() {
+        when(client.putEvents(any(PutEventsRequest.class))).thenReturn(successResponse());
+        var alert = alert(null);
+
+        StepVerifier.create(publisher.publish(alert, EVENT_ID, WORKSPACE_ID, WORKSPACE_NAME, AlertEventType.TRACE_COST,
+                TRIGGERED_AT, payload(alert, List.of("event-1"), List.of()))).verifyComplete();
+
+        JsonNode detail = JsonUtils.getJsonNodeFromString(captureEntries(1).getFirst().detail());
+        assertThat(detail.properties()).extracting(Map.Entry::getKey).containsExactlyInAnyOrder(
+                "schemaVersion", "eventId", "workspaceId", "workspaceName", "alertId", "alertName", "eventType", "url",
+                "triggeredAt", "truncated", "opik");
+    }
+
+    @Test
     void publishWhenSameTriggerIsPublishedTwiceKeepsTriggeredAt() {
         when(client.putEvents(any(PutEventsRequest.class))).thenReturn(successResponse());
         var alert = alert(null);
@@ -213,7 +245,7 @@ class AlertEventBridgePublisherTest {
     @Test
     void publishWhenDetailExceedsLimitTruncates() {
         when(client.putEvents(any(PutEventsRequest.class))).thenReturn(successResponse());
-        var alert = alert(null);
+        var alert = alert(null).toBuilder().customFields(Map.of("impact", "1")).build();
         var eventIds = IntStream.range(0, 5_000).mapToObj(i -> UUID.randomUUID().toString()).toList();
         var largeMetadata = JsonUtils.writeValueAsString(MetricsAlertPayload.builder()
                 .metricValue("1")
@@ -231,6 +263,7 @@ class AlertEventBridgePublisherTest {
         JsonNode detail = JsonUtils.getJsonNodeFromString(entry.detail());
         assertThat(detail.get("truncated").asBoolean()).isTrue();
         assertThat(detail.get("eventId").asText()).isEqualTo(EVENT_ID);
+        assertThat(detail.get("impact").asText()).isEqualTo("1");
         JsonNode opik = detail.get("opik");
         assertThat(opik.get("metadata")).isEmpty();
         assertThat(opik.get("eventIds")).hasSize(AlertEventBridgePublisher.MAX_TRUNCATED_LIST_SIZE);

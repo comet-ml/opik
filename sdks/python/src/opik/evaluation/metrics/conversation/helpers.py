@@ -1,6 +1,7 @@
 from typing import Any, Generator, List
 
 from . import types
+from .conversation_content import message_has_text
 from .conversation_turns_factory import build_conversation_turns
 
 
@@ -103,5 +104,6 @@ __all__ = [
     "get_turns_in_sliding_window",
     "merge_turns",
     "extract_turns_windows_from_conversation",
+    "message_has_text",
     "render_turns_for_prompt",
 ]

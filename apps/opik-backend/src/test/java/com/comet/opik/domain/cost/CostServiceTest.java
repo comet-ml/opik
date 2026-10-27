@@ -2,8 +2,6 @@ package com.comet.opik.domain.cost;
 
 import com.comet.opik.api.ModelCostData;
 import com.comet.opik.domain.token_usage.SpanUsageFactory;
-import com.comet.opik.utils.JsonUtils;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.commons.lang3.StringUtils;
@@ -16,7 +14,6 @@ import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mockito;
 
-import java.io.IOException;
 import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.Map;
@@ -1131,6 +1128,19 @@ class CostServiceTest {
                 Arguments.of("perplexity/sonar", "custom-llm", "0.0012"));
     }
 
+    @ParameterizedTest(name = "{0} via provider={1}")
+    @CsvSource({
+            "llama-3.3-70b, api.cerebras.ai, 0.00109",
+            "deepseek-chat, api.deepseek.com, 0.000364",
+            "grok-4.3, api.x.ai:443, 0.00175"})
+    void calculateCostPricesAProviderSentAsItsApiHost(String model, String provider, String expectedCost) {
+        Map<String, Integer> usage = Map.of("prompt_tokens", 1000, "completion_tokens", 200);
+
+        BigDecimal cost = CostService.calculateCost(model, provider, usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
     /**
      * OpenRouter exposes Moonshot's Kimi family under a different namespace prefix
      * ({@code moonshotai/*}) than LiteLLM's canonical ({@code moonshot/*}) — see the
@@ -1407,13 +1417,13 @@ class CostServiceTest {
                 // vercel_ai_gateway/alibaba/qwen-3-14b: input 8e-08, output 2.4e-07
                 // -> 1000*8e-08 + 200*2.4e-07 = 0.000128
                 Arguments.of("vercel_ai_gateway", "vercel_ai_gateway/alibaba/qwen-3-14b", "0.000128"),
-                // openrouter/anthropic/claude-3.5-sonnet: input 3e-06, output 1.5e-05
+                // openrouter/anthropic/claude-sonnet-4.5: input 3e-06, output 1.5e-05
                 // -> 1000*3e-06 + 200*1.5e-05 = 0.006
-                Arguments.of("openrouter", "openrouter/anthropic/claude-3.5-sonnet", "0.006"));
+                Arguments.of("openrouter", "openrouter/anthropic/claude-sonnet-4.5", "0.006"));
     }
 
     /**
-     * Every provider in the bundled LiteLLM price file is priced under its exact
+     * Every provider in the bundled LiteLLM and OpenRouter price files is priced under its exact
      * {@code litellm_provider} name, with no per-provider registration in {@link CostService}.
      * Covers providers that used to be dropped at load time, and price-file names that used to be
      * folded into another provider ({@code bedrock_converse}, {@code vertex_ai-language-models}, ...).
@@ -1431,11 +1441,9 @@ class CostServiceTest {
                         .multiply(BigDecimal.valueOf(1000))));
     }
 
-    private static Stream<Arguments> provideTokenPricedProviders() throws IOException {
-        Map<String, ModelCostData> prices = JsonUtils.readJsonFile(CostService.MODEL_PRICES_FILE,
-                new TypeReference<>() {
-                });
-        Map<String, Map<String, ModelCostData>> rowsByModelByProvider = prices.entrySet().stream()
+    private static Stream<Arguments> provideTokenPricedProviders() {
+        var modelCosts = ModelPriceTable.readModelCosts();
+        Map<String, Map<String, ModelCostData>> rowsByModelByProvider = modelCosts.entrySet().stream()
                 .filter(entry -> StringUtils.isNotBlank(entry.getValue().litellmProvider()))
                 .filter(entry -> price(entry.getValue().inputCostPerToken()).signum() > 0
                         || price(entry.getValue().outputCostPerToken()).signum() > 0)

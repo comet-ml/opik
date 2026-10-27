@@ -3,8 +3,6 @@ import { OnlineEvaluationPage } from '@e2e/pom/online-evaluation.page';
 import { LogsPage } from '@e2e/pom/logs.page';
 import { ensureModelAvailable } from '@e2e/pom/model-availability';
 
-const MODERATION_SCORE_NAME = 'Moderation'; // canned template's schema name
-
 interface ContentTrace {
   id: string;
   name: string;
@@ -43,8 +41,7 @@ test.describe('Online Evaluation — smoke', { tag: ['@t1-smoke', '@area:online-
       const onlineEval = new OnlineEvaluationPage(page);
       await onlineEval.goto(project.id);
       await onlineEval.waitForReady();
-      await onlineEval.openCreateRuleDialog();
-      await onlineEval.fillAndSubmitCreateRuleDialogLLMJudge({
+      await onlineEval.fillAndSubmitCreateRuleLLMJudge({
         name: ruleName,
         template: 'Moderation',
         modelDisplayName,
@@ -80,12 +77,12 @@ test.describe('Online Evaluation — smoke', { tag: ['@t1-smoke', '@area:online-
 
     const scoreValues = new Map<string, number>();
     await test.step(
-      'Poll each seeded trace for the Moderation score (90s timeout each)',
+      'Poll each seeded trace for the Moderation score (the rule name is the score name)',
       async () => {
         const results = await Promise.all(
           seededTraces.map((t) =>
             backendClient
-              .pollTraceForFeedbackScore(t.id, MODERATION_SCORE_NAME, { timeoutMs: 120_000 })
+              .pollTraceForFeedbackScore(t.id, ruleName, { timeoutMs: 120_000 })
               .then((s) => ({ id: t.id, value: s.value })),
           ),
         );
@@ -103,19 +100,8 @@ test.describe('Online Evaluation — smoke', { tag: ['@t1-smoke', '@area:online-
     );
 
     await test.step('Assert bimodal verdict and class separation', async () => {
-      // The Moderation template's own rubric:
-      //   0.0     → completely safe
-      //   0.1-0.3 → minor / borderline
-      //   0.4-0.6 → moderate violations
-      //   0.7-0.9 → severe violations
-      //   1.0     → extremely unsafe
-      // Asserting "unsafe > 0.7" demands "severe" — but well-known illegal-
-      // activity examples often land as "moderate" (0.4-0.6) in the judge's
-      // own rubric. We assert the SEPARATION between safe (≤ 0.3, "no
-      // violation") and unsafe (> 0.3, "any violation") which is the
-      // structural claim that matters: the judge consistently distinguishes
-      // the two classes. Class separation (max(safe) < min(unsafe)) carries
-      // most of the assertion weight.
+      // The Moderation template scores a Boolean: true (1) when the output is
+      // harmful. The thresholds below also hold for a graded score.
       const safeScores = seededTraces
         .filter((t) => t.bucket === 'safe')
         .map((t) => scoreValues.get(t.id)!);
@@ -145,13 +131,13 @@ test.describe('Online Evaluation — smoke', { tag: ['@t1-smoke', '@area:online-
       const safePanel = await logs.openTraceById(safeTrace.id);
       await safePanel.waitForFullyLoaded();
       await safePanel.openFeedbackScoresTab();
-      const safeUiValue = await safePanel.readFeedbackScoreValue(MODERATION_SCORE_NAME);
+      const safeUiValue = await safePanel.readFeedbackScoreValue(ruleName);
       expect(safeUiValue, 'safe trace UI value').toBeCloseTo(scoreValues.get(safeTrace.id)!, 1);
 
       const unsafePanel = await logs.openTraceById(unsafeTrace.id);
       await unsafePanel.waitForFullyLoaded();
       await unsafePanel.openFeedbackScoresTab();
-      const unsafeUiValue = await unsafePanel.readFeedbackScoreValue(MODERATION_SCORE_NAME);
+      const unsafeUiValue = await unsafePanel.readFeedbackScoreValue(ruleName);
       expect(unsafeUiValue, 'unsafe trace UI value').toBeCloseTo(
         scoreValues.get(unsafeTrace.id)!,
         1,
@@ -181,8 +167,7 @@ test.describe('Online Evaluation — smoke', { tag: ['@t1-smoke', '@area:online-
       const onlineEval = new OnlineEvaluationPage(page);
       await onlineEval.goto(project.id);
       await onlineEval.waitForReady();
-      await onlineEval.openCreateRuleDialog();
-      await onlineEval.fillAndSubmitCreateRuleDialogPythonEquals({
+      await onlineEval.fillAndSubmitCreateRulePythonEquals({
         name: ruleName,
         referenceValue: reference,
       });
@@ -223,7 +208,7 @@ test.describe('Online Evaluation — smoke', { tag: ['@t1-smoke', '@area:online-
       const results = await Promise.all(
         seededTraces.map((t) =>
           backendClient
-            .pollTraceForFeedbackScore(t.id, ruleName, { timeoutMs: 60_000 })
+            .pollTraceForFeedbackScore(t.id, ruleName, { timeoutMs: 90_000 })
             .then((s) => ({ id: t.id, value: s.value })),
         ),
       );

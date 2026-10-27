@@ -1,0 +1,22 @@
+{
+  "org_id": "workspace-1",
+  "workspace_id": "workspace-1",
+  "request_id": "6f1c2c9e-8d0b-4a8e-9a43-3f8f5c6f1a10",
+  "cache": true,
+  "items": [
+    {
+      "item_id": "0192f0c4-4d1e-7a6b-9c3d-2e1f0a9b8c7d:summary",
+      "messages": [
+        {"role": "system", "content": "You summarize agent traces."},
+        {"role": "user", "content": "Summarize this trace:\n{\"name\":\"support-agent\"}"}
+      ],
+      "schema": {
+        "type": "object",
+        "properties": {"summary": {"type": "string"}},
+        "required": ["summary"]
+      },
+      "max_tokens": 256,
+      "temperature": 0.0
+    }
+  ]
+}

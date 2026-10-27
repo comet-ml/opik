@@ -195,10 +195,14 @@ services:
       # Ollie / Agent Insights read-only freeform SQL (default off). When true, the backend provisions the restricted
       # read-only user (provision_agent_insights_readonly_user.sh, after migrations) and connects as it.
       TOGGLE_OLLIE_ENABLED: ${TOGGLE_OLLIE_ENABLED:-"false"}
-      TOGGLE_CUSTOM_CHARTS_WORKSPACES: ${TOGGLE_CUSTOM_CHARTS_WORKSPACES:-""}
+      TOGGLE_CUSTOM_CHARTS_ENABLED: ${TOGGLE_CUSTOM_CHARTS_ENABLED:-"false"}
       # Self-hosted deployments legitimately point custom-provider token auth at internal gateways;
       # the application default is "strict" (SSRF guard) for non-self-hosted deployments.
       LLM_PROVIDER_TOKEN_AUTH_DESTINATION_GUARD: ${LLM_PROVIDER_TOKEN_AUTH_DESTINATION_GUARD:-"relaxed"}
+      # Same for provider base URLs (e.g. a local Ollama or vLLM server)
+      LLM_PROVIDER_DESTINATION_GUARD: ${LLM_PROVIDER_DESTINATION_GUARD:-"relaxed"}
+      LLM_PROVIDER_DESTINATION_SCHEME: ${LLM_PROVIDER_DESTINATION_SCHEME:-"plaintext_or_tls"}
+      LLM_PROVIDER_VIDEO_URL_DESTINATION_GUARD: ${LLM_PROVIDER_VIDEO_URL_DESTINATION_GUARD:-"relaxed"}
       ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_USER: ${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_USER:-comet_readonly_freeform_sql_user}
       ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_PASS: ${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_PASS:-opik}
       # Extended free-form SQL read-only user (default off). Needs TOGGLE_OLLIE_ENABLED too; provisioned by the same script.

@@ -1,7 +1,6 @@
 package com.comet.opik.infrastructure.llm.openai;
 
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
-import com.comet.opik.domain.llm.ModelCapabilities;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.CustomParametersOverrides;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
@@ -11,6 +10,7 @@ import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.openai.client.OpenAIClient;
+import com.openai.core.http.HttpClient;
 import com.openai.models.ReasoningEffort;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.StreamingChatModel;
@@ -54,6 +54,8 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
     }
 
     private final @NonNull LlmProviderClientConfig llmProviderClientConfig;
+    // see OpenAIModule: no redirects, every connection resolved through the destination guard
+    private final @NonNull HttpClient responsesApiHttpClient;
 
     public OpenAiClient newOpenAiClient(@NonNull LlmProviderClientApiConfig config) {
         var openAiClientBuilder = OpenAiClient.builder()
@@ -130,8 +132,8 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
                 // Treat insufficient_quota (429, out-of-credits) as non-retryable so neither the model's
                 // internal retry nor the outer retry policy keeps hitting an exhausted key.
                 .httpClientBuilder(QuotaAwareHttpClient.builder())
-                .logRequests(true)
-                .logResponses(true);
+                .logRequests(llmProviderClientConfig.getLogRequests())
+                .logResponses(llmProviderClientConfig.getLogResponses());
 
         Optional.ofNullable(llmProviderClientConfig.getConnectTimeout())
                 .ifPresent(connectTimeout -> builder.timeout(connectTimeout.toJavaDuration()));
@@ -149,21 +151,13 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
                 .filter(MapUtils::isNotEmpty)
                 .ifPresent(builder::customHeaders);
 
-        var judgeRequest = ChatCompletionRequest.builder().seed(modelParameters.seed());
+        var judgeRequest = ChatCompletionRequest.builder()
+                .temperature(modelParameters.temperature())
+                .seed(modelParameters.seed());
         Optional.ofNullable(modelParameters.customParameters())
                 .filter(JsonNode::isObject)
                 .map(customParameters -> JsonUtils.getMapper().convertValue(customParameters, MAP_TYPE))
                 .ifPresent(judgeRequest::customParameters);
-
-        // This generator also serves OPEN_ROUTER, whose catalog includes the Claude models that take
-        // no sampling params. The judge path never reaches SamplingParamsNormalizer, so the capability
-        // gate has to be here too, or an evaluator rule on one fails every scoring run with a 400.
-        // OpenAI reasoning models lose their temperature earlier, in ChatCompletionService.scoreTrace,
-        // because that check needs the model registry and must skip OPEN_ROUTER.
-        // Like SamplingParamsNormalizer on the chat path, the gate leaves an extra body temperature alone.
-        if (!ModelCapabilities.rejectsSamplingParams(modelParameters.name())) {
-            judgeRequest.temperature(modelParameters.temperature());
-        }
 
         // Round-tripped through a request so an extra body key replaces the typed field of the same name
         // by the chat path's rule; langchain4j would otherwise send that key twice.
@@ -221,9 +215,7 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
                 .modelName(modelParameters.name())
                 .strictJsonSchema(strictJsonSchema);
 
-        if (!ModelCapabilities.rejectsSamplingParams(modelParameters.name())) {
-            Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
-        }
+        Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
 
         return builder;
     }
@@ -258,7 +250,8 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
                 .map(Duration::toJavaDuration)
                 .orElse(null);
         var client = OpenAiOfficialSetup.setupSyncClient(baseUrl, config.apiKey(), null, null, null, null, false,
-                false, modelName, timeout, null, null, config.headers());
+                false, modelName, timeout, null, null, config.headers())
+                .withOptions(options -> options.httpClient(responsesApiHttpClient));
         return OpenAiResponsesExtraBody.withExtraBody(client, extraBody);
     }
 }

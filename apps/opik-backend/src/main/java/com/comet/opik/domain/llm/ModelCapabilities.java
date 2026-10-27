@@ -1,16 +1,15 @@
 package com.comet.opik.domain.llm;
 
-import com.comet.opik.api.ModelCostData;
-import com.comet.opik.domain.cost.CostService;
+import com.comet.opik.api.LlmProvider;
+import com.comet.opik.api.ModelParams;
+import com.comet.opik.domain.cost.ModelPriceTable;
+import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import com.comet.opik.infrastructure.llm.antropic.AnthropicModelName;
-import com.comet.opik.utils.JsonUtils;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.google.common.annotations.VisibleForTesting;
+import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import org.apache.commons.lang3.StringUtils;
 
-import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -22,6 +21,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -97,44 +97,63 @@ public class ModelCapabilities {
     }
 
     /**
-     * Whether the model refuses temperature and top_p outright, rather than merely refusing them
-     * together. Anthropic's adaptive-thinking models answer a request carrying either with a 400.
+     * Whether the model refuses temperature outright, rather than merely refusing it next to top_p.
+     * Anthropic's adaptive-thinking models answer a request carrying either with a 400.
      *
      * <p>An Anthropic id we cannot place is assumed to take none. Taking none is where the family is
-     * heading, so the unplaceable id is far more often a model newer than this list than an older one
+     * heading, so the unplaceable id is far more often a model newer than the catalog than an older one
      * missing from it — and the two failures are not equal: assuming it takes none omits a parameter,
      * while assuming it takes them fails the whole request. The floating {@code claude-opus-latest}
      * aliases are the case that settles it, since they follow the newest model by definition.
      *
      * <p>A name that is not an Anthropic id at all is left alone — see {@link #canonicalAnthropicId}.
      */
-    public boolean rejectsSamplingParams(String modelName) {
-        return isAnthropicIdOutside(modelName, AnthropicModelName.samplingCapableModelIds());
+    public boolean rejectsTemperature(String modelName, @NonNull LlmModelRegistryService registryService) {
+        return isAnthropicModelWithout(modelName, registryService, params -> isAccepted(params.temperature()));
+    }
+
+    /** Whether the model refuses top_p outright, for the reasons given on {@link #rejectsTemperature}. */
+    public boolean rejectsTopP(String modelName, @NonNull LlmModelRegistryService registryService) {
+        return isAnthropicModelWithout(modelName, registryService, params -> isAccepted(params.topP()));
+    }
+
+    // A Claude param the catalog leaves out counts as refused, failing safe by omitting it, for the reason given on
+    // rejectsTemperature. ParamResolver.isRefused reads a missing OpenAI param the other way on purpose.
+    private boolean isAccepted(ModelParams.NumberParam param) {
+        return param != null && Boolean.TRUE.equals(param.accepted());
     }
 
     /**
      * Whether the model thinks when a request does not mention thinking. An Anthropic id we cannot place is
-     * assumed to, for the reason given on {@link #rejectsSamplingParams}.
+     * assumed to, for the reason given on {@link #rejectsTemperature}.
      */
-    public boolean thinksByDefault(String modelName) {
-        return isAnthropicIdOutside(modelName, AnthropicModelName.thinkingOffByDefaultModelIds());
+    public boolean thinksByDefault(String modelName, @NonNull LlmModelRegistryService registryService) {
+        return isAnthropicModelWithout(modelName, registryService,
+                params -> Boolean.FALSE.equals(params.thinksByDefault()));
     }
 
-    private boolean isAnthropicIdOutside(String modelName, Set<String> earlierBehaviourModelIds) {
+    private boolean isAnthropicModelWithout(String modelName, LlmModelRegistryService registryService,
+            Predicate<ModelParams> earlierBehaviour) {
         var canonical = canonicalAnthropicId(modelName);
         if (canonical.isEmpty() || isLegacyGeneration(canonical)) {
             return false;
         }
-        return knownAnthropicId(canonical)
-                .map(id -> !earlierBehaviourModelIds.contains(id))
-                .orElse(true);
+        // An id we cannot place gets its own row when the registry lists one, and the provider profile otherwise.
+        var id = knownAnthropicId(canonical).orElse(canonical);
+        var provider = LlmProvider.ANTHROPIC.getValue();
+        Predicate<ModelParams> without = params -> params == null || !earlierBehaviour.test(params);
+        // The release's rules get a veto. The generated, CDN and override rows sit above the anthropic profile that
+        // refuses sampling, so one of them accepting temperature would otherwise fail every request for the model.
+        // Data can still move a model to the newer behaviour, which costs at most a param, but never back.
+        return without.test(registryService.curatedParamsOf(provider, id))
+                || without.test(registryService.paramsOf(provider, id));
     }
 
     /**
      * The newest listed member of a family, which is what {@code claude-opus-latest} names.
      *
      * <p>A floating alias has to be read as the model it currently resolves to, not left unplaceable:
-     * when that model takes sampling params, as Haiku 4.5 does, classifying the alias by the
+     * when that model takes sampling params, as Haiku 4.5 did until Haiku 5.5, classifying the alias by the
      * unplaceable default would silently drop a temperature someone set — the same model under its
      * own id keeps one.
      */
@@ -295,36 +314,21 @@ public class ModelCapabilities {
     }
 
     private Map<String, ModelCapability> loadCapabilities() {
-        try {
-            Map<String, ModelCostData> rawData = JsonUtils.readJsonFile(CostService.MODEL_PRICES_FILE,
-                    new TypeReference<>() {
-                    });
-            if (rawData.isEmpty()) {
-                throw new IllegalStateException(
-                        "No entries found in model prices file '%s'".formatted(CostService.MODEL_PRICES_FILE));
+        var capabilities = new HashMap<String, ModelCapability>();
+        ModelPriceTable.readModelCosts().forEach((modelName, modelData) -> {
+            if (StringUtils.isBlank(modelName)) {
+                return;
             }
 
-            var capabilities = new HashMap<String, ModelCapability>();
-            rawData.forEach((modelName, modelData) -> {
-                if (StringUtils.isBlank(modelName)) {
-                    return;
-                }
-
-                var normalizedName = normalize(modelName);
-                var canonicalName = modelName.trim();
-                capabilities.putIfAbsent(normalizedName, ModelCapability.builder()
-                        .name(canonicalName)
-                        .litellmProvider(Objects.requireNonNullElse(modelData.litellmProvider(), ""))
-                        .supportsVision(modelData.supportsVision())
-                        .build());
-            });
-
-            return Collections.unmodifiableMap(capabilities);
-        } catch (IOException exception) {
-            throw new UncheckedIOException(
-                    "Failed to load model capabilities from file '%s'".formatted(CostService.MODEL_PRICES_FILE),
-                    exception);
-        }
+            var normalizedName = normalize(modelName);
+            var canonicalName = modelName.trim();
+            capabilities.putIfAbsent(normalizedName, ModelCapability.builder()
+                    .name(canonicalName)
+                    .litellmProvider(Objects.requireNonNullElse(modelData.litellmProvider(), ""))
+                    .supportsVision(modelData.supportsVision())
+                    .build());
+        });
+        return Collections.unmodifiableMap(capabilities);
     }
 
     private List<String> candidateKeys(String modelName) {

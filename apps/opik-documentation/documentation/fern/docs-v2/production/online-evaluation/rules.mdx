@@ -8,340 +8,301 @@ subtitle: Describes how to define scoring rules for production traces
 title: Online Evaluation rules
 ---
 
-<Tip>
-  Online evaluation metrics allow you to score all your production traces and easily identify any issues with your
-  production LLM application.
-</Tip>
+Production apps log too many traces to review by hand. Online evaluation scores them for you. You define an evaluator once, and Opik runs it on new traces, threads or spans as they are logged.
 
-When working with LLMs in production, the sheer number of traces means that it isn't possible to manually review each trace. Opik allows you to define LLM as a Judge metrics that will automatically score the LLM calls logged to the platform.
+## How online evaluation works
 
-![Opik LLM as a Judge](/img/production/online_evaluation.gif)
+An online evaluation rule, or evaluator, has three parts:
 
-By defining LLM as a Judge metrics that run on all your production traces, you will be able to
-automate the monitoring of your LLM calls for hallucinations, answer relevance or any other task
-specific metric.
+- **What to score:** a scope (traces, threads or spans), plus optional filters and a sampling rate.
+- **How to score:** an LLM-as-a-Judge prompt, a decision model, or Python code.
+- **What it returns:** one or more feedback scores, stored on each item it evaluates.
 
-## Defining scoring rules
+Evaluators only run on items logged after you create them. To score older data, see [Run evaluators on existing data](#run-evaluators-on-existing-data).
 
-Scoring rules can be defined through both the UI and the [REST API](/reference/rest-api/overview).
+You can create evaluators in the UI or with the [REST API](/reference/rest-api/overview).
 
-To create a new scoring metric in the UI, first navigate to the project you would like to monitor. Once you have navigated to the `rules` tab, you will be able to create a new rule.
+## Create an evaluator
 
-<Frame>
-  <img src="/img/production/online_evaluation_rule_modal.png" />
-</Frame>
+<Steps>
+  <Step title="Open the Online evaluation page">
+    Open your project and select **Online evaluation** in the sidebar.
+  </Step>
+  <Step title="Pick an evaluator type">
+    Click **Evaluator** and choose **LLM-as-a-Judge**, **Decision model** or **Code evaluator**.
 
-When creating a new rule, you will be presented with the following options:
+    <Frame>
+      <img src="/img/production/online_evaluation_evaluator_menu.png" alt="The Evaluator menu with LLM-as-a-Judge, Decision model and Code evaluator" />
+    </Frame>
+  </Step>
+  <Step title="Configure it">
+    Fill in the panel that opens, then click **Create evaluator**.
+  </Step>
+</Steps>
 
-1. **Name:** The name of the rule
-2. **Sampling rate:** The percentage of production traces to score. When set to `100%`, all production traces will be scored. For trace rules the rate applies to production (SDK-logged) traces only: traces from experiments ignore it and are always scored when the rule matches, and traces from the playground or an optimization run ignore it too but are only evaluated when you explicitly select the rule for that run. Thread and span rules only ever run on production (SDK-logged) data — threads and spans from experiments, the playground and optimization runs are excluded from online evaluation entirely.
-3. **Model:** The model to use to run the LLM as a Judge metric. For evaluating traces with images, make sure to select a model that supports vision capabilities. For pass/fail checks, you can also pick a classifier instead of a chat model — see [Using Jev as a classifier judge](#using-jev-as-a-classifier-judge).
-4. **Prompt:** The LLM as a Judge prompt to use. Opik provides a set of base prompts (Hallucination, Moderation, Answer Relevance) that you can use or you can define your own. Variables in the prompt should be in `{{variable_name}}` format.
-5. **Variable mapping:** Where each prompt variable reads from in the trace. Not needed when you use Agent as a Judge — see [Writing your own LLM as a Judge metric](#writing-your-own-llm-as-a-judge-metric).
-6. **Score definition:** This is the format of the output of the LLM as a Judge metric. By adding more than one score, you can define LLM as a Judge metrics that score an LLM output along different dimensions.
+The panel has two columns:
 
-### Opik's built-in LLM as a Judge metrics
+- **Left:** the evaluator **Name** and the prompt or code editor.
+- **Right:** the **Scope**, the **Filtering and sampling** card, the scores, and the **Cost limit (USD)** for LLM-as-a-Judge.
 
-Opik comes pre-configured with 3 different LLM as a Judge metrics:
-
-1. Hallucination: This metric checks if the LLM output contains any hallucinated information.
-2. Moderation: This metric checks if the LLM output contains any offensive content.
-3. Answer Relevance: This metric checks if the LLM output is relevant to the given context.
-
-<Tip>
-  If you would like us to add more LLM as a Judge metrics to the platform, do raise an issue on
-  [GitHub](https://github.com/comet-ml/opik/issues) and we will do our best to add them !
-</Tip>
-
-### Writing your own LLM as a Judge metric
-
-Opik's built-in LLM as a Judge metrics are very easy to use and are great for getting started. However, as you start working on more complex tasks, you may need to write your own LLM as a Judge metrics.
-
-We typically recommend that you experiment with LLM as a Judge metrics during development using [Opik's evaluation platform](/evaluation/overview). Once you have a metric that works well for your use case, you can then use it in production.
+Use the **Enabled** toggle in the footer to create the evaluator in a paused state.
 
 <Frame>
-  <img src="/img/production/online_evaluation_custom_judge.png" />
-</Frame>
-When writing your own LLM as a Judge metric you will need to specify the prompt variables using the mustache syntax, ie.
-`{{ variable_name }}`. You control the scores it returns with the `Scoring definition` parameter. Under the hood, we will use this definition in conjunction with the [structured outputs](https://platform.openai.com/docs/guides/structured-outputs) functionality to ensure that the LLM as a Judge metric always returns trace scores.
-
-That leaves one decision: where the judge gets its data. For trace and span rules there are two ways, and both work with the built-in metrics as well as your own.
-
-- **Agent as a Judge** — start here. No mapping to fill in, works on any trace shape, handles nesting and attachments. Best while you are still exploring what to measure.
-- **Variable mapping** — use when the judge should see exactly one field, every time.
-
-Thread rules have no mapping to choose. They always use `{{context}}`, which reads the conversation the same way — see [Online thread evaluation rules](#online-thread-evaluation-rules).
-
-#### Agent as a Judge
-
-Add `{{trace}}` to the prompt. There is nothing to map, so the same rule works whatever shape your traces have.
-
-Prompt:
-
-```
-Read the trace below and decide whether the assistant answered the user's question.
-
-{{trace}}
-```
-
-Variable mapping: nothing to fill in.
-
-The judge reads the trace itself, using these tools:
-
-- `read` — read the trace or one of its spans
-- `jq` — pull out a specific path
-- `search` — find text anywhere in the trace
-- `get_trace_spans` — list the trace's spans
-- `get_attachment` — fetch an attached file as image, audio or text
-
-For a span-scope rule, use `{{span}}` instead. To inject the trace's spans as plain JSON without giving the judge any tools, use `{{spans}}`.
-
-Agent as a Judge is built to keep the cost bounded. Opik truncates the trace it puts in the prompt and points the judge at targeted reads instead of loading everything up front. A small trace fits in the prompt and the judge answers in a single call. On a larger one, the judge reads only the parts it needs.
-
-You can also set a hard limit with **Max cost per evaluation (USD)**. Once an evaluation reaches it, the judge wraps up and returns the scores it has. Leave it empty for no limit.
-
-<Note>
-  Agent as a Judge needs a model that supports tool calling. On a model that does not, the rule falls back to a single call with a truncated trace.
-</Note>
-
-#### Variable mapping
-
-Point each prompt variable at a field in the trace. The judge then receives that field and nothing else.
-
-Prompt:
-
-```
-Decide whether the answer below is helpful.
-
-Question: {{question}}
-Answer: {{answer}}
-```
-
-Variable mapping:
-
-- `question` → `input.messages[0].content`
-- `answer` → `output.messages[0].parts[0].content`
-
-Use it when a metric should score the same field on every trace. Because the input is fixed, the scores stay comparable over time, and each evaluation is a single call with no drill-down.
-
-The trade-off is that the path has to match your traces. A rule mapped to your application's traces will not read traces logged in a different shape, such as the ones the playground writes when you run an experiment. Use Agent as a Judge when one rule has to cover both.
-
-### Using Jev as a classifier judge
-
-Trace and span rules can also be judged by [Jev](/integrations/typesafe), TypeSafe AI's System One classifier, served through OpenRouter. Jev does not write free-form text: it answers yes/no questions about a piece of text and returns a calibrated probability, which makes it a fast, low-cost judge for pass/fail checks.
-
-To use it, configure the **OpenRouter** provider under `Configuration` → `AI Providers`, then select `~typesafe/jev-latest` (or a pinned version such as `typesafe/jev-1.13`) in the rule's model selector. Jev is offered in the online evaluation rule dialog only — it is not available in the Playground.
-
-#### How a Jev rule is built
-
-A Jev rule reads differently from a chat judge, and the rule form changes to match:
-
-- **The prompt is the text Jev reads.** Put the data there and nothing else. The instructions a chat judge needs ("You are an impartial judge...", "return JSON") would only be noise in the text Jev is classifying.
-- **Each score's description is its question.** The score name becomes the feedback score name; the description is what Jev is asked. Ask one thing per score, phrased so that a high probability means yes.
-- **Every score is answered in a single call**, so a second or third score barely changes latency or cost.
-
-Selecting Jev loads a template that reflects this — a prompt holding only the data:
-
-```
-INPUT:
-{{input}}
-
-OUTPUT:
-{{output}}
-```
-
-with one Boolean score named `Correctness`, described as "Does the output correctly and fully address the input?". Map the variables as you would for any other rule.
-
-#### Scores
-
-Each answer is a probability between 0 and 1. Opik stores `1` when the probability is `0.5` or higher and `0` below it, and puts the probability in the score reason:
-
-```
-Probability: 0.93
-```
-
-so the model's confidence stays visible even though the stored score is Boolean. An answer Opik cannot read is reported in the rule logs rather than stored.
-
-#### What a Jev rule cannot do
-
-Jev is a single-shot classifier with no chat, tool calling or structured output, so Opik rejects the following when you save the rule:
-
-| Not supported                               | Use instead                                                                          |
-| ------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `INTEGER` and `DOUBLE` scores               | `BOOLEAN` scores — as many as you need                                               |
-| Agent as a Judge (`{{trace}}` / `{{span}}`) | [Variable mapping](#variable-mapping). `{{spans}}` is still available on trace rules |
-| More than one message, or a system message  | A single user message                                                                |
-| Images, audio or video in the prompt        | Text only                                                                            |
-| **Max cost per evaluation (USD)**           | Nothing to set — the budget guard only meters chat calls                             |
-| Thread rules                                | A chat model                                                                         |
-
-Temperature, seed and the other model settings are hidden as well: they do not apply to a classifier.
-
-Switching an existing rule from a chat model to Jev adapts the form rather than failing at save — non-Boolean scores are dropped, and several text messages are merged into one user message — and every change is listed in a notice above the prompt. Switching back to a chat model restores the chat template if you had not edited Jev's.
-
-#### Context limit and cost
-
-Jev has a 32,000 token context covering the prompt and the questions together. An evaluation whose rendered prompt exceeds it is skipped, with the reason recorded in the rule logs — so a rule mapped to very large trace fields will not score. Map it to a narrower field, or use a chat model.
-
-Each Jev call is logged as an LLM span on the rule with its token usage and cost, so Jev rules appear in [cost tracking](/tracing/advanced/cost_tracking) like any other judge.
-
-### Evaluating traces with images
-
-LLM as a Judge metrics can evaluate traces that contain images when using vision-capable models. This is useful for:
-
-- Evaluating image generation quality
-- Analyzing visual content in multimodal applications
-- Validating image-based responses
-
-To reference image data from traces in your evaluation prompts:
-
-1. In the prompt editor, click the **"Images +"** button to add an image variable
-2. Map the image variable to the trace field containing image data using the Variable Mapping section
-
-<Frame>
-  <img src="/img/production/online_evaluation_rule_add_image.png" />
+  <img src="/img/production/online_evaluation_llm_judge_panel.png" alt="The rule editor panel for a new LLM-as-a-Judge evaluator" />
 </Frame>
 
 <Note>
-  When you add an image using the "Images +" button, Opik automatically adds a new line to the prompt with the image wrapped in `<<<image>>><</image>>>` tags. This wrapper is not visible in the UI but ensures proper image processing during evaluation.
+  **Code evaluator** only appears when Python evaluators are enabled on your Opik deployment.
 </Note>
 
-**Example rule configuration:**
+## LLM-as-a-Judge
 
-Prompt:
+An LLM-as-a-Judge evaluator sends a prompt to a model and reads back the scores. By default, it works as an agent-as-a-judge: the judge receives the whole trace, thread or span, and can explore it before it scores.
 
-```
-Evaluate the quality of this generated image.
+### Agent-as-a-Judge
 
-Rate the image on the following criteria:
-1. Visual clarity and resolution
-2. Relevance to the prompt
-3. Technical quality
+We carefully optimized agent-as-a-judge to avoid runaway costs, so the cost of an evaluation stays predictable even on very large traces:
 
-Provide a score between 0 and 1.
-```
+- **Adaptive truncation.** A small trace goes into the prompt as it is. For a larger trace, Opik shortens long text values and marks where they were cut, so the judge can fetch the full value when it needs it. A very large trace becomes an outline of its spans.
+- **Bounded exploration.** The judge can call tools for a limited number of rounds, then it must return its scores.
+- **Cost limit.** Set a [cost limit](#cost-limit) to stop the judge when an evaluation reaches a budget. It then returns the scores collected so far.
 
-Variable Mapping:
+Put the variable for the whole item in your prompt. The judge receives the item, whatever its shape, so you don't need to know which fields hold the data.
 
-- `output_image` → `output.image_data` (path in trace structure)
+| Variable      | Scope   | What the judge receives                   |
+| ------------- | ------- | ----------------------------------------- |
+| `{{trace}}`   | Traces  | The full trace, with its spans            |
+| `{{span}}`    | Spans   | The full span                             |
+| `{{context}}` | Threads | The conversation, see [Threads](#threads) |
 
-Model: Vision-capable model required
+A new judge starts with a choice: pick a [template](#templates), or click **Type your prompt** to write your own. The templates already use the variable for the selected scope.
 
-**Supported image formats:**
+With a model that supports tool calling, the judge can inspect the item with these tools before it scores:
 
-- Image URL
-- Base64 encoded image
+- `read`: read the trace or one of its spans
+- `jq`: pull out a specific path
+- `search`: find text anywhere in the trace
+- `get_trace_spans`: list the trace's spans
+- `get_attachment`: fetch an attached file as image, audio or text
 
-<Tip>
-  When mapping image variables, ensure the trace field contains image data in a
-  supported format (image URL or base64 encoded image).
-</Tip>
+On a model without tool calling, the judge gets the truncated item in a single call.
 
-## Reviewing online evaluation scores
+This is the best fit for agents: the judge can check which tools ran, in which order, and what they returned, not only the final answer.
 
-The scores returned by the online evaluation rules will be stored as feedback scores for each trace. This will allow you to review these scores in the traces sidebar and track their changes over time in the Opik dashboard.
+You don't need to describe the output format. Opik adds the JSON format for your scores to the prompt when the evaluator runs.
 
-![Opik dashboard](/img/production/opik_monitoring_dashboard.gif)
+### Templates
 
-You can also view the average feedback scores for all the traces in your project from the traces table.
+A new judge shows the templates as cards. After that, click **Templates** in the prompt header to load one. Picking a template replaces the prompt and scores, and sets the evaluator name.
 
-Because they are stored as ordinary feedback scores, the scores produced by your own custom rules can also drive [alerts](/production/alerts/alerts#alerting-on-custom-metrics) to Slack, PagerDuty or a webhook when the average crosses a threshold.
+| Scope   | Templates                                                                       |
+| ------- | ------------------------------------------------------------------------------- |
+| Traces  | Task completion, Hallucination, Moderation, Answer relevance, Tool correctness |
+| Threads | Task completion, Conversational coherence, User frustration                     |
+| Spans   | Task completion                                                                 |
 
-## Online thread evaluation rules
-
-It is also possible to define LLM as a Judge and Custom Python metrics that run on threads. This is useful to score the entire conversations and not just the individual traces.
+All templates return a Boolean score. Trace templates read the trace with `{{trace}}`, thread templates read the conversation with `{{context}}`, and the span template reads the span with `{{span}}`.
 
 <Frame>
-  <img src="/img/production/online_evaluation_thread_rule.gif" />
+  <img src="/img/production/online_evaluation_judge_templates.png" alt="The Templates menu in the prompt header" />
 </Frame>
 
-We have built-in templates for the LLM as a Judge metrics that you can use to score the entire conversation:
-1. **Conversation Coherence:** This metric checks if the conversation is coherent and follows a logical flow, return a decimal score between 0 and 1.
-2. **User Frustration:** This metric checks if the user is frustrated with the conversation, return a decimal score between 0 and 1.
-3. **Custom LLM as a Judge metrics:** You can use this template to score the entire conversation using your own LLM as a Judge metric. By default, this template uses binary scoring (true/false) following best practices.
+### Model
 
-For the LLM as a Judge metrics, keep in mind the only variable available is the `{{context}}` one, which is a dictionary containing the entire conversation:
+Pick the judge model in the prompt header. The settings icon next to it opens the model settings, such as temperature, when the model supports them. To judge images, audio or video, pick a model that supports them.
 
-```json wordWrap
-[
-  {
-      "role": "user",
-      "content": "Hello, how are you?"
-  },
-  {
-      "role": "assistant",
-      "content": "I'm good, thank you!"
-  }
-]
+### Scores
+
+The **Score configuration** card defines what the judge returns:
+
+- **Main score:** uses the evaluator name, and follows it when you rename the evaluator. To give it a different name, hover over the name and click the edit icon. A custom name stays the same when you rename the evaluator. Choose its type: **Boolean**, **Integer** or **Number**. The prompt describes how to compute it.
+- **Additional score:** adds another score from the same call. Click the name to edit it, then choose a type and write an instruction for how to compute it.
+
+Every score is stored as a feedback score with its name.
+
+### Cost limit
+
+**Cost limit (USD)** caps the spend of one evaluation. Once it is reached, the judge stops and returns the scores collected so far. Leave it empty for no limit. The cost limit is not available for span scope.
+
+### Images, audio and video
+
+On trace and span scope, the buttons at the bottom of the prompt add an image, audio or video. Enter a URL or a variable, for example `{{input.image_url}}`. Image URLs and base64 encoded images are supported.
+
+For multimodal agents, `{{trace}}` is often simpler: the judge can fetch the trace's attachments with the `get_attachment` tool.
+
+### Advanced: insert specific fields
+
+When you know which fields to judge, insert only those fields instead of the whole item. The prompt is smaller, so evaluations cost less and run faster. The judge always sees the same fields, so the scores stay comparable over time.
+
+Type `{{` to insert a variable. A picker lists the fields found in your latest traces or spans. Pick a field, or type a path with `.` for objects and `[` for arrays, for example `{{input.question}}`, `{{output}}` or `{{metadata.customer_tier}}`. Paths must start with `input`, `output` or `metadata`. On trace scope, `{{spans}}` inserts all the spans of the trace as JSON.
+
+<Frame>
+  <img src="/img/production/online_evaluation_variable_picker.png" alt="The variable picker opened by typing two curly braces in the prompt" />
+</Frame>
+
+Field variables are not available on thread scope, where the prompt uses only `{{context}}`.
+
+## Decision models
+
+A decision model answers yes or no questions about a text and returns a probability for each answer. This makes it a fast, low-cost judge for pass or fail checks. Opik supports [Jev](/integrations/typesafe), TypeSafe AI's classifier, through OpenRouter: `~typesafe/jev-latest` or a pinned version such as `typesafe/jev-1.13`.
+
+<Frame>
+  <img src="/img/production/online_evaluation_decision_model.png" alt="The rule editor panel for a decision model evaluator" />
+</Frame>
+
+To create one, click **Evaluator** > **Decision model**, then pick a template or click **Write your own**. After that, click **Templates** in the text card header to load another template. The templates are Task completion, Hallucination, Answer relevance, Moderation, Compliance risk and Support reply. Support reply asks three questions in one call: whether the reply solves the problem, whether its tone is polite, and whether it escalates.
+
+The form has two parts:
+
+- **The text to judge.** Put only the data here, using `{{` to insert fields, for example `{{input}}` and `{{output}}`. Instructions like "You are an impartial judge" only add noise.
+- **Questions.** Each question is one Boolean score. The main question is named after the evaluator when you create it. Use **Add question** for more, each with its own score name. Phrase each question so that "yes" is the outcome you score as true.
+
+Opik stores `1` when the probability is `0.5` or higher and `0` below it. The reason shows the probability, for example `Probability: 0.93`. All questions are answered in a single call, so extra questions barely change latency or cost.
+
+Decision models need the OpenRouter provider. If it is not connected, click **Connect OpenRouter** in the header of the text card. You can also add it under **Configuration** > **AI Providers**.
+
+Compared with LLM-as-a-Judge, decision models do not support:
+
+- Thread scope
+- `{{trace}}` and `{{span}}`. `{{spans}}` still works on trace scope.
+- Integer and Number scores
+- Model settings, media and a cost limit
+
+Jev has a 32,000 token context for the text and the questions together. Evaluations over that limit are skipped, and the reason is recorded in the evaluator logs. Point the text at narrower fields if this happens. Each call is logged as an LLM span with its token usage and cost, so decision models appear in [cost tracking](/tracing/advanced/cost_tracking).
+
+## Code evaluators
+
+A code evaluator runs a Python metric. Use it for exact matches, keywords, format checks or any custom logic.
+
+<Frame>
+  <img src="/img/production/online_evaluation_code_evaluator.png" alt="The rule editor panel for a code evaluator" />
+</Frame>
+
+The `score` method takes fixed parameters that Opik fills from each item:
+
+| Scope   | Parameters                                 |
+| ------- | ------------------------------------------ |
+| Traces  | `input`, `output`, `metadata`, `spans`     |
+| Spans   | `input`, `output`, `metadata`              |
+| Threads | `conversation`                             |
+
+Declare only the parameters you need. Opik fetches the trace's spans only when `score` declares `spans`, so add `spans=None` only when your metric reads them:
+
+```python wordWrap
+from opik.evaluation.metrics import base_metric, score_result
+
+class MyCustomMetric(base_metric.BaseMetric):
+    def __init__(self, name: str = "my_custom_metric"):
+        self.name = name
+
+    def score(self, input, output, metadata=None, **ignored_kwargs):
+        # Add your logic here
+
+        return score_result.ScoreResult(
+            value=0,
+            name=self.name,
+            reason="Optional reason for the score"
+        )
 ```
 
-By default, `{{context}}` contains only the messages exchanged in the conversation, as shown above. When your evaluation logic needs to reason about *how* the agent produced its final answer — which tools it called, in what order, and what each tool or LLM call returned — Opik can enrich `{{context}}` with the full thread structure instead: every trace in the thread and every span within it (LLM calls, tool calls, retrieval steps, or any other span type), including that span's type, input, output, metadata, and its position in the conversation.
-
-This makes it possible to write rules that evaluate an agent's full execution path, not just its final response. For example:
-
-- **Tool call order** — verify tools were called in the expected sequence before the agent responded (e.g. a retrieval step must run before synthesis).
-- **Grounding** — verify every claim in the final answer is backed by a tool result seen earlier in the conversation, to catch hallucinations not grounded in retrieved data.
-- **Escalation logic** — verify an agent invoked the correct tool (e.g. a human hand-off tool) when the conversation showed signals that warranted it.
-
-Because a full thread can contain many spans, Opik truncates long field values before injecting them into the prompt, and gives the judge model tools to fetch anything beyond the truncated preview:
-
-```json wordWrap
-{
-  "name": "answer_question",
-  "type": "llm",
-  "input": "What is the capital of France?",
-  "output": "The capital of France i[TRUNCATED 800 chars — use read(...) to see full]"
-}
-```
-
-The judge model can call:
-
-- **`read`** — fetch a specific trace or span by ID, with an optional truncation tier, to see more (or all) of its content.
-- **`jq`** — evaluate a `jq` expression against previously fetched data, useful for pulling a specific nested field (e.g. a value in span metadata).
-- **`search`** — run a regex search across a cached entity's string fields, useful for locating a term inside a very long input or output.
-
-This keeps evaluation prompts token-efficient even for long-running threads or deeply nested traces, since the judge model only pulls in the extra detail it actually needs.
-
-<Note>
-  Full trace and span context is available when the model selected for the rule supports tool calling.
-</Note>
-
-Similarly, for the Python metrics, you have the `Conversation` object available to you. This object is a `List[Dict]` where each dict represents a message in the conversation.
+On thread scope, `conversation` is a list of messages:
 
 ```python wordWrap
 [
-  {
-      "role": "user",
-      "content": "Hello, how are you?"
-  },
-  {
-      "role": "assistant",
-      "content": "I'm good, thank you!"
-  }
+    {"role": "user", "content": "Hello, how are you?"},
+    {"role": "assistant", "content": "I'm good, thank you!"}
 ]
 ```
 
-For online scoring rules on threads, Opik waits for a "cooldown period" after the last activity in a thread
-before running the evaluation. This ensures the scoring is done on the full context of the conversation.
+## Scopes
+
+The **Scope** at the top of the right column sets what the evaluator scores. You can't change the scope of an existing evaluator.
+
+- **Traces:** scores each trace.
+- **Threads:** scores a whole conversation.
+- **Spans:** scores individual spans, for example each LLM call or tool call.
+
+### Experiment traces
+
+On trace scope, the **Score** row under the scope sets which traces the evaluator scores: **production traces** (the default, traces logged with the SDK), **experiment traces**, or **all traces**. Filters and the sampling rate don't apply to experiment traces, so every experiment trace is scored.
+
+Traces from the playground and optimization runs are only evaluated when you select the evaluator for that run. Thread and span evaluators only run on production data.
+
+### Threads
+
+Thread evaluators score the full conversation. In LLM-as-a-Judge, the prompt must contain `{{context}}` exactly once, and no other variables. By default, `{{context}}` holds the messages exchanged:
+
+```json wordWrap
+[
+  { "role": "user", "content": "Hello, how are you?" },
+  { "role": "assistant", "content": "I'm good, thank you!" }
+]
+```
+
+With a model that supports tool calling, Opik enriches `{{context}}` with the full thread: every trace and span, with its type, input, output and metadata. Use it to check how the agent reached its answer:
+
+- **Tool call order:** a retrieval step ran before the answer was written.
+- **Grounding:** every claim in the answer is backed by an earlier tool result.
+- **Escalation:** the agent handed off to a human when the conversation called for it.
+
+Long values are truncated, and the judge can use `read`, `jq` and `search` to see more.
+
+Opik waits for a cooldown period after the last activity in a thread before scoring it, so the evaluator sees the full conversation.
 
 <Note>
-  The default cooldown period is 15 minutes but can be configured at the workspace level under "Thread online scoring rule cooldown period".
-  For self-hosted installations, set the `OPIK_TRACE_THREAD_TIMEOUT_TO_MARK_AS_INACTIVE` environment variable.
+  The default cooldown period is 15 minutes. On Opik Cloud, change it in the workspace settings under "Thread online scoring rule cooldown period". For self-hosted installations, set the `OPIK_TRACE_THREAD_TIMEOUT_TO_MARK_AS_INACTIVE` environment variable.
 </Note>
 
-## Running online evaluations on historical data
+## Filtering and sampling
 
-By default, a newly created online evaluation rule will only run on traces or threads logged after the rule was defined. To run a rule against historical data, you can trigger it manually from the UI:
+Open the **Filtering and sampling** card to limit what the evaluator scores:
 
-1. Navigate to the **Traces** or **Threads** tab of your project.
-2. Select the traces or threads you want to evaluate.
-3. Click the brain icon (<Icon icon="brain" />) in the toolbar.
-4. You will be prompted to choose which online evaluation rule to apply to the selected items.
+- **Filters:** only score items that match, for example traces whose name contains `chat_agent`, or spans of type `llm`. Click **Add filter** to combine several.
+- **Sampling rate:** the share of matching items to score. At `100%`, every item is scored.
+
+Filters and sampling apply to production data only. They do not apply to experiments.
+
+## Edit, clone and delete evaluators
+
+Click an evaluator in the table to open it in edit mode, then click **Save changes**. The row actions menu also has **Clone**, which opens a copy you can change and save as a new evaluator, and **Delete**.
+
+## Run evaluators on existing data
+
+Evaluators only score items logged after they were created. To score older data:
+
+1. Open **Logs** and select the traces, threads or spans to evaluate.
+2. Click the evaluate button (<Icon icon="brain" />) in the toolbar.
+3. In **Run online evaluation rules**, select the evaluators and click **Evaluate traces** (or threads, or spans).
 
 <Frame>
-  <img src="/img/production/online_evaluation_historical.png" alt="Running an online evaluation rule on historical traces" />
+  <img src="/img/production/online_evaluation_run_rules_dialog.png" alt="The Run online evaluation rules dialog" />
 </Frame>
 
+This runs even on disabled evaluators and ignores the sampling rate. To create an evaluator from here, click **Create a new rule**. The panel opens with the scope that matches your selection.
+
 <Note>
-  Depending on the model configured in the rule, evaluations may take some time to complete. You can monitor progress in the evaluation rule logs or by refreshing the traces/threads in the UI.
+  Evaluations run in the background. Results can take a moment to appear: check the evaluator logs, or refresh the traces or threads.
 </Note>
+
+## Review the scores
+
+Scores are stored as feedback scores on each trace, thread or span. You can see them in the trace sidebar, see averages in the traces table, and track them over time in the project dashboard.
+
+![Opik dashboard](/img/production/opik_monitoring_dashboard.gif)
+
+Because they are regular feedback scores, they can also trigger [alerts](/production/alerts/alerts#alerting-on-custom-metrics) to Slack, PagerDuty or a webhook when the average crosses a threshold.
+
+## Evaluators created before the new editor
+
+Existing evaluators keep running unchanged. When you open one in the editor:
+
+- **Judges with several messages** show a notice: LLM-as-a-Judge now uses a single prompt, and the messages are combined into one prompt when you save. Media in a system message is removed, because it was never sent to the model.
+- **Variable mappings** appear inline as paths. A `{{question}}` variable mapped to `input.messages[0].content` shows as `{{input.messages[0].content}}`.
+- **Code evaluators with custom argument mappings** show a notice with a **Convert to standard parameters** button. It rewrites `score` to take the standard parameters and reads your fields from them. If the code can't be converted, update the `score` method by hand.
+- **Jev rules** open as decision model evaluators.
+
+## Next steps
+
+- [Set up alerts](/production/alerts/alerts) on your evaluator scores
+- [Build dashboards](/tracing/dashboards/dashboards) to track scores over time
+- [Write custom metrics](/evaluation/metrics/custom_metric) to test them offline before running them in production

@@ -41,7 +41,7 @@ jobs:
         uses: astral-sh/setup-uv@v10.3.0
 
       - name: Install dependencies
-        run: uv pip install --system requests
+        run: uv pip install --system requests pyyaml==6.0.3
 
       - name: Set branch name
         run: |

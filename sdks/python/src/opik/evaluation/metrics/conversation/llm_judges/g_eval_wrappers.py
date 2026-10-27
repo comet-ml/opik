@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Any, List, Optional
+from typing import Any, Optional
 
 import opik.exceptions as exceptions
 
 from opik.evaluation.metrics import score_result
-from opik.evaluation.metrics.conversation import types as conversation_types
+from opik.evaluation.metrics.conversation import (
+    conversation_content,
+    types as conversation_types,
+)
 from opik.evaluation.metrics.base_metric import BaseMetric
 from opik.evaluation.metrics.conversation.conversation_thread_metric import (
     ConversationThreadMetric,
@@ -17,41 +20,6 @@ from opik.evaluation.metrics.llm_judges.g_eval_presets import (
     prompt_uncertainty as prompt_presets,
     qa_suite as qa_presets,
 )
-
-
-def _bad_content(value: Any) -> exceptions.MetricComputationError:
-    return exceptions.MetricComputationError(
-        "Assistant turn content must be text or a list of content parts, "
-        f"got {type(value).__name__}."
-    )
-
-
-def _text_from_parts(parts: Any) -> str:
-    """The text of a multimodal content list, or ``""`` when it carries none.
-
-    A part that is neither a string nor a mapping with string ``text`` is a shape this
-    adapter cannot read, so it is reported rather than counted as an empty turn --
-    counting it as empty would grade an older turn and report success. The public
-    conversation type still declares string content; list/tuple handling is defensive
-    support for direct ``score()`` calls, while ``evaluate_threads`` continues to
-    normalize its output to strings.
-    """
-    texts: List[str] = []
-    for part in parts:
-        if isinstance(part, str):
-            texts.append(part)
-        elif isinstance(part, dict):
-            if "text" in part:
-                text = part["text"]
-                if not isinstance(text, str):
-                    raise _bad_content(part)
-                texts.append(text)
-            elif part.get("type") == "text":
-                raise _bad_content(part)
-        else:
-            raise _bad_content(part)
-
-    return "\n".join(text for text in texts if text.strip())
 
 
 def _latest_assistant_text(conversation: conversation_types.Conversation) -> str:
@@ -73,13 +41,13 @@ def _latest_assistant_text(conversation: conversation_types.Conversation) -> str
             continue
         content = turn.get("content")
         if isinstance(content, (list, tuple)):
-            content = _text_from_parts(content)
+            content = conversation_content.text_from_parts(content)
         elif content is None:
             content = ""
         elif isinstance(content, str):
             pass
         else:
-            raise _bad_content(content)
+            raise conversation_content.bad_content_error(content)
 
         if content.strip():
             return content

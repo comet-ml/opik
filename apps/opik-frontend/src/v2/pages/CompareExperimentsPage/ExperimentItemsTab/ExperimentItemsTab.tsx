@@ -36,7 +36,6 @@ import TraceDetailsPanel from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceD
 import CompareExperimentsPanel from "@/v2/pages/CompareExperimentsPage/CompareExperimentsPanel/CompareExperimentsPanel";
 import CompareExperimentsActionsPanel from "@/v2/pages/CompareExperimentsPage/CompareExperimentsActionsPanel";
 import CompareExperimentsNameCell from "@/v2/pages-shared/experiments/CompareExperimentsNameCell/CompareExperimentsNameCell";
-import CompareExperimentsNameHeader from "@/v2/pages-shared/experiments/CompareExperimentsNameHeader/CompareExperimentsNameHeader";
 import ColumnsButton from "@/shared/ColumnsButton/ColumnsButton";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
 import useAppStore from "@/store/AppStore";
@@ -466,7 +465,6 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
               {
                 id: COLUMN_EXPERIMENT_NAME_ID,
                 label: "Name",
-                header: CompareExperimentsNameHeader as never,
                 cell: CompareExperimentsNameCell as never,
                 customMeta: {
                   experiments,

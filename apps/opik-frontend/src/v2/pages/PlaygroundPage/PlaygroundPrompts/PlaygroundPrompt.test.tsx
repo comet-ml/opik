@@ -69,6 +69,10 @@ vi.mock("@/api/llm/useLlmModels", () => ({
   }),
 }));
 
+vi.mock("@/api/llm/useLlmModelProfiles", () => ({
+  default: () => ({ data: undefined }),
+}));
+
 vi.mock("@/hooks/useOpenAICompatibleModels", () => ({
   default: () => PROVIDER_KEY_MODELS,
 }));
@@ -79,6 +83,13 @@ vi.mock("@tanstack/react-query", () => ({
 
 vi.mock("@/store/AppStore", () => ({
   useActiveProjectId: () => "project-id",
+}));
+
+// The prompt reads the selected dataset to know whether a run will be server-side, which decides
+// the settings it hides. Stubbed so this file's react-query mock stays as narrow as it was: these
+// tests are about switching models, and the real hook pulls a query chain behind it.
+vi.mock("@/hooks/usePlaygroundDataset", () => ({
+  usePlaygroundDataset: () => ({ datasetId: null }),
 }));
 
 vi.mock("@/contexts/PermissionsContext", () => ({

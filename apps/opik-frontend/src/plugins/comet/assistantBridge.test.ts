@@ -10,6 +10,7 @@ import {
   type HostListeners,
 } from "./assistantBridge";
 import useExplainStore from "./explain/explainStore";
+import { registerArtifactHandler } from "@/lib/ollieArtifacts";
 
 // Minimal refs: only `listeners` matters for these tests; the rest are unused
 // no-op handles the bridge reads through.
@@ -124,6 +125,23 @@ describe("assistantBridge — requests made before the console subscribes", () =
     expect(listener).toHaveBeenCalledWith({ message: "hello" });
   });
 
+  it("hands the console the click's origin and entry id, so BI can match the click to its session", () => {
+    const { bridge } = setup("dash-a");
+
+    bridge.startConversation("hello", {
+      origin: "describe_widget",
+      entryId: "e-1",
+    });
+
+    const listener = vi.fn();
+    bridge.subscribe("conversation:start", listener);
+    expect(listener).toHaveBeenCalledWith({
+      message: "hello",
+      origin: "describe_widget",
+      entryId: "e-1",
+    });
+  });
+
   it("drops a request that waited longer than the expiry", () => {
     vi.useFakeTimers();
     const { bridge } = setup("dash-a");
@@ -197,5 +215,146 @@ describe("assistantBridge — chart editing capability", () => {
       capabilities: ["explain", "charts"],
     });
     expect(bridge.canEditChart!()).toBe(true);
+  });
+
+  it("offers Duplicate in Ollie only to a console that handles the duplicate flag", () => {
+    const bridge = createBridge(makeRefs(createHostListeners()));
+
+    // A v5 console edits charts but drops `duplicate`: its card would save over the original.
+    useExplainStore.getState().onConsoleReady({
+      bridgeVersion: 5,
+      capabilities: ["explain", "charts"],
+    });
+    expect(bridge.canEditChart!()).toBe(true);
+    expect(bridge.canDuplicateChart!()).toBe(false);
+
+    useExplainStore.getState().onConsoleReady({
+      bridgeVersion: 6,
+      capabilities: ["explain", "charts"],
+    });
+    expect(bridge.canDuplicateChart!()).toBe(true);
+  });
+
+  it("hides Duplicate in Ollie without chart editing or a known console version", () => {
+    const bridge = createBridge(makeRefs(createHostListeners()));
+
+    useExplainStore
+      .getState()
+      .onConsoleReady({ bridgeVersion: 6, capabilities: ["explain"] });
+    expect(bridge.canDuplicateChart!()).toBe(false);
+
+    useExplainStore.setState({
+      capabilities: ["explain", "charts"],
+      consoleBridgeVersion: null,
+    });
+    expect(bridge.canDuplicateChart!()).toBe(false);
+  });
+});
+
+describe("assistantBridge — artifacts", () => {
+  const proposal = {
+    proposalId: "p1",
+    kind: "test_kind",
+    target: { id: "a" },
+    payload: { value: 1 },
+    summary: "done",
+  };
+
+  const propose = () => {
+    const listeners = createHostListeners();
+    const bridge = createBridge(makeRefs(listeners));
+    const onResult = vi.fn();
+    bridge.subscribe("artifact:result", onResult);
+    bridge.emit("artifact:proposed", proposal);
+    return onResult;
+  };
+
+  it("hands the proposal to the handler for its kind and reports it applied", () => {
+    const handler = vi.fn(() => null);
+    const unregister = registerArtifactHandler("test_kind", handler);
+
+    const onResult = propose();
+
+    expect(handler).toHaveBeenCalledWith(proposal);
+    expect(onResult).toHaveBeenCalledWith({ proposalId: "p1", applied: true });
+    unregister();
+  });
+
+  it("reports no_handler when nothing is registered for the kind", () => {
+    expect(propose()).toHaveBeenCalledWith({
+      proposalId: "p1",
+      applied: false,
+      reason: "no_handler",
+    });
+  });
+
+  it("reports the handler's rejection", () => {
+    const unregister = registerArtifactHandler(
+      "test_kind",
+      () => "target_mismatch",
+    );
+
+    expect(propose()).toHaveBeenCalledWith({
+      proposalId: "p1",
+      applied: false,
+      reason: "target_mismatch",
+    });
+    unregister();
+  });
+
+  it("reports invalid when the handler throws", () => {
+    const unregister = registerArtifactHandler("test_kind", () => {
+      throw new Error("bad payload");
+    });
+
+    expect(propose()).toHaveBeenCalledWith({
+      proposalId: "p1",
+      applied: false,
+      reason: "invalid",
+    });
+    unregister();
+  });
+
+  it("keeps a newer handler when an older one unregisters", () => {
+    const unregisterOld = registerArtifactHandler("test_kind", () => "invalid");
+    const unregisterNew = registerArtifactHandler("test_kind", () => null);
+    unregisterOld();
+
+    expect(propose()).toHaveBeenCalledWith({ proposalId: "p1", applied: true });
+    unregisterNew();
+  });
+
+  it("tells subscribers when the console announces its capabilities", () => {
+    const bridge = createBridge(makeRefs(createHostListeners()));
+    const listener = vi.fn();
+    const unsubscribe = bridge.subscribeCapabilities!(listener);
+
+    useExplainStore
+      .getState()
+      .onConsoleReady({ bridgeVersion: 5, capabilities: ["artifacts"] });
+    unsubscribe();
+    useExplainStore
+      .getState()
+      .onConsoleReady({ bridgeVersion: 2, capabilities: [] });
+
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers artifacts only once the console announces it", () => {
+    const bridge = createBridge(makeRefs(createHostListeners()));
+
+    useExplainStore
+      .getState()
+      .onConsoleReady({ bridgeVersion: 4, capabilities: ["charts"] });
+    expect(bridge.canProposeArtifacts!()).toBe(false);
+
+    useExplainStore
+      .getState()
+      .onConsoleReady({ bridgeVersion: 5, capabilities: ["artifacts"] });
+    expect(bridge.canProposeArtifacts!()).toBe(true);
+
+    useExplainStore
+      .getState()
+      .onConsoleReady({ bridgeVersion: 2, capabilities: [] });
   });
 });

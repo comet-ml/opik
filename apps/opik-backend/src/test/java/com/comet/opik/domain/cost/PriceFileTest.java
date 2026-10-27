@@ -98,7 +98,7 @@ class PriceFileTest {
         TreeMap<Integer, String> tiers() {
             var tiers = new TreeMap<Integer, String>();
             fields.keySet().forEach(field -> {
-                Matcher matcher = CostService.PROMPT_TIER_RATE.matcher(field);
+                Matcher matcher = ModelPriceTable.PROMPT_TIER_RATE.matcher(field);
                 if (matcher.matches() && matcher.group(1).equals("input_cost_per_token")
                         && price(field).signum() > 0) {
                     tiers.put(Integer.parseInt(matcher.group(2)) * (matcher.group(3).isEmpty() ? 1 : 1000),
@@ -111,9 +111,12 @@ class PriceFileTest {
 
     private static List<PricedEntry> pricedEntries() {
         var entriesByKey = new LinkedHashMap<String, PricedEntry>();
-        readEntries(CostService.MODEL_PRICES_FILE).forEach((name, fields) -> put(entriesByKey, name, fields));
+        // ModelPriceTable merges OpenRouter's file into LiteLLM's by model name before keying the prices.
+        var upstream = readEntries(ModelPriceTable.MODEL_PRICES_FILE);
+        upstream.putAll(readEntries(ModelPriceTable.MODEL_PRICES_OPENROUTER_FILE));
+        upstream.forEach((name, fields) -> put(entriesByKey, name, fields));
         // An alias_of override prices like its target, so it adds nothing to check.
-        readEntries(CostService.MODEL_PRICES_OVERRIDES_FILE).entrySet().stream()
+        readEntries(ModelPriceTable.MODEL_PRICES_OVERRIDES_FILE).entrySet().stream()
                 .filter(override -> !override.getValue().containsKey("alias_of"))
                 .forEach(override -> put(entriesByKey, override.getKey(), override.getValue()));
         return List.copyOf(entriesByKey.values());
@@ -131,7 +134,7 @@ class PriceFileTest {
         }
     }
 
-    // CostService keys a price by the name after its first "/" and the provider, and skips Bedrock's legacy paths.
+    // ModelPriceTable keys a price by the name after its first "/" and the provider, and skips Bedrock's legacy paths.
     private static void put(Map<String, PricedEntry> entriesByKey, String name, Map<String, JsonNode> fields) {
         String provider = Optional.ofNullable(fields.get("litellm_provider")).map(JsonNode::asText).orElse("");
         if (provider.isBlank() || (provider.equals("bedrock") && name.contains("/"))) {
@@ -171,7 +174,8 @@ class PriceFileTest {
         @Test
         void everyPriceIsBilledOrListedAsNotPriced() {
             var unaccounted = new TreeMap<String, TreeSet<String>>();
-            Stream.of(CostService.MODEL_PRICES_FILE, CostService.MODEL_PRICES_OVERRIDES_FILE)
+            Stream.of(ModelPriceTable.MODEL_PRICES_FILE, ModelPriceTable.MODEL_PRICES_OPENROUTER_FILE,
+                    ModelPriceTable.MODEL_PRICES_OVERRIDES_FILE)
                     .flatMap(file -> readEntries(file).values().stream())
                     .forEach(fields -> {
                         String provider = Optional.ofNullable(fields.get("litellm_provider")).map(JsonNode::asText)
@@ -197,7 +201,7 @@ class PriceFileTest {
 
         private static boolean accountedFor(String field, Map<String, JsonNode> fields, Format format) {
             String mode = Optional.ofNullable(fields.get("mode")).map(JsonNode::asText).orElse("");
-            Matcher tierRate = CostService.PROMPT_TIER_RATE.matcher(field);
+            Matcher tierRate = ModelPriceTable.PROMPT_TIER_RATE.matcher(field);
             String rate = tierRate.matches() ? tierRate.group(1) : field;
             return format.billedRates().contains(rate)
                     || mode.equals(PRICED_IN_MODE.get(field))

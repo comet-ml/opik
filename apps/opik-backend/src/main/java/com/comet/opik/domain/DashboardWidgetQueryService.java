@@ -84,12 +84,13 @@ class DashboardWidgetQueryServiceImpl implements DashboardWidgetQueryService {
     @Override
     public AnalyticsQueryResponse runSavedQuery(@NonNull UUID dashboardId, @NonNull DashboardScope scope,
             @NonNull String widgetId, @NonNull DashboardWidgetQueryRequest request) {
-        String workspaceId = requestContext.get().getWorkspaceId();
-        if (!customCharts.isEnabledFor(serviceToggles, workspaceId)) {
+        if (!customCharts.isEnabled(serviceToggles)) {
             throw new ServerErrorException(Response.Status.NOT_IMPLEMENTED);
         }
 
         RedactionGuard.rejectUnmaskable(requestContext.get().isRedactResponse(), "Custom Charts free-form SQL");
+
+        String workspaceId = requestContext.get().getWorkspaceId();
 
         Instant start = Optional.ofNullable(request.intervalStart()).orElse(Instant.EPOCH);
         Instant end = Optional.ofNullable(request.intervalEnd()).orElseGet(Instant::now);

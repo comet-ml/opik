@@ -181,6 +181,10 @@ component:
       # Self-hosted deployments legitimately point custom-provider token auth at internal gateways;
       # the application default is "strict" (SSRF guard) for non-self-hosted deployments.
       LLM_PROVIDER_TOKEN_AUTH_DESTINATION_GUARD: "relaxed"
+      # Same for provider base URLs (e.g. a local Ollama or vLLM server)
+      LLM_PROVIDER_DESTINATION_GUARD: "relaxed"
+      # And for detecting the type of videos served from internal hosts
+      LLM_PROVIDER_VIDEO_URL_DESTINATION_GUARD: "relaxed"
       ANALYTICS_DB_MIGRATIONS_PASS: opik
       ANALYTICS_DB_PASS: opik
       STATE_DB_PASS: opik
@@ -212,6 +216,12 @@ component:
       LLM_MODEL_REGISTRY_REMOTE_ENABLED: "false"
       LLM_MODEL_REGISTRY_REMOTE_URL: ""
       LLM_MODEL_REGISTRY_REFRESH_INTERVAL_SECONDS: "300"
+      # ai-labels (apps/opik-backend config.yml aiLabels): AI-generated trace labels, computed by
+      # opik-inference. Off by default; Comet-hosted deployments turn it on, set the URL, and pass the
+      # credential as AI_LABELS_INFERENCE_CREDENTIAL from a secret (secretRefs). Requires the cut-over
+      # traces table. See apps/opik-backend/docs/ai-labels-runbook.md.
+      AI_LABELS_ENABLED: "false"
+      AI_LABELS_INFERENCE_URL: ""
     envFrom:
       - configMapRef:
           name: opik-backend

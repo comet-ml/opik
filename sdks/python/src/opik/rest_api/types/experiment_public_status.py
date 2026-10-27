@@ -2,4 +2,4 @@
 
 import typing
 
-ExperimentPublicStatus = typing.Union[typing.Literal["running", "completed", "cancelled"], typing.Any]
+ExperimentPublicStatus = typing.Union[typing.Literal["running", "completed", "cancelled", "failed"], typing.Any]

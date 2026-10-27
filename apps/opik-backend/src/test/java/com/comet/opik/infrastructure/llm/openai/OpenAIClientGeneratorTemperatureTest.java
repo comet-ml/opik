@@ -1,34 +1,43 @@
 package com.comet.opik.infrastructure.llm.openai;
 
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
+import com.comet.opik.domain.llm.LlmProviderFactory;
+import com.comet.opik.domain.llm.ParamResolver;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
+import com.comet.opik.infrastructure.llm.LlmTestClients;
 import dev.langchain4j.model.chat.request.ChatRequestParameters;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import static com.comet.opik.infrastructure.llm.LlmModelRegistryTestUtils.bundledRegistry;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 /**
- * This generator serves OPEN_AI and, through {@code OpenRouterLlmServiceProvider}, OPEN_ROUTER —
- * whose catalog carries the Claude models that take no sampling params, including the floating
- * {@code claude-*-latest} aliases. The judge path builds its model straight from
- * {@link LlmAsJudgeModelParameters} and never passes through ChatCompletionService, so the gate has
- * to hold here independently or an evaluator rule fails every scoring run with a 400 (OPIK-8386).
+ * This generator serves OPEN_AI and, through {@code OpenRouterLlmServiceProvider}, OPEN_ROUTER — whose catalog
+ * carries the Claude models that take no sampling params, including the floating {@code claude-*-latest} aliases.
+ * An evaluator rule on one that still sends a temperature fails every scoring run with a 400 (OPIK-8386). The judge
+ * parameters go through {@link ParamResolver} first, as {@code ChatCompletionService.scoreTrace} does, so this checks
+ * the temperature the judge ends up sending.
  */
 @DisplayName("OpenAI/OpenRouter judge path — temperature gating")
 class OpenAIClientGeneratorTemperatureTest {
 
+    private static final ParamResolver RESOLVER = new ParamResolver(mock(LlmProviderFactory.class), bundledRegistry());
+
     private ChatRequestParameters judgeParametersFor(String modelName) {
-        var generator = new OpenAIClientGenerator(new LlmProviderClientConfig());
+        var generator = new OpenAIClientGenerator(new LlmProviderClientConfig(),
+                LlmTestClients.RESPONSES_API_HTTP_CLIENT);
         var config = LlmProviderClientApiConfig.builder()
                 .apiKey("test-key")
                 .baseUrl("https://openrouter.ai/api/v1")
                 .build();
         var parameters = LlmAsJudgeModelParameters.builder().name(modelName).temperature(0.7).build();
 
-        return generator.newCompletionsApiChatModel(config, parameters).defaultRequestParameters();
+        return generator.newCompletionsApiChatModel(config, RESOLVER.resolve(parameters).request())
+                .defaultRequestParameters();
     }
 
     @ParameterizedTest
@@ -46,17 +55,19 @@ class OpenAIClientGeneratorTemperatureTest {
     }
 
     private ChatRequestParameters responsesJudgeParametersFor(String modelName) {
-        var generator = new OpenAIClientGenerator(new LlmProviderClientConfig());
+        var generator = new OpenAIClientGenerator(new LlmProviderClientConfig(),
+                LlmTestClients.RESPONSES_API_HTTP_CLIENT);
         var config = LlmProviderClientApiConfig.builder()
                 .apiKey("test-key")
                 .baseUrl("https://openrouter.ai/api/v1")
                 .build();
         var parameters = LlmAsJudgeModelParameters.builder().name(modelName).temperature(0.7).build();
 
-        return generator.newResponsesApiChatModel(config, parameters).defaultRequestParameters();
+        return generator.newResponsesApiChatModel(config, RESOLVER.resolve(parameters).request())
+                .defaultRequestParameters();
     }
 
-    /** The Responses builder gates independently of the Completions one, so it is asserted separately. */
+    /** The Responses builder sets the temperature on its own, so it is asserted separately. */
     @ParameterizedTest
     @ValueSource(strings = {"anthropic/claude-opus-4.7", "anthropic/claude-sonnet-5",
             "~anthropic/claude-opus-latest"})

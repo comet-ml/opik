@@ -6,7 +6,7 @@ anyio==4.14.2
 attrs==26.1.0
 boto3-stubs==1.42.79
 botocore-stubs==1.42.41
-certifi==2026.2.25
+certifi==2026.10.19
 charset-normalizer==3.4.6
 click==8.1.8
 distro==1.9.0
@@ -25,7 +25,7 @@ Jinja2==3.1.6
 jiter==0.13.0
 jsonschema==4.23.0
 jsonschema-specifications==2025.9.1
-litellm==1.84.0
+litellm==1.88.6
 markdown-it-py==4.0.0
 MarkupSafe==3.0.3
 mdurl==0.1.2
@@ -61,5 +61,5 @@ typing-inspection==0.4.2
 typing_extensions==4.15.0
 urllib3==2.8.0
 uuid6==2025.0.1
-yarl==1.23.0
+yarl==1.25.1
 zipp==3.23.0
