@@ -60,6 +60,7 @@ interface GetCompletionProxyStreamParams {
   configs: LLMPromptConfigsType;
   workspaceName: string;
   openAiPipelineMode?: OpenAiPipelineMode;
+  provider?: string;
 }
 
 const isPythonProxyError = (
@@ -106,6 +107,7 @@ const getCompletionProxyStream = async ({
   configs,
   workspaceName,
   openAiPipelineMode,
+  provider,
 }: GetCompletionProxyStreamParams) => {
   return fetch(`${BASE_API_URL}/v1/private/chat/completions`, {
     method: "POST",
@@ -118,7 +120,7 @@ const getCompletionProxyStream = async ({
       messages,
       stream: true,
       stream_options: { include_usage: true },
-      ...getRequestParameters(model, configs, openAiPipelineMode),
+      ...getRequestParameters(model, configs, openAiPipelineMode, provider),
     }),
     credentials: "include",
     signal,
@@ -132,6 +134,7 @@ export interface RunStreamingArgs {
   onAddChunk: (accumulatedValue: string) => void;
   signal: AbortSignal;
   openAiPipelineMode?: OpenAiPipelineMode;
+  provider?: string;
 }
 
 export interface RunStreamingReturn {
@@ -165,6 +168,7 @@ const useCompletionProxyStreaming = ({
       onAddChunk,
       signal,
       openAiPipelineMode,
+      provider,
     }: RunStreamingArgs): Promise<RunStreamingReturn> => {
       const startTime = getNowUtcTimeISOString();
 
@@ -191,6 +195,7 @@ const useCompletionProxyStreaming = ({
           signal,
           workspaceName,
           openAiPipelineMode,
+          provider,
         });
 
         // Extract resolved model and provider from headers

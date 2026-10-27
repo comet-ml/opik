@@ -2,14 +2,18 @@ package com.comet.opik.domain.llm;
 
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
+import com.comet.opik.infrastructure.llm.customllm.AuthTokenException;
 import com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterDecisionModel;
+import com.comet.opik.infrastructure.llm.vertexai.LlmProviderVertexAI.CutOffBeforeAnsweringException;
 import com.comet.opik.utils.ChunkedOutputHandlers;
 import com.comet.opik.utils.HttpStatusRetryability;
 import com.google.api.gax.rpc.ApiException;
 import com.google.api.gax.rpc.StatusCode;
 import com.google.common.base.Throwables;
 import com.openai.errors.OpenAIServiceException;
+import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import dev.langchain4j.exception.AuthenticationException;
 import dev.langchain4j.exception.HttpException;
 import dev.langchain4j.exception.InternalServerException;
@@ -32,9 +36,11 @@ import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.ServerErrorException;
+import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
@@ -59,16 +65,19 @@ public class ChatCompletionService {
     private final LlmProviderClientConfig llmProviderClientConfig;
     private final LlmProviderFactory llmProviderFactory;
     private final ParamResolver paramResolver;
+    private final ProviderErrorMessageValidator providerErrorMessageValidator;
     private final RetryUtils.RetryPolicy retryPolicy;
 
     @Inject
     public ChatCompletionService(
             @NonNull @Config LlmProviderClientConfig llmProviderClientConfig,
             @NonNull LlmProviderFactory llmProviderFactory,
-            @NonNull ParamResolver paramResolver) {
+            @NonNull ParamResolver paramResolver,
+            @NonNull ProviderErrorMessageValidator providerErrorMessageValidator) {
         this.llmProviderClientConfig = llmProviderClientConfig;
         this.llmProviderFactory = llmProviderFactory;
         this.paramResolver = paramResolver;
+        this.providerErrorMessageValidator = providerErrorMessageValidator;
         this.retryPolicy = newRetryPolicy();
     }
 
@@ -90,9 +99,7 @@ public class ChatCompletionService {
             failIfUnsupportedFeature(runtimeException);
             failIfRequestRefused(runtimeException);
 
-            Optional<ErrorMessage> providerError = llmProviderClient.getLlmProviderError(runtimeException);
-
-            providerError
+            getLlmProviderError(llmProviderClient, runtimeException)
                     .ifPresent(llmProviderError -> failHandlingLLMProviderError(runtimeException, llmProviderError));
 
             failIfProviderReportedHttpStatus(runtimeException);
@@ -148,7 +155,7 @@ public class ChatCompletionService {
             @NonNull String workspaceId) {
         var resolved = paramResolver.resolve(modelParameters);
         logChanges(resolved.request().name(), resolved.changes());
-        var languageModelClient = getLanguageModel(workspaceId, resolved.request());
+        var languageModelClient = getLanguageModel(workspaceId, resolved.request(), chatRequest);
 
         ChatResponse chatResponse;
         try {
@@ -195,6 +202,14 @@ public class ChatCompletionService {
                 }
             }
         }
+    }
+
+    // The wrap-up call of a tool loop sends no tool specs but replays the tool calls, so it has to reach the model the
+    // way the rounds before it did.
+    private static boolean usesTools(ChatRequest chatRequest) {
+        return CollectionUtils.isNotEmpty(chatRequest.toolSpecifications())
+                || chatRequest.messages().stream().anyMatch(message -> message instanceof ToolExecutionResultMessage
+                        || message instanceof AiMessage aiMessage && aiMessage.hasToolExecutionRequests());
     }
 
     /**
@@ -352,9 +367,12 @@ public class ChatCompletionService {
      * Building the client can already refuse the request (a Vertex AI location or token_uri), before scoreTrace's
      * try, so that refusal is mapped here; anything else propagates as before.
      */
-    private ChatModel getLanguageModel(String workspaceId, LlmAsJudgeModelParameters modelParameters) {
+    private ChatModel getLanguageModel(String workspaceId, LlmAsJudgeModelParameters modelParameters,
+            ChatRequest chatRequest) {
         try {
-            return llmProviderFactory.getLanguageModel(workspaceId, modelParameters);
+            return usesTools(chatRequest)
+                    ? llmProviderFactory.getToolCallingLanguageModel(workspaceId, modelParameters)
+                    : llmProviderFactory.getLanguageModel(workspaceId, modelParameters);
         } catch (RuntimeException runtimeException) {
             failIfRequestRefused(runtimeException);
             throw runtimeException;
@@ -530,7 +548,7 @@ public class ChatCompletionService {
                 return;
             }
 
-            Optional<ErrorMessage> providerError = llmProviderClient.getLlmProviderError(throwable);
+            Optional<ErrorMessage> providerError = getLlmProviderError(llmProviderClient, throwable);
 
             if (providerError.isPresent()) {
                 log.warn(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, throwable);
@@ -549,74 +567,52 @@ public class ChatCompletionService {
                 var providerStatus = findProviderHttpStatus(throwable);
                 if (providerStatus.isPresent()) {
                     log.warn(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, throwable);
-                    handlers.handleError(
-                            new ErrorMessage(providerStatus.get(), buildDetailedErrorMessage(throwable)));
+                    handlers.handleError(new ErrorMessage(providerStatus.get(),
+                            buildDetailedErrorMessage(throwable)));
                     return;
                 }
 
                 log.error(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, throwable);
 
-                var errorMessage = new ErrorMessage(buildDetailedErrorMessage(throwable));
-                handlers.handleError(errorMessage);
+                handlers.handleError(new ErrorMessage(buildDetailedErrorMessage(throwable)));
             }
         };
     }
 
-    /**
-     * Builds a detailed error message by combining the base error message with exception details.
-     * Extracts meaningful error information from the exception chain.
-     *
-     * @param throwable the exception to extract details from
-     * @return a detailed error message combining the base message with exception details
-     */
-    private String buildDetailedErrorMessage(Throwable throwable) {
-        String exceptionDetails = extractErrorDetails(throwable);
-        if (StringUtils.isNotBlank(exceptionDetails)) {
-            return UNEXPECTED_ERROR_CALLING_LLM_PROVIDER + ": " + exceptionDetails;
-        }
-        return UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
+    private Optional<ErrorMessage> getLlmProviderError(LlmProviderService llmProviderClient, Throwable throwable) {
+        return llmProviderClient.getLlmProviderError(throwable).map(providerErrorMessageValidator::validate);
     }
 
     /**
-     * Extracts meaningful error details from an exception chain.
-     * Walks through the exception chain to find the most informative error message,
-     * preferring root causes over wrapper exceptions.
-     * Provides user-friendly messages for common exception types.
-     *
-     * @param throwable the exception to extract details from
-     * @return the extracted error details, or null if no meaningful details found
+     * Only text from a failure Opik raised is added to the generic message: what a provider answered reaches a caller
+     * solely through a documented error envelope, see {@link ProviderErrorMessageValidator}.
      */
-    private String extractErrorDetails(Throwable throwable) {
-        if (throwable == null) {
-            return null;
-        }
+    private static final String SERVICE_UNREACHABLE = "Service is unreachable. Please check the provider URL.";
 
-        Throwable rootCause = Throwables.getRootCause(throwable);
+    private String buildDetailedErrorMessage(Throwable throwable) {
+        return extractErrorDetails(Throwables.getRootCause(throwable), isRaisedByOpik(throwable))
+                .filter(StringUtils::isNotBlank)
+                .map(details -> UNEXPECTED_ERROR_CALLING_LLM_PROVIDER + ": " + details)
+                .orElse(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
+    }
 
-        // Use the most specific exception (root cause if available)
-        Throwable exceptionToHandle = (rootCause != throwable) ? rootCause : throwable;
+    /** Opik's own validation and failures; no provider client raises these types. */
+    private static boolean isRaisedByOpik(Throwable throwable) {
+        return ExceptionUtils.getThrowableList(throwable).stream()
+                .anyMatch(cause -> cause instanceof WebApplicationException
+                        || cause instanceof AuthTokenException
+                        || cause instanceof CutOffBeforeAnsweringException);
+    }
 
-        // Provide user-friendly messages based on exception type
-        return switch (exceptionToHandle) {
-            case ConnectException connectException -> {
-                // Extract host/URL from the exception message if available
-                String message = connectException.getMessage();
-                if (message != null && message.contains("Connection refused")) {
-                    yield "Service is unreachable. Please check the provider URL.";
-                }
-                yield "Service is unreachable: " + message;
-            }
-            case ClosedChannelException closedChannelException ->
-                "Service is unreachable. Please check the provider URL.";
-            default -> {
-                // For other exceptions, use the exception message
-                String message = exceptionToHandle.getMessage();
-                if (StringUtils.isNotBlank(message)) {
-                    yield message;
-                }
-                // Fallback to exception class name if no message
-                yield exceptionToHandle.getClass().getSimpleName();
-            }
+    private Optional<String> extractErrorDetails(Throwable rootCause, boolean raisedByOpik) {
+        return switch (rootCause) {
+            // the connection error names the resolved address, which stays server-side
+            case ConnectException connectException -> Optional.of(SERVICE_UNREACHABLE);
+            case ClosedChannelException closedChannelException -> Optional.of(SERVICE_UNREACHABLE);
+            default -> raisedByOpik
+                    ? Optional.of(StringUtils.defaultIfBlank(rootCause.getMessage(),
+                            rootCause.getClass().getSimpleName()))
+                    : Optional.empty();
         };
     }
 }

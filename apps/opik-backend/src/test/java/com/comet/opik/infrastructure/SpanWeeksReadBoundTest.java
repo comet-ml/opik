@@ -90,6 +90,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -774,6 +775,62 @@ class SpanWeeksReadBoundTest {
 
         assertThat(actualSize).isEqualTo(expectedSize);
         assertThat(actualSizeWithCopy).isEqualTo(2 * expectedSize);
+    }
+
+    /**
+     * Project delete pages through the trace ids of the project's spans, each page past the last one bounded to the
+     * weeks the index holds for the project's traces past the cursor. The trace past the first page was never logged
+     * and has only a far-future span, so only that bounded read finds it. Read back through the service, as the span
+     * endpoints 404 once the project is gone.
+     */
+    @Test
+    void projectDeleteRemovesAFarFutureSpanPastTheFirstPage() {
+        var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+        var now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+        // One full page of the project delete, of traces never logged, one span each.
+        var pageSpans = Stream.generate(() -> newSpan(projectName, ID_GENERATOR.generateId(),
+                ID_GENERATOR.generateId(), now))
+                .limit(1_000)
+                .toList();
+        // Its trace id is minted after every page one, so it sorts past the page.
+        var farFutureSpan = newSpan(projectName, ID_GENERATOR.getTimeOrderedEpoch(now.plusSeconds(60).toEpochMilli()),
+                ID_GENERATOR.getTimeOrderedEpoch(Instant.parse("2200-06-15T12:00:00Z").toEpochMilli()), now);
+        spanResourceClient.batchCreateSpans(pageSpans, API_KEY, WORKSPACE_NAME);
+        spanResourceClient.batchCreateSpans(List.of(farFutureSpan), API_KEY, WORKSPACE_NAME);
+        var traceIds = Stream.concat(pageSpans.stream(), Stream.of(farFutureSpan))
+                .map(Span::traceId)
+                .collect(Collectors.toUnmodifiableSet());
+        Awaitility.await().atMost(Duration.ofSeconds(30))
+                .untilAsserted(() -> assertThat(spansOfTraces(traceIds)).hasSize(traceIds.size()));
+
+        projectResourceClient.deleteProject(projectId, API_KEY, WORKSPACE_NAME);
+
+        // The trace deletes cascade to the spans on the event bus, after the project delete returns.
+        Awaitility.await().atMost(Duration.ofSeconds(30))
+                .untilAsserted(() -> assertThat(spansOfTraces(traceIds)).isEmpty());
+    }
+
+    private Span newSpan(String projectName, UUID traceId, UUID id, Instant startTime) {
+        return factory.manufacturePojo(Span.class).toBuilder()
+                .id(id)
+                .projectName(projectName)
+                .traceId(traceId)
+                .parentSpanId(null)
+                .startTime(startTime)
+                .endTime(null)
+                .input(null)
+                .output(null)
+                .metadata(null)
+                .feedbackScores(null)
+                .build();
+    }
+
+    private List<Span> spansOfTraces(Set<UUID> traceIds) {
+        return spanService.getByTraceIds(traceIds)
+                .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, USER, WORKSPACE_ID))
+                .collectList()
+                .block();
     }
 
     private long spansSize(Set<UUID> traceIds) {

@@ -25,6 +25,7 @@ public record ModelParams(
         FlagParam stop,
         FlagParam seed,
         EffortParam effort,
+        ToolsParam tools,
         Boolean samplingExclusive,
         Boolean thinksByDefault,
         Map<String, ModelParams> routes) {
@@ -117,6 +118,33 @@ public record ModelParams(
         }
     }
 
+    @Builder(toBuilder = true)
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record ToolsParam(ChatCompletionsTools chatCompletions, FlagParam forcedChoice) {
+
+        static ToolsParam overlay(ToolsParam base, ToolsParam top) {
+            if (base == null || top == null) {
+                return ObjectUtils.getIfNull(top, base);
+            }
+            return new ToolsParam(
+                    ObjectUtils.getIfNull(top.chatCompletions, base.chatCompletions),
+                    FlagParam.overlay(base.forcedChoice, top.forcedChoice));
+        }
+
+        ToolsParam settled() {
+            return new ToolsParam(chatCompletions, forcedChoice == null ? null : forcedChoice.settled());
+        }
+    }
+
+    /** Only Chat Completions has a say: OpenAI's Responses API takes function tools at any effort. */
+    public enum ChatCompletionsTools {
+        @JsonProperty("effortNoneOnly")
+        EFFORT_NONE_ONLY,
+        @JsonProperty("refused")
+        REFUSED
+    }
+
     /** Lists are replaced whole: a model's three effort levels must not merge with its profile's five. */
     public static ModelParams overlay(ModelParams base, ModelParams top) {
         if (base == null || top == null) {
@@ -132,6 +160,7 @@ public record ModelParams(
                 FlagParam.overlay(base.stop, top.stop),
                 FlagParam.overlay(base.seed, top.seed),
                 EffortParam.overlay(base.effort, top.effort),
+                ToolsParam.overlay(base.tools, top.tools),
                 ObjectUtils.getIfNull(top.samplingExclusive, base.samplingExclusive),
                 ObjectUtils.getIfNull(top.thinksByDefault, base.thinksByDefault),
                 overlayRoutes(base.routes, top.routes));
@@ -176,6 +205,7 @@ public record ModelParams(
                 stop == null ? null : stop.settled(),
                 seed == null ? null : seed.settled(),
                 effort == null ? null : effort.settled(),
+                tools == null ? null : tools.settled(),
                 samplingExclusive,
                 thinksByDefault,
                 routes);
