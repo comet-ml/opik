@@ -564,6 +564,10 @@ class OptimizationDAOImpl implements OptimizationDAO {
      * has an experiment, and its final {@code ifNull} yields a non-nullable zero when nothing is
      * attributed, matching {@code FIND}, where {@code sum()} over an empty group returns 0 rather than
      * NULL. The {@code ifNull} covers both {@code join_use_nulls} modes.
+     *
+     * <p>The page is cut in {@code optimization_final}, not on the outer select, in both projections. Every
+     * downstream CTE is keyed per optimization, so the result is the same, but paging late made them run for
+     * every optimization in scope: a project with ~2.2k runs read ~93M rows and took ~30 s for a 100-row page.
      */
     private static final String FIND = """
             WITH optimization_final AS (
@@ -585,6 +589,8 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 <if(dataset_deleted)>AND dataset_deleted = :dataset_deleted<endif>
                 <if(studio_only)>AND studio_config != ''<endif>
                 <if(filters)>AND <filters><endif>
+                ORDER BY id DESC
+                <if(limit)> LIMIT :limit <endif> <if(offset)> OFFSET :offset <endif>
             ), experiments_final AS (
                 SELECT
                     id,
@@ -972,7 +978,6 @@ class OptimizationDAOImpl implements OptimizationDAO {
             LEFT JOIN optimization_costs AS oc ON o.id = oc.optimization_id
             GROUP BY o.*
             ORDER BY o.id DESC
-            <if(limit)> LIMIT :limit <endif> <if(offset)> OFFSET :offset <endif>
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -1043,6 +1048,8 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 <if(dataset_deleted)>AND dataset_deleted = :dataset_deleted<endif>
                 <if(studio_only)>AND studio_config != ''<endif>
                 <if(filters)>AND <filters><endif>
+                ORDER BY id DESC
+                <if(limit)> LIMIT :limit <endif> <if(offset)> OFFSET :offset <endif>
             ), optimization_tagged_traces AS (
                 SELECT DISTINCT
                     tag AS optimization_id_str,
@@ -1102,7 +1109,6 @@ class OptimizationDAOImpl implements OptimizationDAO {
             FROM optimization_final AS o
             LEFT JOIN optimization_costs AS oc ON o.id = oc.optimization_id
             ORDER BY o.id DESC
-            <if(limit)> LIMIT :limit <endif> <if(offset)> OFFSET :offset <endif>
             SETTINGS log_comment = '<log_comment>'
             ;
             """;

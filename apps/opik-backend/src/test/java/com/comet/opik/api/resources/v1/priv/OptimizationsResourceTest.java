@@ -2434,6 +2434,36 @@ class OptimizationsResourceTest {
         }
 
         @Test
+        @DisplayName("Find optimizations with pagination when runs have trials")
+        void findWithPaginationWhenRunsHaveTrials() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var optimizations = new ArrayList<Optimization>();
+
+            for (int i = 0; i < 5; i++) {
+                var optimization = optimizationResourceClient.createPartialOptimization().build();
+                var id = optimizationResourceClient.create(optimization, apiKey, workspaceName);
+                createTrialWithUnfinishedTraceItem(id, true, apiKey, workspaceName);
+                optimizations.add(optimization.toBuilder().id(id).numTrials(1L).build());
+            }
+
+            var page1 = optimizationResourceClient.find(
+                    apiKey, workspaceName, 1, 2, null, null, null, null, 200);
+            var page2 = optimizationResourceClient.find(
+                    apiKey, workspaceName, 2, 2, null, null, null, null, 200);
+            var page3 = optimizationResourceClient.find(
+                    apiKey, workspaceName, 3, 2, null, null, null, null, 200);
+
+            assertOptimizationPage(page1, 1, 2, 2, optimizations.reversed().subList(0, 2));
+            assertOptimizationPage(page2, 2, 2, 2, optimizations.reversed().subList(2, 4));
+            assertOptimizationPage(page3, 3, 1, 1, optimizations.reversed().subList(4, 5));
+        }
+
+        @Test
         @DisplayName("Find optimizations with empty result")
         void findWithEmptyResult() {
             // Mock target workspace
