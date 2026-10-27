@@ -134,17 +134,3 @@ class AgentBundleCandidate:
 
     metadata: dict[str, AgentMetadata]
     """Dictionary mapping agent names to their improvement metadata"""
-
-    def get_agent_names(self) -> list[str]:
-        """Get all agent names in this bundle."""
-        return list(self.prompts.keys())
-
-    def get_agent_reasoning(self, agent_name: str) -> str | None:
-        """Get the reasoning for a specific agent's prompt changes."""
-        agent_meta = self.metadata.get(agent_name)
-        return agent_meta.reasoning if agent_meta else None
-
-    def get_agent_improvement_focus(self, agent_name: str) -> str | None:
-        """Get the improvement focus for a specific agent."""
-        agent_meta = self.metadata.get(agent_name)
-        return agent_meta.improvement_focus if agent_meta else None

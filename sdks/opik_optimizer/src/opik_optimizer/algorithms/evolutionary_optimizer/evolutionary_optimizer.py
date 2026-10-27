@@ -146,16 +146,14 @@ class EvolutionaryOptimizer(BaseOptimizer):
         Adds "no_improvement" finish reason when generations without improvement
         exceeds the early stopping threshold.
         """
-        if context.finish_reason is None:
-            if context.trials_completed >= context.max_trials:
-                context.finish_reason = "max_trials"
-            elif (
-                self._generations_without_overall_improvement
-                >= self.DEFAULT_EARLY_STOPPING_GENERATIONS
-            ):
-                context.finish_reason = "no_improvement"
-            else:
-                context.finish_reason = "completed"
+        if (
+            context.finish_reason is None
+            and context.trials_completed < context.max_trials
+            and self._generations_without_overall_improvement
+            >= self.DEFAULT_EARLY_STOPPING_GENERATIONS
+        ):
+            context.finish_reason = "no_improvement"
+        super()._finalize_finish_reason(context)
 
     def _seed_rngs(self) -> None:
         """
