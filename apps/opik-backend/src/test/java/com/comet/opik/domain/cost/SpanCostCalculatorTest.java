@@ -17,6 +17,10 @@ import static com.comet.opik.domain.token_usage.UsageCases.usage;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+/**
+ * These tests guard what every span is billed: add a case for each cost path and each bug found, and never remove one.
+ * When a fix shows a case expected the wrong cost, correct that case in the same change and say why.
+ */
 class SpanCostCalculatorTest {
 
     private static final ModelPrice CACHE_PRICES = ModelPrice.defaultBuilder()
@@ -265,6 +269,31 @@ class SpanCostCalculatorTest {
 
             assertThat(textCost(tiered, usage)).isEqualByComparingTo("18002.00");
         }
+
+        @Test
+        void textGenerationCostScalesTheReasoningAndAudioRatesAboveATier() {
+            // The tier raises the text rates but publishes no reasoning or audio rate, as Gemini Pro's on OpenRouter.
+            var tiered = NO_CACHE_PRICES.toBuilder()
+                    .outputReasoningTokenPrice(new BigDecimal("0.02"))
+                    .inputAudioTokenPrice(new BigDecimal("0.01"))
+                    .outputAudioTokenPrice(new BigDecimal("0.04"))
+                    .promptTiers(List.of(ModelPrice.PromptTier.builder()
+                            .threshold(ModelPrice.TIER_THRESHOLD_200K)
+                            .inputPrice(new BigDecimal("0.02"))
+                            .outputPrice(new BigDecimal("0.03"))
+                            .cacheCreationInputTokenPrice(BigDecimal.ZERO)
+                            .cacheReadInputTokenPrice(BigDecimal.ZERO)
+                            .build()))
+                    .build();
+            var usage = spanUsage("openrouter", "prompt_tokens", 210_000, "completion_tokens", 1_000,
+                    "prompt_tokens_details.audio_tokens", 10_000, "completion_tokens_details.reasoning_tokens", 800,
+                    "completion_tokens_details.audio_tokens", 100);
+
+            // Each rate keeps its base ratio to the text rate: reasoning 0.02 * 0.03 / 0.02, audio input
+            // 0.01 * 0.02 / 0.01, audio output 0.04 * 0.03 / 0.02:
+            // 200,000 * 0.02 + 10,000 * 0.02 + 100 * 0.03 + 800 * 0.03 + 100 * 0.06
+            assertThat(textCost(tiered, usage)).isEqualByComparingTo("4233.00");
+        }
     }
 
     @Nested
@@ -454,6 +483,15 @@ class SpanCostCalculatorTest {
             ModelPrice withReasoningRate = CACHE_PRICES.toBuilder()
                     .outputReasoningTokenPrice(new BigDecimal("0.003"))
                     .build();
+            ModelPrice tieredWithReasoningRate = withReasoningRate.toBuilder()
+                    .promptTiers(List.of(ModelPrice.PromptTier.builder()
+                            .threshold(ModelPrice.TIER_THRESHOLD_200K)
+                            .inputPrice(new BigDecimal("0.02"))
+                            .outputPrice(new BigDecimal("0.03"))
+                            .cacheCreationInputTokenPrice(BigDecimal.ZERO)
+                            .cacheReadInputTokenPrice(BigDecimal.ZERO)
+                            .build()))
+                    .build();
             return Stream.of(
                     // (1000 - 300) * 0.01 + 300 * 0.005 + 100 * 0.02 = 7 + 1.5 + 2
                     Arguments.of("context cache is part of the prompt", CACHE_PRICES,
@@ -492,7 +530,15 @@ class SpanCostCalculatorTest {
                             spanUsage("gemini", "original_usage.prompt_token_count", 1000,
                                     "original_usage.candidates_token_count", 100,
                                     "original_usage.thoughts_token_count", 50),
-                            "12.15"));
+                            "12.15"),
+                    // 210,000 * 0.02 + 100 * 0.03 + 50 * 0.0045: the reasoning rate keeps its base ratio to the output
+                    // rate, 0.003 * 0.03 / 0.02
+                    Arguments.of("thoughts above a tier bill at the reasoning rate scaled like output",
+                            tieredWithReasoningRate,
+                            spanUsage("gemini", "original_usage.prompt_token_count", 210_000,
+                                    "original_usage.candidates_token_count", 100,
+                                    "original_usage.thoughts_token_count", 50),
+                            "4203.225"));
         }
     }
 

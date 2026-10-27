@@ -15,6 +15,10 @@ import java.util.stream.Stream;
  * normalization tests, the invariants, the round trip and the check that no variant is left without a case. Numbers
  * come from the SDK's {@code llm_usage} tests and from production samples where noted. Every case is consistent usage:
  * contradictions such as an input below its own cache are tested where the warning is.
+ * <p>
+ * Every span's cost is computed from the native record its usage normalizes to, so these cases guard what spans are
+ * billed: add a case for each new variant and each bug found, and never remove one. When a fix shows a case expected
+ * the wrong record, correct that case in the same change and say why.
  */
 public final class UsageCases {
 
@@ -113,6 +117,16 @@ public final class UsageCases {
                                 "prompt_tokens_details.cache_creation_tokens", 3000,
                                 "cache_creation_token_details.ephemeral_5m_input_tokens", 1000,
                                 "cache_creation_token_details.ephemeral_1h_input_tokens", 2000),
+                        anthropic("litellm").inputTokens(1000).cacheReadInputTokens(1000)
+                                .cacheCreation5mInputTokens(1000)
+                                .cacheCreation1hInputTokens(2000).outputTokens(100).build()),
+                new UsageCase("Anthropic through LiteLLM 1.82 with cache writes split by TTL in the prompt's details",
+                        "anthropic",
+                        usage("prompt_tokens", 5000, "completion_tokens", 100, "cache_read_input_tokens", 1000,
+                                "cache_creation_input_tokens", 3000, "prompt_tokens_details.cached_tokens", 1000,
+                                "prompt_tokens_details.cache_creation_tokens", 3000,
+                                "prompt_tokens_details.cache_creation_token_details.ephemeral_5m_input_tokens", 1000,
+                                "prompt_tokens_details.cache_creation_token_details.ephemeral_1h_input_tokens", 2000),
                         anthropic("litellm").inputTokens(1000).cacheReadInputTokens(1000)
                                 .cacheCreation5mInputTokens(1000)
                                 .cacheCreation1hInputTokens(2000).outputTokens(100).build()),

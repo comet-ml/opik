@@ -45,6 +45,8 @@ public class ModelPriceTable {
     /** The rows of a price file, keyed by model name. */
     public static final TypeReference<Map<String, ModelCostData>> MODEL_COSTS_TYPE_REFERENCE = new TypeReference<>() {
     };
+    private static final TypeReference<Map<String, JsonNode>> PRICE_ROWS_TYPE_REFERENCE = new TypeReference<>() {
+    };
     private static final String BEDROCK_PROVIDER = "bedrock";
     // The price file's sample_spec entry documents its fields instead of pricing a model.
     private static final String SAMPLE_SPEC_ENTRY = "sample_spec";
@@ -80,9 +82,12 @@ public class ModelPriceTable {
             if (runtimeKey == null) {
                 return;
             }
-            ModelPrice price = buildModelPrice(modelCost);
+            ModelPrice price = buildModelPrice(modelName, modelCost);
             if (price != null) {
-                parsedModelPrices.put(runtimeKey, price);
+                // Per-image rows such as 1024-x-1024/gpt-image-1.5 share their model's key: a row that prices no token
+                // never replaces one that does.
+                parsedModelPrices.merge(runtimeKey, price,
+                        (kept, row) -> pricesTokens(kept) && !pricesTokens(row) ? kept : row);
             }
         });
 
@@ -108,7 +113,7 @@ public class ModelPriceTable {
     /** Both files are bundled, so one that can't be read or holds no model is a broken build, not a state to run in. */
     private static Map<String, ModelCostData> readPriceFile(String file) {
         try {
-            var modelCosts = JsonUtils.readJsonFile(file, MODEL_COSTS_TYPE_REFERENCE);
+            var modelCosts = toModelCosts(file, JsonUtils.readJsonFile(file, PRICE_ROWS_TYPE_REFERENCE));
             if (modelCosts.isEmpty()) {
                 throw new IllegalStateException("No entries found in model prices file '%s'".formatted(file));
             }
@@ -124,13 +129,29 @@ public class ModelPriceTable {
      */
     private static Map<String, ModelCostData> readOverrides() {
         try {
-            Map<String, ModelCostData> overrides = JsonUtils.readJsonFile(MODEL_PRICES_OVERRIDES_FILE,
-                    MODEL_COSTS_TYPE_REFERENCE);
-            return overrides == null ? Map.of() : overrides;
+            return toModelCosts(MODEL_PRICES_OVERRIDES_FILE,
+                    JsonUtils.readJsonFile(MODEL_PRICES_OVERRIDES_FILE, PRICE_ROWS_TYPE_REFERENCE));
         } catch (IOException | NullPointerException e) {
             log.warn("No model price overrides loaded ('{}'): '{}'", MODEL_PRICES_OVERRIDES_FILE, e.getMessage());
             return Map.of();
         }
+    }
+
+    /**
+     * The prices load with this class, which span ingestion uses, so a row that doesn't read as a price skips its own
+     * model only instead of every price, or every span.
+     */
+    static Map<String, ModelCostData> toModelCosts(String file, Map<String, JsonNode> rows) {
+        var modelCosts = new LinkedHashMap<String, ModelCostData>();
+        rows.forEach((modelName, row) -> {
+            try {
+                modelCosts.put(modelName, JsonUtils.treeToValue(row, ModelCostData.class));
+            } catch (UncheckedIOException exception) {
+                log.warn("Skipping model '{}' of '{}', which doesn't read as a price: '{}'", modelName, file,
+                        exception.getMessage());
+            }
+        });
+        return modelCosts;
     }
 
     /**
@@ -192,7 +213,7 @@ public class ModelPriceTable {
                     modelName, override.litellmProvider());
             return;
         }
-        ModelPrice price = buildModelPrice(override);
+        ModelPrice price = buildModelPrice(modelName, override);
         if (price != null) {
             prices.put(runtimeKey, price);
         }
@@ -209,6 +230,16 @@ public class ModelPriceTable {
             return null;
         }
         return createModelProviderKey(parseModelName(modelName), provider);
+    }
+
+    // A rate that isn't a number skips its model only, for the reason toModelCosts skips a row.
+    static ModelPrice buildModelPrice(String modelName, ModelCostData modelCost) {
+        try {
+            return buildModelPrice(modelCost);
+        } catch (NumberFormatException exception) {
+            log.warn("Skipping model '{}', a rate of which isn't a number: '{}'", modelName, exception.getMessage());
+            return null;
+        }
     }
 
     private static ModelPrice buildModelPrice(ModelCostData modelCost) {
@@ -347,6 +378,11 @@ public class ModelPriceTable {
 
     private static boolean isPositive(BigDecimal value) {
         return Optional.ofNullable(value).map(v -> v.compareTo(BigDecimal.ZERO) > 0).orElse(false);
+    }
+
+    private static boolean pricesTokens(ModelPrice price) {
+        return isPositive(price.inputPrice()) || isPositive(price.outputPrice())
+                || isPositive(price.cacheCreationInputTokenPrice()) || isPositive(price.cacheReadInputTokenPrice());
     }
 
     @RequiredArgsConstructor

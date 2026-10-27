@@ -2,6 +2,7 @@ package com.comet.opik.domain.cost;
 
 import com.comet.opik.api.ModelCostData;
 import com.comet.opik.domain.token_usage.SpanUsageFactory;
+import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.commons.lang3.StringUtils;
@@ -25,6 +26,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 
+/**
+ * These tests guard what every span is billed: add a case for each cost path and each bug found, and never remove one.
+ * When a fix shows a case expected the wrong cost, correct that case in the same change and say why.
+ */
 class CostServiceTest {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
@@ -261,6 +266,26 @@ class CostServiceTest {
                 .isFalse();
         assertThat(ModelPriceTable.PROMPT_TIER_RATE.matcher("input_cost_per_token_above_999999k_tokens").matches())
                 .isTrue();
+    }
+
+    /** A price row that doesn't read as one would stop the price table from loading, and with it span ingestion. */
+    @Test
+    void aPriceRowThatDoesNotReadAsAPriceSkipsOnlyItsModel() {
+        var rows = Map.of(
+                "gpt-good", JsonUtils.getJsonNodeFromString(
+                        "{\"litellm_provider\": \"openai\", \"input_cost_per_token\": 1e-06}"),
+                "gpt-rate-as-object", JsonUtils.getJsonNodeFromString(
+                        "{\"litellm_provider\": \"openai\", \"input_cost_per_token\": {\"usd\": 1e-06}}"));
+
+        assertThat(ModelPriceTable.toModelCosts("test prices", rows)).containsOnlyKeys("gpt-good");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"n/a", ""})
+    void aRateThatIsNotANumberSkipsOnlyItsModel(String rate) {
+        var modelCost = ModelCostData.builder().litellmProvider("openai").inputCostPerToken(rate).build();
+
+        assertThat(ModelPriceTable.buildModelPrice("gpt-bad-rate", modelCost)).isNull();
     }
 
     @Test
@@ -715,8 +740,8 @@ class CostServiceTest {
     /**
      * Mistral cost tracking: until `mistral` was registered in CostService the entire set of
      * upstream LiteLLM `litellm_provider: "mistral"` rows was dropped at startup, so every
-     * Mistral span returned cost = 0. This locks in both the upstream-sourced rows and the
-     * two override-only rows (Medium 3.5, Small 4) added alongside the registry fix.
+     * Mistral span returned cost = 0. This locks in the upstream rows, Medium 3.5 and Small 4
+     * among them, which Opik's overrides priced until upstream did.
      */
     @ParameterizedTest
     @MethodSource("provideMistralModels")
@@ -741,9 +766,9 @@ class CostServiceTest {
                 Arguments.of("mistral-large-3", "2.00"),
                 // Upstream LiteLLM row: $3e-07 in / $9e-07 out → 0.3 + 0.9 = 1.20
                 Arguments.of("codestral-2508", "1.20"),
-                // New override: $1.5e-06 in / $7.5e-06 out → 1.5 + 7.5 = 9.00
+                // Upstream LiteLLM row: $1.5e-06 in / $7.5e-06 out → 1.5 + 7.5 = 9.00
                 Arguments.of("mistral-medium-3-5", "9.00"),
-                // New override: $1.5e-07 in / $6e-07 out → 0.15 + 0.6 = 0.75
+                // Upstream LiteLLM row: $1.5e-07 in / $6e-07 out → 0.15 + 0.6 = 0.75
                 Arguments.of("mistral-small-2603", "0.75"));
     }
 

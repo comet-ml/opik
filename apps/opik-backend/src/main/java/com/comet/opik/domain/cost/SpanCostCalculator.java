@@ -70,8 +70,8 @@ class SpanCostCalculator {
                 .add(cost(orInputPrice(modelPrice.effectiveCacheReadInputTokenPrice(tierBasis), inputPrice),
                         cachedTokens))
                 .add(cost(outputPrice, usage.candidatesTokenCount()))
-                .add(cost(orInputPrice(modelPrice.outputReasoningTokenPrice(), outputPrice),
-                        usage.thoughtsTokenCount()));
+                .add(cost(orInputPrice(scaledToTier(modelPrice.outputReasoningTokenPrice(), modelPrice.outputPrice(),
+                        outputPrice), outputPrice), usage.thoughtsTokenCount()));
     }
 
     private static BigDecimal openAiCost(ModelPrice modelPrice, OpenAiNativeUsage usage) {
@@ -97,14 +97,17 @@ class SpanCostCalculator {
         BigDecimal fiveMinuteWritePrice = orInputPrice(
                 modelPrice.effectiveCacheCreationInputTokenPrice(tierBasis), inputPrice);
         return cost(inputPrice, textPromptTokens)
-                .add(cost(modelPrice.inputAudioTokenPrice(), audioPromptTokens))
+                .add(cost(scaledToTier(modelPrice.inputAudioTokenPrice(), modelPrice.inputPrice(), inputPrice),
+                        audioPromptTokens))
                 .add(cost(orInputPrice(modelPrice.effectiveCacheReadInputTokenPrice(tierBasis), inputPrice),
                         usage.cachedTokens()))
                 .add(cost(fiveMinuteWritePrice, usage.cacheWriteTokens() - usage.cacheWrite1hTokens()))
                 .add(cost(oneHourWritePrice(modelPrice, tierBasis, fiveMinuteWritePrice), usage.cacheWrite1hTokens()))
                 .add(cost(outputPrice, textCompletionTokens - reasoningTokens))
-                .add(cost(modelPrice.outputAudioTokenPrice(), audioCompletionTokens))
-                .add(cost(modelPrice.outputReasoningTokenPrice(), reasoningTokens));
+                .add(cost(scaledToTier(modelPrice.outputAudioTokenPrice(), modelPrice.outputPrice(), outputPrice),
+                        audioCompletionTokens))
+                .add(cost(scaledToTier(modelPrice.outputReasoningTokenPrice(), modelPrice.outputPrice(), outputPrice),
+                        reasoningTokens));
     }
 
     private static BigDecimal totalsCost(ModelPrice modelPrice, OpenAiLikeUsage usage) {
@@ -143,18 +146,21 @@ class SpanCostCalculator {
                 .orElse(0);
     }
 
-    // Claude bills 1-hour cache writes at their own rate, never below a 5-minute write. Above a tier that changes the
-    // 5-minute rate but publishes no 1-hour one, the 1-hour rate keeps its base ratio to the 5-minute rate, as Claude's
-    // own tiers do; LiteLLM keeps the base 1-hour rate there.
+    // Claude bills 1-hour cache writes at their own rate, never below a 5-minute write.
     private static BigDecimal oneHourWritePrice(ModelPrice modelPrice, int tierBasis, BigDecimal fiveMinuteWritePrice) {
-        BigDecimal baseOneHour = modelPrice.cacheCreationInputTokenPriceAbove1hr();
-        BigDecimal baseFiveMinute = modelPrice.cacheCreationInputTokenPrice();
-        BigDecimal oneHour = modelPrice
-                .applicableTier(tierBasis, ModelPrice.PromptTier::cacheCreationInputTokenPriceAbove1hr)
-                .orElse(isPositive(baseFiveMinute) && fiveMinuteWritePrice.compareTo(baseFiveMinute) != 0
-                        ? baseOneHour.multiply(fiveMinuteWritePrice).divide(baseFiveMinute, MathContext.DECIMAL64)
-                        : baseOneHour);
-        return oneHour.max(fiveMinuteWritePrice);
+        return modelPrice.applicableTier(tierBasis, ModelPrice.PromptTier::cacheCreationInputTokenPriceAbove1hr)
+                .orElse(scaledToTier(modelPrice.cacheCreationInputTokenPriceAbove1hr(),
+                        modelPrice.cacheCreationInputTokenPrice(), fiveMinuteWritePrice))
+                .max(fiveMinuteWritePrice);
+    }
+
+    // A rate no tier publishes keeps its base ratio to the rate the matched tier changes: a 1-hour cache write to the
+    // 5-minute one, as Claude's own tiers do, and reasoning and audio tokens to the text rate they're part of, as
+    // Gemini Pro's do. LiteLLM keeps the base rate there.
+    private static BigDecimal scaledToTier(BigDecimal baseRate, BigDecimal baseTextRate, BigDecimal tierTextRate) {
+        return isPositive(baseTextRate) && tierTextRate.compareTo(baseTextRate) != 0
+                ? baseRate.multiply(tierTextRate).divide(baseTextRate, MathContext.DECIMAL64)
+                : baseRate;
     }
 
     // A provider that publishes no cache rate bills its cached tokens as plain input.
