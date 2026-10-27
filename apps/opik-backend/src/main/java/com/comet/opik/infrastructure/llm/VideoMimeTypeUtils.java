@@ -38,8 +38,8 @@ public class VideoMimeTypeUtils {
     private static final Set<String> VIDEO_EXTENSIONS = Set.of(
             "mp4", "webm", "ogg", "ogv", "avi", "mov", "wmv", "flv", "mkv", "m4v", "3gp", "3g2");
 
-    private final @NonNull Client client;
-    private final @NonNull DestinationGuard destinationGuard;
+    private final Client client;
+    private final DestinationGuard destinationGuard;
 
     @Inject
     public VideoMimeTypeUtils(@NonNull Client client,

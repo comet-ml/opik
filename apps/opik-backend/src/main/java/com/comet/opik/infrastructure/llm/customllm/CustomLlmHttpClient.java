@@ -117,7 +117,7 @@ class CustomLlmHttpClient implements HttpClient {
         return multipart.build();
     }
 
-    // the JDK client's timeout ended once the headers arrived, so reading the body has none either
+    /** The JDK client's timeout ended once the headers arrived, so reading the body has none either. */
     private static ResponseBody untimedBody(Response response) {
         var body = response.body();
         body.source().timeout().clearTimeout();
@@ -136,7 +136,7 @@ class CustomLlmHttpClient implements HttpClient {
         try {
             return new String(body.readAllBytes(), StandardCharsets.UTF_8);
         } catch (IOException exception) {
-            return "Cannot read error response body: " + exception.getMessage();
+            return "Cannot read error response body, message '%s'".formatted(exception.getMessage());
         }
     }
 

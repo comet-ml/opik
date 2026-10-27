@@ -372,13 +372,15 @@ class AuthTokenProviderTest {
         wireMock.stubFor(post(urlEqualTo(TOKEN_PATH)).willReturn(aResponse()
                 .withBody(RandomStringUtils.secure().nextAlphanumeric(100_000))
                 .withChunkedDribbleDelay(20, 20_000)));
+        var expectedMaxElapsed = Duration.ofSeconds(10);
         long startNanos = System.nanoTime();
 
         // the test fetch, which skips the token cache, so only the reply is timed
         assertThatThrownBy(() -> cappedProvider.testFetch(oauthRecipe().build()))
-                .isInstanceOf(AuthTokenException.class)
+                .isExactlyInstanceOf(AuthTokenException.class)
                 .hasMessageContaining("exceeds the maximum accepted size");
-        assertThat(Duration.ofNanos(System.nanoTime() - startNanos)).isLessThan(Duration.ofSeconds(10));
+        var actualElapsed = Duration.ofNanos(System.nanoTime() - startNanos);
+        assertThat(actualElapsed).isLessThan(expectedMaxElapsed);
     }
 
     @Test

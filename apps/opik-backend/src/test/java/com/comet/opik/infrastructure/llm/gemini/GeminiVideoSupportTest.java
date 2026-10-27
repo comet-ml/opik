@@ -129,14 +129,15 @@ class GeminiVideoSupportTest {
             WIRE_MOCK.server().stubFor(head(urlPathEqualTo(path))
                     .willReturn(aResponse().withHeader("Content-Type", mimeType + "; charset=utf-8")));
             var videoUrl = WIRE_MOCK.runtimeInfo().getHttpBaseUrl() + path;
-
-            var result = GeminiLangChainMapper.INSTANCE.toChatMessageForGemini(videoMessage(videoUrl),
-                    VIDEO_MIME_TYPE_UTILS);
-
-            assertThat(result).isEqualTo(UserMessage.from(ImageContent.from(Image.builder()
+            var expectedMessage = UserMessage.from(ImageContent.from(Image.builder()
                     .url(URI.create(videoUrl))
                     .mimeType(mimeType)
-                    .build())));
+                    .build()));
+
+            var actualMessage = GeminiLangChainMapper.INSTANCE.toChatMessageForGemini(videoMessage(videoUrl),
+                    VIDEO_MIME_TYPE_UTILS);
+
+            assertThat(actualMessage).isEqualTo(expectedMessage);
         }
 
         @Test
@@ -149,13 +150,14 @@ class GeminiVideoSupportTest {
             WIRE_MOCK.server().stubFor(head(urlPathEqualTo(target))
                     .willReturn(aResponse().withHeader("Content-Type", "video/mp4")));
             var videoUrl = WIRE_MOCK.runtimeInfo().getHttpBaseUrl() + path;
+            var expectedMessage = UserMessage.from(ImageContent.from(Image.builder()
+                    .url(URI.create(videoUrl))
+                    .build()));
 
-            var result = GeminiLangChainMapper.INSTANCE.toChatMessageForGemini(videoMessage(videoUrl),
+            var actualMessage = GeminiLangChainMapper.INSTANCE.toChatMessageForGemini(videoMessage(videoUrl),
                     VIDEO_MIME_TYPE_UTILS);
 
-            assertThat(result).isEqualTo(UserMessage.from(ImageContent.from(Image.builder()
-                    .url(URI.create(videoUrl))
-                    .build())));
+            assertThat(actualMessage).isEqualTo(expectedMessage);
             WIRE_MOCK.server().verify(0, headRequestedFor(urlPathEqualTo(target)));
         }
 

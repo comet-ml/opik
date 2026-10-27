@@ -510,20 +510,22 @@ class ChatCompletionsResourceTest {
                     .willReturn(aResponse().withStatus(307).withHeader("Location", redirectTarget)));
             WIRE_MOCK.server().stubFor(any(urlPathEqualTo(redirectTarget))
                     .willReturn(okJson(SUCCESS_BODY)));
-            var expected = new ErrorMessage(HttpStatus.SC_INTERNAL_SERVER_ERROR,
+            var expectedError = new ErrorMessage(HttpStatus.SC_INTERNAL_SERVER_ERROR,
                     "Unexpected error calling LLM provider");
-
+            var expectedProtocol = "HTTP/1.1";
             var request = ChatCompletionRequest.builder().stream(false).model(MODEL).addUserMessage("ping").build();
-            assertThat(chatCompletionsClient.create(API_KEY, workspaceName, request,
-                    HttpStatus.SC_INTERNAL_SERVER_ERROR)).isEqualTo(expected);
             var streamed = ChatCompletionRequest.builder().stream(true).model(MODEL).addUserMessage("ping").build();
-            assertThat(chatCompletionsClient.createAndGetStreamedError(API_KEY, workspaceName, streamed))
-                    .containsExactly(expected);
 
+            var actualError = chatCompletionsClient.create(API_KEY, workspaceName, request,
+                    HttpStatus.SC_INTERNAL_SERVER_ERROR);
+            var actualStreamedErrors = chatCompletionsClient.createAndGetStreamedError(API_KEY, workspaceName,
+                    streamed);
+
+            assertThat(actualError).isEqualTo(expectedError);
+            assertThat(actualStreamedErrors).containsExactly(expectedError);
             WIRE_MOCK.server().verify(0, anyRequestedFor(urlPathEqualTo(redirectTarget)));
-            assertThat(WIRE_MOCK.server().findAll(postRequestedFor(urlPathMatching(CHAT_COMPLETIONS_REGEX))))
-                    .extracting(LoggedRequest::getProtocol)
-                    .containsOnly("HTTP/1.1");
+            var actualRequests = WIRE_MOCK.server().findAll(postRequestedFor(urlPathMatching(CHAT_COMPLETIONS_REGEX)));
+            assertThat(actualRequests).extracting(LoggedRequest::getProtocol).containsOnly(expectedProtocol);
         }
 
         @Test
@@ -550,10 +552,11 @@ class ChatCompletionsResourceTest {
                     HttpStatus.SC_INTERNAL_SERVER_ERROR);
 
             assertThat(actualError).isEqualTo(expectedError);
-
-            assertThat(WIRE_MOCK.server().findAll(postRequestedFor(urlPathMatching(CHAT_COMPLETIONS_REGEX))))
+            var expectedAcceptEncoding = "identity";
+            var actualRequests = WIRE_MOCK.server().findAll(postRequestedFor(urlPathMatching(CHAT_COMPLETIONS_REGEX)));
+            assertThat(actualRequests)
                     .extracting(loggedRequest -> loggedRequest.getHeader("Accept-Encoding"))
-                    .containsOnly("identity");
+                    .containsOnly(expectedAcceptEncoding);
         }
 
         @Test

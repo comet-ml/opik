@@ -167,10 +167,11 @@ class RemoteMediaInlinerTest {
                 .withBody(gzip(new byte[maxBytes + 1]))));
         List<ChatMessage> messages = List.of(
                 UserMessage.from(ImageContent.from(wireMock.runtimeInfo().getHttpBaseUrl() + mediaPath)));
+        var expectedMessage = new ProviderRequestRefusedException(MEDIA_URL_DOWNLOAD).getMessage();
 
         assertThatThrownBy(() -> gzipInliner.inline(messages))
                 .isExactlyInstanceOf(ProviderRequestRefusedException.class)
-                .hasMessage(new ProviderRequestRefusedException(MEDIA_URL_DOWNLOAD).getMessage());
+                .hasMessage(expectedMessage);
     }
 
     @Test

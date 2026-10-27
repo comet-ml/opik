@@ -8,6 +8,7 @@ import com.comet.opik.infrastructure.net.DestinationGuardDnsResolver;
 import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.core.Response;
+import org.apache.http.HttpStatus;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -49,7 +50,8 @@ class DestinationGuardJerseyClientBuilderTest {
     void setUp() {
         path = "/" + UUID.randomUUID();
         body = UUID.randomUUID().toString();
-        wireMock.server().stubFor(get(urlPathEqualTo(path)).willReturn(aResponse().withStatus(200).withBody(body)));
+        wireMock.server().stubFor(get(urlPathEqualTo(path))
+                .willReturn(aResponse().withStatus(HttpStatus.SC_OK).withBody(body)));
     }
 
     @AfterAll
@@ -68,9 +70,10 @@ class DestinationGuardJerseyClientBuilderTest {
                 .property(DestinationGuardDnsResolver.PROPERTY, STRICT)
                 .get()
                 .close())
-                .isInstanceOf(ProcessingException.class)
+                .isExactlyInstanceOf(ProcessingException.class)
                 .matches(DestinationGuardDns::isRefused);
-        assertThat(wireMock.server().findAll(anyRequestedFor(urlPathEqualTo(path)))).isEmpty();
+        var actualRequests = wireMock.server().findAll(anyRequestedFor(urlPathEqualTo(path)));
+        assertThat(actualRequests).isEmpty();
 
         try (var response = client.target(url).request().get()) {
             assertOk(response);
@@ -88,9 +91,10 @@ class DestinationGuardJerseyClientBuilderTest {
                 .get();
 
         assertThatThrownBy(future::get)
-                .isInstanceOf(ExecutionException.class)
+                .isExactlyInstanceOf(ExecutionException.class)
                 .matches(DestinationGuardDns::isRefused);
-        assertThat(wireMock.server().findAll(anyRequestedFor(urlPathEqualTo(path)))).isEmpty();
+        var actualRequests = wireMock.server().findAll(anyRequestedFor(urlPathEqualTo(path)));
+        assertThat(actualRequests).isEmpty();
     }
 
     @Test
@@ -114,7 +118,10 @@ class DestinationGuardJerseyClientBuilderTest {
     }
 
     private void assertOk(Response response) {
-        assertThat(response.getStatus()).isEqualTo(200);
-        assertThat(response.readEntity(String.class)).isEqualTo(body);
+        var actualStatus = response.getStatus();
+        var actualBody = response.readEntity(String.class);
+
+        assertThat(actualStatus).isEqualTo(HttpStatus.SC_OK);
+        assertThat(actualBody).isEqualTo(body);
     }
 }
