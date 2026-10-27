@@ -11,6 +11,7 @@ import copy
 import json
 from typing import Any
 
+import opik
 import pytest
 from opik.evaluation.metrics import score_result
 
@@ -36,6 +37,12 @@ def _flat(dataset_item: dict[str, Any], llm_output: str) -> score_result.ScoreRe
 
 def _broken_judge(dataset_item: dict[str, Any], llm_output: str) -> Any:
     raise RuntimeError("judge offline")
+
+
+def _final_status() -> str:
+    # install_fakes makes opik.Opik() return one shared fake client.
+    update = opik.Opik().create_optimization.return_value.update
+    return update.call_args.kwargs["status"]
 
 
 @pytest.mark.parametrize("scenario_name", ["S1_single", "S2_multi"])
@@ -64,6 +71,7 @@ def test_improves_the_score_without_touching_the_callers_prompt(
         "completed",
     }
     assert result.history
+    assert _final_status() == "completed"
     assert type(result.prompt) is type(scenario.prompt)
     returned = _as_dict(result.prompt)
     assert set(returned) == set(before)
@@ -143,6 +151,9 @@ def test_a_metric_that_never_scores_fails_the_run(
 
     with pytest.raises(ScoringFailedError, match="failed to score 6 of 6"):
         harness.run_optimizer(optimizer_name, scenario, metric=_broken_judge)
+
+    # Otherwise the run shows as "running" in Opik forever.
+    assert _final_status() == "error"
 
 
 @pytest.mark.parametrize("optimizer_name", harness.OPTIMIZERS)
