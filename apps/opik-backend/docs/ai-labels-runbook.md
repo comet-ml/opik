@@ -227,6 +227,36 @@ tick while it is in the window. It does not block other traces: the cap is per w
 
 ClickHouse queries of the job have a `log_comment` that starts with `topics:`.
 
+### Alerts
+
+| Alert | Condition | Check | First step |
+|---|---|---|---|
+| Churn | `churn` over 0.05 on any project's saved run. | The churn query below. | Read the run's `born`, `retired` and `forced` stats and its revise answer in the logs. A merge or a replaced topic explains a one-night jump; a high churn every night means the list does not settle. |
+| Failed runs | More than 20% of a night's finished runs failed. | `topics.runs` by `status`, or the failed-share query below. | Group the failures by `error_code`: `qwen_*` points at opik-inference, `window_read` and `save` at ClickHouse or MySQL. |
+| No saved run | A project with a list has no `saved` run for 3 nights. | The stale-project query below. | Find its runs in `topic_runs`: failed (read `error_code`), never started (`not_reached`: the budget), or skipped (under `TOPICS_NIGHTLY_MIN_VECTORS`: quiet traffic, no action). |
+
+`topics.run.churn` has no project attribute: use it for the trend, and the SQL for which project.
+
+```sql
+-- MySQL: saved runs of the last day with churn over 0.05
+SELECT run_id, workspace_id, project_id, started_at,
+       JSON_EXTRACT(stats, '$.churn') AS churn, JSON_EXTRACT(stats, '$.churn_any') AS churn_any,
+       JSON_EXTRACT(stats, '$.born') AS born, JSON_EXTRACT(stats, '$.retired') AS retired
+FROM topic_runs
+WHERE status = 'saved' AND mode = 'nightly_update' AND started_at >= NOW() - INTERVAL 1 DAY
+  AND JSON_EXTRACT(stats, '$.churn') > 0.05;
+
+-- MySQL: the failed share of the runs started since midnight UTC
+SELECT SUM(status = 'failed') / NULLIF(SUM(status <> 'running'), 0) AS failed_share
+FROM topic_runs
+WHERE started_at >= UTC_DATE();
+
+-- MySQL: projects with a list and no saved run for 3 nights
+SELECT project_id, workspace_id, last_success_at
+FROM topic_project_state
+WHERE last_success_at < UTC_DATE() - INTERVAL 2 DAY;
+```
+
 ### Deletes
 
 A vector lives as long as its trace. Retention deletes vectors with the traces (the same rules as `ai_labels`), and a
@@ -242,9 +272,9 @@ a retention policy.
 
 ## Topics nightly job
 
-Once a night the job builds each project's topic list from its topic vectors. Stage 2a has the first build only: a
-project with a saved list is skipped every night until the nightly update ships. It reads the same workspaces as
-ai-labels, and runs only with `TOPICS_ENABLED=true`.
+Once a night the job builds or updates each project's topic list from its topic vectors. A project without live topics
+gets a first build; a project with live topics gets a nightly update (see [Nightly update](#nightly-update)). It reads
+the same workspaces as ai-labels, and runs only with `TOPICS_ENABLED=true`.
 
 A first build reads the project's window (the 30 whole UTC days before the night, the newest 30,000 traces at most),
 merges identical intent texts, groups them with k-means (15 to 50 groups), asks Qwen through opik-inference
@@ -253,9 +283,9 @@ or to Other. It writes:
 
 | Table | Database | What |
 |---|---|---|
-| `topics` | MySQL | One row per topic: name, definition, `born` (the night), `size` (window traces). |
+| `topics` | MySQL | One row per topic: name, definition, `born` (the night), `size` (window traces), and the nightly update's lifecycle columns: `low_nights`, `lo7`, `hi7`, `inactive_since`, `retired_at`, `retired_reason`. A retired topic keeps its row; its id is never reused. |
 | `topic_prototypes` | MySQL | The vectors traces are assigned by, several per topic, and the known-Other ones (`topic_id` null). |
-| `topic_project_state` | MySQL | One row per project with a saved list: `rebuilds`, `last_run_id`, `window_until`. |
+| `topic_project_state` | MySQL | One row per project with a saved list: `rebuilds` (saved nights), `last_run_id`, `window_until`. |
 | `topic_runs` | MySQL | One row per run: `running`, then `saved` or `failed` with `error_code`. Kept 90 days. |
 | `trace_topics` | ClickHouse | One row per window trace and run: its `topic_id`, the all-zeros id for Other. The latest row wins. |
 
@@ -270,10 +300,11 @@ or to Other. It writes:
 | `TOPICS_NIGHTLY_MIN_VECTORS` | `100` | A project is built when its window holds at least this many traces with a vector. |
 | `TOPICS_NIGHTLY_WINDOW_DAYS` | `30` | The window, in whole UTC days before the night. |
 | `TOPICS_NIGHTLY_MAX_VECTORS` | `30000` | A larger window keeps its newest traces. |
-| `TOPICS_NIGHTLY_QWEN_DEADLINE` | `120s` | The deadline of the Qwen call. The call uses the `batch` lane, which takes up to 300s. |
+| `TOPICS_NIGHTLY_QWEN_DEADLINE` | `120s` | The deadline of the first build's author call and the nightly update's revise call. The verify (60s) and naming (30s) deadlines are fixed. Every call uses the `batch` lane, which takes up to 300s. |
 | `TOPICS_NIGHTLY_RUNS_RETENTION` | `90d` | `topic_runs` rows are deleted after this. |
 
-To turn it off, set `TOPICS_NIGHTLY_ENABLED=false` and restart. Saved lists stay.
+To turn it off, set `TOPICS_NIGHTLY_ENABLED=false` and restart. Saved lists stay and freeze at their last saved night.
+This is also the rollback of the nightly update.
 
 ### How a night runs
 
@@ -281,25 +312,93 @@ To turn it off, set `TOPICS_NIGHTLY_ENABLED=false` and restart. Saved lists stay
   the lock until it expires (budget + project timeout + 5 minutes), so no other pod runs the same night.
 - The night first fails runs left `running` by an earlier night (`error_code = 'abandoned'`), and deletes runs older
   than the retention.
-- It counts each enabled workspace's projects in the window, drops those under `TOPICS_NIGHTLY_MIN_VECTORS` and those
-  with a saved list, and runs the rest smallest first, one at a time.
+- It counts each enabled workspace's projects in the window, drops those under `TOPICS_NIGHTLY_MIN_VECTORS`, and runs
+  the rest smallest first, one at a time: a `nightly_update` for a project with live topics, else a `first_build`.
 - Each run holds the Redis lock `topics:project:<project_id>`, so a run started by hand and the night never build the
   same project at once.
 - A first build under 1,000 traces is saved with `"provisional": true` in its stats.
 
-A failed run writes nothing but its `topic_runs` row; the project is built again the next night.
+A failed run writes nothing but its `topic_runs` row; the project runs again the next night. A skipped or failed
+night does not count: the lifecycle counters and `rebuilds` change only on a saved run.
 
 | `error_code` | Meaning |
 |---|---|
-| `qwen_timeout` | The Qwen call ran out of `TOPICS_NIGHTLY_QWEN_DEADLINE`. |
-| `qwen_error` | The Qwen call failed after its 2 retries, or with a 4xx. `error_message` has the code and HTTP status. |
-| `qwen_bad_answer` | Qwen's answer has no JSON object, or breaks the schema. The answer is in the logs. |
-| `window_read` | The ClickHouse window read failed, or the window had no usable vector. |
-| `invariant` | A check before the save failed: more than 10 topics, a blank or catch-all name, a prototype not of unit length, a trace not labelled once. |
+| `qwen_timeout` | The author or revise call ran out of `TOPICS_NIGHTLY_QWEN_DEADLINE`. |
+| `qwen_error` | The author or revise call failed after its 2 retries, or with a 4xx. `error_message` has the call's kind, code and HTTP status. |
+| `qwen_bad_answer` | The author or revise answer is not a JSON object, or the author answer breaks the schema. The answer is in the logs. |
+| `window_read` | The ClickHouse window read failed, the window had no usable vector, or the nightly update could not read last night's labels. |
+| `invariant` | A check before the save failed: more than 10 live topics, a retired id live again, a renamed topic, a new topic not born tonight, a blank or catch-all name, a prototype not of unit length, a trace not labelled once or labelled with a retired topic. |
 | `timeout` | The run outlasted `TOPICS_NIGHTLY_PROJECT_TIMEOUT`, or the job was interrupted. |
 | `save` | The ClickHouse insert or the MySQL transaction failed. A ClickHouse insert that went through leaves `trace_topics` rows no saved run points at; the next saved run replaces them. |
 | `abandoned` | The pod stopped during the run. |
 | `internal` | A bug: read the logs for the run id. |
+
+### Nightly update
+
+A project with live topics keeps its list and updates it. The run reads the window and the saved list (live topics,
+their prototypes, the known-Other prototypes, `rebuilds`), then:
+
+1. On a review night the known-Other prototypes are dropped: the Other memory expires weekly.
+2. Every window trace goes to its nearest prototype at cosine 0.75: a topic, known Other, or unassigned.
+3. Each topic's prototypes move to its members of tonight (k-means, 1 to 10 prototypes by member count); so do the
+   known-Other ones.
+4. When 20 or more traces are unassigned, they are grouped by k-means. A group of 20 or more traces is a candidate. A
+   candidate is big when its share of the window, or of the last 7 days, is 2% or more.
+5. Qwen is called only when there is a big candidate or it is a review night. Most nights make no call.
+   - `revise` (`revise_v4.md`, or `revise_review_v4.md` on review nights): assign candidates to topics, create new
+     topics (not when the list holds 10), send candidates to Other; on review nights also merge, retire and redefine
+     topics. A failed revise fails the run.
+   - `verify` (`verify_batch.md`): one call checks every candidate given to a topic. A rejected or unanswered pair is
+     undone. A failed verify undoes every pair and the run goes on.
+   - `naming` (`naming.md`), one call per big candidate left without a topic and tight enough (0.80): it becomes a
+     new topic. On a full list it replaces the topic (not born tonight) with the lowest 7-day share, if that share is
+     below the candidate's. A loose candidate, a full list with no such topic, a catch-all name or a failed naming
+     call send it to known Other, and the run goes on.
+6. The centre of each candidate given to a topic becomes one more prototype of that topic; one given to Other becomes
+   a known-Other prototype.
+7. Every window trace is assigned again, as in the first build (cosine 0.75, the 0.95 gate on known Other).
+8. Lifecycle, then a reassignment when a topic was retired:
+   - `low_nights` counts saved nights in a row under 0.5% of the window; at 3 the topic is retired (`low_share`). A
+     topic born after the first build is measured from 7 days before its birth (newborn protection).
+   - More than 10 live topics: the smallest is retired (`cap`).
+   - Inactive is a display state, not a retirement: 3 nights in a row under 0.5% of the last 7 days set
+     `inactive_since` (`lo7` counts them); 2 nights at 1% or more clear it (`hi7`). An inactive topic still counts
+     traces and can still be retired.
+   - New is a display state too: born less than 7 days ago.
+
+`retired_reason` is one of `low_share`, `cap`, `merged` (dropped by a review night's merge), `review` (retired by a
+review night's answer) or `replaced` (replaced by a forced new topic on a full list).
+
+The save writes tonight's `trace_topics` rows, then in one MySQL transaction: tonight's new topics, the changed
+columns of the topics it read, the project's prototypes (replaced), and `rebuilds` + 1.
+
+#### Review nights
+
+A review night is a run whose `rebuilds` (saved nights before it) is a multiple of 7, above 0: every 7th saved night.
+On a review night the known-Other memory is dropped, and Qwen gets the review prompt, which may also merge, retire and
+redefine topics (a redefine keeps the name). A run is also a review when it has a big candidate and the list already
+holds 10 topics (`"review": true`, `"review_night": false` in its stats).
+
+To force a review night by hand, set `rebuilds` to the next multiple of 7. The next saved night is a review night, and
+the weekly cadence moves with it. `rebuilds` also seeds the night's k-means, so the candidate groups change too.
+
+```sql
+-- MySQL: make the project's next night a review night
+UPDATE topic_project_state SET rebuilds = 7 * CEIL(rebuilds / 7)
+WHERE project_id = '<project_id>' AND rebuilds > 0;
+```
+
+#### Churn
+
+Before writing tonight's labels, the run reads last night's label of each window trace. Over the traces labelled on
+both nights:
+
+- `churn_any` is the share whose label changed, Other included;
+- `churn` is the same over the traces in a topic on both nights: a trace that moved from one topic to another.
+
+A trace that moved to or from Other counts in `churn_any` only. A retired topic's traces moving to Other raise
+`churn_any`, not `churn`. Both are null on a night with no trace labelled the night before. A stable list stays near 0:
+the target for a project is a mean `churn` under 0.01 over two weeks, with no night over 0.05.
 
 ### Tonight's runs
 
@@ -307,16 +406,40 @@ A failed run writes nothing but its `topic_runs` row; the project is built again
 -- MySQL: the runs started since midnight UTC, newest first
 SELECT run_id, workspace_id, project_id, mode, status, error_code, started_at, finished_at,
        JSON_EXTRACT(stats, '$.vectors') AS vectors, JSON_EXTRACT(stats, '$.topics') AS topics,
-       JSON_EXTRACT(stats, '$.other_share') AS other_share, JSON_EXTRACT(stats, '$.provisional') AS provisional
+       JSON_EXTRACT(stats, '$.other_share') AS other_share, JSON_EXTRACT(stats, '$.provisional') AS provisional,
+       JSON_EXTRACT(stats, '$.review') AS review, JSON_EXTRACT(stats, '$.born') AS born,
+       JSON_EXTRACT(stats, '$.retired') AS retired, JSON_EXTRACT(stats, '$.churn') AS churn,
+       JSON_EXTRACT(stats, '$.churn_any') AS churn_any
 FROM topic_runs
 WHERE started_at >= UTC_DATE()
 ORDER BY started_at DESC;
 
--- MySQL: a project's live topics
-SELECT name, size, born, definition FROM topics
+-- MySQL: a project's live topics with their lifecycle state
+SELECT name, size, born, inactive_since, low_nights, lo7, hi7, definition FROM topics
 WHERE project_id = '<project_id>' AND retired_at IS NULL
 ORDER BY size DESC;
+
+-- MySQL: a project's retired topics
+SELECT name, born, retired_at, retired_reason, size FROM topics
+WHERE project_id = '<project_id>' AND retired_at IS NOT NULL
+ORDER BY retired_at DESC;
 ```
+
+A nightly update's `stats` holds, besides `vectors`, `topics`, `other_share`, `seconds` and `task_version_shares`:
+
+| Key | Meaning |
+|---|---|
+| `mode` | `nightly_update`. |
+| `rebuilds_before`, `topics_before` | `rebuilds` and the live topics the run started from. |
+| `review_night`, `review` | A review night by `rebuilds`; a review at all (also forced by a full list). |
+| `unassigned`, `candidates`, `big` | Traces no prototype took at 0.75; candidate groups; big ones. `big` 0 and `review` false mean no Qwen call. |
+| `verify_pairs`, `verify_failed` | Pairs sent to verify; true when the call failed and every pair was undone. |
+| `forced` | Big candidates left without a topic, by outcome: `born`, `other_loose`, `other_full`, `other_name`. |
+| `born`, `retired` | Names of tonight's new topics; tonight's retirements by reason. |
+| `other_prototypes` | Known-Other prototypes after the night. |
+| `churn`, `churn_any` | See [Churn](#churn). |
+| `qwen_calls`, `qwen` | The number of calls, and per call its `kind` (`revise`, `verify`, `naming`), `outcome` and tokens. |
+| `seconds` | Phases: `window`, `state`, `update`, `churn`, `save`. |
 
 ```sql
 -- ClickHouse: a project's trace counts per topic in the last saved window
@@ -332,9 +455,11 @@ GROUP BY topic_id
 ORDER BY traces DESC;
 ```
 
-Each run logs at INFO, by run id: the author prompt, Qwen's raw answer with its token counts, and one line with the
-window, vectors, unique texts, k, seed, the topics with their sizes, the Other share and the phase timings. Search the
-logs for `Topics run '<run_id>'`.
+Each run logs at INFO, by run id: every prompt (author, or revise, verify and naming), Qwen's raw answer to each with
+its token counts, and one summary line. A first build's line has the window, vectors, unique texts, k, seed, the
+topics with their sizes, the Other share and the phase timings; a nightly update's has the review flag, the
+unassigned, candidates and big counts, the topics born and retired, the Other share, the churn and the timings. Search
+the logs for `Topics run '<run_id>'`.
 
 ### Running a project by hand
 
@@ -347,8 +472,8 @@ curl -X POST "http://<opik-backend>:8080/v1/internal/topics/projects/<project_id
 It answers `202` with the `run_id`, and the run goes on in the background with the same timeout; read its outcome in
 `topic_runs`. The night is today (UTC), so the window ends at today's start. Add `&night=yyyy-MM-dd` for another
 night's window; `night` is at most tomorrow, whose window holds today's traces so far. It answers `409` when a run of the project
-is in progress, or the project already has a list (stage 2a builds a project once), and `501` when `TOPICS_ENABLED` is
-off. It does not check the workspace's ai-labels opt-in or `TOPICS_NIGHTLY_MIN_VECTORS`.
+is in progress, or the project already has a list (a run by hand is a first build only; the night updates a list),
+and `501` when `TOPICS_ENABLED` is off. It does not check the workspace's ai-labels opt-in or `TOPICS_NIGHTLY_MIN_VECTORS`.
 
 To build a project that already has a list again (for example after a bad first build), delete its list first. Its
 `trace_topics` rows stay until the new run replaces them:
@@ -364,10 +489,14 @@ DELETE FROM topic_project_state WHERE project_id = '<project_id>';
 
 | Metric | Meaning |
 |---|---|
-| `topics.nightly.projects` by `decision` | Projects the night looked at: `skip` (under the minimum, a list already built, or held by a run started by hand), `first_build`, `not_reached` (the budget ran out: they run the next night). `not_reached` above zero means the budget is too short. |
+| `topics.nightly.projects` by `decision` | Projects the night looked at: `skip` (under the minimum, or held by a run started by hand), `first_build`, `nightly_update`, `not_reached` (the budget ran out: they run the next night). `not_reached` above zero means the budget is too short. |
 | `topics.runs` by `status`, `error_code` | Finished runs. |
-| `topics.run.duration_seconds` by `phase` | Time in `window` (ClickHouse read), `kmeans`, `qwen`, `assign`, `save`. |
-| `topics.qwen.calls` by `outcome` | `ok`, `timeout`, `error`, `bad_answer`. |
+| `topics.run.duration_seconds` by `phase` | Time in `window` (ClickHouse read), `kmeans`, `qwen`, `assign`, `save` (first build); `window`, `state`, `update`, `churn`, `save` (nightly update). |
+| `topics.qwen.calls` by `kind`, `outcome` | `kind` is `author`, `revise`, `verify` or `naming`; `outcome` is `ok`, `timeout`, `error` or `bad_answer`. Failed `verify` and `naming` calls do not fail the run. |
+| `topics.topics.live` | Live topics of a project after each saved run. |
+| `topics.topics.born` by `mode` | Topics born by saved runs. A few a week per project is normal; many every night means the list does not settle. |
+| `topics.topics.retired` by `reason` | `low_share`, `cap`, `merged`, `review`, `replaced`. |
+| `topics.run.churn`, `topics.run.churn_any` | Per saved nightly update, see [Churn](#churn). |
 | `topics.save.rows` by `table` | Rows saved runs wrote. |
 | `topics.nightly.budget_used_seconds` | Wall time of each night. Near `TOPICS_NIGHTLY_BUDGET` means projects will soon be `not_reached`. |
 
