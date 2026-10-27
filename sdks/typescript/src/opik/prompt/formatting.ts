@@ -100,11 +100,17 @@ jinja2Env.addGlobal(
       from = 0;
       by = 1;
     } else if (by === undefined) {
-      // Only an omitted step defaults to 1; a 0 step is invalid (as in Python).
+      // Only an omitted step defaults to 1; everything else is validated below.
       by = 1;
     }
-    if (by === 0) {
-      throw new Error("range() step must not be zero");
+    // Number.isFinite rejects non-numbers (null/NaN/Infinity) without coercion.
+    // A null/NaN step would otherwise stall a descending range until the cap or
+    // silently produce wrong results, and a non-finite bound is meaningless.
+    if (!Number.isFinite(by) || by === 0) {
+      throw new Error("range() step must be a non-zero finite number");
+    }
+    if (!Number.isFinite(from) || !Number.isFinite(to)) {
+      throw new Error("range() bounds must be finite numbers");
     }
     // Enforce the cap while iterating so the element count never relies on a
     // `to - from` subtraction (which can overflow to Infinity for large

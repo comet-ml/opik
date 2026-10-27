@@ -511,6 +511,17 @@ describe("Prompt - format()", () => {
         ).toThrow(PromptValidationError);
       });
 
+      it("should reject a null or NaN range step", () => {
+        const prompt = makeJinja2Prompt("{{ range(start, stop, step) | length }}");
+
+        expect(() =>
+          prompt.format({ start: 0, stop: 3, step: null })
+        ).toThrow(PromptValidationError);
+        expect(() =>
+          prompt.format({ start: 0, stop: 3, step: NaN })
+        ).toThrow(PromptValidationError);
+      });
+
       it("should not execute a constructor call chain", () => {
         const prompt = makeJinja2Prompt(
           "{{ range.constructor('return 7')() }}"
