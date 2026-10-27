@@ -136,15 +136,66 @@ describe("usePlaygroundExperimentItem", () => {
     expect(first.result.current.notRun).toBe(false);
   });
 
-  // A stopped run's status is written the moment the stop is asked for, while items already with a
-  // provider are still landing. Only the finish stamp says those have had their chance.
-  it("should keep waiting while a stopped run may still be landing items", async () => {
+  // A stopped run's status is written the moment the stop is asked for, while the finish stamp can
+  // wait for the sibling variant's work to drain. The row says so at the status, not the stamp.
+  it("should label a stopped row cancelled before the run has drained", async () => {
     finishedAt = null;
+
+    const { result } = renderItem();
+
+    await waitFor(() => expect(result.current.notRun).toBe(true));
+    expect(result.current.cancelled).toBe(true);
+    expect(result.current.hasItem).toBe(false);
+  });
+
+  // Rows read before the cancel was seen cannot show the items written just before it, so they
+  // keep the loader rather than flashing "Cancelled" over output about to render.
+  it("should not label a row cancelled from rows read before the cancel was seen", async () => {
+    finishedAt = null;
+    rowsReadAt = experimentReadAt - 1_000;
 
     const { result } = renderItem();
 
     await waitFor(() => expect(result.current.hasItem).toBe(false));
     expect(result.current.notRun).toBe(false);
+  });
+
+  // Items already with a consumer when the stop landed still finish, after the label is up.
+  it("should replace the label with an item that lands after the stop", async () => {
+    finishedAt = null;
+    const { result, rerender } = renderItem();
+    await waitFor(() => expect(result.current.cancelled).toBe(true));
+
+    rows = [
+      {
+        experiment_items: [
+          {
+            dataset_item_id: DATASET_ITEM_ID,
+            created_at: "2026-10-01T00:00:00Z",
+            trace_id: "trace-1",
+            output: { output: "landed after the stop" },
+          },
+        ],
+      },
+    ];
+    rowsReadAt += 3_000;
+    rerender({ id: EXPERIMENT_ID });
+
+    expect(result.current.hasItem).toBe(true);
+    expect(result.current.notRun).toBe(false);
+    expect(result.current.cancelled).toBe(false);
+    expect(result.current.output).toBe("landed after the stop");
+  });
+
+  it("should pin the cancel to the experiment it was seen for", async () => {
+    finishedAt = null;
+    const first = renderItem();
+    await waitFor(() => expect(first.result.current.cancelled).toBe(true));
+
+    experimentReadAt = rowsReadAt + 1_000;
+    first.rerender({ id: "experiment-2" });
+
+    expect(first.result.current.notRun).toBe(false);
   });
 
   // A cancelled run can carry a null stamp for good: purgeIfCancelledWhilePublishing swallows a

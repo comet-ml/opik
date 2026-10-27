@@ -4,6 +4,7 @@ import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
+import com.comet.opik.infrastructure.llm.LlmTestClients;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
@@ -64,7 +65,7 @@ class GeminiClientGeneratorTest {
         clientConfig.setCallTimeout(Duration.seconds(10));
         clientConfig.setLogRequests(false);
         clientConfig.setLogResponses(false);
-        generator = new GeminiClientGenerator(clientConfig);
+        generator = new GeminiClientGenerator(clientConfig, LlmTestClients.REMOTE_MEDIA_INLINER);
     }
 
     @AfterAll

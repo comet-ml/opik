@@ -4,6 +4,7 @@ import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.LlmProviderService;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
+import com.comet.opik.infrastructure.llm.LlmTestClients;
 import com.comet.opik.utils.JsonUtils;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
@@ -67,7 +68,8 @@ class OpenRouterErrorMessageTest {
         clientConfig.setLogResponses(false);
         clientConfig.setOpenRouterUrl(wireMock.baseUrl() + "/api/v1");
 
-        var clientGenerator = new OpenRouterModule().clientGenerator(clientConfig);
+        var clientGenerator = new OpenRouterModule().clientGenerator(clientConfig,
+                LlmTestClients.RESPONSES_API_HTTP_CLIENT);
         provider = new OpenRouterLlmServiceProvider(clientGenerator, mock(LlmProviderFactory.class))
                 .getService(LlmProviderClientApiConfig.builder().apiKey("test-key").build());
     }

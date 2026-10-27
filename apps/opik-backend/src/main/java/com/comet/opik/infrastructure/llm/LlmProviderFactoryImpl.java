@@ -13,6 +13,7 @@ import com.comet.opik.domain.llm.structuredoutput.ToolCallingStrategy;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.llm.antropic.AnthropicModelName;
 import com.comet.opik.infrastructure.llm.customllm.CustomLlmModelNameChecker;
+import com.comet.opik.infrastructure.llm.customllm.ProviderBaseUrlGuard;
 import com.comet.opik.infrastructure.llm.gemini.GeminiModelName;
 import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterDecisionModel;
@@ -30,10 +31,12 @@ import org.apache.commons.lang3.StringUtils;
 
 import java.util.Arrays;
 import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -48,6 +51,7 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
     private final @NonNull LlmProviderApiKeyService llmProviderApiKeyService;
     private final @NonNull OpikConfiguration configuration;
     private final @NonNull LlmModelRegistryService registryService;
+    private final @NonNull ProviderBaseUrlGuard providerBaseUrlGuard;
     private final Map<LlmProvider, LlmServiceProvider> services = new EnumMap<>(LlmProvider.class);
 
     public void register(LlmProvider llmProvider, LlmServiceProvider service) {
@@ -70,11 +74,33 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
         return buildConfig(getProviderApiKey(workspaceId, llmProvider, model), workspaceId);
     }
 
+    // OPIK_FREE's URL is operator-configured; any other base URL is the workspace's own
+    public boolean hasUserConfiguredDestination(@NonNull String workspaceId, @NonNull String model) {
+        var llmProvider = getLlmProvider(model);
+        return llmProvider != LlmProvider.OPIK_FREE
+                && StringUtils.isNotBlank(getProviderApiKey(workspaceId, llmProvider, model).baseUrl());
+    }
+
     private static final Set<LlmProvider> NAMED_PROVIDERS = Arrays.stream(LlmProvider.values())
             .filter(LlmProvider::supportsProviderName)
             .collect(Collectors.toUnmodifiableSet());
 
+    // Not Anthropic: ModelCapabilities applies the Claude rules, which read a param the catalog leaves out as refused.
+    private static final Set<LlmProvider> CATALOG_PARAMS_PROVIDERS = EnumSet.of(LlmProvider.OPEN_AI,
+            LlmProvider.GEMINI, LlmProvider.VERTEX_AI);
+
+    /**
+     * OPIK_FREE's URL is operator-configured; the others always build their client through
+     * CustomLlmClientGenerator, which checks every request URL itself.
+     */
+    private static final Set<LlmProvider> BASE_URL_GUARD_EXEMPT_PROVIDERS = Set.of(
+            LlmProvider.OPIK_FREE, LlmProvider.CUSTOM_LLM, LlmProvider.BEDROCK, LlmProvider.OLLAMA);
+
     private LlmProviderClientApiConfig buildConfig(ProviderApiKey providerConfig, String workspaceId) {
+        if (!BASE_URL_GUARD_EXEMPT_PROVIDERS.contains(providerConfig.provider())) {
+            providerBaseUrlGuard.validate(providerConfig.baseUrl());
+        }
+
         var configuration = Optional.ofNullable(providerConfig.configuration()).orElse(Map.of());
 
         // For providers that support naming, add provider_name to configuration if present
@@ -98,35 +124,39 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
 
     public ChatModel getLanguageModel(@NonNull String workspaceId,
             @NonNull LlmAsJudgeModelParameters modelParameters) {
-        var llmProvider = getLlmProvider(modelParameters.name());
-        var providerConfig = getProviderApiKey(workspaceId, llmProvider, modelParameters.name());
-        var config = buildConfig(providerConfig, workspaceId);
-
-        return Optional.ofNullable(services.get(llmProvider))
-                .map(provider -> provider.getLanguageModel(config, modelParameters))
-                .orElseThrow(() -> new BadRequestException(
-                        String.format(ERROR_MODEL_NOT_SUPPORTED, modelParameters.name())));
+        return judgeModel(workspaceId, modelParameters,
+                (provider, config) -> provider.getLanguageModel(config, modelParameters));
     }
 
     public ChatModel getToolCallingLanguageModel(@NonNull String workspaceId,
             @NonNull LlmAsJudgeModelParameters modelParameters) {
+        return judgeModel(workspaceId, modelParameters,
+                (provider, config) -> provider.getToolCallingLanguageModel(config, modelParameters,
+                        toolsOf(modelParameters.name())));
+    }
+
+    private ChatModel judgeModel(String workspaceId, LlmAsJudgeModelParameters modelParameters,
+            BiFunction<LlmServiceProvider, LlmProviderClientApiConfig, ChatModel> newModel) {
         var llmProvider = getLlmProvider(modelParameters.name());
         var providerConfig = getProviderApiKey(workspaceId, llmProvider, modelParameters.name());
         var config = buildConfig(providerConfig, workspaceId);
-        var tools = toolsOf(modelParameters.name());
 
         return Optional.ofNullable(services.get(llmProvider))
-                .map(provider -> provider.getToolCallingLanguageModel(config, modelParameters, tools))
+                .map(provider -> newModel.apply(provider, config))
                 .orElseThrow(() -> new BadRequestException(
                         String.format(ERROR_MODEL_NOT_SUPPORTED, modelParameters.name())));
     }
 
     private ModelParams.ToolsParam toolsOf(String model) {
         return registryService.findModel(model)
-                .map(result -> ObjectUtils.getIfNull(result.model().params(),
-                        () -> registryService.paramsOf(result.provider().getValue(), result.model().id())))
+                .map(this::catalogParams)
                 .map(ModelParams::tools)
                 .orElse(null);
+    }
+
+    private ModelParams catalogParams(LlmModelRegistryService.ModelLookupResult result) {
+        return ObjectUtils.getIfNull(result.model().params(),
+                () -> registryService.paramsOf(result.provider().getValue(), result.model().id()));
     }
 
     /**
@@ -156,11 +186,10 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
     }
 
     @Override
-    public Optional<ModelParams> openAiParams(@NonNull String model) {
+    public Optional<ModelParams> catalogParams(@NonNull String model) {
         return registryService.findModel(model)
-                .filter(result -> result.provider() == LlmProvider.OPEN_AI)
-                .map(result -> ObjectUtils.getIfNull(result.model().params(),
-                        () -> registryService.paramsOf(LlmProvider.OPEN_AI.getValue(), result.model().id())));
+                .filter(result -> CATALOG_PARAMS_PROVIDERS.contains(result.provider()))
+                .map(this::catalogParams);
     }
 
     private LlmProvider getLlmProviderFromEnums(@NonNull String model) {

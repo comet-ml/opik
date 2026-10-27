@@ -78,8 +78,8 @@ public class FreeModelServiceProvider implements LlmServiceProvider {
                 // Treat insufficient_quota (429, out-of-credits) as non-retryable so the model's
                 // internal retry does not keep hitting an exhausted key.
                 .httpClientBuilder(QuotaAwareHttpClient.builder())
-                .logRequests(true)
-                .logResponses(true);
+                .logRequests(llmProviderClientConfig.getLogRequests())
+                .logResponses(llmProviderClientConfig.getLogResponses());
 
         Optional.ofNullable(llmProviderClientConfig.getConnectTimeout())
                 .ifPresent(connectTimeout -> builder.timeout(connectTimeout.toJavaDuration()));
@@ -101,7 +101,7 @@ public class FreeModelServiceProvider implements LlmServiceProvider {
         Optional.ofNullable(transformedParameters.seed()).ifPresent(builder::seed);
         // Same reason as FreeModelLlmProvider: gpt-5-nano defaults to medium effort, which makes a judge slow.
         if (freeModelConfig.isReasoningModel()) {
-            builder.reasoningEffort("minimal");
+            builder.reasoningEffort(FreeModelConfig.OPENAI_REASONING_MODEL_EFFORT);
         }
 
         return builder.build();

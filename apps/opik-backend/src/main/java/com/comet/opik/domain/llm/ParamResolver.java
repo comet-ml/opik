@@ -58,6 +58,8 @@ public class ParamResolver {
     private static final String TEMPERATURE = "temperature";
     private static final String TOP_P = "top_p";
     private static final String REASONING_EFFORT = "reasoning_effort";
+    private static final String REASONING = "reasoning";
+    private static final String EFFORT = "effort";
     private static final String THINKING = "thinking";
     private static final String LEVEL = "level";
     private static final String THINKING_LEVEL = THINKING + "." + LEVEL;
@@ -109,7 +111,7 @@ public class ParamResolver {
             changes.add(new ParamChange(TOP_P, ParamChange.Reason.EXCLUSIVE_SAMPLING));
         }
 
-        var params = openAiParams(model, route);
+        var params = catalogParams(model, route);
         if (params.isPresent()) {
             var modelParams = params.get();
             var effectiveParams = route == null || modelParams.routes() == null
@@ -173,7 +175,7 @@ public class ParamResolver {
         var model = parameters.name();
         var changes = new ArrayList<ParamChange>();
         var resolved = parameters;
-        var catalogParams = openAiParams(model, null);
+        var catalogParams = catalogParams(model, null);
 
         var offeredLevel = judgeThinkingLevel(parameters.customParameters())
                 .flatMap(level -> nearestOfferedThinkingLevel(model, level));
@@ -206,12 +208,13 @@ public class ParamResolver {
         // A rule made through the API can carry an effort its model has no levels for, and gpt-4o-mini answers
         // "Unrecognized request argument supplied: reasoning_effort". The rule editor never offers one there.
         if (resolved.customParameters() instanceof ObjectNode customParameters
-                && customParameters.has(REASONING_EFFORT)
                 && catalogParams.map(ModelParams::effort).filter(this::isRefused).isPresent()) {
             var kept = customParameters.deepCopy();
-            kept.remove(REASONING_EFFORT);
-            resolved = resolved.toBuilder().customParameters(kept.isEmpty() ? null : kept).build();
-            changes.add(new ParamChange(REASONING_EFFORT, ParamChange.Reason.REFUSED_BY_MODEL));
+            var removed = removeReasoningEffort(kept);
+            if (!removed.isEmpty()) {
+                resolved = resolved.toBuilder().customParameters(kept.isEmpty() ? null : kept).build();
+                removed.forEach(param -> changes.add(new ParamChange(param, ParamChange.Reason.REFUSED_BY_MODEL)));
+            }
         }
 
         return changes.isEmpty()
@@ -219,12 +222,28 @@ public class ParamResolver {
                 : new Resolution<>(resolved, List.copyOf(changes));
     }
 
+    // The Responses-shaped reasoning object carries the same effort, but the rest of it, such as summary, can still
+    // apply to a reasoning model whose catalog row lists no effort levels.
+    public static List<String> removeReasoningEffort(@NonNull ObjectNode customParameters) {
+        var removed = new ArrayList<String>();
+        if (customParameters.remove(REASONING_EFFORT) != null) {
+            removed.add(REASONING_EFFORT);
+        }
+        if (customParameters.get(REASONING) instanceof ObjectNode reasoning && reasoning.remove(EFFORT) != null) {
+            removed.add(REASONING + "." + EFFORT);
+            if (reasoning.isEmpty()) {
+                customParameters.remove(REASONING);
+            }
+        }
+        return removed;
+    }
+
     // Only OpenAI keys have a route, so an id the registry doesn't list still gets the OpenAI profile there.
-    private Optional<ModelParams> openAiParams(String model, String route) {
+    private Optional<ModelParams> catalogParams(String model, String route) {
         if (model == null) {
             return Optional.empty();
         }
-        return llmProviderFactory.openAiParams(model)
+        return llmProviderFactory.catalogParams(model)
                 .or(() -> route == null
                         ? Optional.empty()
                         : Optional.ofNullable(registryService.paramsOf(LlmProvider.OPEN_AI.getValue(), model)));
@@ -299,8 +318,8 @@ public class ParamResolver {
         return refusedByModel ? ParamChange.Reason.REFUSED_BY_MODEL : ParamChange.Reason.REFUSED_BY_ROUTE;
     }
 
-    // A param the catalog leaves out counts as accepted: an OpenAI model keeps every setting its catalog row doesn't
-    // refuse. ModelCapabilities.isAccepted reads a missing Claude param the other way on purpose.
+    // A param the catalog leaves out counts as accepted: an OpenAI, Gemini or Vertex AI model keeps every setting its
+    // catalog row doesn't refuse. ModelCapabilities.isAccepted reads a missing Claude param the other way on purpose.
     private boolean isRefused(NumberParam param) {
         return param != null && Boolean.FALSE.equals(param.accepted());
     }
