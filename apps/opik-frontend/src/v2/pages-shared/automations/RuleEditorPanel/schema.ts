@@ -297,8 +297,8 @@ const LLMJudgeBaseSchema = z.object({
     thinkingEffort: z
       .enum(["off", ...ANTHROPIC_THINKING_EFFORT_VALUES])
       .optional(),
-    // OpenAI's sits under custom_parameters.reasoning_effort, OpenRouter's under
-    // custom_parameters.reasoning.effort.
+    // OpenAI's sits under custom_parameters.reasoning_effort (or reasoning.effort, next to other
+    // reasoning keys), OpenRouter's under custom_parameters.reasoning.effort.
     reasoningEffort: z.enum(OPENAI_REASONING_EFFORT_VALUES).optional(),
   }),
   template: z.nativeEnum(LLM_JUDGE),
@@ -713,11 +713,32 @@ const getPersistedReasoningEffort = (
   const provider = getReasoningEffortProvider(model);
   if (!provider || !isPlainObject(customParameters)) return undefined;
   const params = customParameters as Record<string, unknown>;
+  const nested = (params.reasoning as { effort?: unknown } | undefined)?.effort;
   const stored =
     provider === PROVIDER_TYPE.OPEN_ROUTER
-      ? (params.reasoning as { effort?: unknown } | undefined)?.effort
-      : params.reasoning_effort;
+      ? nested
+      : params.reasoning_effort ?? nested;
   return OPENAI_REASONING_EFFORT_VALUES.find((level) => level === stored);
+};
+
+const withOpenAIReasoningEffort = (
+  customParameters: Record<string, unknown>,
+  effort: OpenAIReasoningEffort | undefined,
+): Record<string, unknown> => {
+  const rest = omit(customParameters, "reasoning_effort");
+  const reasoning = isPlainObject(rest.reasoning)
+    ? omit(rest.reasoning as Record<string, unknown>, "effort")
+    : undefined;
+  // On the Responses API a stored reasoning object replaces the one built from reasoning_effort as a
+  // whole, so next to other keys such as summary the effort has to sit inside it to reach the model.
+  if (reasoning && !isEmpty(reasoning)) {
+    return {
+      ...rest,
+      reasoning: effort ? { ...reasoning, effort } : reasoning,
+    };
+  }
+  const flat = reasoning ? omit(rest, "reasoning") : rest;
+  return effort ? { ...flat, reasoning_effort: effort } : flat;
 };
 
 const withReasoningEffort = (
@@ -726,9 +747,7 @@ const withReasoningEffort = (
   effort: OpenAIReasoningEffort | undefined,
 ): Record<string, unknown> => {
   if (getReasoningEffortProvider(model) === PROVIDER_TYPE.OPEN_AI) {
-    return effort
-      ? { ...customParameters, reasoning_effort: effort }
-      : omit(customParameters, "reasoning_effort");
+    return withOpenAIReasoningEffort(customParameters, effort);
   }
   // Rebuilding a non-object reasoning would hide the 400 OpenRouter gives the malformed value.
   if (

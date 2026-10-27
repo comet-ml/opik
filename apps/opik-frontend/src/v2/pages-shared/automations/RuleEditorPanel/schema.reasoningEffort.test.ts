@@ -165,6 +165,82 @@ describe("LLM judge OpenAI effort and the key's mode", () => {
   });
 });
 
+describe("LLM judge OpenAI effort in a Responses-shaped reasoning object", () => {
+  const pick = (
+    stored: Record<string, unknown>,
+    reasoningEffort: string | undefined,
+  ) =>
+    save(PROVIDER_MODEL_TYPE.GPT_6_LUNA, {
+      ...open(PROVIDER_MODEL_TYPE.GPT_6_LUNA, stored),
+      reasoningEffort,
+    });
+
+  it.each<[string, Record<string, unknown>, string]>([
+    ["reads reasoning.effort", { reasoning: { effort: "low" } }, "low"],
+    [
+      "prefers reasoning_effort when both are set",
+      { reasoning_effort: "high", reasoning: { effort: "low" } },
+      "high",
+    ],
+  ])("%s", (_, stored, expected) => {
+    expect(open(PROVIDER_MODEL_TYPE.GPT_6_LUNA, stored).reasoningEffort).toBe(
+      expected,
+    );
+  });
+
+  it.each<
+    [
+      string,
+      Record<string, unknown>,
+      string | undefined,
+      Record<string, unknown> | undefined,
+    ]
+  >([
+    [
+      "moves a lone nested effort to reasoning_effort",
+      { reasoning: { effort: "low" } },
+      "high",
+      { reasoning_effort: "high" },
+    ],
+    [
+      "keeps the effort inside reasoning next to its other keys",
+      { reasoning: { effort: "low", summary: "auto" } },
+      "high",
+      { reasoning: { summary: "auto", effort: "high" } },
+    ],
+    [
+      "moves reasoning_effort inside a reasoning that would replace it",
+      { reasoning_effort: "low", reasoning: { summary: "auto" } },
+      "low",
+      { reasoning: { summary: "auto", effort: "low" } },
+    ],
+    [
+      "drops both copies on Default",
+      {
+        reasoning_effort: "low",
+        reasoning: { effort: "high", summary: "auto" },
+      },
+      undefined,
+      { reasoning: { summary: "auto" } },
+    ],
+    [
+      "drops a reasoning left empty on Default",
+      { reasoning: { effort: "low" } },
+      undefined,
+      undefined,
+    ],
+  ])("%s", (_, stored, reasoningEffort, expected) => {
+    expect(pick(stored, reasoningEffort)).toEqual(expected);
+  });
+
+  it("sets reasoning_effort next to a reasoning that is not an object", () => {
+    expect(pick({ reasoning: "high" }, "low")).toEqual({
+      reasoning: "high",
+      reasoning_effort: "low",
+    });
+  });
+});
+
 describe("LLM judge OpenAI effort on a model switch", () => {
   const openThenSwitch = (
     from: PROVIDER_MODEL_TYPE,
@@ -224,6 +300,20 @@ describe("LLM judge OpenAI effort on a model switch", () => {
       { reasoning_effort: "low" },
       undefined,
       undefined,
+    ],
+    [
+      "keeps a nested level the next model offers inside reasoning",
+      PROVIDER_MODEL_TYPE.GPT_6_SOL,
+      { reasoning: { effort: "low", summary: "auto" } },
+      "responses_api",
+      { reasoning: { summary: "auto", effort: "low" } },
+    ],
+    [
+      "drops a nested effort on a model that takes no effort",
+      PROVIDER_MODEL_TYPE.GPT_4O,
+      { reasoning: { effort: "low", summary: "auto" } },
+      "responses_api",
+      { reasoning: { summary: "auto" } },
     ],
   ])(
     "switching from GPT 6 Luna %s",
