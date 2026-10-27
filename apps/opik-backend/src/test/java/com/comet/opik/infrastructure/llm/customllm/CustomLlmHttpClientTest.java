@@ -145,22 +145,20 @@ class CustomLlmHttpClientTest {
     @Test
     void runsManyStreamsToOneHostAtOnce() {
         int streams = 10;
-        int delayMillis = 2_000;
         wireMock.stubFor(post(urlEqualTo(PATH)).willReturn(aResponse().withStatus(200)
                 .withHeader("Content-Type", "text/event-stream")
                 .withBody("data: x\n\n")
-                .withFixedDelay(delayMillis)));
+                .withFixedDelay(5_000)));
 
-        long start = System.nanoTime();
         var actualStreams = IntStream.range(0, streams)
                 .mapToObj(i -> collect(client.stream(request("{}"), new DefaultServerSentEventParser()),
                         Long.MAX_VALUE))
                 .toList();
+
+        // queued 5 at a time, the dispatcher would never run all of them together
+        await().atMost(WAIT).until(() -> okHttpClient.dispatcher().runningCallsCount() == streams);
         CompletableFuture.allOf(actualStreams.toArray(CompletableFuture[]::new)).orTimeout(10, TimeUnit.SECONDS)
                 .join();
-
-        // queued 5 at a time, they would take at least two delays
-        assertThat(Duration.ofNanos(System.nanoTime() - start)).isLessThan(Duration.ofMillis(delayMillis * 2L));
     }
 
     @Test

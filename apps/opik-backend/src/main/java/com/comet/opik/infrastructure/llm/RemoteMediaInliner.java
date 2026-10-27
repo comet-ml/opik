@@ -63,6 +63,11 @@ public class RemoteMediaInliner {
     private static final Set<String> DOWNLOAD_SCHEMES = Set.of("http", "https");
     /** Size of each read from a media body, in bytes. */
     private static final int READ_SIZE = 8192;
+    /**
+     * Largest buffer allocated up front from a declared length: the header is the media server's claim, so a bigger
+     * body grows the buffer as it actually arrives.
+     */
+    private static final int MAX_INITIAL_BUFFER_SIZE = 1 << 20;
 
     private final Client client;
     private final DestinationGuard destinationGuard;
@@ -206,7 +211,8 @@ public class RemoteMediaInliner {
             throw new ProviderRequestRefusedException(MEDIA_URL_DOWNLOAD);
         }
         // the length header can be absent or wrong, so the read itself is capped
-        var encoded = new ByteArrayOutputStream(response.getLength() > 0 ? base64Length(response.getLength()) : 32);
+        var encoded = new ByteArrayOutputStream(
+                response.getLength() > 0 ? Math.min(base64Length(response.getLength()), MAX_INITIAL_BUFFER_SIZE) : 32);
         long total = 0;
         try (var body = response.readEntity(InputStream.class); var encoder = Base64.getEncoder().wrap(encoded)) {
             var chunk = new byte[READ_SIZE];

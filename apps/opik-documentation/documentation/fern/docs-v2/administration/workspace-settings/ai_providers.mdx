@@ -348,6 +348,8 @@ Gemini and Vertex AI receive media as inline data, so Opik downloads the image, 
 
 `LLM_PROVIDER_MEDIA_URL_DESTINATION_SCHEME` sets which schemes `strict` mode accepts for these downloads: `plaintext_or_tls` (the default on every launch path) allows `http` and `https`, and `https_only` allows `https` only. Values are case-insensitive, and any other value stops the backend at startup. `relaxed` mode doesn't check it, but only `http` and `https` media URLs are ever downloaded.
 
+Opik reads at most `LLM_PROVIDER_ERROR_BODY_MAX_SIZE` (default `64KB`, at most `1MiB`) of a custom provider's error response and discards the rest; only a short message parsed from it is returned.
+
 Changing a provider's **URL** requires re-entering its API key (or OAuth2 credentials), since stored secrets are only ever sent to the endpoint they were saved for.
 
 ##### Custom Headers

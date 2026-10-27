@@ -31,6 +31,6 @@ public class LlmHttpClientBuilders {
 
     /** Guarded when a provider key sets its own base URL, which a user chose; else the operator's default endpoint. */
     public HttpClientBuilder forProviderBaseUrl(String baseUrl) {
-        return StringUtils.isNotEmpty(baseUrl) ? guarded() : unguarded();
+        return StringUtils.isNotBlank(baseUrl) ? guarded() : unguarded();
     }
 }
