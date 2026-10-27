@@ -5,6 +5,7 @@ import last from "lodash/last";
 import omitBy from "lodash/omitBy";
 import { PlaygroundPromptType } from "@/types/playground";
 import { generateRandomString } from "@/lib/utils";
+import { getEffortLevels, getModelParams, isAccepted } from "@/lib/modelParams";
 import {
   DEFAULT_ANTHROPIC_CONFIGS,
   DEFAULT_GEMINI_CONFIGS,
@@ -19,6 +20,7 @@ import {
   getDefaultThinkingLevel,
   getOpenRouterDefaultMaxTokens,
   isClaudeModel,
+  resolveOpenAIEffort,
   supportsAnthropicThinkingEffort,
   supportsGeminiThinkingLevel,
   supportsOpenAIReasoningEffort,
@@ -143,7 +145,15 @@ export const getDefaultConfigByProvider = (
       maxConcurrentRequests: DEFAULT_OPEN_AI_CONFIGS.MAX_CONCURRENT_REQUESTS,
     };
 
-    if (supportsOpenAIReasoningEffort(model)) {
+    const params = getModelParams(PROVIDER_TYPE.OPEN_AI, model);
+    if (params) {
+      config.maxCompletionTokens =
+        params.max_output_tokens?.default ?? config.maxCompletionTokens;
+      const effort = resolveOpenAIEffort(params, undefined);
+      if (effort) {
+        config.reasoningEffort = effort;
+      }
+    } else if (supportsOpenAIReasoningEffort(model)) {
       config.reasoningEffort = getDefaultReasoningEffort(model);
     }
 
@@ -151,6 +161,26 @@ export const getDefaultConfigByProvider = (
   }
 
   if (providerType === PROVIDER_TYPE.ANTHROPIC) {
+    const params = getModelParams(PROVIDER_TYPE.ANTHROPIC, model);
+    if (params) {
+      const config: LLMAnthropicConfigsType = {
+        temperature: isAccepted(params.temperature)
+          ? params.temperature?.default
+          : undefined,
+        maxCompletionTokens:
+          params.max_output_tokens?.default ??
+          DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS,
+        topP: undefined,
+        throttling: DEFAULT_ANTHROPIC_CONFIGS.THROTTLING,
+        maxConcurrentRequests:
+          DEFAULT_ANTHROPIC_CONFIGS.MAX_CONCURRENT_REQUESTS,
+      };
+      if (getEffortLevels(params.effort).length > 0) {
+        config.thinkingEffort = getDefaultThinkingEffort(model);
+      }
+      return config;
+    }
+
     const acceptsSamplingParams = supportsSamplingParams(model);
     const config: LLMAnthropicConfigsType = {
       temperature: acceptsSamplingParams

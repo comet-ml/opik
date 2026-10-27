@@ -98,6 +98,7 @@ const DashboardSectionHeader: React.FunctionComponent<
           )}
         >
           <AddWidgetButton
+            sectionId={sectionId}
             onAddWidget={handleAddWidget}
             onMenuOpenChange={setMenuOpen}
           />

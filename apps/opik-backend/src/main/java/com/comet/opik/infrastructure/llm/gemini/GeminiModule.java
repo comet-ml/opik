@@ -3,6 +3,7 @@ package com.comet.opik.infrastructure.llm.gemini;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmServiceProvider;
+import com.comet.opik.infrastructure.llm.RemoteMediaInliner;
 import com.google.inject.AbstractModule;
 import com.google.inject.Provides;
 import com.google.inject.Singleton;
@@ -14,8 +15,9 @@ public class GeminiModule extends AbstractModule {
 
     @Provides
     @Singleton
-    public GeminiClientGenerator clientGenerator(@NonNull @Config("llmProviderClient") LlmProviderClientConfig config) {
-        return new GeminiClientGenerator(config);
+    public GeminiClientGenerator clientGenerator(@NonNull @Config("llmProviderClient") LlmProviderClientConfig config,
+            @NonNull RemoteMediaInliner remoteMediaInliner) {
+        return new GeminiClientGenerator(config, remoteMediaInliner);
     }
 
     @Provides
