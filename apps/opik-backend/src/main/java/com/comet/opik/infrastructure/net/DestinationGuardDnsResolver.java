@@ -36,6 +36,11 @@ public class DestinationGuardDnsResolver implements DnsResolver {
         }
     }
 
+    /** Whether the current call is to a user-supplied destination. */
+    public boolean inScope() {
+        return scopedGuard.get() != null;
+    }
+
     @Override
     public InetAddress[] resolve(String host) throws UnknownHostException {
         var destinationGuard = scopedGuard.get();

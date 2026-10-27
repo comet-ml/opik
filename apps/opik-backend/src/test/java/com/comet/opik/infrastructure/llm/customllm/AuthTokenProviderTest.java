@@ -3,6 +3,7 @@ package com.comet.opik.infrastructure.llm.customllm;
 import com.comet.opik.api.EncryptedAuthConfig;
 import com.comet.opik.api.ProviderAuthConfig;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
+import com.comet.opik.api.resources.utils.TestHttpClientUtils;
 import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.LlmProviderTokenAuthConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
@@ -12,6 +13,8 @@ import com.comet.opik.infrastructure.redis.StringRedisClient;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import com.redis.testcontainers.RedisContainer;
+import jakarta.ws.rs.client.Client;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -48,6 +51,7 @@ class AuthTokenProviderTest {
 
     private static final String TOKEN_PATH = "/oauth/token";
     private static final String SECRET_VALUE = "super-s3cr3t";
+    private static final Client CLIENT = TestHttpClientUtils.client();
 
     /**
      * Single-flight correctness belongs to {@code RedissonLockService}'s own tests (which is also
@@ -134,7 +138,7 @@ class AuthTokenProviderTest {
         opikConfiguration.getEncryption().setKey("0123456789abcdef");
         EncryptionUtils.setConfig(opikConfiguration);
 
-        provider = new AuthTokenProvider(stringRedisClient, PASSTHROUGH_LOCK_SERVICE, relaxedConfig());
+        provider = new AuthTokenProvider(stringRedisClient, PASSTHROUGH_LOCK_SERVICE, relaxedConfig(), CLIENT);
     }
 
     private static LlmProviderTokenAuthConfig relaxedConfig() {
@@ -359,6 +363,25 @@ class AuthTokenProviderTest {
     }
 
     @Test
+    @DisplayName("an oversized reply is refused without waiting for the rest of it")
+    void oversizedReplyIsRefusedWithoutReadingTheRest() {
+        var config = relaxedConfig();
+        config.setMaxResponseChars(1_000);
+        var cappedProvider = new AuthTokenProvider(stringRedisClient, PASSTHROUGH_LOCK_SERVICE, config, CLIENT);
+        // the first chunk is past the cap, even compressed, and the rest takes 20 seconds to arrive
+        wireMock.stubFor(post(urlEqualTo(TOKEN_PATH)).willReturn(aResponse()
+                .withBody(RandomStringUtils.secure().nextAlphanumeric(100_000))
+                .withChunkedDribbleDelay(20, 20_000)));
+        long startNanos = System.nanoTime();
+
+        // the test fetch, which skips the token cache, so only the reply is timed
+        assertThatThrownBy(() -> cappedProvider.testFetch(oauthRecipe().build()))
+                .isInstanceOf(AuthTokenException.class)
+                .hasMessageContaining("exceeds the maximum accepted size");
+        assertThat(Duration.ofNanos(System.nanoTime() - startNanos)).isLessThan(Duration.ofSeconds(10));
+    }
+
+    @Test
     @DisplayName("a secret straddling the error-snippet boundary never leaks its prefix")
     void secretStraddlingSnippetBoundaryIsRedacted() {
         // the secret starts 5 chars before the 500-char cut: truncate-then-redact would leave "super"
@@ -392,7 +415,7 @@ class AuthTokenProviderTest {
         UUID providerId = UUID.randomUUID();
 
         // the "holder": a normal provider sharing the same Redis, whose fetch caches tok-held
-        var holder = new AuthTokenProvider(stringRedisClient, PASSTHROUGH_LOCK_SERVICE, relaxedConfig());
+        var holder = new AuthTokenProvider(stringRedisClient, PASSTHROUGH_LOCK_SERVICE, relaxedConfig(), CLIENT);
         // the "waiter": its lock wait elapses (empty result), but only after the holder has
         // written — exactly the sequence the timed-out-waiter re-read is for
         LockService timedOutLock = org.mockito.Mockito.mock(LockService.class);
@@ -401,7 +424,7 @@ class AuthTokenProviderTest {
                 org.mockito.ArgumentMatchers.any()))
                 .thenAnswer(invocation -> Mono.fromRunnable(() -> holder.bearer("ws", providerId, wrap(recipe)))
                         .then(Mono.empty()));
-        var waiter = new AuthTokenProvider(stringRedisClient, timedOutLock, relaxedConfig());
+        var waiter = new AuthTokenProvider(stringRedisClient, timedOutLock, relaxedConfig(), CLIENT);
 
         assertThat(waiter.bearer("ws", providerId, wrap(recipe))).isEqualTo("tok-held");
         // one fetch total (the holder's); the waiter recovered from the cache
@@ -488,7 +511,7 @@ class AuthTokenProviderTest {
     void strictGuardRefusesNonPublicTokenUrl() {
         var strictConfig = new LlmProviderTokenAuthConfig();
         strictConfig.setDestinationGuard(DestinationGuard.Mode.STRICT);
-        var strictProvider = new AuthTokenProvider(stringRedisClient, PASSTHROUGH_LOCK_SERVICE, strictConfig);
+        var strictProvider = new AuthTokenProvider(stringRedisClient, PASSTHROUGH_LOCK_SERVICE, strictConfig, CLIENT);
 
         assertThatThrownBy(() -> strictProvider.bearer("ws", UUID.randomUUID(), wrap(oauthRecipe().build())))
                 .isInstanceOf(AuthTokenException.class)
@@ -510,7 +533,7 @@ class AuthTokenProviderTest {
         var flakyRedisson = Redisson.create(flakyConfig);
         try {
             var flakyProvider = new AuthTokenProvider(new StringRedisClient(flakyRedisson),
-                    PASSTHROUGH_LOCK_SERVICE, relaxedConfig());
+                    PASSTHROUGH_LOCK_SERVICE, relaxedConfig(), CLIENT);
             flakyRedis.stop();
 
             stubToken("{\"access_token\": \"tok-degraded\", \"expires_in\": 3600}");
