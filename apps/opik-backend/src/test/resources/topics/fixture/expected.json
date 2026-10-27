@@ -3928,16 +3928,15 @@
    ]
   },
   {
-   "name": "System and Session Management",
-   "definition": "Retry responses, resume sessions, or access the playground.",
+   "name": "Session and Response Issues",
+   "definition": "Retry previous responses, explain session resumption, or handle response failures.",
    "clusters": [
-    6,
     7
    ]
   },
   {
-   "name": "Automation and Prompt Configuration",
-   "definition": "Manage automation rules, list evaluators, and configure prompts in Opik.",
+   "name": "Automation Rule Management",
+   "definition": "Check, list, add, or configure automation rules and evaluators in Opik.",
    "clusters": [
     9
    ]
@@ -3950,15 +3949,16 @@
    ]
   },
   {
-   "name": "Dashboard and Chart Generation",
-   "definition": "Create charts, dashboards, and visualize trace data metrics.",
+   "name": "Dashboard and Chart Creation",
+   "definition": "Add charts to dashboards or generate visualizations of trace metrics.",
    "clusters": [
     5
    ]
   }
  ],
  "other": [
-  3
+  3,
+  6
  ],
  "prototypes": {
   "topic_prototypes": [
@@ -3971,14 +3971,14 @@
    13,
    0,
    10,
-   6,
    7,
    9,
    11,
    5
   ],
   "other_prototypes": [
-   3
+   3,
+   6
   ],
   "gated_other": []
  },
@@ -4281,7 +4281,7 @@
   2,
   0,
   1,
-  3,
+  -1,
   2,
   2,
   1,
@@ -4338,7 +4338,7 @@
   1,
   0,
   0,
-  3,
+  -1,
   0,
   0,
   2,
@@ -4353,7 +4353,7 @@
   2,
   4,
   1,
-  3,
+  -1,
   -1,
   0,
   0,

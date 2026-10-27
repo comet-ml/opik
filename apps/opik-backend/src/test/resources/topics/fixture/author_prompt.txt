@@ -10,6 +10,7 @@ Rules:
 - Group by what the user wants to get done, not by wording or by the product/person named in the request.
 - Cover as much traffic as possible: every cluster with share >= 2% must be in a topic unless its requests are not real user requests (retries, greetings, empty, system events) or it is a mix with no dominant kind; put those cluster ids in "other".
 - Topics must not overlap: a reader must be able to assign a request to exactly one topic.
+- Every topic name is unique. If two topics would get the same name, they are one kind of request: make them one topic.
 - A topic holding more than about 30% of traffic is usually too coarse to be useful to the owner: if its clusters show distinct sub-kinds (different subject areas or different goals), split it into those sub-kinds. Keep it whole only when the clusters are genuinely one kind.
 - Prefer fewer, cleaner topics over 10 forced ones; but do not fold different kinds of requests into one topic just to save a slot.
 - Every cluster id appears exactly once, in a topic or in "other".

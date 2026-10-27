@@ -35,25 +35,31 @@
    ]
   },
   {
-   "name": "Automation and Prompt Configuration",
-   "definition": "Manage automation rules, list evaluators, and configure prompts in Opik.",
+   "name": "Automation Rule Management",
+   "definition": "Check, list, add, or configure automation rules and evaluators in Opik.",
    "clusters": [
     9
    ]
   },
   {
-   "name": "Dashboard and Chart Generation",
-   "definition": "Create charts, dashboards, and visualize trace data metrics.",
+   "name": "Dashboard and Chart Creation",
+   "definition": "Add charts to dashboards or generate visualizations of trace metrics.",
    "clusters": [
     5
    ]
   },
   {
-   "name": "System and Session Management",
-   "definition": "Retry responses, resume sessions, or access the playground.",
+   "name": "Session and Response Issues",
+   "definition": "Retry previous responses, explain session resumption, or handle response failures.",
    "clusters": [
-    6,
     7
+   ]
+  },
+  {
+   "name": "General System Access",
+   "definition": "Access the playground or identify general user frustration points.",
+   "clusters": [
+    6
    ]
   }
  ],
