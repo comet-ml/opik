@@ -22,7 +22,14 @@ RUN mvn versions:set -DnewVersion=${OPIK_VERSION} && \
     mvn clean package -Dmaven.test.skip=true -Dmaven.source.skip=true -Dmaven.javadoc.skip=true -Dspotless.skip=true
 
 ###############################
-FROM amazoncorretto:25.0.5-al2023@sha256:be686934052c72a4ff4b087a504af6bf4fb8576eaf4a7bfb7f61b698269abc32
+# Plain AL2023 pinned to a dated release, not the amazoncorretto image: AL2023 locks yum to the base image's
+# release, so OS fixes only arrive with a newer one. Renovate moves the date forward weekly, and each date has
+# a fixed package set.
+FROM public.ecr.aws/amazonlinux/amazonlinux:2023.12.20261026.1@sha256:8272aee6146a36222baaf71d72ab6799770957414ac63b1e940cec58c9197188
+
+# Same as the amazoncorretto:25-al2023 image, whose four Corretto packages are installed below.
+ENV LANG=C.UTF-8 \
+    JAVA_HOME=/usr/lib/jvm/java-25-amazon-corretto
 
 # Add metadata labels
 LABEL org.opencontainers.image.title="Opik Backend"
@@ -46,8 +53,9 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # DL3033: AL2023 core packages track a rolling security channel; pinning exact
 # RPM versions here would rot as AWS updates the base image's repos.
 # hadolint ignore=DL3033
-RUN yum update -y && \
-    yum install -y --allowerasing shadow ca-certificates openssl dos2unix curl && \
+RUN yum install -y --allowerasing java-25-amazon-corretto-headless java-25-amazon-corretto \
+        java-25-amazon-corretto-devel java-25-amazon-corretto-jmods \
+        shadow ca-certificates openssl dos2unix curl && \
     yum clean all && \
     rm -rf /var/cache/yum && \
     mkdir -p /tmp/certs && \

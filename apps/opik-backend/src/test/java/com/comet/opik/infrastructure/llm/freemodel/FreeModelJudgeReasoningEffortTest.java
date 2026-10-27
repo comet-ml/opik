@@ -5,6 +5,7 @@ import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.infrastructure.FreeModelConfig;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
+import com.comet.opik.infrastructure.llm.LlmTestClients;
 import com.comet.opik.infrastructure.llm.openai.OpenAIClientGenerator;
 import com.comet.opik.utils.JsonUtils;
 import com.github.tomakehurst.wiremock.WireMockServer;
@@ -53,7 +54,8 @@ class FreeModelJudgeReasoningEffortTest {
         freeModelConfig.setEnabled(true);
         freeModelConfig.setActualModel(actualModel);
         var clientConfig = new LlmProviderClientConfig();
-        var provider = new FreeModelServiceProvider(new OpenAIClientGenerator(clientConfig),
+        var provider = new FreeModelServiceProvider(
+                new OpenAIClientGenerator(clientConfig, LlmTestClients.RESPONSES_API_HTTP_CLIENT),
                 mock(LlmProviderFactory.class), freeModelConfig, clientConfig);
         var key = LlmProviderClientApiConfig.builder().apiKey("test-key").baseUrl(wireMock.baseUrl()).build();
 

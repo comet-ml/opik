@@ -70,6 +70,11 @@ class LlmModelCatalogTest {
                 effort: {accepted: false}
             """);
 
+    private static final ModelParams ANTHROPIC_PROFILE = params("""
+            temperature: {accepted: false}
+            effort: {accepted: true, levels: [low, medium, high], default: high}
+            """);
+
     private static final ModelParams CLAUDE_SONNET_4_6 = params("""
             temperature: {accepted: true, min: 0, max: 1, default: 0}
             effort: {accepted: true, levels: [low, medium, high, max], default: high}
@@ -167,7 +172,33 @@ class LlmModelCatalogTest {
                     () -> service("llm-models-test.yaml", "llm-models-test-curated-unknown-profile.yaml", null))
                     .isInstanceOf(IllegalStateException.class)
                     .hasMessageContaining("missing-reasoning")
-                    .hasMessageContaining("missing-row-profile");
+                    .hasMessageContaining("missing-row-profile")
+                    .hasMessageContaining("missing-id-profile");
+        }
+
+        @Test
+        void anIdTakesTheProfileOfTheFirstPatternItMatches() {
+            var service = service("llm-models-test.yaml", "llm-models-test-curated-id-profiles.yaml", null);
+
+            assertThat(service.paramsOf("gemini", "gemini-1.5-flash")).isEqualTo(params("""
+                    temperature: {accepted: true}
+                    """));
+            assertThat(service.paramsOf("gemini", "gemini-9-pro")).isEqualTo(params("""
+                    temperature: {accepted: false}
+                    topP: {accepted: false}
+                    """));
+            assertThat(service.paramsOf("gemini", "gemma-9-it")).isEqualTo(params("""
+                    temperature: {accepted: false}
+                    """));
+        }
+
+        @Test
+        void aRowProfileWinsOverTheProfileItsIdMatches() {
+            var service = service("llm-models-test.yaml", "llm-models-test-curated-id-profiles.yaml", null);
+
+            assertThat(service.curatedParamsOf("gemini", "gemini-1.5-pinned")).isEqualTo(params("""
+                    temperature: {accepted: false}
+                    """));
         }
 
         @Test
@@ -248,6 +279,15 @@ class LlmModelCatalogTest {
         @Test
         void aProviderWithoutDefaultsGetsNoParams() {
             assertThat(model(service(null), "vertex-ai", "gemini-2.0-flash-001").params()).isNull();
+        }
+
+        @Test
+        void theProfilesAreWhatAnUnlistedIdOfEachProviderGets() {
+            var service = service(null);
+
+            assertThat(service.getProfiles())
+                    .isEqualTo(Map.of("openai", OPENAI_PROFILE, "anthropic", ANTHROPIC_PROFILE));
+            assertThat(service.paramsOf("anthropic", "an-id-no-layer-lists")).isEqualTo(ANTHROPIC_PROFILE);
         }
 
         @Test

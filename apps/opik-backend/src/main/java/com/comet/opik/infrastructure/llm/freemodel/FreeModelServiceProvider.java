@@ -78,8 +78,8 @@ public class FreeModelServiceProvider implements LlmServiceProvider {
                 // Treat insufficient_quota (429, out-of-credits) as non-retryable so the model's
                 // internal retry does not keep hitting an exhausted key.
                 .httpClientBuilder(QuotaAwareHttpClient.builder())
-                .logRequests(true)
-                .logResponses(true);
+                .logRequests(llmProviderClientConfig.getLogRequests())
+                .logResponses(llmProviderClientConfig.getLogResponses());
 
         Optional.ofNullable(llmProviderClientConfig.getConnectTimeout())
                 .ifPresent(connectTimeout -> builder.timeout(connectTimeout.toJavaDuration()));

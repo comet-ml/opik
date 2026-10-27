@@ -142,6 +142,8 @@ class StrictDestinationGuardResourceTest {
     @ValueSource(strings = {"http://127.0.0.1:8081/tasks/log-level", "http://169.254.169.254/latest/meta-data",
             "http://10.0.0.1/v1", "http://10.0.0.1/{model}/v1", "http://{model}@10.0.0.1/v1",
             "http://user:{model}@10.0.0.1/v1",
+            // IPv6 forms that embed an IPv4 address: IPv4-compatible, 6to4 and Teredo
+            "http://[::a00:1]/v1", "http://[2002:a00:1::1]/v1", "http://[2001:0:4136:e378:8000:63bf:f5ff:fffe]/v1",
             // a {model} host defers only the DNS check, not the scheme
             "ftp://{model}.example.com/v1",
             // the placeholder stand-in written literally is just an unresolvable host (RFC 2606)
@@ -221,6 +223,7 @@ class StrictDestinationGuardResourceTest {
         var update = ProviderApiKeyUpdate.builder()
                 .baseUrl("https://{model}.gw.example.com/v1")
                 .apiKey(UUID.randomUUID().toString())
+                .headers(created.headers())
                 .build();
         client.updateProviderApiKey(created.id(), update, apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
 

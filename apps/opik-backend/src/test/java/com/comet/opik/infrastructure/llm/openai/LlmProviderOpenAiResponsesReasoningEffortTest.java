@@ -2,6 +2,7 @@ package com.comet.opik.infrastructure.llm.openai;
 
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
+import com.comet.opik.infrastructure.llm.LlmTestClients;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.matching.RequestPatternBuilder;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
@@ -98,7 +99,7 @@ class LlmProviderOpenAiResponsesReasoningEffortTest {
 
     private List<Throwable> sendBlockingAndStreaming(ChatCompletionRequest request) {
         var provider = new LlmProviderOpenAiResponses(
-                new OpenAIClientGenerator(new LlmProviderClientConfig()),
+                new OpenAIClientGenerator(new LlmProviderClientConfig(), LlmTestClients.RESPONSES_API_HTTP_CLIENT),
                 LlmProviderClientApiConfig.builder()
                         .apiKey("test-key")
                         .baseUrl(openAi.baseUrl())

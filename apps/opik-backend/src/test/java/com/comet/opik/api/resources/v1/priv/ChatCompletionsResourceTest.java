@@ -14,6 +14,11 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.ChatCompletionsClient;
 import com.comet.opik.api.resources.utils.resources.LlmProviderApiKeyResourceClient;
 import com.comet.opik.domain.llm.LlmProviderFactory;
+import com.comet.opik.domain.llm.langchain4j.AudioUrl;
+import com.comet.opik.domain.llm.langchain4j.OpikContent;
+import com.comet.opik.domain.llm.langchain4j.OpikContentType;
+import com.comet.opik.domain.llm.langchain4j.OpikUserMessage;
+import com.comet.opik.domain.llm.langchain4j.VideoUrl;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -29,6 +34,7 @@ import com.redis.testcontainers.RedisContainer;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.openai.internal.chat.Content;
 import dev.langchain4j.model.openai.internal.chat.ContentType;
+import dev.langchain4j.model.openai.internal.chat.ImageUrl;
 import dev.langchain4j.model.openai.internal.chat.Message;
 import dev.langchain4j.model.openai.internal.chat.Role;
 import dev.langchain4j.model.openai.internal.chat.UserMessage;
@@ -70,6 +76,8 @@ import java.util.stream.Stream;
 import static com.comet.opik.domain.llm.ChatCompletionService.ERROR_EMPTY_MESSAGES;
 import static com.comet.opik.domain.llm.LlmProviderFactory.ERROR_MODEL_NOT_SUPPORTED;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
+import static com.github.tomakehurst.wiremock.client.WireMock.any;
+import static com.github.tomakehurst.wiremock.client.WireMock.anyRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.head;
 import static com.github.tomakehurst.wiremock.client.WireMock.headRequestedFor;
@@ -404,6 +412,43 @@ class ChatCompletionsResourceTest {
             // stubs from one case don't intercept another. Each test re-registers its
             // own workspace auth stub via mockTargetWorkspace().
             WIRE_MOCK.server().resetAll();
+        }
+
+        private Stream<Arguments> rawUpstreamBodyIsNotEchoed() {
+            var text = UUID.randomUUID().toString();
+            return Stream.of(
+                    arguments(HttpStatus.SC_BAD_GATEWAY, "text/plain", "internal page " + text,
+                            HttpStatus.SC_BAD_GATEWAY),
+                    arguments(HttpStatus.SC_BAD_GATEWAY, "application/json", "{\"internal\": \"%s\"}".formatted(text),
+                            HttpStatus.SC_BAD_GATEWAY),
+                    // redirects aren't followed, and a 3xx is no provider error status, so the call fails as Opik's
+                    arguments(HttpStatus.SC_MOVED_TEMPORARILY, "text/html", "<a href=\"/%s\">moved</a>".formatted(text),
+                            HttpStatus.SC_INTERNAL_SERVER_ERROR));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("a body that isn't a provider error is not echoed back from a user-configured destination")
+        void rawUpstreamBodyIsNotEchoed(int upstreamStatus, String contentType, String upstreamBody,
+                int expectedStatus) {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            mockTargetWorkspace(workspaceName, UUID.randomUUID().toString());
+            createCustomProvider(workspaceName);
+            WIRE_MOCK.server().stubFor(post(urlPathMatching(CHAT_COMPLETIONS_REGEX))
+                    .willReturn(aResponse()
+                            .withStatus(upstreamStatus)
+                            .withHeader("Content-Type", contentType)
+                            .withBody(upstreamBody)));
+            var expected = new ErrorMessage(expectedStatus,
+                    "Unexpected error calling LLM provider: provider responded with HTTP " + upstreamStatus);
+
+            var request = ChatCompletionRequest.builder().stream(false).model(MODEL).addUserMessage("ping").build();
+            assertThat(chatCompletionsClient.create(API_KEY, workspaceName, request, expectedStatus))
+                    .isEqualTo(expected);
+
+            var streamed = ChatCompletionRequest.builder().stream(true).model(MODEL).addUserMessage("ping").build();
+            assertThat(chatCompletionsClient.createAndGetStreamedError(API_KEY, workspaceName, streamed))
+                    .containsExactly(expected);
         }
 
         @Test
@@ -1382,6 +1427,121 @@ class ChatCompletionsResourceTest {
                     "client_email": "test@test-project.iam.gserviceaccount.com", "client_id": "1234567890",
                     "token_uri": "%s"}"""
                     .formatted(privateKey, tokenUri);
+        }
+
+        private Stream<Arguments> mediaUrlOnInternalAddressIsNeverDownloaded() {
+            return Stream.of(
+                    arguments(LlmProvider.GEMINI, OpikContentType.IMAGE_URL, ".png"),
+                    arguments(LlmProvider.GEMINI, OpikContentType.VIDEO_URL, ".mp4"),
+                    arguments(LlmProvider.VERTEX_AI, OpikContentType.IMAGE_URL, ".png"),
+                    arguments(LlmProvider.VERTEX_AI, OpikContentType.VIDEO_URL, ".mp4"),
+                    arguments(LlmProvider.VERTEX_AI, OpikContentType.AUDIO_URL, ".wav"));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("a media URL on an internal address is refused before Gemini or Vertex AI can download it")
+        void mediaUrlOnInternalAddressIsNeverDownloaded(LlmProvider provider, OpikContentType type, String extension)
+                throws Exception {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            mockTargetWorkspace(workspaceName, UUID.randomUUID().toString());
+            var model = provider == LlmProvider.GEMINI
+                    ? GeminiModelName.GEMINI_2_5_FLASH.toString()
+                    : VertexAIModelName.GEMINI_2_5_FLASH.qualifiedName();
+            llmProviderApiKeyResourceClient.createProviderApiKey(ProviderApiKey.builder()
+                    .provider(provider)
+                    .apiKey(provider == LlmProvider.GEMINI
+                            ? RandomStringUtils.randomAlphanumeric(20)
+                            : serviceAccountJson("https://oauth2.googleapis.com/token"))
+                    .configuration(provider == LlmProvider.GEMINI ? Map.of() : Map.of("location", "us-central1"))
+                    .build(), API_KEY, workspaceName, HttpStatus.SC_CREATED);
+            var mediaPath = "/media-%s%s".formatted(UUID.randomUUID(), extension);
+            var mediaUrl = WIRE_MOCK.runtimeInfo().getHttpBaseUrl() + mediaPath;
+            WIRE_MOCK.server().stubFor(any(urlPathEqualTo(mediaPath))
+                    .willReturn(aResponse().withBody(RandomStringUtils.randomAlphanumeric(32))));
+            var media = switch (type) {
+                case IMAGE_URL -> OpikContent.builder().type(type)
+                        .imageUrl(ImageUrl.builder().url(mediaUrl).build()).build();
+                case VIDEO_URL -> OpikContent.builder().type(type)
+                        .videoUrl(VideoUrl.builder().url(mediaUrl).build()).build();
+                case AUDIO_URL -> OpikContent.builder().type(type)
+                        .audioUrl(AudioUrl.builder().url(mediaUrl).build()).build();
+                default -> throw new IllegalArgumentException(type.toString());
+            };
+            var message = OpikUserMessage.builder()
+                    .content(List.of(OpikContent.builder().type(OpikContentType.TEXT).text("describe").build(), media))
+                    .build();
+            var expected = new ErrorMessage(HttpStatus.SC_BAD_REQUEST,
+                    "a media URL was refused: it must be an http or https URL that resolves to a public address"
+                            + " (self-hosted deployments serving media from internal networks can set"
+                            + " LLM_PROVIDER_VIDEO_URL_DESTINATION_GUARD=relaxed)");
+
+            var request = ChatCompletionRequest.builder().stream(false).model(model).messages(message).build();
+            assertThat(chatCompletionsClient.create(API_KEY, workspaceName, request, HttpStatus.SC_BAD_REQUEST))
+                    .isEqualTo(expected);
+
+            var streamed = ChatCompletionRequest.builder().stream(true).model(model).messages(message).build();
+            assertThat(chatCompletionsClient.createAndGetStreamedError(API_KEY, workspaceName, streamed))
+                    .containsExactly(expected);
+
+            WIRE_MOCK.server().verify(0, anyRequestedFor(urlPathEqualTo(mediaPath)));
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"file:///etc/hosts", "jar:file:///app.jar!/image.png", "ftp://example.com/image.png"})
+        @DisplayName("a media URL that isn't http or https is refused before Gemini or Vertex AI can read it")
+        void mediaUrlWithOtherSchemeIsRefused(String mediaUrl) throws Exception {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            mockTargetWorkspace(workspaceName, UUID.randomUUID().toString());
+            llmProviderApiKeyResourceClient.createProviderApiKey(ProviderApiKey.builder()
+                    .provider(LlmProvider.VERTEX_AI)
+                    .apiKey(serviceAccountJson("https://oauth2.googleapis.com/token"))
+                    .configuration(Map.of("location", "us-central1"))
+                    .build(), API_KEY, workspaceName, HttpStatus.SC_CREATED);
+            var message = OpikUserMessage.builder()
+                    .content(List.of(OpikContent.builder().type(OpikContentType.IMAGE_URL)
+                            .imageUrl(ImageUrl.builder().url(mediaUrl).build()).build()))
+                    .build();
+            var request = ChatCompletionRequest.builder().stream(false)
+                    .model(VertexAIModelName.GEMINI_2_5_FLASH.qualifiedName()).messages(message).build();
+
+            assertThat(chatCompletionsClient.create(API_KEY, workspaceName, request, HttpStatus.SC_BAD_REQUEST))
+                    .isEqualTo(new ErrorMessage(HttpStatus.SC_BAD_REQUEST,
+                            "a media URL was refused: it must be an http or https URL that resolves to a public"
+                                    + " address (self-hosted deployments serving media from internal networks can set"
+                                    + " LLM_PROVIDER_VIDEO_URL_DESTINATION_GUARD=relaxed)"));
+        }
+
+        @Test
+        @DisplayName("the OpenAI Responses API client doesn't follow a redirect from the provider")
+        void responsesApiDoesNotFollowRedirects() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            mockTargetWorkspace(workspaceName, UUID.randomUUID().toString());
+            var basePath = "/v1-" + UUID.randomUUID();
+            var redirectTarget = "/elsewhere-" + UUID.randomUUID();
+            WIRE_MOCK.server().stubFor(any(urlPathMatching(basePath + "/.*"))
+                    .willReturn(aResponse().withStatus(307).withHeader("Location", redirectTarget)));
+            WIRE_MOCK.server().stubFor(any(urlPathEqualTo(redirectTarget)).willReturn(aResponse().withStatus(200)));
+            llmProviderApiKeyResourceClient.createProviderApiKey(ProviderApiKey.builder()
+                    .provider(LlmProvider.OPEN_AI)
+                    .apiKey(RandomStringUtils.randomAlphanumeric(20))
+                    .baseUrl(WIRE_MOCK.runtimeInfo().getHttpBaseUrl() + basePath)
+                    .configuration(Map.of("openai_pipeline_mode", "responses_api"))
+                    .build(), API_KEY, workspaceName, HttpStatus.SC_CREATED);
+            var request = ChatCompletionRequest.builder().stream(false)
+                    .model(OpenaiModelName.GPT_4O.toString()).addUserMessage("ping").build();
+
+            clientSupport.target(TestUtils.getBaseUrl(clientSupport) + "/v1/private/chat/completions")
+                    .request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                    .post(Entity.json(request))
+                    .close();
+
+            // the provider was reached, so the redirect was answered and not followed
+            assertThat(WIRE_MOCK.server().findAll(anyRequestedFor(urlPathMatching(basePath + "/.*")))).isNotEmpty();
+            WIRE_MOCK.server().verify(0, anyRequestedFor(urlPathEqualTo(redirectTarget)));
         }
 
         @Test

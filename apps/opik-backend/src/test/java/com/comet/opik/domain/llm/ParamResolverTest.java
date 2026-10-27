@@ -54,7 +54,7 @@ class ParamResolverTest {
 
     private static ParamResolver resolverWithOpenAiParams(ModelParams params) {
         var factory = mock(LlmProviderFactory.class);
-        when(factory.openAiParams(anyString())).thenReturn(Optional.of(params));
+        when(factory.catalogParams(anyString())).thenReturn(Optional.of(params));
         return new ParamResolver(factory, bundledRegistry());
     }
 

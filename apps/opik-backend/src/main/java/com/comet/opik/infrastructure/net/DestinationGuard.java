@@ -23,8 +23,8 @@ import static org.apache.commons.lang3.StringUtils.isBlank;
  * (cloud) it resolves the hostname before anyone connects, refusing addresses only our own network
  * can reach: loopback, link-local (including the cloud metadata endpoint at 169.254.169.254),
  * RFC 1918 private ranges, carrier-grade NAT (100.64.0.0/10), the other IANA special-purpose IPv4
- * ranges (0.0.0.0/8, 192.0.0.0/24, 198.18.0.0/15, 240.0.0.0/4), IPv6 unique-local, NAT64
- * (64:ff9b::/96), multicast, and unresolvable hosts. IPv4-mapped IPv6 literals resolve to their IPv4 form and are checked as such. In
+ * ranges (0.0.0.0/8, 192.0.0.0/24, 198.18.0.0/15, 240.0.0.0/4), IPv6 unique-local, the IPv6 forms that embed an IPv4
+ * address (NAT64, IPv4-compatible, 6to4, Teredo), multicast, and unresolvable hosts. IPv4-mapped IPv6 literals resolve to their IPv4 form and are checked as such. In
  * {@code RELAXED} mode (self-hosted default) it is a no-op — internal gateways legitimately live on
  * private ranges there.
  *
@@ -33,10 +33,10 @@ import static org.apache.commons.lang3.StringUtils.isBlank;
  * carries a credential ({@link Scheme#HTTPS_ONLY}) opt in independently of the address filtering
  * above. A caller passing {@link Scheme#PLAINTEXT_OR_TLS} still gets the full SSRF check.
  *
- * <p>Resolve-then-decide is the accepted level of protection here: the later connection resolves
- * again, so a host whose DNS answer changes between the two lookups can pass the check. Some of the
- * surfaces this guards take URLs from any workspace member, so cloud deployments must also restrict
- * egress at the network level; connection-time pinning would require a custom socket layer.
+ * <p>{@link #validate(String)} resolves, then the caller's client resolves again, so a host whose DNS answer changes
+ * between the two lookups can pass it. Clients built on {@link DestinationGuardDns} close that gap: they connect only
+ * to the addresses {@link #lookup(String)} returned. Cloud deployments should still restrict egress at the network
+ * level.
  */
 @Builder(toBuilder = true)
 public class DestinationGuard {
@@ -95,10 +95,13 @@ public class DestinationGuard {
     /**
      * Ranges the JDK's {@link InetAddress} predicates miss: 0.0.0.0/8, carrier-grade NAT (routable inside provider
      * networks), 192.0.0.0/24, 198.18.0.0/15, 240.0.0.0/4, IPv6 unique-local (the JDK's site-local check only covers the
-     * deprecated fec0::/10) and NAT64, which a gateway translates to the embedded, possibly internal, IPv4 address.
+     * deprecated fec0::/10), and the IPv6 forms that embed an IPv4 address a gateway may forward to: NAT64,
+     * IPv4-compatible (::/96), 6to4 (2002::/16) and Teredo (2001::/32). The last three are deprecated transition
+     * mechanisms, so they are refused whole rather than unwrapped to check the embedded address.
      */
     private static final List<IpSubnetFilterRule> NON_PUBLIC_RANGES = Stream.of(
-            "0.0.0.0/8", "100.64.0.0/10", "192.0.0.0/24", "198.18.0.0/15", "240.0.0.0/4", "fc00::/7", "64:ff9b::/96")
+            "0.0.0.0/8", "100.64.0.0/10", "192.0.0.0/24", "198.18.0.0/15", "240.0.0.0/4", "fc00::/7", "64:ff9b::/96",
+            "::/96", "2002::/16", "2001::/32")
             .map(cidr -> new IpSubnetFilterRule(cidr, IpFilterRuleType.REJECT))
             .toList();
 
@@ -114,7 +117,16 @@ public class DestinationGuard {
             return;
         }
 
-        String host = parse(url).getHost();
+        lookup(parse(url).getHost());
+    }
+
+    /**
+     * The host's addresses, refused as {@link #validate(String)} refuses them. For an HTTP client's resolver
+     * ({@link DestinationGuardDns}), so the addresses checked are the ones connected to, on every redirect hop.
+     *
+     * @throws DestinationGuardException with a user-facing message when the host is refused
+     */
+    public List<InetAddress> lookup(@NonNull String host) {
         InetAddress[] addresses;
         try {
             addresses = InetAddress.getAllByName(host);
@@ -122,15 +134,14 @@ public class DestinationGuard {
             throw new DestinationGuardException(
                     "destination host could not be resolved, host '%s'".formatted(host), exception);
         }
-        for (InetAddress address : addresses) {
-            if (isNonPublic(address)) {
-                // deliberately not echoing the resolved address: the hostname is the user's own
-                // input, the address it maps to inside our network is not theirs to learn
-                throw new DestinationGuardException(
-                        "destination was refused, it resolves to a private or internal address, host '%s'"
-                                .formatted(host));
-            }
+        if (mode == Mode.STRICT && Arrays.stream(addresses).anyMatch(DestinationGuard::isNonPublic)) {
+            // deliberately not echoing the resolved address: the hostname is the user's own
+            // input, the address it maps to inside our network is not theirs to learn
+            throw new DestinationGuardException(
+                    "destination was refused, it resolves to a private or internal address, host '%s'"
+                            .formatted(host));
         }
+        return List.of(addresses);
     }
 
     /**

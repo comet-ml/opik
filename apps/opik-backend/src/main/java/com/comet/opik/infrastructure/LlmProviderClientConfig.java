@@ -4,7 +4,12 @@ import com.comet.opik.infrastructure.llm.AnthropicClientConfig;
 import com.comet.opik.infrastructure.llm.OpenAiClientConfig;
 import com.comet.opik.infrastructure.llm.VertexAIClientConfig;
 import com.comet.opik.infrastructure.net.DestinationGuard;
+import io.dropwizard.util.DataSize;
+import io.dropwizard.util.DataSizeUnit;
 import io.dropwizard.util.Duration;
+import io.dropwizard.validation.MaxDataSize;
+import io.dropwizard.validation.MaxDuration;
+import io.dropwizard.validation.MinDataSize;
 import io.dropwizard.validation.MinDuration;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
@@ -65,8 +70,23 @@ public class LlmProviderClientConfig {
     @NotNull private DestinationGuard.Scheme destinationScheme;
 
     /**
-     * Destination policy for the HEAD request that detects the MIME type of an extensionless video URL. The URL
-     * comes from any caller's message, and a refusal only loses the hint.
+     * Destination policy for media URLs in a caller's message: the HEAD request that detects the MIME type of an
+     * extensionless video URL, and the download of the media URLs Gemini and Vertex AI would otherwise fetch
+     * themselves. The URL comes from any caller's message, or from trace data for online scoring.
      */
     @NotNull private DestinationGuard.Mode videoUrlDestinationGuard;
+
+    /**
+     * Time allowed for downloading one media URL that Gemini or Vertex AI receives as inline data, connecting
+     * included.
+     */
+    // the client takes the timeout in milliseconds as an int
+    @NotNull @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS)
+    @MaxDuration(value = Integer.MAX_VALUE, unit = TimeUnit.MILLISECONDS)
+    private Duration mediaDownloadTimeout;
+
+    /** Largest media file downloaded for Gemini or Vertex AI; it is held in memory while it is sent inline. */
+    @NotNull @MinDataSize(1)
+    @MaxDataSize(value = 1, unit = DataSizeUnit.GIBIBYTES)
+    private DataSize mediaDownloadMaxSize;
 }

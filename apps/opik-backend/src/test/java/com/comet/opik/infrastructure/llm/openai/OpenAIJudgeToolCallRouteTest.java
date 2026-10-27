@@ -6,6 +6,7 @@ import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
+import com.comet.opik.infrastructure.llm.LlmTestClients;
 import com.comet.opik.infrastructure.llm.OpenAiClientConfig;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -72,15 +73,18 @@ class OpenAIJudgeToolCallRouteTest {
         wireMock = new WireMockServer(WireMockConfiguration.options().dynamicPort());
         wireMock.start();
 
-        onOpenAi = new OpenAILlmServiceProvider(new OpenAIClientGenerator(clientConfig(wireMock.baseUrl())) {
-            @Override
-            boolean hasCustomBaseUrl(LlmProviderClientApiConfig config) {
-                return false;
-            }
-        }, mock(LlmProviderFactory.class));
+        onOpenAi = new OpenAILlmServiceProvider(
+                new OpenAIClientGenerator(clientConfig(wireMock.baseUrl()), LlmTestClients.RESPONSES_API_HTTP_CLIENT) {
+                    @Override
+                    boolean hasCustomBaseUrl(LlmProviderClientApiConfig config) {
+                        return false;
+                    }
+                }, mock(LlmProviderFactory.class));
         behindServerWideUrl = new OpenAILlmServiceProvider(
-                new OpenAIClientGenerator(clientConfig(wireMock.baseUrl())), mock(LlmProviderFactory.class));
-        withoutServerWideUrl = new OpenAILlmServiceProvider(new OpenAIClientGenerator(clientConfig(null)),
+                new OpenAIClientGenerator(clientConfig(wireMock.baseUrl()), LlmTestClients.RESPONSES_API_HTTP_CLIENT),
+                mock(LlmProviderFactory.class));
+        withoutServerWideUrl = new OpenAILlmServiceProvider(
+                new OpenAIClientGenerator(clientConfig(null), LlmTestClients.RESPONSES_API_HTTP_CLIENT),
                 mock(LlmProviderFactory.class));
     }
 
