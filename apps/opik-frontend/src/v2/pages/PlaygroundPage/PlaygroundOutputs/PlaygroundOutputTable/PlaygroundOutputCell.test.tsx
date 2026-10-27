@@ -20,7 +20,6 @@ type Output = {
   stale: boolean;
   staleChanges?: PlaygroundRunInputChange[];
   traceId?: string;
-  selectedRuleIds?: string[] | null;
 };
 
 let output: Output;
@@ -166,7 +165,6 @@ describe("PlaygroundOutputCell", () => {
         value: "the answer",
         stale: false,
         traceId: "trace-1",
-        selectedRuleIds: ["rule-1"],
       };
     });
 
@@ -199,7 +197,6 @@ describe("PlaygroundOutputCell", () => {
         value: "the answer",
         stale: true,
         traceId: "trace-1",
-        selectedRuleIds: ["rule-1"],
       };
 
       renderCell();

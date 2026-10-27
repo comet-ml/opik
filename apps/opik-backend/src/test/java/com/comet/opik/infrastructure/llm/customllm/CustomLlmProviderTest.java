@@ -5,6 +5,7 @@ import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.MediaContentUtils;
+import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.github.tomakehurst.wiremock.WireMockServer;
@@ -71,7 +72,11 @@ class CustomLlmProviderTest {
         var clientConfig = new LlmProviderClientConfig();
         clientConfig.setLogRequests(false);
         clientConfig.setLogResponses(false);
-        clientGenerator = new CustomLlmClientGenerator(clientConfig, mock(AuthTokenProvider.class));
+        var relaxedGuard = ProviderBaseUrlGuard.builder()
+                .mode(DestinationGuard.Mode.RELAXED)
+                .scheme(DestinationGuard.Scheme.PLAINTEXT_OR_TLS)
+                .build();
+        clientGenerator = new CustomLlmClientGenerator(clientConfig, relaxedGuard, mock(AuthTokenProvider.class));
     }
 
     @AfterAll

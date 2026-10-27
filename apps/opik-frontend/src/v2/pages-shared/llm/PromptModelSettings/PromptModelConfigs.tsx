@@ -201,7 +201,11 @@ const PromptModelConfigs = ({
   const disabled = disabledProp || !composedProviderType;
 
   return (
-    <DropdownMenu>
+    // Not modal: a modal menu sets pointer-events: none on the body, so the first click outside only
+    // closes the panel and is lost, e.g. Run right after changing a setting. Focus outside is still
+    // ignored, as the modal menu does, because the thinking effort list renders in a portal outside
+    // this panel and moving focus into it would otherwise close the panel.
+    <DropdownMenu modal={false}>
       <TooltipWrapper content="Model parameters">
         <DropdownMenuTrigger asChild>
           <Button variant={variant} size={size} disabled={disabled}>
@@ -215,6 +219,7 @@ const PromptModelConfigs = ({
         side="bottom"
         align="end"
         onCloseAutoFocus={(e) => e.preventDefault()}
+        onFocusOutside={(e) => e.preventDefault()}
       >
         <div className="mb-5 w-72">
           <h5 className="comet-body-s-accented text-foreground">

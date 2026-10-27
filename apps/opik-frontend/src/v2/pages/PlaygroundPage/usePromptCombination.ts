@@ -185,7 +185,6 @@ const usePromptCombination = ({
           value: null,
           error: undefined,
           errorHint: undefined,
-          selectedRuleIds,
           usage: undefined,
         });
 

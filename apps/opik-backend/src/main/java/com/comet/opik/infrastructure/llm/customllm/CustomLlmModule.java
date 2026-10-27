@@ -11,13 +11,25 @@ import lombok.NonNull;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 public class CustomLlmModule extends AbstractModule {
+
+    @Provides
+    @Singleton
+    public ProviderBaseUrlGuard providerBaseUrlGuard(
+            @NonNull @Config("llmProviderClient") LlmProviderClientConfig config) {
+        return ProviderBaseUrlGuard.builder()
+                .mode(config.getDestinationGuard())
+                .scheme(config.getDestinationScheme())
+                .build();
+    }
+
     @Provides
     @Singleton
     @Named("customLlmGenerator")
     public CustomLlmClientGenerator clientGenerator(
             @NonNull @Config("llmProviderClient") LlmProviderClientConfig config,
+            @NonNull ProviderBaseUrlGuard providerBaseUrlGuard,
             @NonNull AuthTokenProvider authTokenProvider) {
-        return new CustomLlmClientGenerator(config, authTokenProvider);
+        return new CustomLlmClientGenerator(config, providerBaseUrlGuard, authTokenProvider);
     }
 
     @Provides
