@@ -480,6 +480,18 @@ describe("Prompt - format()", () => {
 
         expect(prompt.format({})).toBe("012");
       });
+
+      it("should allow a small range with large opposite-signed bounds", () => {
+        // `to - from` overflows to Infinity here, but the range emits far fewer
+        // than MAX_RANGE values, so it must still be allowed.
+        const prompt = makeJinja2Prompt("{{ range(lo, hi, step) | length }}");
+
+        const count = Number(
+          prompt.format({ lo: -1e308, hi: 1e308, step: 1e307 })
+        );
+        expect(count).toBeGreaterThan(0);
+        expect(count).toBeLessThan(100000);
+      });
     });
 
     describe("neutralizes template escapes", () => {
@@ -489,6 +501,14 @@ describe("Prompt - format()", () => {
         );
 
         expect(() => prompt.format({})).toThrow(PromptValidationError);
+      });
+
+      it("should reject a zero range step", () => {
+        const prompt = makeJinja2Prompt("{{ range(start, stop, step) | length }}");
+
+        expect(() =>
+          prompt.format({ start: 0, stop: 3, step: 0 })
+        ).toThrow(PromptValidationError);
       });
 
       it("should not execute a constructor call chain", () => {

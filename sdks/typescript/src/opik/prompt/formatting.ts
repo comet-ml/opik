@@ -99,22 +99,22 @@ jinja2Env.addGlobal(
       to = from;
       from = 0;
       by = 1;
-    } else if (!by) {
+    } else if (by === undefined) {
+      // Only an omitted step defaults to 1; a 0 step is invalid (as in Python).
       by = 1;
     }
-    const count = Math.max(0, Math.ceil((to - from) / by));
-    if (count > MAX_RANGE) {
-      throw new Error(`range() produces more than ${MAX_RANGE} values`);
+    if (by === 0) {
+      throw new Error("range() step must not be zero");
     }
+    // Enforce the cap while iterating so the element count never relies on a
+    // `to - from` subtraction (which can overflow to Infinity for large
+    // opposite-signed bounds and wrongly reject a small range).
     const result: number[] = [];
-    if (by > 0) {
-      for (let i = from; i < to; i += by) {
-        result.push(i);
+    for (let i = from; by > 0 ? i < to : i > to; i += by) {
+      if (result.length >= MAX_RANGE) {
+        throw new Error(`range() produces more than ${MAX_RANGE} values`);
       }
-    } else {
-      for (let i = from; i > to; i += by) {
-        result.push(i);
-      }
+      result.push(i);
     }
     return result;
   }
