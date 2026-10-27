@@ -567,12 +567,19 @@ public class ChatCompletionService {
         };
     }
 
+    private String upstreamStatusOnly(Throwable throwable) {
+        return findProviderHttpStatus(throwable)
+                .map("provider responded with HTTP %s"::formatted)
+                .orElseGet(() -> throwable.getClass().getSimpleName());
+    }
+
     // decided only once a call has failed; an unanswerable lookup takes the restrictive path
     private boolean hidesUpstreamText(String workspaceId, String model) {
         try {
             return llmProviderFactory.hasUserConfiguredDestination(workspaceId, model);
         } catch (RuntimeException exception) {
-            log.warn("Could not tell whether model '{}' has a user-configured destination", model, exception);
+            log.warn("Could not tell whether model '{}' has a user-configured destination, workspaceId '{}'", model,
+                    workspaceId, exception);
             return true;
         }
     }
@@ -623,10 +630,9 @@ public class ChatCompletionService {
             }
             case ClosedChannelException closedChannelException ->
                 "Service is unreachable. Please check the provider URL.";
-            // the message can be a destination's raw response body, only echoed when Opik chose the destination
-            case Throwable ignored when hideUpstreamText -> findProviderHttpStatus(throwable)
-                    .map("provider responded with HTTP %s"::formatted)
-                    .orElseGet(() -> exceptionToHandle.getClass().getSimpleName());
+            // their message is what the destination answered: only echoed when Opik chose the destination
+            case HttpException ignored when hideUpstreamText -> upstreamStatusOnly(throwable);
+            case OpenAIServiceException ignored when hideUpstreamText -> upstreamStatusOnly(throwable);
             default -> {
                 // For other exceptions, use the exception message
                 String message = exceptionToHandle.getMessage();

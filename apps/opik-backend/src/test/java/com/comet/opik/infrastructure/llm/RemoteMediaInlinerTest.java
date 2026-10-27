@@ -5,6 +5,7 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException;
 import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder;
+import dev.langchain4j.data.image.Image;
 import dev.langchain4j.data.message.AudioContent;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.Content;
@@ -26,6 +27,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.Base64;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -84,6 +86,34 @@ class RemoteMediaInlinerTest {
 
         assertThat(remoteMediaInliner.inline(messages)).isEqualTo(List.of(system,
                 UserMessage.from(text, fromBase64.apply(Base64.getEncoder().encodeToString(bytes), mimeType))));
+    }
+
+    @Test
+    @DisplayName("an inlined image keeps everything it carried except its URL")
+    void inlinedImageKeepsItsOtherFields() {
+        var bytes = RandomUtils.secure().randomBytes(64);
+        var mediaPath = "/media-" + UUID.randomUUID();
+        wireMock.server().stubFor(get(urlPathEqualTo(mediaPath))
+                .willReturn(aResponse().withHeader("Content-Type", "image/jpeg").withBody(bytes)));
+        var revisedPrompt = UUID.randomUUID().toString();
+        List<ChatMessage> messages = List.of(UserMessage.builder()
+                .name(UUID.randomUUID().toString())
+                .attributes(Map.of(UUID.randomUUID().toString(), UUID.randomUUID().toString()))
+                .contents(List.of(ImageContent.from(Image.builder()
+                        .url(wireMock.runtimeInfo().getHttpBaseUrl() + mediaPath)
+                        .mimeType("image/png")
+                        .revisedPrompt(revisedPrompt)
+                        .build(), ImageContent.DetailLevel.HIGH)))
+                .build());
+        var original = (UserMessage) messages.getFirst();
+
+        assertThat(remoteMediaInliner.inline(messages)).isEqualTo(List.of(original.toBuilder()
+                .contents(List.of(ImageContent.from(Image.builder()
+                        .base64Data(Base64.getEncoder().encodeToString(bytes))
+                        .mimeType("image/png")
+                        .revisedPrompt(revisedPrompt)
+                        .build(), ImageContent.DetailLevel.HIGH)))
+                .build()));
     }
 
     @Test

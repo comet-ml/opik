@@ -5,7 +5,10 @@ import com.comet.opik.infrastructure.llm.OpenAiClientConfig;
 import com.comet.opik.infrastructure.llm.VertexAIClientConfig;
 import com.comet.opik.infrastructure.net.DestinationGuard;
 import io.dropwizard.util.DataSize;
+import io.dropwizard.util.DataSizeUnit;
 import io.dropwizard.util.Duration;
+import io.dropwizard.validation.MaxDataSize;
+import io.dropwizard.validation.MaxDuration;
 import io.dropwizard.validation.MinDataSize;
 import io.dropwizard.validation.MinDuration;
 import jakarta.validation.Valid;
@@ -77,10 +80,13 @@ public class LlmProviderClientConfig {
      * Time allowed for downloading one media URL that Gemini or Vertex AI receives as inline data, connecting
      * included.
      */
+    // the client takes the timeout in milliseconds as an int
     @NotNull @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS)
+    @MaxDuration(value = Integer.MAX_VALUE, unit = TimeUnit.MILLISECONDS)
     private Duration mediaDownloadTimeout;
 
-    /** Largest media file downloaded for Gemini or Vertex AI. */
+    /** Largest media file downloaded for Gemini or Vertex AI; it is held in memory while it is sent inline. */
     @NotNull @MinDataSize(1)
+    @MaxDataSize(value = 1, unit = DataSizeUnit.GIBIBYTES)
     private DataSize mediaDownloadMaxSize;
 }

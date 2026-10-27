@@ -26,6 +26,6 @@ public class LlmTestClients {
     public static RemoteMediaInliner remoteMediaInliner(DestinationGuard.Mode mode) {
         var config = TestConfigUtils.loadConfigTest().getLlmProviderClient();
         config.setVideoUrlDestinationGuard(mode);
-        return new LlmModule().remoteMediaInliner(TestHttpClientUtils.client(), config);
+        return new RemoteMediaInliner(TestHttpClientUtils.client(), config);
     }
 }

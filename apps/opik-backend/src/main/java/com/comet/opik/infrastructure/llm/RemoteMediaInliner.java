@@ -4,6 +4,7 @@ import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException;
 import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.comet.opik.infrastructure.net.DestinationGuardException;
+import dev.langchain4j.data.image.Image;
 import dev.langchain4j.data.message.AudioContent;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.Content;
@@ -11,6 +12,8 @@ import dev.langchain4j.data.message.ImageContent;
 import dev.langchain4j.data.message.PdfFileContent;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.data.message.VideoContent;
+import jakarta.inject.Inject;
+import jakarta.inject.Singleton;
 import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -19,6 +22,7 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.glassfish.jersey.client.ClientProperties;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -41,6 +45,7 @@ import static com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefused
  * destination guard and handed over as inline data. Only URLs that never reach the network from here pass through.
  */
 @Slf4j
+@Singleton
 public class RemoteMediaInliner {
 
     // Cloud Storage objects are read by Google, and data: URIs carry their own bytes; any other scheme is downloaded
@@ -54,7 +59,9 @@ public class RemoteMediaInliner {
     private final int timeoutMillis;
     private final int maxBytes;
 
-    public RemoteMediaInliner(@NonNull Client client, @NonNull LlmProviderClientConfig config) {
+    @Inject
+    public RemoteMediaInliner(@NonNull Client client,
+            @NonNull @Config("llmProviderClient") LlmProviderClientConfig config) {
         this.client = client;
         this.destinationGuard = DestinationGuard.builder()
                 .mode(config.getVideoUrlDestinationGuard())
@@ -98,7 +105,12 @@ public class RemoteMediaInliner {
             case IMAGE -> {
                 var image = (ImageContent) content;
                 var media = download(url, image.image().mimeType());
-                yield ImageContent.from(media.base64Data(), media.mimeType(), image.detailLevel());
+                // only the source changes; Image has no toBuilder, so its other field is copied by hand
+                yield ImageContent.from(Image.builder()
+                        .base64Data(media.base64Data())
+                        .mimeType(media.mimeType())
+                        .revisedPrompt(image.image().revisedPrompt())
+                        .build(), image.detailLevel());
             }
             case AUDIO -> {
                 var media = download(url, ((AudioContent) content).audio().mimeType());
