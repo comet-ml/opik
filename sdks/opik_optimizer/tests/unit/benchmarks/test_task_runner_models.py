@@ -199,7 +199,16 @@ def test_task_result_prefers_optimizer_native_history(
             return result
 
     result, _ = run_task(optimizer_class=WithHistory)
-    assert result.optimization_history["rounds"][0]["round_index"] == 0
+    assert result.status == "Success"
+    assert result.optimization_history == {
+        "rounds": [
+            {
+                "round_index": 0,
+                "trials": [{"trial_index": 0, "score": 0.1}],
+                "best_score": 0.1,
+            }
+        ]
+    }
     assert result.llm_calls_total_optimization == 3
 
 

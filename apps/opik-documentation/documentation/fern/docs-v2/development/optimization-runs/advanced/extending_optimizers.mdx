@@ -245,6 +245,8 @@ def _with_system_prompt(self, prompt: ChatPrompt, text: str) -> ChatPrompt:
         {**message, "content": text.strip()} if message["role"] == "system" else message
         for message in prompt.get_messages()
     ]
+    if not any(message["role"] == "system" for message in messages):
+        messages.insert(0, {"role": "system", "content": text.strip()})
     new_prompt = prompt.copy()
     new_prompt.set_messages(messages)
     return new_prompt

@@ -8,6 +8,7 @@ import traceback
 import warnings
 import time
 from abc import ABC
+from uuid import UUID
 import random
 import importlib.metadata
 
@@ -389,7 +390,8 @@ class BaseOptimizer(ABC):
             optimization_id: Optional pre-specified optimization ID
 
         Returns:
-            The created Optimization object, or None if creation failed
+            The created Optimization object, or None if automatic tracking failed.
+            When an optimization_id was explicitly requested, creation failures propagate.
         """
         try:
             opik_optimization = self.opik_client.create_optimization(
@@ -409,8 +411,10 @@ class BaseOptimizer(ABC):
             )
             return opik_optimization
         except Exception as e:
-            logger.warning(f"Opik server error: {e}. Continuing without Opik tracking.")
             self.current_optimization_id = None
+            if optimization_id is not None:
+                raise
+            logger.warning(f"Opik server error: {e}. Continuing without Opik tracking.")
             return None
 
     def _setup_optimization(
@@ -621,7 +625,16 @@ class BaseOptimizer(ABC):
     ) -> Any:
         """Reuse the given optimization if it exists, otherwise create it with that ID."""
         opik_optimization = None
-        if optimization_id:
+        if optimization_id is not None:
+            try:
+                valid_id = (
+                    isinstance(optimization_id, str)
+                    and UUID(optimization_id).version == 7
+                )
+            except (ValueError, AttributeError, TypeError):
+                valid_id = False
+            if not valid_id:
+                raise ValueError("optimization_id must be a valid UUIDv7 string")
             try:
                 opik_optimization = self.opik_client.get_optimization_by_id(
                     optimization_id

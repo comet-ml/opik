@@ -28,6 +28,82 @@ from ....utils.display.generation import display_candidate_generation_report
 logger = logging.getLogger(__name__)
 
 
+def _resolve_bundle_tools(
+    prompts: dict[str, chat_prompt.ChatPrompt],
+) -> dict[str, chat_prompt.ChatPrompt]:
+    factory = ToolCallingFactory()
+    return {name: factory.resolve_prompt(prompt) for name, prompt in prompts.items()}
+
+
+def _match_bundle_selectors(
+    prompt_name: str,
+    available: set[str],
+    selectors: dict[str, bool],
+) -> tuple[dict[str, bool], set[str]]:
+    """Match selectors for one prompt, with qualified entries taking precedence."""
+    unqualified: dict[str, bool] = {}
+    qualified: dict[str, bool] = {}
+    matched: set[str] = set()
+    for key, enabled in selectors.items():
+        tool = key.removeprefix(prompt_segments.PROMPT_SEGMENT_PREFIX_TOOL)
+        target = unqualified
+        if tool.startswith(prompt_name + "."):
+            tool = tool[len(prompt_name) + 1 :].removeprefix(
+                prompt_segments.PROMPT_SEGMENT_PREFIX_TOOL
+            )
+            target = qualified
+        if tool in available:
+            target[tool] = enabled
+            matched.add(key)
+    return {**unqualified, **qualified}, matched
+
+
+def _select_bundle_tools(
+    resolved: dict[str, chat_prompt.ChatPrompt],
+    optimize_tools: bool | dict[str, bool] | None,
+) -> tuple[dict[str, chat_prompt.ChatPrompt], dict[str, list[str]]]:
+    available_by_prompt = {
+        name: {
+            segment.segment_id.removeprefix(prompt_segments.PROMPT_SEGMENT_PREFIX_TOOL)
+            for segment in prompt_segments.extract_prompt_segments(prompt)
+            if segment.is_tool()
+        }
+        for name, prompt in resolved.items()
+        if prompt.tools
+    }
+    available_names = sorted(
+        f"{name}.{tool}"
+        for name, tools in available_by_prompt.items()
+        for tool in tools
+    )
+    selected: dict[str, list[str]] = {}
+    matched: set[str] = set()
+    for name, available in available_by_prompt.items():
+        selector: bool | dict[str, bool] = True
+        if isinstance(optimize_tools, dict):
+            selector, prompt_matches = _match_bundle_selectors(
+                name, available, optimize_tools
+            )
+            matched.update(prompt_matches)
+            if not any(selector.values()):
+                continue
+        resolved[name], names = _prepare_tool_optimization(resolved[name], selector)
+        selected[name] = names or []
+    if isinstance(optimize_tools, dict):
+        unknown = {key for key, enabled in optimize_tools.items() if enabled} - matched
+        if unknown:
+            raise ValueError(
+                f"Tools not found for optimize_tools entries: {sorted(unknown)}. "
+                f"Available tools: {available_names}"
+            )
+    if not selected:
+        raise ValueError(
+            "Prompt bundle must include selected tools for tool description "
+            f"optimization. Available tools: {available_names}"
+        )
+    return resolved, selected
+
+
 def resolve_prompt_tools(
     prompt_or_prompts: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
     *,
@@ -36,97 +112,39 @@ def resolve_prompt_tools(
     chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
     list[str] | dict[str, list[str]] | None,
 ]:
-    """Normalize toolcalling entries in ChatPrompt(s).
+    """Normalize tools and resolve the requested description-optimization selection.
 
     Args:
         prompt_or_prompts: Single ChatPrompt or mapping of ChatPrompts.
-        optimize_tools: Optional tool selector; qualify bundle entries as prompt_name.tool_name.
+        optimize_tools: True selects all tools. Mapping keys may be unqualified
+            tool names or prompt_name.tool_name for bundles, optionally using the
+            tool: prefix. Qualified entries override unqualified entries regardless
+            of mapping order. False, None, empty mappings and mappings enabling no
+            tools mean description optimization was not requested; runtime tools
+            are still resolved.
 
     Returns:
-        Tuple of (normalized prompt(s), tool_names for optimization or None).
+        Normalized prompt(s) and selected tool names, keyed by prompt for bundles.
+        The selection is None when description optimization was not requested.
+
+    Raises:
+        ValueError: An enabled selector names an unknown tool, or a requested bundle
+            selection resolves to no tools (including qualified exclusions overriding
+            all enabled unqualified selectors).
     """
+    requested = tool_optimization_requested(optimize_tools)
     if isinstance(prompt_or_prompts, dict):
-        if tool_optimization_requested(optimize_tools):
-            factory = ToolCallingFactory()
-            resolved = {
-                name: factory.resolve_prompt(prompt)
-                for name, prompt in prompt_or_prompts.items()
-            }
-            available_by_prompt = {
-                name: {
-                    segment.segment_id.removeprefix(
-                        prompt_segments.PROMPT_SEGMENT_PREFIX_TOOL
-                    )
-                    for segment in prompt_segments.extract_prompt_segments(prompt)
-                    if segment.is_tool()
-                }
-                for name, prompt in resolved.items()
-                if prompt.tools
-            }
-            available_names = sorted(
-                f"{name}.{tool}"
-                for name, tools in available_by_prompt.items()
-                for tool in tools
-            )
-            selected: dict[str, list[str]] = {}
-            matched: set[str] = set()
-            for name, available in available_by_prompt.items():
-                selector: bool | dict[str, bool] = True
-                if isinstance(optimize_tools, dict):
-                    # Qualified (prompt.tool) entries override unqualified ones.
-                    unqualified: dict[str, bool] = {}
-                    qualified: dict[str, bool] = {}
-                    for key, enabled in optimize_tools.items():
-                        tool = key.removeprefix(
-                            prompt_segments.PROMPT_SEGMENT_PREFIX_TOOL
-                        )
-                        target = unqualified
-                        if tool.startswith(name + "."):
-                            tool = tool[len(name) + 1 :].removeprefix(
-                                prompt_segments.PROMPT_SEGMENT_PREFIX_TOOL
-                            )
-                            target = qualified
-                        if tool in available:
-                            target[tool] = enabled
-                            matched.add(key)
-                    selector = {**unqualified, **qualified}
-                    if not any(selector.values()):
-                        continue
-                resolved[name], names = _prepare_tool_optimization(
-                    resolved[name], selector
-                )
-                selected[name] = names or []
-            if isinstance(optimize_tools, dict):
-                unknown = {
-                    key for key, enabled in optimize_tools.items() if enabled
-                } - matched
-                if unknown:
-                    raise ValueError(
-                        f"Tools not found for optimize_tools entries: {sorted(unknown)}. "
-                        f"Available tools: {available_names}"
-                    )
-            if not selected:
-                raise ValueError(
-                    "Prompt bundle must include selected tools for tool description "
-                    f"optimization. Available tools: {available_names}"
-                )
-            return resolved, selected
-        if not any(
-            getattr(prompt, "tools", None) for prompt in prompt_or_prompts.values()
+        if not requested and not any(
+            prompt.tools for prompt in prompt_or_prompts.values()
         ):
             return prompt_or_prompts, None
-        factory = ToolCallingFactory()
-        resolved = {
-            name: factory.resolve_prompt(prompt)
-            for name, prompt in prompt_or_prompts.items()
-        }
+        resolved = _resolve_bundle_tools(prompt_or_prompts)
+        if requested:
+            return _select_bundle_tools(resolved, optimize_tools)
         return resolved, None
-
-    if tool_optimization_requested(optimize_tools):
+    if requested:
         return _prepare_tool_optimization(prompt_or_prompts, optimize_tools)
-
-    resolved_prompt = ToolCallingFactory().resolve_prompt(prompt_or_prompts)
-    return resolved_prompt, None
+    return ToolCallingFactory().resolve_prompt(prompt_or_prompts), None
 
 
 def tool_optimization_requested(

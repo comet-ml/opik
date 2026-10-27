@@ -69,6 +69,8 @@ HRPO's `reasoning_model_parameters=None` inherits optimizer parameters; `{}` is 
 
 ## Migration and deprecated APIs
 
+- **Tracking IDs:** a supplied `optimization_id` must be a valid UUIDv7 string. Existing runs are
+  reused; unknown IDs are created. Failure to create an explicitly requested run raises an error.
 - **ParameterOptimizer:** constructor `model` and `model_parameters` are deprecated, ignored, and
   emit `DeprecationWarning`. Set them on each `ChatPrompt` instead. Parameter search changes only
   selected fields. Result `details["baseline_parameters"]` and `details["optimized_model_kwargs"]`

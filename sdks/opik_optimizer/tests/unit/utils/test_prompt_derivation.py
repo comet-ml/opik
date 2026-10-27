@@ -118,3 +118,36 @@ def test_text_only_rewrite_input_keeps_all_text_and_excludes_media() -> None:
         {"role": "user", "content": "First\nSecond"}
     ]
     assert len(messages[0]["content"]) == 3
+
+
+@pytest.mark.parametrize("generated_text", [None, 17, {"unexpected": "value"}])
+def test_invalid_generated_text_keeps_original_text_and_media(
+    generated_text: Any,
+) -> None:
+    from opik_optimizer.utils.multimodal import preserve_multimodal_message_structure
+
+    original = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Read the image."},
+                {"type": "image_url", "image_url": {"url": "{image}"}},
+            ],
+        }
+    ]
+    before = deepcopy(original)
+    generated = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": generated_text},
+                {"type": "image_url", "image_url": {"url": "ignored"}},
+            ],
+        }
+    ]
+    result = preserve_multimodal_message_structure(
+        original_messages=original,
+        generated_messages=generated,
+    )
+    assert result == before
+    assert original == before

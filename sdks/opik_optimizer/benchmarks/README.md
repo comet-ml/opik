@@ -162,6 +162,11 @@ optimizer model and temperature. Neither configuration falls back to the other. 
 receive the task's evaluation settings; their prompt bundles retain their declared settings.
 `ParameterOptimizer` needs only the evaluation settings because it makes no reasoning calls.
 
+Checkpoints include a format version for this model-ownership contract. Resume and retry reject
+unversioned checkpoints from the earlier shared-model runner, rather than silently choosing new
+reasoning settings. Start a new benchmark with explicit evaluation and optimizer configuration;
+existing result files remain available for inspection.
+
 #### Override Cheat Sheet
 
 - `model_parameters`: evaluation settings for the prompt or package agent (temperature, max_tokens, reasoning_effort). These are never forwarded to the optimizer constructor.

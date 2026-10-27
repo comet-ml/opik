@@ -198,7 +198,7 @@ def preserve_multimodal_message_structure(
     For aligned message indices where role matches and original content is multimodal
     (list of parts), this keeps non-text parts from the original message and replaces
     only the text part with generated text. If generated text is empty, original text
-    is retained.
+    is retained. Invalid generated text values also retain the original text.
     """
     preserved: list[dict[str, Any]] = []
     for index, generated in enumerate(generated_messages):
@@ -235,7 +235,9 @@ def preserve_multimodal_message_structure(
                         and isinstance(generated_part, dict)
                         and generated_part.get("type") == "text"
                     ):
-                        part["text"] = generated_part.get("text", "")
+                        generated_text_part = generated_part.get("text")
+                        if isinstance(generated_text_part, str):
+                            part["text"] = generated_text_part
                 preserved.append({**original_messages[index], "content": content})
                 continue
             original_text = api_types.extract_text_from_content(original_content)

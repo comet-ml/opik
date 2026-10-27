@@ -14,6 +14,14 @@ import opik_optimizer  # type: ignore[import-not-found]  # noqa: E402
 from pydantic import BaseModel
 
 
+DEPRECATED_HOOKS = {
+    "begin_round": "pre_round",
+    "finish_round": "post_round",
+    "start_candidate": "pre_trial",
+    "finish_candidate": "post_trial",
+}
+
+
 class ParameterInfo(BaseModel):
     path: str
     type: str | None
@@ -340,15 +348,9 @@ class ClassInspector:
         # Methods
         if len(info.public_methods) > 0:
             output.append("### Methods")
-        deprecated_hooks = {
-            "begin_round": "pre_round",
-            "finish_round": "post_round",
-            "start_candidate": "pre_trial",
-            "finish_candidate": "post_trial",
-        }
         for method in info.public_methods:
             output.append(f"#### {method.name}")
-            if replacement := deprecated_hooks.get(method.name):
+            if replacement := DEPRECATED_HOOKS.get(method.name):
                 output.append(
                     f"\nDeprecated alias: use `{replacement}` instead. "
                     "This alias remains available and emits `DeprecationWarning`.\n"
@@ -462,6 +464,8 @@ HRPO's `reasoning_model_parameters=None` inherits optimizer parameters; `{}` is 
 
 ## Migration and deprecated APIs
 
+- **Tracking IDs:** a supplied `optimization_id` must be a valid UUIDv7 string. Existing runs are
+  reused; unknown IDs are created. Failure to create an explicitly requested run raises an error.
 - **ParameterOptimizer:** constructor `model` and `model_parameters` are deprecated, ignored, and
   emit `DeprecationWarning`. Set them on each `ChatPrompt` instead. Parameter search changes only
   selected fields. Result `details["baseline_parameters"]` and `details["optimized_model_kwargs"]`

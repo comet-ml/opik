@@ -5,7 +5,6 @@ from contextlib import ExitStack, nullcontext
 from typing import Any, TYPE_CHECKING
 
 import opik
-from opik import exceptions as opik_exceptions
 
 from ....api_objects import chat_prompt
 from ....api_objects.types import MetricFunction
@@ -58,8 +57,13 @@ def run_root_cause_analysis(
                         recording = recording_stack.enter_context(
                             opik.record_traces_locally()
                         )
-                    except (RuntimeError, opik_exceptions.OpikException) as exc:
-                        logger.debug("Agent traces unavailable for analysis: %s", exc)
+                    except Exception as exc:
+                        # Recording is optional; evaluation failures below still propagate.
+                        logger.debug(
+                            "Agent traces unavailable for analysis: %s",
+                            exc,
+                            exc_info=True,
+                        )
                 train_dataset_experiment_result = optimizer.evaluate_prompt(
                     prompt=best_prompts,
                     dataset=dataset,
