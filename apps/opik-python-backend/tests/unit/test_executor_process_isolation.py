@@ -667,7 +667,11 @@ def test_job_exit_ends_idle_isolated_workers(tmp_path):
 
 
 def _never_ready(connection, isolate: bool) -> None:
-    time.sleep(60)
+    # blocks until the parent gives up on the worker and closes its end
+    try:
+        connection.recv_bytes()
+    except (EOFError, OSError):
+        pass
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="forked workers inherit the patched target")
@@ -687,6 +691,26 @@ def test_invalid_max_reply_bytes_fails_startup(monkeypatch, value):
 
     with pytest.raises(ValueError, match=f"^{executor_process.MAX_REPLY_BYTES_ENV_VAR} must be a positive integer, not "):
         executor_process.max_reply_bytes()
+
+
+@pytest.mark.parametrize("value", ["0", "-1", "abc"])
+def test_invalid_max_reply_bytes_fails_the_module_import(value):
+    env = {**os.environ, executor_process.MAX_REPLY_BYTES_ENV_VAR: value}
+    actual = subprocess.run([sys.executable, "-c", "import opik_backend.executor_process"],
+                            env=env, capture_output=True, text=True, timeout=60)
+
+    assert actual.returncode != 0
+    assert (f"ValueError: {executor_process.MAX_REPLY_BYTES_ENV_VAR} must be a positive integer, not {value!r}"
+            in actual.stderr), actual.stderr
+
+
+def test_invalid_max_reply_bytes_names_only_an_excerpt(monkeypatch):
+    monkeypatch.setenv(executor_process.MAX_REPLY_BYTES_ENV_VAR, "x" * 100)
+
+    with pytest.raises(ValueError) as actual:
+        executor_process.max_reply_bytes()
+
+    assert str(actual.value) == f"{executor_process.MAX_REPLY_BYTES_ENV_VAR} must be a positive integer, not {'x' * 32!r}"
 
 
 @pytest.mark.parametrize("value, expected", [(None, 64 * 1024 * 1024), ("", 64 * 1024 * 1024), ("1024", 1024)])

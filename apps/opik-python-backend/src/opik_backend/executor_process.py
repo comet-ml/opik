@@ -104,7 +104,8 @@ def max_reply_bytes() -> int:
     """A positive integer, so a bad value fails startup instead of refusing every reply or lifting the cap."""
     value = os.getenv(MAX_REPLY_BYTES_ENV_VAR) or str(64 * 1024 * 1024)
     if not value.isdecimal() or int(value) == 0:
-        raise ValueError(f"{MAX_REPLY_BYTES_ENV_VAR} must be a positive integer, not {value!r}")
+        # only an excerpt of the value: it goes to the startup log
+        raise ValueError(f"{MAX_REPLY_BYTES_ENV_VAR} must be a positive integer, not {value[:32]!r}")
     return int(value)
 
 
