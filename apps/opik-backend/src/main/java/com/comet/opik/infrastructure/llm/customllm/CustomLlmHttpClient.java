@@ -25,7 +25,6 @@ import mutiny.zero.ZeroPublisher;
 import okhttp3.Call;
 import okhttp3.Callback;
 import okhttp3.HttpUrl;
-import okhttp3.Interceptor;
 import okhttp3.MediaType;
 import okhttp3.MultipartBody;
 import okhttp3.OkHttpClient;
@@ -82,27 +81,10 @@ class CustomLlmHttpClient implements HttpClient {
 
     CustomLlmHttpClient(@NonNull OkHttpClient client, int errorBodyMaxSize, @NonNull Duration streamReadTimeout) {
         this.client = client;
-        int streamReadTimeoutMillis = Math.toIntExact(streamReadTimeout.toMillis());
         this.streamingClient = client.newBuilder()
-                .addNetworkInterceptor(chain -> withStreamReadTimeout(chain, streamReadTimeoutMillis))
+                .addNetworkInterceptor(StreamReadTimeoutInterceptor.forEveryResponse(streamReadTimeout))
                 .build();
         this.errorBodyMaxSize = errorBodyMaxSize;
-    }
-
-    /**
-     * The read timeout bounds the wait for a stream's response headers. OkHttp also sets it as the socket's read
-     * timeout, which would end a stream that is silent for longer, as a model that reasons before answering can be, so
-     * a successful stream's socket takes the stream read timeout instead: long enough for that, short enough that a
-     * stalled stream can't hold its call forever. Each exchange on a pooled connection sets its own again.
-     */
-    private static Response withStreamReadTimeout(Interceptor.Chain chain, int streamReadTimeoutMillis)
-            throws IOException {
-        var response = chain.proceed(chain.request());
-        var connection = chain.connection();
-        if (connection != null && response.isSuccessful()) {
-            connection.socket().setSoTimeout(streamReadTimeoutMillis);
-        }
-        return response;
     }
 
     @Override

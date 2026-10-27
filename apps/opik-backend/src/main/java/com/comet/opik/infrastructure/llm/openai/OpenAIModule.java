@@ -4,6 +4,7 @@ import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmServiceProvider;
 import com.comet.opik.infrastructure.llm.customllm.LlmHttpClientBuilders;
+import com.comet.opik.infrastructure.llm.customllm.StreamReadTimeoutInterceptor;
 import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.comet.opik.infrastructure.net.DestinationGuardDns;
 import com.google.inject.AbstractModule;
@@ -14,6 +15,8 @@ import com.openai.core.http.HttpClient;
 import jakarta.inject.Named;
 import lombok.NonNull;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
+
+import java.time.Duration;
 
 public class OpenAIModule extends AbstractModule {
     @Provides
@@ -37,6 +40,9 @@ public class OpenAIModule extends AbstractModule {
                 .build())
                 .followRedirects(false)
                 .followSslRedirects(false)
+                // as for every other provider, the read timeout bounds a stream's headers, then this one applies
+                .addNetworkInterceptor(StreamReadTimeoutInterceptor.forEventStreams(
+                        Duration.ofMillis(config.getStreamReadTimeout().toMilliseconds())))
                 .build());
     }
 
