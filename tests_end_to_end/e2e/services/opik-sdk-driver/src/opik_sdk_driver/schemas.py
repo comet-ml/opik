@@ -405,6 +405,64 @@ class ExperimentReadItemsRequest(BaseModel):
     workspace: str | None = None
 
 
+class ExperimentLifecycleRequest(BaseModel):
+    """One experiment, read for its lifecycle fields.
+
+    `ids` on the cancel request rather than a single id because
+    `cancel_experiments` takes a sequence, and a caller asserting that the stop
+    is scoped to what it named has to be able to name more than one.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    experiment_id: str
+    workspace: str | None = None
+
+
+class ExperimentCancelRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ids: list[str]
+    workspace: str | None = None
+
+
+class ExperimentCancelResponse(BaseModel):
+    """What the SDK call returned, which for this endpoint is nothing.
+
+    Stated explicitly rather than answering an empty body: the claim the caller
+    makes is that `cancel_experiments` was REACHABLE on the regenerated client
+    and did not raise, which is a different claim from the stop having applied —
+    that one is only readable off the experiment's own status afterwards.
+    """
+
+    requested: int
+    returned_none: bool
+
+
+class ExperimentLifecycleResponse(BaseModel):
+    """An experiment's lifecycle as the regenerated Python client deserialises it.
+
+    Every field is `| None` because `ExperimentPublic` types each one optional,
+    and that optionality is a fact about the API the caller must assert away
+    rather than one this route may paper over: substituting `"completed"` for a
+    dropped `status` here would reproduce the backend's own
+    `ExperimentStatus.fromString` fallback inside the bridge and make the
+    regression invisible.
+
+    `status` is passed through as the raw string the model carries.
+    `ExperimentPublicStatus` is a `Literal[...] | Any` union, so pydantic admits
+    any value — which means a status the client does not know is reported here
+    rather than rejected, and the caller compares it against what it expects.
+    """
+
+    experiment_id: str
+    status: str | None
+    finished_at: str | None
+    created_at: str | None
+    trace_count: int | None
+    dataset_item_count: int | None
+
+
 class ExperimentItemFingerprint(BaseModel):
     """The identity of one experiment item, in the order the read returned it.
 

@@ -30,6 +30,7 @@ export {
   PROJECT_METRIC_TYPES,
   type AttachmentRef,
   type ProjectStatsRef,
+  type ExperimentLifecycle,
   type ExperimentRefDetail,
   type StudioConfigSeed,
   type ExecutePromptSeed,

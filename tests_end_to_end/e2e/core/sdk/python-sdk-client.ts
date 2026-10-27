@@ -361,6 +361,37 @@ export interface PythonSdkClient {
       idx: number | null;
     }>;
   }>;
+  /**
+   * `cancel_experiments(ids=[...])`, one of the bindings opik#9211 regenerated.
+   *
+   * Answers what the SDK call answered — nothing — rather than the experiments'
+   * new state. The endpoint behind it replies 204 even for ids it is not
+   * tracking, so "the call went through" and "the run stopped" are two claims;
+   * read the second off `readExperimentLifecycle`.
+   */
+  cancelExperiments(args: {
+    ids: string[];
+    workspace?: string;
+  }): Promise<{ requested: number; returned_none: boolean }>;
+  /**
+   * An experiment's `status`/`finished_at` as the regenerated Python client
+   * deserialises them, through `Experiment.get_experiment_data()`.
+   *
+   * Nullable throughout on purpose: `ExperimentPublic` declares every field
+   * optional, so a field a regen dropped arrives as `null` instead of raising —
+   * which is why a caller has to assert the absence away before comparing.
+   */
+  readExperimentLifecycle(args: {
+    experiment_id: string;
+    workspace?: string;
+  }): Promise<{
+    experiment_id: string;
+    status: string | null;
+    finished_at: string | null;
+    created_at: string | null;
+    trace_count: number | null;
+    dataset_item_count: number | null;
+  }>;
   createTextPrompt(args: {
     name: string;
     prompt: string;
@@ -830,6 +861,23 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
         // a small page size) are deliberately the slowest way to do it.
         timeoutMs: 300_000,
       });
+    },
+    async cancelExperiments(args) {
+      return request<{ requested: number; returned_none: boolean }>(
+        'POST',
+        '/experiments/cancel',
+        args,
+      );
+    },
+    async readExperimentLifecycle(args) {
+      return request<{
+        experiment_id: string;
+        status: string | null;
+        finished_at: string | null;
+        created_at: string | null;
+        trace_count: number | null;
+        dataset_item_count: number | null;
+      }>('POST', '/experiments/lifecycle', args);
     },
     async createTextPrompt(args) {
       return request<{ id: string; name: string }>('POST', '/prompts/text', args);

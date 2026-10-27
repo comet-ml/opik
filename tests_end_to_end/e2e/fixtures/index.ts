@@ -1,4 +1,4 @@
-export { test, expect } from './playground-logs-traces.fixture';
+export { test, expect } from './stoppable-run-dataset.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -560,3 +560,7 @@ export type {
   PlaygroundLogsTracesRef,
   PlaygroundLogsTracesFixtures,
 } from './playground-logs-traces.fixture';
+export type {
+  StoppableRunDatasetRef,
+  StoppableRunDatasetFixtures,
+} from './stoppable-run-dataset.fixture';

@@ -400,6 +400,27 @@ export interface ExperimentRefDetail {
   datasetId: string | null;
 }
 
+/**
+ * An experiment's lifecycle, read off `GET /v1/private/experiments/{id}`.
+ *
+ * `status` and `finishedAt` are the pair `/experiments/cancel` writes, and the
+ * two counts are what a stopped run is read against: `datasetItemCount` is how
+ * many of the dispatched items produced an experiment item, so
+ * `totalItems - datasetItemCount` is how many the stop prevented.
+ *
+ * Every field is nullable because the wire genuinely omits each one in some
+ * state (`finished_at` while a run may still produce items, `status` on a row
+ * written before the column existed) — a caller asserts the absence away
+ * rather than comparing against a substituted default.
+ */
+export interface ExperimentLifecycle {
+  status: string | null;
+  finishedAt: string | null;
+  createdAt: string | null;
+  datasetItemCount: number | null;
+  traceCount: number | null;
+}
+
 export interface ExecutePromptSeed {
   model: string;
   messages: Array<{ role: string; content: string }>;
@@ -6654,6 +6675,68 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * `PUT /v1/private/experiments/cancel` — the stop a Playground or
+     * test-suite run takes, reporting the status rather than throwing on it.
+     *
+     * The status is deliberately returned: a `204` here does NOT mean anything
+     * was stopped. `ExperimentExecutionService.stillRunning` filters the ids
+     * down to the ones `itemPublisher.isTracked` still holds AND whose status
+     * is non-terminal, and answers an empty `Mono` — i.e. the same 204 — when
+     * that set is empty. So a caller that reads the status as confirmation is
+     * asserting nothing; the claim has to be made against the experiment's own
+     * status afterwards, which is what `getExperimentLifecycle` below is for.
+     */
+    async cancelExperiments(ids: string[]): Promise<RawApiResult> {
+      const { status, message, location } = await rawFetch(
+        'PUT',
+        '/v1/private/experiments/cancel',
+        { body: { ids } },
+      );
+      return { status, message, location };
+    },
+
+    /**
+     * An experiment's lifecycle as the wire carries it: `status`, `finished_at`
+     * and the two item counts a stopped run is read against.
+     *
+     * Raw rather than through the pinned SDK, which predates both fields —
+     * `opik@2.2.74` has no `status` and no `finished_at` on `Experiment`, so
+     * going through `opik.api.experiments.getExperimentById` would silently
+     * drop exactly what a caller asks this for and leave a lifecycle assertion
+     * comparing `undefined` with `undefined`.
+     *
+     * Every field is read as "absent" rather than defaulted. `status: null` and
+     * `finishedAt: null` are facts a caller must assert away before comparing —
+     * a `?? 'completed'` here would reproduce the backend's own
+     * `ExperimentStatus.fromString` fallback inside the test and make a dropped
+     * status read as a healthy one.
+     */
+    async getExperimentLifecycle(id: string): Promise<ExperimentLifecycle> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/experiments/${id}`,
+      );
+      if (status !== 200) {
+        throw new Error(`GET /v1/private/experiments/${id} -> ${status}: ${message}`);
+      }
+      const body = (json ?? {}) as {
+        status?: unknown;
+        finished_at?: unknown;
+        created_at?: unknown;
+        dataset_item_count?: unknown;
+        trace_count?: unknown;
+      };
+      return {
+        status: typeof body.status === 'string' ? body.status : null,
+        finishedAt: typeof body.finished_at === 'string' ? body.finished_at : null,
+        createdAt: typeof body.created_at === 'string' ? body.created_at : null,
+        datasetItemCount:
+          typeof body.dataset_item_count === 'number' ? body.dataset_item_count : null,
+        traceCount: typeof body.trace_count === 'number' ? body.trace_count : null,
+      };
+    },
+
+    /**
      * `POST /v1/private/experiments/delete` for SEVERAL ids at once, reporting
      * the status instead of throwing on it.
      *
@@ -7031,8 +7114,15 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
        * is what a seed wants when the experiment must look like one still being
        * written to. Like `evaluationMethod`, the pinned SDK has no field for
        * it, so setting either takes the raw write.
+       *
+       * `failed` is the member opik#9211's regen added to `ExperimentStatus`,
+       * and it is in the union for the same reason the other three are: the
+       * only way to ask a client whether it can read a status is to store one.
+       * It is not reachable by seeding a run that fails, either — a run whose
+       * items all error still has to be waited out, and what it lands on is
+       * the product's decision rather than the seed's.
        */
-      status?: 'running' | 'completed' | 'cancelled';
+      status?: 'running' | 'completed' | 'cancelled' | 'failed';
     }): Promise<string> {
       if (args.evaluationMethod !== undefined || args.status !== undefined) {
         await postSeedWrite(
