@@ -413,33 +413,6 @@ class BaseOptimizer(ABC):
             self.current_optimization_id = None
             return None
 
-    def _select_evaluation_dataset(
-        self,
-        dataset: Dataset,
-        validation_dataset: Dataset | None,
-        warn_unsupported: bool = False,
-    ) -> Dataset:
-        """
-        Select which dataset to use for evaluation.
-
-        Args:
-            dataset: The training dataset
-            validation_dataset: Optional validation dataset
-            warn_unsupported: If True, log warning that validation_dataset is not supported
-
-        Returns:
-            The dataset to use for evaluation
-        """
-        if validation_dataset is not None:
-            if warn_unsupported:
-                logger.warning(
-                    f"{self.__class__.__name__} currently does not support validation dataset. "
-                    f"Using `dataset` (training) for now. Ignoring `validation_dataset` parameter."
-                )
-                return dataset
-            return validation_dataset
-        return dataset
-
     def _setup_optimization(
         self,
         prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
@@ -511,8 +484,8 @@ class BaseOptimizer(ABC):
         )
 
         # Select evaluation dataset early so we validate n_samples against the right split
-        evaluation_dataset = self._select_evaluation_dataset(
-            dataset, validation_dataset
+        evaluation_dataset = (
+            validation_dataset if validation_dataset is not None else dataset
         )
 
         self._validate_metric_requirements(evaluation_dataset, metric)
