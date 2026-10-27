@@ -526,7 +526,7 @@ class OnlineScoringEngineTest {
 
         var captor = ArgumentCaptor.forClass(List.class);
         Mockito.doReturn(Mono.empty()).when(feedbackScoreService).scoreBatchOfTraces(Mockito.any());
-        var providerErrorMessage = "LLM provider XXXXX";
+        var providerErrorMessage = "LLM provider %s".formatted(RandomStringUtils.secure().nextAlphanumeric(16));
 
         Mockito.doThrow(
                 new InternalServerErrorException(ChatCompletionService.UNEXPECTED_ERROR_CALLING_LLM_PROVIDER,
@@ -541,11 +541,14 @@ class OnlineScoringEngineTest {
 
         //Check user facing logs
         var logPage = evaluatorsResourceClient.getLogs(id, WORKSPACE_NAME, API_KEY);
-        var logMessage = "Unexpected error while scoring traceId '%s' with rule '%s': %n%n%s".formatted(traceId,
-                evaluator.getName(), providerErrorMessage);
+        // Opik's own message and the error type, never the provider's text in its cause
+        var logMessage = "Unexpected error while scoring traceId '%s' with rule '%s', error type '%s': %n%nStatus 500: %s"
+                .formatted(traceId, evaluator.getName(), "InternalServerErrorException",
+                        ChatCompletionService.UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
 
         assertThat(logPage.content())
                 .anyMatch(logItem -> logItem.level().equals(LogLevel.ERROR) && logItem.message().contains(logMessage));
+        assertThat(logPage.content()).noneMatch(logItem -> logItem.message().contains(providerErrorMessage));
     }
 
     @Test

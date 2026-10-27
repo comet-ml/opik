@@ -11,6 +11,7 @@ import org.apache.commons.lang3.StringUtils;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.util.Set;
+import java.util.regex.Pattern;
 
 import static com.comet.opik.domain.llm.ChatCompletionService.UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
 
@@ -74,17 +75,33 @@ public class ProviderErrorMessageValidator {
     }
 
     /**
-     * Markup delimiters, ISO control characters (C0, DEL and C1) and the Unicode line and paragraph separators. All of
-     * them are in the Basic Multilingual Plane, so matching UTF-16 chars matches the same code points.
+     * ISO control characters (C0, DEL and C1) and the Unicode line and paragraph separators. All of them are in the
+     * Basic Multilingual Plane, so matching UTF-16 chars matches the same code points.
      */
-    private static final CharMatcher DISALLOWED = CharMatcher.javaIsoControl()
-            .or(CharMatcher.anyOf("<>\u2028\u2029"));
+    private static final CharMatcher LINE_BREAKING = CharMatcher.javaIsoControl()
+            .or(CharMatcher.anyOf("\u2028\u2029"));
+
+    /**
+     * The start of a tag, comment or declaration. A bare {@code <} or {@code >} is a comparison, as in a parameter
+     * range ({@code >= 1}), so it is kept.
+     */
+    private static final Pattern MARKUP = Pattern.compile("<[\\p{L}/!]");
+
+    private static final Pattern LINE_BREAK = Pattern.compile("\\R");
 
     private final int maxLength;
 
     @Inject
     public ProviderErrorMessageValidator(@NonNull @Config("llmProviderClient") LlmProviderClientConfig config) {
         this.maxLength = config.getProviderErrorMessageMaxLength();
+    }
+
+    /**
+     * The first line of a message, stripped. Google APIs put a one-line summary first and the specifics, such as the
+     * quota that was exceeded, on the lines after it.
+     */
+    public static String firstLine(String text) {
+        return text == null ? null : LINE_BREAK.split(text, 2)[0].strip();
     }
 
     /** The provider's status with none of its text, for an envelope that names no documented error. */
@@ -106,6 +123,6 @@ public class ProviderErrorMessageValidator {
 
     /** A single line of plain text: no markup, control characters or line breaks; length is not checked. */
     public static boolean isPlainText(String text) {
-        return StringUtils.isNotBlank(text) && DISALLOWED.matchesNoneOf(text);
+        return StringUtils.isNotBlank(text) && LINE_BREAKING.matchesNoneOf(text) && !MARKUP.matcher(text).find();
     }
 }

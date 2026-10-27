@@ -290,10 +290,10 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                 .doOnNext(withMdc(mdc, loggedScores -> userFacingLogger
                         .info("Scores for traceId '{}' stored successfully:\n\n{}", trace.id(), loggedScores)))
                 .doOnError(withMdc(mdc, error -> userFacingLogger
-                        .error("Unexpected error while scoring traceId '{}' with rule '{}': \n\n{}",
+                        .error("Unexpected error while scoring traceId '{}' with rule '{}', error type '{}': \n\n{}",
                                 trace.id(), message.ruleName(),
-                                Optional.ofNullable(error.getCause()).map(Throwable::getMessage)
-                                        .orElse(error.getMessage()))))
+                                // Opik's own message: a provider's text, in the cause, is never logged
+                                error.getClass().getSimpleName(), error.getMessage())))
                 .then();
     }
 

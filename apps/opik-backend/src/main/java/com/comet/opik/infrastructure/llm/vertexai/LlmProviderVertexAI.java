@@ -2,9 +2,13 @@ package com.comet.opik.infrastructure.llm.vertexai;
 
 import com.comet.opik.api.ChunkedResponseHandler;
 import com.comet.opik.domain.llm.LlmProviderService;
+import com.comet.opik.domain.llm.ProviderErrorMessageValidator;
+import com.comet.opik.domain.llm.ProviderErrorMessageValidator.DocumentedErrors;
+import com.comet.opik.domain.llm.ProviderFailures;
 import com.comet.opik.infrastructure.llm.GeminiMaxOutputTokens;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderLangChainMapper;
+import com.google.genai.errors.ApiException;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.ChatMessageType;
@@ -26,6 +30,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import reactor.core.scheduler.Schedulers;
 
 import java.util.ArrayList;
@@ -121,7 +126,9 @@ public class LlmProviderVertexAI implements LlmProviderService {
                                 log.warn("Vertex AI stream close handler failed", ex);
                             }
                         } else {
-                            log.warn("Vertex AI stream failed after a terminal callback had already run", e);
+                            log.warn(
+                                    "Vertex AI stream failed after a terminal callback had already run, error type '{}'",
+                                    ProviderFailures.rootType(e), ProviderFailures.redacted(e));
                         }
                         closeOnce.run();
                     }
@@ -227,8 +234,23 @@ public class LlmProviderVertexAI implements LlmProviderService {
 
     }
 
+    /**
+     * The google-genai SDK raises an {@link ApiException} carrying the error's code, status and message, not the JSON
+     * envelope, so it is mapped as a Gemini envelope would be: its message is kept only when Google documents its
+     * status.
+     */
     @Override
     public Optional<ErrorMessage> getLlmProviderError(@NonNull Throwable throwable) {
-        return LlmProviderLangChainMapper.INSTANCE.getGeminiErrorObject(throwable, log);
+        return Optional.ofNullable(ExceptionUtils.throwableOfType(throwable, ApiException.class))
+                .map(LlmProviderVertexAI::toErrorMessage)
+                .or(() -> LlmProviderLangChainMapper.INSTANCE.getGeminiErrorObject(throwable, log));
+    }
+
+    private static ErrorMessage toErrorMessage(ApiException exception) {
+        var errorMessage = new ErrorMessage(exception.code(), ProviderErrorMessageValidator.firstLine(
+                exception.message()), exception.status());
+        return DocumentedErrors.GOOGLE.documents(exception.status())
+                ? errorMessage
+                : ProviderErrorMessageValidator.withoutProviderText(errorMessage);
     }
 }

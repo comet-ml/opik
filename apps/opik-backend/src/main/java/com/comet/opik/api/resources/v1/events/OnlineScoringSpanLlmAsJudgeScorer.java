@@ -41,7 +41,6 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorType.Constants;
@@ -147,10 +146,10 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
                 .doOnNext(withMdc(mdc, loggedScores -> userFacingLogger
                         .info("Scores for spanId '{}' stored successfully:\n\n{}", span.id(), loggedScores)))
                 .doOnError(withMdc(mdc, error -> userFacingLogger
-                        .error("Unexpected error while scoring spanId '{}' with rule '{}': \n\n{}",
+                        .error("Unexpected error while scoring spanId '{}' with rule '{}', error type '{}': \n\n{}",
                                 span.id(), message.ruleName(),
-                                Optional.ofNullable(error.getCause()).map(Throwable::getMessage)
-                                        .orElse(error.getMessage()))))
+                                // Opik's own message: a provider's text, in the cause, is never logged
+                                error.getClass().getSimpleName(), error.getMessage())))
                 .then();
     }
 

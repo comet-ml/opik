@@ -1,5 +1,10 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.classic.spi.ThrowableProxyUtil;
+import ch.qos.logback.core.read.ListAppender;
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
@@ -58,6 +63,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.slf4j.LoggerFactory;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -73,6 +79,7 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 import java.util.stream.Stream;
 import java.util.zip.GZIPOutputStream;
@@ -457,6 +464,105 @@ class ChatCompletionsResourceTest {
             assertThat(actualStreamedErrors).containsExactly(expectedError);
         }
 
+        /** Every Opik log event while {@code call} runs, debug included, with its throwable rendered. */
+        private List<String> opikLogEventsOf(Runnable call) {
+            var logger = (Logger) LoggerFactory.getLogger("com.comet.opik");
+            var appender = new ListAppender<ILoggingEvent>();
+            var previousLevel = logger.getLevel();
+            appender.start();
+            logger.addAppender(appender);
+            logger.setLevel(Level.DEBUG);
+            try {
+                call.run();
+            } finally {
+                logger.detachAppender(appender);
+                logger.setLevel(previousLevel);
+            }
+            return appender.list.stream()
+                    .map(event -> event.getThrowableProxy() == null
+                            ? event.getFormattedMessage()
+                            : "%s%n%s".formatted(event.getFormattedMessage(),
+                                    ThrowableProxyUtil.asString(event.getThrowableProxy())))
+                    .toList();
+        }
+
+        private Stream<Arguments> providerTextIsNeverLogged() {
+            var marker = "upstream-marker-%s".formatted(RandomStringUtils.secure().nextAlphanumeric(16));
+            return Stream.of(
+                    arguments(HttpStatus.SC_BAD_GATEWAY, "text/html", "<html><body>%s</body></html>".formatted(marker),
+                            marker),
+                    arguments(HttpStatus.SC_BAD_REQUEST, "application/json",
+                            JsonUtils.writeValueAsString(Map.of("error", Map.of("message", marker, "type",
+                                    "invalid_request_error"))),
+                            marker));
+        }
+
+        /** The provider's reply reaches the server logs neither as a message nor through a logged throwable. */
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("what a provider answers is never written to the server logs, streamed or not")
+        void providerTextIsNeverLogged(int upstreamStatus, String contentType, String upstreamBody, String marker) {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            mockTargetWorkspace(workspaceName, UUID.randomUUID().toString());
+            createCustomProvider(workspaceName);
+            WIRE_MOCK.server().stubFor(post(urlPathMatching(CHAT_COMPLETIONS_REGEX))
+                    .willReturn(aResponse()
+                            .withStatus(upstreamStatus)
+                            .withHeader("Content-Type", contentType)
+                            .withBody(upstreamBody)));
+            var request = ChatCompletionRequest.builder().stream(false).model(MODEL).addUserMessage("ping").build();
+            var streamed = ChatCompletionRequest.builder().stream(true).model(MODEL).addUserMessage("ping").build();
+
+            var actualEvents = opikLogEventsOf(() -> {
+                try (var response = clientSupport.target(TestUtils.getBaseUrl(clientSupport) + CHAT_COMPLETIONS_PATH)
+                        .request()
+                        .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                        .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                        .post(Entity.json(request))) {
+                    response.readEntity(String.class);
+                }
+                chatCompletionsClient.createAndGetStreamedError(API_KEY, workspaceName, streamed);
+            });
+
+            assertThat(actualEvents).isNotEmpty().noneMatch(event -> event.contains(marker));
+        }
+
+        /**
+         * An error body far past providerErrorBodyMaxSize, dripped over a minute: only the capped prefix is read and
+         * the rest is never waited for, so both calls end long before the body would.
+         */
+        @Test
+        @DisplayName("a long provider error body is read only up to its cap, and not echoed back")
+        void longErrorBodyIsReadOnlyUpToItsCap() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            mockTargetWorkspace(workspaceName, UUID.randomUUID().toString());
+            createCustomProvider(workspaceName);
+            var longBody = """
+                    {"error": {"type": "invalid_request_error", "message": "%s"}}"""
+                    .formatted(RandomStringUtils.secure().nextAlphanumeric(4 * 1024 * 1024));
+            WIRE_MOCK.server().stubFor(post(urlPathMatching(CHAT_COMPLETIONS_REGEX))
+                    .willReturn(aResponse()
+                            .withStatus(HttpStatus.SC_BAD_REQUEST)
+                            .withHeader("Content-Type", "application/json")
+                            .withBody(longBody)
+                            .withChunkedDribbleDelay(600, 60_000)));
+            var expectedError = new ErrorMessage(HttpStatus.SC_BAD_REQUEST, UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
+            long expectedMaxElapsedMillis = 20_000;
+            long startNanos = System.nanoTime();
+
+            var request = ChatCompletionRequest.builder().stream(false).model(MODEL).addUserMessage("ping").build();
+            var actualError = chatCompletionsClient.create(API_KEY, workspaceName, request,
+                    HttpStatus.SC_BAD_REQUEST);
+            var streamed = ChatCompletionRequest.builder().stream(true).model(MODEL).addUserMessage("ping").build();
+            var actualStreamedErrors = chatCompletionsClient.createAndGetStreamedError(API_KEY, workspaceName,
+                    streamed);
+
+            long actualElapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNanos);
+            assertThat(actualError).isEqualTo(expectedError);
+            assertThat(actualStreamedErrors).containsExactly(expectedError);
+            assertThat(actualElapsedMillis).isLessThan(expectedMaxElapsedMillis);
+        }
+
         private Stream<Arguments> providerErrorMessageIsValidated() {
             var text = UUID.randomUUID().toString();
             var generic = UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
@@ -480,7 +586,17 @@ class ChatCompletionsResourceTest {
                             details),
                     arguments("invalid_request_error", "deployment not found\u2029%s".formatted(text), generic,
                             details),
-                    arguments("invalid_request_error", "deployment not found > %s".formatted(text), generic, details),
+                    // markup: a tag, a closing tag, a comment or a declaration
+                    arguments("invalid_request_error", "deployment not found </div> %s".formatted(text), generic,
+                            details),
+                    arguments("invalid_request_error", "deployment not found <!-- %s".formatted(text), generic,
+                            details),
+                    arguments("invalid_request_error", "deployment not found <é %s".formatted(text), generic, details),
+                    // and comparisons, which aren't markup
+                    arguments("invalid_request_error", "Expected a value >= 1, got 0 %s".formatted(text),
+                            "Expected a value >= 1, got 0 %s".formatted(text), details),
+                    arguments("invalid_request_error", "Expected a value <= 2 or < 5 and > 0 %s".formatted(text),
+                            "Expected a value <= 2 or < 5 and > 0 %s".formatted(text), details),
                     // and of what is kept: the first printable character past C1, and characters outside the BMP
                     arguments("invalid_request_error", "deployment not found\u00A0%s".formatted(text),
                             "deployment not found\u00A0%s".formatted(text), details),
