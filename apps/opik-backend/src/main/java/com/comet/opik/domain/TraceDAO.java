@@ -176,7 +176,7 @@ public interface TraceDAO {
 
     Mono<Set<UUID>> getTraceIdsByThreadIds(UUID projectId, List<String> threadIds, Connection connection);
 
-    Flux<UUID> getTraceIdsByProjectId(UUID projectId, @Nullable UUID lastId, int limit, Connection connection);
+    Flux<UUID> getTraceIdsByProjectId(UUID projectId, UUID lastId, int limit, Connection connection);
 
     Mono<Trace> getPartialById(UUID id);
 
