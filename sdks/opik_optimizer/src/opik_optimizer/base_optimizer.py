@@ -104,6 +104,7 @@ class BaseOptimizer(ABC):
     supports_tool_optimization: bool = False
     supports_prompt_optimization: bool = False
     supports_multimodal: bool = False
+    uses_reasoning: bool = True
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
@@ -130,6 +131,8 @@ class BaseOptimizer(ABC):
         perfect_score: float = 0.95,
         prompt_overrides: PromptOverrides = None,
         display: RunDisplay | None = None,
+        reasoning_input: Literal["multimodal", "text_only"] = "multimodal",
+        max_reasoning_examples: int = 5,
     ) -> None:
         """
         Base class for optimizers.
@@ -152,7 +155,20 @@ class BaseOptimizer(ABC):
                Dict: {"prompt_key": "new_template"} to override specific prompts.
                Callable: function(prompts: PromptLibrary) -> None to modify prompts programmatically.
            display: Optional display handler for run output (used for testing or alternate renderers).
+           reasoning_input: Native image evidence by default; text_only explicitly omits media from optimizer reasoning.
+           max_reasoning_examples: Maximum evaluation cases attached to a reasoning request.
         """
+        if reasoning_input not in {"multimodal", "text_only"}:
+            raise ValueError("reasoning_input must be 'multimodal' or 'text_only'")
+        if (
+            isinstance(max_reasoning_examples, bool)
+            or not isinstance(max_reasoning_examples, int)
+            or max_reasoning_examples < 1
+        ):
+            raise ValueError("max_reasoning_examples must be a positive integer")
+        self.reasoning_input = reasoning_input
+        self.max_reasoning_examples = max_reasoning_examples
+        self._reasoning_cases: tuple[Any, ...] = ()
         self.model = model
         self.model_parameters = _copy_model_parameters(model_parameters or {})
         self.reasoning_model = reasoning_model or model
@@ -463,6 +479,33 @@ class BaseOptimizer(ABC):
         self._validate_metric_requirements(evaluation_dataset, metric)
 
         n_samples = self._validated_n_samples(evaluation_dataset, n_samples)
+        from .core.reasoning import EvidenceCase
+
+        self._reasoning_cases = tuple(
+            EvidenceCase(case_id=str(item.get("id", index)), inputs=item)
+            for index, item in enumerate(
+                evaluation_dataset.get_items()[: self.max_reasoning_examples]
+            )
+        )
+
+        self._reasoning_prompts = optimizable_prompts
+        if self.uses_reasoning:
+            from .core.reasoning import (
+                ReasoningEvidence,
+                build_reasoning_messages,
+                validate_reasoning_messages,
+            )
+
+            preflight = build_reasoning_messages(
+                [],
+                evidence=ReasoningEvidence(
+                    prompts=optimizable_prompts, cases=self._reasoning_cases
+                ),
+                mode=self.reasoning_input,
+                allowed_roles=optimizable_roles,
+            )
+            for optimizer_model in {self.model, self.reasoning_model}:
+                validate_reasoning_messages(preflight, optimizer_model)
 
         # Resolve project name
         project_name = resolve_project_name(project_name)
@@ -900,6 +943,13 @@ class BaseOptimizer(ABC):
             raise
         # raw_result is EvaluationResult (normal path) or float (mocked/legacy path).
         if isinstance(raw_result, (EvaluationResult, EvaluationResultOnDictItems)):
+            from .core.reasoning import cases_from_evaluation
+
+            self._reasoning_cases = tuple(
+                cases_from_evaluation(
+                    raw_result.test_results[: self.max_reasoning_examples]
+                )
+            )
             score = self._score_from_evaluation_result(
                 raw_result, metric_name=context.metric.__name__, empty_score=empty_score
             )

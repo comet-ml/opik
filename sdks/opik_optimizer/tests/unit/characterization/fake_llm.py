@@ -325,6 +325,26 @@ def fake_llm_complete(
 # ---------------------------------------------------------------------------
 
 
+def text_edits(
+    original: list[dict[str, Any]], changed: list[dict[str, Any]]
+) -> list[dict[str, str]]:
+    edits = []
+    for index, (before, after) in enumerate(zip(original, changed)):
+        content, new = before["content"], after["content"]
+        if isinstance(content, str) and content != new:
+            edits.append({"segment_id": f"message:{index}", "text": new})
+        elif isinstance(content, list) and isinstance(new, list):
+            for part_index, (a, b) in enumerate(zip(content, new)):
+                if a.get("type") == "text" and a.get("text") != b.get("text"):
+                    edits.append(
+                        {
+                            "segment_id": f"message:{index}:part:{part_index}",
+                            "text": b["text"],
+                        }
+                    )
+    return edits
+
+
 class FakeOptimizerLLM:
     """Replacement for ``call_model`` / ``call_model_async``."""
 
@@ -389,8 +409,6 @@ class FakeOptimizerLLM:
         h = stable_int(kind, _signature(current), idx)
         n = 1 + h % 2 if idx == 0 else h % 3
         new = rewrite_messages(current, n)
-        if self._flatten:
-            new = flatten_content_parts(new)
         self._register(name, new)
         return new
 
@@ -458,7 +476,9 @@ class FakeOptimizerLLM:
         return {
             "prompts": [
                 {
-                    "prompt": self._candidate(name, current, i, "meta"),
+                    "edits": text_edits(
+                        current, self._candidate(name, current, i, "meta")
+                    ),
                     "improvement_focus": f"focus {i}",
                     "reasoning": f"Added hints to candidate {i}.",
                 }
@@ -479,7 +499,9 @@ class FakeOptimizerLLM:
                 agents.append(
                     {
                         "name": name,
-                        "messages": self._candidate(name, current, i, "bundle"),
+                        "edits": text_edits(
+                            current, self._candidate(name, current, i, "bundle")
+                        ),
                         "improvement_focus": f"focus {i}",
                         "reasoning": f"Bundle {i} update for {name}.",
                     }
@@ -506,15 +528,46 @@ class FakeOptimizerLLM:
         self, model: type[BaseModel], text: str, messages: list[Any]
     ) -> dict[str, Any]:
         name, current = self._match_any(text)
-        return {"messages": self._candidate(name, current, 0, "mutation")}
+        return {
+            "edits": text_edits(current, self._candidate(name, current, 0, "mutation"))
+        }
 
     def _handle_CrossoverResponse(  # noqa: N802
         self, model: type[BaseModel], text: str, messages: list[Any]
     ) -> dict[str, Any]:
         name, current = self._match_any(text)
         return {
-            "child_1": self._candidate(name, current, 1, "crossover"),
-            "child_2": self._candidate(name, current, 2, "crossover"),
+            "child_1": text_edits(
+                current, self._candidate(name, current, 1, "crossover")
+            ),
+            "child_2": text_edits(
+                current, self._candidate(name, current, 2, "crossover")
+            ),
+        }
+
+    def _handle_PopulationResponse(
+        self, model: type[BaseModel], text: str, messages: list[Any]
+    ) -> dict[str, Any]:
+        name, current = self._match_any(text)
+        kind = "fresh" if "from scratch" in text.lower() else "variation"
+        self.calls[-1] = "fresh_start" if kind == "fresh" else "variation"
+        match = re.search(r"Generate (\d+) diverse", text)
+        count = int(match.group(1)) if match else 1
+        return {
+            "prompts": [
+                {
+                    "edits": text_edits(
+                        current,
+                        self._candidate(
+                            name,
+                            current,
+                            (10 + index) if kind == "fresh" else index,
+                            kind,
+                        ),
+                    )
+                }
+                for index in range(count)
+            ]
         }
 
     def _handle_RootCauseAnalysis(  # noqa: N802
@@ -555,7 +608,7 @@ class FakeOptimizerLLM:
             current = self._match(name, text)
             entry: dict[str, Any] = {
                 "reasoning": f"Improve {field}.",
-                "messages": self._candidate(name, current, i, "hrpo"),
+                "edits": text_edits(current, self._candidate(name, current, i, "hrpo")),
             }
             if self._tool_descriptions:
                 entry["tool_descriptions"] = [
@@ -582,30 +635,21 @@ class FakeOptimizerLLM:
                         str(message.get("content", "")).split("\n\nReturn ONLY")[0]
                     )
                 except json.JSONDecodeError:
-                    user_payload = {}
-        prompts = user_payload.get("prompts", [])
-        examples = user_payload.get("examples", [])
-        keys = [k for k in (examples[0] if examples else {}) if k != "id"]
+                    continue
+        prompt_entries = user_payload.get("prompts", [])
+        keys = [key for key in user_payload.get("example_fields", []) if key != "id"]
         in_key = "question" if "question" in keys else (keys[0] if keys else "input")
         out_key = "answer" if "answer" in keys else (keys[-1] if keys else "output")
-        fields = [f for f in model.model_fields if f != "template"]
         payload: dict[str, Any] = {"template": f"Q: {{{in_key}}}\nA: {{{out_key}}}"}
-        for field, prompt in zip(fields, prompts):
-            new_messages = copy.deepcopy(prompt.get("messages", []))
-            target = next(
-                (m for m in new_messages if m.get("role") == "system"),
-                new_messages[0] if new_messages else None,
-            )
-            if target is not None:
-                content = target.get("content")
-                if isinstance(content, list):
-                    for part in content:
-                        if isinstance(part, dict) and part.get("type") == "text":
-                            part["text"] = f"{part['text']}\n\nExamples:\n{placeholder}"
-                            break
-                else:
-                    target["content"] = f"{content}\n\nExamples:\n{placeholder}"
-            payload[field] = new_messages
+        fields = [field for field in model.model_fields if field != "template"]
+        for field, entry in zip(fields, prompt_entries):
+            segment = entry["segments"][0]
+            payload[field] = [
+                {
+                    "segment_id": segment["segment_id"],
+                    "text": segment["text"] + f"\n\nExamples:\n{placeholder}",
+                }
+            ]
         return payload
 
     def _handle_ToolDescriptionCandidatesResponse(  # noqa: N802

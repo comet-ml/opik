@@ -462,6 +462,28 @@ def optimize_prompt(
 Custom agents own their calls and should read each supplied prompt's model and `model_kwargs`.
 HRPO's `reasoning_model_parameters=None` inherits optimizer parameters; `{}` is an empty override.
 
+Prompt optimizers default to `reasoning_input="multimodal"` with native image evidence for up to
+`max_reasoning_examples=5` cases per request. Configure a vision-capable optimizer model, or choose
+`reasoning_input="text_only"` explicitly; agent media and settings are retained. Audio/video/file
+reasoning currently requires text-only mode. Candidate responses contain targeted text edits
+(`segment_id`, `text`), not full messages. GEPA requires `gepa>=0.1.4` for native reflection images.
+
+## Structured evidence and text edits
+
+Import `EvidenceCase`, `ReasoningEvidence`, `TextEdit`, `describe_text_segments`, and
+`apply_text_edits` directly from `opik_optimizer` when extending an optimizer.
+
+- `ReasoningEvidence(prompts=..., cases=None, sections=None, editable=True)` supplies named prompt
+  templates, selected cases and optional observations to `llm_calls.call_model` or its async
+  equivalent. `cases=None` uses the active run's bounded cases; `cases=()` supplies none.
+- `EvidenceCase(case_id, inputs, output=None, scores=None, observations=None)` keeps a case's
+  rendered inputs, native images and feedback together.
+- `describe_text_segments(prompt, allowed_roles=None)` returns existing editable segment IDs.
+  `TextEdit(segment_id, text)` replaces one such string or text block.
+- `apply_text_edits(prompt, edits, allowed_roles=None)` validates the full edit set and applies it
+  to a copy. It retains media, role order, tools and agent model settings. Placeholder preservation
+  is enabled by default; callers with their own guard can explicitly disable that check.
+
 ## Migration and deprecated APIs
 
 - **Tracking IDs:** a supplied `optimization_id` must be a valid UUIDv7 string. Existing runs are

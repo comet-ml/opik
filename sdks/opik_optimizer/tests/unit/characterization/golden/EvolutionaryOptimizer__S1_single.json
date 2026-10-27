@@ -44,7 +44,7 @@
       "trial_scores": [
         0.333333,
         0.666667,
-        0.333333,
+        0.5,
         0.333333
       ]
     },
@@ -54,13 +54,12 @@
       "stop_reason": "perfect_score",
       "trial_scores": [
         0.333333,
-        0.666667,
         1.0
       ]
     }
   ],
   "history_rounds": 2,
-  "history_trials": 7,
+  "history_trials": 6,
   "initial_score": 0.333333,
   "known_issue": null,
   "llm_call_kinds": [
@@ -90,5 +89,5 @@
   },
   "score": 1.0,
   "stopped_early": true,
-  "trials_completed": 6
+  "trials_completed": 5
 }

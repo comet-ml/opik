@@ -1,4 +1,7 @@
-from ....utils.prompt_roles import derive_prompt
+from ....utils.prompt_editing import describe_text_segments
+from ....utils.prompt_editing import apply_text_edits, TextEdit
+from ..types import PopulationResponse
+from ....core.reasoning import ReasoningEvidence
 from typing import Any
 from collections.abc import Callable
 import math
@@ -12,11 +15,8 @@ from .. import reporting, helpers, evolutionary_optimizer  # noqa: F401
 from ....api_objects import chat_prompt
 from ....core import runtime
 from ....core import llm_calls as _llm_calls
-from ....utils.helpers import json_to_dict
 from ....utils.prompt_library import PromptLibrary
-from ....utils.multimodal import redact_inline_media
 from ....utils.logging import compact_debug_text, debug_log
-from ....utils.text import normalize_llm_text
 from . import tool_ops
 
 
@@ -203,18 +203,14 @@ def _generate_fresh_start_prompts(
             model=model,
             model_parameters=model_parameters,
             debug_tag="population_fresh_start_response",
+            evidence=ReasoningEvidence(prompts={prompt.name: prompt}),
         )
 
-        parsed_prompts: list[list[dict[str, Any]]] = []
-        for response_item in response_items:
-            fresh_prompts = json_to_dict(response_item)
-            if isinstance(fresh_prompts, list):
-                if all(isinstance(p, dict) for p in fresh_prompts) and all(
-                    p.get("role") is not None for p in fresh_prompts
-                ):
-                    parsed_prompts.append(fresh_prompts)
-                elif all(isinstance(p, list) for p in fresh_prompts):
-                    parsed_prompts.extend(fresh_prompts)
+        parsed_prompts = [
+            candidate.edits
+            for response in response_items
+            for candidate in response.prompts
+        ]
 
         if not parsed_prompts:
             init_pop_report.failed_fresh_prompts(
@@ -228,10 +224,10 @@ def _generate_fresh_start_prompts(
             debug_log(
                 "population_fresh_start_prompt",
                 index=idx,
-                prompt=compact_debug_text(json.dumps(prompt_messages)),
+                prompt=compact_debug_text(str(prompt_messages)),
             )
         init_pop_report.success_fresh_prompts(len(prompts_to_use))
-        return _messages_to_chat_prompts(
+        return _edits_to_chat_prompts(
             prompts_to_use,
             prompt,
             prompt_key=prompt_key,
@@ -277,7 +273,7 @@ def _generate_variation_prompts(
     init_pop_report.start_variations(num_variations_on_initial)
     user_prompt_for_variation = prompts.get(
         "variation_user_prompt_template",
-        initial_prompt_messages=redact_inline_media(prompt.get_messages()),
+        initial_prompt_messages=describe_text_segments(prompt),
         task_description=task_desc_for_llm,
         style=output_style_guidance,
         num_variations=num_variations_on_initial,
@@ -297,17 +293,13 @@ def _generate_variation_prompts(
             model=model,
             model_parameters=model_parameters,
             debug_tag="population_variation_response",
+            evidence=ReasoningEvidence(prompts={prompt.name: prompt}),
         )
-        generated_prompts_variations: list[list[dict[str, Any]]] = []
-        for response_item in response_items:
-            json_response_variations = json.loads(normalize_llm_text(response_item))
-            generated_prompts_variations.extend(
-                [
-                    p["prompt"]
-                    for p in json_response_variations.get("prompts", [])
-                    if isinstance(p, dict) and "prompt" in p
-                ]
-            )
+        generated_prompts_variations = [
+            candidate.edits
+            for response in response_items
+            for candidate in response.prompts
+        ]
 
         if not generated_prompts_variations:
             init_pop_report.failed_variations(
@@ -321,9 +313,9 @@ def _generate_variation_prompts(
             debug_log(
                 "population_variation_prompt",
                 index=idx,
-                prompt=compact_debug_text(json.dumps(prompt_messages)),
+                prompt=compact_debug_text(str(prompt_messages)),
             )
-        return _messages_to_chat_prompts(
+        return _edits_to_chat_prompts(
             generated_prompts_variations,
             prompt,
             prompt_key=prompt_key,
@@ -340,8 +332,8 @@ def _generate_variation_prompts(
         return []
 
 
-def _messages_to_chat_prompts(
-    messages_list: list[list[dict[str, Any]]],
+def _edits_to_chat_prompts(
+    edit_sets: list[list[TextEdit]],
     base_prompt: chat_prompt.ChatPrompt,
     prompt_key: str,
     optimize_tools: bool,
@@ -350,10 +342,10 @@ def _messages_to_chat_prompts(
     optimizer: Any | None = None,
 ) -> list[chat_prompt.ChatPrompt]:
     prompts: list[chat_prompt.ChatPrompt] = [
-        derive_prompt(
-            base_prompt, messages, getattr(optimizer, "_optimizable_roles", None)
+        apply_text_edits(
+            base_prompt, edits, getattr(optimizer, "_optimizable_roles", None)
         )
-        for messages in messages_list
+        for edits in edit_sets
     ]
     # If optimizing tools apply tools to chat prompt
     if optimize_tools:
@@ -395,8 +387,11 @@ def _call_and_normalize_model_response(
     model: str,
     model_parameters: dict[str, Any],
     debug_tag: str,
-) -> list[Any]:
+    evidence: ReasoningEvidence | None = None,
+) -> list[PopulationResponse]:
     response_content = _llm_calls.call_model(
+        evidence=evidence,
+        response_model=PopulationResponse,
         messages=messages,
         model=model,
         model_parameters=model_parameters,
@@ -406,15 +401,7 @@ def _call_and_normalize_model_response(
     response_items = (
         response_content if isinstance(response_content, list) else [response_content]
     )
-    response_items = [
-        normalize_llm_text(item) if isinstance(item, str) else item
-        for item in response_items
-    ]
-    cleaned = [
-        compact_debug_text(item) if isinstance(item, str) else item
-        for item in response_items
-    ]
-    debug_log(debug_tag, prompts=cleaned)
+    debug_log(debug_tag, prompts=[response.model_dump() for response in response_items])
     return response_items
 
 

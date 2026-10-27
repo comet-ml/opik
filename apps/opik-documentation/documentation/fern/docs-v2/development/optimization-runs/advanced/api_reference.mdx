@@ -67,6 +67,28 @@ def optimize_prompt(
 Custom agents own their calls and should read each supplied prompt's model and `model_kwargs`.
 HRPO's `reasoning_model_parameters=None` inherits optimizer parameters; `{}` is an empty override.
 
+Prompt optimizers default to `reasoning_input="multimodal"` with native image evidence for up to
+`max_reasoning_examples=5` cases per request. Configure a vision-capable optimizer model, or choose
+`reasoning_input="text_only"` explicitly; agent media and settings are retained. Audio/video/file
+reasoning currently requires text-only mode. Candidate responses contain targeted text edits
+(`segment_id`, `text`), not full messages. GEPA requires `gepa>=0.1.4` for native reflection images.
+
+## Structured evidence and text edits
+
+Import `EvidenceCase`, `ReasoningEvidence`, `TextEdit`, `describe_text_segments`, and
+`apply_text_edits` directly from `opik_optimizer` when extending an optimizer.
+
+- `ReasoningEvidence(prompts=..., cases=None, sections=None, editable=True)` supplies named prompt
+  templates, selected cases and optional observations to `llm_calls.call_model` or its async
+  equivalent. `cases=None` uses the active run's bounded cases; `cases=()` supplies none.
+- `EvidenceCase(case_id, inputs, output=None, scores=None, observations=None)` keeps a case's
+  rendered inputs, native images and feedback together.
+- `describe_text_segments(prompt, allowed_roles=None)` returns existing editable segment IDs.
+  `TextEdit(segment_id, text)` replaces one such string or text block.
+- `apply_text_edits(prompt, edits, allowed_roles=None)` validates the full edit set and applies it
+  to a copy. It retains media, role order, tools and agent model settings. Placeholder preservation
+  is enabled by default; callers with their own guard can explicitly disable that check.
+
 ## Migration and deprecated APIs
 
 - **Tracking IDs:** a supplied `optimization_id` must be a valid UUIDv7 string. Existing runs are
@@ -106,7 +128,9 @@ FewShotBayesianOptimizer(
     enable_optuna_pruning: bool | None = None,
     prompt_overrides: dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None = None,
     skip_perfect_score: bool = True,
-    perfect_score: float = 0.95
+    perfect_score: float = 0.95,
+    reasoning_input: Literal = 'multimodal',
+    max_reasoning_examples: int = 5
 )
 ```
 
@@ -128,6 +152,8 @@ FewShotBayesianOptimizer(
 <ParamField path="prompt_overrides" type="dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None" optional={true} />
 <ParamField path="skip_perfect_score" type="bool" optional={true} default="True" />
 <ParamField path="perfect_score" type="float" optional={true} default="0.95" />
+<ParamField path="reasoning_input" type="Literal" optional={true} default="multimodal" />
+<ParamField path="max_reasoning_examples" type="int" optional={true} default="5" />
 
 ### Methods
 #### begin_round
@@ -722,7 +748,9 @@ GepaOptimizer(
     name: str | None = None,
     skip_perfect_score: bool = True,
     perfect_score: float = 0.95,
-    prompt_overrides: dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None = None
+    prompt_overrides: dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None = None,
+    reasoning_input: Literal = 'multimodal',
+    max_reasoning_examples: int = 5
 )
 ```
 
@@ -738,6 +766,8 @@ GepaOptimizer(
 <ParamField path="skip_perfect_score" type="bool" optional={true} default="True" />
 <ParamField path="perfect_score" type="float" optional={true} default="0.95" />
 <ParamField path="prompt_overrides" type="dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None" optional={true} />
+<ParamField path="reasoning_input" type="Literal" optional={true} default="multimodal" />
+<ParamField path="max_reasoning_examples" type="int" optional={true} default="5" />
 
 ### Methods
 #### begin_round
@@ -1337,7 +1367,9 @@ MetaPromptOptimizer(
     use_hall_of_fame: bool = True,
     prompt_overrides: dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None = None,
     skip_perfect_score: bool = True,
-    perfect_score: float = 0.95
+    perfect_score: float = 0.95,
+    reasoning_input: Literal = 'multimodal',
+    max_reasoning_examples: int = 5
 )
 ```
 
@@ -1358,6 +1390,8 @@ MetaPromptOptimizer(
 <ParamField path="prompt_overrides" type="dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None" optional={true} />
 <ParamField path="skip_perfect_score" type="bool" optional={true} default="True" />
 <ParamField path="perfect_score" type="float" optional={true} default="0.95" />
+<ParamField path="reasoning_input" type="Literal" optional={true} default="multimodal" />
+<ParamField path="max_reasoning_examples" type="int" optional={true} default="5" />
 
 ### Methods
 #### begin_round
@@ -1964,7 +1998,9 @@ EvolutionaryOptimizer(
     name: str | None = None,
     prompt_overrides: dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None = None,
     skip_perfect_score: bool = True,
-    perfect_score: float = 0.95
+    perfect_score: float = 0.95,
+    reasoning_input: Literal = 'multimodal',
+    max_reasoning_examples: int = 5
 )
 ```
 
@@ -1992,6 +2028,8 @@ EvolutionaryOptimizer(
 <ParamField path="prompt_overrides" type="dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None" optional={true} />
 <ParamField path="skip_perfect_score" type="bool" optional={true} default="True" />
 <ParamField path="perfect_score" type="float" optional={true} default="0.95" />
+<ParamField path="reasoning_input" type="Literal" optional={true} default="multimodal" />
+<ParamField path="max_reasoning_examples" type="int" optional={true} default="5" />
 
 ### Methods
 #### begin_round
@@ -2591,7 +2629,9 @@ HierarchicalReflectiveOptimizer(
     name: str | None = None,
     prompt_overrides: dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None = None,
     skip_perfect_score: bool = True,
-    perfect_score: float = 0.95
+    perfect_score: float = 0.95,
+    reasoning_input: Literal = 'multimodal',
+    max_reasoning_examples: int = 5
 )
 ```
 
@@ -2612,6 +2652,8 @@ HierarchicalReflectiveOptimizer(
 <ParamField path="prompt_overrides" type="dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None" optional={true} />
 <ParamField path="skip_perfect_score" type="bool" optional={true} default="True" />
 <ParamField path="perfect_score" type="float" optional={true} default="0.95" />
+<ParamField path="reasoning_input" type="Literal" optional={true} default="multimodal" />
+<ParamField path="max_reasoning_examples" type="int" optional={true} default="5" />
 
 ### Methods
 #### begin_round
@@ -3881,7 +3923,9 @@ BaseOptimizer(
     skip_perfect_score: bool = True,
     perfect_score: float = 0.95,
     prompt_overrides: dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None = None,
-    display: opik_optimizer.utils.display.run.RunDisplay | None = None
+    display: opik_optimizer.utils.display.run.RunDisplay | None = None,
+    reasoning_input: Literal = 'multimodal',
+    max_reasoning_examples: int = 5
 )
 ```
 
@@ -3899,6 +3943,8 @@ BaseOptimizer(
 <ParamField path="perfect_score" type="float" optional={true} default="0.95" />
 <ParamField path="prompt_overrides" type="dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None" optional={true} />
 <ParamField path="display" type="opik_optimizer.utils.display.run.RunDisplay | None" optional={true} />
+<ParamField path="reasoning_input" type="Literal" optional={true} default="multimodal" />
+<ParamField path="max_reasoning_examples" type="int" optional={true} default="5" />
 
 ### Methods
 #### begin_round
@@ -4558,6 +4604,61 @@ set_messages(
 to_dict()
 ```
 
+
+## EvidenceCase
+
+```python wordWrap
+EvidenceCase(
+    case_id: str,
+    inputs: Mapping,
+    output: Any = None,
+    scores: Any = None,
+    observations: Any = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="case_id" type="str" />
+<ParamField path="inputs" type="Mapping" />
+<ParamField path="output" type="Any" optional={true} />
+<ParamField path="scores" type="Any" optional={true} />
+<ParamField path="observations" type="Any" optional={true} />
+
+## ReasoningEvidence
+
+```python wordWrap
+ReasoningEvidence(
+    prompts: Any = None,
+    cases: Any = None,
+    sections: Any = None,
+    editable: Any = True
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="prompts" type="Any" optional={true} />
+<ParamField path="cases" type="Any" optional={true} />
+<ParamField path="sections" type="Any" optional={true} />
+<ParamField path="editable" type="Any" optional={true} default="True" />
+
+## TextEdit
+
+```python wordWrap
+TextEdit(
+    segment_id: <class 'str'>,
+    text: <class 'str'>
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="segment_id" type="<class 'str'>" default="PydanticUndefined">Exact segment_id from the editable prompt segments</ParamField>
+<ParamField path="text" type="<class 'str'>" default="PydanticUndefined">Replacement text; retain all existing dataset placeholders</ParamField>
 
 ## AlgorithmResult
 

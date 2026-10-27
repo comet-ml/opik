@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 import pytest
 
 import opik_optimizer
 from opik_optimizer import ChatPrompt
+from opik_optimizer.algorithms.evolutionary_optimizer.types import MutationResponse
 from opik_optimizer.algorithms.evolutionary_optimizer.ops import mutation_ops
 from tests.unit.fixtures import system_message, user_message
 from tests.unit.algorithms.evolutionary_optimizer._mutation_test_helpers import (
@@ -28,11 +28,8 @@ class TestRadicalInnovationMutation:
         monkeypatch.setattr(
             "opik_optimizer.core.llm_calls.call_model",
             make_fake_llm_call(
-                json.dumps(
-                    [
-                        system_message("New innovative prompt"),
-                        user_message("{input}"),
-                    ]
+                MutationResponse(
+                    edits=[{"segment_id": "message:0", "text": "New innovative prompt"}]
                 )
             ),
         )
@@ -171,7 +168,7 @@ class TestSemanticMutation:
         assert captured.get("called") is True
 
 
-def test_semantic_mutation_invalid_json_response(
+def test_semantic_mutation_rejects_unstructured_legacy_response(
     monkeypatch: pytest.MonkeyPatch,
     evo_prompts: Any,
 ) -> None:
@@ -231,8 +228,5 @@ def test_semantic_mutation_invalid_json_response(
     )
 
     assert result is not original_prompt
-    assert captured == {}
-    assert result.get_messages() == [
-        system_message("Provide a brief and direct answer to the question."),
-        user_message("{question}"),
-    ]
+    assert captured.get("message")
+    assert result.get_messages() == original_prompt.get_messages()

@@ -1,4 +1,6 @@
 from __future__ import annotations
+from ...core.reasoning import EvidenceCase, render_case_message
+
 
 from typing import Any, TYPE_CHECKING
 from collections.abc import Iterable
@@ -548,9 +550,17 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
                 base_prompts=self._base_prompts
             )
 
+        from gepa import Image
+
+        prompt_variants = candidate_ops.rebuild_prompts_from_candidate(
+            base_prompts=self._base_prompts,
+            candidate=candidate,
+            allowed_roles=self._context.extra_params.get("optimizable_roles"),
+        )[0]
+
         def _records(component_key: str) -> Iterable[dict[str, Any]]:
             tool_metadata = tool_metadata_by_component.get(component_key)
-            for traj in trajectories:
+            for case_index, traj in enumerate(trajectories):
                 dataset_item = traj.get("input", {})
                 output_text = traj.get("output", "")
                 score = traj.get("score", 0.0)
@@ -559,8 +569,27 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
                 )
                 if tool_metadata:
                     feedback += f" Tool metadata: {tool_metadata}"
+                images = []
+                if case_index < self._optimizer.max_reasoning_examples:
+                    case = EvidenceCase(
+                        case_id=str(dataset_item.get("id", case_index)),
+                        inputs=dataset_item,
+                        output=output_text,
+                        scores=traj.get("reasons") or {"score": score},
+                    )
+                    message = render_case_message(
+                        case, prompt_variants, self._optimizer.reasoning_input
+                    )
+                    content = message["content"]
+                    if isinstance(content, list):
+                        images = [
+                            Image(url=part["image_url"]["url"])
+                            for part in content
+                            if part.get("type") == "image_url"
+                        ]
                 yield {
                     "Inputs": input_fields(dataset_item),
+                    "Images": images,
                     "Generated Outputs": output_text,
                     "Feedback": feedback,
                 }

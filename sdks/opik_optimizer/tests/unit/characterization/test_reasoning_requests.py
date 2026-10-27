@@ -8,6 +8,7 @@ from typing import Any
 import pytest
 
 from opik_optimizer.core import llm_calls
+from opik_optimizer.utils.multimodal import text_only_messages
 from tests.unit.characterization import harness
 
 
@@ -17,11 +18,11 @@ def _capture_reasoning_calls(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     original_call, original_async = llm_calls.call_model, llm_calls.call_model_async
 
     def call(**kwargs: Any) -> Any:
-        calls.append(json.dumps(kwargs["messages"], default=str))
+        calls.append(json.dumps(text_only_messages(kwargs["messages"]), default=str))
         return original_call(**kwargs)
 
     async def call_async(**kwargs: Any) -> Any:
-        calls.append(json.dumps(kwargs["messages"], default=str))
+        calls.append(json.dumps(text_only_messages(kwargs["messages"]), default=str))
         return await original_async(**kwargs)
 
     monkeypatch.setattr(llm_calls, "call_model", call)
@@ -79,7 +80,7 @@ INLINE_IMAGE = "data:image/png;base64," + "QUJD" * 500
     "optimizer_name", [n for n in harness.OPTIMIZERS if n != "ParameterOptimizer"]
 )
 @pytest.mark.parametrize("roles", ["system", "all"])
-def test_reasoning_requests_carry_no_inline_media(
+def test_reasoning_text_carries_no_encoded_media(
     optimizer_name: str,
     roles: str,
     install_fakes: Any,

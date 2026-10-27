@@ -14,7 +14,7 @@ dependencies = [
     # 0.1.0 introduced the <curr_param>/<side_info> reflection-template markers
     # and the reflection_prompt_template kwarg contract GepaOptimizer relies on;
     # on 0.0.x the optimizer cannot even be constructed.
-    "gepa>=0.1.0",
+    "gepa>=0.1.4",
     "hf_xet",
     # LiteLLM dependency comments:
     # - Exclude 1.81.x: HTTP client closed during concurrent calls

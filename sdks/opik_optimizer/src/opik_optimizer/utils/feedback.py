@@ -8,7 +8,7 @@ from .multimodal import redact_inline_media
 
 
 def sanitize_feedback(value: Any) -> Any:
-    """Represent media as markers so reasoning prompts never carry base64 payloads."""
+    """Summarize media in text feedback; native images are supplied separately as evidence."""
     if isinstance(value, str):
         return redact_inline_media(value)
     if isinstance(value, list):

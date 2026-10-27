@@ -1,3 +1,9 @@
+from ...utils.prompt_editing import describe_text_segments
+from ...utils.prompt_editing import apply_text_edits
+
+from ...core.reasoning import ReasoningEvidence
+
+from typing import Literal
 import logging
 
 import opik
@@ -10,16 +16,9 @@ from ...base_optimizer import BaseOptimizer
 from ...core.state import OptimizationContext, AlgorithmResult
 from ... import constants
 from ...api_objects import chat_prompt
-from ...api_objects.types import Content
 from ...api_objects.types import MetricFunction
 from ...agents import OptimizableAgent
 from ...utils.prompt_library import PromptOverrides
-from ...utils.multimodal import redact_inline_media
-from ...utils.prompt_roles import (
-    derive_prompt,
-    apply_role_constraints,
-    count_disallowed_role_updates,
-)
 from ...utils.toolcalling.ops import toolcalling as toolcalling_utils
 from ...utils.toolcalling.core import segment_updates
 from ...utils.scoring import improves_over
@@ -36,14 +35,6 @@ from .ops import iteration_ops
 
 # Set up logging
 logger = logging.getLogger(__name__)  # Gets logger configured by setup_logging
-
-
-def _message_has_content(message: dict[str, Any]) -> bool:
-    """Return True if the message carries non-empty content."""
-    content: Content | None = message.get("content")
-    if content is None:
-        return False
-    return chat_prompt.ChatPrompt._has_non_empty_content(content)
 
 
 class HierarchicalReflectiveOptimizer(BaseOptimizer):
@@ -106,8 +97,12 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         prompt_overrides: PromptOverrides = None,
         skip_perfect_score: bool = constants.DEFAULT_SKIP_PERFECT_SCORE,
         perfect_score: float = constants.DEFAULT_PERFECT_SCORE,
+        reasoning_input: Literal["multimodal", "text_only"] = "multimodal",
+        max_reasoning_examples: int = 5,
     ):
         super().__init__(
+            reasoning_input=reasoning_input,
+            max_reasoning_examples=max_reasoning_examples,
             model=model,
             verbose=verbose,
             seed=seed,
@@ -245,9 +240,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         prompts_section = ""
         for prompt_name, prompt in prompts.items():
             prompts_section += f"\n--- Prompt: {prompt_name} ---\n"
-            prompts_section += (
-                f"```\n{redact_inline_media(prompt.get_messages())}\n```\n"
-            )
+            prompts_section += f"```\n{describe_text_segments(prompt)}\n```\n"
             if optimize_tools:
                 tool_blocks = toolcalling_utils.build_tool_blocks_from_prompt(prompt)
                 if tool_blocks:
@@ -284,6 +277,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         )
 
         improve_prompt_response = _llm_calls.call_model(
+            evidence=ReasoningEvidence(prompts=prompts),
             messages=[{"role": "user", "content": improve_prompt_prompt}],
             model=self.reasoning_model,
             seed=attempt_seed,
@@ -416,30 +410,13 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 continue
             improved_chat_prompts: dict[str, chat_prompt.ChatPrompt] = {}
             for prompt_name, improved_prompt in response_item.items():
-                raw_messages = [x.model_dump() for x in improved_prompt.messages]
-                messages_as_dicts = [
-                    message for message in raw_messages if _message_has_content(message)
-                ]
-                original = original_prompts[prompt_name]
                 allowed_roles = (
                     context.extra_params.get("optimizable_roles")
                     if context.extra_params
                     else None
                 )
-                dropped = count_disallowed_role_updates(
-                    original.get_messages(), messages_as_dicts, allowed_roles
-                )
-                if dropped:
-                    logger.debug(
-                        "HRPO candidate dropped %s update(s) for prompt '%s' due to optimize_prompt constraints.",
-                        dropped,
-                        prompt_name,
-                    )
-                messages_as_dicts = apply_role_constraints(
-                    original.get_messages(), messages_as_dicts, allowed_roles
-                )
-                candidate_prompt = derive_prompt(
-                    best_prompts[prompt_name], messages_as_dicts, allowed_roles
+                candidate_prompt = apply_text_edits(
+                    best_prompts[prompt_name], improved_prompt.edits, allowed_roles
                 )
                 candidate_prompt = self._apply_tool_updates_from_improvement(
                     candidate_prompt=candidate_prompt,

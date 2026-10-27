@@ -1,4 +1,7 @@
-from ....utils.prompt_roles import derive_prompt
+from ....utils.prompt_editing import describe_text_segments
+from ....utils.prompt_editing import apply_text_edits, TextEdit
+
+from ....core.reasoning import ReasoningEvidence
 from typing import Any, Protocol
 from collections.abc import Sequence
 
@@ -18,9 +21,7 @@ from ....api_objects.types import (
 from ....core import llm_calls as _llm_calls
 from .. import helpers
 from opik_optimizer.utils.display import display_error, display_success
-from ....utils.prompt_roles import apply_role_constraints, count_disallowed_role_updates
 from ....utils.prompt_library import PromptLibrary
-from ....utils.multimodal import redact_inline_media
 from . import tool_ops
 from ..types import MutationResponse
 
@@ -176,6 +177,14 @@ def _word_level_mutation(
     rng: RandomLike,
 ) -> Content:
     """Perform word-level mutation, handling both string and content parts."""
+    if isinstance(msg_content, list):
+        parts = copy.deepcopy(msg_content)
+        for part in parts:
+            if isinstance(part, dict) and part.get("type") == "text":
+                part["text"] = _word_level_mutation(
+                    part["text"], model, model_parameters, prompts, rng
+                )
+        return parts
     text = extract_text_from_content(msg_content)
     words = text.split()
     if len(words) <= 1:
@@ -215,25 +224,18 @@ def _word_level_mutation_prompt(
     rng: RandomLike,
     allowed_roles: set[str] | None = None,
 ) -> chat_prompt.ChatPrompt:
-    mutated_messages: list[dict[str, Any]] = []
-    for message in prompt.get_messages():
-        if allowed_roles is not None and message.get("role") not in allowed_roles:
-            mutated_messages.append(message)
-            continue
-        mutated_content = _word_level_mutation(
-            msg_content=message["content"],
-            model=model,
-            model_parameters=model_parameters,
-            prompts=prompts,
-            rng=rng,
+    edits = [
+        TextEdit(
+            segment_id=segment["segment_id"],
+            text=str(
+                _word_level_mutation(
+                    segment["text"], model, model_parameters, prompts, rng
+                )
+            ),
         )
-        mutated_messages.append(
-            {
-                "role": message["role"],
-                "content": mutated_content,
-            }
-        )
-    return derive_prompt(prompt, mutated_messages, allowed_roles)
+        for segment in describe_text_segments(prompt, allowed_roles)
+    ]
+    return apply_text_edits(prompt, edits, allowed_roles)
 
 
 def _structural_mutation(
@@ -244,63 +246,47 @@ def _structural_mutation(
     rng: RandomLike,
     allowed_roles: set[str] | None = None,
 ) -> chat_prompt.ChatPrompt:
-    """Perform structural mutation (reordering, combining, splitting)."""
-    mutated_messages: list[dict[str, Any]] = []
+    edits = [
+        TextEdit(
+            segment_id=segment["segment_id"],
+            text=_mutate_sentences(
+                segment["text"], model, model_parameters, prompts, rng
+            ),
+        )
+        for segment in describe_text_segments(prompt, allowed_roles)
+    ]
+    return apply_text_edits(prompt, edits, allowed_roles)
 
-    for message in prompt.get_messages():
-        if allowed_roles is not None and message.get("role") not in allowed_roles:
-            mutated_messages.append(message)
-            continue
-        original_content = message["content"]
-        role = message["role"]
-        text = extract_text_from_content(original_content)
 
-        sentences = [s.strip() for s in text.split(".") if s.strip()]
-        if len(sentences) <= 1:
-            mutated_content = _word_level_mutation(
-                msg_content=original_content,
-                model=model,
-                model_parameters=model_parameters,
-                prompts=prompts,
-                rng=rng,
-            )
-            mutated_messages.append(
-                {
-                    "role": role,
-                    "content": mutated_content,
-                }
-            )
-            continue
-
-        mutation_type = rng.random()
-        new_text: str | None = None
-        if mutation_type < 0.3:
-            rng.shuffle(sentences)
-            new_text = ". ".join(sentences) + "."
-        elif mutation_type < 0.6:
-            if len(sentences) >= 2:
-                idx = rng.randint(0, len(sentences) - 2)
-                combined = sentences[idx] + " and " + sentences[idx + 1]
-                sentences[idx : idx + 2] = [combined]
-                new_text = ". ".join(sentences) + "."
-        else:
-            idx = rng.randint(0, len(sentences) - 1)
-            words = sentences[idx].split()
-            if len(words) > 3:
-                split_point = rng.randint(2, len(words) - 2)
-                sentences[idx : idx + 1] = [
-                    " ".join(words[:split_point]),
-                    " ".join(words[split_point:]),
-                ]
-                new_text = ". ".join(sentences) + "."
-
-        if new_text is not None:
-            mutated_content = rebuild_content_with_new_text(original_content, new_text)
-        else:
-            mutated_content = original_content
-        mutated_messages.append({"role": role, "content": mutated_content})
-
-    return derive_prompt(prompt, mutated_messages, allowed_roles)
+def _mutate_sentences(
+    text: str,
+    model: str,
+    model_parameters: dict[str, Any],
+    prompts: PromptLibrary,
+    rng: RandomLike,
+) -> str:
+    sentences = [sentence.strip() for sentence in text.split(".") if sentence.strip()]
+    if len(sentences) <= 1:
+        return str(_word_level_mutation(text, model, model_parameters, prompts, rng))
+    mutation_type = rng.random()
+    if mutation_type < 0.3:
+        rng.shuffle(sentences)
+    elif mutation_type < 0.6:
+        index = rng.randint(0, len(sentences) - 2)
+        sentences[index : index + 2] = [
+            sentences[index] + " and " + sentences[index + 1]
+        ]
+    else:
+        index = rng.randint(0, len(sentences) - 1)
+        words = sentences[index].split()
+        if len(words) <= 3:
+            return text
+        split = rng.randint(2, len(words) - 2)
+        sentences[index : index + 1] = [
+            " ".join(words[:split]),
+            " ".join(words[split:]),
+        ]
+    return ". ".join(sentences) + "."
 
 
 def _semantic_mutation(
@@ -358,7 +344,7 @@ def _semantic_mutation(
         }
         user_prompt_for_semantic_mutation = prompts.get(
             "semantic_mutation_user_prompt_template",
-            prompt_messages=redact_inline_media(prompt.get_messages()),
+            prompt_messages=describe_text_segments(prompt),
             task_description=helpers.get_task_description_for_llm(
                 initial_prompt,
                 optimize_tools=optimize_tools,
@@ -367,6 +353,7 @@ def _semantic_mutation(
             strategy_instruction=strategy_prompts[strategy],
         )
         response = _llm_calls.call_model(
+            evidence=ReasoningEvidence(prompts={prompt.name: prompt}),
             messages=[
                 {
                     "role": "system",
@@ -385,25 +372,7 @@ def _semantic_mutation(
         )
 
         response_item = response[0] if isinstance(response, list) else response
-        try:
-            messages = helpers.parse_llm_messages(response_item)
-        except Exception as parse_exc:
-            raise RuntimeError(
-                "Error parsing semantic mutation response as JSON. "
-                f"Response: {response_item!r}\nOriginal error: {parse_exc}"
-            ) from parse_exc
-        constrained_messages = apply_role_constraints(
-            prompt.get_messages(), messages, allowed_roles
-        )
-        dropped = count_disallowed_role_updates(
-            prompt.get_messages(), messages, allowed_roles
-        )
-        if dropped:
-            logger.debug(
-                "Evolutionary semantic mutation dropped %s update(s) due to optimize_prompt constraints.",
-                dropped,
-            )
-        return derive_prompt(prompt, constrained_messages, allowed_roles)
+        return apply_text_edits(prompt, response_item.edits, allowed_roles)
     except Exception as e:
         display_error(
             f"      Error in semantic mutation, this is usually a parsing error: {e}",
@@ -436,10 +405,11 @@ def _radical_innovation_mutation(
         "radical_innovation_user_prompt_template",
         task_description=task_desc_for_llm,
         style=current_output_style_guidance,
-        existing_prompt_messages=redact_inline_media(prompt.get_messages()),
+        existing_prompt_messages=describe_text_segments(prompt),
     )
     try:
         new_prompt_str = _llm_calls.call_model(
+            evidence=ReasoningEvidence(prompts={prompt.name: prompt}),
             messages=[
                 {
                     "role": "system",
@@ -459,29 +429,7 @@ def _radical_innovation_mutation(
         response_item = (
             new_prompt_str[0] if isinstance(new_prompt_str, list) else new_prompt_str
         )
-        if isinstance(response_item, str):
-            logger.info(
-                "Radical innovation LLM result (truncated): %s", response_item[:200]
-            )
-        try:
-            new_messages = helpers.parse_llm_messages(response_item)
-        except Exception as parse_exc:
-            logger.warning(
-                f"Failed to parse LLM output in radical innovation mutation for prompt '{json.dumps(prompt.get_messages())[:50]}...'. Output: {response_item[:200]}. Error: {parse_exc}. Returning original."
-            )
-            return prompt.copy()
-        constrained_messages = apply_role_constraints(
-            prompt.get_messages(), new_messages, allowed_roles
-        )
-        dropped = count_disallowed_role_updates(
-            prompt.get_messages(), new_messages, allowed_roles
-        )
-        if dropped:
-            logger.debug(
-                "Evolutionary radical mutation dropped %s update(s) due to optimize_prompt constraints.",
-                dropped,
-            )
-        return derive_prompt(prompt, constrained_messages, allowed_roles)
+        return apply_text_edits(prompt, response_item.edits, allowed_roles)
     except Exception as e:
         logger.warning(
             f"Radical innovation mutation failed for prompt '{json.dumps(prompt.get_messages())[:50]}...': {e}. Returning original."

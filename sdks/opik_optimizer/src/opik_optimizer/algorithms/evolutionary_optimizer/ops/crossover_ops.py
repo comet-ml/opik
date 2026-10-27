@@ -1,8 +1,9 @@
+from ....api_objects import chat_prompt
+from ....utils.prompt_editing import describe_text_segments
+from ....utils.prompt_editing import apply_text_edits, TextEdit
 from ....utils.prompt_roles import apply_role_constraints
-from ....utils.multimodal import (
-    preserve_multimodal_message_structure,
-    redact_inline_media,
-)
+
+from ....core.reasoning import ReasoningEvidence
 from typing import Any, Protocol
 
 import copy
@@ -15,11 +16,6 @@ from opik_optimizer.utils.display import display_message
 from ..types import CrossoverResponse
 from ....core import llm_calls as _llm_calls
 from ....core.llm_calls import StructuredOutputParsingError
-from ....api_objects.types import (
-    Content,
-    extract_text_from_content,
-    rebuild_content_with_new_text,
-)
 from ....utils.prompt_library import PromptLibrary
 from . import tool_ops
 
@@ -68,46 +64,32 @@ def _deap_crossover_word_level(
 
 
 def _crossover_messages(
-    messages_1: list[dict[str, Any]],
-    messages_2: list[dict[str, Any]],
-    rng: RandomLike,
+    messages_1: list[dict[str, Any]], messages_2: list[dict[str, Any]], rng: RandomLike
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Apply crossover to a single prompt's messages.
-
-    Handles both string content and content parts (preserving images/video).
-    """
-    messages_1_result = copy.deepcopy(messages_1)
-    messages_2_result = copy.deepcopy(messages_2)
-
-    for i, message_1 in enumerate(messages_1_result):
-        role: str = message_1["role"]
-        content_1: Content = message_1["content"]
-        if (len(messages_2_result) >= i + 1) and (messages_2_result[i]["role"] == role):
-            message_2 = messages_2_result[i]
-            content_2: Content = message_2["content"]
-
-            # Extract text from content (handles both string and content parts)
-            text_1 = extract_text_from_content(content_1)
-            text_2 = extract_text_from_content(content_2)
-
-            try:
-                child1_text, child2_text = _deap_crossover_chunking_strategy(
-                    text_1, text_2, rng
-                )
-            except ValueError:
-                child1_text, child2_text = _deap_crossover_word_level(
-                    text_1, text_2, rng
-                )
-
-            # Rebuild content preserving non-text parts (images/video)
-            messages_1_result[i]["content"] = rebuild_content_with_new_text(
-                content_1, child1_text
+    parents = [
+        chat_prompt.ChatPrompt(messages=messages_1),
+        chat_prompt.ChatPrompt(messages=messages_2),
+    ]
+    right = {
+        segment["segment_id"]: segment for segment in describe_text_segments(parents[1])
+    }
+    edits: list[list[TextEdit]] = [[], []]
+    for left in describe_text_segments(parents[0]):
+        other = right.get(left["segment_id"])
+        if other is None or other["role"] != left["role"]:
+            continue
+        try:
+            children = _deap_crossover_chunking_strategy(
+                left["text"], other["text"], rng
             )
-            messages_2_result[i]["content"] = rebuild_content_with_new_text(
-                content_2, child2_text
-            )
-
-    return messages_1_result, messages_2_result
+        except ValueError:
+            children = _deap_crossover_word_level(left["text"], other["text"], rng)
+        for index, text in enumerate(children):
+            edits[index].append(TextEdit(segment_id=left["segment_id"], text=text))
+    return (
+        apply_text_edits(parents[0], edits[0]).get_messages(),
+        apply_text_edits(parents[1], edits[1]).get_messages(),
+    )
 
 
 def deap_crossover(
@@ -205,11 +187,21 @@ def _call_llm_for_crossover(
     """Call the LLM for crossover and return the laddered child prompts."""
     user_prompt = prompts.get(
         user_template_key,
-        parent1_messages=redact_inline_media(messages_1),
-        parent2_messages=redact_inline_media(messages_2),
+        parent1_messages=describe_text_segments(
+            chat_prompt.ChatPrompt(messages=messages_1)
+        ),
+        parent2_messages=describe_text_segments(
+            chat_prompt.ChatPrompt(messages=messages_2)
+        ),
         style=output_style_guidance,
     )
     response = _llm_calls.call_model(
+        evidence=ReasoningEvidence(
+            prompts={
+                "parent_1": chat_prompt.ChatPrompt(messages=messages_1),
+                "parent_2": chat_prompt.ChatPrompt(messages=messages_2),
+            }
+        ),
         messages=[
             {
                 "role": "system",
@@ -228,8 +220,12 @@ def _call_llm_for_crossover(
     )
 
     response_item = response[0] if isinstance(response, list) else response
-    first_child_messages = [msg.model_dump() for msg in response_item.child_1]
-    second_child_messages = [msg.model_dump() for msg in response_item.child_2]
+    first_child_messages = apply_text_edits(
+        chat_prompt.ChatPrompt(messages=messages_1), response_item.child_1
+    ).get_messages()
+    second_child_messages = apply_text_edits(
+        chat_prompt.ChatPrompt(messages=messages_2), response_item.child_2
+    ).get_messages()
     return first_child_messages, second_child_messages
 
 
@@ -349,17 +345,11 @@ def llm_deap_crossover(
                             prompts=prompts,
                         )
                     allowed_roles = getattr(optimizer, "_optimizable_roles", None)
-                    child1_data[prompt_name] = preserve_multimodal_message_structure(
-                        original_messages=messages_1,
-                        generated_messages=apply_role_constraints(
-                            messages_1, child1_messages, allowed_roles
-                        ),
+                    child1_data[prompt_name] = apply_role_constraints(
+                        messages_1, child1_messages, allowed_roles
                     )
-                    child2_data[prompt_name] = preserve_multimodal_message_structure(
-                        original_messages=messages_2,
-                        generated_messages=apply_role_constraints(
-                            messages_2, child2_messages, allowed_roles
-                        ),
+                    child2_data[prompt_name] = apply_role_constraints(
+                        messages_2, child2_messages, allowed_roles
                     )
                 except (StructuredOutputParsingError, Exception) as e:
                     logger.warning(
@@ -369,17 +359,11 @@ def llm_deap_crossover(
                         messages_1, messages_2, rng
                     )
                     allowed_roles = getattr(optimizer, "_optimizable_roles", None)
-                    child1_data[prompt_name] = preserve_multimodal_message_structure(
-                        original_messages=messages_1,
-                        generated_messages=apply_role_constraints(
-                            messages_1, child1_messages, allowed_roles
-                        ),
+                    child1_data[prompt_name] = apply_role_constraints(
+                        messages_1, child1_messages, allowed_roles
                     )
-                    child2_data[prompt_name] = preserve_multimodal_message_structure(
-                        original_messages=messages_2,
-                        generated_messages=apply_role_constraints(
-                            messages_2, child2_messages, allowed_roles
-                        ),
+                    child2_data[prompt_name] = apply_role_constraints(
+                        messages_2, child2_messages, allowed_roles
                     )
             else:
                 # Prompt only in ind1 - keep as is in both children

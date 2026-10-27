@@ -2,10 +2,12 @@
 Single-prompt candidate generation for the Meta-Prompt Optimizer.
 """
 
+from ....utils.prompt_editing import apply_text_edits
+
+from ....core.reasoning import ReasoningEvidence
+
 import copy
-import json
 import logging
-import re
 from typing import Any
 from collections.abc import Callable, Sequence
 
@@ -17,12 +19,6 @@ from ....core import llm_calls as _llm_calls
 from ....core.llm_calls import StructuredOutputParsingError
 from ....core.results import OptimizationRound
 from ....utils import display as display_utils
-from ....utils.prompt_roles import (
-    apply_role_constraints,
-    count_disallowed_role_updates,
-    derive_prompt,
-)
-from ....utils.text import normalize_llm_text
 from ....utils.multimodal import text_only_messages
 from .. import prompts as meta_prompts
 from .. import reporting
@@ -83,10 +79,10 @@ def sanitize_generated_prompts(
     sanitized = copy.deepcopy(prompt_json)
     rejected_count = 0
     for prompt_item in sanitized.get("prompts", []):
-        if "prompt" in prompt_item and isinstance(prompt_item["prompt"], list):
+        if "edits" in prompt_item and isinstance(prompt_item["edits"], list):
             has_leakage = False
-            for message in prompt_item["prompt"]:
-                content = message.get("content", "")
+            for message in prompt_item["edits"]:
+                content = message.get("text", "")
                 # Extract text from content (handles both string and multimodal list content)
                 text_content = extract_text_from_content(content)
                 content_lower = text_content.lower()
@@ -204,80 +200,21 @@ def _build_generation_messages(
         {
             "role": "user",
             "content": user_prompt
-            + "\nReturn rewritten message content as text strings. Original media parts are preserved automatically; do not reproduce them.",
+            + "\nReturn targeted text edits using the supplied editable segment IDs. Do not return messages or media.",
         },
     ]
 
 
-def _parse_candidate_json(content_item: str) -> dict[str, Any]:
-    try:
-        return json.loads(content_item)
-    except json.JSONDecodeError:
-        json_match = re.search(r"\{.*\}", content_item, re.DOTALL)
-        if not json_match:
-            raise ValueError(
-                "No JSON object found in response via regex. - received: %s"
-                % content_item
-            )
-        try:
-            return json.loads(normalize_llm_text(json_match.group()))
-        except json.JSONDecodeError as exc:
-            raise ValueError(
-                "Could not parse JSON extracted via regex: %s - received: %s"
-                % (exc, json_match.group())
-            )
-
-
-def _normalize_prompt_json(json_result: Any) -> dict[str, Any]:
-    if isinstance(json_result, list):
-        if (
-            len(json_result) == 1
-            and isinstance(json_result[0], dict)
-            and "prompts" in json_result[0]
-        ):
-            return json_result[0]
-        if all(isinstance(item, dict) and "prompt" in item for item in json_result):
-            logger.debug("Received unwrapped prompt list, wrapping in 'prompts' key")
-            return {"prompts": json_result}
-    if not isinstance(json_result, dict) or "prompts" not in json_result:
-        logger.debug("Parsed JSON content: %s", json_result)
-        raise ValueError(
-            "Parsed JSON is not a dictionary or missing 'prompts' key. - received: %s"
-            % json_result
-        )
-    if not isinstance(json_result["prompts"], list):
-        logger.debug("Content of 'prompts': %s", json_result.get("prompts"))
-        raise ValueError(
-            "'prompts' key does not contain a list. - received: %s"
-            % json_result.get("prompts")
-        )
-    return json_result
-
-
 def _parse_candidate_prompts(
-    *,
-    contents: list[Any],
-    metric_name: str,
+    *, contents: list[Any], metric_name: str
 ) -> list[dict[str, Any]]:
-    prompt_items: list[dict[str, Any]] = []
-    for content_item in contents:
-        if hasattr(content_item, "model_dump"):
-            normalized = content_item.model_dump()
-        else:
-            normalized = content_item
-        if isinstance(normalized, str):
-            normalized = normalize_llm_text(normalized)
-            json_result = _parse_candidate_json(normalized)
-        elif isinstance(normalized, dict):
-            json_result = normalized
-        else:
-            raise ValueError(
-                "Candidate generation response must be a string or dict; received %s"
-                % type(normalized).__name__
-            )
-        json_result = _normalize_prompt_json(json_result)
-        json_result = sanitize_generated_prompts(json_result, metric_name)
-        prompt_items.extend(json_result["prompts"])
+    prompt_items = []
+    for response in contents:
+        if not isinstance(response, PromptCandidatesResponse):
+            raise TypeError("Expected a structured PromptCandidatesResponse")
+        prompt_items.extend(
+            sanitize_generated_prompts(response.model_dump(), metric_name)["prompts"]
+        )
     return prompt_items
 
 
@@ -285,102 +222,31 @@ def _build_prompts_from_items(
     *,
     optimizer: Any,
     current_prompt: chat_prompt.ChatPrompt,
-    round_num: int,
+    round_num: int | None,
     prompt_items: list[dict[str, Any]],
 ) -> list[chat_prompt.ChatPrompt]:
-    valid_prompts: list[chat_prompt.ChatPrompt] = []
+    candidates = []
     for idx, item in enumerate(prompt_items, start=1):
-        if (
-            isinstance(item, dict)
-            and "prompt" in item
-            and isinstance(item["prompt"], list)
-        ):
-            improvement_focus = item.get("improvement_focus")
-            reasoning = item.get("reasoning")
-
-            # Always use messages approach - works for both string and multimodal content
-            candidate_messages = item["prompt"].copy()
-
-            # If user prompt optimization is not allowed, remove user messages from candidate
-            # and use the current prompt's user content instead
-            if not optimizer.allow_user_prompt_optimization:
-                candidate_messages = [
-                    msg for msg in candidate_messages if msg.get("role") != "user"
-                ]
-
-            # Check what roles are present in the candidate
-            candidate_roles = {msg.get("role") for msg in candidate_messages}
-
-            # Fill in missing roles from current prompt if needed
-            if "system" not in candidate_roles:
-                if current_prompt.system:
-                    candidate_messages.insert(
-                        0, {"role": "system", "content": current_prompt.system}
-                    )
-                elif current_prompt.messages:
-                    # Find system message from current prompt
-                    for msg in current_prompt.messages:
-                        if msg.get("role") == "system":
-                            candidate_messages.insert(0, msg)
-                            break
-
-            if "user" not in candidate_roles:
-                if current_prompt.user:
-                    candidate_messages.append(
-                        {"role": "user", "content": current_prompt.user}
-                    )
-                elif current_prompt.messages:
-                    # Find user message from current prompt
-                    for msg in current_prompt.messages:
-                        if msg.get("role") == "user":
-                            candidate_messages.append(msg)
-                            break
-                else:
-                    raise Exception("User content not found in chat-prompt!")
-
-            valid_prompts.append(
-                derive_prompt(
-                    current_prompt,
-                    candidate_messages,
-                    getattr(optimizer, "_optimizable_roles", None),
-                )
-            )
-            allowed_roles = getattr(optimizer, "_optimizable_roles", None)
-            if allowed_roles is not None:
-                constrained = apply_role_constraints(
-                    current_prompt.get_messages(),
-                    valid_prompts[-1].get_messages(),
-                    allowed_roles,
-                )
-                dropped = count_disallowed_role_updates(
-                    current_prompt.get_messages(),
-                    valid_prompts[-1].get_messages(),
-                    allowed_roles,
-                )
-                if dropped:
-                    logger.debug(
-                        "MetaPrompt candidate %s dropped %s update(s) due to optimize_prompt constraints.",
-                        idx,
-                        dropped,
-                    )
-                valid_prompts[-1].set_messages(constrained)
-            prompt_ref = valid_prompts[-1]
-            optimizer._candidate_metadata_by_prompt_id[id(prompt_ref)] = {
-                "improvement_focus": improvement_focus,
-                "reasoning": reasoning,
-            }
-            reporting.log_candidate_generated(
-                round_num=round_num,
-                candidate_id=f"round{round_num}_cand{idx}",
-                prompt_messages=prompt_ref.get_messages(),
-                improvement_focus=improvement_focus,
-                reasoning=reasoning,
-            )
-        else:
-            logger.warning(
-                "Skipping invalid prompt item structure in JSON response: %s", item
-            )
-    return valid_prompts
+        if not isinstance(item, dict) or not isinstance(item.get("edits"), list):
+            raise ValueError("Candidate must contain a list of targeted text edits")
+        candidate = apply_text_edits(
+            current_prompt,
+            item["edits"],
+            getattr(optimizer, "_optimizable_roles", None),
+        )
+        candidates.append(candidate)
+        optimizer._candidate_metadata_by_prompt_id[id(candidate)] = {
+            "improvement_focus": item.get("improvement_focus"),
+            "reasoning": item.get("reasoning"),
+        }
+        reporting.log_candidate_generated(
+            round_num=round_num,
+            candidate_id=f"round{round_num}_cand{idx}",
+            prompt_messages=candidate.get_messages(),
+            improvement_focus=item.get("improvement_focus"),
+            reasoning=item.get("reasoning"),
+        )
+    return candidates
 
 
 def generate_candidate_prompts(
@@ -439,6 +305,9 @@ def generate_candidate_prompts(
             )
 
             content = _llm_calls.call_model(
+                evidence=ReasoningEvidence(
+                    prompts={current_prompt.name: current_prompt}
+                ),
                 messages=messages,
                 model=optimizer.model,
                 model_parameters=optimizer.model_parameters,
@@ -451,10 +320,6 @@ def generate_candidate_prompts(
                 project_name=project_name,
             )
             contents: list[Any] = content if isinstance(content, list) else [content]
-            contents = [
-                normalize_llm_text(item) if isinstance(item, str) else item
-                for item in contents
-            ]
             metric_name = metric.__name__
             prompt_items = _parse_candidate_prompts(
                 contents=contents,

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import Callable
 from typing import Any
 from unittest.mock import MagicMock
@@ -10,6 +9,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from opik_optimizer import ChatPrompt
+from opik_optimizer.algorithms.evolutionary_optimizer.types import PopulationResponse
 from opik_optimizer.algorithms.evolutionary_optimizer.ops.population_ops import (
     initialize_population,
 )
@@ -36,15 +36,22 @@ def _initialize_population_with_defaults(
     )
 
 
-def _fresh_response(*, system_text: str, user_template: str) -> str:
-    return json.dumps([[system_message(system_text), user_message(user_template)]])
+def _fresh_response(*, system_text: str, user_template: str) -> PopulationResponse:
+    return _variation_response(system_texts=[system_text], user_template=user_template)
 
 
-def _variation_response(*, system_texts: list[str], user_template: str) -> str:
-    return json.dumps(
+def _variation_response(
+    *, system_texts: list[str], user_template: str
+) -> PopulationResponse:
+    return PopulationResponse.model_validate(
         {
             "prompts": [
-                {"prompt": [system_message(text), user_message(user_template)]}
+                {
+                    "edits": [
+                        {"segment_id": "message:0", "text": text},
+                        {"segment_id": "message:1", "text": user_template},
+                    ]
+                }
                 for text in system_texts
             ]
         }
@@ -177,9 +184,9 @@ class TestInitializePopulation:
         same_messages = [system_message("Same content"), user_message("{q}")]
         mock_llm_sequence(
             [
-                json.dumps([same_messages]),
-                json.dumps(
-                    {"prompts": [{"prompt": same_messages}, {"prompt": same_messages}]}
+                _fresh_response(system_text="Same content", user_template="{q}"),
+                _variation_response(
+                    system_texts=["Same content", "Same content"], user_template="{q}"
                 ),
             ]
         )

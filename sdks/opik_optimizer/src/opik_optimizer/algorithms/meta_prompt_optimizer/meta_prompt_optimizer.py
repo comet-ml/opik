@@ -1,3 +1,4 @@
+from typing import Literal
 import logging
 from typing import Any, cast
 
@@ -103,8 +104,12 @@ class MetaPromptOptimizer(BaseOptimizer):
         prompt_overrides: PromptOverrides = None,
         skip_perfect_score: bool = constants.DEFAULT_SKIP_PERFECT_SCORE,
         perfect_score: float = constants.DEFAULT_PERFECT_SCORE,
+        reasoning_input: Literal["multimodal", "text_only"] = "multimodal",
+        max_reasoning_examples: int = 5,
     ) -> None:
         super().__init__(
+            reasoning_input=reasoning_input,
+            max_reasoning_examples=max_reasoning_examples,
             model=model,
             verbose=verbose,
             seed=seed,

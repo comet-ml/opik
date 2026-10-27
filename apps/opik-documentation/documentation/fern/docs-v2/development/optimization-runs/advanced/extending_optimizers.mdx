@@ -118,7 +118,7 @@ Original prompt:
 Focus areas for improvement:
 {improvement_focus}
 
-Return only the improved system prompt text.""",
+Return targeted text edits using the supplied segment IDs and the requested response schema.""",
     }
 
     def __init__(
@@ -213,6 +213,14 @@ Your custom logic to create new prompt variations. Use `get_prompt()` to access 
 (which respects the user's `prompt_overrides`) and `llm_calls.call_model()` for LLM calls:
 
 ```python wordWrap
+from pydantic import BaseModel
+from opik_optimizer import ReasoningEvidence, TextEdit, apply_text_edits
+
+
+class CandidateEdits(BaseModel):
+    edits: list[TextEdit]
+
+
 def _generate_candidates(
     self, current_prompts: dict[str, ChatPrompt]
 ) -> list[dict[str, ChatPrompt]]:
@@ -224,7 +232,7 @@ def _generate_candidates(
             # Get the generation prompt template (respects prompt_overrides)
             generation_request = self.get_prompt(
                 "generation_prompt",
-                current_prompt=prompt.get_messages(),
+                current_prompt=name,
                 improvement_focus=f"variation {i + 1}: explore different approaches",
             )
             # Calls are attributed to this run: counters, cost, project and tags.
@@ -233,23 +241,13 @@ def _generate_candidates(
                 model=self.model,
                 seed=self.seed + i,  # Vary seed for diversity
                 model_parameters=self.model_parameters,
+                evidence=ReasoningEvidence(prompts={name: prompt}),
+                response_model=CandidateEdits,
             )
-            candidate[name] = self._with_system_prompt(prompt, response)
+            candidate[name] = apply_text_edits(prompt, response.edits, self._optimizable_roles)
         candidates.append(candidate)
     return candidates
 
-
-def _with_system_prompt(self, prompt: ChatPrompt, text: str) -> ChatPrompt:
-    """Copy the prompt (keeping its model, tools and settings) with a new system message."""
-    messages = [
-        {**message, "content": text.strip()} if message["role"] == "system" else message
-        for message in prompt.get_messages()
-    ]
-    if not any(message["role"] == "system" for message in messages):
-        messages.insert(0, {"role": "system", "content": text.strip()})
-    new_prompt = prompt.copy()
-    new_prompt.set_messages(messages)
-    return new_prompt
 ```
 
 ### Step 4: Run Your Optimizer
@@ -305,6 +303,23 @@ result.display()
 
 The older `begin_round`, `finish_round`, `start_candidate`, and `finish_candidate` hook aliases emit
 `DeprecationWarning` and remain available for compatibility.
+
+## Structured evidence and text edits
+
+Pass `ReasoningEvidence(prompts=current_prompts)` to shared LLM calls. During an optimization
+run, the client attaches bounded selected cases with native images, outputs and scores. Use an
+explicit `cases` list to select your own evidence, or `cases=()` for template-only context.
+Agent messages remain user-provided evidence; their system roles are not promoted into the
+optimizer's system instructions.
+
+Use `TextEdit` and `apply_text_edits()` to update existing text slots. `message:0` addresses a
+string message; `message:1:part:0` addresses a native text content block. This retains media and
+configuration by construction and rejects invalid targets, duplicate edits and removed
+placeholders. Custom generation overrides must return edits rather than full message arrays.
+
+The shared client applies `reasoning_input` and `max_reasoning_examples`, validates the optimizer
+model's vision capability, and preserves native blocks through structured-output retries.
+Display summaries are separate from actual request content.
 
 ## LLM Call Accounting
 

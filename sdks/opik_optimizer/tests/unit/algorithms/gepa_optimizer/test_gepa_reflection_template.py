@@ -28,7 +28,7 @@ class TestTemplateContract:
         """The version floor's real contract, pinned against the installed gepa.
 
         gepa 0.0.x used <curr_instructions>/<inputs_outputs_feedback>; the
-        pyproject floor is gepa>=0.1.0 precisely because our template speaks
+        pyproject floor is gepa>=0.1.4 precisely because our template speaks
         the <curr_param>/<side_info> dialect. If this fails, the resolver
         installed a gepa older (or stranger) than the floor permits.
         """
@@ -170,7 +170,7 @@ class TestTooOldGepaIsDiagnosedAsAVersionProblem:
         )
 
     def test_construction_reports_the_version_floor(self, old_dialect_gepa) -> None:
-        with pytest.raises(RuntimeError, match="gepa>=0.1.0") as exc_info:
+        with pytest.raises(RuntimeError, match="gepa>=0.1.4") as exc_info:
             GepaOptimizer(model="openai/gpt-4o-mini")
         # The misdiagnosis is the bug: no override was passed.
         assert "override" not in str(exc_info.value)
@@ -183,7 +183,7 @@ class TestTooOldGepaIsDiagnosedAsAVersionProblem:
         A new-dialect override is well-formed for us and unusable on that gepa,
         so the version error is still the honest answer.
         """
-        with pytest.raises(RuntimeError, match="gepa>=0.1.0"):
+        with pytest.raises(RuntimeError, match="gepa>=0.1.4"):
             GepaOptimizer(
                 model="openai/gpt-4o-mini",
                 prompt_overrides={
@@ -210,7 +210,7 @@ class TestTooOldGepaIsDiagnosedAsAVersionProblem:
             "validate_prompt_template",
             self._old_dialect_validate,
         )
-        with pytest.raises(RuntimeError, match="gepa>=0.1.0"):
+        with pytest.raises(RuntimeError, match="gepa>=0.1.4"):
             GepaOptimizer(model="openai/gpt-4o-mini")
 
     def test_unreadable_default_still_blames_a_bad_override(self, monkeypatch) -> None:

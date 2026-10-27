@@ -1,3 +1,4 @@
+from dataclasses import replace
 import copy
 import json
 import logging
@@ -5,7 +6,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from functools import wraps
 from collections.abc import Callable, Iterator
-from typing import TYPE_CHECKING, Any, TypeVar, overload
+from typing import TYPE_CHECKING, Any, TypeVar, overload, cast
 
 from pydantic import BaseModel, ValidationError as PydanticValidationError
 
@@ -17,6 +18,14 @@ from opik.integrations.litellm import track_completion
 
 from ..utils import throttle as _throttle
 from ..utils.helpers import json_to_dict
+
+from .reasoning import (
+    ReasoningInput,
+    ChatMessages,
+    ReasoningEvidence,
+    build_reasoning_messages,
+    validate_reasoning_messages,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -349,6 +358,30 @@ def _increment_llm_call_tools_counter_if_in_optimizer() -> None:
         optimizer._increment_llm_call_tools_counter()
 
 
+def _prepare_reasoning_request(
+    messages: ChatMessages, evidence: ReasoningEvidence | None, model: str
+) -> ChatMessages:
+    optimizer = _active_optimizer.get()
+    mode = cast(ReasoningInput, getattr(optimizer, "reasoning_input", "multimodal"))
+    if evidence is not None and evidence.cases is None:
+        evidence = replace(evidence, cases=getattr(optimizer, "_reasoning_cases", ()))
+    if evidence is not None and evidence.prompts is None and evidence.cases:
+        evidence = replace(
+            evidence, prompts=getattr(optimizer, "_reasoning_prompts", None)
+        )
+    if evidence is not None and evidence.cases is not None:
+        limit = getattr(optimizer, "max_reasoning_examples", 5)
+        evidence = replace(evidence, cases=evidence.cases[:limit])
+    result = build_reasoning_messages(
+        messages,
+        evidence=evidence,
+        mode=mode,
+        allowed_roles=getattr(optimizer, "_optimizable_roles", None),
+    )
+    validate_reasoning_messages(result, model)
+    return result
+
+
 def _get_project_name_from_optimizer() -> str | None:
     """Return project_name from the active optimizer."""
     optimizer = _active_optimizer.get()
@@ -557,9 +590,9 @@ def _parse_response(
 
 
 def _append_json_format_instructions(
-    messages: list[dict[str, str]],
+    messages: ChatMessages,
     response_model: type[BaseModel],
-) -> list[dict[str, str]]:
+) -> ChatMessages:
     """
     Append JSON format instructions to the last user message.
 
@@ -588,9 +621,11 @@ Here is the output schema (shown in a code block for readability only — do not
     for i in range(len(modified_messages) - 1, -1, -1):
         if modified_messages[i].get("role") == "user":
             modified_messages[i] = modified_messages[i].copy()
-            modified_messages[i]["content"] = (
-                modified_messages[i]["content"] + format_instructions
-            )
+            content = modified_messages[i]["content"]
+            if isinstance(content, list):
+                content.append({"type": "text", "text": format_instructions})
+            else:
+                modified_messages[i]["content"] = content + format_instructions
             break
     return modified_messages
 
@@ -672,7 +707,7 @@ def _parse_response_list(
 # Overloads for call_model to provide precise return types
 @overload
 def call_model(
-    messages: list[dict[str, str]],
+    messages: ChatMessages,
     model: str,
     seed: int | None = None,
     model_parameters: dict[str, Any] | None = None,
@@ -688,12 +723,13 @@ def call_model(
     metadata: dict[str, Any] | None = None,
     project_name: str | None = None,
     return_all: bool = False,
+    evidence: ReasoningEvidence | None = None,
 ) -> str | list[str]: ...
 
 
 @overload
 def call_model(
-    messages: list[dict[str, str]],
+    messages: ChatMessages,
     model: str,
     seed: int | None = None,
     model_parameters: dict[str, Any] | None = None,
@@ -709,12 +745,13 @@ def call_model(
     metadata: dict[str, Any] | None = None,
     project_name: str | None = None,
     return_all: bool = False,
+    evidence: ReasoningEvidence | None = None,
 ) -> _T | list[_T]: ...
 
 
 @_throttle.rate_limited(_limiter)
 def call_model(
-    messages: list[dict[str, str]],
+    messages: ChatMessages,
     model: str,
     seed: int | None = None,
     model_parameters: dict[str, Any] | None = None,
@@ -732,6 +769,7 @@ def call_model(
     metadata: dict[str, Any] | None = None,
     project_name: str | None = None,
     return_all: bool = False,
+    evidence: ReasoningEvidence | None = None,
 ) -> BaseModel | str:
     """
     Call the LLM model with optional structured output.
@@ -756,6 +794,7 @@ def call_model(
         If response_model is provided, returns an instance of that model.
         Otherwise, returns the raw string response.
     """
+    messages = _prepare_reasoning_request(messages, evidence, model)
     _increment_llm_counter_if_in_optimizer()
 
     # Build dict of call-time LiteLLM parameter overrides (non-None only)
@@ -855,7 +894,7 @@ def call_model(
 # Overloads for call_model_async to provide precise return types
 @overload
 async def call_model_async(
-    messages: list[dict[str, str]],
+    messages: ChatMessages,
     model: str,
     seed: int | None = None,
     model_parameters: dict[str, Any] | None = None,
@@ -871,12 +910,13 @@ async def call_model_async(
     optimization_id: str | None = None,
     metadata: dict[str, Any] | None = None,
     return_all: bool = False,
+    evidence: ReasoningEvidence | None = None,
 ) -> str | list[str]: ...
 
 
 @overload
 async def call_model_async(
-    messages: list[dict[str, str]],
+    messages: ChatMessages,
     model: str,
     seed: int | None = None,
     model_parameters: dict[str, Any] | None = None,
@@ -892,12 +932,13 @@ async def call_model_async(
     optimization_id: str | None = None,
     metadata: dict[str, Any] | None = None,
     return_all: bool = False,
+    evidence: ReasoningEvidence | None = None,
 ) -> _T | list[_T]: ...
 
 
 @_throttle.rate_limited_async(_limiter)
 async def call_model_async(
-    messages: list[dict[str, str]],
+    messages: ChatMessages,
     model: str,
     seed: int | None = None,
     model_parameters: dict[str, Any] | None = None,
@@ -915,6 +956,7 @@ async def call_model_async(
     optimization_id: str | None = None,
     metadata: dict[str, Any] | None = None,
     return_all: bool = False,
+    evidence: ReasoningEvidence | None = None,
 ) -> BaseModel | str:
     """
     Async version of _call_model using litellm.acompletion.
@@ -939,6 +981,7 @@ async def call_model_async(
         If response_model is provided, returns an instance of that model.
         Otherwise, returns the raw string response.
     """
+    messages = _prepare_reasoning_request(messages, evidence, model)
     _increment_llm_counter_if_in_optimizer()
 
     # Build dict of call-time LiteLLM parameter overrides (non-None only)

@@ -45,7 +45,7 @@
         0.333333,
         0.5,
         0.666667,
-        0.666667
+        0.5
       ]
     },
     {
@@ -54,13 +54,12 @@
       "stop_reason": "perfect_score",
       "trial_scores": [
         0.333333,
-        0.666667,
         1.0
       ]
     }
   ],
   "history_rounds": 2,
-  "history_trials": 7,
+  "history_trials": 6,
   "initial_score": 0.333333,
   "known_issue": null,
   "llm_call_kinds": [
@@ -75,15 +74,15 @@
   "per_prompt_outputs": {
     "item-0": {
       "answerer": "A0",
-      "planner": "Plan (4 hints): Plan for: What is the code for item 0?"
+      "planner": "Plan (2 hints): Plan for: What is the code for item 0?"
     },
     "item-1": {
       "answerer": "A1",
-      "planner": "Plan (4 hints): Plan for: What is the code for item 1?"
+      "planner": "Plan (2 hints): Plan for: What is the code for item 1?"
     },
     "item-2": {
       "answerer": "A2",
-      "planner": "Plan (4 hints): Plan for: What is the code for item 2?"
+      "planner": "Plan (2 hints): Plan for: What is the code for item 2?"
     }
   },
   "prompt": {
@@ -106,7 +105,7 @@
     "planner": {
       "messages": [
         {
-          "content": "You plan how to find the code. Answer with the exact value. Be concise. Think step by step. Double check the facts.",
+          "content": "You plan how to find the code. Answer with the exact value. Be concise.",
           "role": "system"
         },
         {
@@ -122,5 +121,5 @@
   },
   "score": 1.0,
   "stopped_early": true,
-  "trials_completed": 6
+  "trials_completed": 5
 }

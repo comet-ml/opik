@@ -66,7 +66,11 @@
       {
         "content": [
           {
-            "text": "You read images and answer. Answer with the exact value. Reply with the code only. Be concise. Think step by step.",
+            "text": "You read images and answer. Answer with the exact value. Be concise. Think step by step. Double check the facts.",
+            "type": "text"
+          },
+          {
+            "text": "Reply with the code only.",
             "type": "text"
           }
         ],

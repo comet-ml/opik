@@ -31,6 +31,7 @@ from opik_optimizer.algorithms.parameter_optimizer.ops.search_ops import (
 )
 from opik_optimizer.algorithms.parameter_optimizer.types import ParameterType
 
+from tests.image_fixtures import RED_IMAGE
 from tests.unit.characterization.fake_llm import agent_answer, content_text, count_hints
 from tests.unit.fixtures.builders import make_mock_dataset
 
@@ -39,7 +40,7 @@ UPDATE_ENV = "UPDATE_GOLDEN"
 MODEL = "openai/gpt-4o-mini"
 SEED = 42
 N_ITEMS = 6
-IMAGE_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABBAEAwS2OUAAAAABJRU5ErkJggg=="
+IMAGE_DATA_URL = RED_IMAGE
 TOOL_NAME = "lookup_code"
 TOOL_DESCRIPTION = "Look up the code for an item."
 

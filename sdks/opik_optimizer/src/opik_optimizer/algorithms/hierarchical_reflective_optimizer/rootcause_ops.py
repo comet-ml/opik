@@ -1,3 +1,4 @@
+from ...core.reasoning import ReasoningEvidence, cases_from_evaluation
 import logging
 import asyncio
 from typing import Any, cast
@@ -167,6 +168,12 @@ Scores:
 
         # TODO: Check which project this data gets logged to
         root_cause_response = await _llm_calls.call_model_async(
+            evidence=ReasoningEvidence(
+                cases=cases_from_evaluation(
+                    test_results[batch_start:actual_end], traces=traces
+                ),
+                editable=False,
+            ),
             model=self.reasoning_model,
             messages=[{"role": "user", "content": batch_analysis_prompt}],
             seed=self.seed,

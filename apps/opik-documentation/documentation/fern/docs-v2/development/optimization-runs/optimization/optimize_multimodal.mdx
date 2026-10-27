@@ -8,79 +8,100 @@ og:title: Optimize multimodal performance with Opik
 title: Optimize multimodal prompts
 ---
 
-Multimodal agents often combine text instructions with images, audio, video, and structured
-outputs. Choose a `ChatPrompt.model` or custom agent model that supports the media you evaluate.
-Optimizer reasoning uses text instructions and bounded feedback; inline base64 media is redacted
-from those requests. The optimizer's reasoning model can be text-only.
+Image evidence reaches both the evaluated agent and the optimizer as native content blocks.
+Configure their models independently: `ChatPrompt.model` runs the task; the optimizer's `model`
+improves its instructions. HRPO uses its independently configured `reasoning_model` for analysis.
+No model or model parameters are borrowed from the other role.
 
-### Optimizer multimodal support
-
-Use optimizers that can forward OpenAI-style content parts (string or an array of structured parts like `{ type: "text" | "image_url" }`) to a multimodal LLM. Current support:
-
-| Optimizer | Multimodal (text+image) | Notes |
-|---|---|---|
-| HRPO (Hierarchical Reflective Prompt Optimizer) | ✓ | Analyzes text feedback and agent steps; evaluation uses the prompt's multimodal model. |
-| MetaPrompt Optimizer | ✓ | Uses content parts; requires a multimodal-capable model for evaluation. |
-| Evolutionary Optimizer | ✓ | Uses content parts; requires a multimodal-capable model for evaluation. |
-| Few-shot Bayesian Optimizer | ✓ | Uses content parts; requires a multimodal-capable model for evaluation. |
-| Parameter Optimizer | ✓ | Tunes parameters only, but supports multimodal prompts for evaluation. |
-| GEPA Optimizer | ✓ | Uses content parts; requires a multimodal-capable model for evaluation. |
-
-## Dataset design
-
-- Store image, audio, or video references as signed URLs in your dataset items (for example `metadata["image_url"]`, `metadata["audio_url"]`, or `metadata["video_url"]`).
-- Include textual descriptions alongside assets so metrics can run without downloading large files when possible.
-- Tag rows with modality info (`metadata["modality"] = "image+text"`) to filter during analysis.
-
-## Prompt structure
+## Configure image optimization
 
 ```python wordWrap
-from opik_optimizer import ChatPrompt
+from opik_optimizer import ChatPrompt, MetaPromptOptimizer
 
 prompt = ChatPrompt(
     messages=[
-        {"role": "system", "content": "Analyze the provided image and answer the question."},
+        {"role": "system", "content": "Read the image and answer the question."},
         {
             "role": "user",
             "content": [
                 {"type": "text", "text": "Question: {question}"},
-                {"type": "image_url", "image_url": {"url": "{image_url}"}},
+                {"type": "image_url", "image_url": {"url": "{image}", "detail": "low"}},
             ],
         },
     ],
-    model="openai/gpt-4o-mini"
+    model="openai/gpt-4o-mini",
+    model_parameters={},
+)
+optimizer = MetaPromptOptimizer(
+    model="openai/gpt-4o",
+    reasoning_input="multimodal",  # Default: send native image evidence.
+    max_reasoning_examples=5,
 )
 ```
 
-Text rewrites retain the original media parts and placeholders, along with tool bindings and
-model settings. Inline data URLs stay available to the evaluated agent while being redacted from
-optimizer reasoning requests. Model and custom-agent support determine which audio and video
-formats can be evaluated.
+Dataset rows supply `question` and `image`. The image value may be an HTTPS URL or an image data
+URL. Keep remote URLs valid for the full optimization run. A data URL remains inside an
+`image_url` block; it is never expanded into the textual prompt description.
 
-- Describe the expected output schema (JSON, markdown table, etc.) to reduce ambiguity.
+## What the optimizer sees and edits
 
-## Metrics
+The shared reasoning client sends the prompt's editable text segments and selected rendered
+cases. Each case keeps its image blocks next to its case ID, rendered input, output and scores.
+HRPO also includes recorded agent observations, including native images used during agent steps.
+GEPA uses the images from its selected reflection batch.
 
-- Reuse existing text metrics when possible by comparing textual descriptions.
-- For vision-specific scoring, call external models from your metric function, but cache results to control cost.
-- Record reasons that mention the modality: “Image not described” or “Chart incorrectly transcribed”.
-- When possible, augment automated metrics with lightweight human review or deterministic checks—LLM-as-a-judge signals can be noisy for multimodal tasks.
+The optimizer returns edits addressed to existing text segments. For example, `message:1:part:0`
+identifies the first text block in the second message. Media, message roles, tool callables,
+unselected text blocks and agent model settings remain unchanged. Duplicate, unknown or
+non-editable targets and edits that remove template variables are rejected.
 
-## Running optimizations
+`max_reasoning_examples` limits the cases attached to each reasoning request (default `5`).
+Image cost still depends on the number, size and detail of images in those cases. Inspect
+optimization call usage when choosing this limit.
 
-- Start with MetaPrompt for wording improvements. For cold-start exploration, pair Evolutionary → Few-Shot Bayesian to uncover new structures and example choices.
-- Use HRPO to catch recurring multimodal failures (e.g., missing chart descriptions) and highlight which dataset rows are problematic.
-- Monitor token usage because multimodal prompts send larger payloads; pick models like `gpt-4o-mini` when budgets are tight.
-- All six optimizers preserve text-and-image prompts. Use a multimodal-capable model for prompt evaluation, and configure the reasoning model separately.
+## Explicit text-only reasoning
 
-## Validation
+To improve text instructions using feedback without showing images to the optimizer, opt in:
 
-- Spot-check generated outputs with the associated media in the dashboard.
-- Confirm that dataset asset URLs remain valid for the duration of the optimization.
-- When sharing results, include thumbnails or sample outputs so reviewers understand the changes.
+```python wordWrap
+optimizer = MetaPromptOptimizer(
+    model="openai/gpt-4o-mini",
+    reasoning_input="text_only",
+)
+```
+
+This mode summarizes media in the optimizer's context. The evaluated agent continues receiving
+its original media. There is no automatic downgrade to this mode. Image evidence requires a
+vision-capable optimizer model; an unsupported model produces a configuration error. For custom
+model aliases or deployments, register their vision capability in LiteLLM before the run.
+
+## Optimizer support
+
+| Optimizer | Image evidence for reasoning | How edits are applied |
+|---|---|---|
+| MetaPrompt | Native blocks with selected cases | Targeted text edits for each prompt or bundle member |
+| HRPO | Native case images and recorded agent observations | Targeted text edits and selected tool descriptions |
+| Evolutionary | Native evidence for fresh starts, variations, mutation and crossover | Targeted edits of each original parent/template |
+| FewShot Bayesian | Native images in template generation | Text edits select the example placeholder; image demonstrations are inserted before the current task |
+| GEPA | Native images from its reflection batch; requires `gepa>=0.1.4` | Individual text-block and tool-description components |
+| ParameterOptimizer | Makes no reasoning calls | Changes only explicitly searched model parameters; forwards media during evaluation |
+
+FewShot image demonstrations retain their images as native blocks even when optimizer reasoning
+is explicitly text-only. The current task's input and media remain the final user message.
+
+Native optimizer evidence currently supports **images**. Audio, video and file blocks require
+`reasoning_input="text_only"`; they are rejected in multimodal reasoning mode. Evaluation support
+for those modalities depends on the agent and its model. Native audio/video reasoning and
+FewShot demonstrations are not supported yet.
+
+## Validate your run
+
+Use metrics that assess the task output and return useful reasons. Inspect cases with their
+images and scores in Opik. Confirm that the winning prompt retains the original image
+placeholders and the intended agent model configuration.
 
 ## Related guides
 
+- [Configure models](/development/optimization-runs/optimization/configure_models)
 - [Define datasets](/development/optimization-runs/optimization/define_datasets)
 - [Define metrics](/development/optimization-runs/optimization/define_metrics)
-- [Automatic Prompt Optimization for Multimodal Vision Agents (self-driving car example)](https://towardsdatascience.com/automatic-prompt-optimization-for-multimodal-vision-agents-a-self-driving-car-example/)

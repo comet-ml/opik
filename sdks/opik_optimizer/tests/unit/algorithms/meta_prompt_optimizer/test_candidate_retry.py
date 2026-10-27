@@ -22,7 +22,6 @@ from opik_optimizer.algorithms.meta_prompt_optimizer.types import (
 )
 from opik_optimizer.core.llm_calls import StructuredOutputParsingError
 from opik_optimizer.core.results import OptimizationRound
-from tests.unit.fixtures import system_message, user_message
 
 pytestmark = pytest.mark.usefixtures("suppress_expected_optimizer_warnings")
 
@@ -39,14 +38,7 @@ def _make_prompt() -> ChatPrompt:
 
 def _build_prompt_candidate() -> PromptCandidatesResponse:
     return PromptCandidatesResponse(
-        prompts=[
-            {
-                "prompt": [
-                    system_message("s"),
-                    user_message("u"),
-                ]
-            }
-        ]
+        prompts=[{"edits": [{"segment_id": "message:0", "text": "s"}]}]
     )
 
 

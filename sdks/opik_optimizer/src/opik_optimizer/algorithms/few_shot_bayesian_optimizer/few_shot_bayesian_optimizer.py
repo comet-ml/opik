@@ -1,3 +1,9 @@
+from ...utils.feedback import sanitize_feedback
+from ...utils.prompt_editing import apply_text_edits, describe_text_segments
+
+from ...core.reasoning import render_case_message, ReasoningEvidence, EvidenceCase
+
+from typing import Literal
 from typing import Any, cast
 
 import copy
@@ -42,10 +48,6 @@ from ...utils.logging import debug_log
 from ...constants import normalize_eval_threads
 from ...utils.prompt_roles import apply_role_constraints, count_disallowed_role_updates
 from ...utils.scoring import improves_over
-from ...utils.multimodal import (
-    preserve_multimodal_message_structure,
-    redact_inline_media,
-)
 from . import types
 from . import prompts as few_shot_prompts
 from .ops.columnarsearch_ops import ColumnarSearchSpace, build_columnar_search_space
@@ -117,6 +119,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         prompt_overrides: PromptOverrides = None,
         skip_perfect_score: bool = constants.DEFAULT_SKIP_PERFECT_SCORE,
         perfect_score: float = constants.DEFAULT_PERFECT_SCORE,
+        reasoning_input: Literal["multimodal", "text_only"] = "multimodal",
+        max_reasoning_examples: int = 5,
     ) -> None:
         super().__init__(
             model,
@@ -127,6 +131,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             skip_perfect_score=skip_perfect_score,
             perfect_score=perfect_score,
             prompt_overrides=prompt_overrides,
+            reasoning_input=reasoning_input,
+            max_reasoning_examples=max_reasoning_examples,
         )
         self.min_examples = min_examples
         self.max_examples = max_examples
@@ -334,13 +340,15 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             "prompts": [
                 {
                     "name": name,
-                    "messages": value.get_messages(),
+                    "segments": describe_text_segments(
+                        value, getattr(self, "_optimizable_roles", None)
+                    ),
                     # pass-tru for tools in final output for evaluation if included
                     "tools": toolcalling_utils.build_tool_blocks_from_prompt(value),
                 }
                 for name, value in prompts.items()
             ],
-            "examples": few_shot_examples,
+            "example_fields": list(few_shot_examples[0]) if few_shot_examples else [],
         }
 
         # Get templates from prompt library (allows for overrides)
@@ -355,7 +363,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                     placeholder=example_placeholder,
                 ),
             },
-            {"role": "user", "content": json.dumps(redact_inline_media(user_message))},
+            {"role": "user", "content": json.dumps(user_message)},
         ]
 
         sanitized_names, original_to_sanitized = self._sanitize_prompt_field_names(
@@ -379,6 +387,15 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         for attempt in range(2):
             try:
                 response_content = _llm_calls.call_model(
+                    evidence=ReasoningEvidence(
+                        prompts=prompts,
+                        cases=[
+                            EvidenceCase(case_id=str(i), inputs=example)
+                            for i, example in enumerate(
+                                few_shot_examples[: self.max_reasoning_examples]
+                            )
+                        ],
+                    ),
                     messages=attempt_messages,
                     model=model,
                     seed=self.seed,
@@ -410,22 +427,12 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         new_prompts: dict[str, chat_prompt.ChatPrompt] = {}
         for prompt_name in prompts.keys():
             try:
-                # Access field using getattr since field names are dynamic
-                messages = [
-                    x.model_dump(mode="json")
-                    for x in getattr(
-                        response_content, original_to_sanitized[prompt_name]
-                    )
-                ]
-                messages = preserve_multimodal_message_structure(
-                    original_messages=prompts[prompt_name].get_messages(),
-                    generated_messages=messages,
+                edits = getattr(response_content, original_to_sanitized[prompt_name])
+                new_prompt = apply_text_edits(
+                    prompts[prompt_name],
+                    edits,
+                    getattr(self, "_optimizable_roles", None),
                 )
-                new_prompt = prompts[prompt_name].copy()
-                # Store LLM-produced messages as-is to preserve placeholders.
-                # Role constraints are applied later in _reconstruct_prompts_with_examples
-                # when examples are actually injected into prompts.
-                new_prompt.set_messages(messages)
             except Exception as e:
                 logger.error(
                     f"Couldn't create prompt with placeholder for {prompt_name}: {e}"
@@ -663,8 +670,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
             llm_task = self._build_task_from_messages(
                 agent=agent,
-                prompts=prompts,
-                few_shot_examples=few_shot_examples,
+                prompts=prompts_with_examples,
+                few_shot_examples="",
                 allow_tool_use=context.allow_tool_use,
                 allowed_roles=(
                     context.extra_params.get("optimizable_roles")
@@ -974,7 +981,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         for example in demo_examples:
             processed_example = {}
             for key, value in example.items():
-                processed_example[key] = str(value)
+                processed_example[key] = str(sanitize_feedback(value))
 
             processed_demo_example = few_shot_prompt_template
             for key, value in processed_example.items():
@@ -991,6 +998,47 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
         few_shot_examples = "\n\n".join(processed_demo_examples)
         return few_shot_examples, processed_demo_examples
+
+    def _native_demonstrations(
+        self,
+        prompt: chat_prompt.ChatPrompt,
+        examples: list[dict[str, Any]],
+        template: str | None,
+        allowed_roles: set[str] | None,
+    ) -> list[dict[str, Any]]:
+        placeholder = str(self.get_prompt("example_placeholder"))
+        if template is None or not any(
+            placeholder in segment["text"]
+            for segment in describe_text_segments(prompt, allowed_roles)
+        ):
+            return []
+        demonstrations = []
+        has_images = False
+        for index, example in enumerate(examples):
+            message = render_case_message(
+                EvidenceCase(case_id=str(index), inputs=example), {prompt.name: prompt}
+            )
+            content = message["content"]
+            images = (
+                [part for part in content if part.get("type") == "image_url"]
+                if isinstance(content, list)
+                else []
+            )
+            has_images = has_images or bool(images)
+            text, _ = self._build_few_shot_examples_string([example], template)
+            demonstrations.append(
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": f"Demonstration example {index + 1}:\n{text}",
+                        },
+                        *images,
+                    ],
+                }
+            )
+        return demonstrations if has_images else []
 
     def _reconstruct_prompts_with_examples(
         self,
@@ -1030,10 +1078,18 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         example_placeholder = str(self.get_prompt("example_placeholder"))
         for key, prompt in prompts_with_placeholder.items():
             new_prompt = prompt.copy()
+            native_demonstrations = self._native_demonstrations(
+                prompt, demo_examples or [], few_shot_prompt_template, allowed_roles
+            )
+            replacement = (
+                "Use the demonstration examples below."
+                if native_demonstrations
+                else few_shot_examples
+            )
             new_messages = new_prompt.replace_in_messages(
                 new_prompt.get_messages(),
                 example_placeholder,
-                few_shot_examples,
+                replacement,
             )
             constrained = apply_role_constraints(
                 prompt.get_messages(), new_messages, allowed_roles
@@ -1047,6 +1103,16 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                     dropped,
                     key,
                 )
+            if native_demonstrations:
+                task_index = max(
+                    (
+                        index
+                        for index, message in enumerate(constrained)
+                        if message.get("role") == "user"
+                    ),
+                    default=len(constrained),
+                )
+                constrained[task_index:task_index] = native_demonstrations
             new_prompt.set_messages(constrained)
             result_prompts[key] = new_prompt
 

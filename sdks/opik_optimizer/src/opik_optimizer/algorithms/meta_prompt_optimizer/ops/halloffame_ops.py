@@ -18,7 +18,7 @@ from ..types import HallOfFameEntry, PatternExtractionResponse
 from ....utils.prompt_library import PromptLibrary
 from ....utils.display import format as display_format
 from ....utils.logging import debug_log
-from ....utils.multimodal import redact_inline_media
+from ....utils.multimodal import text_only_messages
 
 logger = logging.getLogger(__name__)
 
@@ -204,7 +204,7 @@ class PromptHallOfFame:
                 f"Improvement: {entry.improvement_over_baseline:+.1%}) ---\n"
             )
             prompt_scorecard += json.dumps(
-                redact_inline_media(entry.prompt_messages), indent=2
+                text_only_messages(entry.prompt_messages), indent=2
             )
             prompt_scorecard += "\n"
 

@@ -68,8 +68,38 @@
   "prompt": {
     "messages": [
       {
-        "content": "You read images and answer.\n\nExamples:\nQ: What is the code for item 0?\nA: A0\n\nQ: What is the code for item 4?\nA: A4",
+        "content": "You read images and answer.\n\nExamples:\nUse the demonstration examples below.",
         "role": "system"
+      },
+      {
+        "content": [
+          {
+            "text": "Demonstration example 1:\nQ: What is the code for item 0?\nA: A0",
+            "type": "text"
+          },
+          {
+            "image_url": {
+              "url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAAKElEQVR4nO3NsQ0AAAzCMP5/un0CNkuZ41wybXsHAAAAAAAAAAAAxR4yw/wuPL6QkAAAAABJRU5ErkJggg=="
+            },
+            "type": "image_url"
+          }
+        ],
+        "role": "user"
+      },
+      {
+        "content": [
+          {
+            "text": "Demonstration example 2:\nQ: What is the code for item 4?\nA: A4",
+            "type": "text"
+          },
+          {
+            "image_url": {
+              "url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAAKElEQVR4nO3NsQ0AAAzCMP5/un0CNkuZ41wybXsHAAAAAAAAAAAAxR4yw/wuPL6QkAAAAABJRU5ErkJggg=="
+            },
+            "type": "image_url"
+          }
+        ],
+        "role": "user"
       },
       {
         "content": [

@@ -1,9 +1,10 @@
 """Type definitions for the Reflective Optimizer."""
 
+from ...utils.prompt_editing import TextEdit
+
 from typing import Any
 from pydantic import BaseModel, create_model, ConfigDict
 
-from ...api_objects import types
 from ...utils.toolcalling.ops.toolcalling import (
     ToolDescriptionUpdate,
     ToolParameterUpdate,
@@ -46,7 +47,7 @@ class ImprovedPrompt(BaseModel):
     """Model for improved prompt response."""
 
     reasoning: str
-    messages: list[types.Message]
+    edits: list[TextEdit]
     tool_descriptions: list[ToolDescriptionUpdate] | None = None
     parameter_descriptions: list[ToolParameterUpdate] | None = None
 

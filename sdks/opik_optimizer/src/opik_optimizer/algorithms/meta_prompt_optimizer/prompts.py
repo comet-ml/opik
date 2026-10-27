@@ -106,7 +106,7 @@ def build_reasoning_system_prompt(
         - Preserve placeholders, tools, and role ordering per agent.
         - Return updated prompts grouped as candidate bundles. Each candidate can include bundle-level improvement_focus and reasoning.
         - Try to propose multiple distinct candidate bundles (e.g., up to the requested count) if possible.
-        - Each candidate must include every agent under "agents" with fields: name, messages, improvement_focus, reasoning.
+        - Each candidate must include every agent under "agents" with fields: name, edits, improvement_focus, reasoning.
         """
         )
         if mode == "bundle"
@@ -124,7 +124,7 @@ def build_reasoning_system_prompt(
               "agents": [
                 {
                   "name": "<agent_name>",
-                  "messages": [{"role": "<role>", "content": "<content>"}],
+                  "edits": [{"segment_id": "<editable segment ID>", "text": "<replacement text>"}],
                   "improvement_focus": "what you changed for this agent",
                   "reasoning": "why this should help this agent"
                 }
@@ -138,7 +138,7 @@ def build_reasoning_system_prompt(
         {
             "prompts": [
                 {
-                    "prompt": [{"role": "<role>", "content": "<content>"}],
+                    "edits": [{"segment_id": "<editable segment ID>", "text": "<replacement text>"}],
                     "improvement_focus": "what aspect this prompt improves",
                     "reasoning": "why this improvement should help"
                 }
@@ -445,19 +445,19 @@ SYNTHESIS_PROMPT_TEMPLATE = textwrap.dedent(
         {{
             "prompts": [
                 {{
-                    "prompt": [{{"role": "system", "content": "...comprehensive combined prompt..."}}, {{"role": "user", "content": "..."}}],
+                    "edits": [{{"segment_id": "message:0", "text": "...comprehensive combined prompt..."}}],
                     "improvement_focus": "Synthesis of top performers",
                     "reasoning": "How this combines the best elements from the top prompts"
                 }},
                 {{
-                    "prompt": [{{"role": "system", "content": "...second comprehensive prompt..."}}, {{"role": "user", "content": "..."}}],
+                    "edits": [{{"segment_id": "message:0", "text": "...second comprehensive prompt..."}}],
                     "improvement_focus": "Alternative synthesis approach",
                     "reasoning": "How this takes a different synthesis strategy"
                 }}
             ]
         }}
 
-        IMPORTANT: Each prompt object MUST have "prompt", "improvement_focus", and "reasoning" fields. Do NOT mix array and object syntax.
+        IMPORTANT: Each prompt object MUST have "edits", "improvement_focus", and "reasoning" fields. Do NOT mix array and object syntax.
         """
 ).strip()
 

@@ -38,13 +38,13 @@
   "finish_reason": "perfect_score",
   "history": [
     {
-      "best_score": 0.666667,
+      "best_score": 0.833333,
       "round_index": 0,
       "stop_reason": "completed",
       "trial_scores": [
         0.5,
         0.666667,
-        0.5,
+        0.833333,
         0.5
       ]
     },
@@ -54,13 +54,12 @@
       "stop_reason": "perfect_score",
       "trial_scores": [
         0.5,
-        0.666667,
         1.0
       ]
     }
   ],
   "history_rounds": 2,
-  "history_trials": 7,
+  "history_trials": 6,
   "initial_score": 0.5,
   "known_issue": null,
   "llm_call_kinds": [
@@ -101,5 +100,5 @@
   },
   "score": 1.0,
   "stopped_early": true,
-  "trials_completed": 6
+  "trials_completed": 5
 }

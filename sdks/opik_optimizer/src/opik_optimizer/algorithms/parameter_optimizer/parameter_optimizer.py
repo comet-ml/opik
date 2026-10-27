@@ -43,6 +43,7 @@ class _BestState(TypedDict):
 class ParameterOptimizer(BaseOptimizer):
     supports_tool_optimization: bool = False
     supports_prompt_optimization: bool = False
+    uses_reasoning: bool = False
     supports_multimodal: bool = True
     """
     The Parameter Optimizer uses Bayesian optimization to tune model parameters like

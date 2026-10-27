@@ -24,12 +24,12 @@ class TestLLMCrossoverMessages:
 
         mock_response = CrossoverResponse(
             child_1=[
-                system_message("Blended system prompt"),
-                user_message("Blended user prompt"),
+                {"segment_id": "message:0", "text": "Blended system prompt"},
+                {"segment_id": "message:1", "text": "Blended user prompt"},
             ],
             child_2=[
-                system_message("Alternative system prompt"),
-                user_message("Alternative user prompt"),
+                {"segment_id": "message:0", "text": "Alternative system prompt"},
+                {"segment_id": "message:1", "text": "Alternative user prompt"},
             ],
         )
 
@@ -107,8 +107,8 @@ class TestLLMDeapCrossover:
         )
 
         mock_response = CrossoverResponse(
-            child_1=[system_message("LLM generated 1")],
-            child_2=[system_message("LLM generated 2")],
+            child_1=[{"segment_id": "message:0", "text": "LLM generated 1"}],
+            child_2=[{"segment_id": "message:0", "text": "LLM generated 2"}],
         )
 
         monkeypatch.setattr(
@@ -195,8 +195,8 @@ class TestLLMDeapCrossover:
             raise Exception("Semantic failed")
 
         mock_response = CrossoverResponse(
-            child_1=[system_message("LLM fallback 1")],
-            child_2=[system_message("LLM fallback 2")],
+            child_1=[{"segment_id": "message:0", "text": "LLM fallback 1"}],
+            child_2=[{"segment_id": "message:0", "text": "LLM fallback 2"}],
         )
 
         monkeypatch.setattr(

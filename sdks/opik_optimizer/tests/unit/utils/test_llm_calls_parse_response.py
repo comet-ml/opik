@@ -11,7 +11,6 @@ import pytest
 from pydantic import BaseModel, ValidationError
 
 from opik_optimizer.core.llm_calls import _parse_response, StructuredOutputParsingError
-from tests.unit.fixtures import system_message, user_message
 from tests.unit.test_helpers import make_mock_response
 
 
@@ -153,74 +152,41 @@ class TestStructuredOutputModels:
     """Tests for structured output response models used by optimizers."""
 
     @pytest.mark.parametrize(
-        "payload,expected_len,expected_first_role",
+        "payload",
         [
-            (
-                [system_message("s"), user_message("u")],
-                2,
-                "system",
-            ),
-            (
-                {
-                    "messages": [
-                        system_message("s"),
-                        user_message("u"),
-                    ]
-                },
-                2,
-                "system",
-            ),
-            (system_message("s"), 1, "system"),
+            [{"role": "system", "content": "s"}],
+            {"messages": [{"role": "system", "content": "s"}]},
+            {"role": "system", "content": "s"},
         ],
     )
-    def test_mutation_response_normalizes_payloads(
-        self, payload: Any, expected_len: int, expected_first_role: str
+    def test_mutation_response_rejects_legacy_message_payloads(
+        self, payload: Any
     ) -> None:
+        from pydantic import ValidationError
         from opik_optimizer.algorithms.evolutionary_optimizer.types import (
             MutationResponse,
         )
 
-        parsed = MutationResponse.model_validate(payload)
+        with pytest.raises(ValidationError):
+            MutationResponse.model_validate(payload)
 
-        assert len(parsed.messages) == expected_len
-        assert _role_of(parsed.messages[0]) == expected_first_role
-
-    @pytest.mark.parametrize(
-        "payload",
-        [
-            (
-                [
-                    {
-                        "prompt": [
-                            system_message("s"),
-                            user_message("u"),
-                        ]
-                    }
-                ]
-            ),
-            (
-                {
-                    "prompts": [
-                        {
-                            "prompt": [
-                                system_message("s"),
-                                user_message("u"),
-                            ]
-                        }
-                    ]
-                }
-            ),
-        ],
-    )
-    def test_prompt_candidates_response_normalizes_payloads(self, payload: Any) -> None:
+    @pytest.mark.parametrize("wrapped", [False, True])
+    def test_prompt_candidates_response_accepts_targeted_edits(
+        self, wrapped: bool
+    ) -> None:
         from opik_optimizer.algorithms.meta_prompt_optimizer.types import (
             PromptCandidatesResponse,
         )
 
-        parsed = PromptCandidatesResponse.model_validate(payload)
-
+        candidates = [
+            {"edits": [{"segment_id": "message:0", "text": "New instructions"}]}
+        ]
+        parsed = PromptCandidatesResponse.model_validate(
+            {"prompts": candidates} if wrapped else candidates
+        )
         assert len(parsed.prompts) == 1
-        assert _role_of(parsed.prompts[0].prompt[0]) == "system"
+        assert parsed.prompts[0].edits[0].segment_id == "message:0"
+        assert parsed.prompts[0].edits[0].text == "New instructions"
 
     @pytest.mark.parametrize(
         "payload,expected_patterns,expected_first",

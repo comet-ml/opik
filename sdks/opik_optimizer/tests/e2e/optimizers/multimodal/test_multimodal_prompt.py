@@ -7,19 +7,20 @@ Tests verify that all prompt-focused optimizers:
 3. Preserve image URL placeholders
 4. Allow text content to be optimized
 
-Note: Some optimizers are expected to fail initially as they don't yet
-support content_parts. These will be updated to support multimodal prompts.
+The optimizer model and evaluated agent model are configured independently.
+Provider-boundary assertions verify native image evidence during optimization.
 """
 
 from __future__ import annotations
 
 from typing import Any
+from copy import deepcopy
+from opik_optimizer.core import llm_calls
 
 import pytest
 import os
 
 import opik
-from opik.evaluation.metrics import LevenshteinRatio
 from opik.evaluation.metrics.score_result import ScoreResult
 
 from opik_optimizer import (
@@ -50,24 +51,20 @@ pytestmark = [
 ]
 
 
-def hazard_metric(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
-    """Metric for driving hazard detection with reason for HierarchicalReflective."""
-    metric = LevenshteinRatio()
-    reference = dataset_item.get("hazard") or dataset_item.get("label")
-    result = metric.score(reference=reference, output=llm_output)
+def color_metric(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
+    """Score a synthetic image's color with a useful reason for reflection."""
+    expected = dataset_item["label"]
+    value = float(llm_output.strip().lower() == expected)
     return ScoreResult(
-        name=result.name,
-        value=result.value,
-        reason=f"Similarity to expected hazard: {result.value:.2f}",
+        name="color_match",
+        value=value,
+        reason=f"Expected the solid color {expected}; got {llm_output!r}",
     )
 
 
 def create_multimodal_prompt() -> ChatPrompt:
     """Create a multimodal ChatPrompt with text and image content."""
-    system_prompt = (
-        "You are an image analysis assistant. Describe what you see "
-        "in the image and answer any questions about it."
-    )
+    system_prompt = "Always reply with the word unknown."
     return ChatPrompt(
         name="multimodal-prompt",
         messages=[
@@ -79,7 +76,7 @@ def create_multimodal_prompt() -> ChatPrompt:
                 ]
             ),
         ],
-        model="openai/gpt-5-nano",
+        model="openai/gpt-4o-mini",
     )
 
 
@@ -101,7 +98,8 @@ def create_multimodal_prompt() -> ChatPrompt:
 )
 def test_multimodal_prompt(
     optimizer_class: type,
-    setup_driving_hazard_dataset: opik.Dataset,
+    setup_synthetic_image_dataset: opik.Dataset,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
     Test that optimizers can handle multimodal prompts with text and images.
@@ -116,22 +114,62 @@ def test_multimodal_prompt(
     # Create multimodal prompt
     original_prompt = create_multimodal_prompt()
 
-    # Get multimodal dataset (created once per session via conftest)
-    dataset = setup_driving_hazard_dataset
+    # Two generated color squares; no benchmark, customer or repository images are sent.
+    dataset = setup_synthetic_image_dataset
 
     # Create optimizer with minimal config
     config = create_optimizer_config(optimizer_class, verbose=0)
+    if optimizer_class is not ParameterOptimizer:
+        config.update(
+            model="openai/gpt-4o",
+            skip_perfect_score=False,
+            max_reasoning_examples=1,
+        )
+    if optimizer_class is FewShotBayesianOptimizer:
+        config.update(min_examples=1, max_examples=1)
     optimizer = optimizer_class(**config)
+    requests = []
+    original_invoke, original_async = (
+        llm_calls._invoke_traced,
+        llm_calls._invoke_traced_async,
+    )
+
+    def observe(*args: Any, **kwargs: Any) -> Any:
+        requests.append(deepcopy(kwargs))
+        return original_invoke(*args, **kwargs)
+
+    async def observe_async(*args: Any, **kwargs: Any) -> Any:
+        requests.append(deepcopy(kwargs))
+        return await original_async(*args, **kwargs)
+
+    monkeypatch.setattr(llm_calls, "_invoke_traced", observe)
+    monkeypatch.setattr(llm_calls, "_invoke_traced_async", observe_async)
     results = run_optimizer(
         optimizer_class=optimizer_class,
         optimizer=optimizer,
         prompt=original_prompt,
         dataset=dataset,
-        metric=hazard_metric,
+        metric=color_metric,
         parameter_space=get_parameter_space(),
         n_samples=1,
-        max_trials=1,
+        max_trials=4,
     )
+
+    if optimizer_class is not ParameterOptimizer:
+        assert requests, (
+            "The run must exercise optimizer reasoning, not just baseline evaluation"
+        )
+        assert all(request["model"] == "openai/gpt-4o" for request in requests)
+        images = [
+            part
+            for request in requests
+            for message in request["messages"]
+            if isinstance(message.get("content"), list)
+            for part in message["content"]
+            if part.get("type") == "image_url"
+        ]
+        assert images, "The optimizer must receive native image evidence"
+    assert results.prompt.model == original_prompt.model
 
     # Validate results structure
     assert results.optimizer == optimizer_class.__name__, (

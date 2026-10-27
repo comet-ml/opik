@@ -43,6 +43,22 @@ optimizer = MetaPromptOptimizer(
 )
 ```
 
+## Images in optimizer reasoning
+
+Prompt optimizers default to `reasoning_input="multimodal"` and attach native image blocks from
+up to `max_reasoning_examples=5` cases per request. Choose a vision-capable optimizer model
+independently from the agent model. HRPO's `reasoning_model` must also support images when used
+for image evidence. There is no automatic model substitution or removal of media.
+
+For text-only reasoning, explicitly pass `reasoning_input="text_only"` to the optimizer. This
+changes only its reasoning evidence; the evaluated agent retains its original media. Audio,
+video and file evidence currently require this explicit mode. ParameterOptimizer makes no
+reasoning calls and needs only the agent's evaluation settings.
+
+Custom deployment names must have vision capability registered in LiteLLM. See
+[Optimize multimodal prompts](/development/optimization-runs/optimization/optimize_multimodal)
+for native message examples and per-algorithm behavior.
+
 ## LiteLLM Model Format
 
 All models use the LiteLLM format: `provider/model-name`

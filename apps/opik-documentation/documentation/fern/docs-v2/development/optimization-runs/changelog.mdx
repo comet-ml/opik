@@ -15,12 +15,15 @@ Stay current on Agent Optimizer updates. Released entries reflect version bumps 
 These changes are pending release and are not included in the published package yet.
 
 - Agent model settings stay independent from optimizer reasoning settings. Empty prompt settings are preserved; HRPO accepts an explicit empty reasoning-parameter override.
-- Prompt text rewrites preserve media, tool bindings, and prompt configuration. Inline base64 media is redacted from reasoning requests.
+- Optimizer reasoning receives native image evidence with case IDs and feedback. Targeted text edits preserve media, individual text blocks, tool bindings, and prompt configuration. FewShot image demonstrations also use native blocks.
 - MetaPrompt, Evolutionary, GEPA, and HRPO support tool-description optimization in agent prompt bundles, including qualified selectors such as `planner.lookup`.
 - HRPO root-cause analysis includes bounded agent trace context. Nested local trace recordings remain unsupported; see the [HRPO guide](/development/optimization-runs/algorithms/hierarchical_adaptive_optimizer).
 - Candidate evaluation, trial accounting, and call attribution share the base lifecycle. Winner selection, ties, stopping, malformed MetaPrompt generations, and Context7 test-mode dataset sizes are corrected.
 
 ### Migration
+
+- **Multimodal reasoning:** prompt optimizers default to `reasoning_input="multimodal"`. Configure a vision-capable optimizer model for image evidence, or explicitly choose `reasoning_input="text_only"`. Agent and optimizer settings remain independent. `max_reasoning_examples` defaults to `5`. Native audio/video/file reasoning is not supported yet.
+- **Generation overrides:** candidate responses now contain targeted text edits (`segment_id`, `text`) instead of regenerated messages. Update custom generation prompts and response fixtures; legacy message-shaped responses are not accepted. GEPA exposes each multimodal text block as a separate component and requires `gepa>=0.1.4`.
 
 - **Tracking IDs:** caller-supplied `optimization_id` values must be valid UUIDv7 strings. If creation of an explicitly requested run fails, the error propagates instead of continuing untracked.
 - **ParameterOptimizer:** set models and baseline settings on each `ChatPrompt`, then call `optimize_parameter()`. Constructor `model` and `model_parameters` are deprecated and ignored. Search changes only selected fields; result parameter maps are keyed by prompt name.

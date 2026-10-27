@@ -9,7 +9,7 @@ from typing import Any
 
 from ....utils.candidate import unique_ordered_by_key
 from ....utils.scoring import improves_over
-from ....api_objects.types import rebuild_content_with_new_text
+from ....utils.prompt_editing import apply_text_edits, describe_text_segments, TextEdit
 from ....utils.toolcalling.core import segment_updates
 
 logger = logging.getLogger(__name__)
@@ -214,20 +214,13 @@ def build_seed_candidate(
     seed_candidate: dict[str, str] = {}
     for prompt_name, prompt_obj in optimizable_prompts.items():
         messages = prompt_obj.get_messages()
-        for idx, msg in enumerate(messages):
-            role = msg.get("role")
-            if allowed_roles is not None and role not in allowed_roles:
-                continue
-            component_key = f"{prompt_name}_{msg['role']}_{idx}"
-            content = msg.get("content", "")
-            if isinstance(content, list):
-                text_parts = [
-                    part.get("text", "")
-                    for part in content
-                    if isinstance(part, dict) and part.get("type") == "text"
-                ]
-                content = " ".join(text_parts)
-            seed_candidate[component_key] = str(content)
+        for segment in describe_text_segments(prompt_obj, allowed_roles):
+            parts = segment["segment_id"].split(":")
+            index = int(parts[1])
+            component_key = f"{prompt_name}_{messages[index]['role']}_{index}"
+            if len(parts) > 2:
+                component_key += f"_part_{parts[3]}"
+            seed_candidate[component_key] = segment["text"]
         if enable_tools and (
             not isinstance(tool_names, dict) or prompt_name in tool_names
         ):
@@ -340,22 +333,22 @@ def rebuild_prompts_from_candidate(
     placeholder_reverts: list[str] = []
     for prompt_name, prompt_obj in base_prompts.items():
         original_messages = prompt_obj.get_messages()
-        new_messages = []
-        for idx, msg in enumerate(original_messages):
-            component_key = f"{prompt_name}_{msg['role']}_{idx}"
-            original_content = msg.get("content", "")
-            optimized_text = candidate.get(component_key)
-
-            if optimized_text is not None and (
-                allowed_roles is None or msg.get("role") in allowed_roles
-            ):
-                new_content = rebuild_content_with_new_text(
-                    original_content, optimized_text
+        edits = []
+        for segment in describe_text_segments(prompt_obj, allowed_roles):
+            parts = segment["segment_id"].split(":")
+            index = int(parts[1])
+            component_key = f"{prompt_name}_{original_messages[index]['role']}_{index}"
+            if len(parts) > 2:
+                component_key += f"_part_{parts[3]}"
+            if component_key in candidate:
+                edits.append(
+                    TextEdit(
+                        segment_id=segment["segment_id"], text=candidate[component_key]
+                    )
                 )
-            else:
-                new_content = original_content
-
-            new_messages.append({"role": msg["role"], "content": new_content})
+        new_messages = apply_text_edits(
+            prompt_obj, edits, allowed_roles, preserve_placeholders=False
+        ).get_messages()
 
         new_messages, reverted = enforce_placeholder_preservation(
             original_messages=original_messages,
@@ -397,10 +390,9 @@ def count_disallowed_candidate_components(
     for key in candidate.keys():
         if TOOL_COMPONENT_PREFIX in key or TOOL_PARAM_COMPONENT_PREFIX in key:
             continue
-        parts = key.rsplit("_", 2)
-        if len(parts) != 3:
+        component = re.search(r"_(system|user|assistant)_\d+(?:_part_\d+)?$", key)
+        if component is None:
             continue
-        role = parts[1]
-        if role not in allowed_roles:
+        if component.group(1) not in allowed_roles:
             count += 1
     return count

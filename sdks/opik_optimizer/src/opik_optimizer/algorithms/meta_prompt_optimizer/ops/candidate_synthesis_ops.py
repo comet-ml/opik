@@ -2,10 +2,13 @@
 Synthesis candidate generation for the Meta-Prompt Optimizer.
 """
 
+from ....utils.prompt_editing import apply_text_edits
+
+from ....core.reasoning import ReasoningEvidence
+
 import ast
 import json
 import logging
-import re
 from typing import Any
 from collections.abc import Callable, Sequence
 
@@ -17,13 +20,8 @@ from ....core import llm_calls as _llm_calls
 from ....core.llm_calls import StructuredOutputParsingError
 from ....core.results import OptimizationRound, round_payload
 from ....utils import display as display_utils
-from ....utils.prompt_roles import (
-    derive_prompt,
-    apply_role_constraints,
-    count_disallowed_role_updates,
-)
 from ....utils.text import normalize_llm_text
-from ....utils.multimodal import redact_inline_media
+from ....utils.multimodal import text_only_messages
 from .. import prompts as meta_prompts
 from .. import reporting
 from ..types import PromptCandidatesResponse
@@ -95,57 +93,12 @@ def _collect_recent_round_prompts(
     return top_prompts_with_scores
 
 
-def _parse_synthesis_json(content_item: str) -> dict[str, Any]:
-    try:
-        return json.loads(normalize_llm_text(content_item))
-    except json.JSONDecodeError:
-        json_match = re.search(r"\{.*\}", content_item, re.DOTALL)
-        if not json_match:
-            raise ValueError(
-                f"No JSON object found in synthesis response: {content_item}"
-            )
-        try:
-            return json.loads(normalize_llm_text(json_match.group()))
-        except json.JSONDecodeError as exc:
-            raise ValueError(
-                f"Could not parse synthesis JSON: {exc} - received: {json_match.group()}"
-            )
-
-
-def _normalize_synthesis_json(json_result: Any) -> dict[str, Any]:
-    if isinstance(json_result, list):
-        if (
-            len(json_result) == 1
-            and isinstance(json_result[0], dict)
-            and "prompts" in json_result[0]
-        ):
-            json_result = json_result[0]
-        elif all(isinstance(item, dict) and "prompt" in item for item in json_result):
-            json_result = {"prompts": json_result}
-    if not isinstance(json_result, dict) or "prompts" not in json_result:
-        raise ValueError(f"Invalid synthesis JSON structure - received: {json_result}")
-    if not isinstance(json_result["prompts"], list):
-        raise ValueError("'prompts' key does not contain a list in synthesis response")
-    return json_result
-
-
 def _parse_synthesis_prompt_items(contents: list[Any]) -> list[dict[str, Any]]:
-    prompt_items: list[dict[str, Any]] = []
-    for content_item in contents:
-        if hasattr(content_item, "model_dump"):
-            normalized = content_item.model_dump()
-        else:
-            normalized = content_item
-        if isinstance(normalized, str):
-            json_result = _normalize_synthesis_json(_parse_synthesis_json(normalized))
-        elif isinstance(normalized, dict):
-            json_result = _normalize_synthesis_json(normalized)
-        else:
-            raise ValueError(
-                "Synthesis response must be a string or dict; received %s"
-                % type(normalized).__name__
-            )
-        prompt_items.extend(json_result["prompts"])
+    prompt_items = []
+    for response in contents:
+        if not isinstance(response, PromptCandidatesResponse):
+            raise TypeError("Expected a structured PromptCandidatesResponse")
+        prompt_items.extend(response.model_dump()["prompts"])
     return prompt_items
 
 
@@ -156,73 +109,28 @@ def _build_synthesis_prompts(
     round_num: int | None,
     prompt_items: list[dict[str, Any]],
 ) -> list[chat_prompt.ChatPrompt]:
-    valid_prompts: list[chat_prompt.ChatPrompt] = []
+    candidates = []
     for idx, item in enumerate(prompt_items, start=1):
-        if (
-            isinstance(item, dict)
-            and "prompt" in item
-            and isinstance(item["prompt"], list)
-        ):
-            if current_prompt.user:
-                user_text = current_prompt.user
-            elif current_prompt.messages is not None:
-                # Handle both string and list[ContentPart] content types
-                content = current_prompt.messages[-1]["content"]
-                if isinstance(content, list):
-                    from ....api_objects.types import extract_text_from_content
-
-                    user_text = extract_text_from_content(content)
-                else:
-                    user_text = content
-            else:
-                raise Exception("User content not found in chat-prompt!")
-
-            valid_prompts.append(
-                derive_prompt(
-                    current_prompt,
-                    [
-                        {"role": "system", "content": item["prompt"][0]["content"]},
-                        {"role": "user", "content": user_text},
-                    ],
-                    getattr(optimizer, "_optimizable_roles", None),
-                )
-            )
-            allowed_roles = getattr(optimizer, "_optimizable_roles", None)
-            if allowed_roles is not None:
-                constrained = apply_role_constraints(
-                    current_prompt.get_messages(),
-                    valid_prompts[-1].get_messages(),
-                    allowed_roles,
-                )
-                dropped = count_disallowed_role_updates(
-                    current_prompt.get_messages(),
-                    valid_prompts[-1].get_messages(),
-                    allowed_roles,
-                )
-                if dropped:
-                    logger.debug(
-                        "MetaPrompt synthesis candidate %s dropped %s update(s) due to optimize_prompt constraints.",
-                        idx,
-                        dropped,
-                    )
-                valid_prompts[-1].set_messages(constrained)
-            prompt_ref = valid_prompts[-1]
-            optimizer._candidate_metadata_by_prompt_id[id(prompt_ref)] = {
-                "improvement_focus": item.get("improvement_focus"),
-                "reasoning": item.get("reasoning"),
-            }
-            reporting.log_candidate_generated(
-                round_num=round_num,
-                candidate_id=(
-                    f"round{round_num}_cand{idx}" if round_num is not None else None
-                ),
-                prompt_messages=prompt_ref.get_messages(),
-                improvement_focus=item.get("improvement_focus"),
-                reasoning=item.get("reasoning"),
-            )
-        else:
-            logger.warning("Skipping invalid synthesis prompt item structure: %s", item)
-    return valid_prompts
+        if not isinstance(item, dict) or not isinstance(item.get("edits"), list):
+            raise ValueError("Candidate must contain a list of targeted text edits")
+        candidate = apply_text_edits(
+            current_prompt,
+            item["edits"],
+            getattr(optimizer, "_optimizable_roles", None),
+        )
+        candidates.append(candidate)
+        optimizer._candidate_metadata_by_prompt_id[id(candidate)] = {
+            "improvement_focus": item.get("improvement_focus"),
+            "reasoning": item.get("reasoning"),
+        }
+        reporting.log_candidate_generated(
+            round_num=round_num,
+            candidate_id=f"round{round_num}_cand{idx}",
+            prompt_messages=candidate.get_messages(),
+            improvement_focus=item.get("improvement_focus"),
+            reasoning=item.get("reasoning"),
+        )
+    return candidates
 
 
 def generate_synthesis_prompts(
@@ -281,7 +189,7 @@ def generate_synthesis_prompts(
         synthesis_user_prompt = meta_prompts.build_synthesis_prompt(
             template=synthesis_template,
             top_prompts_with_scores=[
-                (redact_inline_media(messages), score, reasoning)
+                (text_only_messages(messages), score, reasoning)
                 for messages, score, reasoning in top_prompts_with_scores
             ],
             task_context_str=task_context_str,
@@ -303,6 +211,9 @@ def generate_synthesis_prompts(
                 {"role": "user", "content": synthesis_user_prompt},
             ]
             content = _llm_calls.call_model(
+                evidence=ReasoningEvidence(
+                    prompts={current_prompt.name: current_prompt}
+                ),
                 messages=base_messages,
                 model=optimizer.model,
                 model_parameters=optimizer.model_parameters,

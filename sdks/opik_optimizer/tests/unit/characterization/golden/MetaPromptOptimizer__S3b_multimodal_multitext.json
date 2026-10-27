@@ -15,8 +15,8 @@
     "trials_completed",
     "verbose"
   ],
-  "final_prompt_rescore": 0.833333,
-  "finish_reason": "max_trials",
+  "final_prompt_rescore": 1.0,
+  "finish_reason": "perfect_score",
   "history": [
     {
       "best_score": 0.666667,
@@ -28,17 +28,16 @@
       ]
     },
     {
-      "best_score": 0.833333,
+      "best_score": 1.0,
       "round_index": 1,
-      "stop_reason": "max_trials",
+      "stop_reason": "perfect_score",
       "trial_scores": [
-        0.833333,
-        0.666667
+        1.0
       ]
     }
   ],
   "history_rounds": 2,
-  "history_trials": 4,
+  "history_trials": 3,
   "initial_score": 0.5,
   "known_issue": null,
   "llm_call_kinds": [
@@ -52,7 +51,11 @@
       {
         "content": [
           {
-            "text": "You read images and answer. Answer with the exact value. Reply with the code only. Be concise.",
+            "text": "You read images and answer. Answer with the exact value. Be concise. Think step by step.",
+            "type": "text"
+          },
+          {
+            "text": "Reply with the code only.",
             "type": "text"
           }
         ],
@@ -79,7 +82,7 @@
     "name": "vision-prompt",
     "tools": null
   },
-  "score": 0.833333,
+  "score": 1.0,
   "stopped_early": true,
-  "trials_completed": 4
+  "trials_completed": 3
 }

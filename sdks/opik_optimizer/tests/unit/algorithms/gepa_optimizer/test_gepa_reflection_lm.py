@@ -185,7 +185,7 @@ class TestGepaReflectionLmInstrumentation:
 
         assert output == "improved instruction"
         assert captured_kwargs["model"] == "gpt-4o-mini"
-        assert captured_kwargs["messages"] == [
+        assert captured_kwargs["messages"][:1] == [
             {"role": "user", "content": "please improve this prompt"}
         ]
         metadata = captured_kwargs.get("metadata") or {}
@@ -257,7 +257,7 @@ class TestGepaReflectionLmInstrumentation:
             output = reflection_lm(messages)
 
         assert output == "multimodal instruction"
-        assert captured_kwargs["messages"] == messages
+        assert captured_kwargs["messages"][: len(messages)] == messages
 
     def test_reflection_call__completion_carries_no_content__raises_empty_llm_response_error(
         self,
@@ -302,7 +302,7 @@ class TestGepaReflectionLmInstrumentation:
         single positional arg, expecting a str back. Pin that against the real
         class so a signature drift in gepa breaks here, not in a live run.
 
-        gepa.lm exists in neither the declared floor (gepa>=0.1.0) nor 0.1.1, so
+        gepa.lm exists in neither the declared floor (gepa>=0.1.4) nor 0.1.1, so
         this skips where the class is absent rather than pinning a version the
         package does not require."""
         TrackingLM = pytest.importorskip(

@@ -2,6 +2,10 @@
 Agent-bundle candidate generation for the Meta-Prompt Optimizer.
 """
 
+from ....utils.prompt_editing import apply_text_edits
+
+from ....core.reasoning import ReasoningEvidence
+
 import json
 import logging
 from typing import Any
@@ -16,11 +20,6 @@ from ....core import llm_calls as _llm_calls
 from ....core.llm_calls import StructuredOutputParsingError
 from ....core.results import OptimizationRound
 from ....utils import display as display_utils
-from ....utils.prompt_roles import (
-    apply_role_constraints,
-    count_disallowed_role_updates,
-    derive_prompt,
-)
 from .. import prompts as meta_prompts
 from .. import reporting
 from ..types import AgentBundleCandidate, AgentBundleCandidatesResponse, AgentMetadata
@@ -130,6 +129,7 @@ def generate_agent_bundle_candidates(
             )
 
             response = _llm_calls.call_model(
+                evidence=ReasoningEvidence(prompts=current_prompts),
                 messages=[
                     {
                         "role": "system",
@@ -173,35 +173,11 @@ def generate_agent_bundle_candidates(
                             continue
 
                         try:
-                            messages_dict = [
-                                msg.model_dump() for msg in agent_update.messages
-                            ]
-                            updated_prompt = derive_prompt(
+                            updated_prompt = apply_text_edits(
                                 current_prompts[name],
-                                messages_dict,
+                                agent_update.edits,
                                 getattr(optimizer, "_optimizable_roles", None),
                             )
-                            allowed_roles = getattr(
-                                optimizer, "_optimizable_roles", None
-                            )
-                            if allowed_roles is not None:
-                                constrained = apply_role_constraints(
-                                    current_prompts[name].get_messages(),
-                                    updated_prompt.get_messages(),
-                                    allowed_roles,
-                                )
-                                dropped = count_disallowed_role_updates(
-                                    current_prompts[name].get_messages(),
-                                    updated_prompt.get_messages(),
-                                    allowed_roles,
-                                )
-                                if dropped:
-                                    logger.debug(
-                                        "MetaPrompt bundle candidate dropped %s update(s) for agent '%s' due to optimize_prompt constraints.",
-                                        dropped,
-                                        name,
-                                    )
-                                updated_prompt.set_messages(constrained)
                             updated_prompts[name] = updated_prompt
                             agent_metadata[name] = AgentMetadata(
                                 improvement_focus=agent_update.improvement_focus,

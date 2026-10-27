@@ -24,7 +24,6 @@ from tests.unit.algorithms.meta_prompt_optimizer._meta_prompt_test_helpers impor
     make_system_prompt_json,
 )
 from tests.unit.fixtures import system_message, user_message
-from tests.unit.fixtures import role_only
 from tests.unit.test_helpers import make_optimization_context
 
 pytestmark = pytest.mark.usefixtures("suppress_expected_optimizer_warnings")
@@ -85,21 +84,21 @@ class TestSanitizeGeneratedPrompts:
         )
 
         kept = _assert_single_prompt(result)
-        assert "accuracy_score" not in kept["prompt"][0]["content"]
+        assert "accuracy_score" not in kept["edits"][0]["text"]
 
     @pytest.mark.parametrize("pattern", METRIC_LEAKAGE_PATTERNS)
     def test_removes_metric_patterns(self, pattern: str) -> None:
         """Should remove prompts containing common metric patterns."""
         result = _sanitize_system_prompts([f"Optimize for {pattern}.", "Clean prompt."])
         kept = _assert_single_prompt(result)
-        assert "Clean prompt" in kept["prompt"][0]["content"]
+        assert "Clean prompt" in kept["edits"][0]["text"]
 
     @pytest.mark.parametrize("pattern", DATASET_LEAKAGE_PATTERNS)
     def test_removes_dataset_patterns(self, pattern: str) -> None:
         """Should remove prompts containing dataset-specific patterns."""
         result = _sanitize_system_prompts([f"Use the {pattern}.", "Clean prompt."])
         kept = _assert_single_prompt(result)
-        assert "Clean prompt" in kept["prompt"][0]["content"]
+        assert "Clean prompt" in kept["edits"][0]["text"]
 
     @pytest.mark.parametrize("content", EVALUATION_LEAKAGE_PATTERNS)
     def test_removes_evaluation_terms(self, content: str) -> None:
@@ -108,7 +107,7 @@ class TestSanitizeGeneratedPrompts:
             [content, "Safe prompt."], metric_name="test_metric"
         )
         kept = _assert_single_prompt(result)
-        assert "Safe prompt" in kept["prompt"][0]["content"]
+        assert "Safe prompt" in kept["edits"][0]["text"]
 
     @pytest.mark.parametrize("dataset_name", BENCHMARK_DATASET_NAMES)
     def test_removes_common_benchmark_names(self, dataset_name: str) -> None:
@@ -117,7 +116,7 @@ class TestSanitizeGeneratedPrompts:
             [f"Answer like in {dataset_name}.", "Be helpful."]
         )
         kept = _assert_single_prompt(result)
-        assert "Be helpful" in kept["prompt"][0]["content"]
+        assert "Be helpful" in kept["edits"][0]["text"]
 
     def test_case_insensitive_matching(self) -> None:
         """Should match patterns case-insensitively."""
@@ -155,8 +154,8 @@ class TestSanitizeGeneratedPrompts:
         """Should handle prompts with missing content gracefully."""
         prompt_json = {
             "prompts": [
-                {"prompt": [role_only("system")]},  # No content field
-                {"prompt": [system_message("Valid.")]},
+                {"edits": [{"segment_id": "message:0"}]},
+                {"edits": [{"segment_id": "message:0", "text": "Valid."}]},
             ]
         }
 
@@ -180,85 +179,30 @@ class TestSanitizeGeneratedPrompts:
         # Original dict should still have same count (function returns new dict)
         assert len(prompt_json["prompts"]) == original_count
 
-    def test_handles_multimodal_content(self) -> None:
-        """Should handle multimodal content (list of content parts) without errors."""
-        # Create a prompt with multimodal content (text + image)
-        prompt_json = {
+    def test_sanitizes_an_edit_to_a_multimodal_text_block(self) -> None:
+        payload = {
             "prompts": [
                 {
-                    "prompt": [
-                        system_message("You are an image analysis assistant."),
-                        user_message(
-                            [
-                                {
-                                    "type": "text",
-                                    "text": "Describe this image with f1 score.",
-                                },
-                                {
-                                    "type": "image_url",
-                                    "image_url": {
-                                        "url": "https://example.com/image.jpg"
-                                    },
-                                },
-                            ]
-                        ),
+                    "edits": [
+                        {
+                            "segment_id": "message:1:part:0",
+                            "text": "Describe this image with f1 score.",
+                        }
                     ]
                 },
                 {
-                    "prompt": [
-                        system_message("Be helpful."),
-                        user_message(
-                            [
-                                {"type": "text", "text": "What is in this image?"},
-                                {
-                                    "type": "image_url",
-                                    "image_url": {
-                                        "url": "https://example.com/image2.jpg"
-                                    },
-                                },
-                            ]
-                        ),
+                    "edits": [
+                        {
+                            "segment_id": "message:1:part:0",
+                            "text": "What is in this image?",
+                        }
                     ]
                 },
             ]
         }
-
-        result = sanitize_generated_prompts(prompt_json, "my_metric")
-
-        # First prompt should be rejected (contains "f1 score"), second should be kept
-        assert len(result["prompts"]) == 1
-        kept = result["prompts"][0]
-        # Verify multimodal structure is preserved
-        user_msg = kept["prompt"][1]
-        assert isinstance(user_msg["content"], list)
-        assert len(user_msg["content"]) == 2
-        assert user_msg["content"][0]["type"] == "text"
-        assert "What is in this image?" in user_msg["content"][0]["text"]
-
-    def test_handles_multimodal_content_with_clean_text(self) -> None:
-        """Should preserve multimodal prompts with clean text content."""
-        prompt_json = {
-            "prompts": [
-                {
-                    "prompt": [
-                        system_message("Analyze images."),
-                        user_message(
-                            [
-                                {"type": "text", "text": "What do you see?"},
-                                {"type": "image_url", "image_url": {"url": "{image}"}},
-                            ]
-                        ),
-                    ]
-                },
-            ]
-        }
-
-        result = sanitize_generated_prompts(prompt_json, "my_metric")
-
-        # Should be preserved (no leakage)
-        assert len(result["prompts"]) == 1
-        kept = result["prompts"][0]
-        assert isinstance(kept["prompt"][1]["content"], list)
+        result = sanitize_generated_prompts(payload, "my_metric")
+        assert result["prompts"] == [payload["prompts"][1]]
+        assert len(payload["prompts"]) == 2
 
 
 def test_history_builder_assigns_trial_indices() -> None:
@@ -306,4 +250,4 @@ def test_explicit_references_to_a_common_word_metric_are_rejected(
         [content, "Return a short answer."], metric_name="exact"
     )
     assert len(result["prompts"]) == 1
-    assert result["prompts"][0]["prompt"][0]["content"] == "Return a short answer."
+    assert result["prompts"][0]["edits"][0]["text"] == "Return a short answer."

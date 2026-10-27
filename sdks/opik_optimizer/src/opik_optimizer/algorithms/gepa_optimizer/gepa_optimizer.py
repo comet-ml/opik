@@ -1,3 +1,6 @@
+from ...core.reasoning import ReasoningEvidence
+
+from typing import Literal
 import logging
 import math
 import threading
@@ -259,7 +262,7 @@ def _build_gepa_stop_callbacks(
 
 
 _GEPA_VERSION_REQUIREMENT = (
-    "opik-optimizer requires gepa>=0.1.0 (the <curr_param>/<side_info> "
+    "opik-optimizer requires gepa>=0.1.4 (the <curr_param>/<side_info> "
     "reflection-template contract; gepa 0.0.x speaks the older "
     "<curr_instructions>/<inputs_outputs_feedback> dialect)."
 )
@@ -473,6 +476,8 @@ class GepaOptimizer(BaseOptimizer):
         skip_perfect_score: bool = constants.DEFAULT_SKIP_PERFECT_SCORE,
         perfect_score: float = constants.DEFAULT_PERFECT_SCORE,
         prompt_overrides: PromptOverrides = None,
+        reasoning_input: Literal["multimodal", "text_only"] = "multimodal",
+        max_reasoning_examples: int = 5,
     ) -> None:
         # Validate required parameters
         if model is None:
@@ -502,6 +507,8 @@ class GepaOptimizer(BaseOptimizer):
             skip_perfect_score=skip_perfect_score,
             perfect_score=perfect_score,
             prompt_overrides=prompt_overrides,
+            reasoning_input=reasoning_input,
+            max_reasoning_examples=max_reasoning_examples,
         )
         self.n_threads = n_threads
         self._adapter_metric_calls = 0
@@ -571,7 +578,7 @@ class GepaOptimizer(BaseOptimizer):
         gepa's LanguageModel protocol hands the callable either a plain prompt
         string or an OpenAI-style messages list (multimodal), so both shapes are
         accepted. This does NOT imply gepa 0.0.x support: the optimizer already
-        requires gepa>=0.1.0 for its reflection-template dialect, enforced at
+        requires gepa>=0.1.4 for its reflection-template dialect, enforced at
         construction by _validate_reflection_prompt_template.
         """
         metadata = _llm_calls.build_llm_call_metadata(self, "gepa_reflection")
@@ -612,6 +619,9 @@ class GepaOptimizer(BaseOptimizer):
         def _tracked_reflection_call(messages: list[dict[str, Any]]) -> str:
             self._tag_trace(phase="Reflection")
             result = _llm_calls.call_model(
+                evidence=ReasoningEvidence(
+                    prompts=context.prompts, cases=(), editable=False
+                ),
                 messages=messages,
                 model=self.model,
                 seed=self.seed,

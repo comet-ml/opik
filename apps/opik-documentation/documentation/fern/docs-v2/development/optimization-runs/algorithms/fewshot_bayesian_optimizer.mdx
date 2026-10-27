@@ -137,3 +137,12 @@ optimizer = FewShotBayesianOptimizer(
 1. Explore specific [Optimizers](/development/optimization-runs/algorithms/overview) for algorithm details.
 2. Refer to the [FAQ](/development/optimization-runs/faq) for common questions and troubleshooting.
 3. Refer to the [API Reference](/development/optimization-runs/advanced/api_reference) for detailed configuration options.
+
+
+## Native image demonstrations
+
+Template generation receives native image evidence and returns targeted edits identifying the
+few-shot placeholder. Selected image examples become native demonstration messages before the
+current task. The current task keeps its original text and image placeholders; image bytes are
+never inserted into the textual example template. `reasoning_input="text_only"` affects only
+the optimizer's reasoning, while image demonstrations still reach the evaluated agent.

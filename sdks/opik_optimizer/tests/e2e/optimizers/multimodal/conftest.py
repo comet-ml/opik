@@ -1,31 +1,37 @@
-"""
-Pytest fixtures for multimodal e2e tests.
+"""Live image tests use only generated color squares and synthetic questions."""
 
-This module ensures the driving_hazard dataset is created once before
-any tests run, allowing parallel test execution.
-"""
+from collections.abc import Iterator
+from uuid import uuid4
 
-from typing import Any
-from collections.abc import Generator
-
+import opik
 import pytest
 
-import opik_optimizer
-from opik import Dataset
-
-from ..utils import dataset_helpers
+from tests.image_fixtures import RED_IMAGE, BLUE_IMAGE
 
 
 @pytest.fixture(scope="session")
-def setup_driving_hazard_dataset(setup_environment) -> Generator[Dataset, Any, None]:  # type: ignore
-    """
-    Create the driving_hazard dataset before any tests run.
-
-    This fixture runs once per session and ensures the dataset exists
-    before parallel tests try to access it, avoiding race conditions.
-    """
-    dataset_helpers.remove_old_datasets(["driving_hazard_train_1_sample"])
-    # Create the dataset (will be reused by all tests)
-    dataset = opik_optimizer.datasets.driving_hazard(test_mode=True, count=1)
-    yield dataset
-    # Cleanup is optional - leave dataset for future runs
+def setup_synthetic_image_dataset(setup_environment: object) -> Iterator[opik.Dataset]:
+    client = opik.Opik()
+    name = f"native-image-colors-{uuid4().hex[:12]}"
+    dataset = client.create_dataset(
+        name=name,
+        description="Synthetic red/blue RGB squares for native-image transport E2E tests",
+    )
+    dataset.insert(
+        [
+            {
+                "question": "Which solid color is shown? Answer only red or blue.",
+                "image": RED_IMAGE,
+                "label": "red",
+            },
+            {
+                "question": "Which solid color is shown? Answer only red or blue.",
+                "image": BLUE_IMAGE,
+                "label": "blue",
+            },
+        ]
+    )
+    try:
+        yield dataset
+    finally:
+        client.delete_dataset(name=name)

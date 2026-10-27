@@ -16,7 +16,17 @@ def make_system_messages(content: str) -> list[dict[str, str]]:
 
 def make_prompt_json(prompts: list[list[dict[str, Any]]]) -> dict[str, Any]:
     """Build the serialized prompt candidates payload shape used by meta-prompt ops."""
-    return {"prompts": [{"prompt": prompt_messages} for prompt_messages in prompts]}
+    return {
+        "prompts": [
+            {
+                "edits": [
+                    {"segment_id": f"message:{index}", "text": message["content"]}
+                    for index, message in enumerate(prompt_messages)
+                ]
+            }
+            for prompt_messages in prompts
+        ]
+    }
 
 
 def make_system_prompt_json(contents: list[str]) -> dict[str, Any]:

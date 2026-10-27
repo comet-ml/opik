@@ -21,12 +21,18 @@ The Opik Agent Optimizer refines your prompts to achieve better performance from
 * **MCP Support**: Built-in support for Model Context Protocol tool calling with `ChatPrompt.tools`
 * **Consistent Results**: All optimizers return standardized `OptimizationResult` objects
 * **Counter Tracking**: Built-in LLM and tool call counters for monitoring usage
-* **Multimodal Prompts**: Supports OpenAI-style content parts (text, image, audio, video) across optimizers
+* **Multimodal Prompts**: Native image evidence for optimizer reasoning and evaluation; audio/video evaluation depends on the agent and requires explicit text-only reasoning
 * **Type Safety**: Full type hints and validation for robust development
 * **Deprecation Warnings**: Clear warnings for deprecated parameters with migration guidance
 
 Opik Optimizer is a component of the [Opik platform](https://github.com/comet-ml/opik), an open-source LLM evaluation platform by Comet.
 For more information about the broader Opik ecosystem, visit our [Website](https://www.comet.com/site/products/opik/) or [Documentation](https://www.comet.com/docs/opik/).
+
+Image-based prompt optimization requires a vision-capable optimizer model independently from
+`ChatPrompt.model`. Use `reasoning_input="text_only"` to explicitly optimize from textual feedback
+instead. `max_reasoning_examples=5` bounds cases per reasoning request. Candidate generation uses
+targeted text edits, preserving original media and unselected settings. See the
+[multimodal guide](https://www.comet.com/docs/opik/development/optimization-runs/optimization/optimize_multimodal).
 
 ## Quickstart
 

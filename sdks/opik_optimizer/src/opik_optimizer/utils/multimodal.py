@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from typing import Any
-import copy
 import re
 
 import rich.text
@@ -183,92 +182,8 @@ def format_message_content(content: str | list[dict[str, Any]]) -> rich.text.Tex
     return result
 
 
-def preserve_multimodal_message_structure(
-    *,
-    original_messages: list[dict[str, Any]],
-    generated_messages: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    """
-    Preserve original multimodal content-part layout while applying generated text.
-
-    Current primary consumer: FewShotBayesianOptimizer prompt-template synthesis.
-    Other optimizers should call this only when they receive full rewritten message
-    arrays from an LLM and must keep original non-text parts stable.
-
-    For aligned message indices where role matches and original content is multimodal
-    (list of parts), this keeps non-text parts from the original message and replaces
-    only the text part with generated text. If generated text is empty, original text
-    is retained. Invalid generated text values also retain the original text.
-    """
-    preserved: list[dict[str, Any]] = []
-    for index, generated in enumerate(generated_messages):
-        generated_role = generated.get("role")
-        generated_content = generated.get("content")
-        has_original_match = (
-            index < len(original_messages)
-            and original_messages[index].get("role") == generated_role
-        )
-        if not _has_non_empty_message_content(generated_content):
-            if has_original_match:
-                preserved.append(
-                    {
-                        "role": generated_role,
-                        "content": original_messages[index].get("content", ""),
-                    }
-                )
-            # If no matching original message exists, drop empty generated message.
-            continue
-
-        if has_original_match and isinstance(
-            original_messages[index].get("content"), list
-        ):
-            original_content = original_messages[index]["content"]
-            if isinstance(generated_content, list) and len(generated_content) == len(
-                original_content
-            ):
-                content = copy.deepcopy(original_content)
-                for part_index, part in enumerate(content):
-                    generated_part = generated_content[part_index]
-                    if (
-                        isinstance(part, dict)
-                        and part.get("type") == "text"
-                        and isinstance(generated_part, dict)
-                        and generated_part.get("type") == "text"
-                    ):
-                        generated_text_part = generated_part.get("text")
-                        if isinstance(generated_text_part, str):
-                            part["text"] = generated_text_part
-                preserved.append({**original_messages[index], "content": content})
-                continue
-            original_text = api_types.extract_text_from_content(original_content)
-            generated_content_raw = generated.get("content", "")
-            if isinstance(generated_content_raw, str) or isinstance(
-                generated_content_raw, list
-            ):
-                generated_text = api_types.extract_text_from_content(
-                    generated_content_raw
-                )
-            else:
-                generated_text = str(generated_content_raw)
-            if not generated_text.strip():
-                generated_text = original_text
-
-            preserved.append(
-                {
-                    "role": generated_role,
-                    "content": api_types.rebuild_content_with_new_text(
-                        original_content, generated_text
-                    ),
-                }
-            )
-            continue
-
-        preserved.append(generated)
-    return preserved
-
-
 def text_only_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Expose editable text to a rewrite model; media is restored from the original."""
+    """Build a text summary for display or history; never use it as native model input."""
     return [
         {
             **message,
@@ -282,11 +197,11 @@ _INLINE_MEDIA = re.compile(r"data:[^\s\"<>]*?;base64,[A-Za-z0-9+/=]+")
 
 
 def redact_inline_media(value: Any) -> Any:
-    """Copy of prompt messages (or any nested value) to send to a reasoning model.
+    """Return a text-safe summary for display, history and textual feedback.
 
     Inline base64 media (data: URLs) becomes a short "[media]" marker; structure,
-    text and placeholder URLs such as "{image}" are kept. Only the request changes:
-    optimized prompts keep their original media.
+    text and placeholder URLs such as "{image}" are kept. Native model requests are assembled separately by core.reasoning; original
+    messages and media are never changed by this summary.
     """
     if isinstance(value, str):
         return _INLINE_MEDIA.sub("[media]", value)

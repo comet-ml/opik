@@ -60,7 +60,11 @@
       {
         "content": [
           {
-            "text": "You read images and answer. Reply with the code only. Answer with the exact value.",
+            "text": "You read images and answer.",
+            "type": "text"
+          },
+          {
+            "text": "Reply with the code only. Answer with the exact value.",
             "type": "text"
           }
         ],

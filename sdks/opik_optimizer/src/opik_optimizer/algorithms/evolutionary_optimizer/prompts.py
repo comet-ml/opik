@@ -30,11 +30,7 @@ The description should be a single string that can be directly used as an instru
 Return ONLY this JSON object string, with no preamble or extra formatting.
 """
 
-SEMANTIC_MUTATION_SYSTEM_PROMPT_TEMPLATE = (
-    "You are a prompt engineering expert. Your goal is to modify prompts to improve their "
-    "effectiveness in eliciting specific types of answers, particularly matching the style: "
-    "'{style}'. Follow the specific modification instruction provided."
-)
+SEMANTIC_MUTATION_SYSTEM_PROMPT_TEMPLATE = "Improve the provided prompt using targeted text edits. Desired output style: {style}. Preserve variables and use only supplied editable segment IDs. Return an edits list of segment_id and text; never regenerate messages or media."
 
 SYNONYMS_SYSTEM_PROMPT = (
     "You are a helpful assistant that provides synonyms. Return only the synonym word, "
@@ -46,69 +42,13 @@ REPHRASE_SYSTEM_PROMPT = (
     "no explanation or additional text."
 )
 
-FRESH_START_SYSTEM_PROMPT_TEMPLATE = (
-    "You are an expert prompt engineer. Your task is to generate novel, effective prompts from scratch "
-    "based on a task description, specifically aiming for prompts that elicit answers in the style: "
-    "'{style}'."
-)
+FRESH_START_SYSTEM_PROMPT_TEMPLATE = "You are an expert prompt engineer. Generate novel, effective prompts from scratch as text edits of the supplied immutable message template. Desired output style: '{style}'. Preserve all variables. Return targeted text edits using the requested schema; never regenerate messages or media."
 
-VARIATION_SYSTEM_PROMPT_TEMPLATE = """You are an expert prompt engineer specializing in creating diverse and effective prompts. Given an initial prompt, your task is to generate a diverse set of alternative prompts.
+VARIATION_SYSTEM_PROMPT_TEMPLATE = "You are an expert prompt engineer. Generate a diverse set of alternative prompts by returning targeted text edits of the provided template. Preserve all variables. Desired output style: '{style}'. Return the requested JSON schema; never return whole messages or media."
 
-For each prompt variation, consider:
-1. Different levels of specificity and detail, including significantly more detailed and longer versions.
-2. Various ways to structure the instruction, exploring more complex sentence structures and phrasings.
-3. Alternative phrasings that maintain the core intent but vary in style and complexity.
-4. Different emphasis on key components, potentially elaborating on them.
-5. Various ways to express constraints or requirements.
-6. Different approaches to clarity and conciseness, but also explore more verbose and explanatory styles.
-7. Alternative ways to guide the model's response format.
-8. Consider variations that are substantially longer and more descriptive than the original.
+LLM_CROSSOVER_SYSTEM_PROMPT_TEMPLATE = "Blend two parent prompts to create two effective children. Desired style: {style}. Return child_1 and child_2 as targeted text-edit lists, each addressing its respective parent's editable segments. Preserve variables, roles, media and message structure."
 
-The generated prompts should guide a target LLM to produce outputs in the following style: '{style}'
-
-Return a JSON array of prompts with the following structure:
-{{
-    "prompts": [
-        {{
-            "prompt": "alternative prompt 1",
-            "strategy": "brief description of the variation strategy used, e.g., 'focused on eliciting specific output style'"
-        }},
-        {{
-            "prompt": "alternative prompt 2",
-            "strategy": "brief description of the variation strategy used"
-        }}
-    ]
-}}
-Each prompt variation should aim to get the target LLM to produce answers matching the desired style: '{style}'.
-"""
-
-LLM_CROSSOVER_SYSTEM_PROMPT_TEMPLATE = """You are an expert prompt engineer specializing in creating novel prompts by intelligently blending existing ones.
-Given two parent prompts, your task is to generate one or two new child prompts that effectively combine the strengths, styles, or core ideas of both parents.
-The children should be coherent and aim to explore a potentially more effective region of the prompt design space, with a key goal of eliciting responses from the target language model in the following style: '{style}'.
-
-Consider the following when generating children:
-- Identify the key instructions, constraints, and desired output formats in each parent, paying attention to any hints about desired output style.
-- Explore ways to merge these elements such that the resulting prompt strongly guides the target LLM towards the desired output style.
-- You can create a child that is a direct blend, or one that takes a primary structure from one parent and incorporates specific elements from the other, always optimizing for clear instruction towards the desired output style.
-- If generating two children, try to make them distinct from each other and from the parents, perhaps by emphasizing different aspects of the parental combination that could lead to the desired output style.
-
-All generated prompts must aim for eliciting answers in the style: '{style}'.
-
-Return two child prompts as "child_1" and "child_2". Each child is a list of LLM messages with role ("system", "user", or "assistant") and content.
-"""
-
-SEMANTIC_CROSSOVER_SYSTEM_PROMPT_TEMPLATE = """You are an expert at semantically blending prompts.
-Given two parent prompts, create two distinct children that combine their core instructions and constraints coherently.
-Prioritize semantic consistency over surface-level copying, and preserve the desired output style: '{style}'.
-
-Guidelines:
-- Identify key objectives, constraints, and structure in each parent.
-- Blend complementary elements to create meaningful variations.
-- Ensure both children are distinct from each other and from the parents.
-
-Return a JSON object with "child_1" and "child_2". Each child is a list of LLM messages
-with role ("system", "user", or "assistant") and content.
-"""
+SEMANTIC_CROSSOVER_SYSTEM_PROMPT_TEMPLATE = "Semantically blend two parent prompts. Desired style: {style}. Return child_1 and child_2 as targeted text-edit lists of segment_id and text. Apply each child's edits to its respective parent; preserve its variables and immutable media."
 
 LLM_CROSSOVER_USER_PROMPT_TEMPLATE = """Parent Prompt 1:
 '''{parent1_messages}'''
@@ -134,12 +74,7 @@ Please generate TWO semantically blended child prompts, preserving the desired o
 Follow the system prompt regarding the JSON output format.
 """
 
-RADICAL_INNOVATION_SYSTEM_PROMPT_TEMPLATE = """You are an expert prompt engineer and a creative problem solver.
-Given a task description and an existing prompt for that task (which might be underperforming), your goal is to generate a new, significantly improved, and potentially very different prompt.
-Do not just make minor edits. Think about alternative approaches, structures, and phrasings that could lead to better performance.
-Consider clarity, specificity, constraints, and how to best guide the language model for the described task TO PRODUCE OUTPUTS IN THE FOLLOWING STYLE: '{style}'.
-Return only the new prompt string, with no preamble or explanation.
-"""
+RADICAL_INNOVATION_SYSTEM_PROMPT_TEMPLATE = "Creatively improve the provided prompt using targeted text edits. Desired output style: {style}. Keep the same message structure and preserve all variables and media. Return an edits list of segment_id and text."
 
 RADICAL_INNOVATION_USER_PROMPT_TEMPLATE = """Task Context:
 {task_description}
@@ -153,43 +88,9 @@ Focus on alternative approaches, better clarity, or more effective guidance for 
 Return only the new prompt list object.
 """
 
-FRESH_START_USER_PROMPT_TEMPLATE = """Here is a description of a task: ```{task_description}```
+FRESH_START_USER_PROMPT_TEMPLATE = "Task: {task_description}\nDesired output style: {style}\nGenerate {num_to_generate} diverse candidates. Return a prompts list, each containing an edits list of segment_id and text. Use the editable segments in the attached evidence."
 
-The goal is to generate prompts that will make a target LLM produce responses in the following style: ```{style}```.
-
-Please generate {num_to_generate} diverse and effective prompt(s) for a language model to accomplish this task, ensuring they guide towards this specific output style.
-Focus on clarity, completeness, and guiding the model effectively towards the desired style. Explore different structural approaches.
-
-Example of valid response: [
-    ["role": "<role>", "content": "<Prompt targeting specified style.>"],
-    ["role": "<role>", "content": "<Another prompt designed for the output style.>"]
-]
-
-Your response MUST be a valid JSON list of AI messages. Do NOT include any other text, explanations, or Markdown formatting like ```json ... ``` around the list.
-"""
-
-VARIATION_USER_PROMPT_TEMPLATE = """Initial prompt:'''{initial_prompt_messages}'''
-Task context: ```{task_description}```
-Desired output style from target LLM: '{style}'
-
-Generate {num_variations} diverse alternative prompts based on the initial prompt above, keeping the task context and desired output style in mind.
-All generated prompt variations should strongly aim to elicit answers from the target LLM matching the style: '{style}'.
-For each variation, consider how to best achieve this style, e.g., by adjusting specificity, structure, phrasing, constraints, or by explicitly requesting it.
-
-Return a JSON array of prompts with the following structure:
-{{
-    "prompts": [
-        {{
-            "prompt": [{{"role": "<role>", "content": "<content>"}}],
-            "strategy": "brief description of the variation strategy used, e.g., 'direct instruction for target style'"
-        }}
-        // ... more prompts if num_variations > 1
-    ]
-}}
-Ensure a good mix of variations, all targeting the specified output style from the end LLM.
-
-Return a valid JSON object that is correctly escaped. Return nothing else, do not include any additional text or Markdown formatting.
-"""
+VARIATION_USER_PROMPT_TEMPLATE = "Initial text segments: {initial_prompt_messages}\nTask: {task_description}\nDesired output style: {style}\nGenerate {num_variations} diverse alternative candidates. Return a prompts list, each containing an edits list of segment_id and text. Use the editable segments in the attached evidence."
 
 SEMANTIC_MUTATION_USER_PROMPT_TEMPLATE = """Given this prompt: '{prompt_messages}'
 Task context: {task_description}

@@ -1,3 +1,5 @@
+from ....core.reasoning import ReasoningEvidence, EvidenceCase
+from ....utils.feedback import sanitize_feedback
 from typing import Any
 
 import logging
@@ -50,9 +52,7 @@ def infer_output_style_from_dataset(
             filtered_content: dict[str, str] = {
                 x: y for x, y in item_content.items() if x != "id"
             }
-            examples_str += (
-                f"Example {i + 1}:\nDataset Item:\n{filtered_content}\n---\n"
-            )
+            examples_str += f"Example {i + 1}:\nDataset Item:\n{sanitize_feedback(filtered_content)}\n---\n"
 
         user_prompt_for_style_inference = prompts.get(
             "style_inference_user_prompt_template", examples_str=examples_str
@@ -60,6 +60,13 @@ def infer_output_style_from_dataset(
 
         try:
             response = _llm_calls.call_model(
+                evidence=ReasoningEvidence(
+                    cases=[
+                        EvidenceCase(case_id=str(i), inputs=item)
+                        for i, item in enumerate(items_to_process)
+                    ],
+                    editable=False,
+                ),
                 messages=[
                     {
                         "role": "system",

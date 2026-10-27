@@ -1,6 +1,7 @@
 """Shared helpers for tool description optimization across optimizers."""
 
 from __future__ import annotations
+from ....api_objects.evidence import ReasoningEvidence
 
 import logging
 import warnings
@@ -374,6 +375,9 @@ def generate_tool_description_candidates(
     )
 
     response = _llm_calls.call_model(
+        evidence=ReasoningEvidence(
+            prompts={current_prompt.name: current_prompt}, editable=False
+        ),
         messages=[
             {
                 "role": "system",
