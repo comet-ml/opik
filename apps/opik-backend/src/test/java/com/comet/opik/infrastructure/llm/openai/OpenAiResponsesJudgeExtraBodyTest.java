@@ -3,6 +3,7 @@ package com.comet.opik.infrastructure.llm.openai;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
+import com.comet.opik.infrastructure.llm.LlmTestClients;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.StreamReadFeature;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -79,7 +80,7 @@ class OpenAiResponsesJudgeExtraBodyTest {
                 .withStatus(400)
                 .withHeader("Content-Type", "application/json")
                 .withBody("{\"error\":{\"message\":\"stub\",\"type\":\"invalid_request_error\"}}")));
-        generator = new OpenAIClientGenerator(new LlmProviderClientConfig());
+        generator = new OpenAIClientGenerator(new LlmProviderClientConfig(), LlmTestClients.RESPONSES_API_HTTP_CLIENT);
     }
 
     @AfterEach

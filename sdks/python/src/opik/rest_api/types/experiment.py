@@ -51,6 +51,11 @@ class Experiment(UniversalBaseModel):
     created_by: typing.Optional[str] = None
     last_updated_by: typing.Optional[str] = None
     status: typing.Optional[ExperimentStatus] = None
+    finished_at: typing.Optional[dt.datetime] = pydantic.Field(default=None)
+    """
+    When the run stopped producing items. Unset while it may still produce more, whatever its status
+    """
+
     experiment_scores: typing.Optional[typing.List[ExperimentScore]] = None
     prompt_version: typing.Optional[PromptVersionLink] = None
     prompt_versions: typing.Optional[typing.List[PromptVersionLink]] = None

@@ -15,6 +15,7 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.glassfish.jersey.client.ClientProperties;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
@@ -132,6 +133,7 @@ public class OllamaService {
     private Mono<Response> performAsyncGet(String url, String apiKey) {
         return Mono.create(sink -> {
             var requestBuilder = httpClient.target(url)
+                    .property(ClientProperties.FOLLOW_REDIRECTS, false)
                     .request(MediaType.APPLICATION_JSON);
 
             if (apiKey != null && !apiKey.isBlank()) {

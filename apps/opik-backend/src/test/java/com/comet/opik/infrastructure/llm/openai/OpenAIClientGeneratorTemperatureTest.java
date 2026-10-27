@@ -5,6 +5,7 @@ import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.ParamResolver;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
+import com.comet.opik.infrastructure.llm.LlmTestClients;
 import dev.langchain4j.model.chat.request.ChatRequestParameters;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -27,7 +28,8 @@ class OpenAIClientGeneratorTemperatureTest {
     private static final ParamResolver RESOLVER = new ParamResolver(mock(LlmProviderFactory.class), bundledRegistry());
 
     private ChatRequestParameters judgeParametersFor(String modelName) {
-        var generator = new OpenAIClientGenerator(new LlmProviderClientConfig());
+        var generator = new OpenAIClientGenerator(new LlmProviderClientConfig(),
+                LlmTestClients.RESPONSES_API_HTTP_CLIENT);
         var config = LlmProviderClientApiConfig.builder()
                 .apiKey("test-key")
                 .baseUrl("https://openrouter.ai/api/v1")
@@ -53,7 +55,8 @@ class OpenAIClientGeneratorTemperatureTest {
     }
 
     private ChatRequestParameters responsesJudgeParametersFor(String modelName) {
-        var generator = new OpenAIClientGenerator(new LlmProviderClientConfig());
+        var generator = new OpenAIClientGenerator(new LlmProviderClientConfig(),
+                LlmTestClients.RESPONSES_API_HTTP_CLIENT);
         var config = LlmProviderClientApiConfig.builder()
                 .apiKey("test-key")
                 .baseUrl("https://openrouter.ai/api/v1")

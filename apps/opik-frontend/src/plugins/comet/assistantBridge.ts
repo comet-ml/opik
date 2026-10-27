@@ -16,6 +16,10 @@ import useExplainStore, {
   handleConsoleEvent,
 } from "@/plugins/comet/explain/explainStore";
 
+// The bridge version that added `duplicate` on `chart:edit`. Gated on its own, like Explain, so a later bump for
+// unrelated events doesn't hide it.
+const DUPLICATE_BRIDGE_VERSION = 6;
+
 /**
  * Host side of the assistant bridge: the in-page channel the Ollie console
  * (iframe) talks to via `window.opikBridge`. `createBridge` builds the bridge
@@ -272,6 +276,14 @@ export const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
   },
   canEditChart: () =>
     useExplainStore.getState().capabilities.includes("charts"),
+  canDuplicateChart: () => {
+    const { capabilities, consoleBridgeVersion } = useExplainStore.getState();
+    return (
+      capabilities.includes("charts") &&
+      consoleBridgeVersion !== null &&
+      consoleBridgeVersion >= DUPLICATE_BRIDGE_VERSION
+    );
+  },
   canProposeArtifacts: () =>
     useExplainStore.getState().capabilities.includes("artifacts"),
   subscribeCapabilities: (listener) =>
