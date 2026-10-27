@@ -84,6 +84,14 @@ def test_llama_index__happyflow(
     Settings.transformations = None
 
     from llama_index.core import VectorStoreIndex, SimpleDirectoryReader
+    from llama_index.llms.openai import OpenAI
+    from llama_index.embeddings.openai import OpenAIEmbedding
+
+    Settings.llm = OpenAI(
+        model=llm_constants.OPENAI_GPT_NANO,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+    )
+    Settings.embed_model = OpenAIEmbedding(model="text-embedding-3-small")
 
     documents = SimpleDirectoryReader(index_documents_directory).load_data()
     index = VectorStoreIndex.from_documents(documents)
@@ -133,7 +141,6 @@ def test_llama_index__happyflow(
 @pytest.mark.parametrize(
     "project_name, expected_project_name",
     [
-        (None, OPIK_PROJECT_DEFAULT_NAME),
         ("llama-index-integration-test", "llama-index-integration-test"),
     ],
 )
@@ -160,6 +167,14 @@ def test_llama_index__no_index_construction_logging_happyflow(
     Settings.transformations = None
 
     from llama_index.core import VectorStoreIndex, SimpleDirectoryReader
+    from llama_index.llms.openai import OpenAI
+    from llama_index.embeddings.openai import OpenAIEmbedding
+
+    Settings.llm = OpenAI(
+        model=llm_constants.OPENAI_GPT_NANO,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+    )
+    Settings.embed_model = OpenAIEmbedding(model="text-embedding-3-small")
 
     documents = SimpleDirectoryReader(index_documents_directory).load_data()
     index = VectorStoreIndex.from_documents(documents)
@@ -196,7 +211,6 @@ def test_llama_index__no_index_construction_logging_happyflow(
 @pytest.mark.parametrize(
     "project_name, expected_project_name",
     [
-        (None, OPIK_PROJECT_DEFAULT_NAME),
         ("llama-index-integration-test", "llama-index-integration-test"),
     ],
 )
@@ -286,7 +300,6 @@ def test_llama_index_chat__happyflow(
 @pytest.mark.parametrize(
     "project_name, expected_project_name",
     [
-        (None, OPIK_PROJECT_DEFAULT_NAME),
         ("llama-index-integration-test", "llama-index-integration-test"),
     ],
 )
@@ -382,7 +395,6 @@ def test_llama_index_stream_chat__happyflow(
 @pytest.mark.parametrize(
     "project_name, expected_project_name",
     [
-        (None, OPIK_PROJECT_DEFAULT_NAME),
         ("llama-index-integration-test", "llama-index-integration-test"),
     ],
 )
@@ -462,7 +474,6 @@ async def test_llama_index_async_chat__happyflow(
 @pytest.mark.parametrize(
     "project_name, expected_project_name",
     [
-        (None, OPIK_PROJECT_DEFAULT_NAME),
         ("llama-index-integration-test", "llama-index-integration-test"),
     ],
 )
@@ -549,7 +560,6 @@ async def test_llama_index_async_stream_chat__happyflow(
 @pytest.mark.parametrize(
     "project_name, expected_project_name",
     [
-        (None, OPIK_PROJECT_DEFAULT_NAME),
         ("llama-index-integration-test", "llama-index-integration-test"),
     ],
 )
@@ -686,7 +696,6 @@ def test_llama_index__used_inside_tracked_function__attached_to_existing_trace(
 @pytest.mark.parametrize(
     "project_name, expected_project_name",
     [
-        (None, OPIK_PROJECT_DEFAULT_NAME),
         ("llama-index-integration-test", "llama-index-integration-test"),
     ],
 )
@@ -935,7 +944,6 @@ def test_llama_index__callback_reused_multiple_times__creates_separate_traces(
 @pytest.mark.parametrize(
     "project_name, expected_project_name",
     [
-        (None, OPIK_PROJECT_DEFAULT_NAME),
         ("llama-index-integration-test", "llama-index-integration-test"),
     ],
 )
@@ -1035,7 +1043,6 @@ def test_llama_index__used_with_start_as_current_trace__attached_to_external_tra
 @pytest.mark.parametrize(
     "project_name, expected_project_name",
     [
-        (None, OPIK_PROJECT_DEFAULT_NAME),
         ("llama-index-integration-test", "llama-index-integration-test"),
     ],
 )
@@ -1136,7 +1143,6 @@ async def test_llama_index_async__used_with_start_as_current_trace__attached_to_
 @pytest.mark.parametrize(
     "project_name, expected_project_name",
     [
-        (None, OPIK_PROJECT_DEFAULT_NAME),
         ("llama-index-integration-test", "llama-index-integration-test"),
     ],
 )
@@ -1315,7 +1321,6 @@ def test_llama_index__query_engine_with_complex_spans__creates_embedding_retriev
 @pytest.mark.parametrize(
     "project_name, expected_project_name",
     [
-        (None, OPIK_PROJECT_DEFAULT_NAME),
         ("llama-index-integration-test", "llama-index-integration-test"),
     ],
 )
