@@ -414,6 +414,37 @@ class ChatCompletionsResourceTest {
             WIRE_MOCK.server().resetAll();
         }
 
+        private Stream<Arguments> rawUpstreamBodyIsNotEchoed() {
+            var text = UUID.randomUUID().toString();
+            return Stream.of(
+                    arguments("text/plain", "internal page " + text),
+                    arguments("application/json", "{\"internal\": \"%s\"}".formatted(text)));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("a body that isn't a provider error is not echoed back from a user-configured destination")
+        void rawUpstreamBodyIsNotEchoed(String contentType, String upstreamBody) {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            mockTargetWorkspace(workspaceName, UUID.randomUUID().toString());
+            createCustomProvider(workspaceName);
+            WIRE_MOCK.server().stubFor(post(urlPathMatching(CHAT_COMPLETIONS_REGEX))
+                    .willReturn(aResponse()
+                            .withStatus(HttpStatus.SC_BAD_GATEWAY)
+                            .withHeader("Content-Type", contentType)
+                            .withBody(upstreamBody)));
+            var expected = new ErrorMessage(HttpStatus.SC_BAD_GATEWAY,
+                    "Unexpected error calling LLM provider: provider responded with HTTP 502");
+
+            var request = ChatCompletionRequest.builder().stream(false).model(MODEL).addUserMessage("ping").build();
+            assertThat(chatCompletionsClient.create(API_KEY, workspaceName, request, HttpStatus.SC_BAD_GATEWAY))
+                    .isEqualTo(expected);
+
+            var streamed = ChatCompletionRequest.builder().stream(true).model(MODEL).addUserMessage("ping").build();
+            assertThat(chatCompletionsClient.createAndGetStreamedError(API_KEY, workspaceName, streamed))
+                    .containsExactly(expected);
+        }
+
         @Test
         @DisplayName("OpenAI-style {error:string} body — message propagates, status collapses to 400")
         void openAiStyleErrorBodyIsPropagated() {
