@@ -103,6 +103,7 @@ export enum PROVIDER_MODEL_TYPE {
   GPT_O3_PRO = "o3-pro",
   GPT_O4_MINI = "o4-mini",
   GPT_O4_MINI_DEEP_RESEARCH = "o4-mini-deep-research",
+  GPT_6_1_TERRA = "gpt-6.1-terra",
 
   //  <----- anthropic
   CLAUDE_SONNET_3_7 = "claude-3-7-sonnet-20250219",
@@ -376,6 +377,7 @@ export enum PROVIDER_MODEL_TYPE {
   LIQUID_LFM_2_2_6B = "liquid/lfm-2.2-6b",
   LIQUID_LFM_2_5_1_2B_INSTRUCT_FREE = "liquid/lfm-2.5-1.2b-instruct:free",
   LIQUID_LFM_2_5_1_2B_THINKING_FREE = "liquid/lfm-2.5-1.2b-thinking:free",
+  LIQUID_LFM_2_5_2_6B = "liquid/lfm-2.5-2.6b",
   LIQUID_LFM_2_5_2_6B_FREE = "liquid/lfm-2.5-2.6b:free",
   LIQUID_LFM_2_5_24B_A2B = "liquid/lfm-2.5-24b-a2b",
   LIQUID_LFM2_8B_A1B = "liquid/lfm2-8b-a1b",
@@ -499,6 +501,7 @@ export enum PROVIDER_MODEL_TYPE {
   MOONSHOTAI_KIMI_K2_7_CODE_BATCH = "moonshotai/kimi-k2.7-code:batch",
   MOONSHOTAI_KIMI_K2_FREE = "moonshotai/kimi-k2:free",
   MOONSHOTAI_KIMI_K3 = "moonshotai/kimi-k3",
+  MOONSHOTAI_KIMI_K3_1_PRO = "moonshotai/kimi-k3.1-pro",
   MOONSHOTAI_KIMI_K3_BATCH = "moonshotai/kimi-k3:batch",
   MOONSHOTAI_KIMI_LINEAR_48B_A3B_INSTRUCT = "moonshotai/kimi-linear-48b-a3b-instruct",
   MORPH_MORPH_V3_FAST = "morph/morph-v3-fast",
@@ -642,6 +645,9 @@ export enum PROVIDER_MODEL_TYPE {
   OPENAI_GPT_6_1_SOL_PRO = "openai/gpt-6.1-sol-pro",
   OPENAI_GPT_6_1_SOL_PRO_BATCH = "openai/gpt-6.1-sol-pro:batch",
   OPENAI_GPT_6_1_SOL_BATCH = "openai/gpt-6.1-sol:batch",
+  OPENAI_GPT_6_1_TERRA = "openai/gpt-6.1-terra",
+  OPENAI_GPT_6_1_TERRA_PRO = "openai/gpt-6.1-terra-pro",
+  OPENAI_GPT_6_1_TERRA_BATCH = "openai/gpt-6.1-terra:batch",
   OPENAI_GPT_AUDIO = "openai/gpt-audio",
   OPENAI_GPT_AUDIO_MINI = "openai/gpt-audio-mini",
   OPENAI_GPT_CHAT_LATEST = "openai/gpt-chat-latest",
@@ -978,9 +984,12 @@ export enum PROVIDER_MODEL_TYPE {
   VERTEX_AI_GEMINI_3_7_FLASH = "vertex_ai/gemini-3.7-flash",
   VERTEX_AI_GEMINI_3_8_FLASH = "vertex_ai/gemini-3.8-flash",
   VERTEX_AI_GEMINI_3_8_FLASH_CYBER = "vertex_ai/gemini-3.8-flash-cyber",
+  VERTEX_AI_GEMINI_4_ARGON = "vertex_ai/gemini-4-argon",
+  VERTEX_AI_GEMINI_4_ARGON_CYBER_PERMISSIVE = "vertex_ai/gemini-4-argon-cyber-permissive",
   VERTEX_AI_GEMINI_OMNI_1_1_FLASH = "vertex_ai/gemini-omni-1.1-flash",
   VERTEX_AI_GEMINI_OMNI_1_1_FLASH_PREVIEW = "vertex_ai/gemini-omni-1.1-flash-preview",
   VERTEX_AI_GEMINI_ROBOTICS_ER_2 = "vertex_ai/gemini-robotics-er-2",
+  VERTEX_AI_GEMINI_ROBOTICS_ER_2_PREVIEW = "vertex_ai/gemini-robotics-er-2-preview",
 }
 
 export interface ProviderModelsMap {
