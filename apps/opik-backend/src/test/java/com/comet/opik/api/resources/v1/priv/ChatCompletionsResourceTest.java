@@ -1773,7 +1773,8 @@ class ChatCompletionsResourceTest {
         }
 
         @ParameterizedTest
-        @ValueSource(strings = {"file:///etc/hosts", "jar:file:///app.jar!/image.png", "ftp://example.com/image.png"})
+        @ValueSource(strings = {"file:///etc/hosts", "jar:file:///app.jar!/image.png", "ftp://example.com/image.png",
+                "example.com/image.png"})
         @DisplayName("a media URL that isn't http or https is refused before Gemini or Vertex AI can read it")
         void mediaUrlWithOtherSchemeIsRefused(String mediaUrl) throws Exception {
             var workspaceName = RandomStringUtils.randomAlphanumeric(20);

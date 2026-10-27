@@ -250,8 +250,8 @@ class RemoteMediaInlinerTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"file:///etc/hosts", "ftp://example.com/image.png", "GS://bucket/image.png",
-            "jar:file:///app.jar!/image.png"})
-    @DisplayName("a media URL with any other scheme is refused before anything is read")
+            "jar:file:///app.jar!/image.png", "example.com/image.png", "//example.com/image.png"})
+    @DisplayName("a media URL with any other scheme, or none, is refused before anything is read")
     void otherSchemesAreRefused(String url) {
         List<ChatMessage> messages = List.of(UserMessage.from(ImageContent.from(url)));
         var expectedMessage = MEDIA_URL_REFUSED;

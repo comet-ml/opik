@@ -107,7 +107,12 @@ public class RemoteMediaInliner {
     }
 
     private static boolean isDownloaded(Content content) {
-        return url(content).filter(url -> !PASS_THROUGH_SCHEMES.contains(url.getScheme())).isPresent();
+        return url(content).filter(url -> !hasSchemeIn(url, PASS_THROUGH_SCHEMES)).isPresent();
+    }
+
+    /** A URL without a scheme has none of them: {@code Set.of} refuses a null lookup. */
+    private static boolean hasSchemeIn(URI url, Set<String> schemes) {
+        return url.getScheme() != null && schemes.contains(url.getScheme());
     }
 
     private static Optional<URI> url(Content content) {
@@ -161,7 +166,7 @@ public class RemoteMediaInliner {
 
     private Media download(String url, String declaredMimeType, Budget budget) {
         try {
-            if (!DOWNLOAD_SCHEMES.contains(URI.create(url).getScheme())) {
+            if (!hasSchemeIn(URI.create(url), DOWNLOAD_SCHEMES)) {
                 throw new DestinationGuardException("destination was refused, only http and https URLs are allowed");
             }
             destinationGuard.validate(url);

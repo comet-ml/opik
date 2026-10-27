@@ -24,7 +24,8 @@ class LoggableUrlTest {
                         "https://media.example.com:8443%s".formatted(path)),
                 arguments("https://media.example.com/%s".formatted("a".repeat(100)),
                         "https://media.example.com/%s".formatted("a".repeat(24))),
-                arguments("http://bad host/%s".formatted(secret), "<invalid URL>"));
+                arguments("http://bad host/%s".formatted(secret), "<invalid URL>"),
+                arguments(null, "<no URL>"));
     }
 
     @ParameterizedTest

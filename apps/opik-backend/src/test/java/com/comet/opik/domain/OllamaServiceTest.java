@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.classic.spi.ThrowableProxyUtil;
 import ch.qos.logback.core.read.ListAppender;
 import com.comet.opik.api.OllamaConnectionTestResponse;
 import com.comet.opik.api.OllamaModel;
@@ -110,8 +111,8 @@ class OllamaServiceTest {
         assertThat(actualResponse).isEqualTo(expectedResponse);
     }
 
-    /** The service's log lines while {@code call} runs, debug included. */
-    private static List<String> logsOf(Runnable call) {
+    /** The service's log events while {@code call} runs, debug included. */
+    private static List<ILoggingEvent> eventsOf(Runnable call) {
         var logger = (Logger) LoggerFactory.getLogger(OllamaService.class);
         var appender = new ListAppender<ILoggingEvent>();
         var previousLevel = logger.getLevel();
@@ -124,7 +125,21 @@ class OllamaServiceTest {
             logger.detachAppender(appender);
             logger.setLevel(previousLevel);
         }
-        return appender.list.stream().map(ILoggingEvent::getFormattedMessage).toList();
+        return List.copyOf(appender.list);
+    }
+
+    private static List<String> logsOf(Runnable call) {
+        return eventsOf(call).stream().map(ILoggingEvent::getFormattedMessage).toList();
+    }
+
+    /** Each event as logged: its message, then its throwable's class, message and causes, stack included. */
+    private static List<String> renderedEventsOf(Runnable call) {
+        return eventsOf(call).stream()
+                .map(event -> event.getThrowableProxy() == null
+                        ? event.getFormattedMessage()
+                        : "%s%n%s".formatted(event.getFormattedMessage(),
+                                ThrowableProxyUtil.asString(event.getThrowableProxy())))
+                .toList();
     }
 
     @Test
@@ -145,15 +160,21 @@ class OllamaServiceTest {
     @Test
     @DisplayName("A connection test logs the URL without its userinfo")
     void testConnection__logsUrlWithoutUserinfo() {
-        var secret = RandomStringUtils.secure().nextAlphanumeric(16);
-        var url = "http://user-%s:%s@localhost:%d/".formatted(secret, secret, wireMockServer.port());
+        var username = "user-%s".formatted(RandomStringUtils.secure().nextAlphanumeric(16));
+        var password = RandomStringUtils.secure().nextAlphanumeric(16);
+        var url = "http://%s:%s@localhost:%d/".formatted(username, password, wireMockServer.port());
         var expectedMessages = List.of(
                 "Testing Ollama connection at: 'http://localhost:%d/api/version'".formatted(wireMockServer.port()),
                 "Failed to connect to Ollama");
 
-        var actualMessages = logsOf(() -> ollamaService.testConnection(url, null).block());
+        var actualEvents = renderedEventsOf(() -> ollamaService.testConnection(url, null).block());
 
-        assertThat(actualMessages).isEqualTo(expectedMessages);
+        assertThat(actualEvents).hasSize(expectedMessages.size());
+        for (int i = 0; i < expectedMessages.size(); i++) {
+            assertThat(actualEvents.get(i)).startsWith(expectedMessages.get(i))
+                    .doesNotContain(username)
+                    .doesNotContain(password);
+        }
     }
 
     @Test
@@ -175,16 +196,22 @@ class OllamaServiceTest {
     @Test
     @DisplayName("Listing models logs the URL without its userinfo")
     void listModels__logsUrlWithoutUserinfo() {
-        var secret = RandomStringUtils.secure().nextAlphanumeric(16);
-        var url = "http://user-%s:%s@localhost:%d/".formatted(secret, secret, wireMockServer.port());
+        var username = "user-%s".formatted(RandomStringUtils.secure().nextAlphanumeric(16));
+        var password = RandomStringUtils.secure().nextAlphanumeric(16);
+        var url = "http://%s:%s@localhost:%d/".formatted(username, password, wireMockServer.port());
         var expectedMessages = List.of(
                 "Fetching models from Ollama instance at: 'http://localhost:%d/api/tags'"
                         .formatted(wireMockServer.port()),
                 "Failed to fetch models from Ollama");
 
-        var actualMessages = logsOf(() -> ollamaService.listModels(url, null).block());
+        var actualEvents = renderedEventsOf(() -> ollamaService.listModels(url, null).block());
 
-        assertThat(actualMessages).isEqualTo(expectedMessages);
+        assertThat(actualEvents).hasSize(expectedMessages.size());
+        for (int i = 0; i < expectedMessages.size(); i++) {
+            assertThat(actualEvents.get(i)).startsWith(expectedMessages.get(i))
+                    .doesNotContain(username)
+                    .doesNotContain(password);
+        }
     }
 
     @Test
