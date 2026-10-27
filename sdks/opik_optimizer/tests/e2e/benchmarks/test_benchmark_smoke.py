@@ -15,7 +15,7 @@ from ._benchmark_test_helpers import InlineExecutor
 
 
 class DummyDataset:
-    def __init__(self, name: str):
+    def __init__(self, name: str) -> None:
         self.name = name
         self.id = f"{name}-id"
 
@@ -46,6 +46,10 @@ class DummyOptimizer:
         agent: Any | None = None,
         **_: Any,
     ):
+        assert self.model == "dummy-reasoning-model"
+        assert self.kwargs["model_parameters"] == {"temperature": 0.7}
+        assert prompt.model == "dummy-model"
+        assert prompt.model_kwargs == {}
         return metric({}, "")
 
     def optimize_prompt(  # type: ignore[no-untyped-def]
@@ -95,7 +99,10 @@ def _patch_benchmark_config(monkeypatch: pytest.MonkeyPatch) -> None:
         {
             "dummy": benchmark_config.BenchmarkOptimizerConfig(
                 class_name="DummyOptimizer",
-                params={},
+                params={
+                    "model": "dummy-reasoning-model",
+                    "model_parameters": {"temperature": 0.7},
+                },
                 optimizer_prompt_params={"max_trials": 1, "n_samples": 1},
             )
         },
@@ -140,6 +147,7 @@ def test_run_benchmark_smoke(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
         dataset_name="toy_train",
         optimizer_name="dummy",
         model_name="dummy-model",
+        model_parameters={},
         test_mode=True,
     )
 
