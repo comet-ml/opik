@@ -1241,64 +1241,6 @@ class BaseOptimizer(ABC):
         return handle
 
     # Candidate-first aliases
-    def begin_round(self, context: OptimizationContext, **extras: Any) -> Any:
-        """Alias for pre_round."""
-        warnings.warn(
-            "begin_round is deprecated; use pre_round.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return self.pre_round(context, **extras)
-
-    def start_candidate(
-        self,
-        context: OptimizationContext,
-        candidate: Any,
-        *,
-        round_handle: Any | None = None,
-    ) -> Any:
-        """Alias for pre_trial."""
-        warnings.warn(
-            "start_candidate is deprecated; use pre_trial.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return self.pre_trial(context, candidate, round_handle=round_handle)
-
-    def finish_candidate(
-        self,
-        context: OptimizationContext,
-        candidate_handle: Any,
-        *,
-        score: float | None,
-        metrics: dict[str, Any] | None = None,
-        extras: dict[str, Any] | None = None,
-        candidates: list[dict[str, Any]] | None = None,
-        dataset: str | None = None,
-        dataset_split: str | None = None,
-        trial_index: int | None = None,
-        timestamp: str | None = None,
-        round_handle: Any | None = None,
-    ) -> None:
-        """Alias for post_trial."""
-        warnings.warn(
-            "finish_candidate is deprecated; use post_trial.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        self.post_trial(
-            context,
-            candidate_handle,
-            score=score,
-            metrics=metrics,
-            extras=extras,
-            candidates=candidates,
-            dataset=dataset,
-            dataset_split=dataset_split,
-            trial_index=trial_index,
-            timestamp=timestamp,
-            round_handle=round_handle,
-        )
 
     def pre_trial(
         self,
@@ -1880,43 +1822,6 @@ class BaseOptimizer(ABC):
                 pareto_front=pareto_front,
                 selection_meta=selection_meta,
             )
-
-    def finish_round(
-        self,
-        round_handle: Any,
-        *,
-        context: OptimizationContext | None = None,
-        best_score: float | None = None,
-        best_candidate: Any | None = None,
-        best_prompt: Any | None = None,
-        stop_reason: str | None = None,
-        extras: dict[str, Any] | None = None,
-        candidates: list[dict[str, Any]] | None = None,
-        timestamp: str | None = None,
-        dataset_split: str | None = None,
-        pareto_front: list[dict[str, Any]] | None = None,
-        selection_meta: dict[str, Any] | None = None,
-    ) -> None:
-        """Alias for post_round."""
-        warnings.warn(
-            "finish_round is deprecated; use post_round.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        self.post_round(
-            round_handle,
-            context=context,
-            best_score=best_score,
-            best_candidate=best_candidate,
-            best_prompt=best_prompt,
-            stop_reason=stop_reason,
-            extras=extras,
-            candidates=candidates,
-            timestamp=timestamp,
-            dataset_split=dataset_split,
-            pareto_front=pareto_front,
-            selection_meta=selection_meta,
-        )
 
     def _update_optimization(
         self,

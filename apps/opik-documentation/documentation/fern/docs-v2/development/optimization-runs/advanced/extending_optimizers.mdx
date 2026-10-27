@@ -301,8 +301,8 @@ result.display()
 | `llm_cost_total` | Tracks total API cost (when available from provider). |
 | `llm_token_usage_total` | Tracks token usage across all calls. |
 
-The older `begin_round`, `finish_round`, `start_candidate`, and `finish_candidate` hook aliases emit
-`DeprecationWarning` and remain available for compatibility.
+The older `begin_round`, `finish_round`, `start_candidate`, and `finish_candidate` hook aliases are
+removed; use `pre_round`, `post_round`, `pre_trial` and `post_trial`.
 
 ## Structured evidence and text edits
 

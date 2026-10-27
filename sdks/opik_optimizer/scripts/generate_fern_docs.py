@@ -14,14 +14,6 @@ import opik_optimizer  # type: ignore[import-not-found]  # noqa: E402
 from pydantic import BaseModel
 
 
-DEPRECATED_HOOKS = {
-    "begin_round": "pre_round",
-    "finish_round": "post_round",
-    "start_candidate": "pre_trial",
-    "finish_candidate": "post_trial",
-}
-
-
 class ParameterInfo(BaseModel):
     path: str
     type: str | None
@@ -350,11 +342,6 @@ class ClassInspector:
             output.append("### Methods")
         for method in info.public_methods:
             output.append(f"#### {method.name}")
-            if replacement := DEPRECATED_HOOKS.get(method.name):
-                output.append(
-                    f"\nDeprecated alias: use `{replacement}` instead. "
-                    "This alias remains available and emits `DeprecationWarning`.\n"
-                )
             output.append(self.format_method_signature(method.name, method.parameters))
             output.append("")
 
@@ -497,8 +484,8 @@ Import `EvidenceCase`, `ReasoningEvidence`, `TextEdit`, `describe_text_segments`
 - **FewShot:** `enable_optuna_pruning` is deprecated and has no effect. Use `n_threads` to configure
   evaluation parallelism.
 - **Custom optimizers:** implement `run_optimization(context)` and return `AlgorithmResult`.
-  `begin_round`, `finish_round`, `start_candidate`, and `finish_candidate` remain deprecated aliases
-  of `pre_round`, `post_round`, `pre_trial`, and `post_trial` respectively.
+  The `begin_round`, `finish_round`, `start_candidate`, and `finish_candidate` hooks are removed;
+  use `pre_round`, `post_round`, `pre_trial`, and `post_trial` respectively.
 
 See [Configure models](/development/optimization-runs/optimization/configure_models),
 [ParameterOptimizer](/development/optimization-runs/algorithms/parameter_optimizer), and

@@ -47,12 +47,8 @@ def infer_output_style_from_dataset(
             return None
 
         # The items are attached as evidence cases, rendered once.
-        examples_str = (
-            f"{len(items_to_process)} dataset items are attached after this message."
-        )
-
         user_prompt_for_style_inference = prompts.get(
-            "style_inference_user_prompt_template", examples_str=examples_str
+            "style_inference_user_prompt_template"
         )
 
         try:

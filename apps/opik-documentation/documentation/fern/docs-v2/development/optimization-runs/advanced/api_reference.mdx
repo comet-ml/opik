@@ -102,8 +102,8 @@ Import `EvidenceCase`, `ReasoningEvidence`, `TextEdit`, `describe_text_segments`
 - **FewShot:** `enable_optuna_pruning` is deprecated and has no effect. Use `n_threads` to configure
   evaluation parallelism.
 - **Custom optimizers:** implement `run_optimization(context)` and return `AlgorithmResult`.
-  `begin_round`, `finish_round`, `start_candidate`, and `finish_candidate` remain deprecated aliases
-  of `pre_round`, `post_round`, `pre_trial`, and `post_trial` respectively.
+  The `begin_round`, `finish_round`, `start_candidate`, and `finish_candidate` hooks are removed;
+  use `pre_round`, `post_round`, `pre_trial`, and `post_trial` respectively.
 
 See [Configure models](/development/optimization-runs/optimization/configure_models),
 [ParameterOptimizer](/development/optimization-runs/algorithms/parameter_optimizer), and
@@ -151,23 +151,6 @@ FewShotBayesianOptimizer(
 <ParamField path="perfect_score" type="float" optional={true} default="0.95" />
 
 ### Methods
-#### begin_round
-
-Deprecated alias: use `pre_round` instead. This alias remains available and emits `DeprecationWarning`.
-
-```python wordWrap
-begin_round(
-    context: OptimizationContext,
-    extras: Any
-)
-```
-
-
-**Parameters:**
-
-<ParamField path="context" type="OptimizationContext" />
-<ParamField path="extras" type="Any" />
-
 #### cleanup
 ```python wordWrap
 cleanup()
@@ -179,8 +162,7 @@ cleanup()
 evaluate(
     context: OptimizationContext,
     prompts: dict,
-    experiment_config: dict[str, typing.Any] | None = None,
-    sampling_tag: str | None = None
+    experiment_config: dict[str, typing.Any] | None = None
 )
 ```
 
@@ -190,7 +172,6 @@ evaluate(
 <ParamField path="context" type="OptimizationContext">Optimization context for this run.</ParamField>
 <ParamField path="prompts" type="dict">Dict of named prompts to evaluate (e.g., &#123;"main": ChatPrompt(...)&#125;). Single-prompt optimizations use a dict with one entry.</ParamField>
 <ParamField path="experiment_config" type="dict[str, typing.Any] | None" optional={true}>Optional experiment configuration.</ParamField>
-<ParamField path="sampling_tag" type="str | None" optional={true}>Optional tag that seeds candidate-output selection for this call.</ParamField>
 
 #### evaluate_prompt
 ```python wordWrap
@@ -208,8 +189,7 @@ evaluate_prompt(
     seed: int | None = None,
     return_evaluation_result: bool = False,
     allow_tool_use: bool | None = None,
-    use_evaluate_on_dict_items: bool | None = None,
-    sampling_tag: str | None = None
+    use_evaluate_on_dict_items: bool | None = None
 )
 ```
 
@@ -230,7 +210,6 @@ evaluate_prompt(
 <ParamField path="return_evaluation_result" type="bool" optional={true} default="False" />
 <ParamField path="allow_tool_use" type="bool | None" optional={true} />
 <ParamField path="use_evaluate_on_dict_items" type="bool | None" optional={true} />
-<ParamField path="sampling_tag" type="str | None" optional={true} />
 
 #### evaluate_with_result
 ```python wordWrap
@@ -240,8 +219,7 @@ evaluate_with_result(
     experiment_config: dict[str, typing.Any] | None = None,
     empty_score: float | None = None,
     n_samples: int | float | str | None = None,
-    n_samples_strategy: str | None = None,
-    sampling_tag: str | None = None
+    n_samples_strategy: str | None = None
 )
 ```
 
@@ -254,79 +232,6 @@ evaluate_with_result(
 <ParamField path="empty_score" type="float | None" optional={true} />
 <ParamField path="n_samples" type="int | float | str | None" optional={true} />
 <ParamField path="n_samples_strategy" type="str | None" optional={true} />
-<ParamField path="sampling_tag" type="str | None" optional={true} />
-
-#### finish_candidate
-
-Deprecated alias: use `post_trial` instead. This alias remains available and emits `DeprecationWarning`.
-
-```python wordWrap
-finish_candidate(
-    context: OptimizationContext,
-    candidate_handle: Any,
-    score: float | None,
-    metrics: dict[str, typing.Any] | None = None,
-    extras: dict[str, typing.Any] | None = None,
-    candidates: list[dict[str, typing.Any]] | None = None,
-    dataset: str | None = None,
-    dataset_split: str | None = None,
-    trial_index: int | None = None,
-    timestamp: str | None = None,
-    round_handle: typing.Any | None = None
-)
-```
-
-
-**Parameters:**
-
-<ParamField path="context" type="OptimizationContext" />
-<ParamField path="candidate_handle" type="Any" />
-<ParamField path="score" type="float | None" />
-<ParamField path="metrics" type="dict[str, typing.Any] | None" optional={true} />
-<ParamField path="extras" type="dict[str, typing.Any] | None" optional={true} />
-<ParamField path="candidates" type="list[dict[str, typing.Any]] | None" optional={true} />
-<ParamField path="dataset" type="str | None" optional={true} />
-<ParamField path="dataset_split" type="str | None" optional={true} />
-<ParamField path="trial_index" type="int | None" optional={true} />
-<ParamField path="timestamp" type="str | None" optional={true} />
-<ParamField path="round_handle" type="typing.Any | None" optional={true} />
-
-#### finish_round
-
-Deprecated alias: use `post_round` instead. This alias remains available and emits `DeprecationWarning`.
-
-```python wordWrap
-finish_round(
-    round_handle: Any,
-    context: opik_optimizer.core.state.OptimizationContext | None = None,
-    best_score: float | None = None,
-    best_candidate: typing.Any | None = None,
-    best_prompt: typing.Any | None = None,
-    stop_reason: str | None = None,
-    extras: dict[str, typing.Any] | None = None,
-    candidates: list[dict[str, typing.Any]] | None = None,
-    timestamp: str | None = None,
-    dataset_split: str | None = None,
-    pareto_front: list[dict[str, typing.Any]] | None = None,
-    selection_meta: dict[str, typing.Any] | None = None
-)
-```
-
-
-**Parameters:**
-
-<ParamField path="round_handle" type="Any" />
-<ParamField path="context" type="opik_optimizer.core.state.OptimizationContext | None" optional={true} />
-<ParamField path="best_score" type="float | None" optional={true} />
-<ParamField path="best_candidate" type="typing.Any | None" optional={true} />
-<ParamField path="best_prompt" type="typing.Any | None" optional={true} />
-<ParamField path="stop_reason" type="str | None" optional={true} />
-<ParamField path="extras" type="dict[str, typing.Any] | None" optional={true} />
-<ParamField path="candidates" type="list[dict[str, typing.Any]] | None" optional={true} />
-<ParamField path="timestamp" type="str | None" optional={true} />
-<ParamField path="dataset_split" type="str | None" optional={true} />
-<ParamField path="pareto_front" type="list[dict[str, typing.Any]] | None" optional={true} />
-<ParamField path="selection_meta" type="dict[str, typing.Any] | None" optional={true} />
 
 #### get_config
 ```python wordWrap
@@ -700,25 +605,6 @@ set_selection_meta(
 
 <ParamField path="selection_meta" type="dict[str, typing.Any] | None" />
 
-#### start_candidate
-
-Deprecated alias: use `pre_trial` instead. This alias remains available and emits `DeprecationWarning`.
-
-```python wordWrap
-start_candidate(
-    context: OptimizationContext,
-    candidate: Any,
-    round_handle: typing.Any | None = None
-)
-```
-
-
-**Parameters:**
-
-<ParamField path="context" type="OptimizationContext" />
-<ParamField path="candidate" type="Any" />
-<ParamField path="round_handle" type="typing.Any | None" optional={true} />
-
 #### with_dataset_split
 ```python wordWrap
 with_dataset_split(
@@ -761,23 +647,6 @@ GepaOptimizer(
 <ParamField path="prompt_overrides" type="dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None" optional={true} />
 
 ### Methods
-#### begin_round
-
-Deprecated alias: use `pre_round` instead. This alias remains available and emits `DeprecationWarning`.
-
-```python wordWrap
-begin_round(
-    context: OptimizationContext,
-    extras: Any
-)
-```
-
-
-**Parameters:**
-
-<ParamField path="context" type="OptimizationContext" />
-<ParamField path="extras" type="Any" />
-
 #### cleanup
 ```python wordWrap
 cleanup()
@@ -789,8 +658,7 @@ cleanup()
 evaluate(
     context: OptimizationContext,
     prompts: dict,
-    experiment_config: dict[str, typing.Any] | None = None,
-    sampling_tag: str | None = None
+    experiment_config: dict[str, typing.Any] | None = None
 )
 ```
 
@@ -800,7 +668,6 @@ evaluate(
 <ParamField path="context" type="OptimizationContext">Optimization context for this run.</ParamField>
 <ParamField path="prompts" type="dict">Dict of named prompts to evaluate (e.g., &#123;"main": ChatPrompt(...)&#125;). Single-prompt optimizations use a dict with one entry.</ParamField>
 <ParamField path="experiment_config" type="dict[str, typing.Any] | None" optional={true}>Optional experiment configuration.</ParamField>
-<ParamField path="sampling_tag" type="str | None" optional={true}>Optional tag that seeds candidate-output selection for this call.</ParamField>
 
 #### evaluate_prompt
 ```python wordWrap
@@ -818,8 +685,7 @@ evaluate_prompt(
     seed: int | None = None,
     return_evaluation_result: bool = False,
     allow_tool_use: bool | None = None,
-    use_evaluate_on_dict_items: bool | None = None,
-    sampling_tag: str | None = None
+    use_evaluate_on_dict_items: bool | None = None
 )
 ```
 
@@ -840,7 +706,6 @@ evaluate_prompt(
 <ParamField path="return_evaluation_result" type="bool" optional={true} default="False" />
 <ParamField path="allow_tool_use" type="bool | None" optional={true} />
 <ParamField path="use_evaluate_on_dict_items" type="bool | None" optional={true} />
-<ParamField path="sampling_tag" type="str | None" optional={true} />
 
 #### evaluate_with_result
 ```python wordWrap
@@ -850,8 +715,7 @@ evaluate_with_result(
     experiment_config: dict[str, typing.Any] | None = None,
     empty_score: float | None = None,
     n_samples: int | float | str | None = None,
-    n_samples_strategy: str | None = None,
-    sampling_tag: str | None = None
+    n_samples_strategy: str | None = None
 )
 ```
 
@@ -864,79 +728,6 @@ evaluate_with_result(
 <ParamField path="empty_score" type="float | None" optional={true} />
 <ParamField path="n_samples" type="int | float | str | None" optional={true} />
 <ParamField path="n_samples_strategy" type="str | None" optional={true} />
-<ParamField path="sampling_tag" type="str | None" optional={true} />
-
-#### finish_candidate
-
-Deprecated alias: use `post_trial` instead. This alias remains available and emits `DeprecationWarning`.
-
-```python wordWrap
-finish_candidate(
-    context: OptimizationContext,
-    candidate_handle: Any,
-    score: float | None,
-    metrics: dict[str, typing.Any] | None = None,
-    extras: dict[str, typing.Any] | None = None,
-    candidates: list[dict[str, typing.Any]] | None = None,
-    dataset: str | None = None,
-    dataset_split: str | None = None,
-    trial_index: int | None = None,
-    timestamp: str | None = None,
-    round_handle: typing.Any | None = None
-)
-```
-
-
-**Parameters:**
-
-<ParamField path="context" type="OptimizationContext" />
-<ParamField path="candidate_handle" type="Any" />
-<ParamField path="score" type="float | None" />
-<ParamField path="metrics" type="dict[str, typing.Any] | None" optional={true} />
-<ParamField path="extras" type="dict[str, typing.Any] | None" optional={true} />
-<ParamField path="candidates" type="list[dict[str, typing.Any]] | None" optional={true} />
-<ParamField path="dataset" type="str | None" optional={true} />
-<ParamField path="dataset_split" type="str | None" optional={true} />
-<ParamField path="trial_index" type="int | None" optional={true} />
-<ParamField path="timestamp" type="str | None" optional={true} />
-<ParamField path="round_handle" type="typing.Any | None" optional={true} />
-
-#### finish_round
-
-Deprecated alias: use `post_round` instead. This alias remains available and emits `DeprecationWarning`.
-
-```python wordWrap
-finish_round(
-    round_handle: Any,
-    context: opik_optimizer.core.state.OptimizationContext | None = None,
-    best_score: float | None = None,
-    best_candidate: typing.Any | None = None,
-    best_prompt: typing.Any | None = None,
-    stop_reason: str | None = None,
-    extras: dict[str, typing.Any] | None = None,
-    candidates: list[dict[str, typing.Any]] | None = None,
-    timestamp: str | None = None,
-    dataset_split: str | None = None,
-    pareto_front: list[dict[str, typing.Any]] | None = None,
-    selection_meta: dict[str, typing.Any] | None = None
-)
-```
-
-
-**Parameters:**
-
-<ParamField path="round_handle" type="Any" />
-<ParamField path="context" type="opik_optimizer.core.state.OptimizationContext | None" optional={true} />
-<ParamField path="best_score" type="float | None" optional={true} />
-<ParamField path="best_candidate" type="typing.Any | None" optional={true} />
-<ParamField path="best_prompt" type="typing.Any | None" optional={true} />
-<ParamField path="stop_reason" type="str | None" optional={true} />
-<ParamField path="extras" type="dict[str, typing.Any] | None" optional={true} />
-<ParamField path="candidates" type="list[dict[str, typing.Any]] | None" optional={true} />
-<ParamField path="timestamp" type="str | None" optional={true} />
-<ParamField path="dataset_split" type="str | None" optional={true} />
-<ParamField path="pareto_front" type="list[dict[str, typing.Any]] | None" optional={true} />
-<ParamField path="selection_meta" type="dict[str, typing.Any] | None" optional={true} />
 
 #### get_config
 ```python wordWrap
@@ -1309,25 +1100,6 @@ set_selection_meta(
 **Parameters:**
 
 <ParamField path="selection_meta" type="dict[str, typing.Any] | None" />
-
-#### start_candidate
-
-Deprecated alias: use `pre_trial` instead. This alias remains available and emits `DeprecationWarning`.
-
-```python wordWrap
-start_candidate(
-    context: OptimizationContext,
-    candidate: Any,
-    round_handle: typing.Any | None = None
-)
-```
-
-
-**Parameters:**
-
-<ParamField path="context" type="OptimizationContext" />
-<ParamField path="candidate" type="Any" />
-<ParamField path="round_handle" type="typing.Any | None" optional={true} />
 
 #### with_dataset_split
 ```python wordWrap
@@ -1381,23 +1153,6 @@ MetaPromptOptimizer(
 <ParamField path="perfect_score" type="float" optional={true} default="0.95" />
 
 ### Methods
-#### begin_round
-
-Deprecated alias: use `pre_round` instead. This alias remains available and emits `DeprecationWarning`.
-
-```python wordWrap
-begin_round(
-    context: OptimizationContext,
-    extras: Any
-)
-```
-
-
-**Parameters:**
-
-<ParamField path="context" type="OptimizationContext" />
-<ParamField path="extras" type="Any" />
-
 #### cleanup
 ```python wordWrap
 cleanup()
@@ -1409,8 +1164,7 @@ cleanup()
 evaluate(
     context: OptimizationContext,
     prompts: dict,
-    experiment_config: dict[str, typing.Any] | None = None,
-    sampling_tag: str | None = None
+    experiment_config: dict[str, typing.Any] | None = None
 )
 ```
 
@@ -1420,7 +1174,6 @@ evaluate(
 <ParamField path="context" type="OptimizationContext">Optimization context for this run.</ParamField>
 <ParamField path="prompts" type="dict">Dict of named prompts to evaluate (e.g., &#123;"main": ChatPrompt(...)&#125;). Single-prompt optimizations use a dict with one entry.</ParamField>
 <ParamField path="experiment_config" type="dict[str, typing.Any] | None" optional={true}>Optional experiment configuration.</ParamField>
-<ParamField path="sampling_tag" type="str | None" optional={true}>Optional tag that seeds candidate-output selection for this call.</ParamField>
 
 #### evaluate_prompt
 ```python wordWrap
@@ -1438,8 +1191,7 @@ evaluate_prompt(
     seed: int | None = None,
     return_evaluation_result: bool = False,
     allow_tool_use: bool | None = None,
-    use_evaluate_on_dict_items: bool | None = None,
-    sampling_tag: str | None = None
+    use_evaluate_on_dict_items: bool | None = None
 )
 ```
 
@@ -1460,7 +1212,6 @@ evaluate_prompt(
 <ParamField path="return_evaluation_result" type="bool" optional={true} default="False" />
 <ParamField path="allow_tool_use" type="bool | None" optional={true} />
 <ParamField path="use_evaluate_on_dict_items" type="bool | None" optional={true} />
-<ParamField path="sampling_tag" type="str | None" optional={true} />
 
 #### evaluate_with_result
 ```python wordWrap
@@ -1470,8 +1221,7 @@ evaluate_with_result(
     experiment_config: dict[str, typing.Any] | None = None,
     empty_score: float | None = None,
     n_samples: int | float | str | None = None,
-    n_samples_strategy: str | None = None,
-    sampling_tag: str | None = None
+    n_samples_strategy: str | None = None
 )
 ```
 
@@ -1484,79 +1234,6 @@ evaluate_with_result(
 <ParamField path="empty_score" type="float | None" optional={true} />
 <ParamField path="n_samples" type="int | float | str | None" optional={true} />
 <ParamField path="n_samples_strategy" type="str | None" optional={true} />
-<ParamField path="sampling_tag" type="str | None" optional={true} />
-
-#### finish_candidate
-
-Deprecated alias: use `post_trial` instead. This alias remains available and emits `DeprecationWarning`.
-
-```python wordWrap
-finish_candidate(
-    context: OptimizationContext,
-    candidate_handle: Any,
-    score: float | None,
-    metrics: dict[str, typing.Any] | None = None,
-    extras: dict[str, typing.Any] | None = None,
-    candidates: list[dict[str, typing.Any]] | None = None,
-    dataset: str | None = None,
-    dataset_split: str | None = None,
-    trial_index: int | None = None,
-    timestamp: str | None = None,
-    round_handle: typing.Any | None = None
-)
-```
-
-
-**Parameters:**
-
-<ParamField path="context" type="OptimizationContext" />
-<ParamField path="candidate_handle" type="Any" />
-<ParamField path="score" type="float | None" />
-<ParamField path="metrics" type="dict[str, typing.Any] | None" optional={true} />
-<ParamField path="extras" type="dict[str, typing.Any] | None" optional={true} />
-<ParamField path="candidates" type="list[dict[str, typing.Any]] | None" optional={true} />
-<ParamField path="dataset" type="str | None" optional={true} />
-<ParamField path="dataset_split" type="str | None" optional={true} />
-<ParamField path="trial_index" type="int | None" optional={true} />
-<ParamField path="timestamp" type="str | None" optional={true} />
-<ParamField path="round_handle" type="typing.Any | None" optional={true} />
-
-#### finish_round
-
-Deprecated alias: use `post_round` instead. This alias remains available and emits `DeprecationWarning`.
-
-```python wordWrap
-finish_round(
-    round_handle: Any,
-    context: opik_optimizer.core.state.OptimizationContext | None = None,
-    best_score: float | None = None,
-    best_candidate: typing.Any | None = None,
-    best_prompt: typing.Any | None = None,
-    stop_reason: str | None = None,
-    extras: dict[str, typing.Any] | None = None,
-    candidates: list[dict[str, typing.Any]] | None = None,
-    timestamp: str | None = None,
-    dataset_split: str | None = None,
-    pareto_front: list[dict[str, typing.Any]] | None = None,
-    selection_meta: dict[str, typing.Any] | None = None
-)
-```
-
-
-**Parameters:**
-
-<ParamField path="round_handle" type="Any" />
-<ParamField path="context" type="opik_optimizer.core.state.OptimizationContext | None" optional={true} />
-<ParamField path="best_score" type="float | None" optional={true} />
-<ParamField path="best_candidate" type="typing.Any | None" optional={true} />
-<ParamField path="best_prompt" type="typing.Any | None" optional={true} />
-<ParamField path="stop_reason" type="str | None" optional={true} />
-<ParamField path="extras" type="dict[str, typing.Any] | None" optional={true} />
-<ParamField path="candidates" type="list[dict[str, typing.Any]] | None" optional={true} />
-<ParamField path="timestamp" type="str | None" optional={true} />
-<ParamField path="dataset_split" type="str | None" optional={true} />
-<ParamField path="pareto_front" type="list[dict[str, typing.Any]] | None" optional={true} />
-<ParamField path="selection_meta" type="dict[str, typing.Any] | None" optional={true} />
 
 #### get_config
 ```python wordWrap
@@ -1929,25 +1606,6 @@ set_selection_meta(
 **Parameters:**
 
 <ParamField path="selection_meta" type="dict[str, typing.Any] | None" />
-
-#### start_candidate
-
-Deprecated alias: use `pre_trial` instead. This alias remains available and emits `DeprecationWarning`.
-
-```python wordWrap
-start_candidate(
-    context: OptimizationContext,
-    candidate: Any,
-    round_handle: typing.Any | None = None
-)
-```
-
-
-**Parameters:**
-
-<ParamField path="context" type="OptimizationContext" />
-<ParamField path="candidate" type="Any" />
-<ParamField path="round_handle" type="typing.Any | None" optional={true} />
 
 #### with_dataset_split
 ```python wordWrap
@@ -2015,23 +1673,6 @@ EvolutionaryOptimizer(
 <ParamField path="perfect_score" type="float" optional={true} default="0.95" />
 
 ### Methods
-#### begin_round
-
-Deprecated alias: use `pre_round` instead. This alias remains available and emits `DeprecationWarning`.
-
-```python wordWrap
-begin_round(
-    context: OptimizationContext,
-    extras: Any
-)
-```
-
-
-**Parameters:**
-
-<ParamField path="context" type="OptimizationContext" />
-<ParamField path="extras" type="Any" />
-
 #### cleanup
 ```python wordWrap
 cleanup()
@@ -2043,8 +1684,7 @@ cleanup()
 evaluate(
     context: OptimizationContext,
     prompts: dict,
-    experiment_config: dict[str, typing.Any] | None = None,
-    sampling_tag: str | None = None
+    experiment_config: dict[str, typing.Any] | None = None
 )
 ```
 
@@ -2054,7 +1694,6 @@ evaluate(
 <ParamField path="context" type="OptimizationContext">Optimization context for this run.</ParamField>
 <ParamField path="prompts" type="dict">Dict of named prompts to evaluate (e.g., &#123;"main": ChatPrompt(...)&#125;). Single-prompt optimizations use a dict with one entry.</ParamField>
 <ParamField path="experiment_config" type="dict[str, typing.Any] | None" optional={true}>Optional experiment configuration.</ParamField>
-<ParamField path="sampling_tag" type="str | None" optional={true}>Optional tag that seeds candidate-output selection for this call.</ParamField>
 
 #### evaluate_prompt
 ```python wordWrap
@@ -2072,8 +1711,7 @@ evaluate_prompt(
     seed: int | None = None,
     return_evaluation_result: bool = False,
     allow_tool_use: bool | None = None,
-    use_evaluate_on_dict_items: bool | None = None,
-    sampling_tag: str | None = None
+    use_evaluate_on_dict_items: bool | None = None
 )
 ```
 
@@ -2094,7 +1732,6 @@ evaluate_prompt(
 <ParamField path="return_evaluation_result" type="bool" optional={true} default="False" />
 <ParamField path="allow_tool_use" type="bool | None" optional={true} />
 <ParamField path="use_evaluate_on_dict_items" type="bool | None" optional={true} />
-<ParamField path="sampling_tag" type="str | None" optional={true} />
 
 #### evaluate_with_result
 ```python wordWrap
@@ -2104,8 +1741,7 @@ evaluate_with_result(
     experiment_config: dict[str, typing.Any] | None = None,
     empty_score: float | None = None,
     n_samples: int | float | str | None = None,
-    n_samples_strategy: str | None = None,
-    sampling_tag: str | None = None
+    n_samples_strategy: str | None = None
 )
 ```
 
@@ -2118,79 +1754,6 @@ evaluate_with_result(
 <ParamField path="empty_score" type="float | None" optional={true} />
 <ParamField path="n_samples" type="int | float | str | None" optional={true} />
 <ParamField path="n_samples_strategy" type="str | None" optional={true} />
-<ParamField path="sampling_tag" type="str | None" optional={true} />
-
-#### finish_candidate
-
-Deprecated alias: use `post_trial` instead. This alias remains available and emits `DeprecationWarning`.
-
-```python wordWrap
-finish_candidate(
-    context: OptimizationContext,
-    candidate_handle: Any,
-    score: float | None,
-    metrics: dict[str, typing.Any] | None = None,
-    extras: dict[str, typing.Any] | None = None,
-    candidates: list[dict[str, typing.Any]] | None = None,
-    dataset: str | None = None,
-    dataset_split: str | None = None,
-    trial_index: int | None = None,
-    timestamp: str | None = None,
-    round_handle: typing.Any | None = None
-)
-```
-
-
-**Parameters:**
-
-<ParamField path="context" type="OptimizationContext" />
-<ParamField path="candidate_handle" type="Any" />
-<ParamField path="score" type="float | None" />
-<ParamField path="metrics" type="dict[str, typing.Any] | None" optional={true} />
-<ParamField path="extras" type="dict[str, typing.Any] | None" optional={true} />
-<ParamField path="candidates" type="list[dict[str, typing.Any]] | None" optional={true} />
-<ParamField path="dataset" type="str | None" optional={true} />
-<ParamField path="dataset_split" type="str | None" optional={true} />
-<ParamField path="trial_index" type="int | None" optional={true} />
-<ParamField path="timestamp" type="str | None" optional={true} />
-<ParamField path="round_handle" type="typing.Any | None" optional={true} />
-
-#### finish_round
-
-Deprecated alias: use `post_round` instead. This alias remains available and emits `DeprecationWarning`.
-
-```python wordWrap
-finish_round(
-    round_handle: Any,
-    context: opik_optimizer.core.state.OptimizationContext | None = None,
-    best_score: float | None = None,
-    best_candidate: typing.Any | None = None,
-    best_prompt: typing.Any | None = None,
-    stop_reason: str | None = None,
-    extras: dict[str, typing.Any] | None = None,
-    candidates: list[dict[str, typing.Any]] | None = None,
-    timestamp: str | None = None,
-    dataset_split: str | None = None,
-    pareto_front: list[dict[str, typing.Any]] | None = None,
-    selection_meta: dict[str, typing.Any] | None = None
-)
-```
-
-
-**Parameters:**
-
-<ParamField path="round_handle" type="Any" />
-<ParamField path="context" type="opik_optimizer.core.state.OptimizationContext | None" optional={true} />
-<ParamField path="best_score" type="float | None" optional={true} />
-<ParamField path="best_candidate" type="typing.Any | None" optional={true} />
-<ParamField path="best_prompt" type="typing.Any | None" optional={true} />
-<ParamField path="stop_reason" type="str | None" optional={true} />
-<ParamField path="extras" type="dict[str, typing.Any] | None" optional={true} />
-<ParamField path="candidates" type="list[dict[str, typing.Any]] | None" optional={true} />
-<ParamField path="timestamp" type="str | None" optional={true} />
-<ParamField path="dataset_split" type="str | None" optional={true} />
-<ParamField path="pareto_front" type="list[dict[str, typing.Any]] | None" optional={true} />
-<ParamField path="selection_meta" type="dict[str, typing.Any] | None" optional={true} />
 
 #### get_config
 ```python wordWrap
@@ -2564,25 +2127,6 @@ set_selection_meta(
 
 <ParamField path="selection_meta" type="dict[str, typing.Any] | None" />
 
-#### start_candidate
-
-Deprecated alias: use `pre_trial` instead. This alias remains available and emits `DeprecationWarning`.
-
-```python wordWrap
-start_candidate(
-    context: OptimizationContext,
-    candidate: Any,
-    round_handle: typing.Any | None = None
-)
-```
-
-
-**Parameters:**
-
-<ParamField path="context" type="OptimizationContext" />
-<ParamField path="candidate" type="Any" />
-<ParamField path="round_handle" type="typing.Any | None" optional={true} />
-
 #### with_dataset_split
 ```python wordWrap
 with_dataset_split(
@@ -2635,23 +2179,6 @@ HierarchicalReflectiveOptimizer(
 <ParamField path="perfect_score" type="float" optional={true} default="0.95" />
 
 ### Methods
-#### begin_round
-
-Deprecated alias: use `pre_round` instead. This alias remains available and emits `DeprecationWarning`.
-
-```python wordWrap
-begin_round(
-    context: OptimizationContext,
-    extras: Any
-)
-```
-
-
-**Parameters:**
-
-<ParamField path="context" type="OptimizationContext" />
-<ParamField path="extras" type="Any" />
-
 #### cleanup
 ```python wordWrap
 cleanup()
@@ -2663,8 +2190,7 @@ cleanup()
 evaluate(
     context: OptimizationContext,
     prompts: dict,
-    experiment_config: dict[str, typing.Any] | None = None,
-    sampling_tag: str | None = None
+    experiment_config: dict[str, typing.Any] | None = None
 )
 ```
 
@@ -2674,7 +2200,6 @@ evaluate(
 <ParamField path="context" type="OptimizationContext">Optimization context for this run.</ParamField>
 <ParamField path="prompts" type="dict">Dict of named prompts to evaluate (e.g., &#123;"main": ChatPrompt(...)&#125;). Single-prompt optimizations use a dict with one entry.</ParamField>
 <ParamField path="experiment_config" type="dict[str, typing.Any] | None" optional={true}>Optional experiment configuration.</ParamField>
-<ParamField path="sampling_tag" type="str | None" optional={true}>Optional tag that seeds candidate-output selection for this call.</ParamField>
 
 #### evaluate_prompt
 ```python wordWrap
@@ -2692,8 +2217,7 @@ evaluate_prompt(
     seed: int | None = None,
     return_evaluation_result: bool = False,
     allow_tool_use: bool | None = None,
-    use_evaluate_on_dict_items: bool | None = None,
-    sampling_tag: str | None = None
+    use_evaluate_on_dict_items: bool | None = None
 )
 ```
 
@@ -2714,7 +2238,6 @@ evaluate_prompt(
 <ParamField path="return_evaluation_result" type="bool" optional={true} default="False" />
 <ParamField path="allow_tool_use" type="bool | None" optional={true} />
 <ParamField path="use_evaluate_on_dict_items" type="bool | None" optional={true} />
-<ParamField path="sampling_tag" type="str | None" optional={true} />
 
 #### evaluate_with_result
 ```python wordWrap
@@ -2724,8 +2247,7 @@ evaluate_with_result(
     experiment_config: dict[str, typing.Any] | None = None,
     empty_score: float | None = None,
     n_samples: int | float | str | None = None,
-    n_samples_strategy: str | None = None,
-    sampling_tag: str | None = None
+    n_samples_strategy: str | None = None
 )
 ```
 
@@ -2738,79 +2260,6 @@ evaluate_with_result(
 <ParamField path="empty_score" type="float | None" optional={true} />
 <ParamField path="n_samples" type="int | float | str | None" optional={true} />
 <ParamField path="n_samples_strategy" type="str | None" optional={true} />
-<ParamField path="sampling_tag" type="str | None" optional={true} />
-
-#### finish_candidate
-
-Deprecated alias: use `post_trial` instead. This alias remains available and emits `DeprecationWarning`.
-
-```python wordWrap
-finish_candidate(
-    context: OptimizationContext,
-    candidate_handle: Any,
-    score: float | None,
-    metrics: dict[str, typing.Any] | None = None,
-    extras: dict[str, typing.Any] | None = None,
-    candidates: list[dict[str, typing.Any]] | None = None,
-    dataset: str | None = None,
-    dataset_split: str | None = None,
-    trial_index: int | None = None,
-    timestamp: str | None = None,
-    round_handle: typing.Any | None = None
-)
-```
-
-
-**Parameters:**
-
-<ParamField path="context" type="OptimizationContext" />
-<ParamField path="candidate_handle" type="Any" />
-<ParamField path="score" type="float | None" />
-<ParamField path="metrics" type="dict[str, typing.Any] | None" optional={true} />
-<ParamField path="extras" type="dict[str, typing.Any] | None" optional={true} />
-<ParamField path="candidates" type="list[dict[str, typing.Any]] | None" optional={true} />
-<ParamField path="dataset" type="str | None" optional={true} />
-<ParamField path="dataset_split" type="str | None" optional={true} />
-<ParamField path="trial_index" type="int | None" optional={true} />
-<ParamField path="timestamp" type="str | None" optional={true} />
-<ParamField path="round_handle" type="typing.Any | None" optional={true} />
-
-#### finish_round
-
-Deprecated alias: use `post_round` instead. This alias remains available and emits `DeprecationWarning`.
-
-```python wordWrap
-finish_round(
-    round_handle: Any,
-    context: opik_optimizer.core.state.OptimizationContext | None = None,
-    best_score: float | None = None,
-    best_candidate: typing.Any | None = None,
-    best_prompt: typing.Any | None = None,
-    stop_reason: str | None = None,
-    extras: dict[str, typing.Any] | None = None,
-    candidates: list[dict[str, typing.Any]] | None = None,
-    timestamp: str | None = None,
-    dataset_split: str | None = None,
-    pareto_front: list[dict[str, typing.Any]] | None = None,
-    selection_meta: dict[str, typing.Any] | None = None
-)
-```
-
-
-**Parameters:**
-
-<ParamField path="round_handle" type="Any" />
-<ParamField path="context" type="opik_optimizer.core.state.OptimizationContext | None" optional={true} />
-<ParamField path="best_score" type="float | None" optional={true} />
-<ParamField path="best_candidate" type="typing.Any | None" optional={true} />
-<ParamField path="best_prompt" type="typing.Any | None" optional={true} />
-<ParamField path="stop_reason" type="str | None" optional={true} />
-<ParamField path="extras" type="dict[str, typing.Any] | None" optional={true} />
-<ParamField path="candidates" type="list[dict[str, typing.Any]] | None" optional={true} />
-<ParamField path="timestamp" type="str | None" optional={true} />
-<ParamField path="dataset_split" type="str | None" optional={true} />
-<ParamField path="pareto_front" type="list[dict[str, typing.Any]] | None" optional={true} />
-<ParamField path="selection_meta" type="dict[str, typing.Any] | None" optional={true} />
 
 #### get_config
 ```python wordWrap
@@ -3184,25 +2633,6 @@ set_selection_meta(
 
 <ParamField path="selection_meta" type="dict[str, typing.Any] | None" />
 
-#### start_candidate
-
-Deprecated alias: use `pre_trial` instead. This alias remains available and emits `DeprecationWarning`.
-
-```python wordWrap
-start_candidate(
-    context: OptimizationContext,
-    candidate: Any,
-    round_handle: typing.Any | None = None
-)
-```
-
-
-**Parameters:**
-
-<ParamField path="context" type="OptimizationContext" />
-<ParamField path="candidate" type="Any" />
-<ParamField path="round_handle" type="typing.Any | None" optional={true} />
-
 #### with_dataset_split
 ```python wordWrap
 with_dataset_split(
@@ -3249,23 +2679,6 @@ ParameterOptimizer(
 <ParamField path="perfect_score" type="float" optional={true} default="0.95" />
 
 ### Methods
-#### begin_round
-
-Deprecated alias: use `pre_round` instead. This alias remains available and emits `DeprecationWarning`.
-
-```python wordWrap
-begin_round(
-    context: OptimizationContext,
-    extras: Any
-)
-```
-
-
-**Parameters:**
-
-<ParamField path="context" type="OptimizationContext" />
-<ParamField path="extras" type="Any" />
-
 #### cleanup
 ```python wordWrap
 cleanup()
@@ -3277,8 +2690,7 @@ cleanup()
 evaluate(
     context: OptimizationContext,
     prompts: dict,
-    experiment_config: dict[str, typing.Any] | None = None,
-    sampling_tag: str | None = None
+    experiment_config: dict[str, typing.Any] | None = None
 )
 ```
 
@@ -3288,7 +2700,6 @@ evaluate(
 <ParamField path="context" type="OptimizationContext">Optimization context for this run.</ParamField>
 <ParamField path="prompts" type="dict">Dict of named prompts to evaluate (e.g., &#123;"main": ChatPrompt(...)&#125;). Single-prompt optimizations use a dict with one entry.</ParamField>
 <ParamField path="experiment_config" type="dict[str, typing.Any] | None" optional={true}>Optional experiment configuration.</ParamField>
-<ParamField path="sampling_tag" type="str | None" optional={true}>Optional tag that seeds candidate-output selection for this call.</ParamField>
 
 #### evaluate_prompt
 ```python wordWrap
@@ -3306,8 +2717,7 @@ evaluate_prompt(
     seed: int | None = None,
     return_evaluation_result: bool = False,
     allow_tool_use: bool | None = None,
-    use_evaluate_on_dict_items: bool | None = None,
-    sampling_tag: str | None = None
+    use_evaluate_on_dict_items: bool | None = None
 )
 ```
 
@@ -3328,7 +2738,6 @@ evaluate_prompt(
 <ParamField path="return_evaluation_result" type="bool" optional={true} default="False" />
 <ParamField path="allow_tool_use" type="bool | None" optional={true} />
 <ParamField path="use_evaluate_on_dict_items" type="bool | None" optional={true} />
-<ParamField path="sampling_tag" type="str | None" optional={true} />
 
 #### evaluate_with_result
 ```python wordWrap
@@ -3338,8 +2747,7 @@ evaluate_with_result(
     experiment_config: dict[str, typing.Any] | None = None,
     empty_score: float | None = None,
     n_samples: int | float | str | None = None,
-    n_samples_strategy: str | None = None,
-    sampling_tag: str | None = None
+    n_samples_strategy: str | None = None
 )
 ```
 
@@ -3352,79 +2760,6 @@ evaluate_with_result(
 <ParamField path="empty_score" type="float | None" optional={true} />
 <ParamField path="n_samples" type="int | float | str | None" optional={true} />
 <ParamField path="n_samples_strategy" type="str | None" optional={true} />
-<ParamField path="sampling_tag" type="str | None" optional={true} />
-
-#### finish_candidate
-
-Deprecated alias: use `post_trial` instead. This alias remains available and emits `DeprecationWarning`.
-
-```python wordWrap
-finish_candidate(
-    context: OptimizationContext,
-    candidate_handle: Any,
-    score: float | None,
-    metrics: dict[str, typing.Any] | None = None,
-    extras: dict[str, typing.Any] | None = None,
-    candidates: list[dict[str, typing.Any]] | None = None,
-    dataset: str | None = None,
-    dataset_split: str | None = None,
-    trial_index: int | None = None,
-    timestamp: str | None = None,
-    round_handle: typing.Any | None = None
-)
-```
-
-
-**Parameters:**
-
-<ParamField path="context" type="OptimizationContext" />
-<ParamField path="candidate_handle" type="Any" />
-<ParamField path="score" type="float | None" />
-<ParamField path="metrics" type="dict[str, typing.Any] | None" optional={true} />
-<ParamField path="extras" type="dict[str, typing.Any] | None" optional={true} />
-<ParamField path="candidates" type="list[dict[str, typing.Any]] | None" optional={true} />
-<ParamField path="dataset" type="str | None" optional={true} />
-<ParamField path="dataset_split" type="str | None" optional={true} />
-<ParamField path="trial_index" type="int | None" optional={true} />
-<ParamField path="timestamp" type="str | None" optional={true} />
-<ParamField path="round_handle" type="typing.Any | None" optional={true} />
-
-#### finish_round
-
-Deprecated alias: use `post_round` instead. This alias remains available and emits `DeprecationWarning`.
-
-```python wordWrap
-finish_round(
-    round_handle: Any,
-    context: opik_optimizer.core.state.OptimizationContext | None = None,
-    best_score: float | None = None,
-    best_candidate: typing.Any | None = None,
-    best_prompt: typing.Any | None = None,
-    stop_reason: str | None = None,
-    extras: dict[str, typing.Any] | None = None,
-    candidates: list[dict[str, typing.Any]] | None = None,
-    timestamp: str | None = None,
-    dataset_split: str | None = None,
-    pareto_front: list[dict[str, typing.Any]] | None = None,
-    selection_meta: dict[str, typing.Any] | None = None
-)
-```
-
-
-**Parameters:**
-
-<ParamField path="round_handle" type="Any" />
-<ParamField path="context" type="opik_optimizer.core.state.OptimizationContext | None" optional={true} />
-<ParamField path="best_score" type="float | None" optional={true} />
-<ParamField path="best_candidate" type="typing.Any | None" optional={true} />
-<ParamField path="best_prompt" type="typing.Any | None" optional={true} />
-<ParamField path="stop_reason" type="str | None" optional={true} />
-<ParamField path="extras" type="dict[str, typing.Any] | None" optional={true} />
-<ParamField path="candidates" type="list[dict[str, typing.Any]] | None" optional={true} />
-<ParamField path="timestamp" type="str | None" optional={true} />
-<ParamField path="dataset_split" type="str | None" optional={true} />
-<ParamField path="pareto_front" type="list[dict[str, typing.Any]] | None" optional={true} />
-<ParamField path="selection_meta" type="dict[str, typing.Any] | None" optional={true} />
 
 #### get_config
 ```python wordWrap
@@ -3798,25 +3133,6 @@ set_selection_meta(
 
 <ParamField path="selection_meta" type="dict[str, typing.Any] | None" />
 
-#### start_candidate
-
-Deprecated alias: use `pre_trial` instead. This alias remains available and emits `DeprecationWarning`.
-
-```python wordWrap
-start_candidate(
-    context: OptimizationContext,
-    candidate: Any,
-    round_handle: typing.Any | None = None
-)
-```
-
-
-**Parameters:**
-
-<ParamField path="context" type="OptimizationContext" />
-<ParamField path="candidate" type="Any" />
-<ParamField path="round_handle" type="typing.Any | None" optional={true} />
-
 #### with_dataset_split
 ```python wordWrap
 with_dataset_split(
@@ -3922,23 +3238,6 @@ BaseOptimizer(
 <ParamField path="display" type="opik_optimizer.utils.display.run.RunDisplay | None" optional={true} />
 
 ### Methods
-#### begin_round
-
-Deprecated alias: use `pre_round` instead. This alias remains available and emits `DeprecationWarning`.
-
-```python wordWrap
-begin_round(
-    context: OptimizationContext,
-    extras: Any
-)
-```
-
-
-**Parameters:**
-
-<ParamField path="context" type="OptimizationContext" />
-<ParamField path="extras" type="Any" />
-
 #### cleanup
 ```python wordWrap
 cleanup()
@@ -3950,8 +3249,7 @@ cleanup()
 evaluate(
     context: OptimizationContext,
     prompts: dict,
-    experiment_config: dict[str, typing.Any] | None = None,
-    sampling_tag: str | None = None
+    experiment_config: dict[str, typing.Any] | None = None
 )
 ```
 
@@ -3961,7 +3259,6 @@ evaluate(
 <ParamField path="context" type="OptimizationContext">Optimization context for this run.</ParamField>
 <ParamField path="prompts" type="dict">Dict of named prompts to evaluate (e.g., &#123;"main": ChatPrompt(...)&#125;). Single-prompt optimizations use a dict with one entry.</ParamField>
 <ParamField path="experiment_config" type="dict[str, typing.Any] | None" optional={true}>Optional experiment configuration.</ParamField>
-<ParamField path="sampling_tag" type="str | None" optional={true}>Optional tag that seeds candidate-output selection for this call.</ParamField>
 
 #### evaluate_prompt
 ```python wordWrap
@@ -3979,8 +3276,7 @@ evaluate_prompt(
     seed: int | None = None,
     return_evaluation_result: bool = False,
     allow_tool_use: bool | None = None,
-    use_evaluate_on_dict_items: bool | None = None,
-    sampling_tag: str | None = None
+    use_evaluate_on_dict_items: bool | None = None
 )
 ```
 
@@ -4001,7 +3297,6 @@ evaluate_prompt(
 <ParamField path="return_evaluation_result" type="bool" optional={true} default="False" />
 <ParamField path="allow_tool_use" type="bool | None" optional={true} />
 <ParamField path="use_evaluate_on_dict_items" type="bool | None" optional={true} />
-<ParamField path="sampling_tag" type="str | None" optional={true} />
 
 #### evaluate_with_result
 ```python wordWrap
@@ -4011,8 +3306,7 @@ evaluate_with_result(
     experiment_config: dict[str, typing.Any] | None = None,
     empty_score: float | None = None,
     n_samples: int | float | str | None = None,
-    n_samples_strategy: str | None = None,
-    sampling_tag: str | None = None
+    n_samples_strategy: str | None = None
 )
 ```
 
@@ -4025,79 +3319,6 @@ evaluate_with_result(
 <ParamField path="empty_score" type="float | None" optional={true} />
 <ParamField path="n_samples" type="int | float | str | None" optional={true} />
 <ParamField path="n_samples_strategy" type="str | None" optional={true} />
-<ParamField path="sampling_tag" type="str | None" optional={true} />
-
-#### finish_candidate
-
-Deprecated alias: use `post_trial` instead. This alias remains available and emits `DeprecationWarning`.
-
-```python wordWrap
-finish_candidate(
-    context: OptimizationContext,
-    candidate_handle: Any,
-    score: float | None,
-    metrics: dict[str, typing.Any] | None = None,
-    extras: dict[str, typing.Any] | None = None,
-    candidates: list[dict[str, typing.Any]] | None = None,
-    dataset: str | None = None,
-    dataset_split: str | None = None,
-    trial_index: int | None = None,
-    timestamp: str | None = None,
-    round_handle: typing.Any | None = None
-)
-```
-
-
-**Parameters:**
-
-<ParamField path="context" type="OptimizationContext" />
-<ParamField path="candidate_handle" type="Any" />
-<ParamField path="score" type="float | None" />
-<ParamField path="metrics" type="dict[str, typing.Any] | None" optional={true} />
-<ParamField path="extras" type="dict[str, typing.Any] | None" optional={true} />
-<ParamField path="candidates" type="list[dict[str, typing.Any]] | None" optional={true} />
-<ParamField path="dataset" type="str | None" optional={true} />
-<ParamField path="dataset_split" type="str | None" optional={true} />
-<ParamField path="trial_index" type="int | None" optional={true} />
-<ParamField path="timestamp" type="str | None" optional={true} />
-<ParamField path="round_handle" type="typing.Any | None" optional={true} />
-
-#### finish_round
-
-Deprecated alias: use `post_round` instead. This alias remains available and emits `DeprecationWarning`.
-
-```python wordWrap
-finish_round(
-    round_handle: Any,
-    context: opik_optimizer.core.state.OptimizationContext | None = None,
-    best_score: float | None = None,
-    best_candidate: typing.Any | None = None,
-    best_prompt: typing.Any | None = None,
-    stop_reason: str | None = None,
-    extras: dict[str, typing.Any] | None = None,
-    candidates: list[dict[str, typing.Any]] | None = None,
-    timestamp: str | None = None,
-    dataset_split: str | None = None,
-    pareto_front: list[dict[str, typing.Any]] | None = None,
-    selection_meta: dict[str, typing.Any] | None = None
-)
-```
-
-
-**Parameters:**
-
-<ParamField path="round_handle" type="Any" />
-<ParamField path="context" type="opik_optimizer.core.state.OptimizationContext | None" optional={true} />
-<ParamField path="best_score" type="float | None" optional={true} />
-<ParamField path="best_candidate" type="typing.Any | None" optional={true} />
-<ParamField path="best_prompt" type="typing.Any | None" optional={true} />
-<ParamField path="stop_reason" type="str | None" optional={true} />
-<ParamField path="extras" type="dict[str, typing.Any] | None" optional={true} />
-<ParamField path="candidates" type="list[dict[str, typing.Any]] | None" optional={true} />
-<ParamField path="timestamp" type="str | None" optional={true} />
-<ParamField path="dataset_split" type="str | None" optional={true} />
-<ParamField path="pareto_front" type="list[dict[str, typing.Any]] | None" optional={true} />
-<ParamField path="selection_meta" type="dict[str, typing.Any] | None" optional={true} />
 
 #### get_config
 ```python wordWrap
@@ -4464,25 +3685,6 @@ set_selection_meta(
 **Parameters:**
 
 <ParamField path="selection_meta" type="dict[str, typing.Any] | None" />
-
-#### start_candidate
-
-Deprecated alias: use `pre_trial` instead. This alias remains available and emits `DeprecationWarning`.
-
-```python wordWrap
-start_candidate(
-    context: OptimizationContext,
-    candidate: Any,
-    round_handle: typing.Any | None = None
-)
-```
-
-
-**Parameters:**
-
-<ParamField path="context" type="OptimizationContext" />
-<ParamField path="candidate" type="Any" />
-<ParamField path="round_handle" type="typing.Any | None" optional={true} />
 
 #### with_dataset_split
 ```python wordWrap

@@ -100,17 +100,9 @@ class HierarchicalRootCauseAnalyzer:
             f"test cases {batch_start + 1} to {actual_end}"
         )
 
-        # The cases themselves (inputs, outputs, scores, agent trace, images)
-        # are attached by the shared evidence renderer, once.
-        formatted_batch = (
-            f"{actual_end - batch_start} test cases are attached after this "
-            "message, one evaluation case each."
-        )
-
-        batch_analysis_prompt = self.prompts.get(
-            "batch_analysis_prompt",
-            formatted_batch=formatted_batch,
-        )
+        # The cases (inputs, outputs, scores, agent trace, images) are attached
+        # by the shared evidence renderer, once.
+        batch_analysis_prompt = self.prompts.get("batch_analysis_prompt")
 
         # TODO: Check which project this data gets logged to
         root_cause_response = await _llm_calls.call_model_async(

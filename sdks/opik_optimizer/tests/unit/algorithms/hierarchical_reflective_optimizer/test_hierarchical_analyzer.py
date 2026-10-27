@@ -33,7 +33,7 @@ def _make_analyzer(**overrides: Any) -> HierarchicalRootCauseAnalyzer:
         "model_parameters": {"temperature": 0.1},
         "prompts": PromptLibrary(
             {
-                "batch_analysis_prompt": "Analyze batch: {formatted_batch}",
+                "batch_analysis_prompt": "Analyze the attached batch.",
                 "synthesis_prompt": "Synthesize: {batch_summaries}",
                 "improve_prompt_template": "Improve: {prompts_section}",
             }
