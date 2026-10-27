@@ -87,7 +87,7 @@ public class WebhookConfig implements StreamConfiguration {
     @NotNull private DestinationGuard.Scheme destinationScheme;
 
     /**
-     * Most bytes read from a webhook response body; the rest is discarded. The destination is caller-supplied and the
+     * Maximum bytes read from a webhook response body; the rest is discarded. The destination is caller-supplied and the
      * body is only logged, so it must not flood the logs or memory.
      */
     @Valid @JsonProperty
