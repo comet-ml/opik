@@ -289,6 +289,12 @@ def build_optimizer_and_prompt(config):
 def main():
     """Main entry point for optimizer runner subprocess."""
     try:
+        # Start the isolation template before reading the job or its credentials, so a code metric's
+        # isolated worker forks from the template and not from this process once it holds them.
+        from opik_backend.executor_process import isolation_enabled, start_isolation_template
+        if isolation_enabled():
+            start_isolation_template()
+
         # Read input from stdin
         input_data = sys.stdin.read()
         if not input_data:

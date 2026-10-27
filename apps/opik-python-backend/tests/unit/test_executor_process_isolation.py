@@ -71,6 +71,14 @@ def ptrace_parent():
         raise OSError(ctypes.get_errno(), "ptrace")
 
 
+def read_fd(fd):
+    # An fd open in the test process; the template forks the worker, so it is not inherited at all.
+    try:
+        return os.pread(fd, 64, 0)
+    except OSError:
+        return b""
+
+
 class Probe(base_metric.BaseMetric):
     def __init__(self):
         super().__init__(name="probe", track=False)
@@ -83,7 +91,7 @@ class Probe(base_metric.BaseMetric):
                 f" dns={'ok' if attempt(lambda: socket.getaddrinfo('example.com', 80)) == 'ok' else 'failed'}"
                 f" unix={attempt(lambda: socket.socket(socket.AF_UNIX).close())}"
                 f" ptrace={attempt(ptrace_parent)}"
-                f" file={os.pread(file_fd, 64, 0)!r}"
+                f" file={read_fd(file_fd)!r}"
             )
         return score_result.ScoreResult(name=self.name, value=1.0, reason=reason)
 """
@@ -256,10 +264,41 @@ class ChildProcess(base_metric.BaseMetric):
         return score_result.ScoreResult(name=self.name, value=float(child.exitcode == 0))
 """
 
-# A job that scores once in an isolated worker and exits, leaving the worker idle.
+# A job that scores once in an isolated worker and exits, leaving the worker idle. Run as a file like
+# the real runner, not python -c, since the forkserver template needs a __main__ it can reconstruct.
 JOB_SCRIPT = f"""
-from opik_backend.executor_process import run_user_code_in_isolated_worker
-print(run_user_code_in_isolated_worker({CHILD_PROCESS_METRIC!r}, {{}})["scores"][0]["value"])
+from opik_backend.executor_process import run_user_code_in_isolated_worker, start_isolation_template
+
+if __name__ == "__main__":
+    start_isolation_template()
+    print(run_user_code_in_isolated_worker({CHILD_PROCESS_METRIC!r}, {{}})["scores"][0]["value"])
+"""
+
+
+def _isolation_failure_worker(connection, isolate):
+    # Stands in for a worker that could not isolate, so the parent's handling is exercised where the
+    # template itself works. Passed as the Process target, it is resolved in the worker by name.
+    from opik_backend.process_worker import ISOLATION_ERROR_KEY, send_reply
+    reason = "install seccomp filter failed: simulated"
+    send_reply(connection, {"code": 500, "error": f"Worker isolation failed: {reason}", ISOLATION_ERROR_KEY: reason})
+    os._exit(1)
+
+# Reads a value the parent may have placed in a module global or the environment after the template started.
+LEAK_PROBE_METRIC = """
+from opik.evaluation.metrics import base_metric, score_result
+from opik_backend import process_worker
+
+
+class LeakProbe(base_metric.BaseMetric):
+    def __init__(self):
+        super().__init__(name="leak_probe", track=False)
+
+    def score(self, **ignored_kwargs):
+        import os
+        return score_result.ScoreResult(name=self.name, value=1.0, reason=(
+            f"glob={getattr(process_worker, 'TEMPLATE_PROBE', 'absent')} "
+            f"env={os.environ.get('TEMPLATE_PROBE', 'absent')}"
+        ))
 """
 
 ISOLATION_SETTINGS = ["false", pytest.param("true", marks=needs_isolation)]
@@ -307,15 +346,17 @@ def probe_env(monkeypatch):
 def workers(monkeypatch) -> Iterator[List]:
     """Records every worker process a test starts and reaps it afterwards, whatever the test did."""
     created = []
-    context = executor_process._mp_context
-    real_process = context.Process
 
-    def recording_process(*args, **kwargs):
-        process = real_process(*args, **kwargs)
-        created.append(process)
-        return process
+    def record(real_process):
+        def recording_process(*args, **kwargs):
+            process = real_process(*args, **kwargs)
+            created.append(process)
+            return process
+        return recording_process
 
-    monkeypatch.setattr(context, "Process", recording_process)
+    # Both contexts: isolated workers fork from the forkserver context, the rest from the fork context.
+    for context in {id(c): c for c in (executor_process._mp_context, executor_process._isolated_context)}.values():
+        monkeypatch.setattr(context, "Process", record(context.Process))
     yield created
     for process in created:
         if process.pid is not None:
@@ -417,14 +458,10 @@ def _assert_single_isolation_error(caplog, failed_step: str) -> None:
 
 
 @needs_isolation
-def test_worker_whose_filter_cannot_be_installed_never_joins_pool(monkeypatch, caplog):
+def test_worker_that_reports_an_isolation_failure_never_joins_pool(monkeypatch, caplog):
     monkeypatch.setenv(PROCESS_NETWORK_ISOLATION_ENV_VAR, "true")
-
-    def refuse() -> None:
-        raise OSError("simulated")
-
-    # Forked workers inherit the patched module.
-    monkeypatch.setattr(process_worker, "_install_seccomp_filter", refuse)
+    # The worker is resolved by name in its own process, so it reports the failure where the template works.
+    monkeypatch.setattr(process_worker, "worker_process_main", _isolation_failure_worker)
     executor = ProcessExecutor()
 
     with caplog.at_level(logging.INFO):
@@ -585,10 +622,12 @@ def test_isolated_worker_can_start_processes():
 
 
 @needs_isolation
-def test_job_exit_ends_idle_isolated_workers():
-    job = subprocess.run([sys.executable, "-c", JOB_SCRIPT], capture_output=True, text=True, timeout=60)
+def test_job_exit_ends_idle_isolated_workers(tmp_path):
+    script = tmp_path / "job.py"
+    script.write_text(JOB_SCRIPT)
+    job = subprocess.run([sys.executable, str(script)], capture_output=True, text=True, timeout=60)
 
-    assert (job.returncode, job.stdout) == (0, "1.0\n")
+    assert (job.returncode, job.stdout) == (0, "1.0\n"), job.stderr
 
 
 def _never_ready(connection, isolate: bool) -> None:
@@ -622,3 +661,51 @@ def test_max_reply_bytes_defaults_when_unset(monkeypatch, value, expected):
         monkeypatch.setenv(executor_process.MAX_REPLY_BYTES_ENV_VAR, value)
 
     assert executor_process.max_reply_bytes() == expected
+
+
+@needs_isolation
+def test_value_set_after_template_start_is_not_visible_to_pool_worker(monkeypatch):
+    monkeypatch.setenv(PROCESS_NETWORK_ISOLATION_ENV_VAR, "true")
+    executor_process.start_isolation_template()
+    # Set after the template's snapshot; the worker forks from the template, so neither reaches it.
+    monkeypatch.setattr(process_worker, "TEMPLATE_PROBE", "s3cr3t", raising=False)
+    monkeypatch.setenv("TEMPLATE_PROBE", "s3cr3t")
+
+    result = _score_in_pool({}, LEAK_PROBE_METRIC)
+
+    assert result["scores"][0]["reason"] == "glob=absent env=absent"
+
+
+@needs_isolation
+def test_value_set_after_template_start_is_not_visible_to_one_shot_worker(monkeypatch):
+    monkeypatch.setenv(PROCESS_NETWORK_ISOLATION_ENV_VAR, "true")
+    executor_process.start_isolation_template()
+    monkeypatch.setattr(process_worker, "TEMPLATE_PROBE", "s3cr3t", raising=False)
+    monkeypatch.setenv("TEMPLATE_PROBE", "s3cr3t")
+
+    result = run_user_code_in_isolated_worker(LEAK_PROBE_METRIC, {})
+
+    assert result["scores"][0]["reason"] == "glob=absent env=absent"
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="needs fork to inherit the parent's module globals")
+def test_without_isolation_a_parent_value_is_visible(monkeypatch):
+    # The contrast: a plain fork inherits the parent, which is why the isolation path uses the template.
+    monkeypatch.setenv(PROCESS_NETWORK_ISOLATION_ENV_VAR, "false")
+    monkeypatch.setattr(process_worker, "TEMPLATE_PROBE", "s3cr3t", raising=False)
+
+    result = _score_in_pool({}, LEAK_PROBE_METRIC)
+
+    assert result["scores"][0]["reason"] == "glob=s3cr3t env=absent"
+
+
+@needs_isolation
+def test_isolated_pool_worker_forks_from_the_template(monkeypatch):
+    from multiprocessing.context import ForkServerProcess
+    monkeypatch.setenv(PROCESS_NETWORK_ISOLATION_ENV_VAR, "true")
+    executor = ProcessExecutor()
+
+    executor.create_worker_process()
+
+    worker = executor.process_pool.get_nowait()
+    assert isinstance(worker["process"], ForkServerProcess)

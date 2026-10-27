@@ -27,16 +27,41 @@ from opik_backend import process_worker
 
 logger = logging.getLogger(__name__)
 
-# Python 3.14 made "forkserver" the Linux default. A forkserver worker is a fresh
-# interpreter that must re-import opik before it can send READY, which on a loaded
-# host exceeds the READY timeout, leaving the pool empty and every scoring call a 503.
-# A forked worker inherits the parent's already-imported modules. Linux only: macOS
-# system frameworks are not fork-safe, which is why "spawn" stays its default.
+# Off the isolation path a forked worker inherits the parent's already-imported modules, so it
+# sends READY without re-importing opik (a fresh interpreter would re-import and, on a loaded host,
+# exceed the READY timeout, leaving the pool empty and every call a 503). Linux only: macOS system
+# frameworks are not fork-safe, which is why "spawn" stays its default.
 _mp_context = multiprocessing.get_context("fork" if sys.platform == "linux" else None)
+
+# On the isolation path a worker forks from a forkserver template instead of from the backend, so it
+# starts from the template's memory and not the backend's per-request state. The template is started
+# before that state exists (see start_isolation_template) and preloads what user code imports, so a
+# forked worker is still ready without re-importing. Off Linux isolation never runs, so this is unused.
+_isolated_context = multiprocessing.get_context("forkserver") if sys.platform == "linux" else _mp_context
+# process_worker imports opik's metrics; preloading it once in the template keeps each fork cheap.
+_ISOLATION_PRELOAD = ["opik_backend.process_worker"]
 
 # filelock refuses os.fork while another thread is mid-fork, and the pool pre-warms its
 # workers from several threads at once, so forks are serialised.
 _fork_lock = Lock()
+
+
+def start_isolation_template() -> None:
+    """Start the forkserver template now, so isolated workers fork from it, not from the backend.
+
+    Idempotent (the forkserver is a singleton). Call it before the backend loads per-request state —
+    pool startup, and the top of the Studio job — so that state is never in the template's memory.
+    No-op off Linux, where isolation does not run.
+    """
+    if sys.platform != "linux":
+        return
+    from multiprocessing import forkserver
+    forkserver.set_forkserver_preload(_ISOLATION_PRELOAD)
+    forkserver.ensure_running()
+
+
+def _worker_context(isolate: bool):
+    return _isolated_context if isolate else _mp_context
 
 PROCESS_NETWORK_ISOLATION_ENV_VAR = "PYTHON_CODE_EXECUTOR_PROCESS_NETWORK_ISOLATION"
 
@@ -87,8 +112,7 @@ _one_shot_isolation_failures = _IsolationFailureLog()
 
 # Studio's isolated workers, reused across metric calls of the job instead of a fork per call.
 _idle_isolated_workers: "Queue[Tuple[multiprocessing.Process, Connection]]" = Queue()
-# Workers are forked from this long-lived thread: their parent-death signal fires when the forking thread
-# exits, so a worker forked from a short-lived evaluation thread would die with it.
+# Forks are serialised on one thread, matching the pool and keeping filelock's one-fork-at-a-time rule.
 _isolated_worker_spawner = concurrent.futures.ThreadPoolExecutor(max_workers=1)
 
 # OTel metrics setup (assuming this is standard and correct)
@@ -233,12 +257,23 @@ def _stop_isolated_worker(process: multiprocessing.Process, connection: Connecti
         process.join()
 
 
+@atexit.register
+def _stop_idle_isolated_workers() -> None:
+    # Isolated workers are not daemonic, so a metric can start its own processes. Stop the idle ones at
+    # exit before multiprocessing's own atexit joins them, which would otherwise block on a live worker.
+    while True:
+        try:
+            _stop_isolated_worker(*_idle_isolated_workers.get_nowait())
+        except Empty:
+            return
+
+
 def _start_isolated_worker() -> Union[dict, Tuple[multiprocessing.Process, Connection]]:
     """A READY isolated worker, or the error reply when it could not start."""
-    parent_conn, child_conn = _mp_context.Pipe()
-    # Not daemonic, so metrics can start processes of their own. The job's exit still ends idle workers:
-    # their parent-death signal fires when the spawner thread stops, before multiprocessing joins them.
-    process = _mp_context.Process(target=process_worker.worker_process_main, args=(child_conn, True))
+    parent_conn, child_conn = _isolated_context.Pipe()
+    # Not daemonic, so metrics can start processes of their own. Idle workers are ended at the job's exit
+    # by _stop_idle_isolated_workers; the template's death is a backstop through the parent-death signal.
+    process = _isolated_context.Process(target=process_worker.worker_process_main, args=(child_conn, True))
     ready = None
     try:
         _start(process)
@@ -318,6 +353,10 @@ class ProcessExecutor(CodeExecutorBase):
         logger.info("ProcessExecutor: Registering signal handlers")
         signal.signal(signal.SIGINT, self._handle_shutdown_signal)
         signal.signal(signal.SIGTERM, self._handle_shutdown_signal)
+
+        # Before the first worker forks, so isolated workers start from the template, not from this backend.
+        if self.isolate:
+            start_isolation_template()
 
         self.releaser_executor = concurrent.futures.ThreadPoolExecutor(max_workers=self.max_parallel)
         self._pre_warm_process_pool()
@@ -439,10 +478,11 @@ class ProcessExecutor(CodeExecutorBase):
 
         start_time = time.time()
         worker_id = str(uuid.uuid4())[:8]
-        parent_conn, child_conn = _mp_context.Pipe()
+        ctx = _worker_context(self.isolate)
+        parent_conn, child_conn = ctx.Pipe()
         process = None
         try:
-            process = _mp_context.Process(target=process_worker.worker_process_main, args=(child_conn, self.isolate))
+            process = ctx.Process(target=process_worker.worker_process_main, args=(child_conn, self.isolate))
             _start(process)
 
             # Wait for READY signal from worker
