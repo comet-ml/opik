@@ -74,17 +74,20 @@ class OpenAIJudgeToolCallRouteTest {
         wireMock.start();
 
         onOpenAi = new OpenAILlmServiceProvider(
-                new OpenAIClientGenerator(clientConfig(wireMock.baseUrl()), LlmTestClients.RESPONSES_API_HTTP_CLIENT) {
+                new OpenAIClientGenerator(clientConfig(wireMock.baseUrl()), LlmTestClients.RESPONSES_API_HTTP_CLIENT,
+                        LlmTestClients.LLM_HTTP_CLIENT_BUILDERS) {
                     @Override
                     boolean hasCustomBaseUrl(LlmProviderClientApiConfig config) {
                         return false;
                     }
                 }, mock(LlmProviderFactory.class));
         behindServerWideUrl = new OpenAILlmServiceProvider(
-                new OpenAIClientGenerator(clientConfig(wireMock.baseUrl()), LlmTestClients.RESPONSES_API_HTTP_CLIENT),
+                new OpenAIClientGenerator(clientConfig(wireMock.baseUrl()), LlmTestClients.RESPONSES_API_HTTP_CLIENT,
+                        LlmTestClients.LLM_HTTP_CLIENT_BUILDERS),
                 mock(LlmProviderFactory.class));
         withoutServerWideUrl = new OpenAILlmServiceProvider(
-                new OpenAIClientGenerator(clientConfig(null), LlmTestClients.RESPONSES_API_HTTP_CLIENT),
+                new OpenAIClientGenerator(clientConfig(null), LlmTestClients.RESPONSES_API_HTTP_CLIENT,
+                        LlmTestClients.LLM_HTTP_CLIENT_BUILDERS),
                 mock(LlmProviderFactory.class));
     }
 

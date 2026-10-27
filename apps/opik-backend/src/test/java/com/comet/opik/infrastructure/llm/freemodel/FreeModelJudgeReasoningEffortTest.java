@@ -55,8 +55,9 @@ class FreeModelJudgeReasoningEffortTest {
         freeModelConfig.setActualModel(actualModel);
         var clientConfig = new LlmProviderClientConfig();
         var provider = new FreeModelServiceProvider(
-                new OpenAIClientGenerator(clientConfig, LlmTestClients.RESPONSES_API_HTTP_CLIENT),
-                mock(LlmProviderFactory.class), freeModelConfig, clientConfig);
+                new OpenAIClientGenerator(clientConfig, LlmTestClients.RESPONSES_API_HTTP_CLIENT,
+                        LlmTestClients.LLM_HTTP_CLIENT_BUILDERS),
+                mock(LlmProviderFactory.class), freeModelConfig, clientConfig, LlmTestClients.LLM_HTTP_CLIENT_BUILDERS);
         var key = LlmProviderClientApiConfig.builder().apiKey("test-key").baseUrl(wireMock.baseUrl()).build();
 
         provider.getLanguageModel(key, LlmAsJudgeModelParameters.builder().name(FreeModelConfig.FREE_MODEL).build())

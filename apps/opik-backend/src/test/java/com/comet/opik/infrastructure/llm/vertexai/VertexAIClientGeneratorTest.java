@@ -673,7 +673,7 @@ class VertexAIClientGeneratorTest {
             var question = UserMessage.from("Read trace t1");
 
             try (var client = (CloseableVertexAiChatModel) new VertexAIClientGenerator(clientConfig(), registry,
-                    LlmTestClients.REMOTE_MEDIA_INLINER)
+                    LlmTestClients.REMOTE_MEDIA_INLINER, LlmTestClients.VIDEO_MIME_TYPE_UTILS)
                     .generateChat(config, new LlmAsJudgeModelParameters(GEMINI_3_MODEL, null, null, null))) {
                 var call = client.chat(ChatRequest.builder().messages(question).build()).aiMessage();
                 client.chat(ChatRequest.builder()
