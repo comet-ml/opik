@@ -612,18 +612,25 @@ class ChatCompletionsResourceTest {
                     .isEmpty();
         }
 
-        @Test
-        @DisplayName("Azure-style {error:{code,message}} body — an undocumented code surfaces as a clean 4xx without its message")
-        void azureStyleErrorBodyIsNotPropagated() {
+        private Stream<Arguments> azureStyleErrorBody() {
+            var message = "The API version 2024-08-01-preview is not supported by this service.";
+            return Stream.of(
+                    arguments("InvalidAPIVersion", message, new ErrorMessage(HttpStatus.SC_BAD_REQUEST, message)),
+                    arguments("DeploymentNotFound", "The API deployment for this resource does not exist.",
+                            new ErrorMessage(HttpStatus.SC_BAD_REQUEST, UNEXPECTED_ERROR_CALLING_LLM_PROVIDER)));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("Azure-style {error:{code,message}} body — InvalidAPIVersion keeps its message, a deployment code doesn't")
+        void azureStyleErrorBody(String code, String message, ErrorMessage expectedError) {
             var workspaceName = RandomStringUtils.randomAlphanumeric(20);
             var workspaceId = UUID.randomUUID().toString();
             mockTargetWorkspace(workspaceName, workspaceId);
             createCustomProvider(workspaceName);
 
             // Real Azure OpenAI error payload shape — nested object, not a string.
-            var upstreamBody = """
-                    {"error": {"code": "InvalidAPIVersion", \
-                    "message": "The API version 2024-08-01-preview is not supported by this service."}}""";
+            var upstreamBody = JsonUtils.writeValueAsString(Map.of("error", Map.of("code", code, "message", message)));
             WIRE_MOCK.server().stubFor(post(urlPathMatching(CHAT_COMPLETIONS_REGEX))
                     .willReturn(aResponse()
                             .withStatus(HttpStatus.SC_BAD_REQUEST)
@@ -635,11 +642,6 @@ class ChatCompletionsResourceTest {
                     .model(MODEL)
                     .addUserMessage("ping")
                     .build();
-
-            // 400 because `InvalidAPIVersion` isn't in the OpenAI-compat code table and CustomLlmErrorMessage
-            // defaults unknown codes to 400; its text isn't passed on because neither OpenAI nor Azure OpenAI
-            // documents the code.
-            var expectedError = new ErrorMessage(HttpStatus.SC_BAD_REQUEST, UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
 
             var actualError = chatCompletionsClient.create(API_KEY, workspaceName, request, HttpStatus.SC_BAD_REQUEST);
 
