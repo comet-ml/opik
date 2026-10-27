@@ -21,6 +21,7 @@ import {
 } from "@/constants/assistantSidebar";
 import DemoProjectBanner from "@/v2/layout/DemoProjectBanner/DemoProjectBanner";
 import McpAnnouncementBanner from "@/v2/layout/McpAnnouncementBanner/McpAnnouncementBanner";
+import NoticeBanner from "@/v2/layout/NoticeBanner/NoticeBanner";
 
 const PageLayout = () => {
   const [hostContainer, setHostContainer] = useState<HTMLDivElement | null>(
@@ -32,8 +33,11 @@ const PageLayout = () => {
   const [retentionBannerHeight, setRetentionBannerHeight] = useState(0);
   const [demoBannerHeight, setDemoBannerHeight] = useState(0);
   const [mcpBannerHeight, setMcpBannerHeight] = useState(0);
-  const bannerHeight =
-    retentionBannerHeight + demoBannerHeight + mcpBannerHeight;
+  const [noticeBannerHeight, setNoticeBannerHeight] = useState(0);
+  const noticeBannerVisible = noticeBannerHeight > 0;
+  const bannerHeight = noticeBannerVisible
+    ? noticeBannerHeight
+    : retentionBannerHeight + demoBannerHeight + mcpBannerHeight;
   const [showWelcomeWizard, setShowWelcomeWizard] = useState(false);
   const [assistantSidebarWidth, setAssistantSidebarWidth] = useState(() =>
     isAssistantSidebarOpen()
@@ -128,14 +132,19 @@ const PageLayout = () => {
             ref={setHostContainer}
             className="relative min-w-0 flex-1 overflow-hidden [transform:translateZ(0)]"
           >
-            {RetentionBanner ? (
-              <RetentionBanner onChangeHeight={setRetentionBannerHeight} />
-            ) : null}
-            <McpAnnouncementBanner
-              onChangeHeight={setMcpBannerHeight}
-              retentionBannerVisible={retentionBannerHeight > 0}
-            />
-            <DemoProjectBanner onChangeHeight={setDemoBannerHeight} />
+            <NoticeBanner onChangeHeight={setNoticeBannerHeight} />
+            {!noticeBannerVisible && (
+              <>
+                {RetentionBanner ? (
+                  <RetentionBanner onChangeHeight={setRetentionBannerHeight} />
+                ) : null}
+                <McpAnnouncementBanner
+                  onChangeHeight={setMcpBannerHeight}
+                  retentionBannerVisible={retentionBannerHeight > 0}
+                />
+                <DemoProjectBanner onChangeHeight={setDemoBannerHeight} />
+              </>
+            )}
 
             <SideBar
               expanded={expanded}
