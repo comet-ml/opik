@@ -586,7 +586,8 @@ class TraceServiceImpl implements TraceService {
                             return Mono.just(0);
                         }))
                 .reduce(0, Integer::sum)
-                .doOnSuccess(total -> log.info("Deleted all traces of projects, project count '{}', trace count '{}'",
+                .doOnSuccess(total -> log.info(
+                        "Finished deleting traces of projects, project count '{}', deleted trace count '{}'",
                         projectIds.size(), total))
                 .then());
     }
