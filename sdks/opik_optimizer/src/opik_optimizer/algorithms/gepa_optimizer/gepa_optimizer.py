@@ -20,7 +20,6 @@ from ...core.state import (
     AlgorithmResult,
     FinishReason,
     OptimizationContext,
-    build_optimization_metadata,
 )
 from ...utils.prompt_library import PromptOverrides
 from . import helpers, reporting as gepa_reporting
@@ -511,7 +510,6 @@ class GepaOptimizer(BaseOptimizer):
         self._max_reflection_calls = 0
         self._reflection_budget_warned = False
         self._reflection_budget_exhausted = False
-        self._adapter = None  # Will be set during optimization
         self._validation_dataset = None
         self._gepa_rescored_scores: list[float] = []
         self._gepa_filtered_val_scores: list[float | None] = []
@@ -707,7 +705,6 @@ class GepaOptimizer(BaseOptimizer):
         """
         # Initialize progress tracking for display
         self._current_round = 0
-        self._total_rounds = context.max_trials
 
         optimizable_prompts = context.prompts
         initial_score = cast(float, context.baseline_score)
@@ -1002,6 +999,3 @@ class GepaOptimizer(BaseOptimizer):
             experiment_config=experiment_config,
             known_placeholder_keys=known_placeholder_keys,
         )
-
-    def _build_optimization_config(self) -> dict[str, Any]:
-        return build_optimization_metadata(self)

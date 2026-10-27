@@ -68,16 +68,6 @@ def extract_placeholders(content: Any, known_keys: set[str] | None = None) -> se
     return tokens
 
 
-def collect_placeholders(
-    messages: list[dict[str, Any]], known_keys: set[str] | None = None
-) -> set[str]:
-    """Return every template-variable token across a prompt's messages."""
-    tokens: set[str] = set()
-    for message in messages:
-        tokens.update(extract_placeholders(message.get("content", ""), known_keys))
-    return tokens
-
-
 def protected_tokens(content: Any, known_keys: set[str] | None = None) -> set[str]:
     """Return the tokens in one message that substitution would actually fill.
 

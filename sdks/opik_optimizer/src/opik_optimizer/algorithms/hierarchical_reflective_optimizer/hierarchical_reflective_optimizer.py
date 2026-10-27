@@ -77,9 +77,6 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         "improve_prompt_template": hierarchical_prompts.IMPROVE_PROMPT_TEMPLATE,
     }
 
-    DEFAULT_MAX_ITERATIONS = constants.HRO_DEFAULT_MAX_ITERATIONS
-    DEFAULT_CONVERGENCE_THRESHOLD = constants.HRO_DEFAULT_CONVERGENCE_THRESHOLD
-
     def __init__(
         self,
         model: str = constants.DEFAULT_MODEL,

@@ -347,15 +347,6 @@ def _increment_llm_counter_if_in_optimizer() -> None:
         optimizer._increment_llm_counter()
 
 
-def _increment_llm_call_tools_counter_if_in_optimizer() -> None:
-    """
-    Increment the active run's counter when called during optimization.
-    """
-    optimizer = _active_optimizer.get()
-    if optimizer is not None:
-        optimizer._increment_llm_call_tools_counter()
-
-
 def _prepare_reasoning_request(
     messages: ChatMessages, evidence: ReasoningEvidence | None, model: str
 ) -> ChatMessages:

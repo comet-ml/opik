@@ -99,7 +99,6 @@ class RichGEPAOptimizerLogger:
         self.progress = progress
         self.max_trials = max_trials
         self.current_iteration = 0
-        self._last_progress_value = 0
         self._last_best_score: float | None = None
         self._last_raw_message: str | None = None
 

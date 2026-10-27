@@ -1,9 +1,6 @@
 # Centralized prompt templates used by EvolutionaryOptimizer.
 # Contains prompt templates as constants.
 
-DEFAULT_OUTPUT_STYLE = (
-    "Produce clear, effective, and high-quality responses suitable for the task."
-)
 
 INFER_STYLE_SYSTEM_PROMPT = """You are an expert in linguistic analysis and prompt engineering. Your task is to analyze a few input-output examples from a dataset and provide a concise, actionable description of the desired output style. This description will be used to guide other LLMs in generating and refining prompts.
 

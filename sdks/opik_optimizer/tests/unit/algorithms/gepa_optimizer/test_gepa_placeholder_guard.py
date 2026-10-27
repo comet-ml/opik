@@ -102,7 +102,7 @@ class TestEnforcePlaceholderPreservation:
             original_messages=original, new_messages=new, prompt_name="p"
         )
 
-        assert candidate_ops.collect_placeholders(guarded) == {"context", "question"}
+        assert "{context}" in str(guarded) and "{question}" in str(guarded)
         assert reverted == ["p_system_0", "p_user_1"]
 
     def test_stale_duplicate_does_not_excuse_deleting_the_input_slot(self) -> None:

@@ -73,9 +73,6 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
 
         # Pre-compute item ID sets for fast lookup during evaluate()
         train_items = dataset.get_items()
-        self._train_item_ids: set[str] = {
-            str(item.get("id")) for item in train_items if item.get("id")
-        }
         val_items: list[dict[str, Any]] = []
         self._val_item_ids: set[str] = set()
         if validation_dataset is not None:

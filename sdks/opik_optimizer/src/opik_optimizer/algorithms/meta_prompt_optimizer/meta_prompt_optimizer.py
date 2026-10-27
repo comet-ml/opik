@@ -154,9 +154,6 @@ class MetaPromptOptimizer(BaseOptimizer):
 
         # Initialize progress tracking
         self._current_round = 0
-        self._total_rounds = 0
-        self._current_candidate = 0
-        self._total_candidates_in_round = 0
 
     def get_metadata(self, context: OptimizationContext) -> dict[str, Any]:
         """
@@ -258,7 +255,6 @@ class MetaPromptOptimizer(BaseOptimizer):
         self._history_builder.clear()
 
         # Calculate the maximum number of rounds
-        self._total_rounds = max(1, max_trials // self.prompts_per_round + 1)
         round_num = 0
         self._set_reporter(object())
         try:

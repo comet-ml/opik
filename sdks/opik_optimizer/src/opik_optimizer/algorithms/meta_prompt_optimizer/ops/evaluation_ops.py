@@ -43,7 +43,6 @@ def score_candidate_prompts(
     """
     prompt_scores: list[tuple[Any, float]] = []
     current_round_best_score = best_score
-    optimizer._total_candidates_in_round = len(candidate_prompts)
     dataset_name = getattr(getattr(context, "evaluation_dataset", None), "name", None)
     is_validation = (
         context.validation_dataset is not None
@@ -54,7 +53,6 @@ def score_candidate_prompts(
         if optimizer._should_stop_context(context):
             break
 
-        optimizer._current_candidate = candidate_count
         selection_summary = display_utils.summarize_selection_policy(candidate)
         with reporting.display_prompt_candidate_scoring_report(
             verbose=optimizer.verbose,

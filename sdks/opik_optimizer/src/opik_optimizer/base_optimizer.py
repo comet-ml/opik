@@ -1131,20 +1131,6 @@ class BaseOptimizer(ABC):
                 "but they are missing/empty in the evaluation dataset."
             )
 
-    def _extract_tool_prompts(
-        self, tools: list[dict[str, Any]] | None
-    ) -> dict[str, str] | None:
-        """
-        Extract tool names and descriptions from tools list.
-
-        Args:
-            tools: List of tool definitions in OpenAI/LiteLLM format
-
-        Returns:
-            Dictionary mapping tool names to descriptions, or None if no tools
-        """
-        return runtime.extract_tool_prompts(tools)
-
     # ------------------------------------------------------------------
     # Sampling helpers
     # ------------------------------------------------------------------
@@ -1184,30 +1170,6 @@ class BaseOptimizer(ABC):
             phase=phase,
             seed=resolved_seed,
             strategy=resolved_strategy,
-        )
-
-    def _prepare_minibatch_plan(
-        self,
-        dataset: Dataset,
-        n_samples: int | float | str | None,
-        n_samples_minibatch: int | None,
-        *,
-        dataset_item_ids: list[str] | None = None,
-        phase: str = "minibatch",
-        seed_override: int | None = None,
-        strategy: str | None = None,
-    ) -> sampling.SamplingPlan:
-        """Build a sampling plan for an inner-loop minibatch."""
-        effective_n_samples = (
-            n_samples_minibatch if n_samples_minibatch is not None else n_samples
-        )
-        return self._prepare_sampling_plan(
-            dataset=dataset,
-            n_samples=effective_n_samples,
-            dataset_item_ids=dataset_item_ids,
-            phase=phase,
-            seed_override=seed_override,
-            strategy=strategy,
         )
 
     @staticmethod

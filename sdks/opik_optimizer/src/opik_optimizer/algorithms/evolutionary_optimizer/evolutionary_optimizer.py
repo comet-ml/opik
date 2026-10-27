@@ -78,9 +78,6 @@ class EvolutionaryOptimizer(BaseOptimizer):
     DEFAULT_RESTART_THRESHOLD = constants.EVOLUTIONARY_DEFAULT_RESTART_THRESHOLD
     DEFAULT_RESTART_GENERATIONS = constants.EVOLUTIONARY_DEFAULT_RESTART_GENERATIONS
     DEFAULT_DIVERSITY_THRESHOLD = constants.EVOLUTIONARY_DEFAULT_DIVERSITY_THRESHOLD
-    DEFAULT_ENABLE_SEMANTIC_CROSSOVER = (
-        constants.EVOLUTIONARY_DEFAULT_ENABLE_SEMANTIC_CROSSOVER
-    )
 
     # Prompt templates for this optimizer
     # Keys match what ops files expect (e.g., prompts.get("infer_style_system_prompt"))
@@ -399,7 +396,6 @@ class EvolutionaryOptimizer(BaseOptimizer):
 
         # Initialize progress tracking for display
         self._current_round = 0
-        self._total_rounds = self.num_generations
 
         self._history_builder.clear()
         self._best_fitness_history = []

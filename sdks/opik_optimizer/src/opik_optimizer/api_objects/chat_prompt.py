@@ -4,7 +4,6 @@ import logging
 import warnings
 from collections.abc import Callable, Mapping
 from typing import Any
-from pydantic import BaseModel, ConfigDict
 from opik import track
 
 from . import types
@@ -12,12 +11,6 @@ from .. import constants
 
 
 logger = logging.getLogger(__name__)
-
-
-class ModelParameters(BaseModel):
-    """Wrapper for model parameters that allows arbitrary key-value pairs."""
-
-    model_config = ConfigDict(extra="allow")
 
 
 class ChatPrompt:

@@ -142,36 +142,3 @@ class TestSetupOptimizationDatasetsAndSamples:
         assert plan.nb_samples is None
         assert plan.dataset_item_ids is None
         assert plan.mode.endswith(":full")
-
-    def test_prepare_minibatch_plan_prefers_minibatch_count(
-        self, optimizer: ConcreteOptimizer
-    ) -> None:
-        dataset = _make_sequential_dataset(10)
-
-        plan = optimizer._prepare_minibatch_plan(
-            dataset=dataset,
-            n_samples=2,
-            n_samples_minibatch=4,
-            phase="minibatch",
-        )
-
-        assert plan.nb_samples == 4
-        assert plan.mode.startswith("minibatch")
-        assert plan.dataset_item_ids is not None
-        assert len(plan.dataset_item_ids) == 4
-
-    def test_prepare_minibatch_plan_clamps_to_dataset_size(
-        self, optimizer: ConcreteOptimizer
-    ) -> None:
-        dataset = _make_sequential_dataset(3)
-
-        plan = optimizer._prepare_minibatch_plan(
-            dataset=dataset,
-            n_samples=1,
-            n_samples_minibatch=10,
-            phase="minibatch",
-        )
-
-        assert plan.nb_samples == 3
-        assert plan.dataset_item_ids is not None
-        assert len(plan.dataset_item_ids) == 3
