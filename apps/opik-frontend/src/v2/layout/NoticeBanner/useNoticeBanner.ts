@@ -42,7 +42,7 @@ const asSafeUrl = (value: unknown) => {
   }
 };
 
-const parsePayload = (payload: unknown): NoticeBannerContent | null => {
+export const parsePayload = (payload: unknown): NoticeBannerContent | null => {
   if (!payload || typeof payload !== "object") return null;
   const raw = payload as Record<string, unknown>;
   const message = asString(raw.message);

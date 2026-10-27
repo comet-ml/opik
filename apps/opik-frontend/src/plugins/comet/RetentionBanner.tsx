@@ -15,11 +15,12 @@ import Banner from "@/v2/layout/Banner/Banner";
 
 interface RetentionBannerProps {
   onChangeHeight: (height: number) => void;
+  hidden?: boolean;
 }
 
 const SHOW_BANNER_MIN_THRESHOLD = 0.8;
 
-const RetentionBanner = ({ onChangeHeight }: RetentionBannerProps) => {
+const RetentionBanner = ({ onChangeHeight, hidden }: RetentionBannerProps) => {
   const { data: user } = useUser();
 
   const [closed, setClosed] = useState(false);
@@ -122,7 +123,7 @@ const RetentionBanner = ({ onChangeHeight }: RetentionBannerProps) => {
 
   return (
     <Banner
-      visible={!hideBanner}
+      visible={!hideBanner && !hidden}
       onChangeHeight={onChangeHeight}
       initialHeight={0}
       ariaLabel="Plan limits"

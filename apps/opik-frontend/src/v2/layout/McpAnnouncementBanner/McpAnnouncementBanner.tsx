@@ -22,6 +22,7 @@ import { useMcpAnnouncementBanner } from "./useMcpAnnouncementBanner";
 interface McpAnnouncementBannerProps {
   onChangeHeight: (height: number) => void;
   retentionBannerVisible: boolean;
+  hidden?: boolean;
 }
 
 // One impression per browser session; a reload must not add another.
@@ -47,10 +48,15 @@ const bannerEventProperties = (copyVariant: McpBannerCopyVariant) => ({
 const McpAnnouncementBanner: React.FC<McpAnnouncementBannerProps> = ({
   onChangeHeight,
   retentionBannerVisible,
+  hidden,
 }) => {
-  const { visible, countable, dismiss } = useMcpAnnouncementBanner({
-    retentionBannerVisible,
-  });
+  const {
+    visible: eligible,
+    countable: eligibleCountable,
+    dismiss,
+  } = useMcpAnnouncementBanner({ retentionBannerVisible });
+  const visible = eligible && !hidden;
+  const countable = eligibleCountable && !hidden;
   const { isPhone } = useIsPhone();
 
   const copy = isPhone ? MCP_BANNER_COPY_SHORT : MCP_BANNER_COPY;

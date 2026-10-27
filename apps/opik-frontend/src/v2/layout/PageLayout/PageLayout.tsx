@@ -138,18 +138,22 @@ const PageLayout = () => {
               {...noticeBanner}
               onChangeHeight={setNoticeBannerHeight}
             />
-            {!noticeBannerVisible && (
-              <>
-                {RetentionBanner ? (
-                  <RetentionBanner onChangeHeight={setRetentionBannerHeight} />
-                ) : null}
-                <McpAnnouncementBanner
-                  onChangeHeight={setMcpBannerHeight}
-                  retentionBannerVisible={retentionBannerHeight > 0}
-                />
-                <DemoProjectBanner onChangeHeight={setDemoBannerHeight} />
-              </>
-            )}
+            {/* Hidden, not unmounted: these banners keep state and side effects. */}
+            {RetentionBanner ? (
+              <RetentionBanner
+                onChangeHeight={setRetentionBannerHeight}
+                hidden={noticeBannerVisible}
+              />
+            ) : null}
+            <McpAnnouncementBanner
+              onChangeHeight={setMcpBannerHeight}
+              retentionBannerVisible={retentionBannerHeight > 0}
+              hidden={noticeBannerVisible}
+            />
+            <DemoProjectBanner
+              onChangeHeight={setDemoBannerHeight}
+              hidden={noticeBannerVisible}
+            />
 
             <SideBar
               expanded={expanded}

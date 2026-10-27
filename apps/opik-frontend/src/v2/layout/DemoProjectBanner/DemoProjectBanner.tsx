@@ -10,10 +10,12 @@ import useAutoCompleteAgentOnboarding from "./useAutoCompleteAgentOnboarding";
 
 interface DemoProjectBannerProps {
   onChangeHeight: (height: number) => void;
+  hidden?: boolean;
 }
 
 const DemoProjectBanner: React.FC<DemoProjectBannerProps> = ({
   onChangeHeight,
+  hidden,
 }) => {
   const workspaceName = useActiveWorkspaceName();
 
@@ -47,7 +49,7 @@ const DemoProjectBanner: React.FC<DemoProjectBannerProps> = ({
 
   return (
     <Banner
-      visible={isBannerVisible}
+      visible={isBannerVisible && !hidden}
       onChangeHeight={onChangeHeight}
       initialHeight={DEMO_BANNER_HEIGHT}
       ariaLabel="Demo project"
