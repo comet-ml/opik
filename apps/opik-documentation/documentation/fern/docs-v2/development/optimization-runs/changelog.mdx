@@ -23,6 +23,7 @@ These changes are pending release and are not included in the published package 
 ### Migration
 
 - **ParameterOptimizer:** set models and baseline settings on each `ChatPrompt`, then call `optimize_parameter()`. Constructor `model` and `model_parameters` are deprecated and ignored. Search changes only selected fields; result parameter maps are keyed by prompt name.
+- **Benchmarks:** task `model` / `model_parameters` and CLI `--models` configure evaluation only. Configure optimizer reasoning independently through `optimizer_params`; omitted reasoning settings use optimizer defaults. Neither side borrows from the other. Empty parameter dictionaries stay empty, and blank model names are rejected.
 - **MCP:** install `opik-optimizer[mcp]` for MCP tools. The extra requires MCP 1.x; plain function tools work without it.
 - **Custom optimizers:** implement `run_optimization(context)` and use `pre_round`, `post_round`, `pre_trial`, and `post_trial`. The legacy hook aliases remain available with deprecation warnings. See [Extending optimizers](/development/optimization-runs/advanced/extending_optimizers).
 - **FewShot:** `enable_optuna_pruning` is deprecated and has no effect.

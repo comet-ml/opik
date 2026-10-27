@@ -178,7 +178,7 @@ def main() -> None:
         type=str,
         nargs="*",
         default=None,
-        help=f"Model names to benchmark. Available: {benchmark_config.MODELS}",
+        help=f"Evaluation model names to benchmark. Available: {benchmark_config.MODELS}",
     )
     parser.add_argument(
         "--test-mode",
