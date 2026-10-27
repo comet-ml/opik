@@ -15,6 +15,9 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -101,5 +104,44 @@ class OpenAIProviderHeadersLoggingTest {
         // the request log is on, and so is written, but without the value
         assertThat(actualEvents).anyMatch(event -> event.contains("HTTP request"))
                 .noneMatch(event -> event.contains(headerValue));
+    }
+
+    /**
+     * A row stored before saving refused them may hold a header without a value, or names differing only in case: the
+     * call still goes out, without the first, and with one value for the others, the one whose name sorts last.
+     */
+    @Test
+    @DisplayName("a stored header without a value is left out, and names differing only in case send one value")
+    void storedHeadersThatCannotBeSentDoNotBreakTheCall() {
+        var serviceProvider = new OpenAILlmServiceProvider(new OpenAIClientGenerator(
+                TestConfigUtils.loadConfigTest().getLlmProviderClient(), LlmTestClients.RESPONSES_API_HTTP_CLIENT,
+                LlmTestClients.LLM_HTTP_CLIENT_BUILDERS), Mockito.mock(LlmProviderFactory.class));
+        var emptyHeaderName = "X-Empty-%s".formatted(RandomStringUtils.secure().nextAlphabetic(8));
+        var upperCaseValue = "marker-%s".formatted(RandomStringUtils.secure().nextAlphanumeric(16));
+        var lowerCaseValue = "marker-%s".formatted(RandomStringUtils.secure().nextAlphanumeric(16));
+        var headers = new HashMap<String, String>();
+        headers.put(emptyHeaderName, null);
+        headers.put("X-Route", upperCaseValue);
+        headers.put("x-route", lowerCaseValue);
+        var config = LlmProviderClientApiConfig.builder()
+                .apiKey(RandomStringUtils.secure().nextAlphanumeric(20))
+                .baseUrl(openAi.baseUrl())
+                .headers(headers)
+                .build();
+        var request = ChatCompletionRequest.builder().model("gpt-4o").addUserMessage("hi").build();
+        var expectedContent = "ok";
+        var expectedRouteValues = List.of(lowerCaseValue);
+        var actualContents = new ArrayList<String>();
+
+        // the client is built, and its headers checked, along with the service
+        var actualEvents = LogCaptureUtils.logEventsOf(() -> actualContents.add(
+                serviceProvider.getService(config).generate(request, "ws-1").content()));
+
+        assertThat(actualContents).containsExactly(expectedContent);
+        var actualRequest = openAi.findAll(postRequestedFor(urlPathEqualTo(CHAT_COMPLETIONS_PATH))).getFirst();
+        assertThat(actualRequest.getHeaders().getHeader("X-Route").values()).isEqualTo(expectedRouteValues);
+        assertThat(actualRequest.containsHeader(emptyHeaderName)).isFalse();
+        assertThat(actualEvents).anyMatch(event -> event.contains(emptyHeaderName))
+                .noneMatch(event -> event.contains(upperCaseValue) || event.contains(lowerCaseValue));
     }
 }

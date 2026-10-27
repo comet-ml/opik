@@ -1,7 +1,8 @@
 package com.comet.opik.api;
 
+import com.comet.opik.infrastructure.net.LoggableUrl;
 import com.comet.opik.utils.EncryptionDeserializer;
-import com.comet.opik.utils.HeaderNames;
+import com.comet.opik.utils.LoggableMaps;
 import com.comet.opik.utils.MaskedSecretTokenSerializer;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonView;
@@ -49,12 +50,16 @@ public record Webhook(
         @JsonView({
                 Alert.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy) {
 
-    /** Without the secret token, and with only the names of the headers, whose values are never logged. */
+    /**
+     * Without the secret token, with only the names of the headers, whose values are never logged, and with the URL's
+     * scheme, host and port only, as its path can hold a token.
+     */
     @Override
     public String toString() {
         return """
                 Webhook[id=%s, name=%s, url=%s, secretToken=[REDACTED], headers=%s, createdAt=%s, createdBy=%s, \
-                lastUpdatedAt=%s, lastUpdatedBy=%s]""".formatted(id, name, url, HeaderNames.of(headers), createdAt,
+                lastUpdatedAt=%s, lastUpdatedBy=%s]""".formatted(id, name, LoggableUrl.of(url),
+                LoggableMaps.keys(headers), createdAt,
                 createdBy, lastUpdatedAt, lastUpdatedBy);
     }
 
@@ -62,7 +67,7 @@ public record Webhook(
     public static class WebhookBuilder {
         @Override
         public String toString() {
-            return "WebhookBuilder[id=%s, name=%s, headers=%s]".formatted(id, name, HeaderNames.of(headers));
+            return "WebhookBuilder[id=%s, name=%s, headers=%s]".formatted(id, name, LoggableMaps.keys(headers));
         }
     }
 }

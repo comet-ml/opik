@@ -109,11 +109,16 @@ class ResponsesApiSharedTransportTest {
             closedClient.responses().create(params);
             closedClient.close();
 
-            var actualResponse = generator.newResponsesApiClient(config, model, null, false).responses()
-                    .create(params);
+            // OpenAIClient has close() but isn't AutoCloseable
+            var nextClient = generator.newResponsesApiClient(config, model, null, false);
+            try {
+                var actualResponse = nextClient.responses().create(params);
 
-            assertThat(actualResponse.id()).isEqualTo("resp_1");
-            assertThat(connections).hasValue(expectedConnections);
+                assertThat(actualResponse.id()).isEqualTo("resp_1");
+                assertThat(connections).hasValue(expectedConnections);
+            } finally {
+                nextClient.close();
+            }
         }
     }
 }

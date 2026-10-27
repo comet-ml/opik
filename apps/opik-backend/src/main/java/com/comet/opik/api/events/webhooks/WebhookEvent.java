@@ -3,7 +3,7 @@ package com.comet.opik.api.events.webhooks;
 import com.comet.opik.api.AlertEventType;
 import com.comet.opik.api.AlertType;
 import com.comet.opik.api.events.RedisSubscriberMessage;
-import com.comet.opik.utils.HeaderNames;
+import com.comet.opik.utils.LoggableMaps;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
@@ -71,7 +71,7 @@ public class WebhookEvent<T> implements RedisSubscriberMessage {
         @Override
         public String toString() {
             return "WebhookEventBuilder{id='%s', eventType=%s, headers=%s}".formatted(id, eventType,
-                    HeaderNames.of(headers));
+                    LoggableMaps.keys(headers));
         }
     }
 
