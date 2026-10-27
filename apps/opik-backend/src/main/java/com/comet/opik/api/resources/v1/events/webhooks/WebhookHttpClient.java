@@ -2,11 +2,13 @@ package com.comet.opik.api.resources.v1.events.webhooks;
 
 import com.comet.opik.api.events.webhooks.WebhookEvent;
 import com.comet.opik.domain.evaluators.UserLog;
+import com.comet.opik.domain.llm.ProviderFailures;
 import com.comet.opik.infrastructure.WebhookConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.comet.opik.infrastructure.net.DestinationGuardDnsResolver;
+import com.comet.opik.infrastructure.net.LoggableUrl;
 import com.comet.opik.utils.RetryUtils;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -73,7 +75,7 @@ public class WebhookHttpClient {
      */
     public Mono<String> sendWebhook(@NonNull WebhookEvent<?> event) {
         log.info("Sending webhook event '{}' to URL: '{}', max retries: '{}'",
-                event.getId(), event.getUrl(), event.getMaxRetries());
+                event.getId(), LoggableUrl.of(event.getUrl()), event.getMaxRetries());
 
         // Serialize payload asynchronously (non-blocking JSON serialization)
         return Mono.deferContextual(
@@ -105,7 +107,8 @@ public class WebhookHttpClient {
 
     private void logError(WebhookEvent<?> event, String workspaceId, String message, Throwable throwable) {
         try (var logContext = wrapWithMdc(buildMdcMap(event, workspaceId))) {
-            userFacingLog.error(message, throwable);
+            // the type only: a connection failure's message can carry the destination URL
+            userFacingLog.error("{}, error type '{}'", message, ProviderFailures.rootType(throwable));
         }
     }
 
@@ -156,12 +159,10 @@ public class WebhookHttpClient {
                                 // Return body if present, otherwise return "ok"
                                 sink.success(responseBody.orElse("ok"));
                             } else {
-                                // the target's body stays server-side: this message is returned to
-                                // the caller, and the destination is caller-supplied
-                                readResponseBody(response).ifPresent(body -> log.debug(
-                                        "Webhook delivery failed, id '{}', status '{}', body '{}'",
-                                        event.getId(), response.getStatus(),
-                                        body));
+                                // the target's body is neither returned nor logged: the destination is
+                                // caller-supplied
+                                log.debug("Webhook delivery failed, id '{}', status '{}'", event.getId(),
+                                        response.getStatus());
                                 sink.error(new RetryUtils.RetryableHttpException(
                                         "Webhook failed with status %d".formatted(response.getStatus()),
                                         response.getStatus()));
@@ -211,8 +212,8 @@ public class WebhookHttpClient {
                     int attemptNumber = (int) retrySignal.totalRetries() + 1;
                     Throwable error = retrySignal.failure();
 
-                    log.warn("Retrying webhook '{}' - Attempt: {}/{}, Error: '{}'",
-                            eventId, attemptNumber, maxRetries, error.getMessage());
+                    log.warn("Retrying webhook '{}' - Attempt: {}/{}, error type '{}'",
+                            eventId, attemptNumber, maxRetries, ProviderFailures.rootType(error));
                 });
     }
 }

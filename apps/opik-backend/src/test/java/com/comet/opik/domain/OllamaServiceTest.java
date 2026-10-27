@@ -143,13 +143,13 @@ class OllamaServiceTest {
     }
 
     @Test
-    @DisplayName("A connection test logs the URL without its query or fragment, port kept")
+    @DisplayName("A connection test logs the URL without its path, query or fragment, port kept")
     void testConnection__logsUrlWithoutQueryOrFragment() {
         var secret = RandomStringUtils.secure().nextAlphanumeric(16);
         var url = "http://localhost:%d/?token=%s#%s".formatted(wireMockServer.port(), secret, secret);
         var expectedMessages = List.of(
-                "Testing Ollama connection at: 'http://localhost:%d/'".formatted(wireMockServer.port()),
-                "Failed to connect to Ollama at 'http://localhost:%d/': HTTP '404'".formatted(wireMockServer.port()));
+                "Testing Ollama connection at: 'http://localhost:%d'".formatted(wireMockServer.port()),
+                "Failed to connect to Ollama at 'http://localhost:%d': HTTP '404'".formatted(wireMockServer.port()));
 
         var actualMessages = logsOf(() -> ollamaService.testConnection(url, null).block());
 
@@ -164,7 +164,7 @@ class OllamaServiceTest {
         var password = RandomStringUtils.secure().nextAlphanumeric(16);
         var url = "http://%s:%s@localhost:%d/".formatted(username, password, wireMockServer.port());
         var expectedMessages = List.of(
-                "Testing Ollama connection at: 'http://localhost:%d/api/version'".formatted(wireMockServer.port()),
+                "Testing Ollama connection at: 'http://localhost:%d'".formatted(wireMockServer.port()),
                 "Failed to connect to Ollama");
 
         var actualEvents = renderedEventsOf(() -> ollamaService.testConnection(url, null).block());
@@ -178,13 +178,13 @@ class OllamaServiceTest {
     }
 
     @Test
-    @DisplayName("Listing models logs the URL without its query or fragment, port kept")
+    @DisplayName("Listing models logs the URL without its path, query or fragment, port kept")
     void listModels__logsUrlWithoutQueryOrFragment() {
         var secret = RandomStringUtils.secure().nextAlphanumeric(16);
         var url = "http://localhost:%d/?token=%s#%s".formatted(wireMockServer.port(), secret, secret);
         var expectedMessages = List.of(
-                "Fetching models from Ollama instance at: 'http://localhost:%d/'".formatted(wireMockServer.port()),
-                "Failed to fetch models from Ollama at 'http://localhost:%d/': HTTP '404'"
+                "Fetching models from Ollama instance at: 'http://localhost:%d'".formatted(wireMockServer.port()),
+                "Failed to fetch models from Ollama at 'http://localhost:%d': HTTP '404'"
                         .formatted(wireMockServer.port()));
 
         var actualMessages = logsOf(() -> ollamaService.listModels(url, null).block());
@@ -200,7 +200,7 @@ class OllamaServiceTest {
         var password = RandomStringUtils.secure().nextAlphanumeric(16);
         var url = "http://%s:%s@localhost:%d/".formatted(username, password, wireMockServer.port());
         var expectedMessages = List.of(
-                "Fetching models from Ollama instance at: 'http://localhost:%d/api/tags'"
+                "Fetching models from Ollama instance at: 'http://localhost:%d'"
                         .formatted(wireMockServer.port()),
                 "Failed to fetch models from Ollama");
 

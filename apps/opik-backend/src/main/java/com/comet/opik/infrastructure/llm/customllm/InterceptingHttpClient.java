@@ -479,7 +479,9 @@ class InterceptingHttpClient extends DelegatingHttpClient {
             }
             return builder.build().toString();
         } catch (URISyntaxException exception) {
-            log.warn("Failed to parse custom provider URL as URI; forwarding unchanged", exception);
+            // the type only: the exception's message is the custom base URL
+            log.warn("Failed to parse custom provider URL as URI; forwarding unchanged, error type '{}'",
+                    exception.getClass().getSimpleName());
             return url;
         }
     }

@@ -1,5 +1,10 @@
 package com.comet.opik.api.resources.v1.events;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.LoggerContext;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.classic.spi.ThrowableProxyUtil;
+import ch.qos.logback.core.read.ListAppender;
 import com.comet.opik.api.AlertEventType;
 import com.comet.opik.api.AlertType;
 import com.comet.opik.api.events.webhooks.WebhookEvent;
@@ -23,9 +28,11 @@ import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.redisson.api.RedissonReactiveClient;
 import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.test.StepVerifier;
 
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.Map;
 import java.util.UUID;
 
@@ -36,9 +43,11 @@ import static com.github.tomakehurst.wiremock.client.WireMock.moreThanOrExactly;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.mockingDetails;
 
 @ExtendWith(MockitoExtension.class)
 class WebhookSubscriberTest {
@@ -133,6 +142,54 @@ class WebhookSubscriberTest {
                 .expectNext(expectedBody)
                 .expectComplete()
                 .verify(Duration.seconds(8).toJavaDuration());
+    }
+
+    /**
+     * A Slack-style webhook URL carries its token in the path. Neither the server logs, at any level, nor the
+     * user-facing ones show it, whether the delivery succeeds or keeps failing.
+     */
+    @ParameterizedTest
+    @ValueSource(ints = {200, 500})
+    void processEvent_neverLogsTheTokenInTheWebhookPath(int status) {
+        var token = RandomStringUtils.secure().nextAlphanumeric(24);
+        var webhookPath = "/services/T%s/B%s/%s".formatted(token, token, token);
+        wireMockServer.stubFor(post(urlEqualTo(webhookPath)).willReturn(aResponse().withStatus(status)
+                .withBody("{\"ok\": true}")));
+        var userFacingLogger = mock(Logger.class);
+        WebhookHttpClient webhookHttpClient;
+        try (MockedStatic<UserFacingLoggingFactory> mockedFactory = mockStatic(UserFacingLoggingFactory.class)) {
+            mockedFactory.when(() -> UserFacingLoggingFactory.getLogger(any(Class.class)))
+                    .thenReturn(userFacingLogger);
+            webhookHttpClient = new WebhookHttpClient(TestHttpClientUtils.client(), webhookConfig);
+        }
+        var subscriber = new WebhookSubscriber(webhookConfig, redisson, webhookHttpClient);
+        var webhookEvent = createWebhookEvent("http://localhost:%d%s".formatted(wireMockServer.port(), webhookPath));
+        var logger = ((LoggerContext) LoggerFactory.getILoggerFactory()).getLogger("com.comet.opik");
+        var appender = new ListAppender<ILoggingEvent>();
+        var previousLevel = logger.getLevel();
+        appender.start();
+        logger.addAppender(appender);
+        logger.setLevel(Level.DEBUG);
+
+        try {
+            StepVerifier.create(subscriber.processEvent(webhookEvent)).verifyComplete();
+        } finally {
+            logger.detachAppender(appender);
+            logger.setLevel(previousLevel);
+        }
+
+        wireMockServer.verify(moreThanOrExactly(1), postRequestedFor(urlEqualTo(webhookPath)));
+        var actualServerLogs = appender.list.stream()
+                .map(event -> event.getThrowableProxy() == null
+                        ? event.getFormattedMessage()
+                        : "%s%n%s".formatted(event.getFormattedMessage(),
+                                ThrowableProxyUtil.asString(event.getThrowableProxy())))
+                .toList();
+        var actualUserFacingLogs = mockingDetails(userFacingLogger).getInvocations().stream()
+                .map(invocation -> Arrays.deepToString(invocation.getArguments()))
+                .toList();
+        assertThat(actualServerLogs).isNotEmpty().noneMatch(line -> line.contains(token));
+        assertThat(actualUserFacingLogs).isNotEmpty().noneMatch(line -> line.contains(token));
     }
 
     @Test
