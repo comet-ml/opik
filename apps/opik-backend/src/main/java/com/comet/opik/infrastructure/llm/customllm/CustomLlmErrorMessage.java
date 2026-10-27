@@ -52,12 +52,14 @@ public record CustomLlmErrorMessage(JsonNode error) implements LlmProviderError<
     }
 
     /**
-     * OpenAI-compatible servers are held to OpenAI's documented type and code values; the text shape names neither.
+     * OpenAI-compatible servers are held to OpenAI's documented type and code values, plus the codes Azure OpenAI
+     * documents; the text shape names neither.
      */
     public boolean isDocumented() {
         return error != null && error.isObject()
                 && (DocumentedErrors.OPENAI.documents(textOrNull(error, "type"))
-                        || DocumentedErrors.OPENAI.documents(textOrNull(error, "code")));
+                        || DocumentedErrors.OPENAI.documents(textOrNull(error, "code"))
+                        || DocumentedErrors.AZURE_OPENAI.documents(textOrNull(error, "code")));
     }
 
     @Override
