@@ -47,7 +47,7 @@ public class VideoMimeTypeUtils {
         this.client = client;
         this.destinationGuard = DestinationGuard.builder()
                 .mode(config.getVideoUrlDestinationGuard())
-                .scheme(DestinationGuard.Scheme.PLAINTEXT_OR_TLS)
+                .scheme(config.getMediaUrlDestinationScheme())
                 .build();
     }
 

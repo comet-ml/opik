@@ -7,6 +7,7 @@ import com.comet.opik.api.resources.utils.TestHttpClientUtils;
 import com.comet.opik.api.resources.v1.events.webhooks.WebhookHttpClient;
 import com.comet.opik.infrastructure.WebhookConfig;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
+import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import io.dropwizard.util.Duration;
 import org.junit.jupiter.api.AfterEach;
@@ -195,6 +196,7 @@ class WebhookSubscriberTest {
         config.setMaxRetryDelay(Duration.seconds(1));
         config.setRequestTimeout(Duration.seconds(5));
         config.setConnectionTimeout(Duration.seconds(2));
+        config.setDestinationScheme(DestinationGuard.Scheme.PLAINTEXT_OR_TLS);
         config.setConsumerBatchSize(10);
         config.setPoolingInterval(Duration.seconds(1));
         return config;

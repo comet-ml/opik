@@ -18,6 +18,7 @@ import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.WebhookConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.log.tables.UserLogTableFactory;
+import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.redis.testcontainers.RedisContainer;
 import io.dropwizard.util.Duration;
@@ -204,6 +205,7 @@ class WebhookSubscriberLoggingTest {
         config.setMaxRetryDelay(Duration.milliseconds(200));
         config.setRequestTimeout(Duration.seconds(2));
         config.setConnectionTimeout(Duration.seconds(1));
+        config.setDestinationScheme(DestinationGuard.Scheme.PLAINTEXT_OR_TLS);
         config.setConsumerBatchSize(10);
         config.setPoolingInterval(Duration.milliseconds(500));
         return config;

@@ -78,6 +78,10 @@ public class WebhookConfig implements StreamConfiguration {
     @Builder.Default
     @NotNull private DestinationGuard.Mode destinationGuard = DestinationGuard.Mode.RELAXED;
 
+    /** Schemes allowed for webhook URLs, checked in strict mode only. */
+    @Valid @JsonProperty
+    @NotNull private DestinationGuard.Scheme destinationScheme;
+
     // Debouncing configuration
     @Valid @JsonProperty
     private DebouncingConfig debouncing = new DebouncingConfig();

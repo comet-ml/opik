@@ -60,7 +60,7 @@ public class WebhookHttpClient {
         // operator's call; this guard is here for the destination, not the transport
         this.destinationGuard = DestinationGuard.builder()
                 .mode(webhookConfig.getDestinationGuard())
-                .scheme(DestinationGuard.Scheme.PLAINTEXT_OR_TLS)
+                .scheme(webhookConfig.getDestinationScheme())
                 .build();
     }
 

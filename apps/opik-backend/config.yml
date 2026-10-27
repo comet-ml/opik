@@ -2220,6 +2220,12 @@ webhook:
   #   link-local, private and unresolvable destinations; 'relaxed' allows them, as self-hosted
   #   deployments legitimately point webhooks at internal services
   destinationGuard: ${WEBHOOK_DESTINATION_GUARD:-relaxed}
+  # Default: plaintext_or_tls
+  # Values: ['plaintext_or_tls', 'https_only']
+  #   - plaintext_or_tls: http and https
+  #   - https_only: https only
+  # Description: Schemes allowed for webhook URLs, checked in strict mode only
+  destinationScheme: ${WEBHOOK_DESTINATION_SCHEME:-plaintext_or_tls}
   # Default: 10
   # Description: Claim pending messages every N polling intervals
   claimIntervalRatio: ${WEBHOOK_CLAIM_INTERVAL_RATIO:-10}
