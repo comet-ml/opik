@@ -6,6 +6,7 @@ import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.openai.OpenAIModule;
 import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.openai.core.http.HttpClient;
+import jakarta.ws.rs.client.Client;
 import lombok.experimental.UtilityClass;
 
 /**
@@ -27,9 +28,13 @@ public class LlmTestClients {
 
     /** For tests serving media from a local mock server, which the strict mode of config-test.yml refuses. */
     public static RemoteMediaInliner remoteMediaInliner(DestinationGuard.Mode mode) {
+        return remoteMediaInliner(mode, TestHttpClientUtils.client());
+    }
+
+    public static RemoteMediaInliner remoteMediaInliner(DestinationGuard.Mode mode, Client client) {
         var config = TestConfigUtils.loadConfigTest().getLlmProviderClient();
         config.setVideoUrlDestinationGuard(mode);
-        return new RemoteMediaInliner(TestHttpClientUtils.client(), config);
+        return new RemoteMediaInliner(client, config);
     }
 
     /** As {@link #remoteMediaInliner(DestinationGuard.Mode)}, for the MIME type lookup of video URLs. */

@@ -8,6 +8,7 @@ import dev.langchain4j.http.client.HttpRequest;
 import dev.langchain4j.http.client.SuccessfulHttpResponse;
 import dev.langchain4j.http.client.sse.ServerSentEventListener;
 import dev.langchain4j.http.client.sse.ServerSentEventParser;
+import jakarta.ws.rs.core.HttpHeaders;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -91,6 +92,11 @@ class CustomLlmHttpClient implements HttpClient {
                 values.forEach(value -> builder.addHeader(name, value));
             }
         });
+        // as the JDK client did: OkHttp inflates a compressed reply only when it asked for one itself, and an
+        // inflated body has no bound, so an uncompressed one is asked for unless the caller chose otherwise
+        if (request.headers().keySet().stream().noneMatch(HttpHeaders.ACCEPT_ENCODING::equalsIgnoreCase)) {
+            builder.header(HttpHeaders.ACCEPT_ENCODING, "identity");
+        }
         RequestBody body = requestBody(request);
         return builder.method(request.method().name(), switch (request.method()) {
             // OkHttp requires a body on POST, where the JDK client sent an empty one

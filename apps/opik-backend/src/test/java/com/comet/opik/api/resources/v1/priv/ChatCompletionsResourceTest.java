@@ -66,6 +66,8 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
 import java.security.KeyPairGenerator;
 import java.util.Base64;
 import java.util.List;
@@ -73,6 +75,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.function.BiConsumer;
 import java.util.stream.Stream;
+import java.util.zip.GZIPOutputStream;
 
 import static com.comet.opik.domain.llm.ChatCompletionService.ERROR_EMPTY_MESSAGES;
 import static com.comet.opik.domain.llm.ChatCompletionService.UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
@@ -521,6 +524,36 @@ class ChatCompletionsResourceTest {
             assertThat(WIRE_MOCK.server().findAll(postRequestedFor(urlPathMatching(CHAT_COMPLETIONS_REGEX))))
                     .extracting(LoggedRequest::getProtocol)
                     .containsOnly("HTTP/1.1");
+        }
+
+        @Test
+        @DisplayName("a custom provider is asked for an uncompressed body, and a compressed one isn't inflated")
+        void customProviderCompressedReplyIsNotInflated() throws Exception {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            mockTargetWorkspace(workspaceName, UUID.randomUUID().toString());
+            createCustomProvider(workspaceName);
+            var compressed = new ByteArrayOutputStream();
+            try (var gzip = new GZIPOutputStream(compressed)) {
+                gzip.write(SUCCESS_BODY.getBytes(StandardCharsets.UTF_8));
+            }
+            WIRE_MOCK.server().stubFor(post(urlPathMatching(CHAT_COMPLETIONS_REGEX))
+                    .willReturn(aResponse()
+                            .withHeader("Content-Type", "application/json")
+                            .withHeader("Content-Encoding", "gzip")
+                            .withBody(compressed.toByteArray())));
+
+            var request = ChatCompletionRequest.builder().stream(false).model(MODEL).addUserMessage("ping").build();
+            var expectedError = new ErrorMessage(HttpStatus.SC_INTERNAL_SERVER_ERROR,
+                    "Unexpected error calling LLM provider");
+
+            var actualError = chatCompletionsClient.create(API_KEY, workspaceName, request,
+                    HttpStatus.SC_INTERNAL_SERVER_ERROR);
+
+            assertThat(actualError).isEqualTo(expectedError);
+
+            assertThat(WIRE_MOCK.server().findAll(postRequestedFor(urlPathMatching(CHAT_COMPLETIONS_REGEX))))
+                    .extracting(loggedRequest -> loggedRequest.getHeader("Accept-Encoding"))
+                    .containsOnly("identity");
         }
 
         @Test

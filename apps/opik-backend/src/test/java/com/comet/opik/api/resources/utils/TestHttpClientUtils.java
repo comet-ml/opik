@@ -48,11 +48,20 @@ public class TestHttpClientUtils {
      */
     @Getter
     @Accessors(fluent = true)
-    private final Client client = newClient();
+    private final Client client = newClient(false);
 
-    private Client newClient() {
+    /**
+     * As {@link #client()}, but decompressing responses as the production client does: config-test.yml turns gzip off,
+     * while the production default leaves it on.
+     */
+    @Getter
+    @Accessors(fluent = true)
+    private final Client gzipClient = newClient(true);
+
+    private Client newClient(boolean gzipEnabled) {
         try {
             var jerseyConfig = TestConfigUtils.loadConfigTest().getJerseyClient();
+            jerseyConfig.setGzipEnabled(gzipEnabled);
             var executor = new ThreadPoolExecutor(
                     jerseyConfig.getMinThreads(),
                     jerseyConfig.getMaxThreads(),

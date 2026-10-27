@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.llm;
 
 import com.comet.opik.TestConfigUtils;
+import com.comet.opik.api.resources.utils.TestHttpClientUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException;
 import com.comet.opik.infrastructure.net.DestinationGuard;
@@ -25,6 +26,8 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
@@ -32,6 +35,7 @@ import java.util.UUID;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Stream;
+import java.util.zip.GZIPOutputStream;
 
 import static com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException.Reason.MEDIA_URL;
 import static com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException.Reason.MEDIA_URL_DOWNLOAD;
@@ -120,6 +124,53 @@ class RemoteMediaInlinerTest {
         var actualMessages = remoteMediaInliner.inline(messages);
 
         assertThat(actualMessages).isEqualTo(expectedMessages);
+    }
+
+    private byte[] gzip(byte[] bytes) throws IOException {
+        var compressed = new ByteArrayOutputStream();
+        try (var gzip = new GZIPOutputStream(compressed)) {
+            gzip.write(bytes);
+        }
+        return compressed.toByteArray();
+    }
+
+    @Test
+    @DisplayName("a compressed media file is inflated, as the production client does, and inlined")
+    void compressedMediaIsInflatedAndInlined() throws IOException {
+        var gzipInliner = LlmTestClients.remoteMediaInliner(DestinationGuard.Mode.RELAXED,
+                TestHttpClientUtils.gzipClient());
+        var bytes = RandomUtils.secure().randomBytes(64);
+        var mediaPath = "/media-" + UUID.randomUUID();
+        wireMock.server().stubFor(get(urlPathEqualTo(mediaPath)).willReturn(aResponse()
+                .withHeader("Content-Type", "image/png")
+                .withHeader("Content-Encoding", "gzip")
+                .withBody(gzip(bytes))));
+        List<ChatMessage> messages = List.of(
+                UserMessage.from(ImageContent.from(wireMock.runtimeInfo().getHttpBaseUrl() + mediaPath)));
+        var expectedMessages = List.<ChatMessage>of(
+                UserMessage.from(ImageContent.from(Base64.getEncoder().encodeToString(bytes), "image/png")));
+
+        var actualMessages = gzipInliner.inline(messages);
+
+        assertThat(actualMessages).isEqualTo(expectedMessages);
+    }
+
+    @Test
+    @DisplayName("a compressed media file over the size limit once inflated fails the request")
+    void compressedMediaOverTheLimitOnceInflatedIsRefused() throws IOException {
+        var gzipInliner = LlmTestClients.remoteMediaInliner(DestinationGuard.Mode.RELAXED,
+                TestHttpClientUtils.gzipClient());
+        var mediaPath = "/media-" + UUID.randomUUID();
+        wireMock.server().stubFor(get(urlPathEqualTo(mediaPath)).willReturn(aResponse()
+                .withHeader("Content-Type", "image/png")
+                .withHeader("Content-Encoding", "gzip")
+                .withBody(gzip(new byte[maxBytes + 1]))));
+        List<ChatMessage> messages = List.of(
+                UserMessage.from(ImageContent.from(wireMock.runtimeInfo().getHttpBaseUrl() + mediaPath)));
+
+        assertThatThrownBy(() -> gzipInliner.inline(messages))
+                .isExactlyInstanceOf(ProviderRequestRefusedException.class)
+                .hasMessage(new ProviderRequestRefusedException(MEDIA_URL_DOWNLOAD).getMessage());
     }
 
     @Test
