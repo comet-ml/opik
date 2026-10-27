@@ -1,0 +1,567 @@
+package com.comet.opik.domain.topics;
+
+import com.comet.opik.domain.topics.GroupSummaries.GroupSummary;
+import com.comet.opik.domain.topics.NightState.RetiredReason;
+import com.comet.opik.domain.topics.TopicsRunException.Code;
+import com.comet.opik.infrastructure.inference.InferenceJson;
+import com.fasterxml.jackson.databind.JsonNode;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/** The nightly update's rules on small synthetic inputs: the paths the three-night fixture does not reach. */
+@DisplayName("topics nightly update: rules")
+class TopicsNightlyRulesTest {
+
+    private static final LocalDate FIRST_BUILD = LocalDate.parse("2026-10-01");
+    private static final LocalDate NIGHT = LocalDate.parse("2026-10-20");
+    private static final Instant NIGHT_START = Instant.parse("2026-10-20T00:00:00Z");
+    /** Inside the night's last 7 days. */
+    private static final Instant WINDOW_DAY = Instant.parse("2026-10-15T00:00:00Z");
+    private static final float[] EAST = {1, 0};
+    private static final float[] NORTH = {0, 1};
+    private static final float[] SOUTH = {0, -1};
+    private static final NightLlm NO_LLM = (tag, prompt, schema, maxTokens) -> {
+        throw new AssertionError("unexpected Qwen call '%s'".formatted(tag));
+    };
+
+    @Nested
+    @DisplayName("revise apply")
+    class Revise {
+
+        @Test
+        @DisplayName("assign takes candidates once and only to live topics")
+        void assign() {
+            var state = state(0, topic("A"), topic("B"));
+            var map = ReviseApplier.apply(state, json("""
+                    {"assign": [{"cluster": 0, "topic": 2}, {"cluster": 0, "topic": 1}, {"cluster": 9, "topic": 1},
+                                {"cluster": 1, "topic": 7}, {"cluster": "1", "topic": 1}, {"cluster": 2, "topic": 1}]}
+                    """), shown(state), Set.of(0, 1, 2), false, 10);
+
+            assertThat(map).containsExactly(Map.entry(0, 1), Map.entry(2, 0));
+        }
+
+        @Test
+        @DisplayName("on a review night merge moves groups and prototypes, retire sends groups to Other, redefine keeps the name")
+        void review() {
+            var state = state(0, topic("A", EAST), topic("B", NORTH), topic("C", SOUTH));
+            var map = ReviseApplier.apply(state, json("""
+                    {"assign": [{"cluster": 0, "topic": 2}, {"cluster": 1, "topic": 3}],
+                     "merge": [[1, 2], [1, 1], [1]],
+                     "retire": [3, 9],
+                     "redefine": [{"id": 1, "definition": "  Both A and B. "}, {"id": 2, "definition": "gone"}]}
+                    """), shown(state), Set.of(0, 1), true, 10);
+
+            assertThat(map).containsExactly(Map.entry(0, 0), Map.entry(1, ReviseApplier.OTHER));
+            assertThat(state.topic(0).getPrototypes()).containsExactly(EAST, NORTH);
+            assertThat(state.topic(0).getName()).isEqualTo("A");
+            assertThat(state.topic(0).getDefinition()).isEqualTo("Both A and B.");
+            assertThat(state.topic(1).getRetiredReason()).isEqualTo(RetiredReason.MERGED);
+            assertThat(state.topic(2).getRetiredReason()).isEqualTo(RetiredReason.REVIEW);
+            assertThat(state.live()).containsExactly(0);
+        }
+
+        @Test
+        @DisplayName("merge, retire and redefine are ignored on a normal night")
+        void normalNight() {
+            var state = state(0, topic("A"), topic("B"));
+            ReviseApplier.apply(state, json("""
+                    {"merge": [[1, 2]], "retire": [1], "redefine": [{"id": 1, "definition": "x"}]}
+                    """), shown(state), Set.of(), false, 10);
+
+            assertThat(state.live()).containsExactly(0, 1);
+            assertThat(state.topic(0).getDefinition()).isEqualTo("A def");
+        }
+
+        @Test
+        @DisplayName("new skips catch-all names and a full list, takes only unmapped candidates; other fills the rest")
+        void newAndOther() {
+            var state = state(0, topic("A"));
+            var map = ReviseApplier.apply(state, json("""
+                    {"assign": [{"cluster": 0, "topic": 1}],
+                     "new": [{"name": "Other Requests", "definition": "x", "clusters": [1]},
+                             {"name": " Weather ", "definition": "Forecasts.", "clusters": [0, 1, 7]},
+                             {"name": "Late", "definition": "y", "clusters": [2]}],
+                     "other": [0, 2, 3, 9]}
+                    """), shown(state), Set.of(0, 1, 2, 3), false, 2);
+
+            assertThat(map).containsExactly(Map.entry(0, 0), Map.entry(1, 1), Map.entry(2, ReviseApplier.OTHER),
+                    Map.entry(3, ReviseApplier.OTHER));
+            assertThat(state.topic(1).getName()).isEqualTo("Weather");
+            assertThat(state.topic(1).getBorn()).isEqualTo(NIGHT);
+            assertThat(state.liveCount()).isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("an answer that is not an object is qwen_bad_answer")
+        void badAnswer() {
+            var state = state(0, topic("A"));
+            assertThatThrownBy(() -> ReviseApplier.apply(state, json("[]"), shown(state), Set.of(), false, 10))
+                    .isInstanceOfSatisfying(TopicsRunException.class,
+                            exception -> assertThat(exception.getCode()).isEqualTo(Code.QWEN_BAD_ANSWER));
+        }
+    }
+
+    @Nested
+    @DisplayName("verify")
+    class Verify {
+
+        private final NightState state = state(0, topic("A"));
+        private final List<GroupSummary> ordered = List.of(group(3, 50, 0.9), group(1, 30, 0.9), group(2, 25, 0.9));
+        private final Map<Integer, Integer> map = new LinkedHashMap<>(Map.of(1, 0, 3, 0, 2, ReviseApplier.OTHER));
+
+        @Test
+        @DisplayName("pairs go largest first; a missing or out-of-range pair is not verified; same follows Python truth")
+        void answers() {
+            var result = Verifier.verify(ordered, topics(state), map, (tag, prompt, schema, maxTokens) -> {
+                assertThat(tag).isEqualTo("verify");
+                assertThat(maxTokens).isEqualTo(60 + 25 * 2);
+                assertThat(prompt).contains("PAIR 0", "PAIR 1").doesNotContain("PAIR 2");
+                return json("""
+                        {"answers": [{"pair": 0, "same": ""}, {"pair": 1}, {"pair": 2, "same": true}]}
+                        """);
+            });
+
+            assertThat(result.pairs()).extracting(pair -> pair[0]).containsExactly(3, 1);
+            assertThat(result.verdicts()).containsOnly(Map.entry(3, false), Map.entry(1, true));
+            assertThat(result.verified(3)).isFalse();
+            assertThat(result.verified(1)).isTrue();
+        }
+
+        @Test
+        @DisplayName("an answer without the pair leaves it not verified")
+        void missing() {
+            var result = Verifier.verify(ordered, topics(state), map,
+                    (tag, prompt, schema, maxTokens) -> json("{\"answers\": [{\"pair\": 1, \"same\": 1}]}"));
+
+            assertThat(result.verified(3)).isFalse();
+            assertThat(result.verified(1)).isTrue();
+        }
+
+        @Test
+        @DisplayName("a failed call verifies nothing and the night goes on")
+        void failed() {
+            var result = Verifier.verify(ordered, topics(state), map, (tag, prompt, schema, maxTokens) -> {
+                throw new IllegalStateException("timeout");
+            });
+
+            assertThat(result.called()).isTrue();
+            assertThat(result.failed()).isTrue();
+            assertThat(result.verdicts()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("no mapped pair means no call")
+        void noPairs() {
+            var result = Verifier.verify(ordered, topics(state), Map.of(), NO_LLM);
+
+            assertThat(result.called()).isFalse();
+        }
+
+        @ParameterizedTest(name = "{0} is {1}")
+        @CsvSource(delimiter = '|', value = {
+                "true|true", "false|false", "0|false", "0.5|true", "\"\"|false", "\"no\"|true", "[]|false",
+                "[0]|true", "{}|false", "null|false"})
+        @DisplayName("truthy is Python's bool")
+        void truthy(String value, boolean expected) {
+            assertThat(Verifier.truthy(json(value))).isEqualTo(expected);
+        }
+    }
+
+    @Nested
+    @DisplayName("forced birth")
+    class Forced {
+
+        @Test
+        @DisplayName("a rejected pair is unmapped; a big one gets a topic, a loose one known Other, a small one nothing")
+        void outcomes() {
+            var state = state(0, topic("A"));
+            var map = new LinkedHashMap<Integer, Integer>(Map.of(0, 0, 1, 0, 2, 0));
+            var verified = verified(Map.of(0, false, 1, false, 2, false));
+            var outcomes = ForcedBirth.apply(state,
+                    List.of(group(0, 60, 0.95), group(1, 50, 0.79), group(2, 10, 0.95)), Set.of(0, 1),
+                    topics(state), verified, map, 10,
+                    naming("{\"topics\": [{\"name\": \"Weather\", \"definition\": \"F.\"}]}"));
+
+            assertThat(outcomes).containsExactly(new ForcedBirth.Outcome(0, ForcedBirth.Result.BORN, 1),
+                    new ForcedBirth.Outcome(1, ForcedBirth.Result.OTHER_LOOSE, null));
+            assertThat(map).containsOnly(Map.entry(0, 1), Map.entry(1, ReviseApplier.OTHER));
+            assertThat(state.topic(1).getName()).isEqualTo("Weather");
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @CsvSource(delimiter = '|', value = {
+                "a catch-all name|{\"topics\": [{\"name\": \"General Help\", \"definition\": \"x\"}]}",
+                "an empty name|{\"topics\": [{\"name\": \"\", \"definition\": \"x\"}]}",
+                "no topics|{\"topics\": []}",
+                "a failed call|"})
+        @DisplayName("a naming answer without a usable name sends the candidate to known Other")
+        void noName(String label, String answer) {
+            var state = state(0, topic("A"));
+            var map = new LinkedHashMap<Integer, Integer>();
+            var outcomes = ForcedBirth.apply(state, List.of(group(0, 60, 0.95)), Set.of(0), topics(state),
+                    verified(Map.of()), map, 10, naming(answer));
+
+            assertThat(outcomes).containsExactly(new ForcedBirth.Outcome(0, ForcedBirth.Result.OTHER_NAME, null));
+            assertThat(map).containsOnly(Map.entry(0, ReviseApplier.OTHER));
+            assertThat(state.liveCount()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("on a full list the oldest-born lowest 7-day share is replaced if below the candidate, never one born tonight")
+        void fullList() {
+            var state = state(0, topic("A"), topic("B"));
+            var topics = new LinkedHashMap<Integer, TopicPrompts.PromptTopic>();
+            topics.put(0, prompt(1, 0, 0.30));
+            topics.put(1, prompt(2, 1, 0.10));
+            var map = new LinkedHashMap<Integer, Integer>();
+            var outcomes = ForcedBirth.apply(state,
+                    List.of(group(0, 60, 0.95, 0.20), group(1, 50, 0.95, 0.40), group(2, 40, 0.95, 0.05)),
+                    Set.of(0, 1, 2), topics, verified(Map.of()), map, 2,
+                    naming("{\"topics\": [{\"name\": \"Weather\", \"definition\": \"F.\"}]}"));
+
+            assertThat(outcomes).extracting(ForcedBirth.Outcome::result).containsExactly(ForcedBirth.Result.BORN,
+                    ForcedBirth.Result.BORN, ForcedBirth.Result.OTHER_FULL);
+            assertThat(state.topic(1).getRetiredReason()).isEqualTo(RetiredReason.REPLACED);
+            assertThat(state.topic(0).getRetiredReason()).isEqualTo(RetiredReason.REPLACED);
+            assertThat(state.live()).containsExactly(2, 3);
+        }
+    }
+
+    @Nested
+    @DisplayName("lifecycle")
+    class Lifecycles {
+
+        @Test
+        @DisplayName("a third low night retires, a good night resets the streak")
+        void lowShare() {
+            var low = topic("Low").toBuilder().lowNights(2).build();
+            var reset = topic("Reset").toBuilder().lowNights(2).build();
+            var state = state(0, low, reset, topic("Big"));
+            var labels = new int[300];
+            Arrays.fill(labels, 2);
+            labels[0] = 0;
+            labels[1] = 1;
+            labels[2] = 1;
+
+            var shares = Lifecycle.retire(state, window(300, Instant.parse("2026-10-15T00:00:00Z")), labels, 10);
+
+            assertThat(shares.get(0)).isEqualTo(1.0 / 300);
+            assertThat(state.topic(0).getRetiredReason()).isEqualTo(RetiredReason.LOW_SHARE);
+            assertThat(state.topic(1).getLowNights()).isZero();
+            assertThat(state.live()).containsExactly(1, 2);
+        }
+
+        @Test
+        @DisplayName("over the cap the smallest count goes, ties to the earlier topic")
+        void cap() {
+            var state = state(0, topic("A"), topic("B"), topic("C"), topic("D"));
+            int[] labels = {0, 0, 0, 1, 2, 3, 3, 3, 3};
+
+            Lifecycle.retire(state, window(9, Instant.parse("2026-10-15T00:00:00Z")), labels, 2);
+
+            assertThat(state.topic(1).getRetiredReason()).isEqualTo(RetiredReason.CAP);
+            assertThat(state.topic(2).getRetiredReason()).isEqualTo(RetiredReason.CAP);
+            assertThat(state.live()).containsExactly(0, 3);
+        }
+
+        @Test
+        @DisplayName("a topic born after the first build is measured from born - 7 days")
+        void newborn() {
+            var state = state(0, topic("Old"), topic("New", LocalDate.parse("2026-10-18")));
+            var createdAt = new Instant[10];
+            Arrays.fill(createdAt, 0, 5, Instant.parse("2026-10-01T00:00:00Z"));
+            Arrays.fill(createdAt, 5, 10, Instant.parse("2026-10-15T00:00:00Z"));
+            int[] labels = {0, 0, 0, 0, 0, 1, 0, 0, 0, 0};
+
+            var shares = Lifecycle.retire(state, window(createdAt), labels, 10);
+
+            assertThat(shares).containsExactly(Map.entry(0, 0.9), Map.entry(1, 0.2));
+        }
+
+        @Test
+        @DisplayName("three quiet weeks make a topic inactive, two busy nights make it active again")
+        void inactive() {
+            var quiet = topic("Quiet").toBuilder().lo7(2).build();
+            var back = topic("Back").toBuilder().inactiveSince(LocalDate.parse("2026-10-10")).hi7(1).lo7(3).build();
+            var state = state(0, quiet, back);
+            var labels = new int[100];
+            Arrays.fill(labels, 1);
+
+            Lifecycle.display(state, window(100, Instant.parse("2026-10-15T00:00:00Z")), labels);
+
+            assertThat(state.topic(0).getInactiveSince()).isEqualTo(NIGHT);
+            assertThat(state.topic(0).getSize()).isZero();
+            assertThat(state.topic(1).getInactiveSince()).isNull();
+            assertThat(state.topic(1).getLo7()).isZero();
+            assertThat(state.topic(1).getSize()).isEqualTo(100);
+        }
+    }
+
+    @Nested
+    @DisplayName("recentre")
+    class Recentring {
+
+        @ParameterizedTest(name = "{0} members, {1} unique texts: k = {2}")
+        @CsvSource({"10, 10, 1", "49, 49, 1", "50, 50, 2", "50, 1, 1", "450, 450, 3", "2000, 2000, 10",
+                "2000, 4, 4"})
+        @DisplayName("k follows the member count with a floor of 2 from 50 members")
+        void k(int members, int unique, int expected) {
+            assertThat(Recentre.k(members, unique)).isEqualTo(expected);
+        }
+
+        @Test
+        @DisplayName("a warm start when the old prototype count equals k, k-means++ with seed 0 otherwise")
+        void warmStart() {
+            var window = window(10, Instant.parse("2026-10-15T00:00:00Z"));
+            var requests = new ArrayList<NightClusterer.Request>();
+            NightClusterer clusterer = request -> {
+                requests.add(request);
+                return NightClusterer.KMEANS.fit(request);
+            };
+            int[] members = {0, 1, 2};
+
+            Recentre.run(window, members, List.of(EAST), UUID.randomUUID(), clusterer);
+            Recentre.run(window, members, List.of(EAST, NORTH), null, clusterer);
+
+            assertThat(requests.get(0).init()).containsExactly(EAST);
+            assertThat(requests.get(0).kind()).isEqualTo(NightClusterer.Kind.RECENTRE_TOPIC);
+            assertThat(requests.get(1).init()).isNull();
+            assertThat(requests.get(1).kind()).isEqualTo(NightClusterer.Kind.RECENTRE_OTHER);
+            assertThat(requests).extracting(NightClusterer.Request::seed).containsOnly(0L);
+        }
+    }
+
+    @Nested
+    @DisplayName("the whole night")
+    class Night {
+
+        @Test
+        @DisplayName("without a big candidate and outside a review night there is no Qwen call")
+        void quiet() {
+            var state = state(1, topic("East", EAST));
+            var result = NightlyUpdate.run(state, window(30, WINDOW_DAY), 10, NightClusterer.KMEANS, NO_LLM);
+
+            assertThat(result.review()).isFalse();
+            assertThat(result.groupMap()).isEmpty();
+            assertThat(result.labels()).containsOnly(0);
+        }
+
+        @Test
+        @DisplayName("a review night drops the known-Other memory and calls revise with the review prompt")
+        void reviewNight() {
+            var state = state(7, topic("East", EAST));
+            state.setOtherPrototypes(List.of(SOUTH));
+            var prompts = new ArrayList<String>();
+
+            var result = NightlyUpdate.run(state, window(30, WINDOW_DAY), 10, NightClusterer.KMEANS,
+                    (tag, prompt, schema, maxTokens) -> {
+                        prompts.add(tag);
+                        var east = TopicPrompts.PromptTopic.builder().id(1).topic(0).name("East")
+                                .definition("East def").share(1.0).recentShare(1.0)
+                                .examples(List.of("t0", "t1", "t10", "t11")).build();
+                        assertThat(prompt).isEqualTo(TopicPrompts.revise(List.of(east), List.of(), true, 10));
+                        return json("{}");
+                    });
+
+            assertThat(result.reviewNight()).isTrue();
+            assertThat(prompts).containsExactly("revise");
+            assertThat(state.getOtherPrototypes()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a big candidate on a full list forces a review and replaces the weakest topic")
+        void fullList() {
+            var vectors = new ArrayList<float[]>();
+            for (int i = 0; i < 100; i++) {
+                vectors.add(i < 20 ? EAST : i < 60 ? NORTH : SOUTH);
+            }
+            var state = state(1, topic("East", EAST));
+            var tags = new ArrayList<String>();
+
+            var result = NightlyUpdate.run(state, window(vectors), 1, NightClusterer.KMEANS,
+                    (tag, prompt, schema, maxTokens) -> {
+                        tags.add(tag);
+                        return tag.equals("revise")
+                                ? json("{}")
+                                : json("{\"topics\": [{\"name\": \"Weather\", \"definition\": \"F.\"}]}");
+                    });
+
+            assertThat(result.review()).isTrue();
+            assertThat(result.big()).containsExactly(0, 1);
+            assertThat(tags).hasSize(2).first().isEqualTo("revise");
+            assertThat(tags.get(1)).startsWith("naming_c");
+            assertThat(result.forced()).extracting(ForcedBirth.Outcome::result)
+                    .containsExactly(ForcedBirth.Result.BORN, ForcedBirth.Result.OTHER_FULL);
+            assertThat(state.topic(0).getRetiredReason()).isEqualTo(RetiredReason.REPLACED);
+            assertThat(state.live()).containsExactly(1);
+            assertThat(state.getOtherPrototypes()).hasSize(1);
+            assertThat(Arrays.stream(result.labels()).filter(label -> label == 1).count()).isEqualTo(40);
+        }
+    }
+
+    @Nested
+    @DisplayName("prompts")
+    class Prompts {
+
+        @Test
+        @DisplayName("revise shows (none) without candidates and the list size in both prompts")
+        void revise() {
+            var topics = List.of(prompt(1, 0, 0.25));
+
+            assertThat(TopicPrompts.revise(topics, List.of(), false, 10)).contains("  (none)")
+                    .doesNotContain("{max_topics}", "{topics}", "{candidates}");
+            assertThat(TopicPrompts.revise(topics, List.of(group(0, 40, 0.9)), true, 10))
+                    .doesNotContain("{max_topics}", "{topics}", "{candidates}");
+        }
+
+        @Test
+        @DisplayName("verify shows the larger of the two shares of the new cluster")
+        void verify() {
+            var prompt = TopicPrompts.verify(List.of(new TopicPrompts.VerifyPair(prompt(1, 0, 0.25),
+                    group(0, 40, 0.9, 0.031))));
+
+            assertThat(prompt).contains("NEW CLUSTER (share 10.0%)");
+        }
+    }
+
+    private static NightState state(int rebuilds, NightState.Topic... topics) {
+        var ids = new AtomicLong(100);
+        return NightState.builder()
+                .topics(List.of(topics))
+                .otherPrototypes(List.of())
+                .rebuilds(rebuilds)
+                .firstBuild(FIRST_BUILD)
+                .night(NIGHT)
+                .ids(() -> new UUID(0, ids.getAndIncrement()))
+                .build();
+    }
+
+    private static NightState.Topic topic(String name, float[]... prototypes) {
+        return topic(name, FIRST_BUILD, prototypes);
+    }
+
+    private static NightState.Topic topic(String name, LocalDate born, float[]... prototypes) {
+        return NightState.Topic.builder()
+                .id(UUID.nameUUIDFromBytes(name.getBytes()))
+                .name(name)
+                .definition(name + " def")
+                .born(born)
+                .prototypes(List.of(prototypes))
+                .build();
+    }
+
+    private static List<TopicPrompts.PromptTopic> shown(NightState state) {
+        var out = new ArrayList<TopicPrompts.PromptTopic>();
+        var live = state.live();
+        for (int p = 0; p < live.size(); p++) {
+            out.add(prompt(p + 1, live.get(p), 0.1));
+        }
+        return out;
+    }
+
+    private static Map<Integer, TopicPrompts.PromptTopic> topics(NightState state) {
+        var out = new LinkedHashMap<Integer, TopicPrompts.PromptTopic>();
+        shown(state).forEach(topic -> out.put(topic.topic(), topic));
+        return out;
+    }
+
+    private static TopicPrompts.PromptTopic prompt(int id, int topic, double recentShare) {
+        return TopicPrompts.PromptTopic.builder()
+                .id(id)
+                .topic(topic)
+                .name("T" + topic)
+                .definition("D" + topic)
+                .share(0.1)
+                .recentShare(recentShare)
+                .examples(List.of("example"))
+                .build();
+    }
+
+    private static GroupSummary group(int group, int size, double tightness) {
+        return group(group, size, tightness, 0.1);
+    }
+
+    private static GroupSummary group(int group, int size, double tightness, double recentShare) {
+        return new GroupSummary(group, size, 0.1, recentShare, tightness, List.of("a", "b"), 2);
+    }
+
+    private static Verifier.Verified verified(Map<Integer, Boolean> verdicts) {
+        return Verifier.Verified.builder().pairs(List.of()).verdicts(verdicts).called(true).failed(false).build();
+    }
+
+    /** A naming stub: the answer's JSON, or a failed call when it is null. */
+    private static NightLlm naming(String answer) {
+        return (tag, prompt, schema, maxTokens) -> {
+            assertThat(tag).startsWith("naming_c");
+            assertThat(maxTokens).isEqualTo(2500);
+            if (answer == null) {
+                throw new IllegalStateException("timeout");
+            }
+            return json(answer);
+        };
+    }
+
+    /** {@code n} traces on {@link #EAST} created at {@code at}. */
+    private static NightWindow window(int n, Instant at) {
+        var vectors = new ArrayList<float[]>();
+        for (int i = 0; i < n; i++) {
+            vectors.add(EAST);
+        }
+        var createdAt = new Instant[n];
+        Arrays.fill(createdAt, at);
+        return window(vectors, createdAt);
+    }
+
+    private static NightWindow window(Instant[] createdAt) {
+        var vectors = new ArrayList<float[]>();
+        for (int i = 0; i < createdAt.length; i++) {
+            vectors.add(EAST);
+        }
+        return window(vectors, createdAt);
+    }
+
+    private static NightWindow window(List<float[]> vectors) {
+        var createdAt = new Instant[vectors.size()];
+        Arrays.fill(createdAt, WINDOW_DAY);
+        return window(vectors, createdAt);
+    }
+
+    private static NightWindow window(List<float[]> vectors, Instant[] createdAt) {
+        int n = vectors.size();
+        var texts = new String[n];
+        var rows = new float[n * 2];
+        for (int i = 0; i < n; i++) {
+            texts[i] = "t" + i;
+            System.arraycopy(vectors.get(i), 0, rows, i * 2, 2);
+        }
+        return NightWindow.builder().texts(texts).vectors(rows).createdAt(createdAt)
+                .from(Instant.parse("2026-09-20T00:00:00Z")).night(NIGHT_START).dimensions(2).build();
+    }
+
+    private static JsonNode json(String text) {
+        try {
+            return InferenceJson.MAPPER.readTree(text);
+        } catch (IOException exception) {
+            throw new UncheckedIOException(exception);
+        }
+    }
+}
