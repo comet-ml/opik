@@ -587,6 +587,8 @@ public class ChatCompletionService {
      * Only text from a failure Opik raised is added to the generic message: what a provider answered reaches a caller
      * solely through a documented error envelope, see {@link ProviderErrorMessageValidator}.
      */
+    private static final String SERVICE_UNREACHABLE = "Service is unreachable. Please check the provider URL.";
+
     private String buildDetailedErrorMessage(Throwable throwable) {
         return extractErrorDetails(Throwables.getRootCause(throwable), isRaisedByOpik(throwable))
                 .filter(StringUtils::isNotBlank)
@@ -604,15 +606,9 @@ public class ChatCompletionService {
 
     private Optional<String> extractErrorDetails(Throwable rootCause, boolean raisedByOpik) {
         return switch (rootCause) {
-            case ConnectException connectException -> {
-                String message = connectException.getMessage();
-                if (message != null && message.contains("Connection refused")) {
-                    yield Optional.of("Service is unreachable. Please check the provider URL.");
-                }
-                yield Optional.of("Service is unreachable: " + message);
-            }
-            case ClosedChannelException closedChannelException ->
-                Optional.of("Service is unreachable. Please check the provider URL.");
+            // the connection error names the resolved address, which stays server-side
+            case ConnectException connectException -> Optional.of(SERVICE_UNREACHABLE);
+            case ClosedChannelException closedChannelException -> Optional.of(SERVICE_UNREACHABLE);
             default -> raisedByOpik
                     ? Optional.of(StringUtils.defaultIfBlank(rootCause.getMessage(),
                             rootCause.getClass().getSimpleName()))

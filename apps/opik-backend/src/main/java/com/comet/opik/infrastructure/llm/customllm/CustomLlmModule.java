@@ -36,9 +36,9 @@ public class CustomLlmModule extends AbstractModule {
      */
     @Provides
     @Singleton
-    @Named("customLlmHttpClient")
-    public OkHttpClient customLlmHttpClient(@NonNull ProviderBaseUrlGuard providerBaseUrlGuard) {
-        return llmHttpClient(DestinationGuardDns.clientBuilder(providerBaseUrlGuard.destinationGuard())
+    @Named("llmHttpClient")
+    public OkHttpClient llmHttpClient(@NonNull ProviderBaseUrlGuard providerBaseUrlGuard) {
+        return newLlmHttpClient(DestinationGuardDns.clientBuilder(providerBaseUrlGuard.destinationGuard())
                 .protocols(List.of(Protocol.HTTP_1_1)));
     }
 
@@ -47,7 +47,7 @@ public class CustomLlmModule extends AbstractModule {
     @Singleton
     public LlmHttpClientBuilders llmHttpClientBuilders(
             @NonNull @Config("llmProviderClient") LlmProviderClientConfig config,
-            @NonNull @Named("customLlmHttpClient") OkHttpClient client) {
+            @NonNull @Named("llmHttpClient") OkHttpClient client) {
         return new LlmHttpClientBuilders(client,
                 Math.toIntExact(config.getProviderErrorBodyMaxSize().toBytes()));
     }
@@ -68,7 +68,7 @@ public class CustomLlmModule extends AbstractModule {
      * send a model call twice, no cap on concurrent calls, which streams would otherwise queue behind, and daemon
      * threads. Each model's client derives from this one, so all of them share its connection pool and dispatcher.
      */
-    private static OkHttpClient llmHttpClient(OkHttpClient.Builder builder) {
+    private static OkHttpClient newLlmHttpClient(OkHttpClient.Builder builder) {
         var dispatcher = new Dispatcher(Executors.newCachedThreadPool(new ThreadFactoryBuilder()
                 .setNameFormat("llm-http-%d")
                 .setDaemon(true)

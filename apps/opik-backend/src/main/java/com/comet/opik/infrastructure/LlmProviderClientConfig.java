@@ -12,6 +12,7 @@ import io.dropwizard.validation.MaxDuration;
 import io.dropwizard.validation.MinDataSize;
 import io.dropwizard.validation.MinDuration;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -109,6 +110,9 @@ public class LlmProviderClientConfig {
     @MaxDataSize(value = 1, unit = DataSizeUnit.MEBIBYTES)
     private DataSize providerErrorBodyMaxSize;
 
-    /** Longest provider error message passed on to a caller; a longer one is replaced by the generic one. */
-    @NotNull @Positive private Integer providerErrorMessageMaxLength;
+    /**
+     * Longest provider error message passed on to a caller; a longer one is replaced by the generic one. At most 1000
+     * characters: provider error messages are one or two sentences.
+     */
+    @NotNull @Positive @Max(1000) private Integer providerErrorMessageMaxLength;
 }

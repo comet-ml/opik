@@ -1408,8 +1408,8 @@ class ChatCompletionServiceTest {
         }
 
         @Test
-        @DisplayName("when ConnectException with custom message, then include custom message")
-        void buildDetailedErrorMessage__whenConnectExceptionWithCustomMessage__thenIncludeCustomMessage() {
+        @DisplayName("when ConnectException with a custom message, then return the fixed message without it")
+        void buildDetailedErrorMessage__whenConnectExceptionWithCustomMessage__thenOmitCustomMessage() {
             // Given
             var request = podamFactory.manufacturePojo(ChatCompletionRequest.class);
             var workspaceId = "test-workspace-id";
@@ -1424,9 +1424,8 @@ class ChatCompletionServiceTest {
             // When & Then
             assertThatThrownBy(() -> chatCompletionService.create(request, workspaceId))
                     .isExactlyInstanceOf(InternalServerErrorException.class)
-                    .hasMessageContaining("Unexpected error calling LLM provider")
-                    .hasMessageContaining("Service is unreachable")
-                    .hasMessageContaining(customMessage);
+                    .hasMessage("%s: Service is unreachable. Please check the provider URL."
+                            .formatted(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER));
         }
     }
 

@@ -39,8 +39,6 @@ import java.util.function.Function;
 import java.util.stream.Stream;
 import java.util.zip.GZIPOutputStream;
 
-import static com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException.Reason.MEDIA_URL;
-import static com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException.Reason.MEDIA_URL_DOWNLOAD;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
@@ -52,6 +50,16 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class RemoteMediaInlinerTest {
+
+    /** The refusals returned to callers, as they read on the wire. */
+    private static final String MEDIA_URL_REFUSED = """
+            a media URL was refused: it must be an http or https URL that resolves to a public address \
+            (self-hosted deployments serving media from internal networks can set \
+            LLM_PROVIDER_VIDEO_URL_DESTINATION_GUARD=relaxed)""";
+    private static final String MEDIA_URL_DOWNLOAD_REFUSED = """
+            a media URL could not be downloaded: it must return the file itself, not a redirect, with a \
+            success status, within the download time and size limits (LLM_PROVIDER_MEDIA_DOWNLOAD_TIMEOUT, \
+            LLM_PROVIDER_MEDIA_DOWNLOAD_MAX_SIZE)""";
 
     private final WireMockUtils.WireMockRuntime wireMock = WireMockUtils.startWireMock();
 
@@ -171,7 +179,7 @@ class RemoteMediaInlinerTest {
                 .withBody(gzip(new byte[maxBytes + 1]))));
         List<ChatMessage> messages = List.of(
                 UserMessage.from(ImageContent.from(wireMock.runtimeInfo().getHttpBaseUrl() + mediaPath)));
-        var expectedMessage = new ProviderRequestRefusedException(MEDIA_URL_DOWNLOAD).getMessage();
+        var expectedMessage = MEDIA_URL_DOWNLOAD_REFUSED;
 
         assertThatThrownBy(() -> gzipInliner.inline(messages))
                 .isExactlyInstanceOf(ProviderRequestRefusedException.class)
@@ -203,7 +211,7 @@ class RemoteMediaInlinerTest {
                 UserMessage.from(ImageContent.from(serve(RandomUtils.secure().randomBytes(limit / 2 + 1)))),
                 UserMessage.from(ImageContent.from(serve(RandomUtils.secure().randomBytes(limit / 2 + 1))),
                         ImageContent.from(lastUrl)));
-        var expectedMessage = new ProviderRequestRefusedException(MEDIA_URL_DOWNLOAD).getMessage();
+        var expectedMessage = MEDIA_URL_DOWNLOAD_REFUSED;
 
         assertThatThrownBy(() -> inlinerWithLimit(limit).inline(messages))
                 .isExactlyInstanceOf(ProviderRequestRefusedException.class)
@@ -246,7 +254,7 @@ class RemoteMediaInlinerTest {
     @DisplayName("a media URL with any other scheme is refused before anything is read")
     void otherSchemesAreRefused(String url) {
         List<ChatMessage> messages = List.of(UserMessage.from(ImageContent.from(url)));
-        var expectedMessage = new ProviderRequestRefusedException(MEDIA_URL).getMessage();
+        var expectedMessage = MEDIA_URL_REFUSED;
 
         assertThatThrownBy(() -> remoteMediaInliner.inline(messages))
                 .isExactlyInstanceOf(ProviderRequestRefusedException.class)
@@ -261,7 +269,7 @@ class RemoteMediaInlinerTest {
                 DestinationGuard.Scheme.HTTPS_ONLY);
         List<ChatMessage> messages = List.of(UserMessage.from(
                 ImageContent.from("http://8.8.8.8/media-%s.png".formatted(UUID.randomUUID()))));
-        var expectedMessage = new ProviderRequestRefusedException(MEDIA_URL).getMessage();
+        var expectedMessage = MEDIA_URL_REFUSED;
 
         assertThatThrownBy(() -> httpsOnlyInliner.inline(messages))
                 .isExactlyInstanceOf(ProviderRequestRefusedException.class)
@@ -284,7 +292,7 @@ class RemoteMediaInlinerTest {
         wireMock.server().stubFor(get(urlPathEqualTo(mediaPath)).willReturn(response));
         List<ChatMessage> messages = List.of(
                 UserMessage.from(ImageContent.from(wireMock.runtimeInfo().getHttpBaseUrl() + mediaPath)));
-        var expectedMessage = new ProviderRequestRefusedException(MEDIA_URL_DOWNLOAD).getMessage();
+        var expectedMessage = MEDIA_URL_DOWNLOAD_REFUSED;
 
         assertThatThrownBy(() -> remoteMediaInliner.inline(messages))
                 .isExactlyInstanceOf(ProviderRequestRefusedException.class)

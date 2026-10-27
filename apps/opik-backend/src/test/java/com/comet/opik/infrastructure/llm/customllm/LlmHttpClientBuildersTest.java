@@ -47,7 +47,7 @@ class LlmHttpClientBuildersTest {
     void everyModelRunsOnThePoolAndDispatcherOfTheSharedClient() {
         var module = new CustomLlmModule();
         var config = TestConfigUtils.loadConfigTest().getLlmProviderClient();
-        var client = module.customLlmHttpClient(module.providerBaseUrlGuard(config));
+        var client = module.llmHttpClient(module.providerBaseUrlGuard(config));
         var builders = module.llmHttpClientBuilders(config, client);
 
         var actualTransports = Stream.of(builders.builder(), builders.builder())

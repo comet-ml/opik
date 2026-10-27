@@ -70,7 +70,7 @@ class CustomLlmHttpClientTest {
                 .mode(DestinationGuard.Mode.RELAXED)
                 .scheme(DestinationGuard.Scheme.PLAINTEXT_OR_TLS)
                 .build();
-        okHttpClient = new CustomLlmModule().customLlmHttpClient(relaxedGuard);
+        okHttpClient = new CustomLlmModule().llmHttpClient(relaxedGuard);
         client = new CustomLlmHttpClientBuilder(okHttpClient, ERROR_BODY_MAX_SIZE)
                 .readTimeout(WAIT)
                 .build();

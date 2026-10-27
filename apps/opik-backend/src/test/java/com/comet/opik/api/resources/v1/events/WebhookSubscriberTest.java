@@ -11,10 +11,13 @@ import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import io.dropwizard.util.DataSize;
 import io.dropwizard.util.Duration;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -25,6 +28,7 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
 
+import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.moreThanOrExactly;
@@ -98,6 +102,29 @@ class WebhookSubscriberTest {
         wireMockServer.verify(postRequestedFor(urlEqualTo("/webhook"))
                 .withHeader("Content-Type", equalTo("application/json"))
                 .withHeader("User-Agent", equalTo("Opik-Webhook/1.0")));
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {16, 512})
+    void sendWebhook_whenResponseBodyExceedsTheCap_shouldReadOnlyTheCap(int responseBodyMaxSize) {
+        var body = RandomStringUtils.secure().nextAlphanumeric(responseBodyMaxSize * 4);
+        wireMockServer.stubFor(post(urlEqualTo("/webhook"))
+                .willReturn(aResponse().withStatus(200).withBody(body)));
+        var config = createWebhookConfig();
+        config.setResponseBodyMaxSize(DataSize.bytes(responseBodyMaxSize));
+        WebhookHttpClient webhookHttpClient;
+        try (MockedStatic<UserFacingLoggingFactory> mockedFactory = mockStatic(UserFacingLoggingFactory.class)) {
+            mockedFactory.when(() -> UserFacingLoggingFactory.getLogger(any(Class.class)))
+                    .thenReturn(mock(org.slf4j.Logger.class));
+            webhookHttpClient = new WebhookHttpClient(TestHttpClientUtils.client(), config);
+        }
+
+        var expectedBody = body.substring(0, responseBodyMaxSize);
+        StepVerifier.create(webhookHttpClient.sendWebhook(
+                createWebhookEvent("http://localhost:" + wireMockServer.port() + "/webhook"))
+                .contextWrite(ctx -> setRequestContext(ctx, USER_NAME, WORKSPACE_ID)))
+                .expectNext(expectedBody)
+                .verifyComplete();
     }
 
     @Test

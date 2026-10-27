@@ -1680,7 +1680,8 @@ llmProviderClient:
   mediaDownloadMaxSize: ${LLM_PROVIDER_MEDIA_DOWNLOAD_MAX_SIZE:-20MB}
   # Default: 300
   # Description: Longest provider error message passed on to a caller. Provider error messages are one or two
-  #   sentences; a longer, multi-line or markup-bearing message is replaced by "Unexpected error calling LLM provider"
+  #   sentences; a longer, multi-line or markup-bearing message is replaced by "Unexpected error calling LLM provider";
+  #   at most 1000
   providerErrorMessageMaxLength: ${LLM_PROVIDER_ERROR_MESSAGE_MAX_LENGTH:-300}
   # Default: 64KB
   # Description: Most bytes read from a custom provider's error response body; the rest is discarded, as only a
