@@ -952,3 +952,60 @@ def test_template_launcher_mirrors_this_interpreter():
     # start_isolation_template copies 3.14's util.spawnv_passfds call to _posixsubprocess.fork_exec,
     # whose positional arguments change between versions; revisit that copy before upgrading.
     assert sys.version_info[:2] == (3, 14), sys.version
+
+
+# Runs the Studio runner's main() with the template start and stdin recorded in the order they happen.
+# A separate process: importing the runner reconfigures logging and the environment for the whole process.
+RUNNER_MAIN_SCRIPT = """
+import json
+import sys
+
+from opik_backend import executor_process
+
+events = []
+
+
+def template():
+    events.append("template")
+    if sys.argv[1] == "fail":
+        raise OSError("template unavailable")
+
+
+class RecordingStdin:
+    def read(self):
+        events.append("read job")
+        return ""
+
+
+executor_process.start_isolation_template = template
+sys.stdin = RecordingStdin()
+
+from opik_backend.jobs import optimizer_runner
+
+try:
+    optimizer_runner.main()
+except SystemExit:
+    pass
+print("EVENTS " + json.dumps(events), file=sys.stderr)
+"""
+
+
+@pytest.mark.parametrize("outcome", ["start", "fail"])
+def test_runner_starts_the_template_before_reading_the_job(tmp_path, outcome):
+    script = tmp_path / "run_main.py"
+    script.write_text(RUNNER_MAIN_SCRIPT)
+    src = os.path.dirname(os.path.dirname(executor_process.__file__))
+    env = {**os.environ, PROCESS_NETWORK_ISOLATION_ENV_VAR: "true", "PYTHON_COLORS": "0",
+           "PYTHONPATH": os.pathsep.join(filter(None, [src, os.environ.get("PYTHONPATH")]))}
+
+    run = subprocess.run([sys.executable, str(script), outcome], capture_output=True, text=True, timeout=120, env=env)
+
+    # The job and its credentials come from stdin, so the template starts before either is read.
+    assert f'EVENTS ["template", "read job"]' in run.stderr, run.stderr[-3000:]
+    errors = [line for line in run.stderr.splitlines() if "cannot be isolated (" in line]
+    if outcome == "start":
+        assert errors == [], errors
+    else:
+        assert len(errors) == 1 and "cannot be isolated (start worker template failed: template unavailable)" in errors[0], errors
+        # Logged with the failure's own traceback, and the job still went on to read its input.
+        assert "OSError: template unavailable" in run.stderr

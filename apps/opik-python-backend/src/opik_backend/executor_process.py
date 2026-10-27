@@ -324,6 +324,17 @@ def _stop_idle_isolated_workers() -> None:
             return
 
 
+def start_job_isolation_template() -> None:
+    """Start the template for a Studio job, logging a failure once instead of raising.
+
+    Only code metrics need it, so the job runs on; each code metric then returns the same named error.
+    """
+    try:
+        _start_template()
+    except _IsolationUnavailable as e:
+        _one_shot_isolation_failures.log(str(e), e.__cause__)
+
+
 def _start_isolated_worker() -> Union[dict, Tuple[multiprocessing.Process, Connection]]:
     """A READY isolated worker, or the error reply when it could not start."""
     # Idempotent; ensures the template was started with the reduced environment, not lazily by the fork.

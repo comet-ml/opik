@@ -291,13 +291,9 @@ def main():
     try:
         # Start the isolation template before reading the job or its credentials, so a code metric's
         # isolated worker forks from the template and not from this process once it holds them.
-        from opik_backend.executor_process import isolation_enabled, start_isolation_template
+        from opik_backend.executor_process import isolation_enabled, start_job_isolation_template
         if isolation_enabled():
-            try:
-                start_isolation_template()
-            except Exception:
-                # Only code metrics need it; each one returns the named isolation error, logged once per job.
-                pass
+            start_job_isolation_template()
 
         # Read input from stdin
         input_data = sys.stdin.read()
