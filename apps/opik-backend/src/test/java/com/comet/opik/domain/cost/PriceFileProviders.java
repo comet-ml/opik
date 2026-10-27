@@ -24,11 +24,11 @@ public class PriceFileProviders {
 
     private Set<String> load() {
         var providers = new TreeSet<String>();
-        var priceFiles = List.of(CostService.MODEL_PRICES_FILE, CostService.MODEL_PRICES_OPENROUTER_FILE,
-                CostService.MODEL_PRICES_OVERRIDES_FILE);
+        var priceFiles = List.of(ModelPriceTable.MODEL_PRICES_FILE, ModelPriceTable.MODEL_PRICES_OPENROUTER_FILE,
+                ModelPriceTable.MODEL_PRICES_OVERRIDES_FILE);
         for (var file : priceFiles) {
             try {
-                var costsByModel = JsonUtils.readJsonFile(file, CostService.MODEL_COSTS_TYPE_REFERENCE);
+                var costsByModel = JsonUtils.readJsonFile(file, ModelPriceTable.MODEL_COSTS_TYPE_REFERENCE);
                 costsByModel.forEach((model, cost) -> {
                     if (!model.equals("sample_spec") && StringUtils.isNotBlank(cost.litellmProvider())) {
                         providers.add(cost.litellmProvider());

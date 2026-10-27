@@ -66,7 +66,7 @@ test.describe(
         const ruleId = await test.step('Create a judge rule with a cost limit typed in', async () => {
           await onlineEval.goto(project.id);
           await onlineEval.waitForReady();
-          await onlineEval.openCreateRulePanel('LLM-as-a-Judge');
+          await onlineEval.openCreateRulePanel('LLM-as-a-Judge', 'Task completion');
           await onlineEval.nameInput.fill(ruleName);
           await onlineEval.selectJudgeModel(REGISTRY_MODEL.openAiStandard);
           await onlineEval.setCostLimit(COST_LIMIT);

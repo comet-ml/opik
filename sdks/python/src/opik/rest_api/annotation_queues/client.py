@@ -4,6 +4,8 @@ import typing
 
 from ..core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
 from ..core.request_options import RequestOptions
+from ..types.annotation_queue_annotator_view import AnnotationQueueAnnotatorView
+from ..types.annotation_queue_annotator_view_write import AnnotationQueueAnnotatorViewWrite
 from ..types.annotation_queue_automation import AnnotationQueueAutomation
 from ..types.annotation_queue_automation_write import AnnotationQueueAutomationWrite
 from ..types.annotation_queue_items_public import AnnotationQueueItemsPublic
@@ -120,6 +122,7 @@ class AnnotationQueuesClient:
         annotators_per_item: typing.Optional[int] = OMIT,
         lock_timeout_seconds: typing.Optional[int] = OMIT,
         automation: typing.Optional[AnnotationQueueAutomationWrite] = OMIT,
+        annotator_view: typing.Optional[AnnotationQueueAnnotatorViewWrite] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -149,6 +152,8 @@ class AnnotationQueuesClient:
 
         automation : typing.Optional[AnnotationQueueAutomationWrite]
 
+        annotator_view : typing.Optional[AnnotationQueueAnnotatorViewWrite]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -174,6 +179,7 @@ class AnnotationQueuesClient:
             annotators_per_item=annotators_per_item,
             lock_timeout_seconds=lock_timeout_seconds,
             automation=automation,
+            annotator_view=annotator_view,
             request_options=request_options,
         )
         return _response.data
@@ -276,6 +282,7 @@ class AnnotationQueuesClient:
         annotators_per_item: typing.Optional[int] = OMIT,
         lock_timeout_seconds: typing.Optional[int] = OMIT,
         automation: typing.Optional[AnnotationQueueAutomation] = OMIT,
+        annotator_view: typing.Optional[AnnotationQueueAnnotatorView] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -301,6 +308,8 @@ class AnnotationQueuesClient:
 
         automation : typing.Optional[AnnotationQueueAutomation]
 
+        annotator_view : typing.Optional[AnnotationQueueAnnotatorView]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -324,6 +333,7 @@ class AnnotationQueuesClient:
             annotators_per_item=annotators_per_item,
             lock_timeout_seconds=lock_timeout_seconds,
             automation=automation,
+            annotator_view=annotator_view,
             request_options=request_options,
         )
         return _response.data
@@ -549,6 +559,7 @@ class AsyncAnnotationQueuesClient:
         annotators_per_item: typing.Optional[int] = OMIT,
         lock_timeout_seconds: typing.Optional[int] = OMIT,
         automation: typing.Optional[AnnotationQueueAutomationWrite] = OMIT,
+        annotator_view: typing.Optional[AnnotationQueueAnnotatorViewWrite] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -578,6 +589,8 @@ class AsyncAnnotationQueuesClient:
 
         automation : typing.Optional[AnnotationQueueAutomationWrite]
 
+        annotator_view : typing.Optional[AnnotationQueueAnnotatorViewWrite]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -606,6 +619,7 @@ class AsyncAnnotationQueuesClient:
             annotators_per_item=annotators_per_item,
             lock_timeout_seconds=lock_timeout_seconds,
             automation=automation,
+            annotator_view=annotator_view,
             request_options=request_options,
         )
         return _response.data
@@ -717,6 +731,7 @@ class AsyncAnnotationQueuesClient:
         annotators_per_item: typing.Optional[int] = OMIT,
         lock_timeout_seconds: typing.Optional[int] = OMIT,
         automation: typing.Optional[AnnotationQueueAutomation] = OMIT,
+        annotator_view: typing.Optional[AnnotationQueueAnnotatorView] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -741,6 +756,8 @@ class AsyncAnnotationQueuesClient:
         lock_timeout_seconds : typing.Optional[int]
 
         automation : typing.Optional[AnnotationQueueAutomation]
+
+        annotator_view : typing.Optional[AnnotationQueueAnnotatorView]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -768,6 +785,7 @@ class AsyncAnnotationQueuesClient:
             annotators_per_item=annotators_per_item,
             lock_timeout_seconds=lock_timeout_seconds,
             automation=automation,
+            annotator_view=annotator_view,
             request_options=request_options,
         )
         return _response.data

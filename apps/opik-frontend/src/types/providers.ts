@@ -943,7 +943,9 @@ export enum PROVIDER_MODEL_TYPE {
   GEMINI_3_8_FLASH = "gemini-3.8-flash",
   GEMINI_3_8_FLASH_LITE_TTS = "gemini-3.8-flash-lite-tts",
   GEMINI_3_8_FLASH_TTS = "gemini-3.8-flash-tts",
+  GEMINI_4_ARGON = "gemini-4-argon",
   GEMINI_FLASH_LATEST_HIGH_RES_EXP = "gemini-flash-latest-high-res-exp",
+  GEMINI_NANO_BANANA_2_1 = "gemini-nano-banana-2.1",
   GEMINI_OMNI_1_1_FLASH = "gemini-omni-1.1-flash",
   GEMINI_OMNI_FLASH_PREVIEW = "gemini-omni-flash-preview",
   GEMINI_PRO_VISION = "gemini-pro-vision",
@@ -954,8 +956,6 @@ export enum PROVIDER_MODEL_TYPE {
   LYRIA_3_5 = "lyria-3.5",
   NANO_BANANA_PRO_PREVIEW = "nano-banana-pro-preview",
   TEXT_EMBEDDING = "text-embedding-004",
-  GEMINI_4_ARGON = "gemini-4-argon",
-  GEMINI_NANO_BANANA_2_1 = "gemini-nano-banana-2.1",
 
   //   <------ vertex ai
   VERTEX_AI_GEMINI_2_0_FLASH = "vertex_ai/gemini-2.0-flash-001",

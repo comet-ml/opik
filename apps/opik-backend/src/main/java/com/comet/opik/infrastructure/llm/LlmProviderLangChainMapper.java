@@ -145,7 +145,7 @@ public interface LlmProviderLangChainMapper {
                     if (mimeType != null) {
                         videoBuilder.mimeType(mimeType);
                         log.debug("Set mimeType '{}' for video URL: '{}'", mimeType,
-                                videoUrl.substring(0, Math.min(60, videoUrl.length())));
+                                VideoMimeTypeUtils.loggable(videoUrl));
                     }
                     yield new VideoContent(videoBuilder.build());
                 }

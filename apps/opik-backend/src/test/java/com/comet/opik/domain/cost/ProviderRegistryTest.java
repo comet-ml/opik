@@ -62,6 +62,32 @@ class ProviderRegistryTest {
         assertThat(ProviderRegistry.resolve(provider, null)).contains(expected);
     }
 
+    @ParameterizedTest
+    @CsvSource({
+            "api.cerebras.ai, cerebras",
+            "API.Cerebras.AI, cerebras",
+            "cerebras.ai, cerebras",
+            "api.cerebras.ai., cerebras",
+            "api.deepseek.com, deepseek",
+            "api.x.ai, xai",
+            "api.z.ai, zai",
+            "api.fireworks.ai, fireworks_ai",
+            "api.groq.com, groq",
+            "api.openai.com, openai",
+            "openrouter.ai, openrouter",
+            "api.together.xyz, together_ai",
+            "api.together.xyz:443, together_ai"})
+    void resolveMapsAnApiHostToTheProviderItNames(String host, String expected) {
+        assertThat(ProviderRegistry.resolve(host, null)).contains(expected);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"api.example.com", "inference.cerebras.ai", "api.eu.cerebras.ai", "openai.internal",
+            "api.deepseek.local", "deepseek.vercel.app", "localhost:8080", "127.0.0.1:8000"})
+    void resolveKeepsAHostThatNamesNoProviderAsSent(String host) {
+        assertThat(ProviderRegistry.resolve(host, null)).contains(host);
+    }
+
     @Test
     void resolvePrefersTheProviderFieldOverTheModelPrefix() {
         assertThat(ProviderRegistry.resolve("openrouter", "anthropic/claude-sonnet-4-5")).contains("openrouter");
