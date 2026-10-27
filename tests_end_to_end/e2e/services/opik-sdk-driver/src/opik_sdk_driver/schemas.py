@@ -491,6 +491,74 @@ class ExperimentCompareSeedResponse(BaseModel):
     experiments: list[CompareExperimentResult]
 
 
+class ReadabilityItemSeed(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    #: Stable handle for the row, echoed back on every score so the caller can
+    #: pair a score with the text that produced it without matching on the text.
+    key: str
+    text: str
+
+
+class ReadabilityEvaluateRequest(BaseModel):
+    workspace: str | None = None
+    project_name: str
+    dataset_name: str
+    dataset_description: str | None = None
+    experiment_name: str
+    items: list[ReadabilityItemSeed]
+    #: One `Readability` metric is built per language, all scored in the SAME
+    #: `evaluate()` run — which is the only way to reach the module-wide lock.
+    languages: list[str]
+    task_threads: int = 4
+
+
+class ReadabilityLocaleScore(BaseModel):
+    dataset_item_id: str
+    key: str
+    language: str
+    metric_name: str
+    #: The score `evaluate()` produced, with every language's metric running
+    #: concurrently in the scoring thread pool.
+    evaluated_value: float
+    #: The same text and language scored on its own, sequentially, outside
+    #: `evaluate()`. This is the uncontended ground truth: if the locale lock
+    #: stops holding, `evaluated_value` drifts away from it while this stays put.
+    serial_value: float
+    #: Surfaced rather than folded into the value, so the caller can refuse a
+    #: run whose scores are the 0.0 of a failed metric rather than a real score.
+    scoring_failed: bool
+
+
+class ReadabilityEvaluateResponse(BaseModel):
+    experiment_id: str
+    experiment_name: str
+    dataset_id: str
+    item_count: int
+    scored_item_count: int
+    scores: list[ReadabilityLocaleScore]
+
+
+class ReadabilityScoreRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: str
+    language: str
+
+
+class ReadabilityScoreResponse(BaseModel):
+    language: str
+    scored: bool
+    value: float | None = None
+    reading_ease: float | None = None
+    #: The exception's class name rather than a boolean, so the caller asserts
+    #: WHICH error it got. Before opik#8318 an unknown locale surfaced as a bare
+    #: `KeyError(None)` from pyphen; the fix is that it is now a named
+    #: `MetricComputationError`, and only the class name can tell those apart.
+    error_type: str | None = None
+    error_message: str | None = None
+
+
 class TestSuiteItemSeed(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -658,3 +726,206 @@ class ThreadsEvaluateResponse(BaseModel):
     # `context` field would serialize an absent key as `"context": null` and
     # destroy the distinction the caller is asserting on.
     conversation: list[dict[str, Any]]
+
+
+class StreamReadShape(BaseModel):
+    """One `search_*` call's paging arguments, exposed verbatim.
+
+    `max_batch_size` is the whole point of the route this belongs to: it is what
+    makes a MULTI-PAGE read cheap to provoke. Every other estate call through
+    `read_and_parse_full_stream` asks for fewer rows than one page holds, so the
+    rewritten cursor arithmetic (opik#8411) has never actually paged.
+
+    Plain ints, not constrained ones: the SDK's own handling of a `max_results`
+    that is not a multiple of the batch size — and of one larger than the
+    population — is part of what a caller reads this route to assert, so pydantic
+    must not reject or round them first.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Caller-chosen handle, echoed back so a response can be matched to the shape
+    # that produced it without depending on list order.
+    key: str
+    max_results: int
+    # Omitted means "the SDK's own default" (MAX_ENDPOINT_BATCH_SIZE, 2000),
+    # which is itself one of the shapes worth asserting — a single-page read that
+    # must agree with the many-page ones.
+    max_batch_size: int | None = None
+
+
+class StreamReadResult(BaseModel):
+    """The ids one shape's read returned, in the order the SDK assembled them.
+
+    Order is carried, not just membership: `read_and_parse_full_stream` appends
+    page by page, so a cursor that re-served a page shows up as a duplicate and a
+    cursor that skipped one shows up as a gap — and a set comparison would hide
+    the first while a count alone would hide both.
+    """
+
+    key: str
+    ids: list[str]
+
+
+class StreamReadsRequest(BaseModel):
+    """Several `search_traces` / `search_spans` reads of one project, in one call.
+
+    Batched deliberately. Each shape is a whole multi-page read of the same
+    seeded population, so issuing them as separate HTTP requests would multiply
+    the bridge's client construction and the rate-limit exposure for no
+    assertion, and the shapes are only meaningful when compared to each other.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    project_name: str
+    trace_shapes: list[StreamReadShape] = []
+    span_shapes: list[StreamReadShape] = []
+    workspace: str | None = None
+
+
+class StreamReadsResponse(BaseModel):
+    traces: list[StreamReadResult] = []
+    spans: list[StreamReadResult] = []
+
+
+class OllamaChatCall(BaseModel):
+    """One `chat()` call the ollama-integration route is to make.
+
+    Each field selects a branch of `track_ollama` that is reached no other way,
+    so a caller describes the call rather than the assertion:
+
+    - `stream` takes the aggregator path, where the decorator folds a chunk
+      sequence into one span instead of ending the span on a `ChatResponse`.
+    - `use_async` swaps `ollama.Client` for `ollama.AsyncClient`, which the
+      decorator wraps through a separate stream wrapper.
+    - `provider` overrides the `ollama` default recorded on every span.
+    - `parent_name`, when set, makes the call from inside an `@opik.track`
+      function, so the chat span has a parent to be attached to.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Echoed back so a caller can match a result to its call without relying on
+    # order, the same reason `StreamReadShape` carries `key`.
+    label: str
+    stream: bool = False
+    use_async: bool = False
+    provider: str | None = None
+    parent_name: str | None = None
+
+
+class OllamaChatRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    project_name: str
+    # Echoed by the mock responder onto every chunk, and read back off the span
+    # by the caller — so a tracker that stopped recording the requested model
+    # fails rather than matching a hardcoded name.
+    model: str
+    prompt: str
+    calls: list[OllamaChatCall]
+    workspace: str | None = None
+
+
+class OllamaChatResult(BaseModel):
+    label: str
+    # What the caller's own `chat()` returned, aggregated for a streamed call.
+    # The tracker must not change it: a wrapper that swallowed the last chunk
+    # would be invisible in Opik and obvious here.
+    content: str
+    model: str
+    # How many chunks a streamed call yielded, and 0 for a non-streamed one.
+    # Load-bearing: "the streamed call produced ONE span" is only a claim about
+    # aggregation if the stream really arrived in several chunks, and a caller
+    # that could not see this would pass identically against a one-chunk mock.
+    chunk_count: int
+
+
+class OllamaChatResponse(BaseModel):
+    """What the calls returned, plus the facts that live only in the process.
+
+    `double_track_is_noop` is the `opik_tracked` guard: `track_ollama` called
+    twice on one client must return the same object with the same bound `chat`,
+    and a second wrap would be invisible from the outside except as doubled
+    spans — which is a weaker and much slower way to observe it.
+    """
+
+    double_track_is_noop: bool
+    calls: list[OllamaChatResult]
+
+
+class TrackedGeneratorCall(BaseModel):
+    """One `@opik.track`ed call the generator route is to make.
+
+    `shape` selects HOW the consumer stops, and each value is a way a user stops
+    reading a streamed response early — the thing that left no trace at all
+    before opik#8518:
+
+    - `break_after` — a `for` loop that `break`s after `take` items, the
+      ordinary case.
+    - `bare_next` — a single `next()` and nothing more, i.e. a peek.
+    - `islice` — `itertools.islice` stopping short of the end, where the
+      consumer never touches the generator itself.
+    - `consumer_raises` — an exception raised in the CONSUMER's loop body after
+      `take` items and caught outside the loop. The generator itself does not
+      fail, so this must still be reported as a successful partial span rather
+      than an errored one.
+
+    And two controls, which are not early exits at all:
+
+    - `exhaust` — a generator read to the end, which raises `StopIteration` and
+      so was always reported.
+    - `plain_function` — a tracked NON-generator. Both exist so that "the trace
+      is there" cannot be confused with "the SDK reached this environment": a
+      red result on an early-exit shape next to a green one on a control is a
+      product finding, and a red everywhere is a connectivity problem.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Also the tracked function's `name`, so the trace is addressable by it.
+    # Echoed back for the same reason `OllamaChatCall.label` is: a result is
+    # matched to its call rather than to its position.
+    label: str
+    shape: Literal[
+        "break_after",
+        "bare_next",
+        "islice",
+        "consumer_raises",
+        "exhaust",
+        "plain_function",
+    ]
+    # How many items the consumer takes before stopping. Ignored by `exhaust`
+    # and `plain_function`.
+    take: int = 1
+
+
+class TrackedGeneratorRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    project_name: str
+    # What the generator yields, in order. Supplied by the caller rather than
+    # fixed here so the caller can derive the span output it expects — the
+    # decorator records `"".join(str(item) for item in consumed)` — without a
+    # second copy of the list living in this file.
+    items: list[str]
+    calls: list[TrackedGeneratorCall]
+    workspace: str | None = None
+
+
+class TrackedGeneratorResult(BaseModel):
+    label: str
+    # What the consumer actually received before it stopped. The one fact that
+    # exists only inside this process, and what makes the span's output
+    # assertable: a span recording more or less than this is wrong, and a
+    # caller that could not see it could only assert presence.
+    consumed: list[str]
+    # The exception type the consumer caught, for `consumer_raises`; null
+    # otherwise. Asserted rather than decoration: if the raise never happened,
+    # that shape degenerates into `break_after` and proves nothing extra.
+    caught: str | None = None
+
+
+class TrackedGeneratorResponse(BaseModel):
+    calls: list[TrackedGeneratorResult]

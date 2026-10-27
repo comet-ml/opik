@@ -498,13 +498,16 @@ const mapOpenAIMessage = (
 /**
  * Maps OpenAI input format to LLMMapperResult
  */
-const mapOpenAIInput = (data: OpenAIInputData): LLMMapperResult => {
+const mapOpenAIInput = (
+  data: OpenAIInputData,
+  fieldType: "input" | "output" = "input",
+): LLMMapperResult => {
   if (!data.messages || !Array.isArray(data.messages)) {
     return { messages: [] };
   }
 
   const messages = data.messages.map((msg, index) =>
-    mapOpenAIMessage(msg, index, "input"),
+    mapOpenAIMessage(msg, index, fieldType),
   );
 
   return { messages };
@@ -538,13 +541,16 @@ const mapOpenAIOutput = (data: OpenAIOutputData): LLMMapperResult => {
 /**
  * Maps direct array input format to LLMMapperResult
  */
-const mapDirectArrayInput = (data: OpenAIDirectArrayInput): LLMMapperResult => {
+const mapDirectArrayInput = (
+  data: OpenAIDirectArrayInput,
+  fieldType: "input" | "output" = "input",
+): LLMMapperResult => {
   if (!Array.isArray(data) || data.length === 0) {
     return { messages: [] };
   }
 
   const messages = data.map((msg, index) =>
-    mapOpenAIMessage(msg, index, "input"),
+    mapOpenAIMessage(msg, index, fieldType),
   );
 
   return { messages };
@@ -608,6 +614,15 @@ const mapCustomOutputFormat = (
 };
 
 /**
+ * Returns the messages after the last user message, or all of them when there
+ * is no user message.
+ */
+const getReplyMessages = (messages: OpenAIMessage[]): OpenAIMessage[] => {
+  const lastUserIndex = messages.map((m) => m.role).lastIndexOf("user");
+  return lastUserIndex === -1 ? messages : messages.slice(lastUserIndex + 1);
+};
+
+/**
  * Maps OpenAI format data to normalized LLMMapperResult.
  * Supports multiple input and output formats.
  */
@@ -649,6 +664,25 @@ export const mapOpenAIMessages: FormatMapper = (data, prettifyConfig) => {
     // Standard format { choices: [...] }
     if (typeof data === "object" && "choices" in data) {
       return mapOpenAIOutput(data as OpenAIOutputData);
+    }
+
+    // Conversation logged as output: [{ role, content }] or { messages: [...] }.
+    // Such outputs usually repeat the whole chat (the Open WebUI Opik filter
+    // logs the full history), and the input already shows the earlier turns,
+    // so keep only what follows the last user message: the reply.
+    if (Array.isArray(data)) {
+      return mapDirectArrayInput(
+        getReplyMessages(data as OpenAIDirectArrayInput),
+        "output",
+      );
+    }
+
+    if (typeof data === "object" && "messages" in data) {
+      const { messages } = data as OpenAIInputData;
+      return mapOpenAIInput(
+        { messages: Array.isArray(messages) ? getReplyMessages(messages) : [] },
+        "output",
+      );
     }
   }
 

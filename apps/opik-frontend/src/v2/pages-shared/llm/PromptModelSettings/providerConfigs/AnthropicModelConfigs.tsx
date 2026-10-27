@@ -4,14 +4,29 @@ import SliderInputControl from "@/shared/SliderInputControl/SliderInputControl";
 import {
   LLMAnthropicConfigsType,
   PROVIDER_MODEL_TYPE,
+  PROVIDER_TYPE,
   AnthropicThinkingEffort,
 } from "@/types/providers";
 import { DEFAULT_ANTHROPIC_CONFIGS } from "@/constants/llm";
 import PromptModelConfigsTooltipContent from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
+import {
+  getAnthropicEffortDescription,
+  getSamplingOffNote,
+} from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/anthropicPanelText";
 import ExclusiveSamplingParams from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/ExclusiveSamplingParams";
 import {
+  createSupports,
+  getAnthropicVisibleControls,
+  isAnyControlVisible,
+} from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/visibleControls";
+import {
   getAnthropicThinkingEffortOptions,
+  getMaxCompletionTokensRange,
+  hasEffortWithoutThinking,
+  hasThinkingInCustomParameters,
+  isAnthropicThinkingRequested,
   resolveEffort,
+  resolveMaxCompletionTokens,
   resolveSamplingParams,
   supportsSamplingParams,
 } from "@/lib/modelUtils";
@@ -33,17 +48,26 @@ const AnthropicModelConfigs = ({
   model,
   unsupportedParams,
 }: AnthropicModelConfigsProps) => {
-  const supports = (param: ModelConfigParam) => !unsupportedParams?.has(param);
-  const showSamplingParams = supportsSamplingParams(model);
+  const supports = createSupports(unsupportedParams);
   const thinkingEffortOptions = getAnthropicThinkingEffortOptions(model);
   // Read the pair through the resolver rather than off the config: it is what the request will
   // carry, and it guarantees exactly one half is live, which is what the choice below reflects.
   const { temperature, topP } = resolveSamplingParams(model ?? "", configs);
   const { thinkingEffort } = resolveEffort(model ?? "", configs);
+  const visible = getAnthropicVisibleControls({ model, configs, supports });
+  const maxCompletionTokensRange = getMaxCompletionTokensRange(
+    PROVIDER_TYPE.ANTHROPIC,
+    model ?? "",
+  );
+  const samplingOffWhileThinking =
+    supportsSamplingParams(model) &&
+    isAnthropicThinkingRequested(model ?? "", configs);
+
+  if (!isAnyControlVisible(visible)) return null;
 
   return (
     <div className="flex w-72 flex-col gap-6">
-      {showSamplingParams && (
+      {visible.samplingParams && (
         <ExclusiveSamplingParams
           temperature={temperature}
           topP={topP}
@@ -54,26 +78,39 @@ const AnthropicModelConfigs = ({
         />
       )}
 
-      {supports("maxCompletionTokens") && (
+      {samplingOffWhileThinking && (
+        <p className="comet-body-xs text-muted-slate">
+          {getSamplingOffNote(
+            supports("topP"),
+            hasThinkingInCustomParameters(configs),
+          )}
+        </p>
+      )}
+
+      {visible.maxCompletionTokens && (
         <SliderInputControl
-          value={
-            configs.maxCompletionTokens ??
-            DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS
-          }
+          value={resolveMaxCompletionTokens(
+            PROVIDER_TYPE.ANTHROPIC,
+            model ?? "",
+            configs.maxCompletionTokens,
+          )}
           onChange={(v) => onChange({ maxCompletionTokens: v })}
           id="maxCompletionTokens"
-          min={0}
-          max={64000}
+          min={maxCompletionTokensRange.min}
+          max={maxCompletionTokensRange.max}
           step={1}
+          integer
           defaultValue={DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS}
           label="Max output tokens"
           tooltip={
-            <PromptModelConfigsTooltipContent text="The maximum number of tokens to generate shared between the prompt and completion. The exact limit varies by model. (One token is roughly 4 characters for standard English text)." />
+            <PromptModelConfigsTooltipContent
+              text={`The maximum number of tokens the model can generate in its response. The prompt does not count toward it. On thinking models, thinking tokens count toward it too, so a low limit can leave the response empty. The exact limit varies by model. The minimum is ${maxCompletionTokensRange.min}. (One token is roughly 4 characters for standard English text).`}
+            />
           }
         />
       )}
 
-      {supports("throttling") && (
+      {visible.throttling && (
         <SliderInputControl
           value={configs.throttling ?? DEFAULT_ANTHROPIC_CONFIGS.THROTTLING}
           onChange={(v) => onChange({ throttling: v })}
@@ -89,7 +126,7 @@ const AnthropicModelConfigs = ({
         />
       )}
 
-      {supports("maxConcurrentRequests") && (
+      {visible.maxConcurrentRequests && (
         <SliderInputControl
           value={
             configs.maxConcurrentRequests ??
@@ -108,13 +145,13 @@ const AnthropicModelConfigs = ({
         />
       )}
 
-      {supports("thinkingEffort") && thinkingEffort !== undefined && (
+      {visible.thinkingEffort && thinkingEffort !== undefined && (
         <div className="space-y-2">
           <div className="flex items-center space-x-2">
             <Label htmlFor="thinkingEffort" className="text-sm font-medium">
-              Thinking effort
+              {hasEffortWithoutThinking(model) ? "Effort" : "Thinking effort"}
             </Label>
-            <ExplainerIcon description="Controls how much effort Claude puts into thinking before responding. Higher effort produces more thorough analysis but takes longer. Uses adaptive thinking mode." />
+            <ExplainerIcon description={getAnthropicEffortDescription(model)} />
           </div>
           <SelectBox
             id="thinkingEffort"

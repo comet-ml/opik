@@ -65,9 +65,10 @@ def track_langgraph(
         - If you need to customize the OpikTracer for specific invocations, you can still
           pass it explicitly in the config parameter, which will override the default.
         - The graph object is modified in-place and also returned for convenience.
-        - For async invocations using `ainvoke()`, you may still need to use
-          `extract_current_langgraph_span_data()` to propagate context to @track-decorated
-          functions within async nodes.
+        - Async invocations (`ainvoke()`, `astream()`) keep the tracer context in node
+          code, so @track-decorated functions called from async nodes nest under the
+          node's span. `extract_current_langgraph_span_data()` remains available for
+          explicit propagation via distributed headers.
     """
     analytics.track_event("integration", "langgraph")
     graph_structure = graph.get_graph(xray=True)

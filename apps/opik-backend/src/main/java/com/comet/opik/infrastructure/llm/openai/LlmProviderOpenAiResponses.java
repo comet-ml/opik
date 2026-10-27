@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.llm.openai;
 
+import com.comet.opik.api.ModelParams;
 import com.comet.opik.domain.llm.LlmProviderService;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderLangChainMapper;
@@ -40,9 +41,11 @@ public class LlmProviderOpenAiResponses implements LlmProviderService {
 
     @Override
     public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
-        var strictJsonSchema = LlmProviderOpenAiResponsesMapper.extractRequestedStrictJsonSchema(request);
-        var chatModel = clientGenerator.newResponsesApiChatModel(config, strictJsonSchema);
-        var chatRequest = LlmProviderOpenAiResponsesMapper.toChatRequest(request);
+        var responsesRequest = OpenAiResponsesExtraBody.toResponsesRequest(request);
+        var strictJsonSchema = LlmProviderOpenAiResponsesMapper.extractRequestedStrictJsonSchema(responsesRequest);
+        var chatModel = clientGenerator.newResponsesApiChatModel(config, strictJsonSchema,
+                responsesRequest.customParameters());
+        var chatRequest = LlmProviderOpenAiResponsesMapper.toChatRequest(responsesRequest);
         var chatResponse = chatModel.chat(chatRequest);
         return LlmProviderOpenAiResponsesMapper.toChatCompletionResponse(chatResponse, request);
     }
@@ -54,9 +57,11 @@ public class LlmProviderOpenAiResponses implements LlmProviderService {
             @NonNull Consumer<ChatCompletionResponse> handleMessage,
             @NonNull Runnable handleClose,
             @NonNull Consumer<Throwable> handleError) {
-        var strictJsonSchema = LlmProviderOpenAiResponsesMapper.extractRequestedStrictJsonSchema(request);
-        var streamingChatModel = clientGenerator.newResponsesApiStreamingChatModel(config, strictJsonSchema);
-        var chatRequest = LlmProviderOpenAiResponsesMapper.toChatRequest(request);
+        var responsesRequest = OpenAiResponsesExtraBody.toResponsesRequest(request);
+        var strictJsonSchema = LlmProviderOpenAiResponsesMapper.extractRequestedStrictJsonSchema(responsesRequest);
+        var streamingChatModel = clientGenerator.newResponsesApiStreamingChatModel(config, strictJsonSchema,
+                responsesRequest.customParameters());
+        var chatRequest = LlmProviderOpenAiResponsesMapper.toChatRequest(responsesRequest);
         streamingChatModel.chat(chatRequest,
                 new OpenAiResponsesStreamingHandler(request, handleMessage, handleClose, handleError));
     }
@@ -79,6 +84,11 @@ public class LlmProviderOpenAiResponses implements LlmProviderService {
         return findOpenAiServiceException(throwable)
                 .map(LlmProviderOpenAiResponses::toErrorMessage)
                 .or(() -> LlmProviderLangChainMapper.INSTANCE.getErrorObject(throwable, log));
+    }
+
+    @Override
+    public String paramsRoute() {
+        return ModelParams.RESPONSES_API_ROUTE;
     }
 
     private static Optional<OpenAIServiceException> findOpenAiServiceException(Throwable throwable) {

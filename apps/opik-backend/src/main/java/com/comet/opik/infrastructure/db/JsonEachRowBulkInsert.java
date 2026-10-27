@@ -5,6 +5,7 @@ import com.clickhouse.client.api.insert.InsertSettings;
 import com.clickhouse.client.api.metrics.ServerMetrics;
 import com.clickhouse.data.ClickHouseFormat;
 import com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
+import com.comet.opik.utils.AsyncUtils;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.core.io.SerializedString;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -41,8 +42,8 @@ import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils
  * experiment aggregates — this class is the same approach, factored out so a write path can adopt it
  * without growing its own copy of the plumbing. {@code FeedbackScoreDAO} is the first caller.
  *
- * <p>Callers reach this only when {@code bulkInsert.v2ClientEnabled} is set — see
- * {@link com.comet.opik.infrastructure.BulkInsertConfig}.
+ * <p>This is the only bulk write path. It was introduced behind a toggle alongside the R2DBC
+ * implementation it replaced; both the toggle and that implementation are gone.
  *
  * <p><b>Which thread does what.</b> The two halves run on different pools, deliberately:
  *
@@ -144,14 +145,12 @@ public class JsonEachRowBulkInsert {
                 .flatMap(payload -> {
                     Segment segment = startSegment(table, "Clickhouse", "batch_insert");
 
-                    return Mono.fromFuture(() -> clickHouseClient.insert(
-                            table, payload::writeTo, ClickHouseFormat.JSONEachRow, settings(logComment)))
+                    return AsyncUtils.usingClickHouseFuture(
+                            () -> clickHouseClient.insert(
+                                    table, payload::writeTo, ClickHouseFormat.JSONEachRow, settings(logComment)),
+                            response -> response.getMetrics().getMetric(ServerMetrics.NUM_ROWS_WRITTEN)
+                                    .getLong())
                             .doFinally(signalType -> endSegment(segment));
-                })
-                .map(response -> {
-                    try (response) {
-                        return response.getMetrics().getMetric(ServerMetrics.NUM_ROWS_WRITTEN).getLong();
-                    }
                 })
                 // The throwable is passed as the cause, not formatted into the message: a failed bulk
                 // insert is diagnosable only from the stack and the cause chain, which say whether it
@@ -188,7 +187,21 @@ public class JsonEachRowBulkInsert {
                 // ttft reaches ClickHouse as the string "NaN" once the sentinel columns are
                 // non-nullable. Set explicitly rather than inherited from the server default,
                 // which would make correctness depend on an unrelated server-side setting.
-                .serverSetting("input_format_json_read_numbers_as_strings", "1");
+                .serverSetting("input_format_json_read_numbers_as_strings", "1")
+                // The parallel parser splits the body on chunk boundaries and cannot carry one row
+                // across them, so a single row past 10x min_chunk_bytes_for_parallel_parsing -- 100
+                // MiB at the 10 MiB default -- is rejected with "Size of JSON object at position N
+                // is extremely large" (code 117, INCORRECT_DATA), taking the whole batch with it at
+                // written_rows = 0. Note the message quotes min_chunk_bytes itself as the bound it
+                // enforces, which is off by the factor of 10: measured on the server image this
+                // suite runs, 99 MiB is accepted and 100 MiB is not.
+                //
+                // Spans carry user-supplied input and output, so rows that large are a normal thing
+                // for a customer to send, and in production this silently dropped batches. Raising
+                // the threshold would only move the cliff; disabling the parallel parser removes it,
+                // and it engages at all only above 10 MiB of body -- under 2% of span inserts, and
+                // none of the other write paths.
+                .serverSetting("input_format_parallel_parsing", "0");
     }
 
     /**

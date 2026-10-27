@@ -60,6 +60,7 @@ Below are instructions for obtaining API keys and other required information for
 3. Click "Create new secret key"
 4. Copy your API key (it will only be shown once)
 5. In Opik, select "OpenAI" as the provider and paste your key
+6. (Optional) Under **Custom headers**, add any static HTTP headers to send with every request to OpenAI (see the note under OpenRouter for the headers you can't set)
 
 #### Anthropic
 
@@ -76,6 +77,16 @@ Below are instructions for obtaining API keys and other required information for
 3. Create a new API key
 4. Copy your API key
 5. In Opik, select "OpenRouter" as the provider and paste your key
+6. (Optional) Under **Custom headers**, add any static HTTP headers to send with every request. For example, OpenRouter's app attribution headers make Opik calls show up under your app name in OpenRouter's activity view:
+   - `HTTP-Referer`: `https://your-app.example.com`
+   - `X-OpenRouter-Title`: `Your App Name`
+
+<Note>
+  For OpenAI and OpenRouter, the `Authorization` and `api-key` headers are rejected, because they would override the API
+  key, with the error "Use the API key field instead of this header". Put the key in the API key field instead. You no
+  longer need a Custom provider entry (see vLLM / Custom Provider below) just to send headers, and the built-in provider
+  keeps Opik cost tracking.
+</Note>
 
 #### Gemini
 
@@ -117,7 +128,7 @@ Once saved, you can use your Azure OpenAI models directly from Online Scores and
 
 1. **Create a Custom IAM Role**
 
-```bash
+```bash wordWrap
 gcloud iam roles create opik \
   --project=<my-project> \
   --title="Opik" \
@@ -128,7 +139,7 @@ gcloud iam roles create opik \
 
 2. **Create a Service Account**
 
-```bash
+```bash wordWrap
 gcloud iam service-accounts create opik-sa \
   --description="Service account for Opik role" \
   --display-name="Opik Service Account"
@@ -136,7 +147,7 @@ gcloud iam service-accounts create opik-sa \
 
 3. **Assign the Role to the Service Account**
 
-```bash
+```bash wordWrap
 gcloud projects add-iam-policy-binding <my-project> \
   --member="serviceAccount:opik-sa@<my-project>.iam.gserviceaccount.com" \
   --role="projects/<my-project>/roles/opik"
@@ -144,7 +155,7 @@ gcloud projects add-iam-policy-binding <my-project> \
 
 4. **Generate the Service Account Key File**
 
-```bash
+```bash wordWrap
 gcloud iam service-accounts keys create opik-key.json \
   --iam-account=opik-sa@<my-project>.iam.gserviceaccount.com
 ```
@@ -242,7 +253,7 @@ Before configuring Bedrock in Opik, ensure you have:
    - **Provider name**: A unique identifier for this provider instance (e.g., "Bedrock us-east-1")
    - **URL**: Your Bedrock endpoint URL (see format below)
    - **Authentication**: Your AWS Bedrock API key (see [AWS documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/getting-started-api-keys.html) for setup instructions), or OAuth2 client credentials if your gateway issues short-lived tokens (see [OAuth2 Client Credentials Authentication](#oauth2-client-credentials-authentication) below)
-   - **Models list**: Comma-separated list of models you want to use (e.g., `us.anthropic.claude-3-5-sonnet-20241022-v2:0,us.meta.llama3-2-3b-instruct-v1:0`)
+   - **Models list**: Comma-separated list of models you want to use (e.g., `us.anthropic.claude-sonnet-4-6,us.meta.llama3-2-3b-instruct-v1:0`)
    - **Custom headers** (optional): Add any additional HTTP headers required by your configuration
 5. Click **Add configuration** to save
 
@@ -284,7 +295,7 @@ Opik connects to [Ollama](https://ollama.com/) using the OpenAI-compatible API, 
    - **Provider name**: A name for this instance (e.g., "Ollama local")
    - **URL**: Base URL of your Ollama instance, ending with `/v1` (e.g., `http://localhost:11434/v1`)
    - **API Key** (optional): Leave blank unless your Ollama instance requires authentication
-   - Use **"Test connection"** to verify Opik can reach the instance, then **"Discover models"** to load the model list
+   - Click **Connect**: Opik checks that it can reach the instance and loads its model list
 5. Click **Save** to store the configuration
 
 You can configure multiple Ollama instances with different provider names and URLs.
@@ -308,6 +319,34 @@ Use this option to add any other OpenAI API-compliant provider such as vLLM, etc
 <Tip>
   If you're running Opik locally, you would need to use `http://host.docker.internal:<PORT>/v1` for Mac and Windows or `http://172.17.0.1:<PORT>/v1` for Linux, and not `http://localhost`.
 </Tip>
+
+<Tip>
+  **Self-hosted deployments:** The Docker Compose and Helm deployments allow provider URLs on private networks (`LLM_PROVIDER_DESTINATION_GUARD=relaxed`), so local servers such as Ollama or vLLM work out of the box. Other launch paths default to `strict`, which allows only public `http`/`https` provider URLs; set the variable to `relaxed` if your provider runs on a private network, or to `strict` on Compose/Helm to harden them. Note that `relaxed` disables the SSRF protection on provider URLs, so it is only appropriate where provider configuration is restricted to trusted administrators. On Opik Cloud, the provider URL must be publicly reachable.
+</Tip>
+
+| Launch path | Default | How to change it |
+|---|---|---|
+| Docker Compose (`./opik.sh` or `docker compose`) | `relaxed` | Export it before starting, e.g. `LLM_PROVIDER_DESTINATION_GUARD=strict ./opik.sh` |
+| Helm chart | `relaxed` | Set `component.backend.env.LLM_PROVIDER_DESTINATION_GUARD` in your values file (example below) |
+| Backend started any other way | `strict` | Set the `LLM_PROVIDER_DESTINATION_GUARD` environment variable on the backend |
+
+```yaml
+# Helm values: harden a deployment whose providers are all public
+component:
+  backend:
+    env:
+      LLM_PROVIDER_DESTINATION_GUARD: "strict"
+```
+
+Accepted values are `strict` and `relaxed` (case-insensitive). When the variable is unset, the default for your launch path applies. Any other value, including an empty one, stops the backend at startup with a configuration error, so a typo never silently turns the check off. Docker Compose is the one exception for an empty value: it treats it as unset and uses its `relaxed` default.
+
+`LLM_PROVIDER_DESTINATION_SCHEME` sets which schemes `strict` mode accepts: `plaintext_or_tls` (the default on every launch path) allows `http` and `https`, as self-hosted model servers commonly run without TLS, and `https_only` allows `https` only. Values are case-insensitive, and any other value stops the backend at startup. `relaxed` mode doesn't check the scheme.
+
+Video URLs without a file extension get a `HEAD` request to detect their type. `LLM_PROVIDER_VIDEO_URL_DESTINATION_GUARD` applies the same destination check to that request (default `relaxed` on Docker Compose and Helm, `strict` on every other launch path); a refused URL is still sent to the model, just without the detected type. Set it to `relaxed` to detect the type of videos served from private networks.
+
+Gemini and Vertex AI receive media as inline data, so Opik downloads the image, audio, video and PDF URLs in a message itself; only `gs://` and `data:` URLs are passed through as they are. The same variable applies the destination check to each download. A media URL with another scheme, or one that is refused, redirects, or exceeds `LLM_PROVIDER_MEDIA_DOWNLOAD_TIMEOUT` (default `30s`) or `LLM_PROVIDER_MEDIA_DOWNLOAD_MAX_SIZE` (default `20MB`), fails the request with a `400`. With `relaxed`, these downloads can reach any address the backend can, including your internal network, so use it only when everyone who can send messages or log traces is trusted with that access.
+
+Changing a provider's **URL** requires re-entering its API key (or OAuth2 credentials), since stored secrets are only ever sent to the endpoint they were saved for.
 
 ##### Custom Headers
 

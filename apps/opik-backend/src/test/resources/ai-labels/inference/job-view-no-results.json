@@ -1,0 +1,8 @@
+{
+  "job_id": "job-8e4a",
+  "endpoint": "generate",
+  "status": "running",
+  "counts": {"pending": 9, "ok": 1, "failed": 0, "cancelled": 0},
+  "cancel_requested": false,
+  "results": []
+}

@@ -49,6 +49,9 @@ from .alert_write import AlertWrite
 from .alert_write_alert_type import AlertWriteAlertType
 from .analytics_query_response import AnalyticsQueryResponse
 from .annotation_queue import AnnotationQueue
+from .annotation_queue_annotator_view import AnnotationQueueAnnotatorView
+from .annotation_queue_annotator_view_public import AnnotationQueueAnnotatorViewPublic
+from .annotation_queue_annotator_view_write import AnnotationQueueAnnotatorViewWrite
 from .annotation_queue_automation import AnnotationQueueAutomation
 from .annotation_queue_automation_public import AnnotationQueueAutomationPublic
 from .annotation_queue_automation_write import AnnotationQueueAutomationWrite
@@ -60,6 +63,8 @@ from .annotation_queue_items_public import AnnotationQueueItemsPublic
 from .annotation_queue_page_public import AnnotationQueuePagePublic
 from .annotation_queue_public import AnnotationQueuePublic
 from .annotation_queue_public_scope import AnnotationQueuePublicScope
+from .annotation_queue_reference import AnnotationQueueReference
+from .annotation_queue_reference_public import AnnotationQueueReferencePublic
 from .annotation_queue_reviewer import AnnotationQueueReviewer
 from .annotation_queue_reviewer_public import AnnotationQueueReviewerPublic
 from .annotation_queue_scope import AnnotationQueueScope
@@ -263,8 +268,10 @@ from .dashboard_page_public import DashboardPagePublic
 from .dashboard_public import DashboardPublic
 from .dashboard_public_scope import DashboardPublicScope
 from .dashboard_public_type import DashboardPublicType
+from .dashboard_saved_query import DashboardSavedQuery
 from .dashboard_update_public import DashboardUpdatePublic
 from .dashboard_update_public_type import DashboardUpdatePublicType
+from .dashboard_widget_query_request import DashboardWidgetQueryRequest
 from .dashboard_write import DashboardWrite
 from .dashboard_write_type import DashboardWriteType
 from .data_point_double import DataPointDouble
@@ -437,7 +444,6 @@ from .guardrail_write_name import GuardrailWriteName
 from .guardrail_write_result import GuardrailWriteResult
 from .guardrails_validation import GuardrailsValidation
 from .guardrails_validation_public import GuardrailsValidationPublic
-from .ids_holder import IdsHolder
 from .image_url import ImageUrl
 from .image_url_public import ImageUrlPublic
 from .image_url_write import ImageUrlWrite
@@ -555,6 +561,7 @@ from .project_stats_summary import ProjectStatsSummary
 from .project_stats_summary_item import ProjectStatsSummaryItem
 from .project_visibility import ProjectVisibility
 from .prompt import Prompt
+from .prompt_cache_options import PromptCacheOptions
 from .prompt_detail import PromptDetail
 from .prompt_detail_template_structure import PromptDetailTemplateStructure
 from .prompt_page_public import PromptPagePublic
@@ -717,6 +724,7 @@ from .trace_write import TraceWrite
 from .trace_write_source import TraceWriteSource
 from .usage import Usage
 from .usage_by_workspace_project_user_response import UsageByWorkspaceProjectUserResponse
+from .usage_projects_response import UsageProjectsResponse
 from .user_defined_metric_python_code import UserDefinedMetricPythonCode
 from .user_defined_metric_python_code_public import UserDefinedMetricPythonCodePublic
 from .user_defined_metric_python_code_write import UserDefinedMetricPythonCodeWrite
@@ -746,6 +754,7 @@ from .workspace_metric_response import WorkspaceMetricResponse
 from .workspace_metrics_summary_request import WorkspaceMetricsSummaryRequest
 from .workspace_metrics_summary_response import WorkspaceMetricsSummaryResponse
 from .workspace_name_holder import WorkspaceNameHolder
+from .workspace_project_name import WorkspaceProjectName
 from .workspace_project_user_count import WorkspaceProjectUserCount
 from .workspace_spans_count import WorkspaceSpansCount
 from .workspace_trace_count import WorkspaceTraceCount
@@ -799,6 +808,9 @@ __all__ = [
     "AlertWriteAlertType",
     "AnalyticsQueryResponse",
     "AnnotationQueue",
+    "AnnotationQueueAnnotatorView",
+    "AnnotationQueueAnnotatorViewPublic",
+    "AnnotationQueueAnnotatorViewWrite",
     "AnnotationQueueAutomation",
     "AnnotationQueueAutomationPublic",
     "AnnotationQueueAutomationWrite",
@@ -810,6 +822,8 @@ __all__ = [
     "AnnotationQueuePagePublic",
     "AnnotationQueuePublic",
     "AnnotationQueuePublicScope",
+    "AnnotationQueueReference",
+    "AnnotationQueueReferencePublic",
     "AnnotationQueueReviewer",
     "AnnotationQueueReviewerPublic",
     "AnnotationQueueScope",
@@ -975,8 +989,10 @@ __all__ = [
     "DashboardPublic",
     "DashboardPublicScope",
     "DashboardPublicType",
+    "DashboardSavedQuery",
     "DashboardUpdatePublic",
     "DashboardUpdatePublicType",
+    "DashboardWidgetQueryRequest",
     "DashboardWrite",
     "DashboardWriteType",
     "DataPointDouble",
@@ -1142,7 +1158,6 @@ __all__ = [
     "GuardrailWriteResult",
     "GuardrailsValidation",
     "GuardrailsValidationPublic",
-    "IdsHolder",
     "ImageUrl",
     "ImageUrlPublic",
     "ImageUrlWrite",
@@ -1258,6 +1273,7 @@ __all__ = [
     "ProjectStatsSummaryItem",
     "ProjectVisibility",
     "Prompt",
+    "PromptCacheOptions",
     "PromptDetail",
     "PromptDetailTemplateStructure",
     "PromptPagePublic",
@@ -1420,6 +1436,7 @@ __all__ = [
     "TraceWriteSource",
     "Usage",
     "UsageByWorkspaceProjectUserResponse",
+    "UsageProjectsResponse",
     "UserDefinedMetricPythonCode",
     "UserDefinedMetricPythonCodePublic",
     "UserDefinedMetricPythonCodeWrite",
@@ -1449,6 +1466,7 @@ __all__ = [
     "WorkspaceMetricsSummaryRequest",
     "WorkspaceMetricsSummaryResponse",
     "WorkspaceNameHolder",
+    "WorkspaceProjectName",
     "WorkspaceProjectUserCount",
     "WorkspaceSpansCount",
     "WorkspaceTraceCount",

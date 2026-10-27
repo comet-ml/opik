@@ -7,6 +7,11 @@ run-name: "SDK Lib DSPy Tests ${{ github.ref_name }} by @${{ github.actor }}"
 permissions:
   contents: read
 env:
+  # Retry transient PyPI/network failures longer before failing the build.
+  PIP_RETRIES: 8
+  PIP_DEFAULT_TIMEOUT: 30
+  UV_HTTP_TIMEOUT: 30
+  UV_HTTP_RETRIES: 8
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   OPENAI_ORG_ID:  ${{ secrets.OPENAI_ORG_ID }}
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
@@ -28,7 +33,9 @@ jobs:
       fail-fast: true
       matrix:
         # 3.14 is supported in 3.1.0b1 and up. Once 3.1.0 is released, we can add 3.14 to the matrix.
-        python_version: ["3.10", "3.11", "3.12", "3.13"]
+        # Lowest and highest supported Python only: these suites make paid
+        # LLM calls and the intermediate versions add cost without coverage.
+        python_version: ["3.10", "3.13"]
 
     steps:
       - name: Check out code
@@ -40,7 +47,7 @@ jobs:
           python-version: ${{matrix.python_version}}
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v10.1.0
+        uses: astral-sh/setup-uv@v10.3.0
 
       - name: Install opik
         run: uv pip install --system .

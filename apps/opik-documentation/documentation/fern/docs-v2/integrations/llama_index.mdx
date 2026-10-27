@@ -30,7 +30,7 @@ title: Observability for LlamaIndex with Opik
 
 To use the Opik integration with LlamaIndex, you'll need to have both the `opik` and `llama_index` packages installed. You can install them using pip:
 
-```bash
+```bash wordWrap
 pip install opik llama-index llama-index-agent-openai llama-index-llms-openai llama-index-callbacks-opik
 ```
 
@@ -49,13 +49,13 @@ In order to use LlamaIndex, you will need to configure your LLM provider API key
 
 You can set them as environment variables:
 
-```bash
+```bash wordWrap
 export OPENAI_API_KEY="YOUR_API_KEY"
 ```
 
 Or set them programmatically:
 
-```python
+```python wordWrap
 import os
 import getpass
 
@@ -67,7 +67,7 @@ if "OPENAI_API_KEY" not in os.environ:
 
 To use the Opik integration with LLamaIndex, you can use the `set_global_handler` function from the LlamaIndex package to set the global tracer:
 
-```python
+```python wordWrap
 from llama_index.core import global_handler, set_global_handler
 
 set_global_handler("opik")
@@ -78,7 +78,7 @@ Now that the integration is set up, all the LlamaIndex runs will be traced and l
 
 Alternatively, you can configure the callback handler directly for more control:
 
-```python
+```python wordWrap
 from llama_index.core import Settings
 from llama_index.core.callbacks import CallbackManager
 from opik.integrations.llama_index import LlamaIndexCallbackHandler
@@ -104,7 +104,7 @@ To showcase the integration, we will create a new a query engine that will use P
 **First step:**
 Configure the Opik integration:
 
-```python
+```python wordWrap
 import os
 from llama_index.core import global_handler, set_global_handler
 
@@ -118,7 +118,7 @@ opik_callback_handler = global_handler
 **Second step:**
 Download the example data:
 
-```python
+```python wordWrap
 import os
 import requests
 
@@ -136,7 +136,7 @@ with open('./data/paul_graham/paul_graham_essay.txt', 'wb') as f:
 
 Configure the OpenAI API key:
 
-```python
+```python wordWrap
 import os
 import getpass
 
@@ -148,7 +148,7 @@ if "OPENAI_API_KEY" not in os.environ:
 
 We can now load the data, create an index and query engine:
 
-```python
+```python wordWrap
 from llama_index.core import VectorStoreIndex, SimpleDirectoryReader
 
 documents = SimpleDirectoryReader("./data/paul_graham").load_data()
@@ -169,7 +169,7 @@ Given that the integration with Opik has been set up, all the traces are logged 
 
 The LlamaIndex integration seamlessly works with Opik's `@track` decorator. When you call LlamaIndex operations inside a tracked function, the LlamaIndex traces will automatically be attached as child spans to your existing trace.
 
-```python
+```python wordWrap
 import opik
 from llama_index.core import global_handler, set_global_handler
 from llama_index.llms.openai import OpenAI
@@ -202,7 +202,7 @@ In this example, Opik will create a trace for the `my_llm_application` function,
 
 You can also manually create traces using `opik.start_as_current_trace()` and have LlamaIndex operations nested within:
 
-```python
+```python wordWrap
 import opik
 from llama_index.core import global_handler, set_global_handler
 from llama_index.llms.openai import OpenAI
@@ -233,7 +233,7 @@ LlamaIndex workflows are multi-step processing pipelines for LLM applications. T
 
 You can use `@opik.track()` to decorate your workflow steps and `opik.start_as_current_span()` to track the workflow execution:
 
-```python
+```python wordWrap
 import opik
 from llama_index.core.workflow import Workflow, StartEvent, StopEvent, step, Event
 from llama_index.core import Settings
@@ -308,7 +308,7 @@ If you're certain the workflow is a top-level call and want to create only a tra
 
 When using streaming chat responses with OpenAI models (e.g., `llm.stream_chat()`), you need to explicitly enable token usage tracking by configuring the `stream_options` parameter:
 
-```python
+```python wordWrap
 from llama_index.llms.openai import OpenAI
 from llama_index.core.llms import ChatMessage
 from llama_index.core import global_handler, set_global_handler

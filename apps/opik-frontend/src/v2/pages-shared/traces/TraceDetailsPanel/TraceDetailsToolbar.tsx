@@ -43,7 +43,7 @@ import { TREE_FILTER_COLUMNS } from "@/v2/pages-shared/traces/TraceDetailsPanel/
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { GuardrailResult } from "@/types/guardrails";
-import { getJSONPaths } from "@/lib/utils";
+import { getJSONPaths, JSON_PATH_FORMAT } from "@/lib/utils";
 import { getSpanTypeFilterConfig } from "@/v2/pages-shared/traces/spanTypeFilter";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
@@ -113,9 +113,13 @@ export const TraceTreeToolbar: React.FC<TraceTreeToolbarProps> = ({
               treeData.reduce<string[]>((acc, d) => {
                 return acc.concat(
                   isObject(d.metadata) || isArray(d.metadata)
-                    ? getJSONPaths(d.metadata, "metadata").map((path) =>
-                        path.substring(path.indexOf(".") + 1),
-                      )
+                    ? getJSONPaths(
+                        d.metadata,
+                        "metadata",
+                        [],
+                        false,
+                        JSON_PATH_FORMAT.bracket,
+                      ).map((path) => path.substring(path.indexOf(".") + 1))
                     : [],
                 );
               }, []),
@@ -139,7 +143,13 @@ export const TraceTreeToolbar: React.FC<TraceTreeToolbarProps> = ({
                     (internalAcc, key) =>
                       internalAcc.concat(
                         isObject(d[key]) || isArray(d[key])
-                          ? getJSONPaths(d[key], key).map((path) => path)
+                          ? getJSONPaths(
+                              d[key],
+                              key,
+                              [],
+                              false,
+                              JSON_PATH_FORMAT.bracket,
+                            ).map((path) => path)
                           : [],
                       ),
                     [],

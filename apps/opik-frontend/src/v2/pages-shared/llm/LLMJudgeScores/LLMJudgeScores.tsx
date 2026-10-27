@@ -12,12 +12,15 @@ interface LLMJudgeScoresProps {
   validationErrors?: ScoresValidationError;
   scores: LLMJudgeSchema[];
   onChange: (scores: LLMJudgeSchema[]) => void;
+  // Restricts the score types offered; all types when omitted. New scores get the first allowed type.
+  allowedTypes?: LLM_SCHEMA_TYPE[];
 }
 
 const LLMJudgeScores = ({
   validationErrors,
   scores,
   onChange,
+  allowedTypes,
 }: LLMJudgeScoresProps) => {
   const generalError = get(validationErrors, "message");
   const handleAddScore = useCallback(() => {
@@ -26,11 +29,11 @@ const LLMJudgeScores = ({
       {
         name: "Score name",
         description: "Score description",
-        type: LLM_SCHEMA_TYPE.INTEGER,
+        type: allowedTypes?.[0] ?? LLM_SCHEMA_TYPE.INTEGER,
         unsaved: false,
       },
     ]);
-  }, [onChange, scores]);
+  }, [allowedTypes, onChange, scores]);
 
   const handleRemoveScore = useCallback(
     (index: number) => {
@@ -57,6 +60,7 @@ const LLMJudgeScores = ({
             onRemoveScore={() => handleRemoveScore(index)}
             onChangeScore={(changes) => handleChangeScore(index, changes)}
             score={score}
+            allowedTypes={allowedTypes}
           />
         ))}
       </div>

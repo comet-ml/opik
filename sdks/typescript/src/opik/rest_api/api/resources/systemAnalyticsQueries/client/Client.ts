@@ -17,7 +17,7 @@ export declare namespace SystemAnalyticsQueriesClient {
 }
 
 /**
- * Internal endpoint to run Agent Insights free-form SQL
+ * Internal endpoints to run free-form analytics SQL
  */
 export class SystemAnalyticsQueriesClient {
     protected readonly _options: NormalizedClientOptions<SystemAnalyticsQueriesClient.Options>;
@@ -120,6 +120,100 @@ export class SystemAnalyticsQueriesClient {
             _response.rawResponse,
             "POST",
             "/v1/internal/analytics-queries/projects/{projectId}",
+        );
+    }
+
+    /**
+     * Runs read-only SQL bounded to the caller's workspace. Supply project_id to restrict traces, spans, feedback scores and trace threads to one project, or omit it to cover the whole workspace. Experiments, experiment items and dataset items always cover the whole workspace.
+     *
+     * @param {OpikApi.ScopedAnalyticsQueryRequest} request
+     * @param {SystemAnalyticsQueriesClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link OpikApi.BadRequestError}
+     * @throws {@link OpikApi.UnprocessableEntityError}
+     * @throws {@link OpikApi.NotImplementedError}
+     *
+     * @example
+     *     await client.systemAnalyticsQueries.executeScopedAnalyticsQuery({
+     *         query: "query"
+     *     })
+     */
+    public executeScopedAnalyticsQuery(
+        request: OpikApi.ScopedAnalyticsQueryRequest,
+        requestOptions?: SystemAnalyticsQueriesClient.RequestOptions,
+    ): core.HttpResponsePromise<OpikApi.AnalyticsQueryResponse> {
+        return core.HttpResponsePromise.fromPromise(this.__executeScopedAnalyticsQuery(request, requestOptions));
+    }
+
+    private async __executeScopedAnalyticsQuery(
+        request: OpikApi.ScopedAnalyticsQueryRequest,
+        requestOptions?: SystemAnalyticsQueriesClient.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.AnalyticsQueryResponse>> {
+        const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
+            this._options?.headers,
+            mergeOnlyDefinedHeaders({
+                "Comet-Workspace": requestOptions?.workspaceName ?? this._options?.workspaceName,
+            }),
+            requestOptions?.headers,
+        );
+        const _response = await core.fetcher({
+            url: core.url.join(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "v1/internal/analytics-queries",
+            ),
+            method: "POST",
+            headers: _headers,
+            contentType: "application/json",
+            queryParameters: requestOptions?.queryParams,
+            requestType: "json",
+            body: serializers.ScopedAnalyticsQueryRequest.jsonOrThrow(request, {
+                unrecognizedObjectKeys: "strip",
+                omitUndefined: true,
+            }),
+            timeoutMs: (requestOptions?.timeoutInSeconds ?? this._options?.timeoutInSeconds ?? 60) * 1000,
+            maxRetries: requestOptions?.maxRetries ?? this._options?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+            fetchFn: this._options?.fetch,
+            logging: this._options.logging,
+        });
+        if (_response.ok) {
+            return {
+                data: serializers.AnalyticsQueryResponse.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    skipValidation: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
+        }
+
+        if (_response.error.reason === "status-code") {
+            switch (_response.error.statusCode) {
+                case 400:
+                    throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
+                case 422:
+                    throw new OpikApi.UnprocessableEntityError(_response.error.body, _response.rawResponse);
+                case 501:
+                    throw new OpikApi.NotImplementedError(_response.error.body, _response.rawResponse);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                        rawResponse: _response.rawResponse,
+                    });
+            }
+        }
+
+        return handleNonStatusCodeError(
+            _response.error,
+            _response.rawResponse,
+            "POST",
+            "/v1/internal/analytics-queries",
         );
     }
 }

@@ -45,6 +45,7 @@ import {
   AuthConfigFormValues,
   EMPTY_AUTH_FORM_VALUES,
   authConfigToFormValues,
+  builtInProviderHeadersForAPI,
   configStringToQueryParamsArray,
   convertHeadersForAPI,
   formValuesToAuthConfig,
@@ -60,6 +61,7 @@ type ManageAIProviderDialogProps = {
   onAddProvider?: (provider: COMPOSED_PROVIDER_TYPE) => void;
   onDeleteProvider?: (provider: COMPOSED_PROVIDER_TYPE) => void;
   configuredProvidersList?: ProviderObject[];
+  defaultProvider?: PROVIDER_TYPE;
 };
 
 const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
@@ -69,6 +71,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
   onAddProvider,
   onDeleteProvider,
   configuredProvidersList,
+  defaultProvider,
 }) => {
   // Ensure providerKey is included in the list for proper grid highlighting
   const effectiveConfiguredProvidersList = useMemo(() => {
@@ -84,17 +87,19 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
     includeAddNewOptions: true,
   });
 
-  const [step, setStep] = useState<Step>(providerKey ? "configure" : "select");
+  const [step, setStep] = useState<Step>(
+    providerKey || defaultProvider ? "configure" : "select",
+  );
   const [confirmOpen, setConfirmOpen] = useState<boolean>(false);
   const [selectedProviderId, setSelectedProviderId] = useState<
     string | undefined
   >(providerKey?.id);
   const [selectedComposedProvider, setSelectedComposedProvider] = useState<
     COMPOSED_PROVIDER_TYPE | ""
-  >(providerKey?.ui_composed_provider ?? "");
+  >(providerKey?.ui_composed_provider ?? defaultProvider ?? "");
   const [selectedProviderType, setSelectedProviderType] = useState<
     PROVIDER_TYPE | ""
-  >(providerKey?.provider ?? "");
+  >(providerKey?.provider ?? defaultProvider ?? "");
 
   const { mutate: createMutate } = useProviderKeysCreateMutation();
   const { mutate: updateMutate } = useProviderKeysUpdateMutation();
@@ -115,8 +120,9 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
   const form: UseFormReturn<AIProviderFormType> = useForm<AIProviderFormType>({
     resolver: zodResolver(createAIProviderFormSchema(existingProviderNames)),
     defaultValues: {
-      provider: providerKey?.provider,
-      composedProviderType: providerKey?.ui_composed_provider,
+      provider: providerKey?.provider ?? defaultProvider,
+      composedProviderType:
+        providerKey?.ui_composed_provider ?? defaultProvider,
       id: providerKey?.id,
       apiKey: "",
       location: providerKey?.configuration?.location ?? "",
@@ -334,7 +340,13 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
 
     const isEditingCustomProvider =
       isCustomLike && !!(providerKey || calculatedProviderKey);
-    const headers = convertHeadersForAPI(headersArray, isEditingCustomProvider);
+    const headers = isCustomLike
+      ? convertHeadersForAPI(headersArray, isEditingCustomProvider)
+      : builtInProviderHeadersForAPI(
+          provider,
+          headersArray,
+          !!(providerKey || calculatedProviderKey),
+        );
 
     const storedProvider = providerKey ?? calculatedProviderKey;
     const authConfig = isCustomLike
@@ -359,7 +371,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
           apiKey: effectiveApiKey,
           base_url: isCustomLike ? url : undefined,
           ...(configuration && { configuration }),
-          ...(isCustomLike && headers !== undefined && { headers }),
+          ...(headers !== undefined && { headers }),
           ...(authConfig !== undefined && { auth_config: authConfig }),
         },
       });
@@ -375,7 +387,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
           base_url: isCustomLike ? url : undefined,
           provider_name: isCustomLike ? providerName : undefined,
           ...(configuration && { configuration }),
-          ...(isCustomLike && headers !== undefined && { headers }),
+          ...(headers !== undefined && { headers }),
           ...(authConfig !== undefined && { auth_config: authConfig }),
         },
       });

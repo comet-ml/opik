@@ -1,0 +1,317 @@
+package com.comet.opik.domain.alerts;
+
+import com.comet.opik.api.Alert;
+import com.comet.opik.api.AlertEventType;
+import com.comet.opik.api.resources.v1.events.webhooks.slack.AlertPayloadAdapter;
+import com.comet.opik.api.resources.v1.events.webhooks.slack.SlackWebhookPayloadMapper;
+import com.comet.opik.infrastructure.AlertsEventBridgeConfig;
+import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.annotation.JsonAnyGetter;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.fasterxml.jackson.databind.annotation.JsonNaming;
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.common.AttributeKey;
+import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.metrics.LongCounter;
+import jakarta.annotation.Nullable;
+import jakarta.inject.Inject;
+import jakarta.inject.Singleton;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.exception.ExceptionUtils;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
+import reactor.util.retry.Retry;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
+import software.amazon.awssdk.awscore.exception.AwsServiceException;
+import software.amazon.awssdk.core.exception.ApiCallAttemptTimeoutException;
+import software.amazon.awssdk.core.exception.SdkClientException;
+import software.amazon.awssdk.services.eventbridge.EventBridgeClient;
+import software.amazon.awssdk.services.eventbridge.model.PutEventsRequest;
+import software.amazon.awssdk.services.eventbridge.model.PutEventsRequestEntry;
+import software.amazon.awssdk.services.eventbridge.model.PutEventsResponse;
+import software.amazon.awssdk.services.eventbridge.model.PutEventsResultEntry;
+
+import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+
+import static com.comet.opik.infrastructure.metrics.ErrorMetricsResolver.ERROR_TYPE_KEY;
+import static com.comet.opik.infrastructure.metrics.ErrorMetricsResolver.WORKSPACE_ID_KEY;
+import static com.comet.opik.infrastructure.metrics.ErrorMetricsResolver.WORKSPACE_NAME_KEY;
+import static com.comet.opik.infrastructure.metrics.ErrorMetricsResolver.errorType;
+
+/**
+ * Best-effort publishing of triggered alerts to the deployment's AWS EventBridge bus. Failures are logged and
+ * counted, never propagated, so they can't affect webhook delivery.
+ */
+@Slf4j
+@Singleton
+public class AlertEventBridgePublisher {
+
+    static final String SOURCE = "comet.opik";
+    static final String DETAIL_TYPE = "Opik Alert";
+    static final String SCHEMA_VERSION = "1";
+    // PutEvents caps an entry at 256 KB, counting only Time (14 bytes), Source, DetailType, Detail and Resources;
+    // the bus name doesn't count
+    static final int MAX_ENTRY_BYTES = 256 * 1024;
+    private static final int TIME_BYTES = 14;
+    static final int MAX_TRUNCATED_LIST_SIZE = 1_000;
+
+    // Custom fields become top-level detail keys, so they can't reuse the envelope's keys. The general webhook body's
+    // keys are reserved too, so custom fields can later be added there without invalidating saved alerts.
+    public static final Set<String> RESERVED_CUSTOM_FIELD_KEYS = Set.of(
+            "schemaVersion", "eventId", "workspaceId", "workspaceName", "alertId", "alertName", "eventType", "url",
+            "triggeredAt", "truncated", "opik",
+            "id", "event_type", "alert_type", "alert_id", "project_id", "alert_name", "workspace_id",
+            "workspace_name", "user_name", "payload", "created_at", "max_retries");
+
+    private static final int MAX_RETRIES = 3;
+    private static final Duration RETRY_BACKOFF = Duration.ofMillis(200);
+    private static final Set<String> RETRYABLE_ENTRY_ERROR_CODES = Set.of("ThrottlingException", "InternalFailure");
+    private static final AttributeKey<String> RESULT_KEY = AttributeKey.stringKey("result");
+
+    private final Optional<EventBridgeClient> client;
+    private final String eventBus;
+    private final LongCounter publishCounter;
+
+    @Inject
+    public AlertEventBridgePublisher(@NonNull Optional<EventBridgeClient> client,
+            @NonNull @Config("alertsEventBridge") AlertsEventBridgeConfig config) {
+        this.client = client;
+        this.eventBus = config.getEventBus();
+        this.publishCounter = GlobalOpenTelemetry.get().getMeter("opik.alerts")
+                .counterBuilder("opik_alerts_eventbridge_publish_total")
+                .setDescription("Number of triggered alerts published to AWS EventBridge, by result")
+                .build();
+    }
+
+    public boolean isEnabled() {
+        return client.isPresent();
+    }
+
+    /**
+     * @param eventId stays stable for one triggered alert, so consumers can dedupe on source + detail.eventId
+     * @param workspaceName null when it couldn't be resolved, in which case the envelope sends it as null
+     * @param triggeredAt when the trigger fired; used for detail.triggeredAt and the entry Time
+     * @param payload the product payload built for the webhook, with its metadata still serialized
+     * @return a Mono that completes once the alert is published or the publish has failed; it never errors
+     */
+    public Mono<Void> publish(@NonNull Alert alert,
+            @NonNull String eventId,
+            @NonNull String workspaceId,
+            @Nullable String workspaceName,
+            @NonNull AlertEventType eventType,
+            @NonNull Instant triggeredAt,
+            @NonNull Map<String, Object> payload) {
+        if (client.isEmpty()) {
+            return Mono.empty();
+        }
+
+        return Mono.fromCallable(() -> buildEntry(alert, eventId, workspaceId, workspaceName, eventType, payload,
+                triggeredAt))
+                .flatMap(entry -> putEvent(entry, alert))
+                .subscribeOn(Schedulers.boundedElastic())
+                .doOnSuccess(__ -> {
+                    publishCounter.add(1, metricAttributes(workspaceId, workspaceName, "success"));
+                    log.info("Published alert to EventBridge, alertName='{}', alertId='{}', bus='{}'",
+                            alert.name(), alert.id(), eventBus);
+                })
+                .onErrorResume(error -> {
+                    publishCounter.add(1, metricAttributes(workspaceId, workspaceName, "error").toBuilder()
+                            .put(ERROR_TYPE_KEY, errorType(error))
+                            .build());
+                    log.warn("Failed to publish alert to EventBridge, alertName='{}', alertId='{}', bus='{}'",
+                            alert.name(), alert.id(), eventBus, error);
+                    return Mono.empty();
+                })
+                .then();
+    }
+
+    private Mono<PutEventsResponse> putEvent(PutEventsRequestEntry entry, Alert alert) {
+        var request = PutEventsRequest.builder().entries(entry).build();
+        return Mono.fromCallable(() -> client.get().putEvents(request))
+                .flatMap(response -> response.failedEntryCount() > 0
+                        ? Mono.error(new FailedEntryException(response.entries().getFirst()))
+                        : Mono.just(response))
+                .retryWhen(Retry.backoff(MAX_RETRIES, RETRY_BACKOFF)
+                        .jitter(0.5)
+                        .filter(AlertEventBridgePublisher::isRetryable)
+                        .doBeforeRetry(signal -> log.warn(
+                                "Retrying EventBridge publish for alertId='{}', attempt='{}'",
+                                alert.id(), signal.totalRetries() + 1, signal.failure()))
+                        .onRetryExhaustedThrow((spec, signal) -> signal.failure()));
+    }
+
+    private static boolean isRetryable(Throwable throwable) {
+        return switch (throwable) {
+            case FailedEntryException failed -> RETRYABLE_ENTRY_ERROR_CODES.contains(failed.getErrorCode());
+            case AwsServiceException aws -> aws.isThrottlingException() || aws.statusCode() >= 500;
+            case ApiCallAttemptTimeoutException timeout -> true;
+            // Only I/O failures are transient; others, such as unresolvable credentials, would fail the same way
+            case SdkClientException clientError -> ExceptionUtils.indexOfType(clientError, IOException.class) >= 0;
+            default -> false;
+        };
+    }
+
+    private PutEventsRequestEntry buildEntry(Alert alert, String eventId, String workspaceId, String workspaceName,
+            AlertEventType eventType, Map<String, Object> payload, Instant triggeredAt) {
+        Map<String, Object> product = new HashMap<>(payload);
+        @SuppressWarnings("unchecked")
+        List<String> metadata = (List<String>) payload.getOrDefault("metadata", List.of());
+        product.put("metadata", AlertPayloadAdapter.deserializeMetadata(metadata, eventType));
+
+        var detail = AlertEventBridgeDetail.builder()
+                .schemaVersion(SCHEMA_VERSION)
+                .eventId(eventId)
+                .workspaceId(workspaceId)
+                .workspaceName(workspaceName)
+                .alertId(alert.id())
+                .alertName(alert.name())
+                .eventType(eventType.getValue())
+                .url(buildAlertUrl(alert, workspaceName))
+                .triggeredAt(triggeredAt)
+                .opik(product)
+                .customFields(Optional.ofNullable(alert.customFields()).orElse(Map.of()))
+                .build();
+
+        return PutEventsRequestEntry.builder()
+                .eventBusName(eventBus)
+                .source(SOURCE)
+                .detailType(DETAIL_TYPE)
+                .time(triggeredAt)
+                .detail(serializeWithinLimit(detail))
+                .build();
+    }
+
+    private String serializeWithinLimit(AlertEventBridgeDetail detail) {
+        String json = JsonUtils.writeValueAsString(detail);
+        int size = entrySize(json);
+        if (size <= MAX_ENTRY_BYTES) {
+            return json;
+        }
+
+        log.warn("EventBridge entry for alertId='{}' is '{}' bytes, dropping metadata and capping lists",
+                detail.alertId(), size);
+
+        Map<String, Object> product = new HashMap<>(detail.opik());
+        product.put("metadata", List.of());
+        product.computeIfPresent("eventIds", (key, value) -> capList(value));
+        product.computeIfPresent("userNames", (key, value) -> capList(value));
+        var truncated = detail.toBuilder().truncated(true).opik(product).build();
+
+        json = JsonUtils.writeValueAsString(truncated);
+        size = entrySize(json);
+        if (size <= MAX_ENTRY_BYTES) {
+            return json;
+        }
+
+        log.warn("EventBridge entry for alertId='{}' is still '{}' bytes, dropping eventIds and userNames",
+                detail.alertId(), size);
+
+        product.put("eventIds", List.of());
+        product.put("userNames", List.of());
+        return JsonUtils.writeValueAsString(truncated.toBuilder().opik(product).build());
+    }
+
+    static int entrySize(String detail) {
+        return TIME_BYTES
+                + SOURCE.getBytes(StandardCharsets.UTF_8).length
+                + DETAIL_TYPE.getBytes(StandardCharsets.UTF_8).length
+                + detail.getBytes(StandardCharsets.UTF_8).length;
+    }
+
+    private static List<?> capList(Object value) {
+        List<?> list = (List<?>) value;
+        return list.subList(0, Math.min(list.size(), MAX_TRUNCATED_LIST_SIZE));
+    }
+
+    // Base URL is the UI origin the alert was saved from, as the Slack payload uses for its links. It's
+    // client-supplied metadata, so only an absolute http(s) URL with a host is turned into a link.
+    private static String buildAlertUrl(Alert alert, String workspaceName) {
+        String baseUrl = Optional.ofNullable(alert.metadata())
+                .map(metadata -> metadata.get(SlackWebhookPayloadMapper.BASE_URL_METADATA_KEY))
+                .orElse(null);
+        if (StringUtils.isBlank(baseUrl) || alert.projectId() == null || StringUtils.isBlank(workspaceName)) {
+            return null;
+        }
+
+        URI baseUri;
+        try {
+            baseUri = new URI(baseUrl.trim());
+        } catch (URISyntaxException exception) {
+            log.debug("No EventBridge alert url, base_url is not a valid URI, alertId='{}'", alert.id(),
+                    exception);
+            return null;
+        }
+        if (!baseUri.isAbsolute() || baseUri.getHost() == null
+                || !Set.of("http", "https").contains(baseUri.getScheme().toLowerCase(Locale.ROOT))) {
+            log.debug("No EventBridge alert url, base_url is not an absolute http(s) URL with a host, "
+                    + "alertId='{}'", alert.id());
+            return null;
+        }
+
+        // A query or fragment on the base would end up in front of the appended path
+        String base = baseUri.getScheme() + "://" + baseUri.getRawAuthority()
+                + StringUtils.defaultString(baseUri.getRawPath());
+        // projectId and alertId are UUIDs, already safe as path segments
+        return (base.endsWith("/") ? base : base + "/") + encodePathSegment(workspaceName) + "/projects/"
+                + alert.projectId() + "/alerts/" + alert.id();
+    }
+
+    private static String encodePathSegment(String segment) {
+        return URLEncoder.encode(segment, StandardCharsets.UTF_8).replace("+", "%20");
+    }
+
+    private static Attributes metricAttributes(String workspaceId, String workspaceName, String result) {
+        return Attributes.of(
+                WORKSPACE_ID_KEY, workspaceId,
+                WORKSPACE_NAME_KEY, StringUtils.defaultIfBlank(workspaceName, workspaceId),
+                RESULT_KEY, result);
+    }
+
+    // Envelope fields that apply but have no value are sent as null, not omitted, so every schemaVersion 1 event has
+    // the same keys as the comet-backend (EM/MPM) envelope; JsonUtils otherwise drops nulls.
+    @Builder(toBuilder = true)
+    @JsonNaming(PropertyNamingStrategies.LowerCamelCaseStrategy.class)
+    record AlertEventBridgeDetail(
+            @NonNull String schemaVersion,
+            @NonNull String eventId,
+            @NonNull String workspaceId,
+            @JsonInclude(JsonInclude.Include.ALWAYS) String workspaceName,
+            @NonNull UUID alertId,
+            @NonNull String alertName,
+            @NonNull String eventType,
+            @JsonInclude(JsonInclude.Include.ALWAYS) String url,
+            @NonNull Instant triggeredAt,
+            boolean truncated,
+            @NonNull Map<String, Object> opik,
+            @JsonAnyGetter @NonNull Map<String, String> customFields) {
+    }
+
+    @Getter
+    static class FailedEntryException extends RuntimeException {
+        private final String errorCode;
+
+        FailedEntryException(PutEventsResultEntry entry) {
+            super("EventBridge rejected the entry, errorCode='%s', errorMessage='%s'"
+                    .formatted(entry.errorCode(), entry.errorMessage()));
+            this.errorCode = entry.errorCode();
+        }
+    }
+}

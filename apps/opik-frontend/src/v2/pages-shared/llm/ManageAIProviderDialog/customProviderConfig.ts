@@ -1,6 +1,10 @@
 import { v4 as uuidv4 } from "uuid";
 
-import { AuthSendAs, ProviderAuthConfig } from "@/types/providers";
+import {
+  AuthSendAs,
+  PROVIDER_TYPE,
+  ProviderAuthConfig,
+} from "@/types/providers";
 
 export type KeyValueEntry = {
   key: string;
@@ -175,6 +179,43 @@ export function convertHeadersForAPI(
   }
 
   return undefined;
+}
+
+// Built-in providers whose backend client applies the stored static `headers` map to every
+// upstream call (OpenAIClientGenerator serves both). Other built-in providers ignore `headers`,
+// so the field is only offered for these.
+export const PROVIDERS_WITH_HEADERS: readonly PROVIDER_TYPE[] = [
+  PROVIDER_TYPE.OPEN_AI,
+  PROVIDER_TYPE.OPEN_ROUTER,
+];
+
+export const supportsProviderHeaders = (
+  provider: PROVIDER_TYPE | string | undefined | null,
+): boolean =>
+  Boolean(provider) &&
+  (PROVIDERS_WITH_HEADERS as readonly string[]).includes(provider as string);
+
+/**
+ * Headers payload for a built-in provider key: undefined for providers that ignore `headers`,
+ * otherwise the same rules as {@link convertHeadersForAPI}. On create, an all-blank list is
+ * omitted rather than sent as {}.
+ */
+export function builtInProviderHeadersForAPI(
+  provider: PROVIDER_TYPE | string | undefined | null,
+  headersArray: Array<{ key: string; value: string }> | undefined,
+  isEditing: boolean,
+): Record<string, string> | undefined {
+  if (!supportsProviderHeaders(provider)) {
+    return undefined;
+  }
+
+  const headers = convertHeadersForAPI(headersArray, isEditing);
+
+  if (!isEditing && headers && Object.keys(headers).length === 0) {
+    return undefined;
+  }
+
+  return headers;
 }
 
 /**

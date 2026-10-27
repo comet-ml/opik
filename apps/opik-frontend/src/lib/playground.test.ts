@@ -1,9 +1,19 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  canRunMessages,
   createCompletionAnnouncer,
+  describeRunFailure,
+  dropEmptySystemMessages,
+  generateDefaultPrompt,
   getDefaultConfigByProvider,
+  hasUnsupportedMedia,
+  isEmptyMessage,
+  isPlaygroundEmpty,
+  OUTPUT_LIMIT_REACHED_MESSAGE,
+  parseCompletionOutput,
   restoreMissingConfigKeys,
 } from "@/lib/playground";
+import { RunStreamingReturn } from "@/api/playground/useCompletionProxyStreaming";
 import {
   COMPOSED_PROVIDER_TYPE,
   LLMAnthropicConfigsType,
@@ -12,6 +22,100 @@ import {
   PROVIDER_TYPE,
 } from "@/types/providers";
 import { PlaygroundPromptType } from "@/types/playground";
+import { LLM_MESSAGE_ROLE, LLMMessage, MessageContent } from "@/types/llm";
+
+const userMessage = (content: MessageContent): LLMMessage => ({
+  id: "message",
+  role: LLM_MESSAGE_ROLE.user,
+  content,
+});
+
+const systemMessage = (content: MessageContent): LLMMessage => ({
+  id: "system-message",
+  role: LLM_MESSAGE_ROLE.system,
+  content,
+});
+
+const assistantMessage = (content: MessageContent): LLMMessage => ({
+  id: "assistant-message",
+  role: LLM_MESSAGE_ROLE.assistant,
+  content,
+});
+
+const imageMessage = userMessage([
+  { type: "text", text: "Describe this" },
+  { type: "image_url", image_url: { url: "https://example.com/cat.png" } },
+]);
+
+const videoMessage = userMessage([
+  { type: "video_url", video_url: { url: "https://example.com/cat.mp4" } },
+]);
+
+const audioMessage = userMessage([
+  { type: "audio_url", audio_url: { url: "https://example.com/cat.mp3" } },
+]);
+
+describe("hasUnsupportedMedia", () => {
+  it("returns false when no model is selected", () => {
+    expect(hasUnsupportedMedia({ model: "", messages: [imageMessage] })).toBe(
+      false,
+    );
+  });
+
+  it("returns false for text-only prompts on a non-vision model", () => {
+    expect(
+      hasUnsupportedMedia({
+        model: PROVIDER_MODEL_TYPE.GPT_3_5_TURBO,
+        messages: [userMessage("Hello")],
+      }),
+    ).toBe(false);
+  });
+
+  it("returns false for images on a vision model", () => {
+    expect(
+      hasUnsupportedMedia({
+        model: PROVIDER_MODEL_TYPE.GPT_4O,
+        messages: [imageMessage],
+      }),
+    ).toBe(false);
+  });
+
+  it("returns true for images on a non-vision model", () => {
+    expect(
+      hasUnsupportedMedia({
+        model: PROVIDER_MODEL_TYPE.GPT_3_5_TURBO,
+        messages: [userMessage("Hello"), imageMessage],
+      }),
+    ).toBe(true);
+  });
+
+  it("returns true for videos on a non-vision model", () => {
+    expect(
+      hasUnsupportedMedia({
+        model: PROVIDER_MODEL_TYPE.GPT_3_5_TURBO,
+        messages: [videoMessage],
+      }),
+    ).toBe(true);
+  });
+
+  it("returns true for audio on a model without audio support", () => {
+    expect(
+      hasUnsupportedMedia({
+        model: PROVIDER_MODEL_TYPE.GPT_4,
+        messages: [audioMessage],
+      }),
+    ).toBe(true);
+  });
+
+  it("returns false for audio on a model flagged for audio under another name", () => {
+    expect(
+      hasUnsupportedMedia({
+        model: PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+        messages: [audioMessage],
+      }),
+    ).toBe(false);
+  });
+});
 
 describe("getDefaultConfigByProvider — Anthropic", () => {
   it("seeds temperature default for models that accept sampling params", () => {
@@ -35,9 +139,189 @@ describe("getDefaultConfigByProvider — Anthropic", () => {
   });
 });
 
+describe("getDefaultConfigByProvider — the starting temperature", () => {
+  it.each<[PROVIDER_TYPE, PROVIDER_MODEL_TYPE]>([
+    [PROVIDER_TYPE.OPEN_AI, PROVIDER_MODEL_TYPE.GPT_4O_MINI],
+    [PROVIDER_TYPE.OPEN_ROUTER, PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI],
+    [PROVIDER_TYPE.ANTHROPIC, PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6],
+    [PROVIDER_TYPE.GEMINI, PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH],
+    [PROVIDER_TYPE.VERTEX_AI, PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH],
+  ])("starts a new %s prompt at 0", (provider, model) => {
+    expect(
+      getDefaultConfigByProvider(provider as COMPOSED_PROVIDER_TYPE, model),
+    ).toMatchObject({ temperature: 0 });
+  });
+});
+
+describe("getDefaultConfigByProvider — the starting max output tokens", () => {
+  it.each<[PROVIDER_TYPE, PROVIDER_MODEL_TYPE, string]>([
+    [
+      PROVIDER_TYPE.OPEN_AI,
+      PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+      "maxCompletionTokens",
+    ],
+    [
+      PROVIDER_TYPE.OPEN_ROUTER,
+      PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI,
+      "maxTokens",
+    ],
+    [
+      PROVIDER_TYPE.ANTHROPIC,
+      PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
+      "maxCompletionTokens",
+    ],
+    [
+      PROVIDER_TYPE.GEMINI,
+      PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+      "maxCompletionTokens",
+    ],
+    [
+      PROVIDER_TYPE.VERTEX_AI,
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_FLASH,
+      "maxCompletionTokens",
+    ],
+  ])("starts a new %s prompt at 4000", (provider, model, key) => {
+    expect(
+      getDefaultConfigByProvider(provider as COMPOSED_PROVIDER_TYPE, model),
+    ).toMatchObject({ [key]: 4000 });
+  });
+
+  it.each([
+    { model: "google/gemma-2-27b-it", maxTokens: 2048 },
+    { model: "gryphe/mythomax-l2-13b", maxTokens: 3686 },
+    // OpenAI's own entry for gpt-3.5-turbo-instruct allows 4096.
+    { model: "openai/gpt-3.5-turbo-instruct", maxTokens: 3685 },
+    { model: "openai/gpt-4o-mini", maxTokens: 4000 },
+    // Only OpenAI and Azure list it, at 1024.
+    { model: "openai/computer-use-preview", maxTokens: 4000 },
+    { model: "acme/unlisted-model", maxTokens: 4000 },
+  ])(
+    "starts OpenRouter $model at $maxTokens: 4000, or OpenRouter's own lower limit for the model",
+    ({ model, maxTokens }) => {
+      expect(
+        getDefaultConfigByProvider(
+          PROVIDER_TYPE.OPEN_ROUTER as COMPOSED_PROVIDER_TYPE,
+          model as PROVIDER_MODEL_TYPE,
+        ),
+      ).toMatchObject({ maxTokens });
+    },
+  );
+});
+
+describe("getDefaultConfigByProvider — OpenAI", () => {
+  const defaults = (model: PROVIDER_MODEL_TYPE) =>
+    getDefaultConfigByProvider(
+      PROVIDER_TYPE.OPEN_AI as COMPOSED_PROVIDER_TYPE,
+      model,
+    ) as LLMOpenAIConfigsType;
+
+  it.each([
+    [PROVIDER_MODEL_TYPE.GPT_6_ASTRA, "medium"],
+    [PROVIDER_MODEL_TYPE.GPT_6_1_SOL, "medium"],
+    [PROVIDER_MODEL_TYPE.GPT_6_SOL, "medium"],
+    [PROVIDER_MODEL_TYPE.GPT_6_LUNA, "medium"],
+    [PROVIDER_MODEL_TYPE.GPT_5_6_LUNA, "medium"],
+    [PROVIDER_MODEL_TYPE.GPT_5_4, "none"],
+    [PROVIDER_MODEL_TYPE.GPT_5, "medium"],
+    [PROVIDER_MODEL_TYPE.GPT_O1, "medium"],
+  ])(
+    "seeds %s as a reasoning model at OpenAI's default effort, %s",
+    (model, reasoningEffort) => {
+      // Not 1: the request omits temperature for reasoning models anyway, and a seeded 1 would carry
+      // over to the next chat model the user picks.
+      expect(defaults(model)).toMatchObject({
+        temperature: 0,
+        reasoningEffort,
+      });
+    },
+  );
+
+  it("seeds o1-mini as a reasoning model without an effort", () => {
+    const config = defaults(PROVIDER_MODEL_TYPE.GPT_O1_MINI);
+
+    expect(config.temperature).toBe(0);
+    expect(config).not.toHaveProperty("reasoningEffort");
+  });
+
+  it.each([
+    PROVIDER_MODEL_TYPE.GPT_5_CHAT_LATEST,
+    PROVIDER_MODEL_TYPE.GPT_5_1_CHAT_LATEST,
+    PROVIDER_MODEL_TYPE.GPT_5_2_CHAT_LATEST,
+    PROVIDER_MODEL_TYPE.GPT_5_3_CHAT_LATEST,
+    PROVIDER_MODEL_TYPE.GPT_4O,
+  ])("seeds %s as a chat model without an effort", (model) => {
+    const config = defaults(model);
+
+    expect(config.temperature).toBe(0);
+    expect(config).not.toHaveProperty("reasoningEffort");
+  });
+});
+
+describe("getDefaultConfigByProvider — Anthropic thinking effort", () => {
+  it.each([
+    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_5, "high"],
+    [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5, "high"],
+    [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5_5, "high"],
+    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5_5, "medium"],
+    [PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_5_5, "medium"],
+  ])("seeds %s with Anthropic's default effort, %s", (model, effort) => {
+    const config = getDefaultConfigByProvider(
+      PROVIDER_TYPE.ANTHROPIC as COMPOSED_PROVIDER_TYPE,
+      model,
+    );
+
+    expect(config).toMatchObject({ thinkingEffort: effort });
+  });
+
+  it.each([
+    PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6,
+    PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
+    PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
+  ])("seeds %s, which thinks only when asked, with Off", (model) => {
+    const config = getDefaultConfigByProvider(
+      PROVIDER_TYPE.ANTHROPIC as COMPOSED_PROVIDER_TYPE,
+      model,
+    );
+
+    expect(config).toMatchObject({ thinkingEffort: "off" });
+  });
+
+  it("seeds no thinkingEffort for a model that takes none", () => {
+    const config = getDefaultConfigByProvider(
+      PROVIDER_TYPE.ANTHROPIC as COMPOSED_PROVIDER_TYPE,
+      PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5,
+    );
+
+    expect(config).not.toHaveProperty("thinkingEffort");
+  });
+});
+
+describe("getDefaultConfigByProvider — Ollama and Bedrock", () => {
+  const CUSTOM_DEFAULTS = {
+    temperature: 0,
+    maxCompletionTokens: 4000,
+    topP: 1,
+    frequencyPenalty: 0,
+    presencePenalty: 0,
+    custom_parameters: null,
+    throttling: 0,
+    maxConcurrentRequests: 5,
+  };
+
+  it.each([
+    [`${PROVIDER_TYPE.OLLAMA}:local`, "custom-llm/local/llama3.2"],
+    [`${PROVIDER_TYPE.BEDROCK}:aws`, "custom-llm/aws/openai.gpt-oss-120b-1:0"],
+    [PROVIDER_TYPE.CUSTOM, "custom-llm/gw/mistral-large-2411"],
+  ])("seeds %s with the custom provider's defaults", (provider, model) => {
+    expect(
+      getDefaultConfigByProvider(provider, model as PROVIDER_MODEL_TYPE),
+    ).toEqual(CUSTOM_DEFAULTS);
+  });
+});
+
 describe("restoreMissingConfigKeys", () => {
   const prompt = (
-    provider: PROVIDER_TYPE,
+    provider: PROVIDER_TYPE | COMPOSED_PROVIDER_TYPE,
     model: PROVIDER_MODEL_TYPE,
     configs: Record<string, unknown>,
   ) =>
@@ -76,6 +360,51 @@ describe("restoreMissingConfigKeys", () => {
     expect(restored.configs).toMatchObject({ minP: 0, topA: 0 });
   });
 
+  it("keeps the temperature an OpenRouter prompt was stored with", () => {
+    const stored = prompt(
+      PROVIDER_TYPE.OPEN_ROUTER,
+      PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI,
+      { temperature: 1, topP: 1, maxTokens: 0 },
+    );
+
+    expect(restoreMissingConfigKeys(stored).configs).toMatchObject({
+      temperature: 1,
+    });
+  });
+
+  it("keeps the 0 an OpenRouter prompt was stored with, which means no limit", () => {
+    const stored = prompt(
+      PROVIDER_TYPE.OPEN_ROUTER,
+      PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI,
+      { temperature: 0, topP: 1, maxTokens: 0 },
+    );
+
+    expect(restoreMissingConfigKeys(stored).configs).toMatchObject({
+      maxTokens: 0,
+    });
+  });
+
+  it.each([
+    { stored: "no temperature", configs: { topP: 1, maxTokens: 0 } },
+    {
+      stored: "a null temperature",
+      configs: { temperature: null, topP: 1, maxTokens: 0 },
+    },
+  ])(
+    "gives an OpenRouter prompt stored with $stored the new default 0",
+    ({ configs }) => {
+      const stored = prompt(
+        PROVIDER_TYPE.OPEN_ROUTER,
+        PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI,
+        configs,
+      );
+
+      expect(restoreMissingConfigKeys(stored).configs).toMatchObject({
+        temperature: 0,
+      });
+    },
+  );
+
   it("leaves a cleared Anthropic temperature cleared when Top P is the live half", () => {
     // Restoring temperature here would silently override the user's Top P: with both set the
     // request drops Top P. Which half is live stays resolveSamplingParams' call.
@@ -104,6 +433,38 @@ describe("restoreMissingConfigKeys", () => {
     );
 
     expect(restored.configs).toMatchObject({ minP: 0, topA: 0 });
+    expect(restored.configs).not.toHaveProperty("temperature");
+    expect(restored.configs).not.toHaveProperty("topP");
+  });
+
+  it("fills the custom defaults into an Ollama prompt stored before it had a panel", () => {
+    const restored = restoreMissingConfigKeys(
+      prompt(
+        `${PROVIDER_TYPE.OLLAMA}:local`,
+        "custom-llm/local/llama3.2" as PROVIDER_MODEL_TYPE,
+        {},
+      ),
+    );
+
+    expect(restored.configs).toMatchObject({
+      temperature: 0,
+      maxCompletionTokens: 4000,
+      topP: 1,
+      frequencyPenalty: 0,
+      presencePenalty: 0,
+    });
+  });
+
+  it("leaves the sampling pair unset for a Claude on Bedrock stored without a config", () => {
+    const restored = restoreMissingConfigKeys(
+      prompt(
+        `${PROVIDER_TYPE.BEDROCK}:aws`,
+        "custom-llm/aws/us.anthropic.claude-sonnet-4-5-20250929-v1:0" as PROVIDER_MODEL_TYPE,
+        {},
+      ),
+    );
+
+    expect(restored.configs).toMatchObject({ maxCompletionTokens: 4000 });
     expect(restored.configs).not.toHaveProperty("temperature");
     expect(restored.configs).not.toHaveProperty("topP");
   });
@@ -184,6 +545,123 @@ describe("restoreMissingConfigKeys", () => {
   });
 });
 
+describe("describeRunFailure — a model the API key can't use", () => {
+  const MODEL_NOT_AVAILABLE =
+    "This model isn't available for your API key. Pick another model, or check which models your provider account can use.";
+
+  const forModel = (model: string) => ({
+    canTuneRequestRate: true,
+    sentMessages: [userMessage("Hi")],
+    model,
+  });
+
+  const failedRun = (
+    overrides: Partial<RunStreamingReturn>,
+  ): RunStreamingReturn => ({
+    result: "",
+    startTime: "",
+    endTime: "",
+    usage: null,
+    choices: null,
+    providerError: null,
+    opikError: null,
+    pythonProxyError: null,
+    errorStatus: null,
+    finishReason: null,
+    actualModel: null,
+    actualProvider: null,
+    ...overrides,
+  });
+
+  it("keeps Anthropic's error and suggests another model", () => {
+    const run = failedRun({
+      errorStatus: 404,
+      providerError: "model: claude-mythos-5",
+    });
+
+    expect(
+      describeRunFailure(run, forModel(PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_5)),
+    ).toEqual({
+      message: "model: claude-mythos-5",
+      hint: { action: MODEL_NOT_AVAILABLE },
+    });
+  });
+
+  it.each([
+    [
+      "OpenAI",
+      "gpt-5.5-pro",
+      "The model `gpt-5.5-pro` does not exist or you do not have access to it.",
+    ],
+    [
+      "OpenRouter",
+      "openai/gpt-4-32k",
+      "No endpoints found for openai/gpt-4-32k.",
+    ],
+    [
+      "Vertex AI",
+      "vertex_ai/gemini-2.5-flash",
+      "Publisher Model `projects/p/locations/us-central1/publishers/google/models/gemini-2.5-flash` was not found or your project does not have access to it.",
+    ],
+  ])(
+    "suggests another model when %s answers 404 for the model",
+    (_provider, model, opikError) => {
+      const run = failedRun({ errorStatus: 404, opikError });
+
+      expect(describeRunFailure(run, forModel(model)).hint?.action).toBe(
+        MODEL_NOT_AVAILABLE,
+      );
+    },
+  );
+
+  it("gives no hint for a 404 that does not name the model", () => {
+    const run = failedRun({
+      errorStatus: 404,
+      opikError: "Unexpected error calling LLM provider: 404 page not found",
+    });
+
+    expect(
+      describeRunFailure(run, forModel("custom-llm/my-gateway/llama-3.3-70b")),
+    ).toEqual({
+      message: "Unexpected error calling LLM provider: 404 page not found",
+    });
+  });
+
+  it.each([
+    [
+      "a longer model id",
+      "custom-llm/my-gateway/llama-3",
+      "Unexpected error calling LLM provider: no deployment named llama-3-70b",
+    ],
+    [
+      "another word",
+      "custom-llm/my-gateway/a",
+      "Unexpected error calling LLM provider: 404 page not found",
+    ],
+  ])(
+    "gives no hint for a 404 that has the model's name only inside %s",
+    (_label, model, opikError) => {
+      const run = failedRun({ errorStatus: 404, opikError });
+
+      expect(describeRunFailure(run, forModel(model)).hint).toBeUndefined();
+    },
+  );
+
+  it.each([500, null])(
+    "gives no hint for a %s status, even when the error names the model",
+    (errorStatus) => {
+      const run = failedRun({
+        errorStatus,
+        opikError: "Internal error while running claude-mythos-5",
+      });
+
+      expect(
+        describeRunFailure(run, forModel(PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_5)),
+      ).toEqual({ message: "Internal error while running claude-mythos-5" });
+    },
+  );
+});
+
 describe("createCompletionAnnouncer", () => {
   it("waits for logging to finish when the registry lands first", () => {
     const announce = vi.fn();
@@ -256,5 +734,392 @@ describe("createCompletionAnnouncer", () => {
     announcer.loggingFinished();
 
     expect(announce).not.toHaveBeenCalled();
+  });
+});
+
+describe("describeRunFailure", () => {
+  const OPENAI_RATE_LIMIT =
+    "Rate limit reached for gpt-4o on requests per min (RPM): Limit 3. Please try again in 20s.";
+
+  const failedRun = (
+    overrides: Partial<RunStreamingReturn>,
+  ): RunStreamingReturn => ({
+    result: "",
+    startTime: "",
+    endTime: "",
+    usage: null,
+    choices: null,
+    finishReason: null,
+    providerError: null,
+    opikError: null,
+    pythonProxyError: null,
+    errorStatus: null,
+    actualModel: null,
+    actualProvider: null,
+    ...overrides,
+  });
+
+  const model = "gpt-4o";
+  const userPrompt = [systemMessage("Be brief."), userMessage("Hi")];
+  const withSettings = {
+    canTuneRequestRate: true,
+    sentMessages: userPrompt,
+    model,
+  };
+  const withoutSettings = {
+    canTuneRequestRate: false,
+    sentMessages: userPrompt,
+    model,
+  };
+  const systemOnly = {
+    canTuneRequestRate: true,
+    sentMessages: [systemMessage("What parameters do I send you?")],
+    model,
+  };
+
+  it("names a rate-limited run and gives the next step on its own", () => {
+    const run = failedRun({ errorStatus: 429, opikError: OPENAI_RATE_LIMIT });
+
+    expect(describeRunFailure(run, withSettings)).toEqual({
+      message: OPENAI_RATE_LIMIT,
+      hint: {
+        title: "Rate limit reached",
+        action:
+          "Wait a moment and run again. If it keeps happening, lower Max concurrent requests or raise Throttling in Model parameters.",
+      },
+    });
+  });
+
+  it("does not point at settings the model has no panel for", () => {
+    const run = failedRun({ errorStatus: 429, opikError: OPENAI_RATE_LIMIT });
+
+    expect(describeRunFailure(run, withoutSettings).hint?.action).toBe(
+      "Wait a moment and run again.",
+    );
+  });
+
+  it("tells an out-of-credits run to add credits, not to slow down", () => {
+    const run = failedRun({
+      errorStatus: 402,
+      opikError: "You exceeded your current quota.",
+    });
+
+    expect(describeRunFailure(run, withSettings)).toEqual({
+      message: "You exceeded your current quota.",
+      hint: {
+        title: "Out of credits",
+        action:
+          "Add credits or raise your quota with the provider, then run again.",
+      },
+    });
+  });
+
+  it("falls back to the title when a 429 came with no readable message", () => {
+    const run = failedRun({ errorStatus: 429 });
+
+    expect(describeRunFailure(run, withoutSettings).message).toBe(
+      "Rate limit reached",
+    );
+  });
+
+  it.each<[string, Partial<RunStreamingReturn>, string]>([
+    [
+      "a provider error",
+      { errorStatus: 401, providerError: "Invalid key" },
+      "Invalid key",
+    ],
+    [
+      "an error with no status",
+      { opikError: "Unexpected error" },
+      "Unexpected error",
+    ],
+  ])("leaves %s as the provider wrote it", (_label, overrides, expected) => {
+    expect(describeRunFailure(failedRun(overrides), withSettings)).toEqual({
+      message: expected,
+    });
+  });
+
+  it.each<[string, LLMMessage[]]>([
+    ["System-only", [systemMessage("What parameters do I send you?")]],
+    ["Assistant-only", [assistantMessage("I am a helpful assistant.")]],
+    [
+      "System + Assistant",
+      [systemMessage("Reply with ok."), assistantMessage("Sure.")],
+    ],
+  ])(
+    "suggests a User message under the provider's error when a %s prompt is rejected with a 400",
+    (_label, sentMessages) => {
+      const run = failedRun({
+        errorStatus: 400,
+        providerError: "messages: Field required",
+      });
+
+      expect(
+        describeRunFailure(run, {
+          canTuneRequestRate: true,
+          sentMessages,
+          model,
+        }),
+      ).toEqual({
+        message: "messages: Field required",
+        hint: {
+          action:
+            "This model needs a User message. Add one with + Message, then run again.",
+        },
+      });
+    },
+  );
+
+  it("keeps the rate-limit hint for a System-only prompt that hit a 429", () => {
+    const run = failedRun({ errorStatus: 429, opikError: OPENAI_RATE_LIMIT });
+
+    expect(describeRunFailure(run, systemOnly).hint?.title).toBe(
+      "Rate limit reached",
+    );
+  });
+
+  it("keeps the plain error as the message when a role suggestion comes with no provider text", () => {
+    const run = failedRun({ errorStatus: 400 });
+
+    expect(describeRunFailure(run, systemOnly).message).toBe(
+      "The AI provider returned an empty response. Please, try again.",
+    );
+  });
+
+  it.each([500, 401, null])(
+    "does not blame the missing User message for a %s status",
+    (errorStatus) => {
+      const run = failedRun({ errorStatus, opikError: "Unexpected error" });
+
+      expect(describeRunFailure(run, systemOnly)).toEqual({
+        message: "Unexpected error",
+      });
+    },
+  );
+
+  it.each<[string, LLMMessage[]]>([
+    ["System + User", userPrompt],
+    [
+      "User + Assistant + User",
+      [userMessage("Hi"), assistantMessage("Hello!"), userMessage("Say ok.")],
+    ],
+  ])(
+    "gives no hint for a 400 when a %s prompt ends with a User message",
+    (_label, sentMessages) => {
+      const run = failedRun({
+        errorStatus: 400,
+        providerError: "temperature: must be at most 1",
+      });
+
+      expect(
+        describeRunFailure(run, {
+          canTuneRequestRate: true,
+          sentMessages,
+          model,
+        }),
+      ).toEqual({ message: "temperature: must be at most 1" });
+    },
+  );
+
+  describe("a prompt that ends with an Assistant message", () => {
+    const PREFILL_ERROR =
+      "This model does not support assistant message prefill. The conversation must end with a user message.";
+    const endsWithAssistant = {
+      canTuneRequestRate: true,
+      sentMessages: [
+        userMessage("Say ok."),
+        assistantMessage("Here is my answer:"),
+      ],
+      model,
+    };
+
+    it("gets a suggestion to end with a User message under the provider's error on a 400", () => {
+      const run = failedRun({ errorStatus: 400, providerError: PREFILL_ERROR });
+
+      expect(describeRunFailure(run, endsWithAssistant)).toEqual({
+        message: PREFILL_ERROR,
+        hint: {
+          action:
+            "This model needs the last message to be a User message. Add one at the end with + Message, or remove the last Assistant message, then run again.",
+        },
+      });
+    });
+
+    it("keeps the error as written for a 500", () => {
+      const run = failedRun({
+        errorStatus: 500,
+        opikError: "Unexpected error",
+      });
+
+      expect(describeRunFailure(run, endsWithAssistant)).toEqual({
+        message: "Unexpected error",
+      });
+    });
+  });
+});
+
+describe("generateDefaultPrompt", () => {
+  const generate = (initPrompt?: Partial<PlaygroundPromptType>) =>
+    generateDefaultPrompt({
+      initPrompt,
+      setupProviders: [],
+      providerResolver: () => "",
+      modelResolver: () => "",
+      isDropdownModel: () => false,
+    });
+
+  it("starts with an empty system message and an empty user message", () => {
+    expect(
+      generate().messages.map(({ role, content }) => ({ role, content })),
+    ).toEqual([
+      { role: LLM_MESSAGE_ROLE.system, content: "" },
+      { role: LLM_MESSAGE_ROLE.user, content: "" },
+    ]);
+  });
+
+  it("keeps the messages of a prompt it is given", () => {
+    const messages = [userMessage("Hello")];
+
+    expect(generate({ messages }).messages).toBe(messages);
+  });
+});
+
+describe("isEmptyMessage", () => {
+  it.each([
+    ["an empty string", userMessage("")],
+    ["an empty part list", userMessage([])],
+  ])("treats %s as empty", (_, message) => {
+    expect(isEmptyMessage(message)).toBe(true);
+  });
+
+  it.each([
+    ["text", userMessage("Hello")],
+    ["a list of parts", imageMessage],
+  ])("treats %s as content", (_, message) => {
+    expect(isEmptyMessage(message)).toBe(false);
+  });
+});
+
+describe("isPlaygroundEmpty", () => {
+  const promptMap = (...messageLists: LLMMessage[][]) =>
+    Object.fromEntries(
+      messageLists.map((messages, index) => [
+        `p${index}`,
+        { id: `p${index}`, messages } as PlaygroundPromptType,
+      ]),
+    );
+
+  it.each([
+    ["no prompts", promptMap()],
+    ["one prompt with only empty messages", promptMap([userMessage("")])],
+  ])("treats %s as empty", (_, prompts) => {
+    expect(isPlaygroundEmpty(prompts)).toBe(true);
+  });
+
+  it.each([
+    ["one prompt with content", promptMap([userMessage("Hello")])],
+    [
+      "two prompts with only empty messages",
+      promptMap([userMessage("")], [userMessage("")]),
+    ],
+    [
+      "a malformed stored prompt",
+      { p0: null as unknown as PlaygroundPromptType },
+    ],
+  ])("treats %s as not empty", (_, prompts) => {
+    expect(isPlaygroundEmpty(prompts)).toBe(false);
+  });
+});
+
+describe("dropEmptySystemMessages", () => {
+  it("drops a system message with no text", () => {
+    expect(
+      dropEmptySystemMessages([systemMessage(""), userMessage("Hello")]),
+    ).toEqual([userMessage("Hello")]);
+  });
+
+  it("keeps a system message with text and empty messages of other roles", () => {
+    const messages = [
+      systemMessage("Answer briefly"),
+      userMessage(""),
+      { id: "assistant", role: LLM_MESSAGE_ROLE.assistant, content: "" },
+    ];
+
+    expect(dropEmptySystemMessages(messages)).toEqual(messages);
+  });
+});
+
+describe("canRunMessages", () => {
+  it("allows a run with an empty system message and a filled user message", () => {
+    expect(canRunMessages([systemMessage(""), userMessage("Hello")])).toBe(
+      true,
+    );
+  });
+
+  it("blocks a run while the user message is empty", () => {
+    expect(canRunMessages([systemMessage(""), userMessage("")])).toBe(false);
+  });
+
+  it("blocks a run when only an empty system message is left", () => {
+    expect(canRunMessages([systemMessage("")])).toBe(false);
+  });
+
+  it("allows a run with an empty system message and a user message with an image", () => {
+    expect(canRunMessages([systemMessage([]), imageMessage])).toBe(true);
+  });
+
+  it("blocks a run while a user message has no parts", () => {
+    expect(canRunMessages([systemMessage(""), userMessage([])])).toBe(false);
+  });
+});
+
+describe("parseCompletionOutput", () => {
+  const EMPTY_RESPONSE =
+    "The AI provider returned an empty response. Please, try again.";
+
+  const run = (overrides: Partial<RunStreamingReturn>): RunStreamingReturn => ({
+    result: "",
+    startTime: "",
+    endTime: "",
+    usage: null,
+    choices: null,
+    finishReason: null,
+    providerError: null,
+    opikError: null,
+    pythonProxyError: null,
+    errorStatus: null,
+    actualModel: null,
+    actualProvider: null,
+    ...overrides,
+  });
+
+  it.each<[string, Partial<RunStreamingReturn>, string]>([
+    [
+      "says the limit ran out when nothing was written before it",
+      { finishReason: "length" },
+      OUTPUT_LIMIT_REACHED_MESSAGE,
+    ],
+    [
+      "keeps a cut-off answer the model did write",
+      { result: "1 2 3", finishReason: "length" },
+      "1 2 3",
+    ],
+    [
+      "keeps the provider's error over the limit message",
+      { finishReason: "length", providerError: "Rate limited" },
+      "Rate limited",
+    ],
+    [
+      "keeps the generic message for an empty answer that stopped normally",
+      { finishReason: "stop" },
+      EMPTY_RESPONSE,
+    ],
+    [
+      "keeps the generic message when no finish reason arrived",
+      {},
+      EMPTY_RESPONSE,
+    ],
+  ])("%s", (_, overrides, expected) => {
+    expect(parseCompletionOutput(run(overrides))).toBe(expected);
   });
 });

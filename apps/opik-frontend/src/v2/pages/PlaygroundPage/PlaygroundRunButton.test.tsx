@@ -1,0 +1,372 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+
+import { TooltipProvider } from "@/ui/tooltip";
+import { PlaygroundPromptType } from "@/types/playground";
+import { LLM_MESSAGE_ROLE, MessageContent } from "@/types/llm";
+import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
+import { DATASET_TYPE } from "@/types/datasets";
+import PlaygroundRunButton from "./PlaygroundRunButton";
+
+const MEDIA_REASON =
+  "This prompt contains media but the selected model doesn't support media input";
+
+let prompt: PlaygroundPromptType | undefined;
+let datasetType: DATASET_TYPE | null = null;
+let playgroundDataset: { datasetId: string | null; itemsTotal?: number } = {
+  datasetId: null,
+};
+let datasetItemsTotal: number | null = null;
+
+let isResumingRun = false;
+let isPromptRunning = false;
+let isStopping = false;
+let isWatchLapsed = false;
+let hasRunProgress = false;
+
+vi.mock("@/store/PlaygroundStore", () => ({
+  usePromptById: () => prompt,
+  useIsPromptRunning: () => isPromptRunning,
+  useIsResumingRun: () => isResumingRun,
+  useIsStopping: () => isStopping,
+  useIsWatchLapsed: () => isWatchLapsed,
+  useHasRunProgress: () => hasRunProgress,
+  useDatasetType: () => datasetType,
+  useDatasetItemsTotal: () => datasetItemsTotal,
+}));
+
+vi.mock("@/hooks/usePlaygroundDataset", () => ({
+  usePlaygroundDataset: () => playgroundDataset,
+}));
+
+const createPrompt = (
+  model: PROVIDER_MODEL_TYPE,
+  content: MessageContent,
+): PlaygroundPromptType => ({
+  id: "prompt-1",
+  name: "Prompt",
+  model,
+  provider: PROVIDER_TYPE.OPEN_AI,
+  configs: {},
+  messages: [{ id: "message-1", role: LLM_MESSAGE_ROLE.user, content }],
+});
+
+const imageContent: MessageContent = [
+  { type: "text", text: "Describe this" },
+  { type: "image_url", image_url: { url: "https://example.com/cat.png" } },
+];
+
+const videoContent: MessageContent = [
+  { type: "text", text: "Describe this" },
+  { type: "video_url", video_url: { url: "https://example.com/cat.mp4" } },
+];
+
+const audioContent: MessageContent = [
+  { type: "text", text: "Transcribe this" },
+  { type: "audio_url", audio_url: { url: "https://example.com/cat.mp3" } },
+];
+
+const onRun = vi.fn();
+const onStop = vi.fn();
+
+const renderButton = () =>
+  render(
+    <TooltipProvider delayDuration={0}>
+      <PlaygroundRunButton promptId="prompt-1" onRun={onRun} onStop={onStop} />
+    </TooltipProvider>,
+  );
+
+const getRunButton = () => screen.getByRole("button", { name: "Run" });
+
+// Radix opens tooltips on pointer move, not on focus, for a disabled trigger:
+// a disabled button cannot take focus, but React still delivers pointer events.
+const hoverRunButton = () =>
+  fireEvent.pointerMove(getRunButton(), { pointerType: "mouse" });
+
+beforeEach(() => {
+  onRun.mockClear();
+  onStop.mockClear();
+  datasetType = null;
+  playgroundDataset = { datasetId: null };
+  datasetItemsTotal = null;
+  isResumingRun = false;
+  isPromptRunning = false;
+  isStopping = false;
+  isWatchLapsed = false;
+  hasRunProgress = false;
+});
+
+describe("PlaygroundRunButton", () => {
+  describe("media the model cannot read", () => {
+    it("should disable Run and explain why for an image on a non-vision model", async () => {
+      prompt = createPrompt(PROVIDER_MODEL_TYPE.GPT_4, imageContent);
+
+      renderButton();
+      hoverRunButton();
+
+      expect(getRunButton()).toBeDisabled();
+      expect(await screen.findByRole("tooltip")).toHaveTextContent(
+        MEDIA_REASON,
+      );
+    });
+
+    it("should disable Run for a video on a non-vision model", async () => {
+      prompt = createPrompt(PROVIDER_MODEL_TYPE.GPT_4, videoContent);
+
+      renderButton();
+      hoverRunButton();
+
+      expect(getRunButton()).toBeDisabled();
+      expect(await screen.findByRole("tooltip")).toHaveTextContent(
+        MEDIA_REASON,
+      );
+    });
+
+    it("should disable Run for audio on a model without audio support", async () => {
+      prompt = createPrompt(PROVIDER_MODEL_TYPE.GPT_4, audioContent);
+
+      renderButton();
+      hoverRunButton();
+
+      expect(getRunButton()).toBeDisabled();
+      expect(await screen.findByRole("tooltip")).toHaveTextContent(
+        MEDIA_REASON,
+      );
+    });
+
+    it("should not call onRun when the disabled button is clicked", () => {
+      prompt = createPrompt(PROVIDER_MODEL_TYPE.GPT_4, imageContent);
+
+      renderButton();
+      fireEvent.click(getRunButton());
+
+      expect(onRun).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("prompts the model can run", () => {
+    it("should enable Run for an image on a vision model", () => {
+      prompt = createPrompt(PROVIDER_MODEL_TYPE.GPT_5_5, imageContent);
+
+      renderButton();
+      fireEvent.click(getRunButton());
+
+      expect(getRunButton()).toBeEnabled();
+      expect(onRun).toHaveBeenCalledTimes(1);
+    });
+
+    it("should enable Run for audio on a model that accepts audio", () => {
+      prompt = createPrompt(PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH, audioContent);
+
+      renderButton();
+
+      expect(getRunButton()).toBeEnabled();
+    });
+
+    it("should enable Run for text only on a non-vision model", () => {
+      prompt = createPrompt(PROVIDER_MODEL_TYPE.GPT_4, "Say hello");
+
+      renderButton();
+
+      expect(getRunButton()).toBeEnabled();
+    });
+
+    it("should enable Run when the system message is left empty", () => {
+      const userPrompt = createPrompt(PROVIDER_MODEL_TYPE.GPT_4, "Say hello");
+      prompt = {
+        ...userPrompt,
+        messages: [
+          { id: "system", role: LLM_MESSAGE_ROLE.system, content: "" },
+          ...userPrompt.messages,
+        ],
+      };
+
+      renderButton();
+
+      expect(getRunButton()).toBeEnabled();
+    });
+  });
+
+  describe("a dataset version with no items", () => {
+    beforeEach(() => {
+      prompt = createPrompt(PROVIDER_MODEL_TYPE.GPT_4, "Say hello");
+      datasetType = DATASET_TYPE.DATASET;
+      playgroundDataset = { datasetId: "dataset-1::version-1", itemsTotal: 0 };
+    });
+
+    it("should disable Run and explain why", async () => {
+      renderButton();
+      hoverRunButton();
+
+      expect(getRunButton()).toBeDisabled();
+      expect(await screen.findByRole("tooltip")).toHaveTextContent(
+        "This dataset version has no items. Add items or select another version to run an experiment",
+      );
+    });
+
+    it("should name a test suite in the reason", async () => {
+      datasetType = DATASET_TYPE.TEST_SUITE;
+
+      renderButton();
+      hoverRunButton();
+
+      expect(await screen.findByRole("tooltip")).toHaveTextContent(
+        "This test suite version has no items. Add items or select another version to run an experiment",
+      );
+    });
+
+    it("should not call onRun when the disabled button is clicked", () => {
+      renderButton();
+      fireEvent.click(getRunButton());
+
+      expect(onRun).not.toHaveBeenCalled();
+    });
+
+    it("should keep Run enabled while the item count is not known yet", () => {
+      playgroundDataset = { datasetId: "dataset-1::version-1" };
+
+      renderButton();
+
+      expect(getRunButton()).toBeEnabled();
+    });
+  });
+
+  // A reopened page does not yet know whether its run is still going. Starting one here in that
+  // window would run alongside it, and the resume then drops the result.
+  describe("while the page is picking a run back up", () => {
+    beforeEach(() => {
+      isResumingRun = true;
+      prompt = createPrompt(PROVIDER_MODEL_TYPE.GPT_4, "Say hello");
+    });
+
+    it("should disable Run on a prompt that is otherwise runnable", () => {
+      renderButton();
+
+      expect(getRunButton()).toBeDisabled();
+    });
+
+    it("should not call onRun when clicked in that window", () => {
+      renderButton();
+      fireEvent.click(getRunButton());
+
+      expect(onRun).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("reason priority", () => {
+    it("should report an empty message before the media problem", async () => {
+      prompt = {
+        ...createPrompt(PROVIDER_MODEL_TYPE.GPT_4, imageContent),
+        messages: [
+          {
+            id: "message-1",
+            role: LLM_MESSAGE_ROLE.user,
+            content: imageContent,
+          },
+          { id: "message-2", role: LLM_MESSAGE_ROLE.user, content: "" },
+        ],
+      };
+
+      renderButton();
+      hoverRunButton();
+
+      expect(await screen.findByRole("tooltip")).toHaveTextContent(
+        "Message is empty. Please add some text to proceed",
+      );
+    });
+  });
+});
+
+describe("PlaygroundRunButton stop state", () => {
+  it("offers Stop while the prompt runs", () => {
+    prompt = createPrompt(PROVIDER_MODEL_TYPE.GPT_4O, "Hello");
+    isPromptRunning = true;
+    renderButton();
+
+    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+
+    expect(onStop).toHaveBeenCalledTimes(1);
+  });
+
+  // A stop pressed before /execute answers cannot cancel anything yet, so the button says so
+  // rather than offering a Stop that looks ignored.
+  it("says Stopping... and refuses a second press while the stop waits for ids", () => {
+    prompt = createPrompt(PROVIDER_MODEL_TYPE.GPT_4O, "Hello");
+    isPromptRunning = true;
+    isStopping = true;
+    renderButton();
+
+    const button = screen.getByRole("button", { name: "Stopping..." });
+    fireEvent.click(button);
+
+    expect(button).toBeDisabled();
+    expect(onStop).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
+  });
+});
+
+describe("a run this tab stopped following", () => {
+  const onCheckAgain = vi.fn();
+
+  const renderLapsed = () =>
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PlaygroundRunButton
+          promptId="prompt-1"
+          onRun={onRun}
+          onStop={onStop}
+          onCheckAgain={onCheckAgain}
+        />
+      </TooltipProvider>,
+    );
+
+  beforeEach(() => {
+    onCheckAgain.mockClear();
+    prompt = createPrompt(PROVIDER_MODEL_TYPE.GPT_4O, "Hello");
+    isPromptRunning = true;
+    isWatchLapsed = true;
+  });
+
+  it("should say the run continues on the server and offer to refresh", () => {
+    renderLapsed();
+
+    expect(
+      screen.getByText("Still running on the server, refresh to update"),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+
+    expect(onCheckAgain).toHaveBeenCalledTimes(1);
+  });
+
+  // The run has not ended, so stopping it is still something the user can ask for.
+  it("should keep offering Stop alongside", () => {
+    renderLapsed();
+
+    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+
+    expect(onStop).toHaveBeenCalledTimes(1);
+  });
+
+  // A run followed as a whole has a progress bar, and it already carries this message and its own
+  // Refresh. Repeating both on every prompt's row would be the same offer N+1 times.
+  it("should leave the message to the progress bar when there is one", () => {
+    hasRunProgress = true;
+    renderLapsed();
+
+    expect(
+      screen.queryByText("Still running on the server, refresh to update"),
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Refresh" })).toBeNull();
+  });
+
+  it("should show nothing extra while the run is still being followed", () => {
+    isWatchLapsed = false;
+    renderLapsed();
+
+    expect(
+      screen.queryByText("Still running on the server, refresh to update"),
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Refresh" })).toBeNull();
+  });
+});

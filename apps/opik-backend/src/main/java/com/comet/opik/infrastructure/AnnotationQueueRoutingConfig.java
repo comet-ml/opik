@@ -30,6 +30,9 @@ import java.util.concurrent.TimeUnit;
  * clear of replication lag. The flush job groups due members by (workspace, scope) and publishes one stream
  * message per group; the consumer then processes one message at a time.
  *
+ * <p>Whether the feature runs at all is not here: that is {@code serviceToggles.annotationQueueAutomationEnabled},
+ * the same switch the UI reads, so a deployment turns the feature on in one place.
+ *
  * <p>Values live in {@code config.yml} and its test counterpart, which is the single source of truth:
  * no field carries a Java default, so a key missing from the yaml fails validation at boot rather than
  * silently taking a value that appears nowhere on disk.
@@ -44,13 +47,6 @@ public class AnnotationQueueRoutingConfig implements StreamConfiguration {
 
     public static final String PAYLOAD_FIELD = "message";
     public static final String PENDING_SET_KEY = "annotation-queue:routing:pending";
-
-    @Valid @JsonProperty
-    private boolean enabled;
-
-    // Off in tests that drive the flush job by hand; the buffer still fills either way.
-    @Valid @JsonProperty
-    private boolean jobEnabled;
 
     @Valid @NotBlank @JsonProperty
     private String streamName;
@@ -79,7 +75,7 @@ public class AnnotationQueueRoutingConfig implements StreamConfiguration {
     // Members are small, but at a high score rate a dead flusher would otherwise grow the key without limit.
     @Valid @JsonProperty
     @NotNull @MinDuration(value = 10, unit = TimeUnit.SECONDS)
-    @MaxDuration(value = 1, unit = TimeUnit.HOURS)
+    @MaxDuration(value = 10, unit = TimeUnit.MINUTES)
     private Duration bufferTtl;
 
     // Members are due debounceDelay after their last write and are picked up on the next run, so an item

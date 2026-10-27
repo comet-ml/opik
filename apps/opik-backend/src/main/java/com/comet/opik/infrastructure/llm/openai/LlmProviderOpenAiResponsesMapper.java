@@ -1,8 +1,10 @@
 package com.comet.opik.infrastructure.llm.openai;
 
 import com.comet.opik.domain.llm.MessageContentNormalizer;
+import com.comet.opik.infrastructure.llm.OpenAiCompatFinishReasons;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.openai.models.ReasoningEffort;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.data.message.AiMessage;
@@ -30,14 +32,18 @@ import dev.langchain4j.model.openai.internal.chat.Tool;
 import dev.langchain4j.model.openai.internal.chat.ToolCall;
 import dev.langchain4j.model.openai.internal.chat.ToolMessage;
 import dev.langchain4j.model.openai.internal.chat.ToolType;
+import dev.langchain4j.model.openai.internal.shared.CompletionTokensDetails;
+import dev.langchain4j.model.openai.internal.shared.PromptTokensDetails;
 import dev.langchain4j.model.openai.internal.shared.Usage;
-import dev.langchain4j.model.output.FinishReason;
+import dev.langchain4j.model.openaiofficial.OpenAiOfficialResponsesChatRequestParameters;
+import dev.langchain4j.model.openaiofficial.OpenAiOfficialTokenUsage;
 import dev.langchain4j.model.output.TokenUsage;
 import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.ObjectUtils;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.List;
 import java.util.Map;
@@ -50,9 +56,9 @@ import java.util.Optional;
  * <br/>
  * Scope: text-only system/user/assistant messages, tool calling (tool specs, tool_choice,
  * assistant tool_calls, tool result resume), structured response formats (json_object and
- * json_schema), basic sampling parameters, token usage, and finish reason. Multimodal content and
- * per-token streaming of tool-call argument deltas are intentionally out of scope and should be
- * added incrementally.
+ * json_schema), basic sampling parameters, reasoning effort, token usage, and finish reason.
+ * Multimodal content and per-token streaming of tool-call argument deltas are intentionally out of
+ * scope and should be added incrementally.
  */
 @lombok.experimental.UtilityClass
 @Slf4j
@@ -83,8 +89,11 @@ class LlmProviderOpenAiResponsesMapper {
         Optional.ofNullable(request.temperature()).ifPresent(builder::temperature);
         Optional.ofNullable(request.topP()).ifPresent(builder::topP);
         Optional.ofNullable(resolveMaxOutputTokens(request)).ifPresent(builder::maxOutputTokens);
-
-        warnIfDroppedSamplingParam(request);
+        // No penalties, stop or seed: langchain4j's validate() throws UnsupportedFeatureException for them, and the
+        // playground sends penalties of 0 by default, so mapping them would fail ordinary requests. The catalog's
+        // responses_api route has ParamResolver drop them before this runs; a user who needs them switches the key's
+        // openai_pipeline_mode to Chat Completions.
+        Optional.ofNullable(toResponsesParameters(request)).ifPresent(builder::parameters);
 
         if (CollectionUtils.isNotEmpty(request.tools())) {
             builder.toolSpecifications(toToolSpecifications(request.tools()));
@@ -140,7 +149,7 @@ class LlmProviderOpenAiResponsesMapper {
                 .choices(List.of(ChatCompletionChoice.builder()
                         .index(0)
                         .delta(Delta.builder().build())
-                        .finishReason(toFinishReasonString(response.finishReason()))
+                        .finishReason(OpenAiCompatFinishReasons.toWireValue(response.finishReason()))
                         .build()))
                 .usage(toUsage(response.tokenUsage()))
                 .build();
@@ -204,7 +213,7 @@ class LlmProviderOpenAiResponsesMapper {
         return ChatCompletionChoice.builder()
                 .index(0)
                 .message(assistantBuilder.build())
-                .finishReason(toFinishReasonString(response.finishReason()))
+                .finishReason(OpenAiCompatFinishReasons.toWireValue(response.finishReason()))
                 .build();
     }
 
@@ -364,48 +373,36 @@ class LlmProviderOpenAiResponsesMapper {
         if (tokenUsage == null) {
             return null;
         }
-        return Usage.builder()
+        var builder = Usage.builder()
                 .promptTokens(tokenUsage.inputTokenCount())
                 .completionTokens(tokenUsage.outputTokenCount())
-                .totalTokens(tokenUsage.totalTokenCount())
-                .build();
-    }
-
-    private String toFinishReasonString(FinishReason finishReason) {
-        if (finishReason == null) {
-            return null;
+                .totalTokens(tokenUsage.totalTokenCount());
+        if (tokenUsage instanceof OpenAiOfficialTokenUsage responsesUsage) {
+            Optional.ofNullable(responsesUsage.inputTokensDetails())
+                    .map(OpenAiOfficialTokenUsage.InputTokensDetails::cachedTokens)
+                    .map(cached -> PromptTokensDetails.builder().cachedTokens(cached).build())
+                    .ifPresent(builder::promptTokensDetails);
+            Optional.ofNullable(responsesUsage.outputTokensDetails())
+                    .map(OpenAiOfficialTokenUsage.OutputTokensDetails::reasoningTokens)
+                    .map(reasoning -> CompletionTokensDetails.builder().reasoningTokens(reasoning).build())
+                    .ifPresent(builder::completionTokensDetails);
         }
-        return switch (finishReason) {
-            case STOP -> "stop";
-            case LENGTH -> "length";
-            case TOOL_EXECUTION -> "tool_calls";
-            case CONTENT_FILTER -> "content_filter";
-            default -> "other";
-        };
+        return builder.build();
     }
 
     /**
-     * {@code frequency_penalty}, {@code presence_penalty}, {@code stop}, and {@code top_k} are NOT
-     * supported by the OpenAI Responses API — langchain4j's
-     * {@code OpenAiOfficialResponsesChatModel.validate()} throws {@code UnsupportedFeatureException}
-     * for any of them. Clients (notably the playground) often send {@code frequency_penalty: 0} /
-     * {@code presence_penalty: 0} as framework defaults even when the user didn't tune them, so the
-     * request would fail before reaching OpenAI. We silently drop these fields rather than 500 the
-     * call; a user who explicitly tunes them and expects them to apply should use
-     * {@code pipeline_mode=CHAT_COMPLETIONS_API}.
+     * The generic ChatRequest has no reasoning-effort slot, so it travels in the Responses-specific
+     * parameters; ChatRequest merges those with the plain fields set alongside them. The value is
+     * passed through unchecked because the accepted set differs per model ({@code max} exists only
+     * on the Responses API) and OpenAI's own 400 names the problem better than a local enum would.
      */
-    private void warnIfDroppedSamplingParam(ChatCompletionRequest request) {
-        if (request.frequencyPenalty() != null && request.frequencyPenalty() != 0.0) {
-            log.debug("Dropping unsupported 'frequency_penalty'='{}' for OpenAI Responses API",
-                    request.frequencyPenalty());
+    private OpenAiOfficialResponsesChatRequestParameters toResponsesParameters(ChatCompletionRequest request) {
+        if (StringUtils.isBlank(request.reasoningEffort())) {
+            return null;
         }
-        if (request.presencePenalty() != null && request.presencePenalty() != 0.0) {
-            log.debug("Dropping unsupported 'presence_penalty'='{}' for OpenAI Responses API",
-                    request.presencePenalty());
-        }
-        if (CollectionUtils.isNotEmpty(request.stop())) {
-            log.debug("Dropping unsupported 'stop'='{}' for OpenAI Responses API", request.stop());
-        }
+        return OpenAiOfficialResponsesChatRequestParameters.builder()
+                .reasoningEffort(ReasoningEffort.of(request.reasoningEffort()))
+                .build();
     }
 
     private Integer resolveMaxOutputTokens(ChatCompletionRequest request) {

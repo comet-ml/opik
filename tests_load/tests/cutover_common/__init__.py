@@ -35,6 +35,11 @@ EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 # A far-future instant matching the litellm UUIDv7 bug (ids whose embedded timestamp lands around the year 2201). Built
 # from a fixed date (not now().replace(year=2201)) so it never hits Feb 29 -> ValueError at import on a leap-day run.
 BAD_ID_INSTANT = datetime(2201, 6, 1, tzinfo=timezone.utc)
+# Past the end of DateTime64's range (2300-01-01), where id_at SATURATES: every id beyond it stores in the same final
+# weekly partition whatever its real week, so the cutover's partition-scope derivation refuses to derive one and the
+# replay falls back to a single UNBOUNDED statement (OPIK-8607). Distinct from BAD_ID_INSTANT, which is far-future but
+# still honestly representable and so still scopes.
+CEILING_ID_INSTANT = datetime(2400, 1, 1, tzinfo=timezone.utc)
 
 
 def make_ch_client():

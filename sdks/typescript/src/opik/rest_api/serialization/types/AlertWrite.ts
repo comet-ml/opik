@@ -14,6 +14,10 @@ export const AlertWrite: core.serialization.ObjectSchema<serializers.AlertWrite.
         enabled: core.serialization.boolean().optional(),
         alertType: core.serialization.property("alert_type", AlertWriteAlertType.optional()),
         metadata: core.serialization.record(core.serialization.string(), core.serialization.string()).optional(),
+        customFields: core.serialization.property(
+            "custom_fields",
+            core.serialization.record(core.serialization.string(), core.serialization.string()).optional(),
+        ),
         webhook: WebhookWrite,
         triggers: core.serialization.list(AlertTriggerWrite).optional(),
         projectId: core.serialization.property("project_id", core.serialization.string().optional()),
@@ -26,6 +30,7 @@ export declare namespace AlertWrite {
         enabled?: boolean | null;
         alert_type?: AlertWriteAlertType.Raw | null;
         metadata?: Record<string, string> | null;
+        custom_fields?: Record<string, string> | null;
         webhook: WebhookWrite.Raw;
         triggers?: AlertTriggerWrite.Raw[] | null;
         project_id?: string | null;

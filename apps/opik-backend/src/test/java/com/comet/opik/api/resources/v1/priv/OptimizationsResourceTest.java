@@ -1573,8 +1573,8 @@ class OptimizationsResourceTest {
         /**
          * The tagged-cost branch must charge one span once, from its newest version, no matter how many
          * physical rows it has. A span re-ingested under a different parent is the case that used to break
-         * both halves of that: {@code /v1/private/spans/batch} goes through {@code SpanDAO.BULK_INSERT},
-         * which binds {@code parent_span_id} straight from the request with no old-row merge, so the rewrite
+         * both halves of that: {@code /v1/private/spans/batch} goes through {@code SpanDAO.batchInsert},
+         * which writes {@code parent_span_id} straight from the request with no old-row merge, so the rewrite
          * lands as a second row carrying a <em>different</em> parent. A dedup grouping that still contained
          * that column then kept both rows and summed the cost twice, and a sort tuple that still contained it
          * picked the winner by largest parent instead of newest write (OPIK-7750).

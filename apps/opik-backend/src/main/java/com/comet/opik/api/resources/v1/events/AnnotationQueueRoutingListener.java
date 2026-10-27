@@ -5,7 +5,7 @@ import com.comet.opik.api.events.FeedbackScoresCreated;
 import com.comet.opik.domain.AnnotationQueueAutomationService;
 import com.comet.opik.domain.AnnotationQueueRoutingBufferService;
 import com.comet.opik.domain.EntityType;
-import com.comet.opik.infrastructure.AnnotationQueueRoutingConfig;
+import com.comet.opik.infrastructure.FeatureFlags;
 import com.google.common.eventbus.Subscribe;
 import jakarta.inject.Inject;
 import lombok.NonNull;
@@ -13,7 +13,6 @@ import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
-import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 /**
  * Decides whether a feedback-score event is worth routing work, and hands it off (OPIK-6303).
@@ -47,22 +46,22 @@ public class AnnotationQueueRoutingListener {
 
     private final @NonNull AnnotationQueueAutomationService automationService;
     private final @NonNull AnnotationQueueRoutingBufferService bufferService;
-    private final @NonNull AnnotationQueueRoutingConfig config;
+    private final @NonNull FeatureFlags featureFlags;
 
     @Inject
     public AnnotationQueueRoutingListener(@NonNull AnnotationQueueAutomationService automationService,
             @NonNull AnnotationQueueRoutingBufferService bufferService,
-            @NonNull @Config("annotationQueueRouting") AnnotationQueueRoutingConfig config) {
+            @NonNull FeatureFlags featureFlags) {
         this.automationService = automationService;
         this.bufferService = bufferService;
-        this.config = config;
+        this.featureFlags = featureFlags;
     }
 
     @Subscribe
     public void onFeedbackScoresCreated(@NonNull FeedbackScoresCreated event) {
         // First, and silently: this fires for every score event in the deployment, so a switched-off
         // feature must not pay for the lookup below nor log a line each time.
-        if (!config.isEnabled()) {
+        if (!featureFlags.isAnnotationQueueAutomationEnabled()) {
             return;
         }
 
@@ -70,8 +69,8 @@ public class AnnotationQueueRoutingListener {
         if (scope == null) {
             // Routine rather than anomalous: spans are scored like anything else, they just can never be
             // annotation queue items, so there is nothing to route them to.
-            log.debug("Ignoring feedback scores for entity type '{}', which cannot be an annotation queue "
-                    + "item, workspace '{}'", event.entityType(), event.workspaceId());
+            log.debug("Ignoring feedback scores for an entity type that cannot be an annotation queue item, "
+                    + "entityType '{}', workspace '{}'", event.entityType(), event.workspaceId());
             return;
         }
 

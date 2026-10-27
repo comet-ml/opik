@@ -249,12 +249,12 @@ class ChatPrompt(base_prompt.BasePrompt):
         Args:
             variables: Dictionary of variables to substitute in the template.
             supported_modalities: Optional dictionary specifying which modalities are supported
-                by the target model. Keys are modality names ("vision" or "video") and values
-                are booleans indicating support. When a modality is not supported (False or not
-                specified), structured content parts (e.g., images, videos) are replaced with
-                text placeholders like "<<<image>>>" or "<<<video>>>". When supported (True),
+                by the target model. Keys are modality names ("vision", "video" or "audio") and
+                values are booleans indicating support. When a modality is not supported (False or
+                not specified), structured content parts (e.g., images, videos, audio) are replaced
+                with text placeholders like "<<<image>>>" or "<<<video>>>". When supported (True),
                 the structured content is preserved as-is.
-                Example: {"vision": True, "video": False}
+                Example: {"vision": True, "video": False, "audio": True}
 
                 If not specified, all modalities default to SUPPORTED. Example: {"vision": True, "video": False}
 
@@ -266,6 +266,11 @@ class ChatPrompt(base_prompt.BasePrompt):
             supported_modalities = {
                 "vision": True,
                 "video": True,
+                # A new modality has to be listed here as well: the registry treats
+                # an absent flag as unsupported, and one unsupported part flattens
+                # the whole message, so leaving it out would turn every legacy
+                # text+image+audio prompt into a single string.
+                "audio": True,
             }
 
         return self._chat_template.format(

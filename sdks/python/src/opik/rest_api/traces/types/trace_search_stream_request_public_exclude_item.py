@@ -30,6 +30,7 @@ TraceSearchStreamRequestPublicExcludeItem = typing.Union[
         "visibility_mode",
         "providers",
         "experiment",
+        "annotation_queues",
         "source",
         "environment",
     ],

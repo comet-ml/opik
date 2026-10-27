@@ -4,6 +4,7 @@ import opik
 from fastapi import APIRouter, Header
 from opik.evaluation import evaluate
 from opik.evaluation.metrics import Equals
+from opik.evaluation.metrics.heuristics.readability import Readability
 
 from ..opik_factory import make_opik_client
 from ..schemas import (
@@ -16,12 +17,27 @@ from ..schemas import (
     ExperimentItemScore,
     ExperimentReadItemsRequest,
     ExperimentReadItemsResponse,
+    ReadabilityEvaluateRequest,
+    ReadabilityEvaluateResponse,
+    ReadabilityLocaleScore,
 )
 
 router = APIRouter(prefix="/experiments", tags=["experiments"])
 
 
 _SCORE_METRIC_NAME = "equals_metric"
+
+
+def _readability_metric_name(language: str) -> str:
+    """Per-locale metric name.
+
+    `Readability` defaults every instance to `readability_metric`, so four
+    locales in one run would write four scores under one name and the last
+    writer would win. Naming them apart is what makes the per-locale score
+    addressable — in the response here, and as its own column in the compare
+    grid.
+    """
+    return f"readability_{language}"
 
 
 def _collect_scores(result) -> list[ExperimentItemScore]:
@@ -156,6 +172,113 @@ def read_experiment_items(
         experiment_id=body.experiment_id,
         count=len(fingerprints),
         items=fingerprints,
+    )
+
+
+@router.post(
+    "/readability-evaluate",
+    response_model=ReadabilityEvaluateResponse,
+    status_code=201,
+)
+def readability_evaluate(
+    body: ReadabilityEvaluateRequest,
+    x_opik_api_key: str | None = Header(default=None),
+) -> ReadabilityEvaluateResponse:
+    """Score one dataset with several `Readability` locales in ONE evaluate run.
+
+    This is the only shape that reaches what opik#8318 changed. `textstat`
+    carries its locale in MODULE state, set through `set_lang`, and the
+    evaluation engine scores metrics from a thread pool — so N locales in one
+    run is exactly the interleaving the new module-wide lock exists to
+    serialise. Scoring them in N separate runs would pass just as happily with
+    the lock removed.
+
+    Each language is also scored SEQUENTIALLY here, outside `evaluate()`, and
+    returned alongside as `serial_value`. Comparing the two is what separates
+    the two ways this can regress: if `set_lang` stops being applied at all the
+    languages stop differing from each other, and if the lock stops holding
+    they differ from their own uncontended value.
+
+    Both halves are computed in this one process, so they share a textstat
+    version and the comparison never depends on an absolute Flesch number.
+    """
+    client = make_opik_client(workspace=body.workspace, api_key=x_opik_api_key)
+    opik.set_global_client(client, context_wise=True)
+
+    # The uncontended reference, taken before the concurrent run and one metric
+    # at a time. `track=False` because these are a pure computation for
+    # comparison, not part of the experiment being seeded.
+    serial_values: dict[tuple[str, str], float] = {
+        (item.key, language): float(
+            Readability(language=language, track=False).score(output=item.text).value
+        )
+        for item in body.items
+        for language in body.languages
+    }
+
+    language_by_metric_name = {
+        _readability_metric_name(language): language for language in body.languages
+    }
+
+    try:
+        dataset = client.create_dataset(
+            name=body.dataset_name,
+            description=body.dataset_description,
+            project_name=body.project_name,
+        )
+        dataset.insert(
+            [{"key": item.key, "input": item.text, "task_output": item.text} for item in body.items]
+        )
+
+        def _task(item: dict) -> dict:
+            return {"output": item["task_output"]}
+
+        result = evaluate(
+            dataset=dataset,
+            task=_task,
+            scoring_metrics=[
+                Readability(name=_readability_metric_name(language), language=language)
+                for language in body.languages
+            ],
+            experiment_name=body.experiment_name,
+            project_name=body.project_name,
+            task_threads=body.task_threads,
+            verbose=0,
+        )
+    finally:
+        client.end(flush=True)
+        atexit.unregister(client.end)
+
+    scores: list[ReadabilityLocaleScore] = []
+    for test_result in result.test_results:
+        item_content = test_result.test_case.dataset_item_content or {}
+        key = str(item_content.get("key", ""))
+        for score_result in test_result.score_results:
+            language = language_by_metric_name.get(score_result.name)
+            if language is None:
+                continue
+            scores.append(
+                ReadabilityLocaleScore(
+                    dataset_item_id=str(test_result.test_case.dataset_item_id),
+                    key=key,
+                    language=language,
+                    metric_name=score_result.name,
+                    evaluated_value=float(score_result.value),
+                    # KeyError rather than a default: a score whose (key,
+                    # language) pair was never seeded is a bug in this route,
+                    # and substituting a plausible number would hide it.
+                    serial_value=serial_values[(key, language)],
+                    scoring_failed=bool(score_result.scoring_failed),
+                )
+            )
+
+    return ReadabilityEvaluateResponse(
+        experiment_id=str(result.experiment_id),
+        experiment_name=result.experiment_name or body.experiment_name,
+        dataset_id=str(result.dataset_id),
+        item_count=len(body.items),
+        scored_item_count=len(result.test_results),
+        scores=scores,
     )
 
 

@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.llm;
 
 import com.comet.opik.api.LlmProvider;
+import com.comet.opik.api.ModelParams;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.domain.LlmProviderApiKeyService;
@@ -12,8 +13,10 @@ import com.comet.opik.domain.llm.structuredoutput.ToolCallingStrategy;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.llm.antropic.AnthropicModelName;
 import com.comet.opik.infrastructure.llm.customllm.CustomLlmModelNameChecker;
+import com.comet.opik.infrastructure.llm.customllm.ProviderBaseUrlGuard;
 import com.comet.opik.infrastructure.llm.gemini.GeminiModelName;
 import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
+import com.comet.opik.infrastructure.llm.openrouter.OpenRouterDecisionModel;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterModelName;
 import com.comet.opik.infrastructure.llm.vertexai.VertexAIModelName;
 import dev.langchain4j.model.chat.ChatModel;
@@ -23,10 +26,12 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.EnumUtils;
+import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.Arrays;
 import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -45,6 +50,7 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
     private final @NonNull LlmProviderApiKeyService llmProviderApiKeyService;
     private final @NonNull OpikConfiguration configuration;
     private final @NonNull LlmModelRegistryService registryService;
+    private final @NonNull ProviderBaseUrlGuard providerBaseUrlGuard;
     private final Map<LlmProvider, LlmServiceProvider> services = new EnumMap<>(LlmProvider.class);
 
     public void register(LlmProvider llmProvider, LlmServiceProvider service) {
@@ -62,11 +68,38 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
                         "LLM provider not supported: %s".formatted(llmProvider)));
     }
 
+    public LlmProviderClientApiConfig getClientApiConfig(@NonNull String workspaceId, @NonNull String model) {
+        var llmProvider = getLlmProvider(model);
+        return buildConfig(getProviderApiKey(workspaceId, llmProvider, model), workspaceId);
+    }
+
+    // OPIK_FREE's URL is operator-configured; any other base URL is the workspace's own
+    public boolean hasUserConfiguredDestination(@NonNull String workspaceId, @NonNull String model) {
+        var llmProvider = getLlmProvider(model);
+        return llmProvider != LlmProvider.OPIK_FREE
+                && StringUtils.isNotBlank(getProviderApiKey(workspaceId, llmProvider, model).baseUrl());
+    }
+
     private static final Set<LlmProvider> NAMED_PROVIDERS = Arrays.stream(LlmProvider.values())
             .filter(LlmProvider::supportsProviderName)
             .collect(Collectors.toUnmodifiableSet());
 
+    // Not Anthropic: ModelCapabilities applies the Claude rules, which read a param the catalog leaves out as refused.
+    private static final Set<LlmProvider> CATALOG_PARAMS_PROVIDERS = EnumSet.of(LlmProvider.OPEN_AI,
+            LlmProvider.GEMINI, LlmProvider.VERTEX_AI);
+
+    /**
+     * OPIK_FREE's URL is operator-configured; the others always build their client through
+     * CustomLlmClientGenerator, which checks every request URL itself.
+     */
+    private static final Set<LlmProvider> BASE_URL_GUARD_EXEMPT_PROVIDERS = Set.of(
+            LlmProvider.OPIK_FREE, LlmProvider.CUSTOM_LLM, LlmProvider.BEDROCK, LlmProvider.OLLAMA);
+
     private LlmProviderClientApiConfig buildConfig(ProviderApiKey providerConfig, String workspaceId) {
+        if (!BASE_URL_GUARD_EXEMPT_PROVIDERS.contains(providerConfig.provider())) {
+            providerBaseUrlGuard.validate(providerConfig.baseUrl());
+        }
+
         var configuration = Optional.ofNullable(providerConfig.configuration()).orElse(Map.of());
 
         // For providers that support naming, add provider_name to configuration if present
@@ -84,6 +117,7 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
                 .providerId(providerConfig.id())
                 .workspaceId(workspaceId)
                 .authConfig(providerConfig.authConfig())
+                .provider(providerConfig.provider())
                 .build();
     }
 
@@ -125,6 +159,14 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
         return StructuredOutputStrategy.getStrategy(provider, model);
     }
 
+    @Override
+    public Optional<ModelParams> catalogParams(@NonNull String model) {
+        return registryService.findModel(model)
+                .filter(result -> CATALOG_PARAMS_PROVIDERS.contains(result.provider()))
+                .map(result -> ObjectUtils.getIfNull(result.model().params(),
+                        () -> registryService.paramsOf(result.provider().getValue(), result.model().id())));
+    }
+
     private LlmProvider getLlmProviderFromEnums(@NonNull String model) {
         var freeModelConfig = configuration.getFreeModel();
         if (freeModelConfig.isEnabled() && model.equals(freeModelConfig.getModel())) {
@@ -141,7 +183,8 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
             return LlmProvider.GEMINI;
         }
         if (model.startsWith("openrouter/")
-                || isModelBelongToProvider(model, OpenRouterModelName.class, OpenRouterModelName::toString)) {
+                || isModelBelongToProvider(model, OpenRouterModelName.class, OpenRouterModelName::toString)
+                || OpenRouterDecisionModel.isDecisionModel(model)) {
             return LlmProvider.OPEN_ROUTER;
         }
 

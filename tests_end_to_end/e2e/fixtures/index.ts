@@ -1,4 +1,4 @@
-export { test, expect } from './feedback-score-reasons.fixture';
+export { test, expect } from './emptied-source-versions.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -202,6 +202,7 @@ export {
 export type { BulkTagTraceRef, BulkTagTracesFixtures } from './bulk-tag-traces.fixture';
 export type {
   ImageOutputItemRef,
+  InputImageItemRef,
   ExperimentImageOutputRef,
   ExperimentImageOutputFixtures,
 } from './experiment-image-output.fixture';
@@ -230,4 +231,265 @@ export {
   COLLAPSED_JUDGE_REASON,
   EMPTY_LIST_JUDGE_REASON,
 } from './feedback-score-reasons.fixture';
+export type {
+  DeepPagedItemSeed,
+  DeepPagedExperimentRef,
+  DeepPagedExperimentFixtures,
+} from './deep-paged-experiment.fixture';
+export type {
+  TraceSourceRef,
+  TraceSourcesRef,
+  TraceSourceFixtures,
+} from './trace-source.fixture';
+export type {
+  ReadabilityLocaleScore,
+  ReadabilityLocaleExperimentRef,
+  ReadabilityLocaleExperimentFixtures,
+} from './readability-locale-experiment.fixture';
+export { READABILITY_LANGUAGES } from './readability-locale-experiment.fixture';
+export type {
+  OutputAttachmentItemRef,
+  ExperimentOutputAttachmentRef,
+  ExperimentOutputAttachmentFixtures,
+} from './experiment-output-attachment.fixture';
+export type {
+  SuiteRunSeed,
+  SuiteExperimentRunMediaRef,
+  SuiteExperimentRunMediaFixtures,
+} from './suite-experiment-run-media.fixture';
+export type {
+  IdAgedSpanRef,
+  IdAgedSpansRef,
+  IdAgedSpansFixtures,
+} from './id-aged-spans.fixture';
+export type {
+  MismatchedItemRef,
+  CompareProjectMismatchRef,
+  CompareProjectMismatchFixtures,
+} from './compare-project-mismatch.fixture';
+export type {
+  RawBranchExperimentRef,
+  RawBranchExperimentFixtures,
+} from './raw-branch-experiment.fixture';
+export { RAW_ITEM_COUNT } from './raw-branch-experiment.fixture';
+export type {
+  CompareButtonExperimentRef,
+  CompareButtonExperimentsRef,
+  CompareButtonExperimentsFixtures,
+} from './compare-button-experiments.fixture';
+export type {
+  OtelAliasSpanSeed,
+  OtelProviderAliasSpansRef,
+  OtelProviderAliasSpansFixtures,
+} from './otel-provider-alias-spans.fixture';
+export type {
+  TypedExperimentRef,
+  ExperimentTypeDatasetRef,
+  ExperimentTypeDatasetsRef,
+  ExperimentTypeDatasetsFixtures,
+} from './experiment-type-datasets.fixture';
+export type {
+  PagedStreamPopulationRef,
+  PagedStreamPopulationFixtures,
+} from './paged-stream-population.fixture';
+export type {
+  ComparePromptLink,
+  ComparePromptExperimentRef,
+  ComparePromptVersionsRef,
+  ComparePromptVersionsFixtures,
+} from './compare-prompt-versions.fixture';
+export { CONFIG_METADATA_KEYS } from './compare-prompt-versions.fixture';
+export type {
+  QuickFilterPairRef,
+  QuickFilterLogsRef,
+  QuickFilterLogsFixtures,
+} from './quick-filter-logs.fixture';
+export {
+  QUICK_FILTER_SEED,
+  TRACE_PROVIDER_METADATA_VALUE,
+} from './quick-filter-logs.fixture';
+export type {
+  ModelRegistryProvidersRef,
+  ModelRegistryProvidersFixtures,
+} from './model-registry-providers.fixture';
+export {
+  REGISTRY_PROVIDERS,
+  PROVIDER_GROUP,
+  REGISTRY_MODEL,
+} from './model-registry-providers.fixture';
+export type {
+  ExperimentMessagePanelRef,
+  ExperimentMessagePanelFixtures,
+} from './experiment-message-panel.fixture';
+export {
+  DATASET_CONVERSATION,
+  DATASET_SCALARS,
+  OUTPUT_TEXT,
+  OUTPUT_SIBLINGS,
+  EXPECTED_DATASET_REMAINING_LINES,
+  EXPECTED_OUTPUT_REMAINING_LINES,
+} from './experiment-message-panel.fixture';
+export type {
+  OpenEndedWindowRow,
+  OpenEndedKpiExpectation,
+  OpenEndedWindowRowsRef,
+  OpenEndedWindowRowsFixtures,
+} from './open-ended-window-rows.fixture';
+export type {
+  MovedTraceKey,
+  MovedTraceRef,
+  ThreadAggregateExpectation,
+  MovedTraceThreadsRef,
+  MovedTraceThreadsFixtures,
+} from './moved-trace-threads.fixture';
+export type {
+  OpenRouterNativeModelsRef,
+  OpenRouterNativeModelsFixtures,
+} from './open-router-native-models.fixture';
+export {
+  OPEN_ROUTER_GROUP,
+  OPEN_ROUTER_MODEL,
+  SAMPLING_AND_PENALTY_KEYS,
+  SAMPLING_CONTROLS,
+  PENALTY_CONTROLS,
+} from './open-router-native-models.fixture';
+export type {
+  CacheWriteTtl,
+  PromptTier,
+  CacheWriteTtlSpanSeed,
+  CacheWriteTtlSpansRef,
+  CacheWriteTtlSpansFixtures,
+} from './cache-write-ttl-spans.fixture';
+export {
+  CACHE_WRITE_5M_KEY,
+  CACHE_WRITE_1H_KEY,
+  CACHE_WRITE_TOTAL_KEY,
+  CACHE_WRITE_RATES,
+} from './cache-write-ttl-spans.fixture';
+export type {
+  CacheDialectWriter,
+  CacheDialectSpanSeed,
+  CacheDialectSpansRef,
+  CacheDialectSpansFixtures,
+} from './cache-dialect-spans.fixture';
+export {
+  CACHE_DIALECT_NATIVE_KEY,
+  CACHE_DIALECT_OTLP_KEY,
+} from './cache-dialect-spans.fixture';
+export type {
+  NewProviderCostSpanSeed,
+  NewProviderCostSpansRef,
+  NewProviderCostSpansFixtures,
+} from './new-provider-cost-spans.fixture';
+export type {
+  CrossShapeCacheVector,
+  CrossShapeCacheSpansRef,
+  CrossShapeCacheSpansFixtures,
+} from './cross-shape-cache-spans.fixture';
+export type {
+  LitellmCacheShadowSpanSeed,
+  LitellmCacheShadowSpansRef,
+  LitellmCacheShadowSpansFixtures,
+} from './litellm-cache-shadow-spans.fixture';
+export type {
+  OuterPromptTokensSpanSeed,
+  OuterPromptTokensSpansRef,
+  OuterPromptTokensSpansFixtures,
+} from './outer-prompt-tokens-spans.fixture';
+export type {
+  VersionedItemSeed,
+  SeededVersionRef,
+  VersionedDatasetRef,
+  VersionedSuiteRef,
+  VersionHistorySeedFixtures,
+} from './version-history-seed.fixture';
+export {
+  V1_MARKER,
+  V2_EDITED_MARKER,
+  V2_NEW_MARKER,
+  BYSTANDER_MARKER,
+  ANSWER_FIELD,
+  QUESTION_FIELD,
+} from './version-history-seed.fixture';
+export type {
+  SuiteNavItem,
+  SuiteItemNavRef,
+  SuiteItemNavFixtures,
+} from './suite-item-nav.fixture';
+export type {
+  SearchRowRef,
+  SearchPopulationRef,
+  SearchPopulationFixtures,
+} from './search-population.fixture';
+export { SEARCH_NEEDLE, SEARCH_NEEDLE_CHAR } from './search-population.fixture';
+export type {
+  OrphanTreeRole,
+  OrphanSpanRef,
+  OrphanSpanTreeRef,
+  OrphanSpanTreeFixtures,
+} from './orphan-span-tree.fixture';
+export type {
+  NativeUsageShapeSeed,
+  NativeUsageShapeSpansRef,
+  NativeUsageShapeSpansFixtures,
+} from './native-usage-shape-spans.fixture';
+export {
+  BEDROCK_CACHE_SURCHARGE,
+  GEMINI_THOUGHTS_COST,
+  GEMINI_CACHE_DISCOUNT,
+} from './native-usage-shape-spans.fixture';
 export type { ProjectRef } from '../core/backend';
+export type {
+  ThreadSearchRowRef,
+  ThreadSearchPopulationRef,
+  ThreadSearchPopulationFixtures,
+} from './thread-search-population.fixture';
+export {
+  THREAD_INPUT_MARKER,
+  THREAD_OUTPUT_MARKER,
+} from './thread-search-population.fixture';
+export type {
+  UploadFileCase,
+  DatasetUploadFilesRef,
+  DatasetUploadFilesFixtures,
+} from './dataset-upload-files.fixture';
+export type {
+  OpenAiResponsesStubRef,
+  OpenAiResponsesStubFixtures,
+} from './openai-responses-stub.fixture';
+export {
+  STUB_RESPONSES_MODEL,
+  STUB_INPUT_TOKENS,
+  STUB_OUTPUT_TOKENS,
+  STUB_OUTPUT_TEXT,
+} from './openai-responses-stub.fixture';
+export type {
+  InternalTraceTurnRef,
+  InternalTraceThreadRef,
+  InternalTraceThreadsRef,
+  InternalTraceThreadsFixtures,
+} from './internal-trace-threads.fixture';
+export { OPIK_METADATA_KEY, IS_INTERNAL_KEY } from './internal-trace-threads.fixture';
+export type {
+  SmeInternalThreadQueueRef,
+  SmeInternalThreadQueueFixtures,
+} from './sme-internal-thread-queue.fixture';
+export type { OtelRoutedProjectsFixtures } from './otel-routed-projects.fixture';
+export type {
+  OpenRouterProviderRef,
+  OpenRouterProviderFixtures,
+} from './open-router-provider.fixture';
+export { OPEN_ROUTER_EFFORT_MODEL } from './open-router-provider.fixture';
+export type {
+  StudioRerunOptimizationRef,
+  StudioRerunOptimizationFixtures,
+} from './studio-rerun-optimization.fixture';
+export {
+  RETIRED_MODEL,
+  SAVED_MODEL_PARAMETERS,
+} from './studio-rerun-optimization.fixture';
+export type {
+  SourceVersionRef,
+  EmptiedSourceRef,
+  EmptiedSourceVersionsFixtures,
+} from './emptied-source-versions.fixture';

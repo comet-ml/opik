@@ -8,6 +8,8 @@ export interface AlertPublic {
     enabled?: boolean;
     alertType?: OpikApi.AlertPublicAlertType;
     metadata?: Record<string, string>;
+    /** Optional user-defined key/value pairs, added as top-level keys of the alert's EventBridge event detail. Keys must not collide with the event's own keys. */
+    customFields?: Record<string, string>;
     webhook: OpikApi.WebhookPublic;
     triggers?: OpikApi.AlertTriggerPublic[];
     createdAt?: Date;

@@ -18,8 +18,11 @@ import {
 import { Button } from "@/ui/button";
 import { Separator } from "@/ui/separator";
 
-import { getDefaultConfigByProvider } from "@/lib/playground";
-import { updateProviderConfig } from "@/lib/modelUtils";
+import {
+  getDefaultConfigByProvider,
+  restoreMissingProviderAndConfigKeys,
+} from "@/lib/playground";
+import { updateProviderConfig, withShownThinkingLevel } from "@/lib/modelUtils";
 import {
   PLAYGROUND_LAST_PICKED_MODEL,
   PLAYGROUND_PROMPT_COLORS,
@@ -31,6 +34,8 @@ import PromptModelSelect from "@/v2/pages-shared/llm/PromptModelSelect/PromptMod
 import { cn, getAlphabetLetter } from "@/lib/utils";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import PromptModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/PromptModelConfigs";
+import { BACKEND_RUN_UNSUPPORTED_PARAMS } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
+import { usePlaygroundDataset } from "@/hooks/usePlaygroundDataset";
 import {
   useDatasetVariables,
   useDatasetSampleData,
@@ -59,17 +64,20 @@ import {
 import useLoadChatPrompt from "@/hooks/useLoadChatPrompt";
 import usePromptVersionLabel from "@/hooks/usePromptVersionLabel";
 import PlaygroundRunButton from "@/v2/pages/PlaygroundPage/PlaygroundRunButton";
+import useOpenAiPipelineMode from "@/hooks/useOpenAiPipelineMode";
 
 interface PlaygroundPromptProps {
   workspaceName: string;
   index: number;
   promptId: string;
   providerKeys: COMPOSED_PROVIDER_TYPE[];
-  isPendingProviderKeys: boolean;
+  hasLoadedProviderKeys: boolean;
+  hasRegistryModels: boolean;
   providerResolver: ProviderResolver;
   modelResolver: ModelResolver;
   onRun?: () => void;
   onStop?: () => void;
+  onCheckAgain?: () => void;
 }
 
 const PlaygroundPrompt = ({
@@ -77,14 +85,18 @@ const PlaygroundPrompt = ({
   promptId,
   index,
   providerKeys,
-  isPendingProviderKeys,
+  hasLoadedProviderKeys,
+  hasRegistryModels,
   providerResolver,
   modelResolver,
   onRun,
   onStop,
+  onCheckAgain,
 }: PlaygroundPromptProps) => {
   const checkedIfModelIsValidRef = useRef(false);
   const activeProjectId = useActiveProjectId();
+  const { datasetId } = usePlaygroundDataset();
+  const isBackendRun = !!datasetId;
   const queryClient = useQueryClient();
 
   const prompt = usePromptById(promptId);
@@ -92,6 +104,7 @@ const PlaygroundPrompt = ({
   const datasetVariables = useDatasetVariables();
   const datasetSampleData = useDatasetSampleData();
   const providerValidationTrigger = useProviderValidationTrigger();
+  const openAiPipelineMode = useOpenAiPipelineMode(workspaceName);
 
   const [, setLastPickedModel] = useLastPickedModel({
     key: PLAYGROUND_LAST_PICKED_MODEL,
@@ -117,9 +130,15 @@ const PlaygroundPrompt = ({
   const selectedChatPromptVersionId = prompt?.loadedChatPromptVersionId;
 
   const handleChatPromptMessagesLoaded = useCallback(
-    (newMessages: LLMMessage[], promptName: string) => {
+    (newMessages: LLMMessage[], promptName: string, versionId: string) => {
       setLastImportedPromptName(promptName);
-      updatePrompt(promptId, { messages: newMessages });
+      // Pinning the version keeps a newer library version from being applied
+      // over unsaved edits later.
+      updatePrompt(promptId, {
+        messages: newMessages,
+        loadedChatPromptVersionId: versionId,
+        appliedChatPromptVersionId: versionId,
+      });
     },
     [promptId, updatePrompt],
   );
@@ -128,6 +147,7 @@ const PlaygroundPrompt = ({
     updatePrompt(promptId, {
       loadedChatPromptId: undefined,
       loadedChatPromptVersionId: undefined,
+      appliedChatPromptVersionId: undefined,
     });
   }, [promptId, updatePrompt]);
 
@@ -140,6 +160,7 @@ const PlaygroundPrompt = ({
   } = useLoadChatPrompt({
     selectedChatPromptId,
     selectedChatPromptVersionId,
+    appliedChatPromptVersionId: prompt?.appliedChatPromptVersionId,
     messages,
     onMessagesLoaded: handleChatPromptMessagesLoaded,
     onPromptUnavailable: handleChatPromptUnavailable,
@@ -207,15 +228,23 @@ const PlaygroundPrompt = ({
   const handleUpdateModel = useCallback(
     (newModel: PROVIDER_MODEL_TYPE, newProvider: COMPOSED_PROVIDER_TYPE) => {
       let newConfigs: LLMPromptConfigsType;
+      // The picker reports the bare provider type ("custom-llm"), while `provider` is the row's
+      // key ("custom-llm:mock"). Compared as is, two models of one Custom LLM, Ollama or Bedrock
+      // row would look like a provider change and lose every setting.
+      const newRowProvider =
+        providerResolver(newModel, newProvider) || newProvider;
 
-      if (newProvider !== provider) {
+      if (newRowProvider !== provider) {
         // Provider changed: Reset to default configs for the new provider
         newConfigs = getDefaultConfigByProvider(newProvider, newModel);
       } else {
         // Model changed within same provider: Adjust existing configs if needed
-        const adjustedConfigs = updateProviderConfig(configs, {
+        const shownConfigs = withShownThinkingLevel(model, configs);
+        const adjustedConfigs = updateProviderConfig(shownConfigs, {
           model: newModel,
           provider: newProvider,
+          openAiPipelineMode,
+          previousModel: model,
         });
         newConfigs = adjustedConfigs || configs;
       }
@@ -227,7 +256,16 @@ const PlaygroundPrompt = ({
       });
       setLastPickedModel(newModel);
     },
-    [updatePrompt, promptId, provider, configs, setLastPickedModel],
+    [
+      updatePrompt,
+      promptId,
+      provider,
+      model,
+      providerResolver,
+      configs,
+      setLastPickedModel,
+      openAiPipelineMode,
+    ],
   );
 
   const handleAddProvider = useCallback(
@@ -265,7 +303,14 @@ const PlaygroundPrompt = ({
 
   useEffect(() => {
     // on init, to check if a prompt has a model from valid providers: (f.e., remove a provider after setting a model)
-    if (!checkedIfModelIsValidRef.current && !isPendingProviderKeys) {
+    // A failed request is not an empty answer: without the registry's models every stored model looks
+    // unknown, and without the keys every provider looks removed, so the model would be swapped or cleared.
+    // The check waits until both have really loaded, even after one has failed.
+    if (
+      !checkedIfModelIsValidRef.current &&
+      hasLoadedProviderKeys &&
+      hasRegistryModels
+    ) {
       checkedIfModelIsValidRef.current = true;
 
       const newModel = modelResolver(model, providerKeys);
@@ -278,18 +323,36 @@ const PlaygroundPrompt = ({
           configs: getDefaultConfigByProvider(newProvider, newModel),
         });
 
-        updateOutput(promptId, "", { value: null });
+        updateOutput(promptId, {
+          value: null,
+          error: undefined,
+          errorHint: undefined,
+        });
+      } else {
+        const restored = restoreMissingProviderAndConfigKeys(
+          prompt,
+          providerResolver,
+        );
+
+        if (restored !== prompt) {
+          updatePrompt(promptId, {
+            provider: restored.provider,
+            configs: restored.configs,
+          });
+        }
       }
     }
   }, [
     providerKeys,
-    isPendingProviderKeys,
+    hasLoadedProviderKeys,
+    hasRegistryModels,
     providerResolver,
     modelResolver,
     updateOutput,
     updatePrompt,
     promptId,
     model,
+    prompt,
   ]);
 
   const handleImportChatPrompt = useCallback(
@@ -297,6 +360,7 @@ const PlaygroundPrompt = ({
       updatePrompt(promptId, {
         loadedChatPromptId: loadedPromptId,
         loadedChatPromptVersionId: loadedVersionId,
+        appliedChatPromptVersionId: undefined,
       });
     },
     [promptId, updatePrompt],
@@ -320,11 +384,10 @@ const PlaygroundPrompt = ({
     () => ({
       model,
       provider,
-      configs,
       workspaceName,
       onAccept: handleImproveAccept,
     }),
-    [model, provider, configs, workspaceName, handleImproveAccept],
+    [model, provider, workspaceName, handleImproveAccept],
   );
 
   const promptColor =
@@ -336,6 +399,7 @@ const PlaygroundPrompt = ({
     <div
       data-testid="playground-variant-card"
       data-variant-index={index}
+      data-prompt-id={promptId}
       className="group/prompt flex min-w-[var(--min-prompt-width)] max-w-[var(--max-prompt-width)] flex-1 flex-col overflow-hidden border-r"
     >
       <div className="flex h-10 items-center justify-between overflow-hidden border-b px-4">
@@ -367,6 +431,10 @@ const PlaygroundPrompt = ({
             model={model}
             configs={configs}
             onChange={handleUpdateConfig}
+            openAiPipelineMode={openAiPipelineMode}
+            unsupportedParams={
+              isBackendRun ? BACKEND_RUN_UNSUPPORTED_PARAMS : undefined
+            }
             size="icon-xs"
             variant="ghost"
           />
@@ -474,6 +542,8 @@ const PlaygroundPrompt = ({
           jsonTreeData={datasetSampleData}
           hidePromptActions={false}
           improvePromptConfig={improvePromptConfig}
+          autoFocusFirstMessage={index === 0}
+          shiftEnterInsertsNewline
         />
       </div>
 
@@ -482,6 +552,7 @@ const PlaygroundPrompt = ({
           promptId={promptId}
           onRun={onRun}
           onStop={onStop}
+          onCheckAgain={onCheckAgain}
           className="flex items-center justify-end border-t px-4 py-2"
         />
       )}
@@ -500,6 +571,7 @@ const PlaygroundPrompt = ({
             updatePrompt(promptId, {
               loadedChatPromptId: savedPromptId,
               loadedChatPromptVersionId: version.id,
+              appliedChatPromptVersionId: version.id,
             });
 
             const newChatPromptKey = `${savedPromptId}-${version.id}`;

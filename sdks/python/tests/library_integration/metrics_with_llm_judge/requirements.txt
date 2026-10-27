@@ -11,7 +11,10 @@ langchain_openai
 # until ragas migrates off the old import.
 langchain-community<0.4
 ragas<0.3.2; python_version<"3.10"
-ragas; python_version>="3.10"
+# test__ragas_llm_context_precision needs LangchainLLMWrapper(bypass_temperature=)
+# (added in 0.3.3). Without the floor, uv silently backtracks to 0.3.1 when
+# newer ragas conflicts with the rest of the env, and the test fails at runtime.
+ragas>=0.3.3; python_version>="3.10"
 pillow # for ragas 0.3.0 to work
 litellm[google] # for vertexai models
 # Native Anthropic adapter. Without it the factory routes `anthropic/...`

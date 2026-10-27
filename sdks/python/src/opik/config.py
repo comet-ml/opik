@@ -469,7 +469,6 @@ class OpikConfig(pydantic_settings.BaseSettings):
                 self.config_file_fullpath, mode="w+", encoding="utf-8"
             ) as config_file:
                 config_file_content.write(config_file)
-            LOGGER.info(f"Configuration saved to file: {self.config_file_fullpath}")
         except OSError as e:
             LOGGER.error(f"Failed to save configuration: {e}")
             raise

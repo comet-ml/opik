@@ -25,7 +25,7 @@ This guide explains how to integrate Opik with the Bedrock Python SDK, supportin
 
 To start tracking your Bedrock LLM calls, you'll need to have both the `opik` and `boto3` packages. You can install them using pip:
 
-```bash
+```bash wordWrap
 pip install opik boto3
 ```
 
@@ -49,7 +49,7 @@ You can request access to models in the [AWS Bedrock console](https://us-east-1.
 
 Once you have these, you can create your boto3 client:
 
-```python
+```python wordWrap
 import boto3
 
 REGION = "us-east-1"
@@ -68,7 +68,7 @@ bedrock_client = boto3.client(
 
 Opik supports both AWS Bedrock APIs: the **Converse API** (unified interface) and the **Invoke Model API** (model-specific formats). To log LLM calls to Opik, wrap your boto3 client with `track_bedrock`:
 
-```python
+```python wordWrap
 import os
 from opik.integrations.bedrock import track_bedrock
 
@@ -86,7 +86,7 @@ bedrock_client = track_bedrock(bedrock_client)
 
 The Converse API provides a unified interface across all supported models:
 
-```python
+```python wordWrap
 import os
 import boto3
 from opik.integrations.bedrock import track_bedrock
@@ -118,7 +118,7 @@ The Invoke Model API uses model-specific request and response formats. Here are 
 
 <Tabs>
     <Tab value="Anthropic Claude" title="Anthropic Claude">
-        ```python
+        ```python wordWrap
         import json
         import os
         import boto3
@@ -145,7 +145,7 @@ The Invoke Model API uses model-specific request and response formats. Here are 
         }
 
         response = bedrock_client.invoke_model(
-            modelId="us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+            modelId="us.anthropic.claude-sonnet-4-6",
             body=json.dumps(request_body),
             contentType="application/json",
             accept="application/json"
@@ -156,7 +156,7 @@ The Invoke Model API uses model-specific request and response formats. Here are 
         ```
     </Tab>
     <Tab value="Amazon Nova" title="Amazon Nova">
-        ```python
+        ```python wordWrap
         import json
         import os
         import boto3
@@ -199,7 +199,7 @@ The Invoke Model API uses model-specific request and response formats. Here are 
         ```
     </Tab>
     <Tab value="Meta Llama" title="Meta Llama">
-        ```python
+        ```python wordWrap
         import json
         import os
         import boto3
@@ -232,7 +232,7 @@ The Invoke Model API uses model-specific request and response formats. Here are 
         ```
     </Tab>
     <Tab value="Mistral AI" title="Mistral AI">
-        ```python
+        ```python wordWrap
         import json
         import os
         import boto3
@@ -284,7 +284,7 @@ Both Bedrock APIs support streaming responses, which is useful for real-time app
 
 The `converse_stream` method provides streaming with the unified interface:
 
-```python
+```python wordWrap
 import os
 import boto3
 from opik.integrations.bedrock import track_bedrock
@@ -370,7 +370,7 @@ The `invoke_model_with_response_stream` method supports streaming with model-spe
 
 <Tabs>
     <Tab value="Anthropic Claude" title="Anthropic Claude">
-        ```python
+        ```python wordWrap
         import json
         import os
         import boto3
@@ -397,7 +397,7 @@ The `invoke_model_with_response_stream` method supports streaming with model-spe
         }
 
         response = bedrock_client.invoke_model_with_response_stream(
-            modelId="us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+            modelId="us.anthropic.claude-sonnet-4-6",
             body=json.dumps(request_body),
             contentType="application/json",
             accept="application/json"
@@ -410,7 +410,7 @@ The `invoke_model_with_response_stream` method supports streaming with model-spe
         ```
     </Tab>
     <Tab value="Amazon Nova" title="Amazon Nova">
-        ```python
+        ```python wordWrap
         import json
         import os
         import boto3
@@ -455,7 +455,7 @@ The `invoke_model_with_response_stream` method supports streaming with model-spe
         ```
     </Tab>
     <Tab value="Meta Llama" title="Meta Llama">
-        ```python
+        ```python wordWrap
         import json
         import os
         import boto3
@@ -490,7 +490,7 @@ The `invoke_model_with_response_stream` method supports streaming with model-spe
         ```
     </Tab>
     <Tab value="Mistral AI" title="Mistral AI">
-        ```python
+        ```python wordWrap
         import json
         import os
         import boto3
@@ -543,7 +543,7 @@ The `invoke_model_with_response_stream` method supports streaming with model-spe
 
 If you have multiple steps in your LLM pipeline, you can use the `@track` decorator to log the traces for each step. If Bedrock is called within one of these steps, the LLM call will be associated with that corresponding step:
 
-```python
+```python wordWrap
 import boto3
 from opik import track
 from opik.integrations.bedrock import track_bedrock
@@ -552,7 +552,7 @@ from opik.integrations.bedrock import track_bedrock
 bedrock_client = boto3.client("bedrock-runtime", region_name="us-east-1")
 bedrock_client = track_bedrock(bedrock_client, project_name="bedrock-integration-demo")
 
-MODEL_ID = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+MODEL_ID = "us.anthropic.claude-sonnet-4-6"
 
 @track
 def generate_story(prompt):

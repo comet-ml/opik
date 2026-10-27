@@ -6,6 +6,36 @@ import { AddToDatasetDialogPage } from './add-to-dataset-dialog.page';
 
 export type ExplainKind = 'error' | 'duration' | 'cost';
 
+/**
+ * The Logs table's row-height setting — `ROW_HEIGHT` in
+ * apps/opik-frontend/src/types/shared.ts, labelled Compact / Medium / Detailed
+ * in the selector.
+ *
+ * It matters to more than line count: cells switch RENDER PATH on it. At
+ * small/medium a feedback score's reason goes into a hover tooltip; at large it
+ * is written inline into the cell (`FeedbackScoreCell`), which is a different
+ * element with a different white-space rule.
+ */
+export type LogsRowHeight = 'small' | 'medium' | 'large';
+
+/**
+ * One filter as the Logs URL carries it (`traces_filters` / `spans_filters`).
+ *
+ * Every field is optional because the shape is what is under test: a quick
+ * filter on a span's `provider` must produce a `string` filter with NO `key`,
+ * while one on a metadata attribute must produce a `dictionary` filter WITH
+ * one. A type that required `key` could not express the first, and a spec
+ * reading through it could not tell the two apart.
+ */
+export type LogsUrlFilter = {
+  id?: string;
+  field?: string;
+  type?: string;
+  key?: string;
+  operator?: string;
+  value?: string;
+};
+
 // Maps an explain kind to the Traces table column id (used in data-cell-id)
 // and the owl trigger's aria-label, per apps/opik-frontend/src/plugins/comet/explain/registry.ts.
 const EXPLAIN_COLUMN: Record<ExplainKind, string> = {
@@ -24,12 +54,18 @@ export class LogsPage {
 
   constructor(private readonly page: Page) {}
 
-  async goto(projectId: string): Promise<void> {
-    return test.step(`Open Logs for project ${projectId}`, async () => {
-      this.projectId = projectId;
-      const env = loadEnvConfig();
-      await this.page.goto(`${env.baseUrl}/${env.workspace}/projects/${projectId}/logs`);
-    });
+  async goto(projectId: string, opts: { rowHeight?: LogsRowHeight } = {}): Promise<void> {
+    return test.step(
+      `Open Logs for project ${projectId}${opts.rowHeight ? ` at ${opts.rowHeight} row height` : ''}`,
+      async () => {
+        this.projectId = projectId;
+        const env = loadEnvConfig();
+        const query = opts.rowHeight ? `?height=${opts.rowHeight}` : '';
+        await this.page.goto(
+          `${env.baseUrl}/${env.workspace}/projects/${projectId}/logs${query}`,
+        );
+      },
+    );
   }
 
   /**
@@ -63,9 +99,139 @@ export class LogsPage {
     });
   }
 
+  /**
+   * Open Logs with the Traces tab active, optionally at a chosen date range.
+   *
+   * The sibling of `gotoSpans` and `gotoThreads`, and not the same thing as
+   * `goto()`: that one states no `logsType` at all, so the active tab is
+   * whatever localStorage last persisted for the project — and a bare `/logs`
+   * on a fresh profile resolves to Threads, not Traces (`useLogsType`). A spec
+   * about the Traces table has to say so.
+   *
+   * `timeRange` is the page's own `time_range` query param, the same one the
+   * other two take. It is also persisted per project, and it decides whether
+   * the read is windowed at all — so an unstated range is whichever one the
+   * profile last stored.
+   *
+   * `size` is the table's page size, as `gotoSpans` already takes it. Worth
+   * stating for the same reason `timeRange` is: the page keeps it in
+   * localStorage as well as in the URL and syncs the two on init
+   * (`useQueryParamAndLocalStorageState`), so a spec that wants its whole seed
+   * on one page has to say how big a page is rather than inherit whatever the
+   * profile last stored.
+   */
+  async gotoTraces(
+    projectId: string,
+    opts: { timeRange?: string; size?: number } = {},
+  ): Promise<void> {
+    return test.step(
+      `Open Logs (Traces) for project ${projectId}${opts.timeRange ? ` over ${opts.timeRange}` : ''}`,
+      async () => {
+        this.projectId = projectId;
+        const env = loadEnvConfig();
+        const params = new URLSearchParams({ logsType: 'traces' });
+        if (opts.timeRange !== undefined) params.set('time_range', opts.timeRange);
+        if (opts.size !== undefined) params.set('size', String(opts.size));
+        await this.page.goto(
+          `${env.baseUrl}/${env.workspace}/projects/${projectId}/logs?${params}`,
+        );
+      },
+    );
+  }
+
   /** The Threads/Traces/Spans tab toggle for "Spans". */
   get spansTab(): Locator {
     return this.page.getByRole('radio', { name: 'Spans' });
+  }
+
+  /** The Threads/Traces/Spans tab toggle for "Traces". */
+  get tracesTab(): Locator {
+    return this.page.getByRole('radio', { name: 'Traces' });
+  }
+
+  /**
+   * Which entity table is on screen, read from the toggle itself.
+   *
+   * Asserted rather than assumed by every spec that cares: `logsType` is
+   * persisted per project in localStorage, so the active tab survives between
+   * visits and a spec that inherited it would silently be driving the other
+   * table.
+   */
+  async activeLogsTab(): Promise<'threads' | 'traces' | 'spans'> {
+    return test.step('Read which entity tab is active', async () => {
+      const checked = async (tab: Locator) =>
+        (await tab.getAttribute('aria-checked')) === 'true';
+      if (await checked(this.tracesTab)) return 'traces';
+      if (await checked(this.spansTab)) return 'spans';
+      if (await checked(this.threadsTab)) return 'threads';
+      throw new Error('LogsPage.activeLogsTab: no entity toggle reported itself selected');
+    });
+  }
+
+  /**
+   * The filters the URL carries for one of the two tables, parsed.
+   *
+   * `null` when the param is absent, which is deliberately distinct from `[]`:
+   * "the Traces filter was never written" is the assertion that separates a
+   * quick filter correctly routed to the Spans table from one that wrote to
+   * both, and an empty array would be a write.
+   *
+   * Read from the URL rather than from the chip bar because the URL is where
+   * the filter's wire shape lives — field, type, operator and key, exactly as
+   * the table will send them.
+   */
+  async readUrlFilters(type: 'traces' | 'spans'): Promise<LogsUrlFilter[] | null> {
+    return test.step(`Read the ${type} filters from the URL`, async () => {
+      const raw = new URL(this.page.url()).searchParams.get(`${type}_filters`);
+      if (raw === null) return null;
+      return JSON.parse(raw) as LogsUrlFilter[];
+    });
+  }
+
+  /**
+   * Wait until the URL carries filters for `type` that satisfy `predicate`.
+   *
+   * The quick filter writes the param with `replaceIn`, so there is no
+   * navigation to await — the settle point is the param itself holding the
+   * expected shape. Polling the parsed value (rather than string-matching the
+   * URL) keeps the wait honest about JSON key order and encoding.
+   */
+  async waitForUrlFilters(
+    type: 'traces' | 'spans',
+    predicate: (filters: LogsUrlFilter[]) => boolean,
+  ): Promise<LogsUrlFilter[]> {
+    return test.step(`Wait for the ${type} filters in the URL`, async () => {
+      await expect
+        .poll(
+          async () => {
+            const filters = await this.readUrlFilters(type);
+            return filters !== null && predicate(filters);
+          },
+          { message: `${type}_filters in the URL`, timeout: 15_000 },
+        )
+        .toBe(true);
+      return (await this.readUrlFilters(type))!;
+    });
+  }
+
+  /**
+   * The chip ids currently pinned to one table's chip bar, read from the store
+   * that owns them.
+   *
+   * `null` when nothing has been stored yet, which is the state a chip bar
+   * showing its defaults is in — and the precondition that makes "the filter
+   * pinned a chip that was not pinned before" mean something. Read from
+   * localStorage because the bar renders a chip for a default and for a pinned
+   * id identically, so the DOM cannot distinguish "already there" from
+   * "just added".
+   */
+  async readPinnedChipIds(type: 'traces' | 'spans'): Promise<string[] | null> {
+    return test.step(`Read the pinned chips stored for the ${type} table`, async () => {
+      const key = `chips:pinnedConfig:logs.${type}`;
+      const raw = await this.page.evaluate((k) => window.localStorage.getItem(k), key);
+      if (raw === null) return null;
+      return JSON.parse(raw) as string[];
+    });
   }
 
   /**
@@ -266,24 +432,73 @@ export class LogsPage {
     });
   }
 
-  /** Open Logs with the Threads tab active for the given project. */
-  async gotoThreads(projectId: string): Promise<void> {
-    return test.step(`Open Logs (Threads) for project ${projectId}`, async () => {
-      this.projectId = projectId;
-      const env = loadEnvConfig();
-      await this.page.goto(
-        `${env.baseUrl}/${env.workspace}/projects/${projectId}/logs?logsType=threads`,
-      );
-    });
+  /**
+   * Open Logs with the Threads tab active for the given project.
+   *
+   * `timeRange` is the page's own `time_range` query param, the same one
+   * `gotoSpans` takes. Two reasons a spec states it rather than inheriting the
+   * default: the value is also persisted in localStorage and the URL is what
+   * outranks it, so an unstated range is whatever the profile last stored; and
+   * it decides whether the read is windowed at all — `alltime` sends no
+   * `from_time`, and only a windowed read takes the `trace_threads` inner-join
+   * branch. A spec about that branch has to say which range it means.
+   *
+   * Note that `alltime` is NOT available here: `ThreadsTab` passes
+   * `excludePresets: [DATE_RANGE_PRESET_ALLTIME]`, so the Threads read is always
+   * windowed and a caller asking for it gets the default preset instead. A
+   * threads spec therefore states a bounded preset (`past24hours`, …) and seeds
+   * inside it, rather than reaching for the unwindowed read its Traces sibling
+   * can use.
+   *
+   * `size` is the table's page size, stated for the same reason `gotoTraces`
+   * states it: the value is persisted in localStorage as well as carried in the
+   * URL, so a spec that wants its whole seed on one page has to say how big a
+   * page is.
+   */
+  async gotoThreads(
+    projectId: string,
+    opts: { timeRange?: string; size?: number } = {},
+  ): Promise<void> {
+    return test.step(
+      `Open Logs (Threads) for project ${projectId}${opts.timeRange ? ` over ${opts.timeRange}` : ''}`,
+      async () => {
+        this.projectId = projectId;
+        const env = loadEnvConfig();
+        const params = new URLSearchParams({ logsType: 'threads' });
+        if (opts.timeRange !== undefined) params.set('time_range', opts.timeRange);
+        if (opts.size !== undefined) params.set('size', String(opts.size));
+        await this.page.goto(
+          `${env.baseUrl}/${env.workspace}/projects/${projectId}/logs?${params}`,
+        );
+      },
+    );
   }
 
-  async waitForReady(): Promise<void> {
+  /**
+   * Wait until the Logs table has either a row or its empty state on screen.
+   *
+   * `timeout` is opt-in and defaults to the config's 15s `actionTimeout`, which
+   * is what every existing caller gets. A caller whose project is large or
+   * freshly seeded should raise it: the first row cannot paint until the listing
+   * AND its count query have both answered over a project the write path is
+   * still catching up with, and on a shared cloud workspace that has been
+   * observed to take longer than 15s for a ~25-row project — surfacing as a
+   * flake in `waitForReady` rather than in whatever the spec went on to assert.
+   *
+   * Not simply raised for everyone: a longer default would also lengthen the
+   * failure of every spec whose project legitimately has no rows, turning a
+   * quick, clear failure into a slow one.
+   */
+  async waitForReady(opts: { timeout?: number } = {}): Promise<void> {
     return test.step('Wait for Logs table ready', async () => {
       const realRow = this.page.locator('tr[data-row-id]').first();
       const emptyState = this.page.getByText('No traces yet');
       await Promise.race([
-        realRow.waitFor({ state: 'visible' }),
-        emptyState.waitFor({ state: 'visible' }),
+        realRow.waitFor({ state: 'visible', ...(opts.timeout ? { timeout: opts.timeout } : {}) }),
+        emptyState.waitFor({
+          state: 'visible',
+          ...(opts.timeout ? { timeout: opts.timeout } : {}),
+        }),
       ]);
       await this.page.waitForFunction(() => {
         const txt = document.body.innerText;
@@ -525,9 +740,188 @@ export class LogsPage {
     return this.page.locator(`[data-cell-id="${traceId}_duration"]`);
   }
 
+  /**
+   * One column header's TITLE, addressed by the label the user reads.
+   *
+   * The title and not the header cell, because the two are different click
+   * targets with different handlers. `HeaderWrapper` puts the sort handler on
+   * its own root, but when the table is showing column statistics it also
+   * mounts a second row inside that root which calls `stopPropagation()` and
+   * opens a percentile menu instead — and that menu then swallows the next
+   * outside click. Clicking the header cell is therefore a coin toss between
+   * sorting and opening a menu, decided by where the element's centre happens
+   * to fall. The title span is inside the wrapper and outside the statistics
+   * row, so a click on it always reaches the sort handler.
+   *
+   * By label rather than by column index: column order here is user-configurable
+   * and persisted, so an `nth-child` would address whatever column the profile
+   * happens to have put there.
+   */
+  private columnHeaderTitle(label: string): Locator {
+    return this.page
+      .getByRole('columnheader')
+      .filter({ has: this.page.getByText(label, { exact: true }) })
+      .getByText(label, { exact: true });
+  }
+
+  /**
+   * Click a column header to advance its sort, and resolve once the URL says so.
+   *
+   * The settle point is the `<type>_sorting` param, not a row order: the table
+   * re-requests on the new sort, so a caller reading rows the instant the click
+   * returned would be as likely to read the PREVIOUS response. Waiting on the
+   * param and then on the request is what makes the row order a real assertion.
+   *
+   * Returns the direction the URL ended up carrying, so a caller asserts the
+   * direction it got rather than assuming the first click sorts descending.
+   */
+  async sortByColumn(
+    type: 'traces' | 'spans',
+    label: string,
+    columnId: string,
+  ): Promise<'asc' | 'desc'> {
+    return test.step(`Sort the ${type} table by "${label}"`, async () => {
+      const title = this.columnHeaderTitle(label);
+      // Exactly one, not `.first()`: two columns rendering the same label would
+      // otherwise sort whichever the DOM happened to order first.
+      await expect(title, `exactly one "${label}" column header`).toHaveCount(1);
+
+      const listed = this.page.waitForResponse((response) => {
+        // Trailing slash tolerated deliberately: the frontend's own
+        // `TRACES_REST_ENDPOINT` / `SPANS_REST_ENDPOINT` are declared WITH one
+        // (`/v1/private/traces/`), while the estate's backend client calls the
+        // same endpoint without. Pinning either spelling makes this wait pass
+        // or hang on which caller happened to issue the request.
+        const pathname = new URL(response.url()).pathname.replace(/\/$/, '');
+        return pathname.endsWith(`/v1/private/${type}`) && response.ok();
+      });
+      await title.click();
+
+      await expect
+        .poll(async () => (await this.readUrlSorting(type))?.[0]?.id ?? null, {
+          message: `${type}_sorting in the URL names the ${columnId} column`,
+          timeout: 15_000,
+        })
+        .toBe(columnId);
+      await listed;
+
+      const sorting = await this.readUrlSorting(type);
+      // Asserted away rather than defaulted: the poll above only proves the
+      // param names the column, and a sort whose direction went missing is
+      // exactly the sort that is not doing anything.
+      expect(sorting, `${type}_sorting is in the URL`).not.toBeNull();
+      expect(sorting!.length, `${type}_sorting carries exactly one clause`).toBe(1);
+      return sorting![0].desc ? 'desc' : 'asc';
+    });
+  }
+
+  /**
+   * The sort clauses the URL carries for one table, parsed.
+   *
+   * `null` when the param is absent, which is deliberately distinct from `[]`:
+   * "the table was never sorted" and "the sort was cleared" are different
+   * states, and the first is the precondition that makes a first click mean
+   * something.
+   *
+   * The URL carries TanStack's `{id, desc}` shape, which is NOT the
+   * `{field, direction}` the API takes — `listLogsPage` spells that one. A spec
+   * asserting both is asserting the table and the API agree.
+   */
+  async readUrlSorting(
+    type: 'traces' | 'spans',
+  ): Promise<Array<{ id: string; desc: boolean }> | null> {
+    const raw = new URL(this.page.url()).searchParams.get(`${type}_sorting`);
+    if (raw === null) return null;
+    return JSON.parse(raw) as Array<{ id: string; desc: boolean }>;
+  }
+
+  /**
+   * A trace row's cell for ONE named feedback score.
+   *
+   * Each score in the project is its own dynamic column, and every score the
+   * project has ever carried is auto-selected into the table on a fresh profile
+   * (`useDynamicColumnsCache`), so a seeded score needs no column configuration
+   * to be visible.
+   *
+   * The column is declared with `id: 'feedback_scores.<name>'`, which
+   * `mapColumnDataFields` hands to TanStack as an `accessorKey` and no explicit
+   * id — and TanStack derives the id from an accessorKey by replacing the first
+   * `.` with `_`. Hence `feedback_scores_<name>` here while the wire-level
+   * `sorting`/`filters` params still take the dotted form. Same idiom as
+   * `CompareExperimentsPage.readItemScore`.
+   */
+  feedbackScoreCell(traceId: string, scoreName: string): Locator {
+    return this.page.locator(`td[data-cell-id="${traceId}_feedback_scores_${scoreName}"]`);
+  }
+
+  /**
+   * A feedback-score cell's text AS RENDERED, and its height.
+   *
+   * `innerText`, never `textContent`, and that is the whole point of this
+   * helper: the reason is seeded with a real `\n`, so a `textContent` read
+   * reports the newline back from the DOM even on a build whose CSS collapsed it
+   * on screen — and the spec would pass having verified nothing. `innerText` is
+   * computed from the rendered box, so `white-space: normal` shows up in it as a
+   * space.
+   *
+   * The height comes back with it because the two are one observation: at
+   * Detailed row height the reason is written inline into the cell, so "the
+   * newline survived" and "the cell grew to hold two lines" are the same claim
+   * seen twice, and a caller that reads them in separate round-trips could have
+   * them straddle a re-render.
+   *
+   * Counted before reading: a dynamic feedback-score column is named by the
+   * score, so an ambiguous match would mean the table is rendering two columns
+   * for one score — worth failing on rather than silently taking `.first()`.
+   */
+  async readFeedbackScoreCell(
+    traceId: string,
+    scoreName: string,
+  ): Promise<{ text: string; height: number }> {
+    return test.step(`read the rendered "${scoreName}" cell of trace ${traceId}`, async () => {
+      const cell = this.feedbackScoreCell(traceId, scoreName);
+      await expect(cell, `exactly one "${scoreName}" cell for trace ${traceId}`).toHaveCount(1);
+      await expect(cell, `the "${scoreName}" cell for trace ${traceId}`).toBeVisible();
+      return cell.evaluate((el) => ({
+        text: (el as HTMLElement).innerText,
+        height: el.getBoundingClientRect().height,
+      }));
+    });
+  }
+
+  /**
+   * The hover trigger that holds a feedback score's reason at Compact/Medium
+   * height — `FeedbackScoreReasonTooltip`'s `MessageSquareMore` icon.
+   *
+   * Addressed by the Lucide icon class because the trigger is a bare `div` with
+   * no role, name or `data-testid`; the same idiom `CompareExperimentsPage` uses
+   * for the shared table's icon-only controls, and for the same reason — these
+   * specs run against a pre-built deployment, so a front-end attribute added
+   * beside them would not exist in the build under test.
+   *
+   * Only ever used to tell the two render paths apart: its presence is what says
+   * the cell took the tooltip branch rather than the inline one.
+   */
+  feedbackScoreReasonTooltipTrigger(traceId: string, scoreName: string): Locator {
+    return this.feedbackScoreCell(traceId, scoreName).locator('svg.lucide-message-square-more');
+  }
+
   /** The Errors/Duration/Estimated cost cell for a trace row, keyed by Ollie explain kind. */
   explainCell(traceId: string, kind: ExplainKind): Locator {
     return this.page.locator(`[data-cell-id="${traceId}_${EXPLAIN_COLUMN[kind]}"]`);
+  }
+
+  /**
+   * The Estimated cost cell of a trace row.
+   *
+   * The same cell {@link explainCell} addresses under the `cost` kind, named
+   * for what it renders rather than for the Ollie affordance that happens to
+   * live in it — a spec asserting the table's own cost column should not have
+   * to ask for an "explain cell". Delegates rather than repeating the
+   * `data-cell-id` so the column id stays declared once, in `EXPLAIN_COLUMN`.
+   */
+  estimatedCostCell(traceId: string): Locator {
+    return this.explainCell(traceId, 'cost');
   }
 
   /**
@@ -765,6 +1159,90 @@ export class LogsPage {
     });
   }
 
+  // --- Free-text search ("Search by anything") ---
+
+  /**
+   * The "Search by anything" box that sits as `FilterChipBar`'s prefix on the
+   * Traces, Spans and Threads tabs.
+   *
+   * `data-testid="search-input"` comes from the shared `SearchInput`, so it is
+   * the FE's own stability contract rather than a structural fallback. The
+   * testid is generic (the component is shared), so every method below asserts
+   * the lookup resolved to exactly ONE box: a popover that mounted a second
+   * SearchInput of its own would otherwise be typed into silently.
+   */
+  get searchBox(): Locator {
+    return this.page.getByTestId('search-input');
+  }
+
+  /**
+   * Type `term` into the search box and wait for the page to have taken it.
+   *
+   * The settle is on the URL's own `<type>_search` param, which is the page's
+   * single source of truth for the term and what the next list/stats request is
+   * built from — `SearchInput` is a `DebounceInput` with a 300ms delay, so a
+   * caller that read the table straight after typing would be reading the
+   * pre-search answer. Waiting on the committed param instead of on a fixed
+   * delay is what keeps that deterministic.
+   *
+   * Compared lower-cased because `TracesSpansTab` commits
+   * `search.trim().toLowerCase()` — the term that reaches the API is the
+   * folded one, and `ilike` makes that equivalent. Callers that want the API
+   * and the UI to be asking the identical question should pass a term that is
+   * already lower-case.
+   *
+   * `type` is `'threads'` as well as the two entity tables, because the Threads
+   * tab mounts the same `SearchInput` under its own `threads_search` param. Note
+   * that `ThreadsTab` passes the raw term to the STATS read and the trimmed,
+   * folded one to the listing, so a caller asserting that the count card and the
+   * rows agree must pass a term that is already trimmed and lower-case — the
+   * two are otherwise asking different questions by construction.
+   *
+   * Does NOT wait for the rows: what the table then shows is the assertion, and
+   * a POM that waited for a particular row count would be deciding the answer
+   * before the spec got to.
+   */
+  async searchFor(
+    term: string,
+    type: 'traces' | 'spans' | 'threads' = 'traces',
+  ): Promise<void> {
+    return test.step(`Search the ${type} table for "${term}"`, async () => {
+      await expect(this.searchBox, 'exactly one search box on the Logs page').toHaveCount(1);
+      await this.searchBox.fill(term);
+      const committed = term.trim().toLowerCase();
+      await this.page.waitForURL(
+        (url) => url.searchParams.get(`${type}_search`) === committed,
+        { timeout: 15_000 },
+      );
+    });
+  }
+
+  /**
+   * Clear the search box, and wait for the term to leave the URL.
+   *
+   * Through the box's own Clear button — the control a user reaches for, and
+   * the one that also resets the page back to 1. The param is dropped entirely
+   * rather than set empty, so the wait is on absence.
+   */
+  async clearSearch(type: 'traces' | 'spans' | 'threads' = 'traces'): Promise<void> {
+    return test.step(`Clear the ${type} table's search`, async () => {
+      await expect(this.searchBox, 'exactly one search box on the Logs page').toHaveCount(1);
+      // The Clear button only renders while the box holds text, and it is an
+      // icon-only `Button` with no name — addressed as the button inside the
+      // search box's own wrapper, which is the only one there.
+      const clear = this.searchBox.locator('xpath=..').getByRole('button');
+      await expect(clear, 'exactly one clear button beside the search box').toHaveCount(1);
+      await clear.click();
+      await this.page.waitForURL(
+        (url) => {
+          const value = url.searchParams.get(`${type}_search`);
+          return value === null || value === '';
+        },
+        { timeout: 15_000 },
+      );
+    });
+  }
+
   // --- Threads tab ---
 
   /** The Threads/Traces/Spans tab toggle for "Threads". */
@@ -777,12 +1255,22 @@ export class LogsPage {
    * that specific row — threads are eventually consistent, so gating on "any
    * row" can pass before the seeded thread has been aggregated into the list.
    */
-  async waitForThreadsReady(threadId?: string): Promise<void> {
+  async waitForThreadsReady(
+    threadId?: string,
+    opts: { timeout?: number } = {},
+  ): Promise<void> {
     return test.step('Wait for Threads table ready', async () => {
       const target = threadId
         ? this.threadRow(threadId)
         : this.page.locator('tr[data-row-id]').first();
-      await target.waitFor({ state: 'visible' });
+      // `timeout` opt-in, defaulting to the config's 15s actionTimeout, for the
+      // same reason `waitForReady` takes one — and more so here: a thread row is
+      // materialised from the traces that share its id, so the Threads listing
+      // trails the trace write by a further aggregation step.
+      await target.waitFor({
+        state: 'visible',
+        ...(opts.timeout ? { timeout: opts.timeout } : {}),
+      });
     });
   }
 
@@ -804,6 +1292,39 @@ export class LogsPage {
   /** A thread row, keyed by thread id (the row's data-row-id IS the thread id). */
   threadRow(threadId: string): Locator {
     return this.page.locator(`tr[data-row-id="${threadId}"]`);
+  }
+
+  /**
+   * Every rendered thread row.
+   *
+   * The same locator as {@link traceRows} — one shared `DataTable` stamps
+   * `data-row-id` on whichever entity it is rendering — but named for the
+   * Threads tab so a spec about threads does not read as though it were
+   * asserting on traces. Which table is on screen is `activeLogsTab()`'s
+   * business, and a threads spec asserts that first.
+   */
+  get threadRows(): Locator {
+    return this.page.locator('tr[data-row-id]');
+  }
+
+  /**
+   * The thread ids rendered on the current page, in table order.
+   *
+   * The Threads table's `data-row-id` is the THREAD id — a string the producer
+   * chose, not a UUID — which is also the only place it appears in the row: the
+   * id is not one of the rendered columns, so there is no text-based alternative.
+   */
+  async readThreadIdsOnPage(): Promise<string[]> {
+    return test.step('Read the thread ids on the current page', async () => {
+      await this.threadRows.first().waitFor({ state: 'visible' });
+      const ids = await this.threadRows.evaluateAll((rows) =>
+        rows.map((row) => row.getAttribute('data-row-id') ?? ''),
+      );
+      if (ids.some((id) => id === '')) {
+        throw new Error('LogsPage.readThreadIdsOnPage: a rendered row carried no data-row-id');
+      }
+      return ids;
+    });
   }
 
   /**
@@ -833,16 +1354,32 @@ export class LogsPage {
     return this.threadRow(threadId).locator(`[data-cell-id="${threadId}_last_message"]`);
   }
 
-  /** Open a thread's detail panel by id, returning the conversation panel POM. */
-  async openThreadById(threadId: string): Promise<ThreadPanelPage> {
-    return test.step(`Open thread ${threadId}`, async () => {
-      if (!this.projectId) {
-        throw new Error('LogsPage.openThreadById: call gotoThreads(projectId) first');
-      }
-      const env = loadEnvConfig();
-      const url = `${env.baseUrl}/${env.workspace}/projects/${this.projectId}/logs?logsType=threads&thread=${threadId}`;
-      await this.page.goto(url);
-      return new ThreadPanelPage(this.page, threadId);
-    });
+  /**
+   * Open a thread's detail panel by id, returning the conversation panel POM.
+   *
+   * `traceId` sets the panel's `trace` param — the shape a deep link into one
+   * turn of a conversation has. It is not a display detail: the panel treats the
+   * selected trace as one it must keep listed whatever the hide preference says,
+   * so it is the only way to reach that branch.
+   */
+  async openThreadById(
+    threadId: string,
+    opts: { traceId?: string } = {},
+  ): Promise<ThreadPanelPage> {
+    return test.step(
+      `Open thread ${threadId}${opts.traceId ? ` on trace ${opts.traceId}` : ''}`,
+      async () => {
+        if (!this.projectId) {
+          throw new Error('LogsPage.openThreadById: call gotoThreads(projectId) first');
+        }
+        const env = loadEnvConfig();
+        const params = new URLSearchParams({ logsType: 'threads', thread: threadId });
+        if (opts.traceId !== undefined) params.set('trace', opts.traceId);
+        await this.page.goto(
+          `${env.baseUrl}/${env.workspace}/projects/${this.projectId}/logs?${params}`,
+        );
+        return new ThreadPanelPage(this.page, threadId);
+      },
+    );
   }
 }

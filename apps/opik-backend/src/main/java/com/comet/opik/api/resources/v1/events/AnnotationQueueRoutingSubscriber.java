@@ -7,12 +7,14 @@ import com.comet.opik.domain.AnnotationQueueConditionEvaluator;
 import com.comet.opik.domain.AnnotationQueueRoutingMessage;
 import com.comet.opik.domain.AnnotationQueueRoutingMetrics;
 import com.comet.opik.domain.AnnotationQueueService;
+import com.comet.opik.domain.EffectiveFeedbackScore;
 import com.comet.opik.domain.EntityFeedbackScores;
 import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.FeedbackScoreDAO;
 import com.comet.opik.domain.TraceDAO;
 import com.comet.opik.domain.threads.TraceThreadDAO;
 import com.comet.opik.infrastructure.AnnotationQueueRoutingConfig;
+import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.inject.Inject;
 import lombok.NonNull;
@@ -59,6 +61,7 @@ public class AnnotationQueueRoutingSubscriber extends BaseRedisSubscriber<Annota
     private static final String METRICS_BASE_NAME = "annotation_queue_routing";
 
     private final AnnotationQueueRoutingConfig config;
+    private final FeatureFlags featureFlags;
     private final AnnotationQueueAutomationService automationService;
     private final AnnotationQueueConditionEvaluator evaluator;
     private final AnnotationQueueService annotationQueueService;
@@ -70,6 +73,7 @@ public class AnnotationQueueRoutingSubscriber extends BaseRedisSubscriber<Annota
     public AnnotationQueueRoutingSubscriber(
             @NonNull @Config("annotationQueueRouting") AnnotationQueueRoutingConfig config,
             @NonNull RedissonReactiveClient redisson,
+            @NonNull FeatureFlags featureFlags,
             @NonNull AnnotationQueueAutomationService automationService,
             @NonNull AnnotationQueueConditionEvaluator evaluator,
             @NonNull AnnotationQueueService annotationQueueService,
@@ -78,6 +82,7 @@ public class AnnotationQueueRoutingSubscriber extends BaseRedisSubscriber<Annota
             @NonNull TraceThreadDAO traceThreadDAO) {
         super(config, redisson, AnnotationQueueRoutingConfig.PAYLOAD_FIELD, METRICS_NAMESPACE, METRICS_BASE_NAME);
         this.config = config;
+        this.featureFlags = featureFlags;
         this.automationService = automationService;
         this.evaluator = evaluator;
         this.annotationQueueService = annotationQueueService;
@@ -88,7 +93,7 @@ public class AnnotationQueueRoutingSubscriber extends BaseRedisSubscriber<Annota
 
     @Override
     public void start() {
-        if (!config.isEnabled()) {
+        if (!featureFlags.isAnnotationQueueAutomationEnabled()) {
             log.info("Annotation queue routing is disabled, skipping subscriber start");
             return;
         }
@@ -102,7 +107,7 @@ public class AnnotationQueueRoutingSubscriber extends BaseRedisSubscriber<Annota
         return route(message)
                 .doOnNext(routed -> {
                     if (routed > 0) {
-                        log.info("Routed '{}' items into annotation queues, workspace '{}'",
+                        log.info("Routed items into annotation queues, count '{}', workspace '{}'",
                                 routed, message.workspaceId());
                     }
                 })
@@ -172,7 +177,8 @@ public class AnnotationQueueRoutingSubscriber extends BaseRedisSubscriber<Annota
                     int skipped = entityIds.size() - kept.size();
                     if (skipped > 0) {
                         AnnotationQueueRoutingMetrics.NON_PRODUCTION_SKIPPED.add(skipped);
-                        log.debug("Skipped '{}' of '{}' scored entities not logged by an SDK, workspace '{}'",
+                        log.debug(
+                                "Skipped scored entities not logged by an SDK, skipped '{}', scored '{}', workspace '{}'",
                                 skipped, entityIds.size(), message.workspaceId());
                     }
 
@@ -193,7 +199,28 @@ public class AnnotationQueueRoutingSubscriber extends BaseRedisSubscriber<Annota
         // entity with no scores visible is simply not routed until its next score.
         return feedbackScoreDAO.getEffectiveScores(entityType, message.entityIds())
                 .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, message.workspaceId())
-                        .put(RequestContext.USER_NAME, RequestContext.SYSTEM_USER));
+                        .put(RequestContext.USER_NAME, RequestContext.SYSTEM_USER))
+                // Straight into the per-entity view: each entity's rows are folded as its group closes,
+                // so no second map of the same rows is built alongside the first.
+                .collect(Collectors.groupingBy(EffectiveFeedbackScore::entityId,
+                        Collectors.collectingAndThen(Collectors.toList(),
+                                AnnotationQueueRoutingSubscriber::toEntityScores)));
+    }
+
+    /**
+     * Folds one entity's rows into the view the conditions are evaluated against. This lives here rather
+     * than in the DAO because this is where the bound on it is known: the rows belong to the entity ids of
+     * one message, which the buffer flush caps at {@code jobBatchSize}.
+     */
+    private static EntityFeedbackScores toEntityScores(List<EffectiveFeedbackScore> rows) {
+        return EntityFeedbackScores.builder()
+                .entityId(rows.getFirst().entityId())
+                .projectId(rows.getFirst().projectId())
+                // The query returns one row per (entity, name); the merge only keeps a corrupted duplicate
+                // from failing a whole batch.
+                .scores(rows.stream().collect(Collectors.toUnmodifiableMap(EffectiveFeedbackScore::name,
+                        EffectiveFeedbackScore::value, (first, ignored) -> first)))
+                .build();
     }
 
     private Mono<Long> addMatches(List<AnnotationQueueAutomationService.QueueAutomation> automations,
@@ -230,7 +257,11 @@ public class AnnotationQueueRoutingSubscriber extends BaseRedisSubscriber<Annota
                         // only way to see a badly scoped condition filling one up.
                         .doOnNext(added -> AnnotationQueueRoutingMetrics.ITEMS_ROUTED.add(added))
                         .onErrorResume(error -> {
-                            log.error("Failed to route items into annotation queue '{}'", entry.getKey(), error);
+                            // DEBUG, not ERROR: every failure here is rethrown below, and the base
+                            // subscriber logs that one at ERROR with the rest attached as suppressed. This
+                            // line only adds the queue each failure belongs to.
+                            log.debug("Failed to route items into annotation queue, queueId '{}'", entry.getKey(),
+                                    error);
                             AnnotationQueueRoutingMetrics.QUEUE_WRITE_FAILURES.add(1);
                             failures.add(error);
                             return Mono.just(0L);
