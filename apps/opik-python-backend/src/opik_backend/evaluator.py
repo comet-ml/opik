@@ -20,7 +20,7 @@ RESERVED_BUILT_INS = frozenset({"spans"})
 MAX_CODE_LENGTH_FOR_SIGNATURE_READ = 64 * 1024
 
 # Environment variable to control execution strategy
-EXECUTION_STRATEGY = os.getenv("PYTHON_CODE_EXECUTOR_STRATEGY", "process")
+EXECUTION_STRATEGY = os.getenv("PYTHON_CODE_EXECUTOR_STRATEGY", "docker")
 
 evaluator = Blueprint('evaluator', __name__, url_prefix='/v1/private/evaluators')
 
@@ -30,6 +30,11 @@ def init_executor(app):
         from opik_backend.executor_docker import DockerExecutor
         app.executor = DockerExecutor()
     elif EXECUTION_STRATEGY == "process":
+        app.logger.warning(
+            "PYTHON_CODE_EXECUTOR_STRATEGY=process runs user-defined metrics inside the "
+            "python-backend service itself. It is intended for local development; "
+            "use 'docker' for any other deployment."
+        )
         from opik_backend.executor_process import ProcessExecutor
         process_executor = ProcessExecutor()
         # start services only in the following case to avoid double initialization in debug mode
