@@ -543,8 +543,9 @@ class TopicVectorsTickServiceTest {
 
         @ParameterizedTest(name = "{0} ms left: {1} window reads")
         // Time only shrinks between here and the read, so the cases sit at the far side of each bound: 1,990 ms keeps
-        // ~1 s of slack above the 1 s minimum and still rounds down to max_execution_time = 1; 0 ms can only shrink.
-        @CsvSource({"0, 0", "1990, 1"})
+        // ~1 s of slack above the 1 s minimum and still rounds down to max_execution_time = 1; 0 and 900 ms can only
+        // shrink, so they stay under it.
+        @CsvSource({"0, 0", "900, 0", "1990, 1"})
         @DisplayName("a window read starts only with at least a second left in the tick, and gets the whole seconds left")
         void noWindowReadUnderASecondLeft(long leftMillis, int reads) {
             when(registry.find(TopicVectorsTickService.TASK)).thenReturn(java.util.Optional.of(earlyTask()));
