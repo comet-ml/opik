@@ -24,6 +24,7 @@ def reset_gateway_state(monkeypatch):
     """Isolate the module-level workspace container and drop log between tests."""
     monkeypatch.setattr(optimizer_runner, "_gateway_workspace", {"name": None})
     monkeypatch.setattr(optimizer_runner, "_dropped_params_logged", set())
+    monkeypatch.setattr(optimizer_runner, "_dropped_headers_logged", set())
 
 
 @pytest.fixture
@@ -82,14 +83,34 @@ class TestRouteLitellmCallsThroughGateway:
         assert extra_headers["X-Custom"] == "1"
         assert extra_headers["Comet-Workspace"] == "my-workspace"
 
-    def test_does_not_override_explicit_workspace_header(self, fake_litellm, gateway_env):
+    @pytest.mark.parametrize("call", ["completion", "acompletion"])
+    def test_caller_identity_headers_never_reach_the_gateway(self, fake_litellm, gateway_env, call):
+        route_litellm_calls_through_gateway("my-workspace")
+        caller_headers = {
+            "comet-workspace": "other", "COMET-WORKSPACE": "other", "Authorization": "x",
+            "proxy-authorization": "y", "Cookie": "sessionToken=z", "X-Custom": "1",
+        }
+
+        result = getattr(fake_litellm, call)(model="openai/m", messages=[], extra_headers=caller_headers)
+        if call == "acompletion":
+            asyncio.run(result)
+
+        assert fake_litellm.calls == [{
+            "model": "openai/m",
+            "messages": [],
+            "api_base": "http://gateway/v1/private",
+            "extra_headers": {"X-Custom": "1", "Comet-Workspace": "my-workspace"},
+        }]
+
+    def test_logs_dropped_header_names_once_without_values(self, fake_litellm, gateway_env, caplog):
         route_litellm_calls_through_gateway("my-workspace")
 
-        fake_litellm.completion(
-            messages=[], extra_headers={"Comet-Workspace": "explicit-ws"}
-        )
+        with caplog.at_level(logging.WARNING, logger=optimizer_runner.__name__):
+            for _ in range(3):
+                fake_litellm.completion(messages=[], extra_headers={"comet-workspace": "other", "Authorization": "x"})
 
-        assert fake_litellm.calls[-1]["extra_headers"]["Comet-Workspace"] == "explicit-ws"
+        assert [r.getMessage() for r in caplog.records] == [
+            "Dropped headers a Studio LLM call does not set itself: ['Authorization', 'comet-workspace']"]
 
     def test_noop_when_gateway_not_active(self, fake_litellm, monkeypatch):
         monkeypatch.setattr(optimizer_runner, "OPENAI_API_BASE", None)

@@ -144,8 +144,13 @@ _ALLOWED_PARAMS = frozenset({
     # The same OpenRouter sampling settings, as older saved runs carry them, flat.
     "top_k", "min_p", "top_a", "repetition_penalty",
 })
+# Headers the gateway reads a caller's identity from (opik-backend's AuthFilter: the workspace header, the API key in
+# Authorization, the session cookie), plus the proxy's, compared in lower case. A caller's value is dropped, so a
+# gateway call always carries the job's own workspace and the credential LiteLLM sets.
+_IDENTITY_HEADERS = frozenset({"comet-workspace", "authorization", "proxy-authorization", "cookie"})
 # Names already logged as dropped; one job runs in one process, so this logs each name once per job.
 _dropped_params_logged = set()
+_dropped_headers_logged = set()
 
 
 def route_litellm_calls_through_gateway(workspace_name):
@@ -192,8 +197,17 @@ def route_litellm_calls_through_gateway(workspace_name):
             # Names only: values can be credentials or URLs.
             logger.warning(f"Dropped model parameters a Studio LLM call does not take: {sorted(dropped)}")
         kwargs["api_base"] = OPENAI_API_BASE
-        extra_headers = dict(kwargs.get("extra_headers") or {})
-        extra_headers.setdefault("Comet-Workspace", _gateway_workspace["name"])
+        extra_headers = {}
+        dropped_headers = set()
+        for name, value in dict(kwargs.get("extra_headers") or {}).items():
+            if str(name).lower() in _IDENTITY_HEADERS:
+                dropped_headers.add(str(name))
+            else:
+                extra_headers[name] = value
+        if dropped_headers - _dropped_headers_logged:
+            _dropped_headers_logged.update(dropped_headers)
+            logger.warning(f"Dropped headers a Studio LLM call does not set itself: {sorted(dropped_headers)}")
+        extra_headers["Comet-Workspace"] = _gateway_workspace["name"]
         kwargs["extra_headers"] = extra_headers
         return kwargs
 
