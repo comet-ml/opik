@@ -70,8 +70,8 @@ const Banner: React.FC<BannerProps> = ({
     >
       <div
         className={cn(
-          "comet-body-xs flex min-w-0 flex-1 items-center justify-center gap-1.5 text-center",
-          contentClassName,
+          "flex min-w-0 flex-1 items-center justify-center gap-1.5 text-center",
+          contentClassName ?? "comet-body-xs",
         )}
       >
         {icon}
