@@ -43,9 +43,11 @@ public class ProviderErrorMessageValidator {
                 "environment_connection_failed", "environment_connection_timeout", "idle_timeout")),
         /**
          * https://learn.microsoft.com/azure/ai-foundry/openai/concepts/content-filter; error.code of an
-         * OpenAI-compatible envelope. Azure OpenAI otherwise answers with OpenAI's identifiers.
+         * OpenAI-compatible envelope. Azure OpenAI otherwise answers with OpenAI's identifiers. InvalidAPIVersion isn't
+         * in Azure's reference, but it is kept: its message names only the API version the caller sent. Codes that
+         * describe the deployment behind a gateway, such as DeploymentNotFound, are not.
          */
-        AZURE_OPENAI(Set.of("content_filter")),
+        AZURE_OPENAI(Set.of("content_filter", "InvalidAPIVersion")),
         /** https://platform.claude.com/docs/en/api/errors; error.type */
         ANTHROPIC(Set.of(
                 "invalid_request_error", "authentication_error", "billing_error", "permission_error",
