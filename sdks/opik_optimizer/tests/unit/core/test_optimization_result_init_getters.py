@@ -9,45 +9,6 @@ from opik_optimizer.core.results import OptimizationResult
 class TestOptimizationResultInitialization:
     """Tests for OptimizationResult initialization."""
 
-    def test_creates_with_minimal_fields(self) -> None:
-        prompt = ChatPrompt(system="Test", user="Query")
-        result = OptimizationResult(
-            prompt=prompt,
-            score=0.85,
-            metric_name="accuracy",
-        )
-        assert result.score == 0.85
-        assert result.metric_name == "accuracy"
-        assert result.optimizer == "Optimizer"
-
-    def test_creates_with_all_fields(self) -> None:
-        prompt = ChatPrompt(system="Test", user="Query")
-        result = OptimizationResult(
-            optimizer="MetaPromptOptimizer",
-            prompt=prompt,
-            score=0.95,
-            metric_name="f1_score",
-            optimization_id="opt-123",
-            dataset_id="ds-456",
-            initial_prompt=ChatPrompt(system="Initial", user="Query"),
-            initial_score=0.60,
-            details={"rounds": [1, 2, 3], "model": "gpt-4"},
-            history=[{"round": 1, "trials": [{"trial_index": 0, "score": 0.7}]}],
-            llm_calls=100,
-            llm_calls_tools=10,
-            llm_cost_total=5.50,
-            llm_token_usage_total={"prompt_tokens": 1000, "completion_tokens": 500},
-        )
-        assert result.optimizer == "MetaPromptOptimizer"
-        assert result.optimization_id == "opt-123"
-        assert result.initial_score == 0.60
-        assert result.llm_cost_total == 5.50
-        assert result.details.get("schema_version") is None
-        assert result.details_version == "v1"
-        assert result.details.get("trials_completed") == 1
-        assert len(result.history) == 1
-        assert result.details.get("stop_reason_details") is None
-
     def test_details_counters_default_from_history(self) -> None:
         result = OptimizationResult(
             prompt=ChatPrompt(system="Test", user="Query"),

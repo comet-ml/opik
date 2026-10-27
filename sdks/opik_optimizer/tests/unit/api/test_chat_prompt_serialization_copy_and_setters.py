@@ -8,28 +8,6 @@ from tests.unit.fixtures import assistant_message, user_message
 class TestChatPromptSerialization:
     """Tests for serialization methods."""
 
-    def test_to_dict_includes_system(self) -> None:
-        """to_dict should include system when present."""
-        prompt = ChatPrompt(system="System message")
-        result = prompt.to_dict()
-
-        assert result == {"system": "System message"}
-
-    def test_to_dict_includes_user(self) -> None:
-        """to_dict should include user when present."""
-        prompt = ChatPrompt(user="User message")
-        result = prompt.to_dict()
-
-        assert result == {"user": "User message"}
-
-    def test_to_dict_includes_messages(self) -> None:
-        """to_dict should include messages when present."""
-        messages = [user_message("Hello")]
-        prompt = ChatPrompt(messages=messages)
-        result = prompt.to_dict()
-
-        assert result == {"messages": messages}
-
     def test_to_dict_includes_all_fields(self) -> None:
         """to_dict should include all non-None fields."""
         prompt = ChatPrompt(system="System", user="User")

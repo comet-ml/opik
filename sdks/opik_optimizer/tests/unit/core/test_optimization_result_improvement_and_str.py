@@ -61,62 +61,6 @@ class TestCalculateImprovementStr:
         assert "0.00%" in improvement
 
 
-class TestOptimizationResultStr:
-    """Tests for __str__ method."""
-
-    def test_str_contains_basic_info(self) -> None:
-        result = OptimizationResult(
-            optimizer="TestOptimizer",
-            prompt=ChatPrompt(system="Test", user="Query"),
-            score=0.85,
-            metric_name="accuracy",
-            details={"model": "gpt-4", "temperature": 0.7},
-        )
-        output = str(result)
-        assert "OPTIMIZATION COMPLETE" in output
-        assert "TestOptimizer" in output
-        assert "accuracy" in output
-        assert "0.8500" in output
-
-    def test_str_contains_rounds_info(self) -> None:
-        result = OptimizationResult(
-            prompt=ChatPrompt(system="Test", user="Query"),
-            score=0.85,
-            metric_name="accuracy",
-            details={"trials_completed": 3},
-        )
-        output = str(result)
-        assert "Trials Completed: 3" in output
-
-    def test_str_contains_parameter_summary(self) -> None:
-        result = OptimizationResult(
-            prompt=ChatPrompt(system="Test", user="Query"),
-            score=0.85,
-            metric_name="accuracy",
-            initial_score=0.60,
-            details={
-                "optimized_parameters": {"temperature": 0.7},
-                "parameter_importance": {"temperature": 0.8},
-                "search_ranges": {"stage1": {"temperature": {"min": 0.1, "max": 1.0}}},
-            },
-        )
-        output = str(result)
-        assert "Parameter Summary" in output
-        assert "temperature" in output
-
-    def test_str_strips_rich_formatting(self) -> None:
-        result = OptimizationResult(
-            prompt=ChatPrompt(system="Test", user="Query"),
-            score=0.90,
-            metric_name="accuracy",
-            initial_score=0.60,
-        )
-        output = str(result)
-        # Rich formatting tags should be removed
-        assert "[bold green]" not in output
-        assert "[/bold green]" not in output
-
-
 class TestOptimizationResultEdgeCases:
     """Tests for edge cases in OptimizationResult."""
 

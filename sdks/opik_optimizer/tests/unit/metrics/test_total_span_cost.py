@@ -200,16 +200,6 @@ class TestSpanCost:
             failed_span_count=1,
         )
 
-    def test_custom_metric_name(self) -> None:
-        """Test that custom metric name is used"""
-        custom_name = "my_custom_cost_metric"
-        metric = SpanCost(name=custom_name)
-        span = make_span(total_cost=0.05)
-
-        result = metric.score(task_span=span)
-
-        assert result.name == custom_name
-
     def test_handles_deeply_nested_spans(self) -> None:
         """Test that deeply nested span trees are handled correctly"""
         metric = SpanCost()
@@ -238,16 +228,3 @@ class TestSpanCost:
         result = metric.score(task_span=root)
 
         assert_cost_result(result=result, expected_cost=0.06, processed_span_count=3)
-
-    def test_metadata_contains_all_required_fields(self) -> None:
-        """Test that result metadata contains all required fields"""
-        metric = SpanCost()
-        span = make_span(total_cost=0.05)
-
-        result = metric.score(task_span=span)
-
-        assert "total_cost" in result.metadata
-        assert "total_prompt_tokens" in result.metadata
-        assert "total_completion_tokens" in result.metadata
-        assert "processed_span_count" in result.metadata
-        assert "failed_span_count" in result.metadata

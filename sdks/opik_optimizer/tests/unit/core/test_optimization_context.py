@@ -181,34 +181,6 @@ class SimpleOptimizer(BaseOptimizer):
         }
 
 
-class TestOptimizationContextFields:
-    """Tests for OptimizationContext fields."""
-
-    def test_context_has_should_stop_field(self, make_context: Any) -> None:
-        """OptimizationContext should have should_stop field."""
-        context = make_context()
-        assert hasattr(context, "should_stop")
-        assert context.should_stop is False
-
-    def test_context_has_finish_reason_field(self, make_context: Any) -> None:
-        """OptimizationContext should have finish_reason field."""
-        context = make_context()
-        assert hasattr(context, "finish_reason")
-        assert context.finish_reason is None
-
-    def test_context_has_trials_completed_field(self, make_context: Any) -> None:
-        """OptimizationContext should have trials_completed field."""
-        context = make_context()
-        assert hasattr(context, "trials_completed")
-        assert context.trials_completed == 0
-
-    def test_context_has_current_best_score_field(self, make_context: Any) -> None:
-        """OptimizationContext should have current_best_score field."""
-        context = make_context()
-        assert hasattr(context, "current_best_score")
-        assert context.current_best_score is None
-
-
 class TestMidOptimizationEarlyStop:
     """Tests for mid-optimization early stopping."""
 

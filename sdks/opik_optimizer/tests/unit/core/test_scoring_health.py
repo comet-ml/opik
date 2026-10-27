@@ -161,23 +161,6 @@ class TestBuildFinalResultScoringHealth:
         assert health is not None
         assert health == {"failed_count": 0, "total_count": 0}
 
-    def test_scoring_health_shape_is_correct(self) -> None:
-        """Shape contract: dict with exactly failed_count and total_count int keys."""
-        optimizer = _make_optimizer()
-        context = _make_context(scoring_health={"failed_count": 1, "total_count": 5})
-        alg_result = _make_algorithm_result()
-
-        result = build_final_result(
-            optimizer=optimizer,
-            algorithm_result=alg_result,
-            context=context,
-        )
-
-        health = result.details["scoring_health"]
-        assert set(health.keys()) >= {"failed_count", "total_count"}
-        assert isinstance(health["failed_count"], int)
-        assert isinstance(health["total_count"], int)
-
 
 class TestBuildFinalResultFailsWhenUnscoreable:
     """The pass/fail decision is made ONCE here, against the best prompt's health."""

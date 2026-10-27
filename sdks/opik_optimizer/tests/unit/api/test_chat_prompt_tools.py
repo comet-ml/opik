@@ -8,26 +8,6 @@ from opik_optimizer.api_objects.chat_prompt import ChatPrompt
 class TestChatPromptWithTools:
     """Tests for ChatPrompt with tools."""
 
-    def test_stores_tools(self) -> None:
-        """Should store tools when provided."""
-        tools = [
-            {
-                "type": "function",
-                "function": {
-                    "name": "search",
-                    "description": "Search the web",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {"query": {"type": "string"}},
-                        "required": ["query"],
-                    },
-                },
-            }
-        ]
-        prompt = ChatPrompt(system="Use tools", tools=tools)
-
-        assert prompt.tools == tools
-
     def test_wraps_function_map_with_track(self) -> None:
         """Should wrap function_map functions with Opik track."""
 

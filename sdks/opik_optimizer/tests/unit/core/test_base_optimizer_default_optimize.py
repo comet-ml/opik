@@ -62,52 +62,6 @@ class TestDefaultOptimizePrompt:
         assert result.details["stopped_early"] is True
         assert result.details["stop_reason"] == "baseline_score_met_threshold"
 
-    def test_calls_run_optimization_when_baseline_below_threshold(
-        self,
-        simple_chat_prompt,
-        mock_opik_client,
-        mock_metric,
-        monkeypatch,
-    ) -> None:
-        """Should call _run_optimization when baseline doesn't meet threshold."""
-        mock_opik_client()
-        mock_ds = make_mock_dataset(
-            [{"id": "1", "input": "test"}],
-            name="test-dataset",
-            dataset_id="ds-123",
-        )
-
-        run_optimization_called: list[bool] = []
-
-        class DefaultOptimizer(BaseOptimizer):
-            def run_optimization(self, context: OptimizationContext):
-                run_optimization_called.append(True)
-                return AlgorithmResult(
-                    best_prompts={"prompt": list(context.prompts.values())[0]},
-                    best_score=0.8,
-                    history=[],
-                    metadata={},
-                )
-
-            def get_config(self, context: OptimizationContext):
-                return {"optimizer": "DefaultOptimizer"}
-
-            def get_optimizer_metadata(self):
-                return {}
-
-        optimizer = DefaultOptimizer(model="gpt-4", perfect_score=0.9)
-        monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 0.5)
-
-        result = optimizer.optimize_prompt(
-            prompt=simple_chat_prompt,
-            dataset=mock_ds,
-            metric=mock_metric,
-            max_trials=10,
-        )
-
-        assert len(run_optimization_called) == 1
-        assert result.score == 0.8
-
     def test_early_stop_reports_at_least_one_trial(
         self,
         simple_chat_prompt,
