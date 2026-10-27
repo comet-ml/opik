@@ -8,12 +8,14 @@ scores move only when an optimizer actually improves a prompt.
 from __future__ import annotations
 
 import copy
+import json
 from typing import Any
 
 import pytest
 from opik.evaluation.metrics import score_result
 
 from opik_optimizer import ChatPrompt
+from opik_optimizer.core import llm_calls
 from opik_optimizer.core.exceptions import ScoringFailedError
 from tests.unit.characterization import fake_opik, harness
 
@@ -169,6 +171,50 @@ def test_validation_dataset_is_what_gets_scored(
     harness.run_optimizer(optimizer_name, scenario, validation_dataset=validation)
 
     assert "validation-dataset" in evaluated
+
+
+@pytest.mark.parametrize("optimizer_name", harness.OPTIMIZERS)
+def test_validation_items_never_reach_the_optimizer_model(
+    optimizer_name: str, install_fakes: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    scenario = harness.build_scenario("S1_single")
+    for item in scenario.items:
+        item["question"] = "TRAIN " + item["question"]
+    install_fakes(scenario)
+    validation = harness.make_mock_dataset(
+        [
+            dict(item, id=f"val-{item['id']}", question=f"HELDOUT {item['question']}")
+            for item in scenario.items
+        ],
+        name="validation-dataset",
+        dataset_id="ds-validation",
+    )
+    requests: list[str] = []
+    fake_sync, fake_async = llm_calls.call_model, llm_calls.call_model_async
+
+    def capture(kwargs: dict[str, Any]) -> None:
+        # The request the real client sends, after it attaches evidence cases.
+        sent = llm_calls._prepare_reasoning_request(
+            kwargs.get("messages") or [], kwargs.get("evidence"), harness.MODEL
+        )
+        requests.append(json.dumps(sent, default=str))
+
+    def sync_call(**kwargs: Any) -> Any:
+        capture(kwargs)
+        return fake_sync(**kwargs)
+
+    async def async_call(**kwargs: Any) -> Any:
+        capture(kwargs)
+        return await fake_async(**kwargs)
+
+    monkeypatch.setattr(llm_calls, "call_model", sync_call)
+    monkeypatch.setattr(llm_calls, "call_model_async", async_call)
+
+    harness.run_optimizer(optimizer_name, scenario, validation_dataset=validation)
+
+    assert not [request for request in requests if "HELDOUT" in request]
+    if optimizer_name != "ParameterOptimizer":
+        assert any("TRAIN" in request for request in requests)
 
 
 @pytest.mark.parametrize("optimizer_name", harness.OPTIMIZERS)

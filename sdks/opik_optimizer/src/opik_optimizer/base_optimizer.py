@@ -481,10 +481,12 @@ class BaseOptimizer(ABC):
         n_samples = self._validated_n_samples(evaluation_dataset, n_samples)
         from .core.reasoning import EvidenceCase
 
+        # Evidence shown to the optimizer model comes from training data only;
+        # the validation dataset ranks candidates and must stay unseen.
         self._reasoning_cases = tuple(
             EvidenceCase(case_id=str(item.get("id", index)), inputs=item)
             for index, item in enumerate(
-                evaluation_dataset.get_items()[: self.max_reasoning_examples]
+                dataset.get_items()[: self.max_reasoning_examples]
             )
         )
 
@@ -947,11 +949,12 @@ class BaseOptimizer(ABC):
         if isinstance(raw_result, (EvaluationResult, EvaluationResultOnDictItems)):
             from .core.reasoning import cases_from_evaluation
 
-            self._reasoning_cases = tuple(
-                cases_from_evaluation(
-                    raw_result.test_results[: self.max_reasoning_examples]
+            if context.evaluation_dataset is not context.validation_dataset:
+                self._reasoning_cases = tuple(
+                    cases_from_evaluation(
+                        raw_result.test_results[: self.max_reasoning_examples]
+                    )
                 )
-            )
             score = self._score_from_evaluation_result(
                 raw_result, metric_name=context.metric.__name__, empty_score=empty_score
             )
