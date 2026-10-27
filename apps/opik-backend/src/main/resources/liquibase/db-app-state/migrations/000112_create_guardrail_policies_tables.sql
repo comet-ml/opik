@@ -13,9 +13,11 @@ CREATE TABLE IF NOT EXISTS guardrail_policies
     workspace_id    VARCHAR(150)                 NOT NULL,
     name            VARCHAR(255)                 NOT NULL,
     description     VARCHAR(1000)                NULL,
-    -- on_request applies when the SDK names the policy; global applies to every check in the workspace. A new
-    -- scope is a MODIFY COLUMN migration, forward-only like every ENUM widening in this changelog (000019, 000063).
-    execution_scope ENUM('on_request', 'global') NOT NULL,
+    -- ON_REQUEST applies when the SDK names the policy; GLOBAL applies to every check in the workspace. Values are
+    -- stored exactly as the API spells them, like dataset_export_jobs.status, so no mapping sits between the
+    -- column and the Java enum. A new scope is a MODIFY COLUMN migration, forward-only like every ENUM widening
+    -- in this changelog (000019, 000063).
+    execution_scope ENUM('ON_REQUEST', 'GLOBAL') NOT NULL,
     created_at      TIMESTAMP(6)                 NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     created_by      VARCHAR(100)                 NOT NULL DEFAULT 'admin',
     last_updated_at TIMESTAMP(6)                 NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
@@ -29,11 +31,11 @@ CREATE TABLE IF NOT EXISTS guardrail_policies
     -- The default list order, `WHERE workspace_id = ? ORDER BY id DESC`, which the unique key above
     -- (ordered by name) cannot serve.
     INDEX guardrail_policies_workspace_id_idx (workspace_id, id),
-    -- The check path runs on every SDK validate call and loads the named policies plus every global policy
-    -- of the workspace. The global half has no name to look up, so without this index it reads the
+    -- The check path runs on every SDK validate call and loads the named policies plus every GLOBAL policy
+    -- of the workspace. The GLOBAL half has no name to look up, so without this index it reads the
     -- workspace's every policy; with it, only the global ones. It is used when that half is its own lookup
     -- (a UNION with the names lookup, or a second statement): MySQL 8.4 answers a single `name IN (...) OR
-    -- execution_scope = 'global'` by scanning the workspace prefix of the unique key instead. id is not
+    -- execution_scope = 'GLOBAL'` by scanning the workspace prefix of the unique key instead. id is not
     -- listed: InnoDB appends the primary key to every secondary index.
     INDEX guardrail_policies_workspace_execution_scope_idx (workspace_id, execution_scope)
 ) ENGINE = InnoDB
@@ -49,11 +51,12 @@ CREATE TABLE IF NOT EXISTS guardrail_policy_rules
 (
     id              CHAR(36)     NOT NULL,
     policy_id       CHAR(36)     NOT NULL,
-    -- The GuardrailType values in the Java enum's order, lower-cased like every ENUM in this schema: the same
-    -- enum the ClickHouse guardrails results table stores in `name`, so a result is readable against its rule.
-    -- Which of them a policy may hold is the service's call (milestone 1: topic, pii, prompt_injection); a new
-    -- Java value gets a MODIFY COLUMN migration, as in 000019 and 000063.
-    type            ENUM('topic', 'pii', 'llm_judge', 'prompt_injection', 'custom_classifier') NOT NULL,
+    -- The GuardrailType values in the Java enum's order, spelled as the API and the SDKs send them and as the
+    -- ClickHouse guardrails results table stores them in `name`, so a result is readable against its rule and
+    -- no mapping sits between the column and the Java enum. Which of them a policy may hold is the service's
+    -- call (milestone 1: TOPIC, PII, PROMPT_INJECTION); a new Java value gets a MODIFY COLUMN migration, as in
+    -- 000019 and 000063.
+    type            ENUM('TOPIC', 'PII', 'LLM_JUDGE', 'PROMPT_INJECTION', 'CUSTOM_CLASSIFIER') NOT NULL,
     -- Exactly what the user set: PII classes, allowed and restricted topics. An empty object for a type with
     -- no settings (prompt injection). Never thresholds, model names or question templates.
     config          JSON         NOT NULL,
