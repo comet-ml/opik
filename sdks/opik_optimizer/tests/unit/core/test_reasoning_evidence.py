@@ -92,30 +92,6 @@ def test_native_evidence_renders_each_case_and_keeps_scores_and_image_associatio
     assert prompt.model == "agent-model" and prompt.model_kwargs == {}
 
 
-def test_explicit_text_only_mode_omits_media_without_changing_the_prompt() -> None:
-    prompt = vision_prompt()
-    evidence = ReasoningEvidence(
-        prompts={"vision": prompt},
-        cases=[EvidenceCase(case_id="a", inputs={"question": "hi", "image": IMAGE})],
-    )
-    native = [
-        {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "Look"},
-                {"type": "image_url", "image_url": {"url": IMAGE}},
-            ],
-        }
-    ]
-    original = deepcopy(native)
-    messages = build_reasoning_messages(native, evidence=evidence, mode="text_only")
-    assert IMAGE not in str(messages)
-    assert "image" in str(messages).lower()
-    assert not any(isinstance(message["content"], list) for message in messages)
-    assert prompt.get_messages()[1]["content"][1]["image_url"]["url"] == "{image}"
-    assert native == original
-
-
 @pytest.mark.parametrize(
     "part",
     [
@@ -124,11 +100,15 @@ def test_explicit_text_only_mode_omits_media_without_changing_the_prompt() -> No
         {"type": "input_file", "file_data": "data:application/pdf;base64,aGVsbG8="},
     ],
 )
-def test_unsupported_reasoning_modalities_fail_explicitly(part: dict[str, Any]) -> None:
+def test_media_the_optimizer_model_cannot_take_is_named_not_sent(
+    part: dict[str, Any],
+) -> None:
     evidence = ReasoningEvidence(sections={"input": [part]})
-    with pytest.raises(ValueError, match="(?i)(audio|video|file).*text_only"):
-        build_reasoning_messages([], evidence=evidence)
-    assert build_reasoning_messages([], evidence=evidence, mode="text_only")
+    messages = build_reasoning_messages([], evidence=evidence)
+    rendered = str(messages)
+    assert "omitted: not sent to the optimizer model" in rendered
+    assert "aGVsbG8=" not in rendered and "movie.mp4" not in rendered
+    assert all(isinstance(message["content"], str) for message in messages)
 
 
 def test_text_edits_address_each_part_without_reconstructing_media_or_settings() -> (
@@ -297,44 +277,6 @@ def test_recorded_agent_images_are_attached_as_observations() -> None:
     assert "camera" in case[0]["text"]
 
 
-def test_reasoning_case_budget_is_applied_at_shared_client_boundary(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from types import SimpleNamespace
-    from opik_optimizer.core import llm_calls
-
-    evidence = ReasoningEvidence(
-        prompts={"vision": vision_prompt()},
-        cases=[
-            EvidenceCase(
-                case_id=str(i),
-                inputs={"question": str(i), "image": f"https://example.com/{i}.png"},
-            )
-            for i in range(4)
-        ],
-    )
-    token = llm_calls._active_optimizer.set(
-        SimpleNamespace(reasoning_input="multimodal", max_reasoning_examples=2)
-    )
-    try:
-        messages = llm_calls._prepare_reasoning_request(
-            [], evidence, "openai/gpt-4o-mini"
-        )
-    finally:
-        llm_calls._active_optimizer.reset(token)
-    images = [
-        part
-        for message in messages
-        if isinstance(message["content"], list)
-        for part in message["content"]
-        if part["type"] == "image_url"
-    ]
-    assert [part["image_url"]["url"] for part in images] == [
-        "https://example.com/0.png",
-        "https://example.com/1.png",
-    ]
-
-
 def test_few_shot_demonstrations_keep_images_in_native_blocks() -> None:
     from opik_optimizer import FewShotBayesianOptimizer
     from opik_optimizer.algorithms.few_shot_bayesian_optimizer.prompts import (
@@ -462,7 +404,3 @@ def test_recorded_image_sources_become_native_blocks_not_encoded_text(
     assert content[-1] == {"type": "image_url", "image_url": {"url": IMAGE}}
     assert IMAGE.split(",", 1)[1] not in content[0]["text"]
     assert part == original
-    text_only = build_reasoning_messages(
-        [], evidence=ReasoningEvidence(sections={"agent_image": part}), mode="text_only"
-    )
-    assert IMAGE.split(",", 1)[1] not in str(text_only)

@@ -462,10 +462,9 @@ def optimize_prompt(
 Custom agents own their calls and should read each supplied prompt's model and `model_kwargs`.
 HRPO's `reasoning_model_parameters=None` inherits optimizer parameters; `{}` is an empty override.
 
-Prompt optimizers default to `reasoning_input="multimodal"` with native image evidence for up to
-`max_reasoning_examples=5` cases per request. Configure a vision-capable optimizer model, or choose
-`reasoning_input="text_only"` explicitly; agent media and settings are retained. Audio/video/file
-reasoning currently requires text-only mode. Candidate responses contain targeted text edits
+Images in prompts, training items or agent traces reach the optimizer model as native image
+blocks, so it must support vision; otherwise the run fails before any evaluation. Audio, video and
+file content is named but not sent. Agent media and settings are retained. Candidate responses contain targeted text edits
 (`segment_id`, `text`), not full messages. GEPA requires `gepa>=0.1.4` for native reflection images.
 
 ## Structured evidence and text edits

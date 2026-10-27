@@ -4,7 +4,7 @@ Synthesis candidate generation for the Meta-Prompt Optimizer.
 
 from ....utils.prompt_editing import apply_text_edits
 
-from ....core.reasoning import ReasoningEvidence
+from ....core.reasoning import EvidenceCase, ReasoningEvidence
 
 import ast
 import json
@@ -180,8 +180,9 @@ def generate_synthesis_prompts(
         )
 
         task_context_str = ""
+        task_cases: list[EvidenceCase] = []
         if optimizer.enable_context:
-            task_context_str, _ = get_task_context_fn(metric=metric)
+            task_context_str, task_cases = get_task_context_fn(metric=metric)
 
         synthesis_template = optimizer.get_prompt("synthesis")
         reasoning_template = optimizer.get_prompt("reasoning_system")
@@ -212,7 +213,7 @@ def generate_synthesis_prompts(
             ]
             content = _llm_calls.call_model(
                 evidence=ReasoningEvidence(
-                    prompts={current_prompt.name: current_prompt}
+                    prompts={current_prompt.name: current_prompt}, cases=task_cases
                 ),
                 messages=base_messages,
                 model=optimizer.model,

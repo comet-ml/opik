@@ -1,4 +1,3 @@
-from dataclasses import replace
 import copy
 import json
 import logging
@@ -6,7 +5,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from functools import wraps
 from collections.abc import Callable, Iterator
-from typing import TYPE_CHECKING, Any, TypeVar, overload, cast
+from typing import TYPE_CHECKING, Any, TypeVar, overload
 
 from pydantic import BaseModel, ValidationError as PydanticValidationError
 
@@ -20,7 +19,6 @@ from ..utils import throttle as _throttle
 from ..utils.helpers import json_to_dict
 
 from .reasoning import (
-    ReasoningInput,
     ChatMessages,
     ReasoningEvidence,
     build_reasoning_messages,
@@ -361,21 +359,11 @@ def _increment_llm_call_tools_counter_if_in_optimizer() -> None:
 def _prepare_reasoning_request(
     messages: ChatMessages, evidence: ReasoningEvidence | None, model: str
 ) -> ChatMessages:
+    # Each optimizer passes exactly the cases it chose; nothing is added here.
     optimizer = _active_optimizer.get()
-    mode = cast(ReasoningInput, getattr(optimizer, "reasoning_input", "multimodal"))
-    if evidence is not None and evidence.cases is None:
-        evidence = replace(evidence, cases=getattr(optimizer, "_reasoning_cases", ()))
-    if evidence is not None and evidence.prompts is None and evidence.cases:
-        evidence = replace(
-            evidence, prompts=getattr(optimizer, "_reasoning_prompts", None)
-        )
-    if evidence is not None and evidence.cases is not None:
-        limit = getattr(optimizer, "max_reasoning_examples", 5)
-        evidence = replace(evidence, cases=evidence.cases[:limit])
     result = build_reasoning_messages(
         messages,
         evidence=evidence,
-        mode=mode,
         allowed_roles=getattr(optimizer, "_optimizable_roles", None),
     )
     validate_reasoning_messages(result, model)

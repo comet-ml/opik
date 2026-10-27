@@ -14,7 +14,6 @@ from . import reporting
 from ...utils.reporting import get_console
 from ...core import llm_calls as _llm_calls
 from ...utils.prompt_library import PromptLibrary
-from ...utils.feedback import _truncate, _format_agent_trace
 
 logger = logging.getLogger(__name__)
 
@@ -65,62 +64,6 @@ class HierarchicalRootCauseAnalyzer:
         self.model_parameters = model_parameters or {}
         self.prompts = prompts
 
-    def _format_test_results_batch(
-        self,
-        test_results: list[Any],
-        batch_start: int,
-        batch_end: int,
-        traces: dict[str, Any] | None = None,
-    ) -> str:
-        """
-        Format a batch of test results for analysis.
-
-        Args:
-            test_results: Full list of test results
-            batch_start: Starting index of the batch
-            batch_end: Ending index of the batch (exclusive)
-            traces: Locally recorded trace trees by trace id, used to show the agent's steps
-
-        Returns:
-            Formatted string containing test result details
-        """
-        traces = traces or {}
-        formatted_results = []
-
-        for idx in range(batch_start, min(batch_end, len(test_results))):
-            test_result = test_results[idx]
-            test_case = test_result.test_case
-            dataset_item_id = test_case.dataset_item_id
-            dataset_item = test_case.dataset_item_content
-            if isinstance(dataset_item, dict):
-                dataset_item = {k: v for k, v in dataset_item.items() if k != "id"}
-
-            # Extract scores
-            scores_info = []
-            for score in test_result.score_results:
-                score_str = f"  - {score.name}: {score.value:.3f}"
-                if score.reason:
-                    score_str += f"\n    Reason: {score.reason}"
-                if score.scoring_failed:
-                    score_str += " (FAILED)"
-                scores_info.append(score_str)
-
-            # Format this test result
-            result_text = f"""Test Case #{idx + 1} (ID: {dataset_item_id}, Trial: {test_result.trial_id})
-Dataset item: {_truncate(dataset_item)}
-Output: {_truncate(test_case.task_output)}
-Scores:
-{chr(10).join(scores_info)}"""
-
-            trace = traces.get(test_case.trace_id)
-            agent_trace = _format_agent_trace(trace) if trace is not None else ""
-            if agent_trace:
-                result_text += f"\nAgent trace:\n{agent_trace}"
-
-            formatted_results.append(result_text)
-
-        return "\n\n" + ("=" * 80 + "\n\n").join(formatted_results)
-
     @staticmethod
     def _extract_first_response(response: Any) -> Any:
         """Normalize list responses to a single response object."""
@@ -157,8 +100,11 @@ Scores:
             f"test cases {batch_start + 1} to {actual_end}"
         )
 
-        formatted_batch = self._format_test_results_batch(
-            test_results, batch_start, batch_end, traces
+        # The cases themselves (inputs, outputs, scores, agent trace, images)
+        # are attached by the shared evidence renderer, once.
+        formatted_batch = (
+            f"{actual_end - batch_start} test cases are attached after this "
+            "message, one evaluation case each."
         )
 
         batch_analysis_prompt = self.prompts.get(

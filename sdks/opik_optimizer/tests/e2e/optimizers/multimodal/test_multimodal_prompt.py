@@ -123,7 +123,6 @@ def test_multimodal_prompt(
         config.update(
             model="openai/gpt-4o",
             skip_perfect_score=False,
-            max_reasoning_examples=1,
         )
     if optimizer_class is FewShotBayesianOptimizer:
         config.update(min_examples=1, max_examples=1)
@@ -168,7 +167,9 @@ def test_multimodal_prompt(
             for part in message["content"]
             if part.get("type") == "image_url"
         ]
-        assert images, "The optimizer must receive native image evidence"
+        if optimizer_class is not EvolutionaryOptimizer:
+            # Evolutionary reasons about prompts only and is shown no dataset cases.
+            assert images, "The optimizer must receive native image evidence"
     assert results.prompt.model == original_prompt.model
 
     # Validate results structure

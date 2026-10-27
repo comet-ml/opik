@@ -22,7 +22,7 @@ These changes are pending release and are not included in the published package 
 
 ### Migration
 
-- **Multimodal reasoning:** prompt optimizers default to `reasoning_input="multimodal"`. Configure a vision-capable optimizer model for image evidence, or explicitly choose `reasoning_input="text_only"`. Agent and optimizer settings remain independent. `max_reasoning_examples` defaults to `5`. Native audio/video/file reasoning is not supported yet.
+- **Multimodal reasoning:** images in an optimization now reach the optimizer model as native image blocks, so it must support vision; otherwise the run fails before any evaluation. Agent and optimizer settings remain independent. Audio, video and file content is named but not sent to the optimizer model.
 - **Generation overrides:** candidate responses now contain targeted text edits (`segment_id`, `text`) instead of regenerated messages. Update custom generation prompts and response fixtures; legacy message-shaped responses are not accepted. GEPA exposes each multimodal text block as a separate component and requires `gepa>=0.1.4`.
 
 - **Tracking IDs:** caller-supplied `optimization_id` values must be valid UUIDv7 strings. If creation of an explicitly requested run fails, the error propagates instead of continuing untracked.

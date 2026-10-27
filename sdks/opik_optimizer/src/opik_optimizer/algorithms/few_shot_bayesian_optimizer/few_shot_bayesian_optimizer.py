@@ -3,7 +3,6 @@ from ...utils.prompt_editing import apply_text_edits, describe_text_segments
 
 from ...core.reasoning import render_case_message, ReasoningEvidence, EvidenceCase
 
-from typing import Literal
 from typing import Any, cast
 
 import copy
@@ -119,8 +118,6 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         prompt_overrides: PromptOverrides = None,
         skip_perfect_score: bool = constants.DEFAULT_SKIP_PERFECT_SCORE,
         perfect_score: float = constants.DEFAULT_PERFECT_SCORE,
-        reasoning_input: Literal["multimodal", "text_only"] = "multimodal",
-        max_reasoning_examples: int = 5,
     ) -> None:
         super().__init__(
             model,
@@ -131,8 +128,6 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             skip_perfect_score=skip_perfect_score,
             perfect_score=perfect_score,
             prompt_overrides=prompt_overrides,
-            reasoning_input=reasoning_input,
-            max_reasoning_examples=max_reasoning_examples,
         )
         self.min_examples = min_examples
         self.max_examples = max_examples
@@ -391,9 +386,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                         prompts=prompts,
                         cases=[
                             EvidenceCase(case_id=str(i), inputs=example)
-                            for i, example in enumerate(
-                                few_shot_examples[: self.max_reasoning_examples]
-                            )
+                            for i, example in enumerate(few_shot_examples)
                         ],
                     ),
                     messages=attempt_messages,

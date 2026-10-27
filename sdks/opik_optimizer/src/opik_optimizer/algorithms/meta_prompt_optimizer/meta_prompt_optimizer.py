@@ -1,4 +1,3 @@
-from typing import Literal
 import logging
 from typing import Any, cast
 
@@ -7,6 +6,7 @@ from ...base_optimizer import BaseOptimizer
 from ...core.state import AlgorithmResult, OptimizationContext
 from ...utils.prompt_library import PromptOverrides
 from ... import constants
+from ...api_objects.evidence import EvidenceCase
 from ...api_objects.types import MetricFunction
 from ...api_objects import chat_prompt
 from ...utils import throttle as _throttle
@@ -104,12 +104,8 @@ class MetaPromptOptimizer(BaseOptimizer):
         prompt_overrides: PromptOverrides = None,
         skip_perfect_score: bool = constants.DEFAULT_SKIP_PERFECT_SCORE,
         perfect_score: float = constants.DEFAULT_PERFECT_SCORE,
-        reasoning_input: Literal["multimodal", "text_only"] = "multimodal",
-        max_reasoning_examples: int = 5,
     ) -> None:
         super().__init__(
-            reasoning_input=reasoning_input,
-            max_reasoning_examples=max_reasoning_examples,
             model=model,
             verbose=verbose,
             seed=seed,
@@ -133,13 +129,6 @@ class MetaPromptOptimizer(BaseOptimizer):
         self.num_task_examples = num_task_examples
         self.task_context_columns = task_context_columns
         self.selection_strategy = "best_by_metric"
-
-        # TODO: Extract context learning into an extension module shared across optimizers.
-        # Calculate token budget for task context data stuffing (dataset examples only).
-        # This is ONLY used for adaptive fitting logic in get_task_context().
-        self.max_context_tokens = context_learning_ops.calculate_max_context_tokens(
-            self.model
-        )
 
         # TODO: Extract Hall of Fame into an extension module shared across optimizers.
         # Hall of Fame for pattern mining.
@@ -187,7 +176,6 @@ class MetaPromptOptimizer(BaseOptimizer):
             "enable_context": self.enable_context,
             "num_task_examples": self.num_task_examples,
             "task_context_columns": self.task_context_columns,
-            "max_context_tokens": self.max_context_tokens,
             "n_threads": self.n_threads,
             "use_hall_of_fame": self.use_hall_of_fame,
             "hall_of_fame_size": self.hall_of_fame.max_size
@@ -472,15 +460,15 @@ class MetaPromptOptimizer(BaseOptimizer):
             use_hall_of_fame=self.use_hall_of_fame,
         )
 
-    def _get_task_context(self, metric: MetricFunction) -> tuple[str, int]:
-        """Get task-specific context from the dataset and metric (delegates to ops)."""
+    def _get_task_context(
+        self, metric: MetricFunction
+    ) -> tuple[str, list[EvidenceCase]]:
+        """Task description plus the training examples shown as evidence cases."""
         return context_learning_ops.get_task_context(
             dataset=self.dataset,
             metric=metric,
             num_examples=self.num_task_examples,
             columns=self.task_context_columns,
-            max_tokens=self.max_context_tokens,
-            model=self.model,
             extract_metric_understanding=self.extract_metric_understanding,
             seed=self.seed,
         )

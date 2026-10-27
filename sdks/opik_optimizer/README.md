@@ -29,8 +29,7 @@ Opik Optimizer is a component of the [Opik platform](https://github.com/comet-ml
 For more information about the broader Opik ecosystem, visit our [Website](https://www.comet.com/site/products/opik/) or [Documentation](https://www.comet.com/docs/opik/).
 
 Image-based prompt optimization requires a vision-capable optimizer model independently from
-`ChatPrompt.model`. Use `reasoning_input="text_only"` to explicitly optimize from textual feedback
-instead. `max_reasoning_examples=5` bounds cases per reasoning request. Candidate generation uses
+`ChatPrompt.model`; the run fails before any evaluation otherwise. Candidate generation uses
 targeted text edits, preserving original media and unselected settings. See the
 [multimodal guide](https://www.comet.com/docs/opik/development/optimization-runs/optimization/optimize_multimodal).
 

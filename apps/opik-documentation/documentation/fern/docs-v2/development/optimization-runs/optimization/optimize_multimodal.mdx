@@ -32,11 +32,7 @@ prompt = ChatPrompt(
     model="openai/gpt-4o-mini",
     model_parameters={},
 )
-optimizer = MetaPromptOptimizer(
-    model="openai/gpt-4o",
-    reasoning_input="multimodal",  # Default: send native image evidence.
-    max_reasoning_examples=5,
-)
+optimizer = MetaPromptOptimizer(model="openai/gpt-4o")  # must support vision
 ```
 
 Dataset rows supply `question` and `image`. The image value may be an HTTPS URL or an image data
@@ -45,54 +41,39 @@ URL. Keep remote URLs valid for the full optimization run. A data URL remains in
 
 ## What the optimizer sees and edits
 
-The shared reasoning client sends the prompt's editable text segments and selected rendered
-cases. Each case keeps its image blocks next to its case ID, rendered input, output and scores.
-HRPO also includes recorded agent observations, including native images used during agent steps.
-GEPA uses the images from its selected reflection batch.
+Each optimizer chooses the training cases it shows its model, always from the training dataset:
+MetaPrompt shows `num_task_examples` items, HRPO each failure-analysis batch (`batch_size`), GEPA
+its reflection minibatch, and FewShot the items it builds its template from. Evolutionary reasons
+about prompts only. Each case is rendered once, with its image blocks next to its case ID,
+rendered input, output, scores and, for HRPO, the agent's recorded steps and the images it saw.
 
 The optimizer returns edits addressed to existing text segments. For example, `message:1:part:0`
 identifies the first text block in the second message. Media, message roles, tool callables,
 unselected text blocks and agent model settings remain unchanged. Duplicate, unknown or
 non-editable targets and edits that remove template variables are rejected.
 
-`max_reasoning_examples` limits the cases attached to each reasoning request (default `5`).
-Image cost still depends on the number, size and detail of images in those cases. Inspect
-optimization call usage when choosing this limit.
-
-## Explicit text-only reasoning
-
-To improve text instructions using feedback without showing images to the optimizer, opt in:
-
-```python wordWrap
-optimizer = MetaPromptOptimizer(
-    model="openai/gpt-4o-mini",
-    reasoning_input="text_only",
-)
-```
-
-This mode summarizes media in the optimizer's context. The evaluated agent continues receiving
-its original media. There is no automatic downgrade to this mode. Image evidence requires a
-vision-capable optimizer model; an unsupported model produces a configuration error. For custom
-model aliases or deployments, register their vision capability in LiteLLM before the run.
+Image cost depends on the number, size and detail of images in those cases; the settings above
+control how many cases each request carries. Image evidence requires a vision-capable optimizer
+model; an unsupported model fails the run before any evaluation. For custom model aliases or
+deployments, register their vision capability in LiteLLM before the run.
 
 ## Optimizer support
 
 | Optimizer | Image evidence for reasoning | How edits are applied |
 |---|---|---|
-| MetaPrompt | Native blocks with selected cases | Targeted text edits for each prompt or bundle member |
-| HRPO | Native case images and recorded agent observations | Targeted text edits and selected tool descriptions |
-| Evolutionary | Native evidence for fresh starts, variations, mutation and crossover | Targeted edits of each original parent/template |
+| MetaPrompt | Native blocks with its `num_task_examples` training cases | Targeted text edits for each prompt or bundle member |
+| HRPO | Native images for every case in each analysis batch, including recorded agent images | Targeted text edits and selected tool descriptions |
+| Evolutionary | Images in the prompt template; no dataset cases | Targeted edits of each original parent/template |
 | FewShot Bayesian | Native images in template generation | Text edits select the example placeholder; image demonstrations are inserted before the current task |
 | GEPA | Native images from its reflection batch; requires `gepa>=0.1.4` | Individual text-block and tool-description components |
 | ParameterOptimizer | Makes no reasoning calls | Changes only explicitly searched model parameters; forwards media during evaluation |
 
-FewShot image demonstrations retain their images as native blocks even when optimizer reasoning
-is explicitly text-only. The current task's input and media remain the final user message.
+FewShot image demonstrations keep their images as native blocks. The current task's input and
+media remain the final user message.
 
-Native optimizer evidence currently supports **images**. Audio, video and file blocks require
-`reasoning_input="text_only"`; they are rejected in multimodal reasoning mode. Evaluation support
-for those modalities depends on the agent and its model. Native audio/video reasoning and
-FewShot demonstrations are not supported yet.
+Native optimizer evidence supports **images**. Audio, video and file blocks are named in the
+optimizer's context but not sent. Evaluation support for those modalities depends on the agent
+and its model.
 
 ## Validate your run
 

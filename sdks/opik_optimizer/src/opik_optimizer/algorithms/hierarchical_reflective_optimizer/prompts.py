@@ -14,9 +14,9 @@ TEST RESULTS:
 {formatted_batch}
 ```
 
-Each test case shows its dataset item, the final output and the scores. The dataset item may hold reference fields (such as the expected answer) that are only used for scoring: the agent never sees them, it only sees what the prompt template inserts. When an "Agent trace" is present, it lists the agent's steps in order: LLM responses (with the tool calls the model requested), tool executions with the input they actually received and their output, and errors. Use it to locate where the run went wrong (a wrong tool choice, missing or bad tool arguments, an ignored or misread tool result, a missing step) rather than judging the final output alone.
+Each test case shows its dataset item, the final output and the scores (with the metric's reason). The dataset item may hold reference fields (such as the expected answer) that are only used for scoring: the agent never sees them, it only sees what the prompt template inserts. When an agent_trace is present, it lists the agent's steps in order: LLM responses (with the tool calls the model requested), tool executions with the input they actually received and their output, and errors. Use it to locate where the run went wrong (a wrong tool choice, missing or bad tool arguments, an ignored or misread tool result, a missing step) rather than judging the final output alone.
 
-Important constraint: Base your analysis exclusively on the TEST RESULTS shown above. Do not infer, speculate, or hypothesize failure modes that are not directly evidenced in the provided results.
+Important constraint: Base your analysis exclusively on the attached test cases. Do not infer, speculate, or hypothesize failure modes that are not directly evidenced in the provided results.
 
 Think through the failures systematically:
 

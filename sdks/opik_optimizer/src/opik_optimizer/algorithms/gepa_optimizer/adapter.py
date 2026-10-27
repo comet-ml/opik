@@ -569,24 +569,22 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
                 )
                 if tool_metadata:
                     feedback += f" Tool metadata: {tool_metadata}"
-                images = []
-                if case_index < self._optimizer.max_reasoning_examples:
-                    case = EvidenceCase(
-                        case_id=str(dataset_item.get("id", case_index)),
-                        inputs=dataset_item,
-                        output=output_text,
-                        scores=traj.get("reasons") or {"score": score},
-                    )
-                    message = render_case_message(
-                        case, prompt_variants, self._optimizer.reasoning_input
-                    )
-                    content = message["content"]
-                    if isinstance(content, list):
-                        images = [
-                            Image(url=part["image_url"]["url"])
-                            for part in content
-                            if part.get("type") == "image_url"
-                        ]
+                case = EvidenceCase(
+                    case_id=str(dataset_item.get("id", case_index)),
+                    inputs=dataset_item,
+                    output=output_text,
+                    scores=traj.get("reasons") or {"score": score},
+                )
+                content = render_case_message(case, prompt_variants)["content"]
+                images = (
+                    [
+                        Image(url=part["image_url"]["url"])
+                        for part in content
+                        if part.get("type") == "image_url"
+                    ]
+                    if isinstance(content, list)
+                    else []
+                )
                 yield {
                     "Inputs": input_fields(dataset_item),
                     "Images": images,

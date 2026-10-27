@@ -4,7 +4,7 @@ Single-prompt candidate generation for the Meta-Prompt Optimizer.
 
 from ....utils.prompt_editing import apply_text_edits
 
-from ....core.reasoning import ReasoningEvidence
+from ....core.reasoning import EvidenceCase, ReasoningEvidence
 
 import copy
 import logging
@@ -143,9 +143,10 @@ def _build_context_instructions(
     optimizer: Any,
     metric: MetricFunction,
     get_task_context_fn: Callable,
-) -> tuple[str, str, str]:
+) -> tuple[str, list[EvidenceCase], str, str]:
+    task_cases: list[EvidenceCase] = []
     if optimizer.enable_context:
-        task_context_str, _ = get_task_context_fn(metric=metric)
+        task_context_str, task_cases = get_task_context_fn(metric=metric)
         analysis_instruction = (
             "Analyze the example provided (if any), the metric description (if any), "
             "and the history of scores."
@@ -159,7 +160,7 @@ def _build_context_instructions(
             "Analyze the history of scores and the current prompt's performance."
         )
         metric_focus_instruction = "Focus on generating diverse and effective prompt variations based on the history."
-    return task_context_str, analysis_instruction, metric_focus_instruction
+    return task_context_str, task_cases, analysis_instruction, metric_focus_instruction
 
 
 def _build_generation_messages(
@@ -285,9 +286,12 @@ def generate_candidate_prompts(
             optimizer, winning_patterns, candidate_rng
         )
         history_context = build_history_context_fn(previous_rounds)
-        task_context_str, analysis_instruction, metric_focus_instruction = (
-            _build_context_instructions(optimizer, metric, get_task_context_fn)
-        )
+        (
+            task_context_str,
+            task_cases,
+            analysis_instruction,
+            metric_focus_instruction,
+        ) = _build_context_instructions(optimizer, metric, get_task_context_fn)
         messages = _build_generation_messages(
             optimizer=optimizer,
             current_prompt=current_prompt,
@@ -306,7 +310,7 @@ def generate_candidate_prompts(
 
             content = _llm_calls.call_model(
                 evidence=ReasoningEvidence(
-                    prompts={current_prompt.name: current_prompt}
+                    prompts={current_prompt.name: current_prompt}, cases=task_cases
                 ),
                 messages=messages,
                 model=optimizer.model,

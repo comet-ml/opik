@@ -317,8 +317,9 @@ string message; `message:1:part:0` addresses a native text content block. This r
 configuration by construction and rejects invalid targets, duplicate edits and removed
 placeholders. Custom generation overrides must return edits rather than full message arrays.
 
-The shared client applies `reasoning_input` and `max_reasoning_examples`, validates the optimizer
-model's vision capability, and preserves native blocks through structured-output retries.
+Pass the training cases your algorithm wants the model to see as `ReasoningEvidence(cases=...)`;
+the shared client renders each case once, validates the optimizer model's vision capability, and
+preserves native blocks through structured-output retries. It never adds cases on its own.
 Display summaries are separate from actual request content.
 
 ## LLM Call Accounting

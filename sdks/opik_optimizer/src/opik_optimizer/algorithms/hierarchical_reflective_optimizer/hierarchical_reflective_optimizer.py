@@ -3,7 +3,6 @@ from ...utils.prompt_editing import apply_text_edits
 
 from ...core.reasoning import ReasoningEvidence
 
-from typing import Literal
 import logging
 
 import opik
@@ -97,12 +96,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         prompt_overrides: PromptOverrides = None,
         skip_perfect_score: bool = constants.DEFAULT_SKIP_PERFECT_SCORE,
         perfect_score: float = constants.DEFAULT_PERFECT_SCORE,
-        reasoning_input: Literal["multimodal", "text_only"] = "multimodal",
-        max_reasoning_examples: int = 5,
     ):
         super().__init__(
-            reasoning_input=reasoning_input,
-            max_reasoning_examples=max_reasoning_examples,
             model=model,
             verbose=verbose,
             seed=seed,

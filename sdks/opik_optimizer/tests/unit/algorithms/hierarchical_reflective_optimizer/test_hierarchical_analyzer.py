@@ -18,6 +18,7 @@ from opik_optimizer.algorithms.hierarchical_reflective_optimizer.types import (
     HierarchicalRootCauseAnalysis,
     RootCauseAnalysis,
 )
+from opik_optimizer.core.reasoning import build_reasoning_messages
 from opik_optimizer.utils.prompt_library import PromptLibrary
 
 _CALL_MODEL_ASYNC = "opik_optimizer.algorithms.hierarchical_reflective_optimizer.rootcause_ops._llm_calls.call_model_async"
@@ -142,7 +143,7 @@ class TestAnalyze:
         assert max_concurrent == 1
 
 
-def test_format_test_results_batch_includes_agent_trace(
+def test_each_batch_sends_every_case_once_with_its_agent_trace(
     analyzer: HierarchicalRootCauseAnalyzer, mock_evaluation_result: MagicMock
 ) -> None:
     now = datetime.datetime.now()
@@ -209,21 +210,37 @@ def test_format_test_results_batch_includes_agent_trace(
         ],
     )
     results = mock_evaluation_result.test_results
-    results[0].test_case.trace_id = "trace-0"
+    for index, result in enumerate(results):
+        result.test_case.trace_id = f"trace-{index}"
+        result.test_case.dataset_item_content = {"question": f"item_{index}"}
+        result.test_case.task_output = {"output": f"answer {index}"}
+        for score in result.score_results:
+            score.model_dump.return_value = {
+                "name": score.name,
+                "value": score.value,
+                "reason": score.reason,
+            }
+    batches: list[list[str]] = []
 
-    formatted = analyzer._format_test_results_batch(
-        results, 0, 2, traces={"trace-0": trace}
-    )
-    case_0, case_1 = formatted.split("Test Case #2")
+    async def fake_call(*args: Any, **kwargs: Any) -> Any:
+        if kwargs["response_model"] is RootCauseAnalysis:
+            rendered = build_reasoning_messages(
+                kwargs["messages"], evidence=kwargs["evidence"]
+            )
+            batches.append([str(m["content"]) for m in rendered[1:]])
+            return RootCauseAnalysis(failure_modes=[])
+        return _synthesis()
 
-    assert "item_0" in case_0
-    assert "accuracy:" in case_0
+    with patch(_CALL_MODEL_ASYNC, new_callable=AsyncMock, side_effect=fake_call):
+        analyzer.analyze(mock_evaluation_result, traces={"trace-0": trace})
+
+    # batch_size=5: every case of each batch is sent, once, as its own message.
+    assert [len(batch) for batch in batches] == [5, 5]
+    case_0, case_1 = batches[0][0], batches[0][1]
+    assert "item_0" in case_0 and "accuracy" in case_0
     assert "- [llm] completion (gpt-4o)" in case_0
-    assert 'search({\\"query\\": \\"x\\"})' in case_0
-    assert "choices" not in case_0
-    assert "arg_validation" not in case_0
+    assert "search(" in case_0 and "timeout" in case_0
     assert "SYSTEM PROMPT" in case_0
     assert "REPLAYED HISTORY" not in case_0
-    assert '  input: {"query": "capital of france"}' in case_0
-    assert "timeout" in case_0
-    assert "Agent trace" not in case_1
+    assert "arg_validation" not in case_0
+    assert "agent_trace" not in case_1

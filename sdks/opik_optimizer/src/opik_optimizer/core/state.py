@@ -136,8 +136,6 @@ def build_optimizer_metadata(
         "model": optimizer.model,
         "model_parameters": optimizer.model_parameters or None,
         "seed": getattr(optimizer, "seed", None),
-        "reasoning_input": getattr(optimizer, "reasoning_input", None),
-        "max_reasoning_examples": getattr(optimizer, "max_reasoning_examples", None),
         "num_threads": getattr(optimizer, "num_threads", None),
     }
 

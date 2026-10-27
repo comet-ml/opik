@@ -1,5 +1,4 @@
 from ....core.reasoning import ReasoningEvidence, EvidenceCase
-from ....utils.feedback import sanitize_feedback
 from typing import Any
 
 import logging
@@ -47,12 +46,10 @@ def infer_output_style_from_dataset(
             )
             return None
 
-        examples_str = ""
-        for i, item_content in enumerate(items_to_process):
-            filtered_content: dict[str, str] = {
-                x: y for x, y in item_content.items() if x != "id"
-            }
-            examples_str += f"Example {i + 1}:\nDataset Item:\n{sanitize_feedback(filtered_content)}\n---\n"
+        # The items are attached as evidence cases, rendered once.
+        examples_str = (
+            f"{len(items_to_process)} dataset items are attached after this message."
+        )
 
         user_prompt_for_style_inference = prompts.get(
             "style_inference_user_prompt_template", examples_str=examples_str

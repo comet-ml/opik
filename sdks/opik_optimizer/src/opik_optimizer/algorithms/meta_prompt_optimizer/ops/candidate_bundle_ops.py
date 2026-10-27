@@ -4,7 +4,7 @@ Agent-bundle candidate generation for the Meta-Prompt Optimizer.
 
 from ....utils.prompt_editing import apply_text_edits
 
-from ....core.reasoning import ReasoningEvidence
+from ....core.reasoning import EvidenceCase, ReasoningEvidence
 
 import json
 import logging
@@ -91,11 +91,12 @@ def generate_agent_bundle_candidates(
 
         history_context = build_history_context_fn(previous_rounds)
         task_context_str = ""
+        task_cases: list[EvidenceCase] = []
         analysis_instruction = ""
         metric_focus_instruction = ""
 
         if optimizer.enable_context:
-            task_context_str, _ = get_task_context_fn(metric=metric)
+            task_context_str, task_cases = get_task_context_fn(metric=metric)
             analysis_instruction = "Analyze the examples/feedback (if any), metric description, and score history."
             metric_focus_instruction = "Focus on improving evaluation scores while keeping each agent's role distinct."
         else:
@@ -129,7 +130,7 @@ def generate_agent_bundle_candidates(
             )
 
             response = _llm_calls.call_model(
-                evidence=ReasoningEvidence(prompts=current_prompts),
+                evidence=ReasoningEvidence(prompts=current_prompts, cases=task_cases),
                 messages=[
                     {
                         "role": "system",

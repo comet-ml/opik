@@ -1,6 +1,5 @@
 from ...core.reasoning import ReasoningEvidence
 
-from typing import Literal
 import logging
 import math
 import threading
@@ -476,8 +475,6 @@ class GepaOptimizer(BaseOptimizer):
         skip_perfect_score: bool = constants.DEFAULT_SKIP_PERFECT_SCORE,
         perfect_score: float = constants.DEFAULT_PERFECT_SCORE,
         prompt_overrides: PromptOverrides = None,
-        reasoning_input: Literal["multimodal", "text_only"] = "multimodal",
-        max_reasoning_examples: int = 5,
     ) -> None:
         # Validate required parameters
         if model is None:
@@ -507,8 +504,6 @@ class GepaOptimizer(BaseOptimizer):
             skip_perfect_score=skip_perfect_score,
             perfect_score=perfect_score,
             prompt_overrides=prompt_overrides,
-            reasoning_input=reasoning_input,
-            max_reasoning_examples=max_reasoning_examples,
         )
         self.n_threads = n_threads
         self._adapter_metric_calls = 0

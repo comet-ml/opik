@@ -58,19 +58,16 @@ def capture_provider(
 
 
 @pytest.mark.parametrize(
-    "optimizer_name,mode",
+    "optimizer_name",
     [
-        ("MetaPromptOptimizer", "multimodal"),
-        ("HierarchicalReflectiveOptimizer", "multimodal"),
-        ("EvolutionaryOptimizer", "multimodal"),
-        ("FewShotBayesianOptimizer", "multimodal"),
-        ("GepaOptimizer", "multimodal"),
-        ("MetaPromptOptimizer", "text_only"),
+        "MetaPromptOptimizer",
+        "HierarchicalReflectiveOptimizer",
+        "FewShotBayesianOptimizer",
+        "GepaOptimizer",
     ],
 )
 def test_public_run_sends_native_images_to_optimizer_and_preserves_agent_media(
     optimizer_name: str,
-    mode: str,
     install_fakes: Any,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -80,24 +77,11 @@ def test_public_run_sends_native_images_to_optimizer_and_preserves_agent_media(
     scenario.prompt.model_kwargs = {}
     original = deepcopy(scenario.prompt.get_messages())
     captured = capture_provider(scenario, install_fakes, monkeypatch)
-    factory = harness.make_optimizer
-
-    def configured(name: str) -> Any:
-        optimizer = factory(name)
-        optimizer.reasoning_input = mode
-        return optimizer
-
-    monkeypatch.setattr(harness, "make_optimizer", configured)
     result = harness.run_optimizer(optimizer_name, scenario)
     assert captured, "optimizer must reach its own LLM"
     assert all(call["model"] != "agent-model" for call in captured)
     images = [part for call in captured for part in native_images(call["messages"])]
-    if mode == "multimodal":
-        assert any(
-            part["image_url"]["url"] == harness.IMAGE_DATA_URL for part in images
-        )
-    else:
-        assert not images
+    assert any(part["image_url"]["url"] == harness.IMAGE_DATA_URL for part in images)
     for call in captured:
         for message in call["messages"]:
             text = (
@@ -123,7 +107,7 @@ def test_image_reasoning_rejects_text_only_optimizer_model_without_using_agent_m
     monkeypatch.setattr(
         llm_calls, "_invoke_traced", lambda *a, **kw: reached_provider.append(kw)
     )
-    with pytest.raises(ValueError, match="(?i)(vision|image).*text_only"):
+    with pytest.raises(ValueError, match="cannot read images"):
         optimizer.optimize_prompt(
             prompt=scenario.prompt,
             dataset=harness.make_dataset(scenario),
@@ -131,26 +115,3 @@ def test_image_reasoning_rejects_text_only_optimizer_model_without_using_agent_m
             max_trials=2,
         )
     assert not reached_provider
-
-
-def test_tool_description_learning_receives_native_image_evidence(
-    install_fakes: Any,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    scenario = harness.build_scenario("S3_multimodal")
-    tools = harness.build_scenario("S4_tools").prompt
-    assert isinstance(scenario.prompt, harness.ChatPrompt) and isinstance(
-        tools, harness.ChatPrompt
-    )
-    scenario.prompt.tools = tools.tools
-    scenario.prompt.function_map = tools.function_map
-    scenario.tools = True
-    captured = capture_provider(scenario, install_fakes, monkeypatch)
-    harness.run_optimizer("MetaPromptOptimizer", scenario)
-    tool_requests = [
-        request
-        for request in captured
-        if request.get("response_model") == "ToolDescriptionCandidatesResponse"
-    ]
-    assert tool_requests
-    assert all(native_images(request["messages"]) for request in tool_requests)

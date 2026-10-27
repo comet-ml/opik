@@ -213,7 +213,8 @@ def test_validation_items_never_reach_the_optimizer_model(
     harness.run_optimizer(optimizer_name, scenario, validation_dataset=validation)
 
     assert not [request for request in requests if "HELDOUT" in request]
-    if optimizer_name != "ParameterOptimizer":
+    # Evolutionary reasons about prompts only; Parameter makes no reasoning calls.
+    if optimizer_name not in {"EvolutionaryOptimizer", "ParameterOptimizer"}:
         assert any("TRAIN" in request for request in requests)
 
 

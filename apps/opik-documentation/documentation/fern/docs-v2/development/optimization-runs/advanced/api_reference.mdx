@@ -67,10 +67,9 @@ def optimize_prompt(
 Custom agents own their calls and should read each supplied prompt's model and `model_kwargs`.
 HRPO's `reasoning_model_parameters=None` inherits optimizer parameters; `{}` is an empty override.
 
-Prompt optimizers default to `reasoning_input="multimodal"` with native image evidence for up to
-`max_reasoning_examples=5` cases per request. Configure a vision-capable optimizer model, or choose
-`reasoning_input="text_only"` explicitly; agent media and settings are retained. Audio/video/file
-reasoning currently requires text-only mode. Candidate responses contain targeted text edits
+Images in prompts, training items or agent traces reach the optimizer model as native image
+blocks, so it must support vision; otherwise the run fails before any evaluation. Audio, video and
+file content is named but not sent. Agent media and settings are retained. Candidate responses contain targeted text edits
 (`segment_id`, `text`), not full messages. GEPA requires `gepa>=0.1.4` for native reflection images.
 
 ## Structured evidence and text edits
@@ -128,9 +127,7 @@ FewShotBayesianOptimizer(
     enable_optuna_pruning: bool | None = None,
     prompt_overrides: dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None = None,
     skip_perfect_score: bool = True,
-    perfect_score: float = 0.95,
-    reasoning_input: Literal = 'multimodal',
-    max_reasoning_examples: int = 5
+    perfect_score: float = 0.95
 )
 ```
 
@@ -152,8 +149,6 @@ FewShotBayesianOptimizer(
 <ParamField path="prompt_overrides" type="dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None" optional={true} />
 <ParamField path="skip_perfect_score" type="bool" optional={true} default="True" />
 <ParamField path="perfect_score" type="float" optional={true} default="0.95" />
-<ParamField path="reasoning_input" type="Literal" optional={true} default="multimodal" />
-<ParamField path="max_reasoning_examples" type="int" optional={true} default="5" />
 
 ### Methods
 #### begin_round
@@ -195,7 +190,7 @@ evaluate(
 <ParamField path="context" type="OptimizationContext">Optimization context for this run.</ParamField>
 <ParamField path="prompts" type="dict">Dict of named prompts to evaluate (e.g., &#123;"main": ChatPrompt(...)&#125;). Single-prompt optimizations use a dict with one entry.</ParamField>
 <ParamField path="experiment_config" type="dict[str, typing.Any] | None" optional={true}>Optional experiment configuration.</ParamField>
-<ParamField path="sampling_tag" type="str | None" optional={true}>Optional sampling tag for deterministic subsampling per candidate.</ParamField>
+<ParamField path="sampling_tag" type="str | None" optional={true}>Optional tag that seeds candidate-output selection for this call.</ParamField>
 
 #### evaluate_prompt
 ```python wordWrap
@@ -748,9 +743,7 @@ GepaOptimizer(
     name: str | None = None,
     skip_perfect_score: bool = True,
     perfect_score: float = 0.95,
-    prompt_overrides: dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None = None,
-    reasoning_input: Literal = 'multimodal',
-    max_reasoning_examples: int = 5
+    prompt_overrides: dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None = None
 )
 ```
 
@@ -766,8 +759,6 @@ GepaOptimizer(
 <ParamField path="skip_perfect_score" type="bool" optional={true} default="True" />
 <ParamField path="perfect_score" type="float" optional={true} default="0.95" />
 <ParamField path="prompt_overrides" type="dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None" optional={true} />
-<ParamField path="reasoning_input" type="Literal" optional={true} default="multimodal" />
-<ParamField path="max_reasoning_examples" type="int" optional={true} default="5" />
 
 ### Methods
 #### begin_round
@@ -809,7 +800,7 @@ evaluate(
 <ParamField path="context" type="OptimizationContext">Optimization context for this run.</ParamField>
 <ParamField path="prompts" type="dict">Dict of named prompts to evaluate (e.g., &#123;"main": ChatPrompt(...)&#125;). Single-prompt optimizations use a dict with one entry.</ParamField>
 <ParamField path="experiment_config" type="dict[str, typing.Any] | None" optional={true}>Optional experiment configuration.</ParamField>
-<ParamField path="sampling_tag" type="str | None" optional={true}>Optional sampling tag for deterministic subsampling per candidate.</ParamField>
+<ParamField path="sampling_tag" type="str | None" optional={true}>Optional tag that seeds candidate-output selection for this call.</ParamField>
 
 #### evaluate_prompt
 ```python wordWrap
@@ -1367,9 +1358,7 @@ MetaPromptOptimizer(
     use_hall_of_fame: bool = True,
     prompt_overrides: dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None = None,
     skip_perfect_score: bool = True,
-    perfect_score: float = 0.95,
-    reasoning_input: Literal = 'multimodal',
-    max_reasoning_examples: int = 5
+    perfect_score: float = 0.95
 )
 ```
 
@@ -1390,8 +1379,6 @@ MetaPromptOptimizer(
 <ParamField path="prompt_overrides" type="dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None" optional={true} />
 <ParamField path="skip_perfect_score" type="bool" optional={true} default="True" />
 <ParamField path="perfect_score" type="float" optional={true} default="0.95" />
-<ParamField path="reasoning_input" type="Literal" optional={true} default="multimodal" />
-<ParamField path="max_reasoning_examples" type="int" optional={true} default="5" />
 
 ### Methods
 #### begin_round
@@ -1433,7 +1420,7 @@ evaluate(
 <ParamField path="context" type="OptimizationContext">Optimization context for this run.</ParamField>
 <ParamField path="prompts" type="dict">Dict of named prompts to evaluate (e.g., &#123;"main": ChatPrompt(...)&#125;). Single-prompt optimizations use a dict with one entry.</ParamField>
 <ParamField path="experiment_config" type="dict[str, typing.Any] | None" optional={true}>Optional experiment configuration.</ParamField>
-<ParamField path="sampling_tag" type="str | None" optional={true}>Optional sampling tag for deterministic subsampling per candidate.</ParamField>
+<ParamField path="sampling_tag" type="str | None" optional={true}>Optional tag that seeds candidate-output selection for this call.</ParamField>
 
 #### evaluate_prompt
 ```python wordWrap
@@ -1998,9 +1985,7 @@ EvolutionaryOptimizer(
     name: str | None = None,
     prompt_overrides: dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None = None,
     skip_perfect_score: bool = True,
-    perfect_score: float = 0.95,
-    reasoning_input: Literal = 'multimodal',
-    max_reasoning_examples: int = 5
+    perfect_score: float = 0.95
 )
 ```
 
@@ -2028,8 +2013,6 @@ EvolutionaryOptimizer(
 <ParamField path="prompt_overrides" type="dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None" optional={true} />
 <ParamField path="skip_perfect_score" type="bool" optional={true} default="True" />
 <ParamField path="perfect_score" type="float" optional={true} default="0.95" />
-<ParamField path="reasoning_input" type="Literal" optional={true} default="multimodal" />
-<ParamField path="max_reasoning_examples" type="int" optional={true} default="5" />
 
 ### Methods
 #### begin_round
@@ -2071,7 +2054,7 @@ evaluate(
 <ParamField path="context" type="OptimizationContext">Optimization context for this run.</ParamField>
 <ParamField path="prompts" type="dict">Dict of named prompts to evaluate (e.g., &#123;"main": ChatPrompt(...)&#125;). Single-prompt optimizations use a dict with one entry.</ParamField>
 <ParamField path="experiment_config" type="dict[str, typing.Any] | None" optional={true}>Optional experiment configuration.</ParamField>
-<ParamField path="sampling_tag" type="str | None" optional={true}>Optional sampling tag for deterministic subsampling per candidate.</ParamField>
+<ParamField path="sampling_tag" type="str | None" optional={true}>Optional tag that seeds candidate-output selection for this call.</ParamField>
 
 #### evaluate_prompt
 ```python wordWrap
@@ -2629,9 +2612,7 @@ HierarchicalReflectiveOptimizer(
     name: str | None = None,
     prompt_overrides: dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None = None,
     skip_perfect_score: bool = True,
-    perfect_score: float = 0.95,
-    reasoning_input: Literal = 'multimodal',
-    max_reasoning_examples: int = 5
+    perfect_score: float = 0.95
 )
 ```
 
@@ -2652,8 +2633,6 @@ HierarchicalReflectiveOptimizer(
 <ParamField path="prompt_overrides" type="dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None" optional={true} />
 <ParamField path="skip_perfect_score" type="bool" optional={true} default="True" />
 <ParamField path="perfect_score" type="float" optional={true} default="0.95" />
-<ParamField path="reasoning_input" type="Literal" optional={true} default="multimodal" />
-<ParamField path="max_reasoning_examples" type="int" optional={true} default="5" />
 
 ### Methods
 #### begin_round
@@ -2695,7 +2674,7 @@ evaluate(
 <ParamField path="context" type="OptimizationContext">Optimization context for this run.</ParamField>
 <ParamField path="prompts" type="dict">Dict of named prompts to evaluate (e.g., &#123;"main": ChatPrompt(...)&#125;). Single-prompt optimizations use a dict with one entry.</ParamField>
 <ParamField path="experiment_config" type="dict[str, typing.Any] | None" optional={true}>Optional experiment configuration.</ParamField>
-<ParamField path="sampling_tag" type="str | None" optional={true}>Optional sampling tag for deterministic subsampling per candidate.</ParamField>
+<ParamField path="sampling_tag" type="str | None" optional={true}>Optional tag that seeds candidate-output selection for this call.</ParamField>
 
 #### evaluate_prompt
 ```python wordWrap
@@ -3309,7 +3288,7 @@ evaluate(
 <ParamField path="context" type="OptimizationContext">Optimization context for this run.</ParamField>
 <ParamField path="prompts" type="dict">Dict of named prompts to evaluate (e.g., &#123;"main": ChatPrompt(...)&#125;). Single-prompt optimizations use a dict with one entry.</ParamField>
 <ParamField path="experiment_config" type="dict[str, typing.Any] | None" optional={true}>Optional experiment configuration.</ParamField>
-<ParamField path="sampling_tag" type="str | None" optional={true}>Optional sampling tag for deterministic subsampling per candidate.</ParamField>
+<ParamField path="sampling_tag" type="str | None" optional={true}>Optional tag that seeds candidate-output selection for this call.</ParamField>
 
 #### evaluate_prompt
 ```python wordWrap
@@ -3923,9 +3902,7 @@ BaseOptimizer(
     skip_perfect_score: bool = True,
     perfect_score: float = 0.95,
     prompt_overrides: dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None = None,
-    display: opik_optimizer.utils.display.run.RunDisplay | None = None,
-    reasoning_input: Literal = 'multimodal',
-    max_reasoning_examples: int = 5
+    display: opik_optimizer.utils.display.run.RunDisplay | None = None
 )
 ```
 
@@ -3943,8 +3920,6 @@ BaseOptimizer(
 <ParamField path="perfect_score" type="float" optional={true} default="0.95" />
 <ParamField path="prompt_overrides" type="dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None" optional={true} />
 <ParamField path="display" type="opik_optimizer.utils.display.run.RunDisplay | None" optional={true} />
-<ParamField path="reasoning_input" type="Literal" optional={true} default="multimodal" />
-<ParamField path="max_reasoning_examples" type="int" optional={true} default="5" />
 
 ### Methods
 #### begin_round
@@ -3986,7 +3961,7 @@ evaluate(
 <ParamField path="context" type="OptimizationContext">Optimization context for this run.</ParamField>
 <ParamField path="prompts" type="dict">Dict of named prompts to evaluate (e.g., &#123;"main": ChatPrompt(...)&#125;). Single-prompt optimizations use a dict with one entry.</ParamField>
 <ParamField path="experiment_config" type="dict[str, typing.Any] | None" optional={true}>Optional experiment configuration.</ParamField>
-<ParamField path="sampling_tag" type="str | None" optional={true}>Optional sampling tag for deterministic subsampling per candidate.</ParamField>
+<ParamField path="sampling_tag" type="str | None" optional={true}>Optional tag that seeds candidate-output selection for this call.</ParamField>
 
 #### evaluate_prompt
 ```python wordWrap
