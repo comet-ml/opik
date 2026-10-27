@@ -345,7 +345,8 @@ curl -X POST "http://<opik-backend>:8080/v1/internal/topics/projects/<project_id
 ```
 
 It answers `202` with the `run_id`, and the run goes on in the background with the same timeout; read its outcome in
-`topic_runs`. The night is today (UTC), so the window ends at today's start. It answers `409` when a run of the project
+`topic_runs`. The night is today (UTC), so the window ends at today's start. Add `&night=yyyy-MM-dd` for another
+night's window; `night` is at most tomorrow, whose window holds today's traces so far. It answers `409` when a run of the project
 is in progress, or the project already has a list (stage 2a builds a project once), and `501` when `TOPICS_ENABLED` is
 off. It does not check the workspace's ai-labels opt-in or `TOPICS_NIGHTLY_MIN_VECTORS`.
 

@@ -346,6 +346,29 @@ class TopicsNightlyJobTest {
         try (var response = rebuild(workspaceId, projectId)) {
             assertThat(response.getStatus()).isEqualTo(409);
         }
+        try (var response = rebuild(workspaceId, UUID.randomUUID(), "yesterday")) {
+            assertThat(response.getStatus()).isEqualTo(400);
+        }
+        try (var response = rebuild(workspaceId, UUID.randomUUID(),
+                LocalDate.now(ZoneOffset.UTC).plusDays(2).toString())) {
+            assertThat(response.getStatus()).isEqualTo(400);
+        }
+    }
+
+    @Test
+    @DisplayName("the internal endpoint builds the window of the night it is given")
+    void rebuildByHandForANight() {
+        var workspaceId = enabledWorkspace();
+        var projectId = UUID.randomUUID();
+        seed(workspaceId, projectId, 0, BUILT);
+        stubAnswer(FIXTURE.answer);
+
+        try (var response = rebuild(workspaceId, projectId, night().toString())) {
+            assertThat(response.getStatus()).isEqualTo(202);
+        }
+        Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> assertThat(runs(projectId))
+                .singleElement().satisfies(run -> assertThat(run.status()).isEqualTo(TopicRun.Status.SAVED)));
+        assertThat(topics(projectId)).isNotEmpty().allSatisfy(topic -> assertThat(topic.born()).isEqualTo(night()));
     }
 
     @Test
@@ -401,8 +424,13 @@ class TopicsNightlyJobTest {
     }
 
     private Response rebuild(String workspaceId, UUID projectId) {
-        return client.target("%s/v1/internal/topics/projects/%s/rebuild".formatted(baseUrl, projectId))
-                .queryParam("workspace_id", workspaceId)
+        return rebuild(workspaceId, projectId, null);
+    }
+
+    private Response rebuild(String workspaceId, UUID projectId, String night) {
+        var target = client.target("%s/v1/internal/topics/projects/%s/rebuild".formatted(baseUrl, projectId))
+                .queryParam("workspace_id", workspaceId);
+        return (night == null ? target : target.queryParam("night", night))
                 .request(MediaType.APPLICATION_JSON_TYPE)
                 .post(Entity.json(""));
     }

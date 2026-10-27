@@ -134,13 +134,13 @@ public class TopicsNightlyService {
 
     /**
      * Starts a first build of the project now, outside the night, and returns its run id; the run goes on in the
-     * background with the same timeout, and its outcome is its {@code topic_runs} row. The night is today's (UTC), so the
-     * window ends at today's start.
+     * background with the same timeout, and its outcome is its {@code topic_runs} row. The window is the one of
+     * {@code night}: it ends at that day's start (UTC).
      *
      * @throws ConflictException when a run of the project is in progress, or it already has a topic list (stage 2a
      *                           builds a project once)
      */
-    public UUID rebuildNow(@NonNull String workspaceId, @NonNull UUID projectId) {
+    public UUID rebuildNow(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull LocalDate night) {
         if (!lockProject(projectId)) {
             throw new ConflictException("A topics run of project '%s' is in progress".formatted(projectId));
         }
@@ -155,7 +155,6 @@ public class TopicsNightlyService {
             var runId = rebuildService.startRun(workspaceId, projectId, TopicRun.Mode.FIRST_BUILD);
             log.info("Topics run '{}' started by hand, workspace '{}', project '{}'", runId, workspaceId, projectId);
             var candidate = new Candidate(workspaceId, projectId, 0);
-            var night = LocalDate.now(ZoneOffset.UTC);
             Thread.ofPlatform().name("topics-rebuild-" + projectId).daemon(true).start(() -> {
                 var executor = Executors.newThreadPerTaskExecutor(
                         Thread.ofPlatform().name("topics-rebuild-run-", 0).daemon(true).factory());

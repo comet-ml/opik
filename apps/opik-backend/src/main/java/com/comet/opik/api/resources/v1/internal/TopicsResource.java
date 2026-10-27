@@ -8,6 +8,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.inject.Inject;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
@@ -20,6 +21,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeParseException;
 import java.util.Map;
 import java.util.UUID;
 
@@ -41,16 +45,28 @@ public class TopicsResource {
 
     @POST
     @Path("/projects/{projectId}/rebuild")
-    @Operation(operationId = "rebuildProjectTopics", summary = "Build a project's topic list now", description = "Starts the project's first build in the background and returns its run id; the run's outcome is its topic_runs row. 409 when a run of the project is in progress or it already has a list.", responses = {
+    @Operation(operationId = "rebuildProjectTopics", summary = "Build a project's topic list now", description = "Starts the project's first build for the night (default today, UTC; at most tomorrow) in the background and returns its run id; the run's outcome is its topic_runs row. 409 when a run of the project is in progress or it already has a list.", responses = {
             @ApiResponse(responseCode = "202", description = "The run started"),
             @ApiResponse(responseCode = "409", description = "A run is in progress, or the project has a list"),
             @ApiResponse(responseCode = "501", description = "Topics are off")})
     public Response rebuild(@PathParam("projectId") UUID projectId,
-            @QueryParam("workspace_id") @NotBlank String workspaceId) {
+            @QueryParam("workspace_id") @NotBlank String workspaceId,
+            @QueryParam("night") String night) {
         if (!config.isEnabled()) {
             return Response.status(Response.Status.NOT_IMPLEMENTED).build();
         }
-        var runId = nightlyService.rebuildNow(workspaceId, projectId);
+        var today = LocalDate.now(ZoneOffset.UTC);
+        LocalDate runNight;
+        try {
+            runNight = night == null ? today : LocalDate.parse(night);
+        } catch (DateTimeParseException exception) {
+            throw new BadRequestException("night must be a date, yyyy-MM-dd, night '%s'".formatted(night));
+        }
+        // Tomorrow's window ends at tomorrow's start, so it holds today's traces so far; a later night holds nothing more.
+        if (runNight.isAfter(today.plusDays(1))) {
+            throw new BadRequestException("night must not be after tomorrow, night '%s'".formatted(runNight));
+        }
+        var runId = nightlyService.rebuildNow(workspaceId, projectId, runNight);
         return Response.accepted(Map.of("run_id", runId)).build();
     }
 }
