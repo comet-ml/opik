@@ -481,6 +481,14 @@ describe("Prompt - format()", () => {
         expect(prompt.format({})).toBe("012");
       });
 
+      it("should render a range with a finite fractional step", () => {
+        const prompt = makeJinja2Prompt(
+          "{% for i in range(0, 2, 0.5) %}{{ i }},{% endfor %}"
+        );
+
+        expect(prompt.format({})).toBe("0,0.5,1,1.5,");
+      });
+
       it("should allow a small range with large opposite-signed bounds", () => {
         // `to - from` overflows to Infinity here, but the range emits far fewer
         // than MAX_RANGE values, so it must still be allowed.
@@ -520,6 +528,30 @@ describe("Prompt - format()", () => {
         expect(() =>
           prompt.format({ start: 0, stop: 3, step: NaN })
         ).toThrow(PromptValidationError);
+      });
+
+      it("should reject an infinite range step", () => {
+        const prompt = makeJinja2Prompt("{{ range(start, stop, step) | length }}");
+
+        expect(() =>
+          prompt.format({ start: 0, stop: 3, step: Infinity })
+        ).toThrow(PromptValidationError);
+        expect(() =>
+          prompt.format({ start: 0, stop: 3, step: -Infinity })
+        ).toThrow(PromptValidationError);
+      });
+
+      it("should reject non-finite range bounds", () => {
+        const prompt = makeJinja2Prompt("{{ range(start, stop) | length }}");
+
+        for (const bounds of [
+          { start: null, stop: 3 },
+          { start: 0, stop: null },
+          { start: NaN, stop: 3 },
+          { start: Infinity, stop: 3 },
+        ]) {
+          expect(() => prompt.format(bounds)).toThrow(PromptValidationError);
+        }
       });
 
       it("should not execute a constructor call chain", () => {
