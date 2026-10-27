@@ -2,6 +2,7 @@ package com.comet.opik.infrastructure.llm.customllm;
 
 import com.comet.opik.TestConfigUtils;
 import com.comet.opik.infrastructure.net.DestinationGuard;
+import com.comet.opik.infrastructure.net.DestinationGuardDns;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import dev.langchain4j.exception.HttpException;
@@ -221,7 +222,13 @@ class CustomLlmHttpClientTest {
 
     /** A stream that sends its headers, then nothing for {@code silence}, then one event. */
     private static RawReply silentStream(Duration silence, String data) {
+        return delayedStream(Duration.ZERO, silence, data);
+    }
+
+    /** A stream that waits {@code headerDelay} before its headers, then {@code silence} before its one event. */
+    private static RawReply delayedStream(Duration headerDelay, Duration silence, String data) {
         return out -> {
+            Thread.sleep(headerDelay);
             out.write("""
                     HTTP/1.1 200 OK\r
                     Content-Type: text/event-stream\r
@@ -232,6 +239,104 @@ class CustomLlmHttpClientTest {
             Thread.sleep(silence);
             out.write("data: %s\n\n".formatted(data).getBytes(StandardCharsets.UTF_8));
         };
+    }
+
+    /**
+     * The read timeout bounds the wait for the headers only, the stream read timeout the body only, in either order of
+     * the two: headers slower than the stream read timeout but within the read timeout arrive, and a body silent for
+     * longer than the stream read timeout then fails at it.
+     */
+    @ParameterizedTest
+    @EnumSource(StreamPath.class)
+    void aStreamReadTimeoutShorterThanTheReadTimeoutBoundsTheBodyOnly(StreamPath streamPath) throws Exception {
+        var readTimeout = Duration.ofSeconds(3);
+        var streamReadTimeout = Duration.ofMillis(500);
+        var headerDelay = Duration.ofSeconds(1);
+        var data = RandomStringUtils.secure().nextAlphanumeric(10);
+        var timedClient = clientWithTimeouts(readTimeout, streamReadTimeout, okHttpClient);
+        try (var server = rawServer(delayedStream(headerDelay, Duration.ZERO, data))) {
+            var expectedEvents = List.of(new ServerSentEvent(null, data));
+
+            var actualEvents = streamedEvents(timedClient, streamPath, rawRequest(server));
+
+            assertThat(actualEvents).isEqualTo(expectedEvents);
+        }
+        try (var server = rawServer(delayedStream(headerDelay, Duration.ofSeconds(30), data))) {
+            long startNanos = System.nanoTime();
+
+            Throwable actualError = failure(timedClient, CallPath.valueOf(streamPath.name()), rawRequest(server));
+
+            var actualElapsed = Duration.ofNanos(System.nanoTime() - startNanos);
+            assertThat(actualError).isExactlyInstanceOf(TimeoutException.class);
+            assertThat(actualElapsed).isBetween(headerDelay.plus(streamReadTimeout), readTimeout);
+        }
+    }
+
+    /** An unset read timeout leaves the header wait unbounded, as with the JDK client; the body keeps its bound. */
+    @ParameterizedTest
+    @EnumSource(StreamPath.class)
+    void anUnsetReadTimeoutLeavesTheHeaderWaitUnbounded(StreamPath streamPath) throws Exception {
+        var streamReadTimeout = Duration.ofMillis(500);
+        var headerDelay = Duration.ofMillis(1_500);
+        var data = RandomStringUtils.secure().nextAlphanumeric(10);
+        var timedClient = clientWithTimeouts(Duration.ZERO, streamReadTimeout, okHttpClient);
+        try (var server = rawServer(delayedStream(headerDelay, Duration.ZERO, data))) {
+            var expectedEvents = List.of(new ServerSentEvent(null, data));
+
+            var actualEvents = streamedEvents(timedClient, streamPath, rawRequest(server));
+
+            assertThat(actualEvents).isEqualTo(expectedEvents);
+        }
+        try (var server = rawServer(delayedStream(Duration.ZERO, Duration.ofSeconds(30), data))) {
+            long startNanos = System.nanoTime();
+
+            Throwable actualError = failure(timedClient, CallPath.valueOf(streamPath.name()), rawRequest(server));
+
+            var actualElapsed = Duration.ofNanos(System.nanoTime() - startNanos);
+            assertThat(actualError).isExactlyInstanceOf(TimeoutException.class);
+            assertThat(actualElapsed).isBetween(streamReadTimeout, Duration.ofSeconds(5));
+        }
+    }
+
+    /**
+     * The header wait starts once the connection is established: resolving the host, which the connect timeout
+     * bounds, takes longer than the read timeout here, and the headers that follow within it still arrive.
+     */
+    @ParameterizedTest
+    @EnumSource(StreamPath.class)
+    void connectingDoesNotCountAgainstTheReadTimeout(StreamPath streamPath) throws Exception {
+        var readTimeout = Duration.ofSeconds(1);
+        var slowResolution = Duration.ofMillis(1_500);
+        var data = RandomStringUtils.secure().nextAlphanumeric(10);
+        var slowDnsGuard = DestinationGuard.builder()
+                .mode(DestinationGuard.Mode.RELAXED)
+                .scheme(DestinationGuard.Scheme.PLAINTEXT_OR_TLS)
+                .resolver(host -> {
+                    try {
+                        Thread.sleep(slowResolution);
+                    } catch (InterruptedException exception) {
+                        Thread.currentThread().interrupt();
+                    }
+                    return InetAddress.getAllByName(host);
+                })
+                .build();
+        var slowDnsClient = DestinationGuardDns.clientBuilder(slowDnsGuard).protocols(List.of(Protocol.HTTP_1_1))
+                .connectTimeout(Duration.ofSeconds(10))
+                .build();
+        var timedClient = clientWithTimeouts(readTimeout, STREAM_READ_TIMEOUT, slowDnsClient);
+        try (var server = rawServer(delayedStream(Duration.ofMillis(300), Duration.ZERO, data))) {
+            var expectedEvents = List.of(new ServerSentEvent(null, data));
+            long startNanos = System.nanoTime();
+
+            var actualEvents = streamedEvents(timedClient, streamPath, rawRequest(server));
+
+            var actualElapsed = Duration.ofNanos(System.nanoTime() - startNanos);
+            assertThat(actualEvents).isEqualTo(expectedEvents);
+            assertThat(actualElapsed).isGreaterThan(slowResolution);
+        } finally {
+            slowDnsClient.dispatcher().executorService().shutdownNow();
+            slowDnsClient.connectionPool().evictAll();
+        }
     }
 
     /**

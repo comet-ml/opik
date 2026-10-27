@@ -4,7 +4,7 @@ import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmServiceProvider;
 import com.comet.opik.infrastructure.llm.customllm.LlmHttpClientBuilders;
-import com.comet.opik.infrastructure.llm.customllm.ResponseHeadersDeadline;
+import com.comet.opik.infrastructure.llm.customllm.StreamCallTimeouts;
 import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.comet.opik.infrastructure.net.DestinationGuardDns;
 import com.google.inject.AbstractModule;
@@ -41,12 +41,18 @@ public class OpenAIModule extends AbstractModule {
                 .build())
                 .followRedirects(false)
                 .followSslRedirects(false)
-                // a stream's read timeout is the stream read timeout, see OpenAIClientGenerator; the wait for any
-                // call's headers is bounded by the read timeout
-                .addInterceptor(ResponseHeadersDeadline.within(Optional.ofNullable(config.getReadTimeout())
-                        .map(timeout -> Duration.ofMillis(timeout.toMilliseconds()))
-                        .orElse(Duration.ZERO)))
+                // the read timeout bounds every call's headers, then the stream read timeout an event stream's body;
+                // the SDK's own per-call read timeout never fires first, see OpenAIClientGenerator
+                .addNetworkInterceptor(StreamCallTimeouts.forEventStreams(readTimeout(config),
+                        Duration.ofMillis(config.getStreamReadTimeout().toMilliseconds())))
                 .build());
+    }
+
+    /** The configured read timeout, none when unset. */
+    static Duration readTimeout(LlmProviderClientConfig config) {
+        return Optional.ofNullable(config.getReadTimeout())
+                .map(timeout -> Duration.ofMillis(timeout.toMilliseconds()))
+                .orElse(Duration.ZERO);
     }
 
     @Provides

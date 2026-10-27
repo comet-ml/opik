@@ -75,7 +75,7 @@ class CustomLlmHttpClient implements HttpClient {
 
     /**
      * {@link #client} for streams, on the same pool and dispatcher: the read timeout bounds the wait for the headers,
-     * and the stream read timeout each read of the body.
+     * and the stream read timeout each read of the body, see {@link StreamCallTimeouts}.
      */
     private final OkHttpClient streamingClient;
 
@@ -84,11 +84,9 @@ class CustomLlmHttpClient implements HttpClient {
 
     CustomLlmHttpClient(@NonNull OkHttpClient client, int errorBodyMaxSize, @NonNull Duration streamReadTimeout) {
         this.client = client;
-        // the read timeout bounds a stream's headers, then the stream read timeout each read of its body
-        this.streamingClient = client.newBuilder()
-                .readTimeout(streamReadTimeout)
-                .addInterceptor(ResponseHeadersDeadline.within(Duration.ofMillis(client.readTimeoutMillis())))
-                .build();
+        this.streamingClient = StreamCallTimeouts
+                .forStreams(Duration.ofMillis(client.readTimeoutMillis()), streamReadTimeout)
+                .applyTo(client);
         this.errorBodyMaxSize = errorBodyMaxSize;
     }
 
@@ -142,7 +140,8 @@ class CustomLlmHttpClient implements HttpClient {
 
             @Override
             public void onResponse(@NonNull Call call, @NonNull Response response) {
-                var body = untimedBody(response);
+                // its timeout is the stream read timeout, see StreamCallTimeouts
+                var body = response.body();
                 try (response; InputStream bodyStream = body.byteStream()) {
                     if (!response.isSuccessful()) {
                         var exception = new HttpException(response.code(), readErrorBody(call, body));
@@ -198,7 +197,8 @@ class CustomLlmHttpClient implements HttpClient {
     /** Sends the response head and then each event parsed from the body, until the body ends or the tube does. */
     private void streamEvents(Call call, Response response, ServerSentEventParser parser,
             Tube<HttpStreamingEvent> tube) throws IOException {
-        var body = untimedBody(response);
+        // its timeout is the stream read timeout, see StreamCallTimeouts
+        var body = response.body();
         if (!response.isSuccessful()) {
             tube.fail(new HttpException(response.code(), readErrorBody(call, body)));
             return;

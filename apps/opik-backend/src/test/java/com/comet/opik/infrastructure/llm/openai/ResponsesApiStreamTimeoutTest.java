@@ -88,10 +88,16 @@ class ResponsesApiStreamTimeoutTest {
     }
 
     private static ServerSocket silentStreamServer(Duration silence) throws IOException {
+        return delayedStreamServer(Duration.ZERO, silence);
+    }
+
+    /** A raw server that waits {@code headerDelay} before the headers, then {@code silence} before the events. */
+    private static ServerSocket delayedStreamServer(Duration headerDelay, Duration silence) throws IOException {
         var server = new ServerSocket(0, 1, InetAddress.getLoopbackAddress());
         Thread.ofVirtual().start(() -> {
             try (Socket socket = server.accept(); var out = socket.getOutputStream()) {
                 readRequest(socket.getInputStream());
+                Thread.sleep(headerDelay);
                 out.write("""
                         HTTP/1.1 200 OK\r
                         Content-Type: text/event-stream\r
@@ -135,7 +141,6 @@ class ResponsesApiStreamTimeoutTest {
     private static LlmProviderOpenAiResponses provider(ServerSocket server, String readTimeout,
             String streamReadTimeout) {
         var config = TestConfigUtils.loadConfigTest().getLlmProviderClient();
-        config.setConnectTimeout(TestConfigUtils.duration(readTimeout));
         config.setReadTimeout(TestConfigUtils.duration(readTimeout));
         config.setStreamReadTimeout(TestConfigUtils.duration(streamReadTimeout));
         var generator = new OpenAIClientGenerator(config, new OpenAIModule().responsesApiHttpClient(config),
@@ -148,7 +153,6 @@ class ResponsesApiStreamTimeoutTest {
 
     private static Outcome stream(ServerSocket server, String readTimeout, String streamReadTimeout)
             throws Exception {
-        // before the fix, the SDK took the connect timeout as both its read and its whole-call timeout
         var provider = provider(server, readTimeout, streamReadTimeout);
         var chunks = new CopyOnWriteArrayList<ChatCompletionResponse>();
         var done = new CompletableFuture<Throwable>();
@@ -178,6 +182,72 @@ class ResponsesApiStreamTimeoutTest {
             var actualElapsed = Duration.ofNanos(System.nanoTime() - startNanos);
             assertThat(actualResponse.choices().getFirst().message().content()).isEqualTo(expectedContent);
             assertThat(actualElapsed).isGreaterThanOrEqualTo(pause);
+        }
+    }
+
+    /** Headers within the read timeout arrive, though slower than the SDK's own read timeout would allow alone. */
+    @Test
+    @DisplayName("a Responses API stream whose headers arrive within the read timeout completes")
+    void headersWithinTheReadTimeoutArrive() throws Exception {
+        try (var server = delayedStreamServer(Duration.ofMillis(300), Duration.ZERO)) {
+            var actualOutcome = stream(server, "1s", "5s");
+
+            assertThat(actualOutcome.error()).isNull();
+            assertThat(actualOutcome.chunks()).isNotEmpty();
+        }
+    }
+
+    /**
+     * A raw server that never answers: for each connection, the time from reading the request to the client giving
+     * up on it. The SDK retries a failed call, so every connection is accepted.
+     */
+    private static ServerSocket neverAnsweringServer(List<Duration> waits) throws IOException {
+        var server = new ServerSocket(0, 8, InetAddress.getLoopbackAddress());
+        Thread.ofVirtual().start(() -> {
+            while (!server.isClosed()) {
+                try {
+                    var socket = server.accept();
+                    Thread.ofVirtual().start(() -> {
+                        try (socket) {
+                            readRequest(socket.getInputStream());
+                            long startNanos = System.nanoTime();
+                            // blocks until the client closes the connection
+                            while (socket.getInputStream().read() != -1) {
+                                // nothing is expected
+                            }
+                            waits.add(Duration.ofNanos(System.nanoTime() - startNanos));
+                        } catch (IOException exception) {
+                            // a reset is the client giving up too
+                        }
+                    });
+                } catch (IOException exception) {
+                    return;
+                }
+            }
+        });
+        return server;
+    }
+
+    /**
+     * Headers that never arrive fail at the read timeout, not at the longer stream read timeout that the SDK's own
+     * read timeout is set to. Measured per connection, from the request on, as the SDK retries the call.
+     */
+    @Test
+    @DisplayName("a Responses API stream whose headers never arrive fails at the read timeout")
+    void headersThatNeverArriveFailAtTheReadTimeout() throws Exception {
+        var readTimeout = Duration.ofMillis(500);
+        var expectedMaxWait = Duration.ofMillis(1_500);
+        var actualWaits = new CopyOnWriteArrayList<Duration>();
+        try (var server = neverAnsweringServer(actualWaits)) {
+
+            var actualOutcome = stream(server, "500ms", "5s");
+
+            assertThat(actualOutcome.error()).isExactlyInstanceOf(OpenAIIoException.class)
+                    .cause()
+                    .isExactlyInstanceOf(SocketTimeoutException.class)
+                    .hasMessage("the response headers took longer than the read timeout");
+            assertThat(actualWaits).isNotEmpty().allSatisfy(wait -> assertThat(wait).isBetween(readTimeout,
+                    expectedMaxWait));
         }
     }
 

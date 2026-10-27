@@ -7,7 +7,7 @@ import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
 import com.comet.opik.infrastructure.llm.OpenAiClientConfig;
 import com.comet.opik.infrastructure.llm.customllm.LlmHttpClientBuilders;
-import com.comet.opik.infrastructure.llm.customllm.ResponseHeadersDeadline;
+import com.comet.opik.infrastructure.llm.customllm.StreamCallTimeouts;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -255,15 +255,16 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
 
     /**
      * The SDK's timeout is a whole-call timeout, which would end a stream after that long however lively it is, and it
-     * is the read timeout too. A stream has no whole-call timeout, and its read timeout, which bounds each read of the
-     * body, is the stream read timeout; the wait for its headers is bounded by the read timeout, see
-     * {@link ResponseHeadersDeadline}. All of it is the call's own, set on no connection another call shares.
+     * is the read timeout too. A stream has no whole-call timeout; the read timeout bounds its headers and the stream
+     * read timeout each read of its body, see {@link StreamCallTimeouts}, so the SDK's read timeout is set to fire
+     * before neither. All of it is the call's own, set on no connection another call shares.
      */
     private Timeout streamingTimeout() {
         var connectTimeout = Optional.ofNullable(llmProviderClientConfig.getConnectTimeout());
         return Timeout.builder()
                 .connect(connectTimeout.map(Duration::toJavaDuration).orElse(null))
-                .read(llmProviderClientConfig.getStreamReadTimeout().toJavaDuration())
+                .read(StreamCallTimeouts.clientReadTimeout(OpenAIModule.readTimeout(llmProviderClientConfig),
+                        llmProviderClientConfig.getStreamReadTimeout().toJavaDuration()))
                 .write(Optional.ofNullable(llmProviderClientConfig.getWriteTimeout()).or(() -> connectTimeout)
                         .map(Duration::toJavaDuration).orElse(null))
                 .request(Duration.seconds(0).toJavaDuration())
