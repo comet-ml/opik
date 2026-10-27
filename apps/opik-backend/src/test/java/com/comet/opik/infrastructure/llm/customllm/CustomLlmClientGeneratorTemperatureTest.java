@@ -6,6 +6,7 @@ import com.comet.opik.domain.llm.ParamResolver;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import dev.langchain4j.model.chat.request.ChatRequestParameters;
+import okhttp3.OkHttpClient;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -30,7 +31,7 @@ class CustomLlmClientGeneratorTemperatureTest {
 
     private ChatRequestParameters judgeParametersFor(String modelName, Double temperature) {
         var generator = new CustomLlmClientGenerator(new LlmProviderClientConfig(), mock(ProviderBaseUrlGuard.class),
-                mock(AuthTokenProvider.class));
+                mock(AuthTokenProvider.class), new OkHttpClient());
         var config = LlmProviderClientApiConfig.builder()
                 .apiKey("test-key")
                 .baseUrl("https://gateway.example.com/v1")

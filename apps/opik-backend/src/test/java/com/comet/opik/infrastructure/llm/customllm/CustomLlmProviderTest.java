@@ -76,7 +76,8 @@ class CustomLlmProviderTest {
                 .mode(DestinationGuard.Mode.RELAXED)
                 .scheme(DestinationGuard.Scheme.PLAINTEXT_OR_TLS)
                 .build();
-        clientGenerator = new CustomLlmClientGenerator(clientConfig, relaxedGuard, mock(AuthTokenProvider.class));
+        clientGenerator = new CustomLlmClientGenerator(clientConfig, relaxedGuard, mock(AuthTokenProvider.class),
+                new CustomLlmModule().customLlmHttpClient(relaxedGuard));
     }
 
     @AfterAll

@@ -205,7 +205,7 @@ class LlmProviderFactoryTest {
         // Register custom LLM service (required for getService to work)
         CustomLlmModule customLlmModule = new CustomLlmModule();
         CustomLlmClientGenerator customLlmClientGenerator = customLlmModule.clientGenerator(llmProviderClientConfig,
-                RELAXED_GUARD, mock(AuthTokenProvider.class));
+                RELAXED_GUARD, mock(AuthTokenProvider.class), customLlmModule.customLlmHttpClient(RELAXED_GUARD));
         customLlmModule.llmServiceProvider(llmProviderFactory, customLlmClientGenerator);
 
         // When & Then - Should successfully get the service
@@ -243,7 +243,7 @@ class LlmProviderFactoryTest {
         // Register custom LLM service (required for getService to work)
         CustomLlmModule customLlmModule = new CustomLlmModule();
         CustomLlmClientGenerator customLlmClientGenerator = customLlmModule.clientGenerator(llmProviderClientConfig,
-                RELAXED_GUARD, mock(AuthTokenProvider.class));
+                RELAXED_GUARD, mock(AuthTokenProvider.class), customLlmModule.customLlmHttpClient(RELAXED_GUARD));
         customLlmModule.llmServiceProvider(llmProviderFactory, customLlmClientGenerator);
 
         // When & Then - Should throw BadRequestException

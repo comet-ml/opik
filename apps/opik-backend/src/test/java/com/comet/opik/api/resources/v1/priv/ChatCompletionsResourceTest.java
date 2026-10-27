@@ -30,6 +30,7 @@ import com.comet.opik.infrastructure.llm.vertexai.VertexAIModelName;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.github.tomakehurst.wiremock.verification.LoggedRequest;
 import com.redis.testcontainers.RedisContainer;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.openai.internal.chat.Content;
@@ -82,6 +83,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.anyRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.head;
 import static com.github.tomakehurst.wiremock.client.WireMock.headRequestedFor;
+import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
@@ -492,6 +494,33 @@ class ChatCompletionsResourceTest {
             var actualStreamedErrors = chatCompletionsClient.createAndGetStreamedError(API_KEY, workspaceName,
                     streamed);
             assertThat(actualStreamedErrors).containsExactly(expectedStreamedError);
+        }
+
+        @Test
+        @DisplayName("a custom provider is called over HTTP/1.1 and its redirect isn't followed, streamed or not")
+        void customProviderIsCalledOverHttp11WithoutFollowingRedirects() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            mockTargetWorkspace(workspaceName, UUID.randomUUID().toString());
+            createCustomProvider(workspaceName);
+            var redirectTarget = "/elsewhere-" + UUID.randomUUID();
+            WIRE_MOCK.server().stubFor(post(urlPathMatching(CHAT_COMPLETIONS_REGEX))
+                    .willReturn(aResponse().withStatus(307).withHeader("Location", redirectTarget)));
+            WIRE_MOCK.server().stubFor(any(urlPathEqualTo(redirectTarget))
+                    .willReturn(okJson(SUCCESS_BODY)));
+            var expected = new ErrorMessage(HttpStatus.SC_INTERNAL_SERVER_ERROR,
+                    "Unexpected error calling LLM provider");
+
+            var request = ChatCompletionRequest.builder().stream(false).model(MODEL).addUserMessage("ping").build();
+            assertThat(chatCompletionsClient.create(API_KEY, workspaceName, request,
+                    HttpStatus.SC_INTERNAL_SERVER_ERROR)).isEqualTo(expected);
+            var streamed = ChatCompletionRequest.builder().stream(true).model(MODEL).addUserMessage("ping").build();
+            assertThat(chatCompletionsClient.createAndGetStreamedError(API_KEY, workspaceName, streamed))
+                    .containsExactly(expected);
+
+            WIRE_MOCK.server().verify(0, anyRequestedFor(urlPathEqualTo(redirectTarget)));
+            assertThat(WIRE_MOCK.server().findAll(postRequestedFor(urlPathMatching(CHAT_COMPLETIONS_REGEX))))
+                    .extracting(LoggedRequest::getProtocol)
+                    .containsOnly("HTTP/1.1");
         }
 
         @Test
