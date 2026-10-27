@@ -583,6 +583,27 @@ areas:
       # /traces/threads/stats, which is the threads area's.
       environment-filter:      { covered: false, note: "The Threads tab's environment filter and the shared `environment` URL param: a 4-thread project across two environments and one untagged (2/1/1, so no two answers are the same number), asserted at the API on both the listing and /traces/threads/stats and in the UI on both the rendered rows and the count card above them — the card being the silent half, since a count that ignored the filter looks exactly like a correct one. Also: the param surviving a reload and a switch to the Traces tab, and an inbound name the workspace registry does not know being dropped with threads_page reset to 1. The fixture registers its environments by seeding traces that carry them (the path a user's data takes) and proves the seed at the trace level before the browser opens, since a UI assertion over an environment that never landed cannot fail. NOT covered: export honouring the selection — the control sits behind the EXPORT_ENABLED feature toggle, so it is not deterministic across environments; and the Spans tab, which shares the param with Traces." }
       thread-level-metrics:    { covered: true,  tier: t2-cuj, note: "conversational metrics; also the thread panel header's duration, asserted at both ends of formatDuration(_, false) — a 3_615_300 ms thread (float remainder 15.300000000000182) rendering as '1h 15.3s', and a 5 ms thread keeping '0.005s'" }
+      # New for 2.2.125, from the release pass's own staging exploration of
+      # opik#9234 (OPIK-8650). `coverage/pending/` held nothing this release.
+      #
+      # Its own key, and NOT one of the three above it. `open-thread-panel` and
+      # `turn-order-io` are what `thread-logging-smoke.spec.ts` already covers at
+      # t1 — that the panel opens and that its turns carry the right text in the
+      # right order — and every one of those assertions passes over a message
+      # that has overflowed its container, because an escaped element is still
+      # visible, still ordered and still carries its text. Folding layout under
+      # them would retire the question permanently while nothing had tested it.
+      #
+      # Not the visual key `threads.visual.thread-panel` below either, though it
+      # is the obvious neighbour: that one is `@vcap:`-shaped — one screenshot
+      # asserting a whole page state, run as the `visual-tests/` suite — and the
+      # spec here deliberately measures boxes instead, so that it is immune to
+      # the font, theme and scrollbar drift a snapshot is not. The visual key
+      # stays `covered: false`; a snapshot of this panel is still worth having.
+      #
+      # The capability is in the `threads` area even though the spec lives in
+      # trace-explore/ — that is this area's `spec_dir`, shared with traces.
+      message-wrapping:        { covered: false, note: "Thread message content with no break opportunity stays inside its container instead of overflowing it (opik#9234): a four-turn thread seeded with a 400-character unspaced token, a break-free URL and a wide nested JSON object, measured rather than eyeballed — the message container's scrollWidth equals its clientWidth, and no descendant of any [data-trace-message-id] has a box starting left of or ending right of that container. The left half is the reported bug and the one a scrollbar cannot rescue: the container is overflow-y-auto, so the X axis is auto too and content past the RIGHT edge becomes a scrollbar, while content past the LEFT edge is simply unreachable in a left-to-right layout. Asserted at a 1600px and a 900px viewport, on the thread detail panel AND on the SME annotator thread view, which renders the same shared TraceMessages component from a separate layout at a much narrower message column. Also covers the list's trailing space (pb-6), asserted only once the thread is proven taller than its container, since a short thread leaves space below the last message whatever the padding is. The fixture proves it can discriminate before any box is read: every turn's input and output must still be an OBJECT when read back, because TraceMessage renders an object through the JSON view the fix touched and anything else through MarkdownPreview, which breaks long words with or without opik#9234. NOT covered: the annotation-queues annotator view (a third surface rendering the same component), and the appearance of the wrap — no pixel snapshot is taken, so a break at the wrong place inside a word would pass." }
 
     visual:
       logs-threads-view:   { covered: true,  state: default, spec: "visual-comparison.spec.ts 03" }
