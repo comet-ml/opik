@@ -48,7 +48,7 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
         <JsonView
           src={message}
           {...jsonViewTheme}
-          className="comet-code"
+          className="comet-code [overflow-wrap:anywhere]"
           collapseStringsAfterLength={10000}
           enableClipboard={false}
         />
@@ -67,7 +67,7 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
       return (
         <JsonView
           src={message}
-          className="comet-code"
+          className="comet-code [overflow-wrap:anywhere]"
           {...jsonViewTheme}
           collapseStringsAfterLength={10000}
           enableClipboard={false}
@@ -83,7 +83,7 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
   return (
     <div className="flex flex-col gap-2" data-trace-message-id={trace.id}>
       <div className="flex justify-end pl-16">
-        <div className="rounded-t-xl rounded-bl-xl bg-[var(--message-input-background)] px-4 py-2">
+        <div className="min-w-0 rounded-t-xl rounded-bl-xl bg-[var(--message-input-background)] px-4 py-2">
           {input}
         </div>
       </div>
