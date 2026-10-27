@@ -143,6 +143,9 @@ _ALLOWED_PARAMS = frozenset({
     "frequency_penalty", "reasoning_effort", "custom_parameters",
     # The same OpenRouter sampling settings, as older saved runs carry them, flat.
     "top_k", "min_p", "top_a", "repetition_penalty",
+    # LiteLLM's other OpenAI parameters that only shape the output or attribute the call. Left out on purpose: those
+    # that pick a service tier, store or cache the call, add retries or server-side tools, or change the output type.
+    "user", "safety_identifier", "logit_bias", "verbosity", "prediction", "stream_options", "thinking",
 })
 # Headers the gateway reads a caller's identity from (opik-backend's AuthFilter: the workspace header, the API key in
 # Authorization, the session cookie), plus the proxy's, compared in lower case. A caller's value is dropped, so a
@@ -195,7 +198,7 @@ def route_litellm_calls_through_gateway(workspace_name):
         if dropped - _dropped_params_logged:
             _dropped_params_logged.update(dropped)
             # Names only: values can be credentials or URLs.
-            logger.warning(f"Dropped model parameters a Studio LLM call does not take: {sorted(dropped)}")
+            logger.warning(f"Dropped model parameters not passed to the gateway: {sorted(dropped)}")
         kwargs["api_base"] = OPENAI_API_BASE
         extra_headers = {}
         dropped_headers = set()
@@ -206,7 +209,7 @@ def route_litellm_calls_through_gateway(workspace_name):
                 extra_headers[name] = value
         if dropped_headers - _dropped_headers_logged:
             _dropped_headers_logged.update(dropped_headers)
-            logger.warning(f"Dropped headers a Studio LLM call does not set itself: {sorted(dropped_headers)}")
+            logger.warning(f"Dropped headers not passed to the gateway: {sorted(dropped_headers)}")
         extra_headers["Comet-Workspace"] = _gateway_workspace["name"]
         kwargs["extra_headers"] = extra_headers
         return kwargs

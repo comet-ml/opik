@@ -110,7 +110,7 @@ class TestRouteLitellmCallsThroughGateway:
                 fake_litellm.completion(messages=[], extra_headers={"comet-workspace": "other", "Authorization": "x"})
 
         assert [r.getMessage() for r in caplog.records] == [
-            "Dropped headers a Studio LLM call does not set itself: ['Authorization', 'comet-workspace']"]
+            "Dropped headers not passed to the gateway: ['Authorization', 'comet-workspace']"]
 
     def test_noop_when_gateway_not_active(self, fake_litellm, monkeypatch):
         monkeypatch.setattr(optimizer_runner, "OPENAI_API_BASE", None)
@@ -208,6 +208,12 @@ REROUTING_PARAMS = {
     "extra_body": {"url": "http://10.0.0.4"},
     "aws_region_name": "us-east-1",
     "vertex_project": "p",
+    # LiteLLM OpenAI parameters that pick a tier, store or cache the call, or add retries or server-side tools.
+    "service_tier": "flex",
+    "store": True,
+    "prompt_cache_key": "k",
+    "max_retries": 9,
+    "web_search_options": {},
 }
 
 # Every parameter a Studio call keeps, with a value of its own type.
@@ -218,6 +224,9 @@ GENERATION_PARAMS = {
     "timeout": 30, "num_retries": 6, "metadata": {"opik": {}}, "tools": [], "tool_choice": "auto",
     "parallel_tool_calls": False, "custom_parameters": {"thinking_level": "low"},
     "top_k": 40, "min_p": 0.1, "top_a": 0.1, "repetition_penalty": 1.1,
+    "user": "u", "safety_identifier": "s", "logit_bias": {"50256": -100}, "verbosity": "low",
+    "prediction": {"type": "content", "content": "x"}, "stream_options": {"include_usage": True},
+    "thinking": {"type": "enabled", "budget_tokens": 1024},
 }
 
 
@@ -256,7 +265,7 @@ class TestModelParameterAllowlist:
                 fake_litellm.completion(model="openai/m", messages=[], **REROUTING_PARAMS)
 
         assert [r.getMessage() for r in caplog.records] == [
-            f"Dropped model parameters a Studio LLM call does not take: {sorted(REROUTING_PARAMS)}"]
+            f"Dropped model parameters not passed to the gateway: {sorted(REROUTING_PARAMS)}"]
 
 
 @pytest.fixture
@@ -308,12 +317,26 @@ def _call_geval():
                         project_name="p")({"answer": "a"}, "output")
 
 
-@pytest.mark.parametrize("call", [_call_optimizer, _call_agent, _call_geval])
-def test_studio_call_sites_lose_no_parameter(recorded_litellm, caplog, call):
+GATEWAY = {"api_base": "http://gateway/v1/private", "extra_headers": {"Comet-Workspace": "my-workspace"}}
+
+
+@pytest.mark.parametrize("call, expected", [
+    (_call_optimizer, {"model": "openai/m", "messages": [{"role": "user", "content": "hi"}],
+                       **STUDIO_MODEL_PARAMS, **GATEWAY}),
+    (_call_agent, {"model": "openai/m", "messages": [{"role": "user", "content": "x"}],
+                   **STUDIO_MODEL_PARAMS, **GATEWAY}),
+    # The metric takes no model parameters from the run, only the model.
+    (_call_geval, {"model": "openai/m", **GATEWAY}),
+])
+def test_studio_call_sites_reach_the_gateway_with_their_values(recorded_litellm, caplog, call, expected):
     with caplog.at_level(logging.WARNING, logger=optimizer_runner.__name__):
         call()
 
+    # GEval makes more than one call; every call carries the same values.
     assert recorded_litellm, "the call site made no LLM call"
-    assert not [r for r in caplog.records if r.getMessage().startswith("Dropped model parameters")]
-    for kwargs in recorded_litellm:
-        assert kwargs["api_base"] == "http://gateway/v1/private"
+    assert [{key: kwargs.get(key) for key in expected} for kwargs in recorded_litellm] == (
+        [expected] * len(recorded_litellm))
+    assert all(
+        {frozenset(message) for message in kwargs["messages"]} == {frozenset({"role", "content"})}
+        for kwargs in recorded_litellm)
+    assert [r.getMessage() for r in caplog.records if r.getMessage().startswith("Dropped")] == []
