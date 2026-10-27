@@ -73,7 +73,10 @@ class CustomLlmHttpClient implements HttpClient {
     @Getter(AccessLevel.PACKAGE)
     private final OkHttpClient client;
 
-    /** {@link #client} for streams, whose body has the stream read timeout once the headers arrived; same pool. */
+    /**
+     * {@link #client} for streams, on the same pool and dispatcher: the read timeout bounds the wait for the headers,
+     * and the stream read timeout each read of the body.
+     */
     private final OkHttpClient streamingClient;
 
     /** Most bytes read from a non-2xx response body; the rest is discarded. */
@@ -81,8 +84,10 @@ class CustomLlmHttpClient implements HttpClient {
 
     CustomLlmHttpClient(@NonNull OkHttpClient client, int errorBodyMaxSize, @NonNull Duration streamReadTimeout) {
         this.client = client;
+        // the read timeout bounds a stream's headers, then the stream read timeout each read of its body
         this.streamingClient = client.newBuilder()
-                .addNetworkInterceptor(StreamReadTimeoutInterceptor.forEveryResponse(streamReadTimeout))
+                .readTimeout(streamReadTimeout)
+                .addInterceptor(ResponseHeadersDeadline.within(Duration.ofMillis(client.readTimeoutMillis())))
                 .build();
         this.errorBodyMaxSize = errorBodyMaxSize;
     }

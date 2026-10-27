@@ -16,7 +16,12 @@ import dev.langchain4j.http.client.sse.HttpStreamingEvent;
 import dev.langchain4j.http.client.sse.ServerSentEvent;
 import dev.langchain4j.http.client.sse.ServerSentEventListener;
 import lombok.Builder;
+import lombok.NonNull;
+import okhttp3.Call;
+import okhttp3.ConnectionPool;
+import okhttp3.EventListener;
 import okhttp3.OkHttpClient;
+import okhttp3.Protocol;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -31,6 +36,8 @@ import java.io.InputStream;
 import java.io.InterruptedIOException;
 import java.io.OutputStream;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.Proxy;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
@@ -41,6 +48,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.Flow;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.IntStream;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
@@ -266,6 +274,119 @@ class CustomLlmHttpClientTest {
             var actualElapsed = Duration.ofNanos(System.nanoTime() - startNanos);
             assertThat(actualError).isExactlyInstanceOf(TimeoutException.class);
             assertThat(actualElapsed).isBetween(streamReadTimeout, expectedMaxElapsed);
+        }
+    }
+
+    /** Counts the connections a client opens. */
+    private static final class ConnectionCounter extends EventListener {
+        private final AtomicInteger connects = new AtomicInteger();
+
+        @Override
+        public void connectStart(@NonNull Call call, @NonNull InetSocketAddress address, @NonNull Proxy proxy) {
+            connects.incrementAndGet();
+        }
+    }
+
+    private static OkHttpClient isolatedClient(ConnectionCounter counter, List<Protocol> protocols) {
+        return new CustomLlmModule().llmHttpClient(TestConfigUtils.loadConfigTest().getLlmProviderClient(),
+                RELAXED_GUARD)
+                .newBuilder()
+                .connectionPool(new ConnectionPool())
+                .protocols(protocols)
+                .eventListener(counter)
+                .build();
+    }
+
+    private HttpRequest requestTo(String path) {
+        return HttpRequest.builder()
+                .method(HttpMethod.POST)
+                .url(wireMock.baseUrl() + path)
+                .addHeader("Content-Type", "application/json")
+                .body("{}")
+                .build();
+    }
+
+    /**
+     * A stream's timeouts are its call's own: a call that isn't a stream, made next on the same pooled connection,
+     * still fails at the read timeout rather than waiting for the stream read timeout.
+     */
+    @Test
+    void aCallAfterAStreamOnTheSameConnectionKeepsTheReadTimeout() throws Exception {
+        var counter = new ConnectionCounter();
+        var isolated = isolatedClient(counter, List.of(Protocol.HTTP_1_1));
+        var timedClient = clientWithTimeouts(Duration.ofMillis(500), Duration.ofSeconds(30), isolated);
+        var data = RandomStringUtils.secure().nextAlphanumeric(10);
+        wireMock.stubFor(post(urlEqualTo("/stream")).willReturn(aResponse().withStatus(200)
+                .withHeader("Content-Type", "text/event-stream")
+                .withBody("data: %s\n\n".formatted(data))));
+        wireMock.stubFor(post(urlEqualTo(PATH)).willReturn(aResponse().withStatus(200).withBody("{}")
+                .withFixedDelay(3_000)));
+        var expectedEvents = List.of(new ServerSentEvent(null, data));
+        var expectedMaxElapsed = Duration.ofMillis(2_500);
+        try {
+            var actualEvents = streamedEvents(timedClient, StreamPath.STREAM, requestTo("/stream"));
+            long startNanos = System.nanoTime();
+
+            Throwable actualError = failure(timedClient, CallPath.EXECUTE, request("{}"));
+
+            var actualElapsed = Duration.ofNanos(System.nanoTime() - startNanos);
+            assertThat(actualEvents).isEqualTo(expectedEvents);
+            assertThat(actualError).isExactlyInstanceOf(TimeoutException.class);
+            assertThat(actualElapsed).isLessThan(expectedMaxElapsed);
+            // the call reused the stream's connection
+            assertThat(counter.connects).hasValue(1);
+        } finally {
+            isolated.dispatcher().executorService().shutdownNow();
+            isolated.connectionPool().evictAll();
+        }
+    }
+
+    /**
+     * Two exchanges at once on one HTTP/2 connection keep their own timeouts: the call that isn't a stream fails at
+     * its read timeout, not the stream read timeout of the stream beside it, and its failure leaves the stream to
+     * complete. WireMock sends an HTTP/2 stream's headers with its first chunk, so the stream's gaps stay within the
+     * read timeout here; the silence past it is covered on HTTP/1.1 above.
+     */
+    @Test
+    void concurrentExchangesOnOneHttp2ConnectionKeepTheirOwnTimeouts() throws Exception {
+        var counter = new ConnectionCounter();
+        var isolated = isolatedClient(counter, List.of(Protocol.H2_PRIOR_KNOWLEDGE));
+        var readTimeout = Duration.ofSeconds(1);
+        var timedClient = clientWithTimeouts(readTimeout, Duration.ofSeconds(30), isolated);
+        var data = RandomStringUtils.secure().nextAlphanumeric(10);
+        wireMock.stubFor(post(urlEqualTo("/stream")).willReturn(aResponse().withStatus(200)
+                .withHeader("Content-Type", "text/event-stream")
+                .withBody("data: %s\n\n".formatted(data))
+                .withChunkedDribbleDelay(4, 2_000)));
+        wireMock.stubFor(post(urlEqualTo(PATH)).willReturn(aResponse().withStatus(200).withBody("{}")
+                .withFixedDelay(5_000)));
+        var expectedMaxElapsed = Duration.ofMillis(3_000);
+        var expectedEvents = List.of(new ServerSentEvent(null, data));
+        wireMock.stubFor(post(urlEqualTo("/warm-up")).willReturn(aResponse().withStatus(200).withBody("{}")));
+        try {
+            // opens the one HTTP/2 connection, so the two exchanges below share it rather than race to open two
+            timedClient.execute(requestTo("/warm-up"));
+            var stream = CompletableFuture.supplyAsync(() -> {
+                try {
+                    return streamedEvents(timedClient, StreamPath.STREAM, requestTo("/stream"));
+                } catch (Exception exception) {
+                    throw new CompletionException(exception);
+                }
+            });
+            long startNanos = System.nanoTime();
+            var call = timedClient.executeAsync(request("{}"));
+
+            var actualError = catchFailure(() -> call.orTimeout(10, TimeUnit.SECONDS).join());
+            var actualElapsed = Duration.ofNanos(System.nanoTime() - startNanos);
+            var actualEvents = stream.get(10, TimeUnit.SECONDS);
+
+            assertThat(actualError).isExactlyInstanceOf(TimeoutException.class);
+            assertThat(actualElapsed).isBetween(readTimeout, expectedMaxElapsed);
+            assertThat(actualEvents).isEqualTo(expectedEvents);
+            assertThat(counter.connects).hasValue(1);
+        } finally {
+            isolated.dispatcher().executorService().shutdownNow();
+            isolated.connectionPool().evictAll();
         }
     }
 
