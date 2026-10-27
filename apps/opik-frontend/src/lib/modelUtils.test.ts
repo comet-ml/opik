@@ -28,6 +28,7 @@ import {
   updateProviderConfig,
   withoutThinkingAmount,
   withShownThinkingLevel,
+  writeAnthropicRequest,
 } from "@/lib/modelUtils";
 import {
   AnthropicThinkingEffort,
@@ -43,7 +44,10 @@ import {
   PROVIDER_TYPE,
   ReasoningEffort,
 } from "@/types/providers";
-import { ANTHROPIC_MODEL_CAPABILITIES } from "@/constants/llm";
+import {
+  ANTHROPIC_MODEL_CAPABILITIES,
+  DEFAULT_ANTHROPIC_CONFIGS,
+} from "@/constants/llm";
 import {
   getLatestProviderModelsSnapshot,
   ModelFlags,
@@ -3440,7 +3444,7 @@ describe("OpenRouter request contract", () => {
       request: { ...WITHOUT_MAX_TOKENS, maxTokens: 7372 },
     },
     {
-      model: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_5_CONTENT_SAFETY_FREE,
+      model: PROVIDER_MODEL_TYPE.COHERE_COMMAND_A,
       maxTokens: 9000,
       request: { ...WITHOUT_MAX_TOKENS, maxTokens: 8192 },
     },
@@ -3824,5 +3828,23 @@ describe("OpenRouter parameters follow the model's OpenRouter lists", () => {
         reasoningEffort: "minimal",
       }),
     ).toEqual({});
+  });
+});
+
+describe("writeAnthropicRequest", () => {
+  it("sends the default max tokens when the catalog row gives none, as Anthropic requires one", () => {
+    expect(
+      writeAnthropicRequest(
+        "claude-sonnet-4-5" as PROVIDER_MODEL_TYPE,
+        { temperature: 0.4 },
+        {
+          temperature: { accepted: true, min: 0, max: 1, default: 0 },
+          max_output_tokens: { accepted: false },
+        },
+      ),
+    ).toEqual({
+      temperature: 0.4,
+      maxCompletionTokens: DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS,
+    });
   });
 });

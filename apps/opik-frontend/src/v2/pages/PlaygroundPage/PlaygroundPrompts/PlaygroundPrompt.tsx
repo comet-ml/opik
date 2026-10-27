@@ -401,6 +401,7 @@ const PlaygroundPrompt = ({
     <div
       data-testid="playground-variant-card"
       data-variant-index={index}
+      data-prompt-id={promptId}
       className="group/prompt flex min-w-[var(--min-prompt-width)] max-w-[var(--max-prompt-width)] flex-1 flex-col overflow-hidden border-r"
     >
       <div className="flex h-10 items-center justify-between overflow-hidden border-b px-4">
@@ -550,6 +551,7 @@ const PlaygroundPrompt = ({
           hidePromptActions={false}
           improvePromptConfig={improvePromptConfig}
           autoFocusFirstMessage={index === 0}
+          shiftEnterInsertsNewline
         />
       </div>
 

@@ -4015,6 +4015,34 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/experiments/cancel:
+    put:
+      tags:
+      - Experiments
+      summary: Cancel running experiments
+      description: "Stops the given experiments: queued items are skipped and the\
+        \ experiments are marked cancelled"
+      operationId: cancelExperiments
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IdsHolder"
+      responses:
+        "204":
+          description: No content
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "429":
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/experiments:
     get:
       tags:
@@ -4196,6 +4224,18 @@ paths:
                 $ref: "#/components/schemas/ExperimentExecutionResponse"
         "400":
           description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "429":
+          description: Too many requests
           content:
             application/json:
               schema:
@@ -11670,6 +11710,8 @@ components:
           format: int32
         automation:
           $ref: "#/components/schemas/AnnotationQueueAutomation"
+        annotator_view:
+          $ref: "#/components/schemas/AnnotationQueueAnnotatorView"
         reviewers:
           type: array
           readOnly: true
@@ -11699,6 +11741,26 @@ components:
           type: string
           readOnly: true
       description: List of annotation queues to create
+    AnnotationQueueAnnotatorView:
+      type: object
+      properties:
+        html:
+          maxLength: 200000
+          minLength: 0
+          type: string
+          description: A custom HTML view rendered in a sandboxed iframe instead of
+            the default trace blocks or conversation
+        kit_version:
+          maximum: 1
+          minimum: 1
+          type: integer
+          description: Version of the view kit the html was written for
+          format: int32
+        summary:
+          maxLength: 1000
+          minLength: 0
+          type: string
+          description: "What annotators see in the view, in one or two sentences"
     AnnotationQueueAutomation:
       type: object
       properties:
@@ -11775,6 +11837,26 @@ components:
         value:
           type: number
           format: double
+    AnnotationQueueAnnotatorView_Write:
+      type: object
+      properties:
+        html:
+          maxLength: 200000
+          minLength: 0
+          type: string
+          description: A custom HTML view rendered in a sandboxed iframe instead of
+            the default trace blocks or conversation
+        kit_version:
+          maximum: 1
+          minimum: 1
+          type: integer
+          description: Version of the view kit the html was written for
+          format: int32
+        summary:
+          maxLength: 1000
+          minLength: 0
+          type: string
+          description: "What annotators see in the view, in one or two sentences"
     AnnotationQueueAutomation_Write:
       type: object
       properties:
@@ -11832,6 +11914,8 @@ components:
           format: int32
         automation:
           $ref: "#/components/schemas/AnnotationQueueAutomation_Write"
+        annotator_view:
+          $ref: "#/components/schemas/AnnotationQueueAnnotatorView_Write"
       description: List of annotation queues to create
     ConditionGroup_Write:
       required:
@@ -11903,6 +11987,26 @@ components:
           items:
             $ref: "#/components/schemas/AnnotationQueue_Write"
       description: Batch of annotation queues to create
+    AnnotationQueueAnnotatorView_Public:
+      type: object
+      properties:
+        html:
+          maxLength: 200000
+          minLength: 0
+          type: string
+          description: A custom HTML view rendered in a sandboxed iframe instead of
+            the default trace blocks or conversation
+        kit_version:
+          maximum: 1
+          minimum: 1
+          type: integer
+          description: Version of the view kit the html was written for
+          format: int32
+        summary:
+          maxLength: 1000
+          minLength: 0
+          type: string
+          description: "What annotators see in the view, in one or two sentences"
     AnnotationQueueAutomation_Public:
       type: object
       properties:
@@ -11988,6 +12092,8 @@ components:
           format: int32
         automation:
           $ref: "#/components/schemas/AnnotationQueueAutomation_Public"
+        annotator_view:
+          $ref: "#/components/schemas/AnnotationQueueAnnotatorView_Public"
         reviewers:
           type: array
           readOnly: true
@@ -12160,6 +12266,8 @@ components:
           format: int32
         automation:
           $ref: "#/components/schemas/AnnotationQueueAutomation"
+        annotator_view:
+          $ref: "#/components/schemas/AnnotationQueueAnnotatorView"
     AssertionResultBatch:
       required:
       - assertion_results
@@ -16926,10 +17034,24 @@ components:
           - running
           - completed
           - cancelled
+          - failed
         experiment_scores:
           type: array
           items:
             $ref: "#/components/schemas/ExperimentScore"
+    IdsHolder:
+      required:
+      - ids
+      type: object
+      properties:
+        ids:
+          maxItems: 1000
+          minItems: 1
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+            format: uuid
     AssertionScoreAverage:
       required:
       - name
@@ -17051,6 +17173,13 @@ components:
           - running
           - completed
           - cancelled
+          - failed
+        finished_at:
+          type: string
+          description: "When the run stopped producing items. Unset while it may still\
+            \ produce more, whatever its status"
+          format: date-time
+          readOnly: true
         experiment_scores:
           type: array
           items:
@@ -17191,6 +17320,7 @@ components:
           - running
           - completed
           - cancelled
+          - failed
         experiment_scores:
           type: array
           items:
@@ -17280,6 +17410,9 @@ components:
         prompt_index:
           type: integer
           format: int32
+        total_items:
+          type: integer
+          format: int32
     ExperimentExecutionRequest:
       required:
       - dataset_id
@@ -17300,6 +17433,9 @@ components:
             $ref: "#/components/schemas/PromptVariant"
         project_name:
           type: string
+        project_id:
+          type: string
+          format: uuid
         dataset_id:
           type: string
           format: uuid
@@ -17309,6 +17445,13 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PromptVersionLink"
+        selected_rule_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        filters:
+          type: string
     PromptVariant:
       required:
       - messages
@@ -18189,6 +18332,13 @@ components:
           - running
           - completed
           - cancelled
+          - failed
+        finished_at:
+          type: string
+          description: "When the run stopped producing items. Unset while it may still\
+            \ produce more, whatever its status"
+          format: date-time
+          readOnly: true
         experiment_scores:
           type: array
           items:
@@ -18339,19 +18489,6 @@ components:
           type: string
         aggregations:
           $ref: "#/components/schemas/AggregationData"
-    IdsHolder:
-      required:
-      - ids
-      type: object
-      properties:
-        ids:
-          maxItems: 1000
-          minItems: 1
-          uniqueItems: true
-          type: array
-          items:
-            type: string
-            format: uuid
     ExperimentItemStreamRequest:
       required:
       - experiment_name

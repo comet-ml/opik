@@ -24,6 +24,10 @@ import usePlaygroundColumnsSettings, {
   getVariableColumnId,
   TAGS_COLUMN_ID,
 } from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputTable/usePlaygroundColumnsSettings";
+import {
+  PLAYGROUND_OUTPUT_COLUMNS_WIDTH_KEY,
+  PLAYGROUND_OUTPUT_LEFT_PANEL_WIDTH_KEY,
+} from "@/constants/llm";
 
 type PlaygroundOutputTableData = {
   variables: { [key: string]: string };
@@ -39,8 +43,6 @@ interface PlaygroundOutputTableProps {
   isFetchingData: boolean;
 }
 
-const COLUMNS_WIDTH_KEY = "playground-output-table-width-keys";
-const LEFT_PANEL_WIDTH_KEY = "playground-output-left-panel-width";
 const DEFAULT_LEFT_WIDTH = "50%";
 const MIN_LEFT_WIDTH = "10%";
 const MAX_LEFT_WIDTH = "90%";
@@ -55,13 +57,15 @@ const PlaygroundOutputTable = ({
 }: PlaygroundOutputTableProps) => {
   const [columnsWidth, setColumnsWidth] = useLocalStorageState<
     Record<string, number>
-  >(COLUMNS_WIDTH_KEY, {
+  >(PLAYGROUND_OUTPUT_COLUMNS_WIDTH_KEY, {
     defaultValue: {},
   });
 
   const [leftPanelWidth, setLeftPanelWidth] = useLocalStorageState<
     string | number
-  >(LEFT_PANEL_WIDTH_KEY, { defaultValue: DEFAULT_LEFT_WIDTH });
+  >(PLAYGROUND_OUTPUT_LEFT_PANEL_WIDTH_KEY, {
+    defaultValue: DEFAULT_LEFT_WIDTH,
+  });
 
   const hydratedDatasetItems = useIncrementalDatasetHydration(datasetItems);
 
