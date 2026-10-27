@@ -562,7 +562,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         sampling_plan = self._prepare_sampling_plan(
             dataset=evaluation_dataset,
             n_samples=n_samples,
-            phase="optimization_eval",
+            # Trials must score the items the baseline was scored on.
+            phase="eval",
             seed_override=self.seed,
             strategy=context.n_samples_strategy,
         )

@@ -172,6 +172,38 @@ def test_validation_dataset_is_what_gets_scored(
 
 
 @pytest.mark.parametrize("optimizer_name", harness.OPTIMIZERS)
+def test_n_samples_scores_every_candidate_on_the_baseline_items(
+    optimizer_name: str, install_fakes: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    scenario = harness.build_scenario("S1_single")
+    install_fakes(scenario)
+    evaluated: list[set[str]] = []
+
+    def recording_evaluate(**kwargs: Any) -> Any:
+        result = fake_opik.fake_evaluate(**kwargs)
+        evaluated.append({r.test_case.dataset_item_id for r in result.test_results})
+        return result
+
+    for target in ("evaluate", "evaluate_optimization_trial"):
+        monkeypatch.setattr(
+            f"opik_optimizer.core.evaluation.opik_evaluator.{target}",
+            recording_evaluate,
+        )
+
+    # A minibatch the size of n_samples would be indistinguishable below.
+    result = harness.run_optimizer(
+        optimizer_name, scenario, n_samples=2, n_samples_minibatch=1
+    )
+
+    baseline_items = evaluated[0]
+    assert len(baseline_items) == 2
+    # Minibatches may differ; every full-size evaluation uses the baseline items.
+    assert all(items == baseline_items for items in evaluated if len(items) == 2)
+    if result.details["finish_reason"] == "perfect_score":
+        assert result.score >= harness.make_optimizer(optimizer_name).perfect_score
+
+
+@pytest.mark.parametrize("optimizer_name", harness.OPTIMIZERS)
 def test_an_optimizer_instance_can_be_reused(
     optimizer_name: str, install_fakes: Any
 ) -> None:

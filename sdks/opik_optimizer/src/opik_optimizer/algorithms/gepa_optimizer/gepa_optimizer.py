@@ -780,11 +780,12 @@ class GepaOptimizer(BaseOptimizer):
         )
 
         val_source = validation_dataset or dataset
+        # GEPA's valset drives its stop decisions, so it must be the sample
+        # Opik scores the baseline and the final candidates on.
         val_plan = self._prepare_sampling_plan(
             dataset=val_source,
             n_samples=n_samples,
-            phase="val",
-            seed_override=seed,
+            phase="eval",
             strategy=context.n_samples_strategy,
         )
 

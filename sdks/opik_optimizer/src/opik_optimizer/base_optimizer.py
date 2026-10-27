@@ -840,7 +840,7 @@ class BaseOptimizer(ABC):
             prompts: Dict of named prompts to evaluate (e.g., {"main": ChatPrompt(...)}).
                      Single-prompt optimizations use a dict with one entry.
             experiment_config: Optional experiment configuration.
-            sampling_tag: Optional sampling tag for deterministic subsampling per candidate.
+            sampling_tag: Optional tag that seeds candidate-output selection for this call.
 
         Returns:
             The score (float).
@@ -2242,12 +2242,14 @@ class BaseOptimizer(ABC):
             build_optimizer_version=_OPTIMIZER_VERSION,
         )
 
-        phase = "eval" if sampling_tag is None else f"eval:{sampling_tag}"
+        # Every evaluation of a run scores the same items, so candidates are
+        # compared with each other and the baseline on equal terms. The
+        # sampling tag only seeds the choice among multiple model outputs.
         sampling_plan = self._prepare_sampling_plan(
             dataset=dataset,
             n_samples=n_samples,
             dataset_item_ids=dataset_item_ids,
-            phase=phase,
+            phase="eval",
             seed_override=sampling_seed,
             strategy=n_samples_strategy,
         )
