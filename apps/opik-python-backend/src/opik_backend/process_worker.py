@@ -1,10 +1,10 @@
 import ast
 import ctypes
 import errno
+import gc
+import json
 import os
 import platform
-import stat
-import posix
 import signal
 import sys
 import tempfile
@@ -14,7 +14,7 @@ import uuid
 import logging
 from multiprocessing.connection import Connection
 from types import ModuleType
-from typing import Type, Union, List, Optional, Tuple
+from typing import Any, Type, Union, List, Optional, Tuple
 
 from opik.evaluation.metrics import BaseMetric
 from opik.evaluation.metrics.score_result import ScoreResult
@@ -554,24 +554,21 @@ def _check_platform() -> None:
         raise OSError(f"needs Linux, not {sys.platform}")
 
 
-def _replace_inherited_sockets(keep_fd: int) -> None:
-    """Point every socket inherited from the parent, other than the pipe, at /dev/null.
+def _replace_inherited_descriptors(keep_fd: int) -> None:
+    """Point every descriptor inherited from the parent at /dev/null, except the pipe and stderr.
 
-    The seccomp filter only stops new sockets. dup2 rather than close keeps the numbers
-    taken, so objects that still hold them can't later close a descriptor user code opened.
+    The seccomp filter only stops new sockets, and open files, pipes and sockets of the parent
+    would otherwise stay readable. stderr stays because worker logs go there; stdin and stdout
+    are replaced too, since a Studio job's stdout carries its result. dup2 rather than close
+    keeps the numbers taken, so objects that still hold them can't later close a descriptor
+    user code opened.
     """
     devnull = os.open(os.devnull, os.O_RDWR)
     try:
+        # The listing includes its own directory descriptor, closed by then; dup2 just reopens it on /dev/null.
         for fd in map(int, os.listdir("/proc/self/fd")):
-            # stdio stays: the parent reads worker logs from it.
-            if fd > 2 and fd not in (keep_fd, devnull):
-                try:
-                    if stat.S_ISSOCK(os.fstat(fd).st_mode):
-                        os.dup2(devnull, fd)
-                except OSError as e:
-                    # The listing includes its own, now closed, directory descriptor.
-                    if e.errno != errno.EBADF:
-                        raise
+            if fd not in (2, keep_fd, devnull):
+                os.dup2(devnull, fd)
     finally:
         os.close(devnull)
 
@@ -583,6 +580,9 @@ def _drop_privileges() -> None:
 
 
 def _strip_environment() -> None:
+    # Imported here: posix exists only on POSIX systems, and this runs after the platform check.
+    import posix
+
     kept = {key: os.environ[key] for key in _ISOLATED_ENV_KEYS if key in os.environ}
     os.environ.clear()
     # os.environ is a copy; the posix module keeps the original mapping too.
@@ -601,7 +601,7 @@ def isolate_worker(keep_fd: int) -> None:
     """
     steps = (
         ("check platform", _check_platform),
-        ("replace inherited sockets", lambda: _replace_inherited_sockets(keep_fd)),
+        ("replace inherited descriptors", lambda: _replace_inherited_descriptors(keep_fd)),
         ("strip environment", _strip_environment),
         (f"switch to uid {UNPRIVILEGED_ID}", _drop_privileges),
         ("set no_new_privs", lambda: _prctl(_PR_SET_NO_NEW_PRIVS, 1)),
@@ -617,7 +617,15 @@ def isolate_worker(keep_fd: int) -> None:
             raise OSError(f"{name} failed: {e}") from e
 
 
+def send_reply(connection: Connection, reply: Any) -> None:
+    """Replies go out as JSON, so the parent reads them as data, not objects."""
+    connection.send_bytes(json.dumps(reply).encode())
+
+
 def worker_process_main(connection: Connection, isolate: bool = False) -> None:
+    # Objects inherited from the parent are never collected here, so a full collection doesn't write
+    # to, and so copy, every page this worker shares with the parent.
+    gc.freeze()
     # Workers should ignore SIGINT; parent ProcessExecutor will manage shutdown.
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     # A forked worker inherits the parent's SIGTERM handler, which would run the parent's
@@ -629,13 +637,13 @@ def worker_process_main(connection: Connection, isolate: bool = False) -> None:
             isolate_worker(connection.fileno())
         except Exception as e:
             # The parent logs the cause once for the whole pool.
-            connection.send({"code": 500, "error": f"Worker isolation failed: {e}", ISOLATION_ERROR_KEY: str(e)})
+            send_reply(connection, {"code": 500, "error": f"Worker isolation failed: {e}", ISOLATION_ERROR_KEY: str(e)})
             # A forked worker must not run the parent's exit handlers.
             os._exit(1)
 
     try:
         # Signal READY to the parent process via the pipe
-        connection.send("READY")
+        send_reply(connection, "READY")
 
         # Keep reading commands until told to exit or pipe closes
         while True:
@@ -654,7 +662,7 @@ def worker_process_main(connection: Connection, isolate: bool = False) -> None:
                 result = run_user_code(code, input_data, payload_type)
 
                 # Return the result via the pipe
-                connection.send(result)
+                send_reply(connection, result)
             except EOFError as e:
                 # This occurs when the parent closes the pipe, e.g., during shutdown.
                 # The worker will break from its loop and be terminated by SIGTERM from the parent.
@@ -670,7 +678,7 @@ def worker_process_main(connection: Connection, isolate: bool = False) -> None:
                     "traceback": traceback.format_exc(),
                 }
                 try:
-                    connection.send(error_msg)
+                    send_reply(connection, error_msg)
                 except Exception as send_e:
                     logger.error(f"Failed to send error to parent: {send_e}")
                 logger.error(f"Encountered error: {e}")
@@ -685,7 +693,7 @@ def worker_process_main(connection: Connection, isolate: bool = False) -> None:
             "traceback": traceback.format_exc(),
         }
         try:
-            connection.send(error_payload)
+            send_reply(connection, error_payload)
         except Exception:
             pass  # Pipe might not be usable
         logger.error(f"Worker initialization error: {str(e)}\n{traceback.format_exc()}")

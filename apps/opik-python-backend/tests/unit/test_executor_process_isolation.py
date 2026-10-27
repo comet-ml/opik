@@ -4,10 +4,12 @@ Isolated, each worker drops to an unprivileged account, loses the inherited envi
 runs under a seccomp filter refusing new sockets and process inspection. That needs Linux
 and root, so those tests skip elsewhere, where the fail-closed tests run instead.
 """
+import builtins
 import logging
 import os
 import socket
 import sys
+from typing import Iterator, List
 
 import pytest
 
@@ -16,7 +18,6 @@ from opik_backend.executor_process import (
     PROCESS_NETWORK_ISOLATION_ENV_VAR,
     ProcessExecutor,
     run_user_code_in_isolated_worker,
-    terminate_worker,
 )
 from opik_backend.process_worker import UNPRIVILEGED_ID
 
@@ -71,7 +72,7 @@ class Probe(base_metric.BaseMetric):
     def __init__(self):
         super().__init__(name="probe", track=False)
 
-    def score(self, port, full=False, **ignored_kwargs):
+    def score(self, port, full=False, file_fd=None, **ignored_kwargs):
         reason = f"uid={os.getuid()} secret={os.environ.get('PROBE_SECRET')} tcp={attempt(lambda: tcp(port))}"
         if full:
             reason += (
@@ -79,6 +80,7 @@ class Probe(base_metric.BaseMetric):
                 f" dns={'ok' if attempt(lambda: socket.getaddrinfo('example.com', 80)) == 'ok' else 'failed'}"
                 f" unix={attempt(lambda: socket.socket(socket.AF_UNIX).close())}"
                 f" ptrace={attempt(ptrace_parent)}"
+                f" file={os.pread(file_fd, 64, 0)!r}"
             )
         return score_result.ScoreResult(name=self.name, value=1.0, reason=reason)
 """
@@ -92,7 +94,33 @@ def _scores(reason: str) -> dict:
 
 
 NOT_ISOLATED = _scores(f"uid={os.getuid()} secret=s3cr3t tcp=ok")
-ISOLATED = _scores(f"uid={UNPRIVILEGED_ID} secret=None tcp=EPERM dns=failed unix=EPERM ptrace=EPERM")
+ISOLATED = _scores(f"uid={UNPRIVILEGED_ID} secret=None tcp=EPERM dns=failed unix=EPERM ptrace=EPERM file=b''")
+
+# Writes a reply into the worker's own pipe before the real one; unpickled, it would set a flag in the parent.
+EARLY_REPLY_METRIC = """
+import pickle
+import sys
+
+from opik.evaluation.metrics import base_metric, score_result
+
+
+class SetsFlag:
+    def __reduce__(self):
+        return (exec, ("import builtins; builtins.EARLY_REPLY_UNPICKLED = True",))
+
+
+class EarlyReply(base_metric.BaseMetric):
+    def __init__(self):
+        super().__init__(name="early_reply", track=False)
+
+    def score(self, **ignored_kwargs):
+        frame = sys._getframe()
+        while "connection" not in frame.f_locals:
+            frame = frame.f_back
+        frame.f_locals["connection"].send_bytes(pickle.dumps(SetsFlag()))
+        return score_result.ScoreResult(name=self.name, value=1.0)
+"""
+MALFORMED = {"code": 400, "error": executor_process.MALFORMED_REPLY_ERROR}
 
 
 @pytest.fixture
@@ -107,21 +135,49 @@ def listener():
         server.close()
 
 
+@pytest.fixture
+def secret_file(tmp_path) -> Iterator[int]:
+    """A descriptor open in the test process, which workers inherit."""
+    path = tmp_path / "secret"
+    path.write_text("s3cr3t")
+    fd = os.open(path, os.O_RDONLY)
+    try:
+        yield fd
+    finally:
+        os.close(fd)
+
+
 @pytest.fixture(autouse=True)
 def probe_env(monkeypatch):
     monkeypatch.setenv("PROBE_SECRET", "s3cr3t")
-    # The failure is logged once per process; each test starts from a clean slate.
-    monkeypatch.setattr(executor_process, "_isolation_failure_logged", False)
+    # One-shot failures are logged once per process; each test starts from a clean slate.
+    monkeypatch.setattr(executor_process, "_one_shot_isolation_failures", executor_process._IsolationFailureLog())
 
 
-def _score_in_pool(data: dict) -> dict:
+@pytest.fixture(autouse=True)
+def workers(monkeypatch) -> Iterator[List]:
+    """Records every worker process a test starts and reaps it afterwards, whatever the test did."""
+    created = []
+    context = executor_process._mp_context
+    real_process = context.Process
+
+    def recording_process(*args, **kwargs):
+        process = real_process(*args, **kwargs)
+        created.append(process)
+        return process
+
+    monkeypatch.setattr(context, "Process", recording_process)
+    yield created
+    for process in created:
+        if process.pid is not None:
+            process.kill()
+            process.join()
+
+
+def _score_in_pool(data: dict, code: str = PROBE_METRIC) -> dict:
     executor = ProcessExecutor()
     executor.create_worker_process()
-    worker = executor.process_pool.queue[0]
-    try:
-        return executor.run_scoring(PROBE_METRIC, data)
-    finally:
-        terminate_worker(worker)
+    return executor.run_scoring(code, data)
 
 
 @pytest.mark.parametrize("isolation", [None, "false", "FALSE", ""])
@@ -138,21 +194,65 @@ def test_pool_worker_is_not_isolated_without_setting(monkeypatch, listener, isol
     assert result == NOT_ISOLATED
 
 
-@needs_isolation
-@pytest.mark.parametrize("isolation", ["true", "True"])
-def test_pool_worker_is_isolated_with_setting(monkeypatch, listener, isolation):
+@pytest.mark.parametrize("isolation", ["yes", "1", "on", " true"])
+def test_invalid_setting_fails_startup(monkeypatch, isolation):
     monkeypatch.setenv(PROCESS_NETWORK_ISOLATION_ENV_VAR, isolation)
 
-    result = _score_in_pool({"port": listener, "full": True})
+    with pytest.raises(ValueError, match=f"^{PROCESS_NETWORK_ISOLATION_ENV_VAR} must be true or false, not "):
+        ProcessExecutor()
+
+
+@needs_isolation
+@pytest.mark.parametrize("isolation", ["true", "True"])
+def test_pool_worker_is_isolated_with_setting(monkeypatch, listener, secret_file, isolation):
+    monkeypatch.setenv(PROCESS_NETWORK_ISOLATION_ENV_VAR, isolation)
+
+    result = _score_in_pool({"port": listener, "full": True, "file_fd": secret_file})
 
     assert result == ISOLATED
 
 
 @needs_isolation
-def test_isolated_one_shot_worker_scores_without_network(listener):
-    result = run_user_code_in_isolated_worker(PROBE_METRIC, {"port": listener, "full": True})
+def test_isolated_one_shot_worker_scores_without_network(listener, secret_file):
+    result = run_user_code_in_isolated_worker(PROBE_METRIC, {"port": listener, "full": True, "file_fd": secret_file})
 
     assert result == ISOLATED
+
+
+@needs_isolation
+def test_isolated_one_shot_worker_is_reused(listener, secret_file, workers):
+    data = {"port": listener, "full": True, "file_fd": secret_file}
+
+    results = [run_user_code_in_isolated_worker(PROBE_METRIC, data) for _ in range(3)]
+
+    assert results == [ISOLATED] * 3
+    assert len(workers) == 1
+
+
+@pytest.mark.parametrize("isolation", ["false", pytest.param("true", marks=needs_isolation)])
+def test_pool_worker_reply_is_read_as_data(monkeypatch, isolation):
+    monkeypatch.setenv(PROCESS_NETWORK_ISOLATION_ENV_VAR, isolation)
+
+    result = _score_in_pool({}, EARLY_REPLY_METRIC)
+
+    assert result == MALFORMED
+    assert not hasattr(builtins, "EARLY_REPLY_UNPICKLED")
+
+
+def test_oversized_reply_is_an_error(monkeypatch, listener):
+    monkeypatch.setattr(executor_process, "MAX_REPLY_BYTES", 16)
+
+    result = _score_in_pool({"port": listener})
+
+    assert result == MALFORMED
+
+
+@needs_isolation
+def test_one_shot_worker_reply_is_read_as_data():
+    result = run_user_code_in_isolated_worker(EARLY_REPLY_METRIC, {})
+
+    assert result == MALFORMED
+    assert not hasattr(builtins, "EARLY_REPLY_UNPICKLED")
 
 
 def _isolation_errors(caplog) -> list[str]:
@@ -201,9 +301,18 @@ def test_worker_that_cannot_isolate_never_joins_pool(monkeypatch, caplog):
 
 @cannot_isolate
 def test_one_shot_worker_that_cannot_isolate_returns_error(listener, caplog):
+    reason = (
+        f"check platform failed: needs Linux, not {sys.platform}"
+        if sys.platform != "linux"
+        else "switch to uid 65534 failed: [Errno 1] Operation not permitted"
+    )
+
     with caplog.at_level(logging.INFO):
         result = run_user_code_in_isolated_worker(PROBE_METRIC, {"port": listener})
 
-    assert result["code"] == 500
-    assert result["error"].startswith("Worker isolation failed: ")
+    assert result == {
+        "code": 500,
+        "error": f"Worker isolation failed: {reason}",
+        process_worker.ISOLATION_ERROR_KEY: reason,
+    }
     _assert_single_isolation_error(caplog, "check platform" if sys.platform != "linux" else "switch to uid 65534")

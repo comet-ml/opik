@@ -1,5 +1,6 @@
 import atexit
 import concurrent.futures
+import json
 import logging
 import os
 import signal
@@ -9,7 +10,8 @@ import sys
 import multiprocessing
 from queue import Queue, Empty
 from threading import Event, Lock, Thread
-from typing import Optional
+from multiprocessing.connection import Connection
+from typing import Any, Optional, Tuple, Union
 
 
 from opentelemetry import metrics
@@ -37,12 +39,42 @@ _fork_lock = Lock()
 
 PROCESS_NETWORK_ISOLATION_ENV_VAR = "PYTHON_CODE_EXECUTOR_PROCESS_NETWORK_ISOLATION"
 
-_isolation_failure_lock = Lock()
-_isolation_failure_logged = False
+# Far above any real score list; a longer reply is refused before it is read, so it is never buffered.
+MAX_REPLY_BYTES = int(os.getenv("PYTHON_CODE_EXECUTOR_MAX_RESULT_SIZE_IN_BYTES", str(64 * 1024 * 1024)))
+MALFORMED_REPLY_ERROR = "Execution failed: the worker returned a malformed or oversized result"
 
 
 class _IsolationUnavailable(Exception):
     pass
+
+
+class _IsolationFailureLog:
+    """Every worker of one executor fails the same way, so the cause is logged once per executor."""
+
+    def __init__(self) -> None:
+        self._lock = Lock()
+        self._logged = False
+
+    def log(self, reason: str) -> None:
+        with self._lock:
+            if self._logged:
+                return
+            self._logged = True
+        logger.error(
+            f"{PROCESS_NETWORK_ISOLATION_ENV_VAR}=true but process workers cannot be isolated ({reason}). "
+            f"It needs Linux, with python-backend running as root (CAP_SETUID and CAP_SETGID, granted by default). "
+            f"No process worker will start until then."
+        )
+
+
+# Studio's isolated workers have no executor; within a Studio job subprocess this logs once per job.
+_one_shot_isolation_failures = _IsolationFailureLog()
+
+# Studio's isolated workers, reused across metric calls of the job instead of a fork per call.
+_idle_isolated_workers: "Queue[Tuple[multiprocessing.Process, Connection]]" = Queue()
+# Workers are forked from this long-lived thread: their parent-death signal fires when the forking thread
+# exits, so a worker forked from a short-lived evaluation thread would die with it.
+_isolated_worker_spawner = concurrent.futures.ThreadPoolExecutor(max_workers=1)
 
 # OTel metrics setup (assuming this is standard and correct)
 meter = metrics.get_meter("process_executor")
@@ -87,24 +119,32 @@ def terminate_worker(worker):
     logger.info(f"Terminating worker {worker_id} (PID: {process.pid}).")
     try:
         process.terminate()  # Send SIGTERM
-        process.join(timeout=2)
-        if process.is_alive():  # Check if it's still alive after timeout
+        if not _wait_for_exit(process, 2):
             logger.warning(
                 f"Worker {worker_id} (PID: {process.pid}) did not terminate gracefully after SIGTERM, killing.")
             process.kill()  # Send SIGKILL
-            process.join(timeout=1)  # Wait for SIGKILL to take effect
+            _wait_for_exit(process, 1)  # Wait for SIGKILL to take effect
     except Exception as e:  # Catch any other exceptions during termination
         logger.error(f"Exception during termination of worker {worker_id} (PID: {process.pid}): {e}")
         if process.is_alive():
             process.kill()
-            process.join(timeout=1)
+            _wait_for_exit(process, 1)
 
     logger.info(f"Termination sequence for worker {worker_id} complete.")
 
 
 def isolation_enabled() -> bool:
-    """Opt-in, so installs that run python-backend as non-root keep working unchanged."""
-    return os.getenv(PROCESS_NETWORK_ISOLATION_ENV_VAR, "false").lower() == "true"
+    """Opt-in, so installs that run python-backend as non-root keep working unchanged.
+
+    Any value other than true/false (any case) or empty raises, so a typo fails startup
+    instead of leaving workers unisolated.
+    """
+    value = os.getenv(PROCESS_NETWORK_ISOLATION_ENV_VAR, "")
+    if value.lower() in ("", "false"):
+        return False
+    if value.lower() == "true":
+        return True
+    raise ValueError(f"{PROCESS_NETWORK_ISOLATION_ENV_VAR} must be true or false, not {value!r}")
 
 
 def _start(process: multiprocessing.Process) -> None:
@@ -112,50 +152,104 @@ def _start(process: multiprocessing.Process) -> None:
         process.start()
 
 
-def _log_isolation_failure(reason: str) -> None:
-    """Every worker fails the same way, so the cause is logged once instead of per worker."""
-    global _isolation_failure_logged
-    with _isolation_failure_lock:
-        if _isolation_failure_logged:
-            return
-        _isolation_failure_logged = True
-    logger.error(
-        f"{PROCESS_NETWORK_ISOLATION_ENV_VAR}=true but process workers cannot be isolated ({reason}). "
-        f"It needs Linux, with python-backend running as root (CAP_SETUID and CAP_SETGID, granted by default). "
-        f"No process worker will start until then."
-    )
+def _wait_for_exit(process: multiprocessing.Process, timeout: float) -> bool:
+    """Polls rather than join(timeout): join waits on a pipe the worker can close, and then blocks unbounded."""
+    deadline = time.monotonic() + timeout
+    while process.is_alive():
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.01)
+    return True
 
 
-def run_user_code_in_isolated_worker(code: str, data: dict, payload_type: Optional[str] = None) -> dict:
-    """Run user code once in a new isolated worker.
+def _read_reply(connection: Connection) -> Any:
+    """One worker reply, decoded as JSON: replies are read as data, not objects.
 
-    For callers without a worker pool: Optimization Studio runs code metrics inside its
-    job subprocess, which needs the network itself and so cannot be isolated as a whole.
-    No timeout here, as before: the job supervisor bounds the run, and an isolated
-    worker is killed when the thread that started it exits.
+    None when the reply is too long or not JSON. EOFError still propagates.
     """
-    parent_conn, child_conn = _mp_context.Pipe()
-    process = _mp_context.Process(target=process_worker.worker_process_main, args=(child_conn, True))
-    _start(process)
-    # Only the worker holds its end now, so a worker that dies surfaces as EOFError.
-    child_conn.close()
     try:
-        ready = parent_conn.recv()
-        if ready != "READY":
-            if process_worker.ISOLATION_ERROR_KEY in ready:
-                _log_isolation_failure(ready[process_worker.ISOLATION_ERROR_KEY])
-            return ready
-        parent_conn.send({'code': code, 'data': data, 'payload_type': payload_type})
-        return parent_conn.recv()
+        return json.loads(connection.recv_bytes(MAX_REPLY_BYTES))
+    except (OSError, ValueError):
+        return None
+
+
+def _isolation_error(reply: Any) -> Optional[str]:
+    if isinstance(reply, dict) and isinstance(reply.get(process_worker.ISOLATION_ERROR_KEY), str):
+        return reply[process_worker.ISOLATION_ERROR_KEY]
+    return None
+
+
+def _stop_isolated_worker(process: multiprocessing.Process, connection: Connection) -> None:
+    # Closing the pipe ends the worker's command loop.
+    connection.close()
+    if process.pid is not None and not _wait_for_exit(process, 1):
+        process.kill()
+        process.join()
+
+
+def _start_isolated_worker() -> Union[dict, Tuple[multiprocessing.Process, Connection]]:
+    """A READY isolated worker, or the error reply when it could not start."""
+    parent_conn, child_conn = _mp_context.Pipe()
+    # Daemon, so the job's exit terminates idle workers instead of waiting for them.
+    process = _mp_context.Process(target=process_worker.worker_process_main, args=(child_conn, True), daemon=True)
+    ready = None
+    try:
+        _start(process)
+        # Only the worker holds its end now, so a worker that dies surfaces as EOFError.
+        child_conn.close()
+        ready = _read_reply(parent_conn)
+        if ready == "READY":
+            return process, parent_conn
+        reason = _isolation_error(ready)
+        if reason is None:
+            return {"code": 500, "error": "Isolated worker sent a malformed ready reply"}
+        _one_shot_isolation_failures.log(reason)
+        return ready
     except EOFError:
         return {"code": 500, "error": "Isolated worker exited before returning a result"}
     finally:
-        # Closing the pipe ends the worker's command loop.
-        parent_conn.close()
-        process.join(timeout=1)
-        if process.is_alive():
-            process.kill()
-            process.join()
+        child_conn.close()
+        if ready != "READY":
+            _stop_isolated_worker(process, parent_conn)
+
+
+def run_user_code_in_isolated_worker(code: str, data: dict, payload_type: Optional[str] = None) -> dict:
+    """Run user code in an isolated worker.
+
+    For callers without a worker pool: Optimization Studio runs code metrics inside its
+    job subprocess, which needs the network itself and so cannot be isolated as a whole.
+    Workers are reused within that process, like pool workers, and replaced after any
+    failure. No timeout here, as before: the job supervisor bounds the run, and isolated
+    workers are killed when the job process exits.
+    """
+    worker = None
+    while worker is None:
+        try:
+            worker = _idle_isolated_workers.get_nowait()
+        except Empty:
+            started = _isolated_worker_spawner.submit(_start_isolated_worker).result()
+            if isinstance(started, dict):
+                return started
+            worker = started
+        if not worker[0].is_alive():
+            _stop_isolated_worker(*worker)
+            worker = None
+    process, connection = worker
+    reusable = False
+    try:
+        connection.send({'code': code, 'data': data, 'payload_type': payload_type})
+        result = _read_reply(connection)
+        if not isinstance(result, dict):
+            return {"code": 400, "error": MALFORMED_REPLY_ERROR}
+        reusable = True
+        return result
+    except (EOFError, BrokenPipeError):
+        return {"code": 500, "error": "Isolated worker exited before returning a result"}
+    finally:
+        if reusable:
+            _idle_isolated_workers.put(worker)
+        else:
+            _stop_isolated_worker(process, connection)
 
 
 class ProcessExecutor(CodeExecutorBase):
@@ -166,6 +260,7 @@ class ProcessExecutor(CodeExecutorBase):
         self.stop_event = Event()
         self.pool_check_interval = int(os.getenv("PYTHON_CODE_EXECUTOR_POOL_CHECK_INTERVAL_IN_SECONDS", "3"))
         self.isolate = isolation_enabled()
+        self._isolation_failures = _IsolationFailureLog()
 
         self.scheduler_thread = None
 
@@ -302,9 +397,10 @@ class ProcessExecutor(CodeExecutorBase):
 
             # Wait for READY signal from worker
             if parent_conn.poll(timeout=10):
-                ready_signal = parent_conn.recv()
-                if isinstance(ready_signal, dict) and process_worker.ISOLATION_ERROR_KEY in ready_signal:
-                    raise _IsolationUnavailable(ready_signal[process_worker.ISOLATION_ERROR_KEY])
+                ready_signal = _read_reply(parent_conn)
+                reason = _isolation_error(ready_signal)
+                if reason is not None:
+                    raise _IsolationUnavailable(reason)
                 if ready_signal != "READY":
                     raise Exception(f"Worker {worker_id} (PID: {process.pid}) sent unexpected signal: {ready_signal}")
             else:
@@ -318,13 +414,13 @@ class ProcessExecutor(CodeExecutorBase):
             logger.info(f"Created worker {worker_id} (PID: {process.pid}) in {latency:.3f}ms.")
         except Exception as e:
             if isinstance(e, _IsolationUnavailable):
-                _log_isolation_failure(str(e))
+                self._isolation_failures.log(str(e))
             else:
                 logger.error(
                     f"Failed to create worker process {worker_id} (PID: {process.pid if process and process.pid else 'N/A'}): {e}")
             if process and process.is_alive():
                 process.terminate()
-                process.join(timeout=1)
+                _wait_for_exit(process, 1)
             if parent_conn:
                 parent_conn.close()
             if child_conn:
@@ -407,7 +503,11 @@ class ProcessExecutor(CodeExecutorBase):
 
             # Wait for result with timeout
             if connection.poll(timeout=self.exec_timeout):
-                result = connection.recv()
+                result = _read_reply(connection)
+                if not isinstance(result, dict):
+                    # The pipe may hold more of the bad reply, so the worker is not reused.
+                    self._async_terminate(worker)
+                    return {"code": 400, "error": MALFORMED_REPLY_ERROR}
             else:
                 logger.error(f"Timeout waiting for result from worker {worker_id}")
                 # Dispatch termination off the request thread so the

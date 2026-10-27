@@ -165,6 +165,7 @@ class TestRouteLitellmCallsThroughGateway:
         fake_litellm.completion(model="openai/gpt-4o-mini", messages=[], **overrides)
         asyncio.run(fake_litellm.acompletion(model="openai/gpt-4o-mini", messages=[], **overrides))
 
+        assert len(fake_litellm.calls) == 2
         for call in fake_litellm.calls:
             assert call == {
                 "model": "openai/gpt-4o-mini",
