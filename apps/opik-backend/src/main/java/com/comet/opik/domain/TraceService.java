@@ -139,10 +139,10 @@ class TraceServiceImpl implements TraceService {
     public static final String TRACE_KEY = "Trace";
 
     /**
-     * Same as the batch delete endpoint's max, so each {@code TracesDeleted} cascade posted per page is no larger than
+     * Same as the batch delete endpoint's max, so each {@code TracesDeleted} cascade posted per batch is no larger than
      * one a user's batch delete can post.
      */
-    static final int DELETE_BY_PROJECT_ID_PAGE_SIZE = 1_000;
+    static final int DELETE_BY_PROJECT_IDS_BATCH_SIZE = 1_000;
 
     private final @NonNull TraceDAO dao;
     private final @NonNull DeletionEventDAO deletionEventDAO;
@@ -556,8 +556,12 @@ class TraceServiceImpl implements TraceService {
     }
 
     /**
-     * Deletes every trace of the given projects one project at a time, so a large project's delete doesn't run
-     * alongside the others. A failure on one project is logged and doesn't stop the rest.
+     * Deletes every trace of the given projects in batches of {@code (project_id, id)} pairs that span projects, so
+     * small projects share a delete statement rather than each costing its own. Each batch goes through
+     * {@link #delete(Set, Connection)}, so it gets the same deletion-events capture as a user's delete and a
+     * {@code TracesDeleted} cascade per project. Ids are read one project at a time, keeping each page's cursor within
+     * one project, where it prunes partitions. A failed read of a project or a failed batch is logged and doesn't stop
+     * the rest.
      */
     @Override
     @WithSpan
@@ -565,41 +569,43 @@ class TraceServiceImpl implements TraceService {
         log.info("Deleting all traces of projects, count '{}'", projectIds.size());
 
         return Mono.deferContextual(ctx -> Flux.fromIterable(projectIds)
-                .concatMap(projectId -> deleteByProjectId(projectId)
+                .concatMap(projectId -> getTraceIdsByProjectId(projectId)
+                        .map(id -> Pair.of(projectId, id))
                         .onErrorResume(error -> {
-                            log.error("Failed to delete all traces of a project, project id '{}', workspace '{}'",
+                            log.error(
+                                    "Failed to read the traces of a project to delete, project id '{}', workspace '{}'",
                                     projectId, ctx.get(RequestContext.WORKSPACE_ID), error);
                             return Mono.empty();
                         }))
+                .buffer(DELETE_BY_PROJECT_IDS_BATCH_SIZE)
+                .concatMap(batch -> template.nonTransaction(connection -> delete(Set.copyOf(batch), connection))
+                        .thenReturn(batch.size())
+                        .onErrorResume(error -> {
+                            log.error("Failed to delete a batch of the projects' traces, count '{}', workspace '{}'",
+                                    batch.size(), ctx.get(RequestContext.WORKSPACE_ID), error);
+                            return Mono.just(0);
+                        }))
+                .reduce(0, Integer::sum)
+                .doOnSuccess(total -> log.info("Deleted all traces of projects, project count '{}', trace count '{}'",
+                        projectIds.size(), total))
                 .then());
     }
 
     /**
-     * Deletes every trace of the project page by page, each page through {@link #delete(Set, UUID)}, so it gets the
-     * same deletion-events capture and {@code TracesDeleted} cascade as a user's delete. Pages are id-ordered, which
-     * keeps each page's ids within few weekly partitions, and the next page is read only after the previous one is
-     * deleted.
+     * Pages through the project's trace ids in id order, reading the next page only once the previous one is
+     * consumed.
      */
-    private Mono<Void> deleteByProjectId(UUID projectId) {
-        log.info("Deleting all traces of a project, project id '{}'", projectId);
-
-        return deleteTracesPage(projectId, null)
-                .expand(page -> page.size() < DELETE_BY_PROJECT_ID_PAGE_SIZE
+    private Flux<UUID> getTraceIdsByProjectId(UUID projectId) {
+        return getTraceIdsPage(projectId, null)
+                .expand(page -> page.size() < DELETE_BY_PROJECT_IDS_BATCH_SIZE
                         ? Mono.empty()
-                        : deleteTracesPage(projectId, page.getLast()))
-                .map(List::size)
-                .reduce(0, Integer::sum)
-                .doOnSuccess(total -> log.info("Deleted all traces of a project, project id '{}', count '{}'",
-                        projectId, total))
-                .then();
+                        : getTraceIdsPage(projectId, page.getLast()))
+                .concatMapIterable(page -> page);
     }
 
-    private Mono<List<UUID>> deleteTracesPage(UUID projectId, UUID lastId) {
+    private Mono<List<UUID>> getTraceIdsPage(UUID projectId, UUID lastId) {
         return template.nonTransaction(connection -> dao.getTraceIdsByProjectId(projectId, lastId,
-                DELETE_BY_PROJECT_ID_PAGE_SIZE, connection).collectList())
-                .flatMap(page -> page.isEmpty()
-                        ? Mono.just(page)
-                        : delete(Set.copyOf(page), projectId).thenReturn(page));
+                DELETE_BY_PROJECT_IDS_BATCH_SIZE, connection).collectList());
     }
 
     /**

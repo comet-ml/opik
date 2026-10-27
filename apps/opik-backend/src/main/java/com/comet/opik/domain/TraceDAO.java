@@ -49,6 +49,7 @@ import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Row;
 import io.r2dbc.spi.RowMetadata;
 import io.r2dbc.spi.Statement;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
@@ -175,7 +176,7 @@ public interface TraceDAO {
 
     Mono<Set<UUID>> getTraceIdsByThreadIds(UUID projectId, List<String> threadIds, Connection connection);
 
-    Flux<UUID> getTraceIdsByProjectId(UUID projectId, UUID lastId, int limit, Connection connection);
+    Flux<UUID> getTraceIdsByProjectId(UUID projectId, @Nullable UUID lastId, int limit, Connection connection);
 
     Mono<Trace> getPartialById(UUID id);
 
@@ -3550,6 +3551,13 @@ class TraceDAOImpl implements TraceDAO {
      * Also reads the trace ids of the project's spans, so spans whose trace was never stored are found too. Each side
      * is limited before the union, since the first {@code limit} ids of the union are within the first {@code limit}
      * of each side.
+     * <p>
+     * The traces cursor carries a parallel week-start bound, as in {@link #SELECT_BY_PROJECT_ID}, so a page skips the
+     * partitions before the cursor's week. Only under {@code traces_partitioned}: the legacy table has no partitions to
+     * prune and keeps a 32-bit {@code id_at} that wraps far-future ids, so the bound there could only drop rows. The
+     * spans side pages by {@code trace_id} while spans partition on their own id, so the cursor implies nothing about
+     * their weeks; under {@code span_weeks_bound} it reads only the weeks the {@code span_weeks} index holds for the
+     * project's traces past the cursor.
      */
     private static final String SELECT_TRACE_IDS_BY_PROJECT_ID = """
             SELECT id
@@ -3559,7 +3567,9 @@ class TraceDAOImpl implements TraceDAO {
                     FROM traces
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
-                    <if(last_id)>AND id > :last_id<endif>
+                    <if(last_id)>AND id > :last_id
+                    <if(traces_partitioned)>AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        >= (toDate32(UUIDv7ToDateTime(toUUID(:last_id), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:last_id), 'UTC'), 1)))<endif><endif>
                     ORDER BY id
                     LIMIT :limit
                 )
@@ -3570,6 +3580,12 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
                     <if(last_id)>AND trace_id > :last_id<endif>
+                    <if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                        SELECT id_week FROM span_weeks
+                        WHERE workspace_id = :workspace_id
+                        AND project_id = :project_id
+                        <if(last_id)>AND trace_id > :last_id<endif>
+                    )<endif>
                     ORDER BY trace_id
                     LIMIT :limit
                 )
@@ -5428,7 +5444,7 @@ class TraceDAOImpl implements TraceDAO {
 
     @Override
     @WithSpan
-    public Flux<UUID> getTraceIdsByProjectId(@NonNull UUID projectId, UUID lastId, int limit,
+    public Flux<UUID> getTraceIdsByProjectId(@NonNull UUID projectId, @Nullable UUID lastId, int limit,
             @NonNull Connection connection) {
         log.debug("Getting trace IDs by project id '{}', after id '{}', limit '{}'", projectId, lastId, limit);
 
@@ -5436,6 +5452,8 @@ class TraceDAOImpl implements TraceDAO {
             var template = getSTWithLogComment(SELECT_TRACE_IDS_BY_PROJECT_ID, "get_trace_ids_by_project_id",
                     workspaceId, userName, "project_id=%s, last_id=%s, limit=%s".formatted(projectId, lastId, limit));
             Optional.ofNullable(lastId).ifPresent(id -> template.add("last_id", id));
+            addTracesPartitionedFlag(template);
+            addSpanWeeksBound(template);
 
             var statement = connection.createStatement(template.render())
                     .bind("workspace_id", workspaceId)

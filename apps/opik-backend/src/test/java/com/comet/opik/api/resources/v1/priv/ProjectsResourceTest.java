@@ -3252,15 +3252,18 @@ class ProjectsResourceTest {
             var workspaceId = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var deletedProjectId = createProjectWithTracedSpans(apiKey, workspaceName);
+            // Two deleted projects, so their traces are deleted in one batch spanning both.
+            var deletedProjectIds = Set.of(createProjectWithTracedSpans(apiKey, workspaceName),
+                    createProjectWithTracedSpans(apiKey, workspaceName));
             var keptProjectId = createProjectWithTracedSpans(apiKey, workspaceName);
             var keptProjectCost = getProjectCost(keptProjectId, apiKey, workspaceName);
-            assertThat(getProjectCost(deletedProjectId, apiKey, workspaceName)).isPositive();
+            deletedProjectIds.forEach(projectId -> assertThat(getProjectCost(projectId, apiKey, workspaceName))
+                    .isPositive());
 
-            projectResourceClient.deleteProjectsBatch(Set.of(deletedProjectId), apiKey, workspaceName);
+            projectResourceClient.deleteProjectsBatch(deletedProjectIds, apiKey, workspaceName);
 
-            Awaitility.await().untilAsserted(
-                    () -> assertThat(getProjectCost(deletedProjectId, apiKey, workspaceName)).isZero());
+            Awaitility.await().untilAsserted(() -> deletedProjectIds.forEach(
+                    projectId -> assertThat(getProjectCost(projectId, apiKey, workspaceName)).isZero()));
             assertThat(getProjectCost(keptProjectId, apiKey, workspaceName)).isEqualTo(keptProjectCost);
         }
 
