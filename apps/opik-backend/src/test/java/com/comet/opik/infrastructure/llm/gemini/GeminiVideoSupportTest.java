@@ -1,10 +1,14 @@
 package com.comet.opik.infrastructure.llm.gemini;
 
+import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.domain.llm.langchain4j.OpikContent;
 import com.comet.opik.domain.llm.langchain4j.OpikContentType;
 import com.comet.opik.domain.llm.langchain4j.OpikGeminiChatModel;
 import com.comet.opik.domain.llm.langchain4j.OpikUserMessage;
 import com.comet.opik.domain.llm.langchain4j.VideoUrl;
+import com.comet.opik.infrastructure.LlmProviderClientConfig;
+import com.comet.opik.infrastructure.llm.RemoteMediaInliner;
+import com.comet.opik.infrastructure.net.DestinationGuard;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.AudioContent;
 import dev.langchain4j.data.message.ChatMessage;
@@ -16,6 +20,9 @@ import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.RandomUtils;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -25,8 +32,13 @@ import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.Base64;
 import java.util.List;
+import java.util.UUID;
 
+import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
+import static com.github.tomakehurst.wiremock.client.WireMock.get;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
@@ -45,6 +57,36 @@ class GeminiVideoSupportTest {
 
     @Captor
     private ArgumentCaptor<ChatRequest> chatRequestCaptor;
+
+    // Gemini downloads image URLs itself, so the videos converted to images are served locally and arrive inlined
+    private static final WireMockUtils.WireMockRuntime WIRE_MOCK = WireMockUtils.startWireMock();
+    private static final byte[] VIDEO_BYTES = RandomUtils.secure().randomBytes(64);
+    private static final ImageContent INLINED_VIDEO = ImageContent.from(
+            Base64.getEncoder().encodeToString(VIDEO_BYTES), "video/mp4");
+
+    @BeforeAll
+    static void setUp() {
+        RemoteMediaInliner.setConfig(config(DestinationGuard.Mode.RELAXED));
+    }
+
+    @AfterAll
+    static void tearDown() {
+        RemoteMediaInliner.setConfig(config(DestinationGuard.Mode.STRICT));
+        WIRE_MOCK.server().stop();
+    }
+
+    private static LlmProviderClientConfig config(DestinationGuard.Mode mode) {
+        var config = new LlmProviderClientConfig();
+        config.setVideoUrlDestinationGuard(mode);
+        return config;
+    }
+
+    private static String stubVideo(String fileName) {
+        var path = "/%s/%s".formatted(UUID.randomUUID(), fileName);
+        WIRE_MOCK.server().stubFor(get(urlPathEqualTo(path))
+                .willReturn(aResponse().withHeader("Content-Type", "video/mp4").withBody(VIDEO_BYTES)));
+        return WIRE_MOCK.runtimeInfo().getHttpBaseUrl() + path;
+    }
 
     @Nested
     @DisplayName("GeminiLangChainMapper Tests")
@@ -197,7 +239,7 @@ class GeminiVideoSupportTest {
         @DisplayName("Should convert ChatCompletionRequest with VIDEO_URL messages for Gemini")
         void shouldConvertChatCompletionRequestForGemini() {
             // Given: ChatCompletionRequest with VIDEO_URL message
-            var videoUrl = "https://storage.googleapis.com/example-bucket/video.mp4";
+            var videoUrl = stubVideo("video.mp4");
             var videoContent = OpikContent.builder()
                     .type(OpikContentType.VIDEO_URL)
                     .videoUrl(VideoUrl.builder().url(videoUrl).build())
@@ -224,7 +266,7 @@ class GeminiVideoSupportTest {
             assertThat(userMessage.contents().get(0)).isInstanceOf(ImageContent.class);
 
             var imageContent = (ImageContent) userMessage.contents().get(0);
-            assertThat(imageContent.image().url()).hasToString(videoUrl);
+            assertThat(imageContent).isEqualTo(INLINED_VIDEO);
 
             log.info("SUCCESS: ChatCompletionRequest converted for Gemini");
         }
@@ -241,7 +283,7 @@ class GeminiVideoSupportTest {
             var opikGeminiModel = new OpikGeminiChatModel(mockDelegate);
 
             // Given: UserMessage with VideoContent (from OpikOpenAiChatModel conversion)
-            var videoUrl = "https://storage.googleapis.com/example-bucket/video.mp4";
+            var videoUrl = stubVideo("video.mp4");
             var videoContent = dev.langchain4j.data.message.VideoContent.from(videoUrl);
             var userMessage = UserMessage.from(List.of(videoContent));
 
@@ -266,7 +308,7 @@ class GeminiVideoSupportTest {
             assertThat(processedUserMessage.contents().get(0)).isInstanceOf(ImageContent.class);
 
             var imageContent = (ImageContent) processedUserMessage.contents().get(0);
-            assertThat(imageContent.image().url()).hasToString(videoUrl);
+            assertThat(imageContent).isEqualTo(INLINED_VIDEO);
 
             log.info("SUCCESS: VideoContent converted to ImageContent for online scoring");
         }
@@ -315,7 +357,7 @@ class GeminiVideoSupportTest {
 
             // Given: UserMessage with TextContent and VideoContent
             var textContent = TextContent.from("What happens in this video?");
-            var videoUrl = "https://storage.googleapis.com/example-bucket/demo.mp4";
+            var videoUrl = stubVideo("demo.mp4");
             var videoContent = dev.langchain4j.data.message.VideoContent.from(videoUrl);
             var userMessage = UserMessage.from(List.of(textContent, videoContent));
 
@@ -344,7 +386,7 @@ class GeminiVideoSupportTest {
 
             assertThat(processedUserMessage.contents().get(1)).isInstanceOf(ImageContent.class);
             var processedImageContent = (ImageContent) processedUserMessage.contents().get(1);
-            assertThat(processedImageContent.image().url()).hasToString(videoUrl);
+            assertThat(processedImageContent).isEqualTo(INLINED_VIDEO);
 
             log.info("SUCCESS: Multimodal message converted for online scoring");
         }
@@ -380,7 +422,7 @@ class GeminiVideoSupportTest {
             var opikGeminiModel = new OpikGeminiChatModel(mockDelegate);
 
             var audioUrl = "https://storage.googleapis.com/example-bucket/clip.mp3";
-            var videoUrl = "https://storage.googleapis.com/example-bucket/demo.mp4";
+            var videoUrl = stubVideo("demo.mp4");
             var userMessage = UserMessage.from(List.of(
                     AudioContent.from(audioUrl),
                     dev.langchain4j.data.message.VideoContent.from(videoUrl)));
@@ -395,7 +437,7 @@ class GeminiVideoSupportTest {
             assertThat(processedUserMessage.contents().get(0)).isInstanceOf(AudioContent.class);
             assertThat(((AudioContent) processedUserMessage.contents().get(0)).audio().url())
                     .hasToString(audioUrl);
-            assertThat(processedUserMessage.contents().get(1)).isInstanceOf(ImageContent.class);
+            assertThat(processedUserMessage.contents().get(1)).isEqualTo(INLINED_VIDEO);
         }
 
         @Test

@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.llm.vertexai;
 
+import com.comet.opik.infrastructure.llm.RemoteMediaInliner;
 import com.google.genai.Client;
 import dev.langchain4j.model.ModelProvider;
 import dev.langchain4j.model.chat.Capability;
@@ -27,7 +28,9 @@ class CloseableVertexAiStreamingChatModel implements StreamingChatModel, AutoClo
 
     @Override
     public void chat(ChatRequest chatRequest, StreamingChatResponseHandler handler) {
-        delegate.chat(chatRequest, handler);
+        delegate.chat(chatRequest.toBuilder()
+                .messages(RemoteMediaInliner.inlineForVertexAi(chatRequest.messages()))
+                .build(), handler);
     }
 
     @Override

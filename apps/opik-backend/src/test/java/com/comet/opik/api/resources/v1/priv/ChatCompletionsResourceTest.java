@@ -14,6 +14,11 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.ChatCompletionsClient;
 import com.comet.opik.api.resources.utils.resources.LlmProviderApiKeyResourceClient;
 import com.comet.opik.domain.llm.LlmProviderFactory;
+import com.comet.opik.domain.llm.langchain4j.AudioUrl;
+import com.comet.opik.domain.llm.langchain4j.OpikContent;
+import com.comet.opik.domain.llm.langchain4j.OpikContentType;
+import com.comet.opik.domain.llm.langchain4j.OpikUserMessage;
+import com.comet.opik.domain.llm.langchain4j.VideoUrl;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -29,6 +34,7 @@ import com.redis.testcontainers.RedisContainer;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.openai.internal.chat.Content;
 import dev.langchain4j.model.openai.internal.chat.ContentType;
+import dev.langchain4j.model.openai.internal.chat.ImageUrl;
 import dev.langchain4j.model.openai.internal.chat.Message;
 import dev.langchain4j.model.openai.internal.chat.Role;
 import dev.langchain4j.model.openai.internal.chat.UserMessage;
@@ -70,6 +76,8 @@ import java.util.stream.Stream;
 import static com.comet.opik.domain.llm.ChatCompletionService.ERROR_EMPTY_MESSAGES;
 import static com.comet.opik.domain.llm.LlmProviderFactory.ERROR_MODEL_NOT_SUPPORTED;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
+import static com.github.tomakehurst.wiremock.client.WireMock.any;
+import static com.github.tomakehurst.wiremock.client.WireMock.anyRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.head;
 import static com.github.tomakehurst.wiremock.client.WireMock.headRequestedFor;
@@ -1382,6 +1390,64 @@ class ChatCompletionsResourceTest {
                     "client_email": "test@test-project.iam.gserviceaccount.com", "client_id": "1234567890",
                     "token_uri": "%s"}"""
                     .formatted(privateKey, tokenUri);
+        }
+
+        private Stream<Arguments> mediaUrlOnInternalAddressIsNeverDownloaded() {
+            return Stream.of(
+                    arguments(LlmProvider.GEMINI, OpikContentType.IMAGE_URL, ".png"),
+                    arguments(LlmProvider.GEMINI, OpikContentType.VIDEO_URL, ".mp4"),
+                    arguments(LlmProvider.VERTEX_AI, OpikContentType.IMAGE_URL, ".png"),
+                    arguments(LlmProvider.VERTEX_AI, OpikContentType.VIDEO_URL, ".mp4"),
+                    arguments(LlmProvider.VERTEX_AI, OpikContentType.AUDIO_URL, ".wav"));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("a media URL on an internal address is refused before Gemini or Vertex AI can download it")
+        void mediaUrlOnInternalAddressIsNeverDownloaded(LlmProvider provider, OpikContentType type, String extension)
+                throws Exception {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            mockTargetWorkspace(workspaceName, UUID.randomUUID().toString());
+            var model = provider == LlmProvider.GEMINI
+                    ? GeminiModelName.GEMINI_2_5_FLASH.toString()
+                    : VertexAIModelName.GEMINI_2_5_FLASH.qualifiedName();
+            llmProviderApiKeyResourceClient.createProviderApiKey(ProviderApiKey.builder()
+                    .provider(provider)
+                    .apiKey(provider == LlmProvider.GEMINI
+                            ? RandomStringUtils.randomAlphanumeric(20)
+                            : serviceAccountJson("https://oauth2.googleapis.com/token"))
+                    .configuration(provider == LlmProvider.GEMINI ? Map.of() : Map.of("location", "us-central1"))
+                    .build(), API_KEY, workspaceName, HttpStatus.SC_CREATED);
+            var mediaPath = "/media-%s%s".formatted(UUID.randomUUID(), extension);
+            var mediaUrl = WIRE_MOCK.runtimeInfo().getHttpBaseUrl() + mediaPath;
+            WIRE_MOCK.server().stubFor(any(urlPathEqualTo(mediaPath))
+                    .willReturn(aResponse().withBody(RandomStringUtils.randomAlphanumeric(32))));
+            var media = switch (type) {
+                case IMAGE_URL -> OpikContent.builder().type(type)
+                        .imageUrl(ImageUrl.builder().url(mediaUrl).build()).build();
+                case VIDEO_URL -> OpikContent.builder().type(type)
+                        .videoUrl(VideoUrl.builder().url(mediaUrl).build()).build();
+                case AUDIO_URL -> OpikContent.builder().type(type)
+                        .audioUrl(AudioUrl.builder().url(mediaUrl).build()).build();
+                default -> throw new IllegalArgumentException(type.toString());
+            };
+            var message = OpikUserMessage.builder()
+                    .content(List.of(OpikContent.builder().type(OpikContentType.TEXT).text("describe").build(), media))
+                    .build();
+            var expected = new ErrorMessage(HttpStatus.SC_BAD_REQUEST,
+                    "a media URL was refused: it must be an http or https URL that resolves to a public address"
+                            + " (self-hosted deployments serving media from internal networks can set"
+                            + " LLM_PROVIDER_VIDEO_URL_DESTINATION_GUARD=relaxed)");
+
+            var request = ChatCompletionRequest.builder().stream(false).model(model).messages(message).build();
+            assertThat(chatCompletionsClient.create(API_KEY, workspaceName, request, HttpStatus.SC_BAD_REQUEST))
+                    .isEqualTo(expected);
+
+            var streamed = ChatCompletionRequest.builder().stream(true).model(model).messages(message).build();
+            assertThat(chatCompletionsClient.createAndGetStreamedError(API_KEY, workspaceName, streamed))
+                    .containsExactly(expected);
+
+            WIRE_MOCK.server().verify(0, anyRequestedFor(urlPathEqualTo(mediaPath)));
         }
 
         @Test

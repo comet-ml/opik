@@ -65,8 +65,9 @@ public class LlmProviderClientConfig {
     @NotNull private DestinationGuard.Scheme destinationScheme;
 
     /**
-     * Destination policy for the HEAD request that detects the MIME type of an extensionless video URL. The URL
-     * comes from any caller's message, and a refusal only loses the hint.
+     * Destination policy for media URLs in a caller's message: the HEAD request that detects the MIME type of an
+     * extensionless video URL, and the download of the media URLs Gemini and Vertex AI would otherwise fetch
+     * themselves. The URL comes from any caller's message, or from trace data for online scoring.
      */
     @NotNull private DestinationGuard.Mode videoUrlDestinationGuard;
 }

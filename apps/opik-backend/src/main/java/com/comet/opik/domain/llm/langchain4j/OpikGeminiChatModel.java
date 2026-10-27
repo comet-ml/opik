@@ -1,5 +1,6 @@
 package com.comet.opik.domain.llm.langchain4j;
 
+import com.comet.opik.infrastructure.llm.RemoteMediaInliner;
 import dev.langchain4j.data.image.Image;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.Content;
@@ -31,7 +32,8 @@ public class OpikGeminiChatModel implements ChatModel {
     @Override
     public ChatResponse chat(ChatRequest chatRequest) {
         // Convert messages: if any UserMessage has VideoContent, convert to ImageContent
-        List<ChatMessage> convertedMessages = convertMessagesForGemini(chatRequest.messages());
+        List<ChatMessage> convertedMessages = RemoteMediaInliner.inlineForGemini(
+                convertMessagesForGemini(chatRequest.messages()));
 
         // Create new request with converted messages
         ChatRequest convertedRequest = ChatRequest.builder()
