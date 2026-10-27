@@ -3,6 +3,8 @@ package com.comet.opik.infrastructure.llm;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException;
 import com.comet.opik.infrastructure.net.DestinationGuard;
+import com.comet.opik.infrastructure.net.DestinationGuardDns;
+import com.comet.opik.infrastructure.net.DestinationGuardDnsResolver;
 import com.comet.opik.infrastructure.net.DestinationGuardException;
 import dev.langchain4j.data.image.Image;
 import dev.langchain4j.data.message.AudioContent;
@@ -145,10 +147,12 @@ public class RemoteMediaInliner {
             log.warn("Refused media URL, url '{}'", VideoMimeTypeUtils.loggable(url));
             throw new ProviderRequestRefusedException(MEDIA_URL);
         }
-        // a redirect is a failed download, so the only destination is the one just checked
+        // a redirect is a failed download, and the guard checks each address connected to, so the only destination
+        // is the one just checked
         var future = client.target(url)
                 .request()
                 .property(ClientProperties.FOLLOW_REDIRECTS, false)
+                .property(DestinationGuardDnsResolver.PROPERTY, destinationGuard)
                 .property(ClientProperties.CONNECT_TIMEOUT, timeoutMillis)
                 .property(ClientProperties.READ_TIMEOUT, timeoutMillis)
                 .async()
@@ -162,6 +166,10 @@ public class RemoteMediaInliner {
             throw new ProviderRequestRefusedException(MEDIA_URL_DOWNLOAD);
         } catch (ExecutionException | TimeoutException | IOException | ProcessingException exception) {
             future.cancel(true);
+            if (DestinationGuardDns.isRefused(exception)) {
+                log.warn("Refused media URL: '{}'", VideoMimeTypeUtils.loggable(url));
+                throw new ProviderRequestRefusedException(MEDIA_URL);
+            }
             // the message can echo the full URL, credentials included, so only the type is logged
             log.warn("Media URL download failed, error type '{}', url '{}'", exception.getClass().getSimpleName(),
                     VideoMimeTypeUtils.loggable(url));

@@ -2,9 +2,9 @@ package com.comet.opik.api.resources.utils;
 
 import com.codahale.metrics.MetricRegistry;
 import com.comet.opik.TestConfigUtils;
+import com.comet.opik.infrastructure.http.DestinationGuardJerseyClientBuilder;
 import com.comet.opik.infrastructure.http.HttpModule;
 import com.comet.opik.infrastructure.http.MatrixParameterRequestFilter;
-import io.dropwizard.client.JerseyClientBuilder;
 import jakarta.ws.rs.client.Client;
 import lombok.Getter;
 import lombok.experimental.Accessors;
@@ -59,7 +59,7 @@ public class TestHttpClientUtils {
                     60L, TimeUnit.SECONDS,
                     new ArrayBlockingQueue<>(jerseyConfig.getWorkQueueSize()),
                     newThreadFactory());
-            var jerseyClientBuilder = new JerseyClientBuilder(new MetricRegistry())
+            var jerseyClientBuilder = new DestinationGuardJerseyClientBuilder(new MetricRegistry())
                     .using(executor);
             return HttpModule.buildClient(jerseyClientBuilder, jerseyConfig);
         } catch (Exception exception) {

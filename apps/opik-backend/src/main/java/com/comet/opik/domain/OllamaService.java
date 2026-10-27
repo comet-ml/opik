@@ -2,6 +2,8 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.OllamaConnectionTestResponse;
 import com.comet.opik.api.OllamaModel;
+import com.comet.opik.infrastructure.llm.customllm.ProviderBaseUrlGuard;
+import com.comet.opik.infrastructure.net.DestinationGuardDnsResolver;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.ValidationUtils;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -36,6 +38,7 @@ import java.util.List;
 public class OllamaService {
 
     private final @NonNull Client httpClient;
+    private final @NonNull ProviderBaseUrlGuard providerBaseUrlGuard;
 
     /**
      * Tests connection to an Ollama instance and retrieves a server version.
@@ -134,6 +137,8 @@ public class OllamaService {
         return Mono.create(sink -> {
             var requestBuilder = httpClient.target(url)
                     .property(ClientProperties.FOLLOW_REDIRECTS, false)
+                    // the caller validated the base URL; this checks each address connected to
+                    .property(DestinationGuardDnsResolver.PROPERTY, providerBaseUrlGuard.destinationGuard())
                     .request(MediaType.APPLICATION_JSON);
 
             if (apiKey != null && !apiKey.isBlank()) {

@@ -6,6 +6,7 @@ import com.comet.opik.infrastructure.WebhookConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.comet.opik.infrastructure.net.DestinationGuard;
+import com.comet.opik.infrastructure.net.DestinationGuardDnsResolver;
 import com.comet.opik.utils.RetryUtils;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -131,6 +132,8 @@ public class WebhookHttpClient {
 
                 // a redirect would carry the secret and headers to a destination the guard never checked
                 requestBuilder.property(ClientProperties.FOLLOW_REDIRECTS, false);
+                // checks each address connected to, not only the one validated above
+                requestBuilder.property(DestinationGuardDnsResolver.PROPERTY, destinationGuard);
 
                 // Set timeout properties
                 requestBuilder.property("jersey.config.client.connectTimeout",
