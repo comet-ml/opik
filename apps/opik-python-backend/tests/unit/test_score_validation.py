@@ -1,6 +1,6 @@
 import pytest
 
-from opik_backend.score_validation import has_usable_score
+from opik_backend.score_validation import has_usable_score, rejection_reason
 
 
 def score(name="metric", value=1.0, scoring_failed=False):
@@ -35,3 +35,22 @@ def test_only_a_real_true_counts_as_a_failed_scoring(flag):
 
 def test_a_real_true_counts_as_a_failed_scoring():
     assert has_usable_score([score(name="a", value=1.0, scoring_failed=True)]) is False
+
+
+@pytest.mark.parametrize("response, expected", [
+    ({"scores": [score()]}, None),
+    ({"scores": [score(value=0.0)]}, None),
+    ({"scores": [score(value=None)]}, "no_usable_score"),
+    ({"scores": [score(value=0.0, scoring_failed=True)]}, "no_usable_score"),
+    ({"scores": []}, "no_scores"),
+    ({"scores": None}, "no_scores"),
+    ({"scores": "not a list"}, "no_scores"),
+    ({}, "no_scores"),
+    ({"error": "boom"}, "error_payload"),
+    ({"error": None}, "error_payload"),
+    ({"scores": [], "error": "boom"}, "error_payload"),
+    (None, "unparsable_result"),
+    (["scores"], "unparsable_result"),
+])
+def test_rejection_reason_matches_what_the_endpoint_serves(response, expected):
+    assert rejection_reason(response) == expected

@@ -19,6 +19,7 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.glassfish.jersey.client.ClientProperties;
 import org.slf4j.Logger;
 import reactor.core.publisher.Mono;
 import reactor.util.retry.Retry;
@@ -127,6 +128,9 @@ public class WebhookHttpClient {
                 if (StringUtils.isNotBlank(event.getSecret())) {
                     requestBuilder.header(HttpHeaders.AUTHORIZATION, BEARER_PREFIX + decrypt(event.getSecret()));
                 }
+
+                // a redirect would carry the secret and headers to a destination the guard never checked
+                requestBuilder.property(ClientProperties.FOLLOW_REDIRECTS, false);
 
                 // Set timeout properties
                 requestBuilder.property("jersey.config.client.connectTimeout",

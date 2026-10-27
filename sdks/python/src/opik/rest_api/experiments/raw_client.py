@@ -13,7 +13,9 @@ from ..core.request_options import RequestOptions
 from ..core.serialization import convert_and_respect_annotation_metadata
 from ..errors.bad_request_error import BadRequestError
 from ..errors.conflict_error import ConflictError
+from ..errors.forbidden_error import ForbiddenError
 from ..errors.not_found_error import NotFoundError
+from ..errors.too_many_requests_error import TooManyRequestsError
 from ..errors.unprocessable_entity_error import UnprocessableEntityError
 from ..types.experiment_execution_response import ExperimentExecutionResponse
 from ..types.experiment_group_aggregations_response import ExperimentGroupAggregationsResponse
@@ -97,6 +99,65 @@ class RawExperimentsClient:
                 return HttpResponse(response=_response, data=None)
             if _response.status_code == 400:
                 raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def cancel_experiments(
+        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+    ) -> HttpResponse[None]:
+        """
+        Stops the given experiments: queued items are skipped and the experiments are marked cancelled
+
+        Parameters
+        ----------
+        ids : typing.Sequence[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[None]
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/experiments/cancel",
+            method="PUT",
+            json={
+                "ids": ids,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return HttpResponse(response=_response, data=None)
+            if _response.status_code == 403:
+                raise ForbiddenError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 429:
+                raise TooManyRequestsError(
                     headers=dict(_response.headers),
                     body=typing.cast(
                         typing.Optional[typing.Any],
@@ -449,8 +510,11 @@ class RawExperimentsClient:
         dataset_id: str,
         dataset_version_id: typing.Optional[str] = OMIT,
         project_name: typing.Optional[str] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
         version_hash: typing.Optional[str] = OMIT,
         prompt_versions: typing.Optional[typing.Sequence[PromptVersionLink]] = OMIT,
+        selected_rule_ids: typing.Optional[typing.Sequence[str]] = OMIT,
+        filters: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[ExperimentExecutionResponse]:
         """
@@ -468,9 +532,15 @@ class RawExperimentsClient:
 
         project_name : typing.Optional[str]
 
+        project_id : typing.Optional[str]
+
         version_hash : typing.Optional[str]
 
         prompt_versions : typing.Optional[typing.Sequence[PromptVersionLink]]
+
+        selected_rule_ids : typing.Optional[typing.Sequence[str]]
+
+        filters : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -490,11 +560,14 @@ class RawExperimentsClient:
                     object_=prompts, annotation=typing.Sequence[PromptVariant], direction="write"
                 ),
                 "project_name": project_name,
+                "project_id": project_id,
                 "dataset_id": dataset_id,
                 "version_hash": version_hash,
                 "prompt_versions": convert_and_respect_annotation_metadata(
                     object_=prompt_versions, annotation=typing.Sequence[PromptVersionLink], direction="write"
                 ),
+                "selected_rule_ids": selected_rule_ids,
+                "filters": filters,
             },
             headers={
                 "content-type": "application/json",
@@ -514,6 +587,28 @@ class RawExperimentsClient:
                 return HttpResponse(response=_response, data=_data)
             if _response.status_code == 400:
                 raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 403:
+                raise ForbiddenError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 429:
+                raise TooManyRequestsError(
                     headers=dict(_response.headers),
                     body=typing.cast(
                         typing.Optional[typing.Any],
@@ -1267,6 +1362,65 @@ class AsyncRawExperimentsClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
+    async def cancel_experiments(
+        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+    ) -> AsyncHttpResponse[None]:
+        """
+        Stops the given experiments: queued items are skipped and the experiments are marked cancelled
+
+        Parameters
+        ----------
+        ids : typing.Sequence[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[None]
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/experiments/cancel",
+            method="PUT",
+            json={
+                "ids": ids,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return AsyncHttpResponse(response=_response, data=None)
+            if _response.status_code == 403:
+                raise ForbiddenError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 429:
+                raise TooManyRequestsError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
     async def find_experiments(
         self,
         *,
@@ -1605,8 +1759,11 @@ class AsyncRawExperimentsClient:
         dataset_id: str,
         dataset_version_id: typing.Optional[str] = OMIT,
         project_name: typing.Optional[str] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
         version_hash: typing.Optional[str] = OMIT,
         prompt_versions: typing.Optional[typing.Sequence[PromptVersionLink]] = OMIT,
+        selected_rule_ids: typing.Optional[typing.Sequence[str]] = OMIT,
+        filters: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[ExperimentExecutionResponse]:
         """
@@ -1624,9 +1781,15 @@ class AsyncRawExperimentsClient:
 
         project_name : typing.Optional[str]
 
+        project_id : typing.Optional[str]
+
         version_hash : typing.Optional[str]
 
         prompt_versions : typing.Optional[typing.Sequence[PromptVersionLink]]
+
+        selected_rule_ids : typing.Optional[typing.Sequence[str]]
+
+        filters : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1646,11 +1809,14 @@ class AsyncRawExperimentsClient:
                     object_=prompts, annotation=typing.Sequence[PromptVariant], direction="write"
                 ),
                 "project_name": project_name,
+                "project_id": project_id,
                 "dataset_id": dataset_id,
                 "version_hash": version_hash,
                 "prompt_versions": convert_and_respect_annotation_metadata(
                     object_=prompt_versions, annotation=typing.Sequence[PromptVersionLink], direction="write"
                 ),
+                "selected_rule_ids": selected_rule_ids,
+                "filters": filters,
             },
             headers={
                 "content-type": "application/json",
@@ -1670,6 +1836,28 @@ class AsyncRawExperimentsClient:
                 return AsyncHttpResponse(response=_response, data=_data)
             if _response.status_code == 400:
                 raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 403:
+                raise ForbiddenError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 429:
+                raise TooManyRequestsError(
                     headers=dict(_response.headers),
                     body=typing.cast(
                         typing.Optional[typing.Any],

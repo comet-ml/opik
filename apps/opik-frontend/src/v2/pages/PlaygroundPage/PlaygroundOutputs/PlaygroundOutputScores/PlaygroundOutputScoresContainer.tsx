@@ -1,10 +1,14 @@
 import React, { useMemo, useRef, useEffect } from "react";
+import get from "lodash/get";
+import isArray from "lodash/isArray";
 
 import useTraceById from "@/api/traces/useTraceById";
 import useRulesList from "@/api/automations/useRulesList";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
+import { useSelectedRuleIds } from "@/store/PlaygroundStore";
 import { getScoreNamesFromRule } from "@/lib/rules";
 import { EvaluatorsRule } from "@/types/automations";
+import { Trace } from "@/types/traces";
 import {
   isAlwaysRunRule,
   isTraceRule,
@@ -19,18 +23,31 @@ const scoreNamesOf = (rules: EvaluatorsRule[]) =>
     (a, b) => a.localeCompare(b),
   );
 
+const pickedRuleIdsOf = (trace: Trace): string[] => {
+  const picked: unknown = get(trace.metadata, "selected_rule_ids");
+  return isArray(picked) ? picked : [];
+};
+
+const scoringRulesOf = (rules: EvaluatorsRule[], pickedRuleIds: string[]) => {
+  const pickedIds = new Set(pickedRuleIds);
+  return rules.filter(
+    (rule) =>
+      isTraceRule(rule) && (pickedIds.has(rule.id) || isAlwaysRunRule(rule)),
+  );
+};
+
 interface PlaygroundOutputScoresContainerProps {
   traceId: string | null;
-  selectedRuleIds: string[] | null | undefined;
   notRun?: boolean;
   className?: string;
 }
 
 const PlaygroundOutputScoresContainer: React.FC<
   PlaygroundOutputScoresContainerProps
-> = ({ traceId, selectedRuleIds, notRun = false, className }) => {
+> = ({ traceId, notRun = false, className }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const activeProjectId = useActiveProjectId();
+  const pickerRuleIds = useSelectedRuleIds();
   const pollingStartTimeRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -55,76 +72,62 @@ const PlaygroundOutputScoresContainer: React.FC<
 
   const rules = useMemo(() => rulesData?.content || [], [rulesData?.content]);
 
-  const selectedRuleIdsSet = useMemo(
-    () => new Set(selectedRuleIds ?? []),
-    [selectedRuleIds],
-  );
-
-  // A dataset run is logged as an experiment trace, so every enabled rule targeting experiments
-  // scores it alongside the picked ones. Both sets are known up front, so both get a pending tag
-  // and both are awaited, or the cell would stop refetching before the unpicked scores land.
-  const scoringRules = useMemo(
-    () =>
-      rules.filter(
-        (rule) =>
-          isTraceRule(rule) &&
-          (selectedRuleIdsSet.has(rule.id) || isAlwaysRunRule(rule)),
-      ),
-    [rules, selectedRuleIdsSet],
-  );
-
-  // With no rule to score this trace there is nothing to poll for. Two cases leave us unable to
-  // tell: the list is still loading, or it is capped at one page and a scoring rule may sit beyond
-  // it. Both keep polling. A failed lookup stops it, since guessing would poll to the timeout.
+  // Any trace rule may have been picked; which ones only shows once the trace loads. A loading or
+  // capped list may hide one, so both fetch. A failed lookup does not, or it would poll to timeout.
   const rulesPending = !!activeProjectId && !rulesLoaded && !rulesFailed;
   const rulesTruncated = (rulesData?.total ?? 0) > rules.length;
-  const hasScoringRules =
-    rulesPending || rulesTruncated || scoringRules.length > 0;
-
-  const expectedMetricNames = useMemo(
-    () => scoreNamesOf(scoringRules),
-    [scoringRules],
-  );
-
-  const awaitedScoreNames = useMemo(
-    () => new Set(expectedMetricNames),
-    [expectedMetricNames],
-  );
-
-  const awaitedScoreNamesRef = useRef(awaitedScoreNames);
-  awaitedScoreNamesRef.current = awaitedScoreNames;
-
-  const rulesTruncatedRef = useRef(rulesTruncated);
-  rulesTruncatedRef.current = rulesTruncated;
+  const mayBeScored =
+    rulesPending || rulesTruncated || rules.some((rule) => isTraceRule(rule));
 
   const { data: trace } = useTraceById(
     { traceId: traceId! },
     {
-      enabled: !!traceId && hasScoringRules,
+      enabled: !!traceId && mayBeScored,
       refetchInterval: (query) => {
         const elapsed =
           Date.now() - (pollingStartTimeRef.current || Date.now());
         if (elapsed > MAX_REFETCH_TIME) return false;
 
-        const receivedScores = query.state.data?.feedback_scores ?? [];
-        const awaitedNames = awaitedScoreNamesRef.current;
-
-        // Those names come from page one of the rules list. When the list is capped, a rule
-        // beyond it may still score this trace, so they are not a complete stop condition.
-        if (awaitedNames.size > 0 && !rulesTruncatedRef.current) {
-          const receivedNames = new Set(receivedScores.map((s) => s.name));
-          if ([...awaitedNames].every((name) => receivedNames.has(name))) {
-            return false;
-          }
+        const loadedTrace = query.state.data;
+        // Unloaded picks are unknown, not empty; an incomplete list may hide a scoring rule.
+        if (!loadedTrace || rulesPending || rulesTruncated) {
+          return REFETCH_INTERVAL;
         }
-        // The awaited set can still be empty while rules are scoring — a Python rule's score
-        // names cannot be extracted statically — so an empty set is not a reason to stop. The
-        // case where nothing scores the trace at all is handled by the `enabled` gate above.
+
+        const scoringRules = scoringRulesOf(
+          rules,
+          pickedRuleIdsOf(loadedTrace),
+        );
+        if (scoringRules.length === 0) return false;
+
+        // A Python rule's score names can't be predicted, so an empty set is no reason to stop.
+        const awaitedNames = scoreNamesOf(scoringRules);
+        const receivedNames = new Set(
+          (loadedTrace.feedback_scores ?? []).map((s) => s.name),
+        );
+        if (
+          awaitedNames.length > 0 &&
+          awaitedNames.every((name) => receivedNames.has(name))
+        ) {
+          return false;
+        }
 
         return REFETCH_INTERVAL;
       },
     },
   );
+
+  // The picker stands in until the trace loads, so picked metrics show pending from the start.
+  // It never affects when polling stops. A row that was not run never gets a trace, and the
+  // picker is free to change once the run is over, so it does not stand in there.
+  const expectedMetricNames = useMemo(() => {
+    const pickedRuleIds = trace
+      ? pickedRuleIdsOf(trace)
+      : notRun
+        ? []
+        : pickerRuleIds ?? [];
+    return scoreNamesOf(scoringRulesOf(rules, pickedRuleIds));
+  }, [rules, trace, notRun, pickerRuleIds]);
 
   const metricScores = useMemo(() => {
     const scores: Record<string, ScoreData> = {};

@@ -78,6 +78,8 @@ class InterceptingHttpClient implements HttpClient {
     private static final Pattern TOKEN_REJECTION_HINT = Pattern.compile("invalid_token|expired|revoked",
             Pattern.CASE_INSENSITIVE);
 
+    private static final Pattern AUTHORITY_MODEL_NAME = Pattern.compile("[A-Za-z0-9.-]+");
+
     private final @NonNull HttpClient delegate;
     private final Map<String, String> configuration;
     private final String apiKey;
@@ -120,11 +122,18 @@ class InterceptingHttpClient implements HttpClient {
     @Override
     public void execute(HttpRequest request, ServerSentEventParser parser,
             ServerSentEventListener listener) {
-        if (tokenSupplier == null) {
-            delegate.execute(mutate(request), parser, listener);
+        HttpRequest mutated;
+        try {
+            mutated = mutate(request);
+        } catch (ProviderRequestRefusedException exception) {
+            listener.onError(exception);
             return;
         }
-        delegate.execute(mutate(request), parser, new RetryOnAuthFailureListener(request, parser, listener));
+        if (tokenSupplier == null) {
+            delegate.execute(mutated, parser, listener);
+            return;
+        }
+        delegate.execute(mutated, parser, new RetryOnAuthFailureListener(request, parser, listener));
     }
 
     /**
@@ -263,6 +272,11 @@ class InterceptingHttpClient implements HttpClient {
             return url;
         }
         String modelName = modelNode.asText();
+        // a raw substitution into the authority must not move the host, or the credential follows it elsewhere
+        if (ProviderBaseUrlGuard.hasModelPlaceholderInAuthority(url)
+                && !AUTHORITY_MODEL_NAME.matcher(modelName).matches()) {
+            throw new ProviderRequestRefusedException(ProviderRequestRefusedException.Reason.MODEL_IN_AUTHORITY);
+        }
         if (modelName.indexOf('/') >= 0) {
             log.warn(
                     "Substituted model '{}' contains '/'; the resulting URL will gain extra path segments — verify the gateway expects this",

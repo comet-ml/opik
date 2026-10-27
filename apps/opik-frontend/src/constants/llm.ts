@@ -21,6 +21,14 @@ import {
 export const PLAYGROUND_LAST_PICKED_MODEL = "playground-last-picked-model";
 export const PLAYGROUND_SELECTED_DATASET_VERSION_KEY =
   "playground-selected-dataset-version";
+export const PLAYGROUND_OUTPUT_COLUMNS_WIDTH_KEY =
+  "playground-output-table-width-keys";
+export const PLAYGROUND_OUTPUT_LEFT_PANEL_WIDTH_KEY =
+  "playground-output-left-panel-width";
+export const PLAYGROUND_OUTPUT_HIDDEN_COLUMNS_KEY =
+  "playground-output-table-hidden-columns";
+export const PLAYGROUND_OUTPUT_COLUMNS_ORDER_KEY =
+  "playground-output-table-columns-order";
 
 export const PLAYGROUND_PROMPT_COLORS = [
   { bg: "var(--accent-green)", text: "#1a1a1a" },
