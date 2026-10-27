@@ -2,6 +2,7 @@ package com.comet.opik.api;
 
 import com.comet.opik.api.validation.ProviderApiKeyValidation;
 import com.comet.opik.utils.EncryptionDeserializer;
+import com.comet.opik.utils.HeaderNames;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
@@ -53,23 +54,23 @@ public record ProviderApiKey(
         @JsonView({
                 View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "If true, this provider is system-managed and cannot be edited or deleted") boolean readOnly) {
 
+    /** Without the API key, and with only the names of the headers, whose values are never logged. */
     @Override
     public String toString() {
-        return "ProviderApiKey{" +
-                "id=" + id +
-                ", provider=" + provider +
-                ", apiKey='*******'" +
-                ", name='" + name + '\'' +
-                ", providerName='" + providerName + '\'' +
-                ", headers=" + headers +
-                ", authConfig=" + authConfig +
-                ", baseUrl='" + baseUrl + '\'' +
-                ", createdAt=" + createdAt +
-                ", createdBy='" + createdBy + '\'' +
-                ", lastUpdatedAt=" + lastUpdatedAt +
-                ", lastUpdatedBy='" + lastUpdatedBy + '\'' +
-                ", readOnly=" + readOnly +
-                '}';
+        return """
+                ProviderApiKey{id=%s, provider=%s, apiKey='*******', name='%s', providerName='%s', headers=%s, \
+                authConfig=%s, baseUrl='%s', createdAt=%s, createdBy='%s', lastUpdatedAt=%s, lastUpdatedBy='%s', \
+                readOnly=%s}""".formatted(id, provider, name, providerName, HeaderNames.of(headers), authConfig,
+                baseUrl, createdAt, createdBy, lastUpdatedAt, lastUpdatedBy, readOnly);
+    }
+
+    /** Hand-declared so that Lombok's toString, which would print the API key and the header values, isn't. */
+    public static class ProviderApiKeyBuilder {
+        @Override
+        public String toString() {
+            return "ProviderApiKeyBuilder{provider=%s, name='%s', headers=%s}".formatted(provider, name,
+                    HeaderNames.of(headers));
+        }
     }
 
     public static class View {

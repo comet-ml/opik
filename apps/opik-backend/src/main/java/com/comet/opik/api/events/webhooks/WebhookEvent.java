@@ -3,6 +3,7 @@ package com.comet.opik.api.events.webhooks;
 import com.comet.opik.api.AlertEventType;
 import com.comet.opik.api.AlertType;
 import com.comet.opik.api.events.RedisSubscriberMessage;
+import com.comet.opik.utils.HeaderNames;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
@@ -64,6 +65,15 @@ public class WebhookEvent<T> implements RedisSubscriberMessage {
     private String secret;
 
     private Map<String, String> headers;
+
+    /** Hand-declared so that Lombok's toString, which would print the secret and the header values, isn't. */
+    public static class WebhookEventBuilder<T> {
+        @Override
+        public String toString() {
+            return "WebhookEventBuilder{id='%s', eventType=%s, headers=%s}".formatted(id, eventType,
+                    HeaderNames.of(headers));
+        }
+    }
 
     // RedisSubscriberMessage accessors — bridge the Lombok getters so BaseRedisSubscriber can attribute
     // this event's metrics to the originating workspace/user.

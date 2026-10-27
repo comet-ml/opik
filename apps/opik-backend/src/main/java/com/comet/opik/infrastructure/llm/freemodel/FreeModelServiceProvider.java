@@ -9,6 +9,7 @@ import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmServiceProvider;
 import com.comet.opik.infrastructure.llm.OpenAiClientConfig;
+import com.comet.opik.infrastructure.llm.ProviderHeadersHttpClient;
 import com.comet.opik.infrastructure.llm.customllm.LlmHttpClientBuilders;
 import com.comet.opik.infrastructure.llm.openai.OpenAIClientGenerator;
 import com.comet.opik.infrastructure.llm.openai.QuotaAwareHttpClient;
@@ -82,7 +83,8 @@ public class FreeModelServiceProvider implements LlmServiceProvider {
                 .apiKey(config.apiKey())
                 // Treat insufficient_quota (429, out-of-credits) as non-retryable so the model's
                 // internal retry does not keep hitting an exhausted key.
-                .httpClientBuilder(QuotaAwareHttpClient.builder(httpClientBuilders.builder()))
+                .httpClientBuilder(QuotaAwareHttpClient.builder(
+                        ProviderHeadersHttpClient.builder(httpClientBuilders.builder(), config.headers())))
                 .logRequests(llmProviderClientConfig.getLogRequests())
                 .logResponses(llmProviderClientConfig.getLogResponses());
 
@@ -97,10 +99,6 @@ public class FreeModelServiceProvider implements LlmServiceProvider {
         if (StringUtils.isNotEmpty(config.baseUrl())) {
             builder.baseUrl(config.baseUrl());
         }
-
-        Optional.ofNullable(config.headers())
-                .filter(headers -> !headers.isEmpty())
-                .ifPresent(builder::customHeaders);
 
         Optional.ofNullable(transformedParameters.temperature()).ifPresent(builder::temperature);
         Optional.ofNullable(transformedParameters.seed()).ifPresent(builder::seed);
