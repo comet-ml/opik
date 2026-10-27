@@ -390,7 +390,11 @@ class ProcessExecutor(CodeExecutorBase):
 
         # Before the first worker forks, so isolated workers start from the template, not from this backend.
         if self.isolate:
-            start_isolation_template()
+            try:
+                start_isolation_template()
+            except Exception as e:
+                # each worker retries the template and is refused, so no worker starts from this backend
+                self._isolation_failures.log(f"start worker template failed: {e}")
 
         self.releaser_executor = concurrent.futures.ThreadPoolExecutor(max_workers=self.max_parallel)
         self._pre_warm_process_pool()
@@ -512,13 +516,16 @@ class ProcessExecutor(CodeExecutorBase):
 
         start_time = time.time()
         worker_id = str(uuid.uuid4())[:8]
-        if self.isolate:
-            # Idempotent; ensures the template was started with the reduced environment, not lazily by the fork.
-            start_isolation_template()
-        ctx = _worker_context(self.isolate)
-        parent_conn, child_conn = ctx.Pipe()
-        process = None
+        parent_conn = child_conn = process = None
         try:
+            if self.isolate:
+                # Idempotent; ensures the template was started with the reduced environment, not lazily by the fork.
+                try:
+                    start_isolation_template()
+                except Exception as e:
+                    raise _IsolationUnavailable(f"start worker template failed: {e}") from e
+            ctx = _worker_context(self.isolate)
+            parent_conn, child_conn = ctx.Pipe()
             process = ctx.Process(target=process_worker.worker_process_main, args=(child_conn, self.isolate))
             _start(process)
 

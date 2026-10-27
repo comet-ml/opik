@@ -508,6 +508,23 @@ def test_worker_that_reports_an_isolation_failure_never_joins_pool(monkeypatch, 
     _assert_single_isolation_error(caplog, "install seccomp filter")
 
 
+def _failing_template() -> None:
+    raise OSError("template unavailable")
+
+
+def test_worker_template_failure_is_logged_and_no_worker_joins_pool(monkeypatch, caplog):
+    monkeypatch.setenv(PROCESS_NETWORK_ISOLATION_ENV_VAR, "true")
+    monkeypatch.setattr(executor_process, "start_isolation_template", _failing_template)
+    executor = ProcessExecutor()
+
+    with caplog.at_level(logging.INFO):
+        executor.create_worker_process()
+        executor.create_worker_process()
+
+    assert executor.process_pool.qsize() == 0
+    _assert_single_isolation_error(caplog, "start worker template")
+
+
 @cannot_isolate
 def test_worker_that_cannot_isolate_never_joins_pool(monkeypatch, caplog):
     monkeypatch.setenv(PROCESS_NETWORK_ISOLATION_ENV_VAR, "true")
@@ -777,7 +794,8 @@ def test_template_environment_excludes_a_parent_marker(monkeypatch):
     executor_process.start_isolation_template()
 
     from multiprocessing import forkserver
-    environ = open(f"/proc/{forkserver._forkserver._forkserver_pid}/environ", "rb").read()
+    with open(f"/proc/{forkserver._forkserver._forkserver_pid}/environ", "rb") as template_environ:
+        environ = template_environ.read()
     keys = {entry.split(b"=", 1)[0].decode() for entry in environ.split(b"\0") if entry}
 
     assert b"s3cr3t-marker" not in environ and "MARKER_SECRET" not in keys
