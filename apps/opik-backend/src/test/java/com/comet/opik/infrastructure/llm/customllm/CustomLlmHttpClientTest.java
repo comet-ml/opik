@@ -241,6 +241,18 @@ class CustomLlmHttpClientTest {
         };
     }
 
+    /** A successful reply without a body, such as a 204, isn't a stream, and ends the call normally. */
+    @ParameterizedTest
+    @EnumSource(StreamPath.class)
+    void aStreamAnsweredWithoutABodyEndsNormally(StreamPath streamPath) throws Exception {
+        wireMock.stubFor(post(urlEqualTo(PATH)).willReturn(aResponse().withStatus(204)));
+        var expectedEvents = List.<ServerSentEvent>of();
+
+        var actualEvents = streamedEvents(client, streamPath, request("{}"));
+
+        assertThat(actualEvents).isEqualTo(expectedEvents);
+    }
+
     /**
      * The read timeout bounds the wait for the headers only, the stream read timeout the body only, in either order of
      * the two: headers slower than the stream read timeout but within the read timeout arrive, and a body silent for

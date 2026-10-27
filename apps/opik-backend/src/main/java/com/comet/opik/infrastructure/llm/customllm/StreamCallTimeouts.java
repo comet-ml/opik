@@ -5,10 +5,12 @@ import lombok.NonNull;
 import okhttp3.Interceptor;
 import okhttp3.OkHttpClient;
 import okhttp3.Response;
+import okhttp3.ResponseBody;
 
 import java.io.IOException;
 import java.net.SocketTimeoutException;
 import java.time.Duration;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 
@@ -69,8 +71,10 @@ public final class StreamCallTimeouts implements Interceptor {
     @Override
     public Response intercept(@NonNull Chain chain) throws IOException {
         var response = withHeaderDeadline(chain);
-        if (response.isSuccessful() && isStream.test(response)) {
-            response.body().source().timeout().timeout(streamReadTimeout.toMillis(), TimeUnit.MILLISECONDS);
+        // a reply without a body, such as a 204, isn't a stream
+        var body = response.body();
+        if (body != null && response.isSuccessful() && isStream.test(response)) {
+            body.source().timeout().timeout(streamReadTimeout.toMillis(), TimeUnit.MILLISECONDS);
         }
         return response;
     }
@@ -95,7 +99,7 @@ public final class StreamCallTimeouts implements Interceptor {
     }
 
     private static boolean isEventStream(Response response) {
-        var contentType = response.body().contentType();
-        return contentType != null && "event-stream".equalsIgnoreCase(contentType.subtype());
+        var contentType = Optional.ofNullable(response.body()).map(ResponseBody::contentType);
+        return contentType.filter(type -> "event-stream".equalsIgnoreCase(type.subtype())).isPresent();
     }
 }
