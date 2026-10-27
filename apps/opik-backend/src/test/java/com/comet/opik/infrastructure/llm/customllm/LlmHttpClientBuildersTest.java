@@ -44,26 +44,18 @@ class LlmHttpClientBuildersTest {
     }
 
     @Test
-    void everyModelRunsOnThePoolAndDispatcherOfItsSharedClient() {
+    void everyModelRunsOnThePoolAndDispatcherOfTheSharedClient() {
         var module = new CustomLlmModule();
         var config = TestConfigUtils.loadConfigTest().getLlmProviderClient();
-        var guardedClient = module.customLlmHttpClient(module.providerBaseUrlGuard(config));
-        var unguardedClient = module.unguardedLlmHttpClient();
-        var builders = module.llmHttpClientBuilders(config, guardedClient, unguardedClient);
+        var client = module.customLlmHttpClient(module.providerBaseUrlGuard(config));
+        var builders = module.llmHttpClientBuilders(config, client);
 
-        var actualGuarded = Stream.of(builders.guarded(), builders.guarded(),
-                builders.forProviderBaseUrl("https://gateway.example.com")).map(LlmHttpClientBuildersTest::transport)
-                .toList();
-        var actualUnguarded = Stream.of(builders.unguarded(), builders.unguarded(), builders.forProviderBaseUrl(null))
+        var actualTransports = Stream.of(builders.builder(), builders.builder())
                 .map(LlmHttpClientBuildersTest::transport)
                 .toList();
 
-        var expectedGuarded = Transport.of(guardedClient);
-        var expectedUnguarded = Transport.of(unguardedClient);
-        assertThat(actualGuarded).isEqualTo(List.of(expectedGuarded, expectedGuarded, expectedGuarded));
-        assertThat(actualUnguarded).isEqualTo(List.of(expectedUnguarded, expectedUnguarded, expectedUnguarded));
-        assertThat(expectedGuarded.connectionPool()).isNotSameAs(expectedUnguarded.connectionPool());
-        assertThat(expectedGuarded.dispatcher()).isNotSameAs(expectedUnguarded.dispatcher());
+        var expectedTransport = Transport.of(client);
+        assertThat(actualTransports).isEqualTo(List.of(expectedTransport, expectedTransport));
     }
 
     /** The transport of a model's client, built with a timeout of its own as each model's is. */

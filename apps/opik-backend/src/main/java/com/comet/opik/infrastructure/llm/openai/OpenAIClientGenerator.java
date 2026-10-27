@@ -61,7 +61,7 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
     private final @NonNull LlmHttpClientBuilders httpClientBuilders;
 
     public OpenAiClient newOpenAiClient(@NonNull LlmProviderClientApiConfig config) {
-        return newOpenAiClient(config, httpClientBuilders.forProviderBaseUrl(config.baseUrl()));
+        return newOpenAiClient(config, httpClientBuilders.builder());
     }
 
     /** As {@link #newOpenAiClient(LlmProviderClientApiConfig)}, over the given HTTP client builder. */
@@ -134,7 +134,7 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
                 // Treat insufficient_quota (429, out-of-credits) as non-retryable so neither the model's
                 // internal retry nor the outer retry policy keeps hitting an exhausted key.
                 .httpClientBuilder(QuotaAwareHttpClient.builder(
-                        httpClientBuilders.forProviderBaseUrl(config.baseUrl())))
+                        httpClientBuilders.builder()))
                 .logRequests(llmProviderClientConfig.getLogRequests())
                 .logResponses(llmProviderClientConfig.getLogResponses());
 

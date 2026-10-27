@@ -53,7 +53,7 @@ public class FreeModelServiceProvider implements LlmServiceProvider {
     public LlmProviderService getService(@NonNull LlmProviderClientApiConfig config) {
         return new FreeModelLlmProvider(
                 // the free model's URL is the operator's, which may be internal
-                clientGenerator.newOpenAiClient(config, httpClientBuilders.unguarded()),
+                clientGenerator.newOpenAiClient(config, httpClientBuilders.builder()),
                 freeModelConfig.getActualModel(),
                 freeModelConfig.isReasoningModel());
     }
@@ -82,7 +82,7 @@ public class FreeModelServiceProvider implements LlmServiceProvider {
                 .apiKey(config.apiKey())
                 // Treat insufficient_quota (429, out-of-credits) as non-retryable so the model's
                 // internal retry does not keep hitting an exhausted key.
-                .httpClientBuilder(QuotaAwareHttpClient.builder(httpClientBuilders.unguarded()))
+                .httpClientBuilder(QuotaAwareHttpClient.builder(httpClientBuilders.builder()))
                 .logRequests(llmProviderClientConfig.getLogRequests())
                 .logResponses(llmProviderClientConfig.getLogResponses());
 

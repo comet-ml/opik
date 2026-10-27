@@ -34,7 +34,7 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
 
     private AnthropicClient newAnthropicClient(@NonNull LlmProviderClientApiConfig config) {
         var anthropicClientBuilder = AnthropicClient.builder()
-                .httpClientBuilder(httpClientBuilders.forProviderBaseUrl(config.baseUrl()));
+                .httpClientBuilder(httpClientBuilders.builder());
         Optional.ofNullable(llmProviderClientConfig.getAnthropicClient())
                 .map(AnthropicClientConfig::url)
                 .filter(StringUtils::isNotEmpty)
@@ -78,7 +78,7 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
         var builder = AnthropicChatModel.builder()
                 .apiKey(config.apiKey())
                 .modelName(modelParameters.name())
-                .httpClientBuilder(httpClientBuilders.forProviderBaseUrl(config.baseUrl()))
+                .httpClientBuilder(httpClientBuilders.builder())
                 .logRequests(llmProviderClientConfig.getLogRequests())
                 .logResponses(llmProviderClientConfig.getLogResponses());
 

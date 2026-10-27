@@ -43,7 +43,7 @@ public class GeminiClientGenerator implements LlmProviderClientGenerator<GoogleA
         return GeminiChatModelMapper.INSTANCE.toGeminiChatModel(apiKey, request,
                 llmProviderClientConfig.getCallTimeout().toJavaDuration(), MAX_RETRIES,
                 llmProviderClientConfig.getLogRequests(),
-                llmProviderClientConfig.getLogResponses(), httpClientBuilders.unguarded());
+                llmProviderClientConfig.getLogResponses(), httpClientBuilders.builder());
     }
 
     public GoogleAiGeminiStreamingChatModel newGeminiStreamingClient(
@@ -51,7 +51,7 @@ public class GeminiClientGenerator implements LlmProviderClientGenerator<GoogleA
         return GeminiChatModelMapper.INSTANCE.toGeminiStreamingChatModel(apiKey, request,
                 llmProviderClientConfig.getCallTimeout().toJavaDuration(), MAX_RETRIES,
                 llmProviderClientConfig.getLogRequests(),
-                llmProviderClientConfig.getLogResponses(), httpClientBuilders.unguarded());
+                llmProviderClientConfig.getLogResponses(), httpClientBuilders.builder());
     }
 
     @Override
@@ -68,7 +68,7 @@ public class GeminiClientGenerator implements LlmProviderClientGenerator<GoogleA
         GoogleAiGeminiChatModelBuilder modelBuilder = GoogleAiGeminiChatModel.builder()
                 .modelName(modelParameters.name())
                 .apiKey(config.apiKey())
-                .httpClientBuilder(httpClientBuilders.unguarded())
+                .httpClientBuilder(httpClientBuilders.builder())
                 .logRequests(llmProviderClientConfig.getLogRequests())
                 .logResponses(llmProviderClientConfig.getLogResponses())
                 // Gemini 3 rejects a tool loop's next round unless each earlier function call carries the thought

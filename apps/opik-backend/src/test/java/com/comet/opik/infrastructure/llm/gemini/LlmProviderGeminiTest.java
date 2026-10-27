@@ -183,7 +183,7 @@ class LlmProviderGeminiTest {
         GoogleAiGeminiStreamingChatModel.builder()
                 .baseUrl("http://localhost:%d/v1beta".formatted(wireMock.server().port()))
                 .apiKey("test-api-key")
-                .httpClientBuilder(LlmTestClients.LLM_HTTP_CLIENT_BUILDERS.unguarded())
+                .httpClientBuilder(LlmTestClients.LLM_HTTP_CLIENT_BUILDERS.builder())
                 .modelName(MODEL)
                 .maxOutputTokens(GeminiMaxOutputTokens.firstPositive(request).orElse(null))
                 .returnThinking(false)
