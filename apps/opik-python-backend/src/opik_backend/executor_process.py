@@ -40,8 +40,20 @@ _fork_lock = Lock()
 
 PROCESS_NETWORK_ISOLATION_ENV_VAR = "PYTHON_CODE_EXECUTOR_PROCESS_NETWORK_ISOLATION"
 
+MAX_REPLY_BYTES_ENV_VAR = "PYTHON_CODE_EXECUTOR_MAX_RESULT_SIZE_IN_BYTES"
+READY_TIMEOUT_SECONDS = 10
+
+
+def max_reply_bytes() -> int:
+    """A positive integer, so a bad value fails startup instead of refusing every reply or lifting the cap."""
+    value = os.getenv(MAX_REPLY_BYTES_ENV_VAR) or str(64 * 1024 * 1024)
+    if not value.isdecimal() or int(value) == 0:
+        raise ValueError(f"{MAX_REPLY_BYTES_ENV_VAR} must be a positive integer, not {value!r}")
+    return int(value)
+
+
 # Far above any real score list; a longer reply is refused before it is read, so it is never buffered.
-MAX_REPLY_BYTES = int(os.getenv("PYTHON_CODE_EXECUTOR_MAX_RESULT_SIZE_IN_BYTES", str(64 * 1024 * 1024)))
+MAX_REPLY_BYTES = max_reply_bytes()
 MALFORMED_REPLY_ERROR = "Execution failed: the worker returned a malformed or oversized result"
 # A worker holding more pending replies than this is replaced rather than drained.
 _MAX_PENDING_REPLIES = 16
@@ -224,13 +236,16 @@ def _stop_isolated_worker(process: multiprocessing.Process, connection: Connecti
 def _start_isolated_worker() -> Union[dict, Tuple[multiprocessing.Process, Connection]]:
     """A READY isolated worker, or the error reply when it could not start."""
     parent_conn, child_conn = _mp_context.Pipe()
-    # Daemon, so the job's exit terminates idle workers instead of waiting for them.
-    process = _mp_context.Process(target=process_worker.worker_process_main, args=(child_conn, True), daemon=True)
+    # Not daemonic, so metrics can start processes of their own. The job's exit still ends idle workers:
+    # their parent-death signal fires when the spawner thread stops, before multiprocessing joins them.
+    process = _mp_context.Process(target=process_worker.worker_process_main, args=(child_conn, True))
     ready = None
     try:
         _start(process)
         # Only the worker holds its end now, so a worker that dies surfaces as EOFError.
         child_conn.close()
+        if not parent_conn.poll(READY_TIMEOUT_SECONDS):
+            return {"code": 500, "error": "Isolated worker timed out waiting for READY"}
         ready = _read_reply(parent_conn)
         if ready == "READY":
             return process, parent_conn
@@ -431,7 +446,7 @@ class ProcessExecutor(CodeExecutorBase):
             _start(process)
 
             # Wait for READY signal from worker
-            if parent_conn.poll(timeout=10):
+            if parent_conn.poll(timeout=READY_TIMEOUT_SECONDS):
                 ready_signal = _read_reply(parent_conn)
                 reason = _isolation_error(ready_signal)
                 if reason is not None:

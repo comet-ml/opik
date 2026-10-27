@@ -9,16 +9,14 @@ import json
 import logging
 import os
 import socket
+import subprocess
 import sys
 import time
 from typing import Iterator, List
 
 import pytest
-from flask import jsonify
 
-from opik_backend import create_app
-
-from opik_backend import executor_process, process_worker
+from opik_backend import create_app, executor_process, process_worker
 from opik_backend.executor_process import (
     PROCESS_NETWORK_ISOLATION_ENV_VAR,
     ProcessExecutor,
@@ -240,6 +238,30 @@ class OtherIdReply(base_metric.BaseMetric):
         return score_result.ScoreResult(name=self.name, value=1.0)
 """
 
+# Starts a process of its own, as a metric may.
+CHILD_PROCESS_METRIC = """
+import multiprocessing
+
+from opik.evaluation.metrics import base_metric, score_result
+
+
+class ChildProcess(base_metric.BaseMetric):
+    def __init__(self):
+        super().__init__(name="child_process", track=False)
+
+    def score(self, **ignored_kwargs):
+        child = multiprocessing.get_context("fork").Process(target=lambda: None)
+        child.start()
+        child.join()
+        return score_result.ScoreResult(name=self.name, value=float(child.exitcode == 0))
+"""
+
+# A job that scores once in an isolated worker and exits, leaving the worker idle.
+JOB_SCRIPT = f"""
+from opik_backend.executor_process import run_user_code_in_isolated_worker
+print(run_user_code_in_isolated_worker({CHILD_PROCESS_METRIC!r}, {{}})["scores"][0]["value"])
+"""
+
 ISOLATION_SETTINGS = ["false", pytest.param("true", marks=needs_isolation)]
 
 
@@ -456,11 +478,15 @@ def test_reply_is_encoded_as_the_endpoint_encoded_it(monkeypatch, isolation):
         "/v1/private/evaluators/python", json={"code": ENDPOINT_ENCODED_METRIC, "data": {}}
     )
 
-    # The endpoint used to encode the worker's own objects.
-    with app.app_context():
-        expected = jsonify({"scores": process_worker.run_user_code(ENDPOINT_ENCODED_METRIC, {})["scores"]})
+    # Flask's own encoding of these values, which the endpoint applied to the worker's objects.
     assert response.status_code == 200
-    assert response.get_data() == expected.get_data()
+    assert response.get_data() == (
+        b'{"scores":[{"category_name":null,"metadata":{"date":"Fri, 02 Jan 2026 00:00:00 GMT",'
+        b'"datetime":"Fri, 02 Jan 2026 03:04:05 GMT","decimal":"0.1","infinity":Infinity,'
+        b'"int_keys":{"1":"a","2":"b"},"point":{"x":1,"y":2},"tuple":[1,"a"],'
+        b'"uuid":"12345678-1234-5678-1234-567812345678"},"name":"encoded","reason":"r",'
+        b'"scoring_failed":false,"value":NaN}]}\n'
+    )
 
 
 @pytest.mark.parametrize("isolation", ISOLATION_SETTINGS)
@@ -549,3 +575,50 @@ def test_every_command_has_its_own_request_id():
     ids = {executor_process._command("code", {}, None)[0] for _ in range(100)}
 
     assert len(ids) == 100
+
+
+@needs_isolation
+def test_isolated_worker_can_start_processes():
+    result = run_user_code_in_isolated_worker(CHILD_PROCESS_METRIC, {})
+
+    assert result == _only_score("child_process", 1.0)
+
+
+@needs_isolation
+def test_job_exit_ends_idle_isolated_workers():
+    job = subprocess.run([sys.executable, "-c", JOB_SCRIPT], capture_output=True, text=True, timeout=60)
+
+    assert (job.returncode, job.stdout) == (0, "1.0\n")
+
+
+def _never_ready(connection, isolate: bool) -> None:
+    time.sleep(60)
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="forked workers inherit the patched target")
+def test_isolated_worker_that_never_gets_ready_is_an_error(monkeypatch, workers):
+    monkeypatch.setattr(executor_process, "READY_TIMEOUT_SECONDS", 0.5)
+    monkeypatch.setattr(process_worker, "worker_process_main", _never_ready)
+
+    result = run_user_code_in_isolated_worker(PROBE_METRIC, {"port": 1})
+
+    assert result == {"code": 500, "error": "Isolated worker timed out waiting for READY"}
+    assert not workers[0].is_alive()
+
+
+@pytest.mark.parametrize("value", ["0", "-1", "1.5", "64MiB"])
+def test_invalid_max_reply_bytes_fails_startup(monkeypatch, value):
+    monkeypatch.setenv(executor_process.MAX_REPLY_BYTES_ENV_VAR, value)
+
+    with pytest.raises(ValueError, match=f"^{executor_process.MAX_REPLY_BYTES_ENV_VAR} must be a positive integer, not "):
+        executor_process.max_reply_bytes()
+
+
+@pytest.mark.parametrize("value, expected", [(None, 64 * 1024 * 1024), ("", 64 * 1024 * 1024), ("1024", 1024)])
+def test_max_reply_bytes_defaults_when_unset(monkeypatch, value, expected):
+    if value is None:
+        monkeypatch.delenv(executor_process.MAX_REPLY_BYTES_ENV_VAR, raising=False)
+    else:
+        monkeypatch.setenv(executor_process.MAX_REPLY_BYTES_ENV_VAR, value)
+
+    assert executor_process.max_reply_bytes() == expected
