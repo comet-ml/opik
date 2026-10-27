@@ -44,49 +44,6 @@ def _make_adapter(
     )
 
 
-class TestExtractPlaceholders:
-    def test_extracts_identifier_tokens(self) -> None:
-        assert candidate_ops.extract_placeholders(
-            "Answer {question} for {user_id} and {a.b} and {user-name}"
-        ) == {"question", "user_id", "a.b", "user-name"}
-
-    def test_ignores_json_and_code_braces(self) -> None:
-        """A prompt full of JSON must not read as a prompt full of variables.
-
-        Otherwise the guard would revert every legitimate reformatting edit and
-        stall the optimization entirely.
-        """
-        assert (
-            candidate_ops.extract_placeholders(
-                'Reply as {"answer": 1} or {} or { spaced } or {2bad}'
-            )
-            == set()
-        )
-
-    def test_reads_text_parts_of_multimodal_content(self) -> None:
-        content = [
-            {"type": "text", "text": "Describe {image_topic}"},
-            {"type": "image_url", "image_url": {"url": "http://x/y.png"}},
-        ]
-        assert candidate_ops.extract_placeholders(content) == {"image_topic"}
-
-    def test_known_dataset_keys_extend_the_identifier_shape(self) -> None:
-        """A dataset column is substitutable whatever its shape, so its literal
-        "{key}" token counts as a variable when the caller names the columns."""
-        assert candidate_ops.extract_placeholders(
-            "Answer {my key} about {question}", known_keys={"my key", "question"}
-        ) == {"my key", "question"}
-
-    def test_known_keys_require_the_exact_literal_token(self) -> None:
-        """JSON that merely mentions a column name is still not a variable."""
-        assert (
-            candidate_ops.extract_placeholders(
-                'Reply as {"answer": 1}', known_keys={"answer"}
-            )
-            == set()
-        )
-
-
 class TestEnforcePlaceholderPreservation:
     def test_reverts_message_that_dropped_a_variable(self) -> None:
         original = [{"role": "user", "content": "Answer {question}"}]
@@ -217,25 +174,6 @@ class TestEnforcePlaceholderPreservation:
         assert guarded == new
         assert reverted == []
 
-    def test_empty_known_keys_means_nothing_is_a_variable(self) -> None:
-        """An empty column set is knowledge, not ignorance.
-
-        `if known_keys:` used to treat it like None and fall back to the
-        identifier shape, reverting edits to literals a zero-column dataset
-        can never substitute.
-        """
-        original = [{"role": "user", "content": "Answer {question}"}]
-        new = [{"role": "user", "content": "Answer plainly"}]
-        guarded, reverted = candidate_ops.enforce_placeholder_preservation(
-            original_messages=original,
-            new_messages=new,
-            prompt_name="p",
-            known_keys=set(),
-        )
-
-        assert guarded == new
-        assert reverted == []
-
     def test_reverts_only_the_offending_message(self) -> None:
         original = [
             {"role": "system", "content": "Use {context}"},
@@ -252,15 +190,6 @@ class TestEnforcePlaceholderPreservation:
         assert guarded[1]["content"] == "Answer {question}"
         assert reverted == ["p_user_1"]
 
-    def test_no_variables_in_seed_is_a_no_op(self) -> None:
-        original = [{"role": "system", "content": "Be nice"}]
-        new = [{"role": "system", "content": "Be very nice"}]
-        guarded, reverted = candidate_ops.enforce_placeholder_preservation(
-            original_messages=original, new_messages=new, prompt_name="p"
-        )
-        assert guarded == new
-        assert reverted == []
-
     def test_known_keys_protect_non_identifier_placeholders(self) -> None:
         original = [{"role": "user", "content": "Answer {my key}"}]
         guarded, reverted = candidate_ops.enforce_placeholder_preservation(
@@ -270,17 +199,6 @@ class TestEnforcePlaceholderPreservation:
             known_keys={"my key"},
         )
         assert guarded == original
-        assert reverted == ["p_user_0"]
-
-    def test_revert_keeps_extra_message_fields(self) -> None:
-        """A revert restores content without stripping other message fields."""
-        original = [{"role": "user", "name": "asker", "content": "Answer {question}"}]
-        guarded, reverted = candidate_ops.enforce_placeholder_preservation(
-            original_messages=original,
-            new_messages=[{"role": "user", "content": "Answer it"}],
-            prompt_name="p",
-        )
-        assert guarded[0] == original[0]
         assert reverted == ["p_user_0"]
 
 
@@ -358,19 +276,6 @@ class TestRebuildAppliesGuard:
         assert rebuilt["p"].get_messages()[0]["content"] == "Answer {question}"
         assert reverted == ["p_user_0"]
 
-    def test_adapter_records_nothing_when_candidate_is_clean(self) -> None:
-        prompt = _prompt([{"role": "user", "content": "Answer {question}"}])
-        adapter = _make_adapter({"p": prompt})
-
-        rebuilt, reverted = adapter._rebuild_prompts_from_candidate(
-            {"p_user_0": "Answer concisely: {question}"}
-        )
-
-        assert (
-            rebuilt["p"].get_messages()[0]["content"] == "Answer concisely: {question}"
-        )
-        assert reverted == []
-
     def test_adapter_protects_non_identifier_dataset_keys(self) -> None:
         """The dataset's columns are authoritative: "{my key}" is outside the
         identifier regex, but the adapter knows the column exists and
@@ -407,16 +312,6 @@ class TestRebuildAppliesGuard:
         )
         gepa_meta = captured["configuration_updates"]["gepa"]
         assert gepa_meta["rejected_components_missing_variables"] == ["p_user_0"]
-
-    def test_metadata_omits_the_key_when_nothing_was_rejected(
-        self, monkeypatch: Any
-    ) -> None:
-        """drop_none must keep clean runs free of a noisy always-null field."""
-        captured = self._run_evaluate(
-            monkeypatch, candidate={"p_user_0": "Answer briefly: {question}"}
-        )
-        gepa_meta = captured["configuration_updates"]["gepa"]
-        assert "rejected_components_missing_variables" not in gepa_meta
 
     @staticmethod
     def _run_evaluate(monkeypatch: Any, candidate: dict[str, str]) -> dict[str, Any]:

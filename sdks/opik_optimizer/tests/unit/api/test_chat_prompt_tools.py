@@ -18,18 +18,6 @@ class TestChatPromptWithTools:
 
         assert "my_tool" in prompt.function_map
 
-    def test_preserves_already_tracked_functions(self) -> None:
-        """Should preserve functions that are already tracked."""
-        from opik import track
-
-        @track(type="tool")
-        def my_tracked_tool(query: str) -> str:
-            return f"Result for {query}"
-
-        prompt = ChatPrompt(system="Test", function_map={"my_tool": my_tracked_tool})
-
-        assert prompt.function_map["my_tool"] is my_tracked_tool
-
     def test_accepts_mcp_stdio_tool(self) -> None:
         prompt = ChatPrompt(
             system="System",

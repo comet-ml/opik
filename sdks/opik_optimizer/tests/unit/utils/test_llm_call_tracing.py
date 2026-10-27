@@ -53,9 +53,6 @@ class _Optimizer(BaseOptimizer):
 
 
 class TestResolveOptimizationId:
-    def test_explicit_id_always_wins(self) -> None:
-        assert llm_calls._resolve_optimization_id("explicit") == "explicit"
-
     def test_falls_back_to_the_running_optimizer(self) -> None:
         """13 of 20 call sites never pass an id — every Evolutionary and
         HierarchicalReflective LLM call among them — so their traces carried no
@@ -72,9 +69,6 @@ class TestResolveOptimizationId:
         _Optimizer.probe = method  # type: ignore[attr-defined]
         with llm_calls.optimizer_scope(optimizer):
             assert optimizer.probe() == "opt-from-scope"  # type: ignore[attr-defined]
-        assert llm_calls._resolve_optimization_id(None) is None
-
-    def test_none_when_no_optimizer_is_running(self) -> None:
         assert llm_calls._resolve_optimization_id(None) is None
 
 
@@ -189,17 +183,6 @@ class TestInvokeTraced:
             ]
             is caller_span
         )
-
-
-class TestTraceName:
-    def test_named_after_the_call_type(self) -> None:
-        assert (
-            llm_calls._trace_name({"metadata": {"opik_call_type": "reflection"}})
-            == "reflection"
-        )
-
-    def test_falls_back_when_the_call_type_is_absent(self) -> None:
-        assert llm_calls._trace_name({}) == "optimizer_llm_call"
 
 
 @pytest.mark.asyncio

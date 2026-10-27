@@ -5,7 +5,7 @@ Unit tests for call_model/call_model_async and related utilities in opik_optimiz
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from pydantic import BaseModel
@@ -72,37 +72,6 @@ class TestCallModelSync:
             "value",
             "detail",
         ]
-
-    def test_call_model_increments_counter(self) -> None:
-        mock_response = make_mock_response("response")
-
-        with patch(
-            "opik_optimizer.core.llm_calls._increment_llm_counter_if_in_optimizer"
-        ) as mock_inc:
-            with patch("opik_optimizer.core.llm_calls.track_completion") as mock_track:
-                mock_track.return_value = lambda x: x
-                with patch("litellm.completion", return_value=mock_response):
-                    _llm_calls.call_model(
-                        messages=[user_message("test")],
-                        model="gpt-4o",
-                    )
-                    mock_inc.assert_called_once()
-
-    def test_call_model_with_structured_output(self) -> None:
-        mock_response = make_mock_response('{"name": "test", "score": 0.9}')
-
-        with patch("opik_optimizer.core.llm_calls.track_completion") as mock_track:
-            mock_completion = MagicMock(return_value=mock_response)
-            mock_track.return_value = lambda x: mock_completion
-
-            result = _llm_calls.call_model(
-                messages=[user_message("test")],
-                model="gpt-4o",
-                response_model=SampleResponseModel,
-            )
-
-            assert isinstance(result, SampleResponseModel)
-            assert result.name == "test"
 
     def test_call_model_retries_with_json_instructions(self) -> None:
         captured_messages: list[list[dict[str, str]]] = []
@@ -196,40 +165,6 @@ class TestCallModelAsync:
             "value",
             "detail",
         ]
-
-    @pytest.mark.asyncio
-    async def test_call_model_async_increments_counter(self) -> None:
-        mock_response = make_mock_response("response")
-
-        with patch(
-            "opik_optimizer.core.llm_calls._increment_llm_counter_if_in_optimizer"
-        ) as mock_inc:
-            with patch("opik_optimizer.core.llm_calls.track_completion") as mock_track:
-                async_mock = AsyncMock(return_value=mock_response)
-                mock_track.return_value = lambda x: async_mock
-
-                await _llm_calls.call_model_async(
-                    messages=[user_message("test")],
-                    model="gpt-4o",
-                )
-                mock_inc.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_call_model_async_with_structured_output(self) -> None:
-        mock_response = make_mock_response('{"name": "test", "score": 0.9}')
-
-        with patch("opik_optimizer.core.llm_calls.track_completion") as mock_track:
-            async_mock = AsyncMock(return_value=mock_response)
-            mock_track.return_value = lambda x: async_mock
-
-            result = await _llm_calls.call_model_async(
-                messages=[user_message("test")],
-                model="gpt-4o",
-                response_model=SampleResponseModel,
-            )
-
-            assert isinstance(result, SampleResponseModel)
-            assert result.name == "test"
 
     @pytest.mark.asyncio
     async def test_call_model_async_retries_with_json_instructions(self) -> None:

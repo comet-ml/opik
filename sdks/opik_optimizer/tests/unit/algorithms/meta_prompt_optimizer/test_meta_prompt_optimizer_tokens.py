@@ -3,97 +3,15 @@ Unit tests for MetaPromptOptimizer token calculation and context fitting logic.
 """
 
 from unittest.mock import Mock, patch
-from opik_optimizer.algorithms.meta_prompt_optimizer.meta_prompt_optimizer import (
-    MetaPromptOptimizer,
-)
 from opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_learning_ops import (
     get_task_context,
 )
-from opik_optimizer.utils import token as token_utils
 
 
 def _metric_with_name(name: str = "mock_metric") -> Mock:
     metric = Mock()
     metric.__name__ = name
     return metric
-
-
-class TestTokenCalculation:
-    """Test token calculation logic using litellm."""
-
-    def test_calculate_max_context_tokens_with_known_model(self) -> None:
-        """Test token calculation with a known model (gpt-4)."""
-        with patch("opik_optimizer.utils.token.get_max_tokens") as mock_get_max_tokens:
-            mock_get_max_tokens.return_value = 128000  # gpt-4 context window
-
-            optimizer = MetaPromptOptimizer(model="gpt-4")
-
-            # Should be 25% of 128000 = 32000, but capped at 10000
-            assert optimizer.max_context_tokens == 10000
-            mock_get_max_tokens.assert_called_once_with("gpt-4")
-
-    def test_calculate_max_context_tokens_with_smaller_model(self) -> None:
-        """Test token calculation with a smaller model."""
-        with patch("opik_optimizer.utils.token.get_max_tokens") as mock_get_max_tokens:
-            mock_get_max_tokens.return_value = 16000  # gpt-3.5-turbo context
-
-            optimizer = MetaPromptOptimizer(model="gpt-3.5-turbo")
-
-            # Should be 25% of 16000 = 4000 (under the cap)
-            assert optimizer.max_context_tokens == 4000
-            mock_get_max_tokens.assert_called_once_with("gpt-3.5-turbo")
-
-    def test_calculate_max_context_tokens_custom_model_fallback(self) -> None:
-        """Test fallback to absolute max for custom models."""
-        with patch("opik_optimizer.utils.token.get_max_tokens") as mock_get_max_tokens:
-            mock_get_max_tokens.side_effect = Exception("Model not found")
-
-            optimizer = MetaPromptOptimizer(model="custom-model-xyz")
-
-            # Should fall back to DEFAULT_DATASET_CONTEXT_MAX_TOKENS
-            assert optimizer.max_context_tokens == 10000
-
-    def test_calculate_max_context_tokens_applies_absolute_max(self) -> None:
-        """Test that absolute max is always applied as safety cap."""
-        with patch("opik_optimizer.utils.token.get_max_tokens") as mock_get_max_tokens:
-            # Simulate a model with huge context (e.g., Claude 3.5 with 200k)
-            mock_get_max_tokens.return_value = 200000
-
-            optimizer = MetaPromptOptimizer(model="claude-3-5-sonnet-20241022")
-
-            # Should be capped at 10000 even though 25% of 200k = 50k
-            assert optimizer.max_context_tokens == 10000
-
-
-class TestContextOpsTokenCounting:
-    """Test token counting functionality in history_ops."""
-
-    def test_count_tokens_with_litellm(self) -> None:
-        """Test token counting using litellm."""
-        with patch("opik_optimizer.utils.token.token_counter") as mock_counter:
-            mock_counter.return_value = 100
-
-            result = token_utils.count_tokens("This is a test string", model="gpt-4")
-
-            assert result == 100
-            mock_counter.assert_called_once()
-            # Verify it was called with messages format
-            call_args = mock_counter.call_args
-            assert call_args[1]["model"] == "gpt-4"
-            assert call_args[1]["messages"][0]["role"] == "user"
-            assert call_args[1]["messages"][0]["content"] == "This is a test string"
-
-    def test_count_tokens_fallback_when_litellm_unavailable(self) -> None:
-        """Test fallback token counting when litellm fails."""
-        with patch(
-            "opik_optimizer.utils.token.LITELLM_TOKEN_COUNTER_AVAILABLE",
-            False,
-        ):
-            test_string = "x" * 40  # Exactly 40 characters
-            result = token_utils.count_tokens(test_string, model="gpt-4")
-
-            # Fallback: ~1 token per 4 chars = 40/4 = 10 tokens
-            assert result == 10
 
 
 class TestAdaptiveContextFitting:

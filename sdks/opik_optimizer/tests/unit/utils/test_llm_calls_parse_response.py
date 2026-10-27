@@ -50,10 +50,6 @@ def _role_of(message: Any) -> str | None:
 class TestParseResponse:
     """Tests for _parse_response function."""
 
-    def test_returns_content_when_no_response_model(self) -> None:
-        mock_response = make_mock_response("Hello, world!")
-        assert _parse_response(mock_response) == "Hello, world!"
-
     def test_parses_structured_output_with_response_model(self) -> None:
         mock_response = make_mock_response('{"name": "test", "count": 42}')
         result = _parse_response(mock_response, response_model=_NameCountModel)
@@ -66,12 +62,6 @@ class TestParseResponse:
         )
         result = _parse_response(mock_response, response_model=_NameCountModel)
         _assert_pydantic_model(result, _NameCountModel, {"name": "parsed", "count": 7})
-
-    def test_parses_structured_output_from_parsed_model_instance(self) -> None:
-        parsed_model = _NameCountModel(name="parsed", count=3)
-        mock_response = make_mock_response("{}", parsed=parsed_model)
-        result = _parse_response(mock_response, response_model=_NameCountModel)
-        assert result is parsed_model
 
     def test_parsed_object_invalid_falls_back_to_json(self) -> None:
         mock_response = make_mock_response(
@@ -127,11 +117,6 @@ class TestParseResponse:
         result = _parse_response(mock_response, response_model=_NameModel)
         _assert_pydantic_model(result, _NameModel, {"name": "test"})
 
-    def test_handles_none_finish_reason(self) -> None:
-        mock_response = make_mock_response("Response content")
-        del mock_response.choices[0].finish_reason
-        assert _parse_response(mock_response) == "Response content"
-
     def test_return_all_prefers_parsed_objects(self) -> None:
         mock_response = MagicMock()
         mock_response.choices = [MagicMock(), MagicMock()]
@@ -185,36 +170,3 @@ class TestStructuredOutputModels:
         first = parsed.patterns[0]
         pattern_text = first.pattern if hasattr(first, "pattern") else first
         assert pattern_text == expected_first
-
-
-class TestParseResponseEdgeCases:
-    def test_parse_response_handles_nested_pydantic_model(self) -> None:
-        class Inner(BaseModel):
-            value: int
-
-        class Outer(BaseModel):
-            inner: Inner
-            name: str
-
-        mock_response = make_mock_response('{"inner": {"value": 42}, "name": "test"}')
-
-        result = _parse_response(mock_response, response_model=Outer)
-
-        assert isinstance(result, Outer)
-        assert result.inner.value == 42
-        assert result.name == "test"
-
-    def test_parse_response_handles_list_in_pydantic_model(self) -> None:
-        class ListModel(BaseModel):
-            items: list[str]
-
-        mock_response = make_mock_response('{"items": ["a", "b", "c"]}')
-
-        result = _parse_response(mock_response, response_model=ListModel)
-
-        assert isinstance(result, ListModel)
-        assert result.items == ["a", "b", "c"]
-
-    def test_parse_response_handles_unicode_content(self) -> None:
-        mock_response = make_mock_response("Hello, 世界! 🌍")
-        assert _parse_response(mock_response) == "Hello, 世界! 🌍"

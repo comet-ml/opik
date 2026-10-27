@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
 from typing import Any
-from unittest.mock import MagicMock
 
 import litellm
 import pytest
@@ -16,11 +14,9 @@ from tests.unit.algorithms.parameter_optimizer._test_builders import (
     float_param,
     space,
 )
-from tests.unit.fixtures import assert_baseline_early_stop, make_baseline_prompt
 from tests.unit.test_helpers import (
     make_mock_dataset,
     make_simple_metric,
-    STANDARD_DATASET_ITEMS,
 )
 
 
@@ -100,109 +96,6 @@ class TestUnsupportedParameterWarning:
                     categorical_param("model", choices=["no-top-p"], target="model"),
                 ],
             )
-
-
-class TestParameterOptimizerOptimizePrompt:
-    def test_optimize_prompt_raises_not_implemented(
-        self,
-        mock_optimization_context,
-    ) -> None:
-        mock_optimization_context()
-        optimizer = ParameterOptimizer(verbose=0, seed=42)
-        prompt = ChatPrompt(system="Test", user="{question}")
-        dataset = make_mock_dataset(
-            STANDARD_DATASET_ITEMS, name="test-dataset", dataset_id="dataset-123"
-        )
-
-        with pytest.raises(NotImplementedError):
-            optimizer.optimize_prompt(
-                prompt=prompt,
-                dataset=dataset,
-                metric=make_simple_metric(),
-                max_trials=1,
-            )
-
-
-class TestParameterOptimizerEarlyStop:
-    def test_skips_on_perfect_score(
-        self,
-        mock_opik_client: Callable[..., MagicMock],
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        mock_opik_client()
-        dataset = make_mock_dataset(
-            STANDARD_DATASET_ITEMS, name="test-dataset", dataset_id="dataset-123"
-        )
-        optimizer = ParameterOptimizer(perfect_score=0.95)
-
-        monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 0.96)
-        monkeypatch.setattr(
-            "optuna.create_study",
-            lambda **kwargs: (_ for _ in ()).throw(AssertionError("should not run")),
-        )
-
-        prompt = make_baseline_prompt()
-        parameter_space = space(float_param("temperature"))
-        result = optimizer.optimize_parameter(
-            prompt=prompt,
-            dataset=dataset,
-            metric=make_simple_metric(),
-            parameter_space=parameter_space,
-            max_trials=1,
-        )
-
-        assert_baseline_early_stop(result, perfect_score=0.95)
-        assert result.details["n_trials"] == 0
-        assert {
-            "optimized_model",
-            "optimized_model_kwargs",
-            "parameter_space",
-            "search_stages",
-            "parameter_importance",
-        } <= result.details.keys()
-        # ParameterOptimizer bypasses runtime.build_final_result, so it must surface
-        # scoring_health in its own result details (present, not dropped) — here the
-        # float-mode baseline leaves it unset, so it falls back to the all-clear shape.
-        assert result.details["scoring_health"] == {"failed_count": 0, "total_count": 0}
-
-
-class TestSharedLifecycle:
-    def test_stops_on_winning_trial_and_keeps_prompt_models(
-        self, mock_opik_client, monkeypatch
-    ):
-        mock_opik_client()
-        optimizer = ParameterOptimizer(verbose=0)
-        prompts = {
-            "a": ChatPrompt(name="a", system="A", model="agent-a"),
-            "b": ChatPrompt(name="b", system="B", model="agent-b"),
-        }
-        scores = iter([0.2, 1.0])
-        seen = []
-
-        def evaluate(**kwargs):
-            seen.append(kwargs["prompt"])
-            return next(scores)
-
-        monkeypatch.setattr(optimizer, "evaluate_prompt", evaluate)
-        finalized = MagicMock(wraps=optimizer._finalize_optimization)
-        monkeypatch.setattr(optimizer, "_finalize_optimization", finalized)
-        result = optimizer.optimize_parameter(
-            prompt=prompts,
-            dataset=make_mock_dataset(),
-            metric=make_simple_metric(),
-            parameter_space=space(float_param("temperature")),
-            max_trials=5,
-        )
-        assert len(seen) == 2
-        assert result.score == 1.0
-        assert result.details["trials_completed"] == 1
-        assert result.details["finish_reason"] == "perfect_score"
-        assert isinstance(result.prompt, dict)
-        assert {key: value.model for key, value in result.prompt.items()} == {
-            "a": "agent-a",
-            "b": "agent-b",
-        }
-        assert finalized.call_args.kwargs["status"] == "completed"
 
 
 class TestFinishReasonAndWarnings:

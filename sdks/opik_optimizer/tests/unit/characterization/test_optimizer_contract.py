@@ -28,6 +28,10 @@ def _perfect(dataset_item: dict[str, Any], llm_output: str) -> score_result.Scor
     return score_result.ScoreResult(name="perfect", value=1.0, reason="ok")
 
 
+def _flat(dataset_item: dict[str, Any], llm_output: str) -> score_result.ScoreResult:
+    return score_result.ScoreResult(name="flat", value=0.5, reason="no signal")
+
+
 def _broken_judge(dataset_item: dict[str, Any], llm_output: str) -> Any:
     raise RuntimeError("judge offline")
 
@@ -52,7 +56,11 @@ def test_improves_the_score_without_touching_the_callers_prompt(
     else:
         assert result.score > result.initial_score
     assert result.details["trials_completed"] <= harness.MAX_TRIALS[optimizer_name]
-    assert result.details["finish_reason"] in {"max_trials", "perfect_score", "completed"}
+    assert result.details["finish_reason"] in {
+        "max_trials",
+        "perfect_score",
+        "completed",
+    }
     assert result.history
     assert type(result.prompt) is type(scenario.prompt)
     returned = _as_dict(result.prompt)
@@ -80,6 +88,8 @@ def test_perfect_baseline_returns_it_without_searching(
     assert result.score == result.initial_score == 1.0
     assert result.details["finish_reason"] == "perfect_score"
     assert result.details["trials_completed"] == 1
+    assert isinstance(result.prompt, ChatPrompt)
+    assert isinstance(scenario.prompt, ChatPrompt)
     assert result.prompt.get_messages() == scenario.prompt.get_messages()
     assert not fake.calls
 
@@ -98,6 +108,28 @@ def test_stops_once_a_candidate_reaches_the_perfect_score(
     assert result.initial_score < 0.45 <= result.score
     assert result.details["finish_reason"] == "perfect_score"
     assert result.details["trials_completed"] < harness.MAX_TRIALS[optimizer_name]
+
+
+@pytest.mark.parametrize("optimizer_name", harness.OPTIMIZERS)
+def test_returns_the_original_prompt_when_nothing_beats_it(
+    optimizer_name: str, install_fakes: Any
+) -> None:
+    scenario = harness.build_scenario("S1_single")
+    install_fakes(scenario)
+
+    result = harness.run_optimizer(
+        optimizer_name, scenario, metric=_flat, max_trials=20
+    )
+
+    assert result.score == result.initial_score == 0.5
+    assert isinstance(result.prompt, ChatPrompt)
+    assert isinstance(scenario.prompt, ChatPrompt)
+    assert result.prompt.get_messages() == scenario.prompt.get_messages()
+    assert result.details["trials_completed"] <= 20
+    if optimizer_name in {"GepaOptimizer", "HierarchicalReflectiveOptimizer"}:
+        # These detect convergence and stop before spending the budget.
+        assert result.details["finish_reason"] == "no_improvement"
+        assert result.details["trials_completed"] < 20
 
 
 @pytest.mark.parametrize("optimizer_name", harness.OPTIMIZERS)

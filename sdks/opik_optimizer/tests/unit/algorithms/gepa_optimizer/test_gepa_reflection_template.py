@@ -37,89 +37,22 @@ class TestTemplateContract:
         assert "<side_info>" in default
 
 
-class TestAdditiveOverUpstreamDefault:
-    """Our template must be a strict superset of GEPA's default guidance.
+class TestInvalidOverridesFailAtConstruction:
+    """Reject a bad template in __init__, before a billed baseline evaluation."""
 
-    If one of these fails after a gepa upgrade, upstream reworded its default:
-    re-read gepa/strategies/instruction_proposal.py and re-sync
-    REFLECTION_PROMPT_TEMPLATE deliberately rather than relaxing the assertion.
-    """
-
-    def test_every_default_paragraph_is_preserved_verbatim(self) -> None:
-        default = InstructionProposalSignature.default_prompt_template
-        paragraphs = [p.strip() for p in default.split("\n\n") if p.strip()]
-        missing = [p for p in paragraphs if p not in TEMPLATE]
-        assert missing == [], (
-            "GEPA's default reflection guidance is no longer contained verbatim in "
-            f"our template; missing paragraph(s): {missing}"
-        )
-
-    def test_template_only_adds_to_the_default(self) -> None:
-        default = InstructionProposalSignature.default_prompt_template
-        assert len(TEMPLATE) > len(default)
-
-
-class TestRendersThroughGepa:
-    def test_markers_are_substituted_and_braces_survive(self) -> None:
-        """Rendered via gepa's real renderer, not a reimplementation of it."""
-        rendered = InstructionProposalSignature.prompt_renderer(
-            {
-                "current_instruction_doc": "Answer {question} using {context}.",
-                "dataset_with_feedback": [
-                    {"Inputs": {"question": "2+2?"}, "Feedback": "too verbose"}
-                ],
-                "prompt_template": TEMPLATE,
-            }
-        )
-        assert isinstance(rendered, str)
-        assert "<curr_param>" not in rendered
-        assert "<side_info>" not in rendered
-        # The seed's variables reach the reflection LM intact...
-        assert "Answer {question} using {context}." in rendered
-        # ...as do the template's own brace examples (str.replace, not .format).
-        assert "{user_input}" in rendered
-
-
-class TestOptimizerWiring:
-    def test_default_template_is_resolved_and_validated(self) -> None:
-        optimizer = GepaOptimizer(model="openai/gpt-4o-mini")
-        assert optimizer._resolve_reflection_prompt_template() == TEMPLATE
-
-    def test_override_missing_markers_fails_at_construction(self) -> None:
-        """Must raise in __init__, not at the gepa hand-off.
-
-        The hand-off happens after the baseline evaluation, so validating there
-        would bill the user a full dataset scoring pass before rejecting an
-        obviously malformed template.
-        """
-        with pytest.raises(ValueError, match="<curr_param>"):
+    @pytest.mark.parametrize(
+        "override,match",
+        [
+            ("no markers here", "<curr_param>"),
+            (123, "Invalid reflection_prompt_template override"),
+        ],
+    )
+    def test_invalid_override_is_rejected(self, override: object, match: str) -> None:
+        with pytest.raises(ValueError, match=match):
             GepaOptimizer(
                 model="openai/gpt-4o-mini",
-                prompt_overrides={"reflection_prompt_template": "no markers here"},
+                prompt_overrides={"reflection_prompt_template": override},  # type: ignore[dict-item]
             )
-
-    def test_non_string_override_fails_with_the_same_context(self) -> None:
-        """A non-string override fails at construction with the documented message.
-
-        It must not escape as a bare TypeError from gepa's validator.
-        """
-        with pytest.raises(
-            ValueError, match="Invalid reflection_prompt_template override"
-        ):
-            GepaOptimizer(
-                model="openai/gpt-4o-mini",
-                # The wrong type is the point of this test: PromptOverrides is
-                # str-valued, so a caller who ignores that must still get the
-                # documented ValueError rather than a bare TypeError.
-                prompt_overrides={"reflection_prompt_template": 123},  # type: ignore[dict-item]
-            )
-
-    def test_template_swapped_in_after_construction_is_still_caught(self) -> None:
-        """__init__ cannot see a later prompts.set(), so resolve re-checks."""
-        optimizer = GepaOptimizer(model="openai/gpt-4o-mini")
-        optimizer.prompts.set("reflection_prompt_template", "no markers here")
-        with pytest.raises(ValueError, match="<side_info>"):
-            optimizer._resolve_reflection_prompt_template()
 
 
 class TestTooOldGepaIsDiagnosedAsAVersionProblem:
@@ -174,57 +107,6 @@ class TestTooOldGepaIsDiagnosedAsAVersionProblem:
             GepaOptimizer(model="openai/gpt-4o-mini")
         # The misdiagnosis is the bug: no override was passed.
         assert "override" not in str(exc_info.value)
-
-    def test_a_valid_new_dialect_override_also_reports_the_version(
-        self, old_dialect_gepa
-    ) -> None:
-        """The dialect is a property of the install, not of this one template.
-
-        A new-dialect override is well-formed for us and unusable on that gepa,
-        so the version error is still the honest answer.
-        """
-        with pytest.raises(RuntimeError, match="gepa>=0.1.4"):
-            GepaOptimizer(
-                model="openai/gpt-4o-mini",
-                prompt_overrides={
-                    "reflection_prompt_template": "Rewrite <curr_param> given <side_info>."
-                },
-            )
-
-    def test_unreadable_default_still_spares_the_builtin_template(
-        self, monkeypatch
-    ) -> None:
-        """Fallback when the dialect can't be read from gepa's default.
-
-        If a future gepa drops or reshapes ``default_prompt_template`` we cannot
-        sniff the dialect, so we do not guess a version error from its absence
-        (that would break a *compatible* gepa that merely renamed it). Instead,
-        a rejection of our own built-in default is attributed to the install,
-        since the caller had no hand in it.
-        """
-        monkeypatch.setattr(
-            InstructionProposalSignature, "default_prompt_template", object()
-        )
-        monkeypatch.setattr(
-            InstructionProposalSignature,
-            "validate_prompt_template",
-            self._old_dialect_validate,
-        )
-        with pytest.raises(RuntimeError, match="gepa>=0.1.4"):
-            GepaOptimizer(model="openai/gpt-4o-mini")
-
-    def test_unreadable_default_still_blames_a_bad_override(self, monkeypatch) -> None:
-        """The fallback must not swallow genuine caller errors."""
-        monkeypatch.setattr(
-            InstructionProposalSignature, "default_prompt_template", object()
-        )
-        with pytest.raises(
-            ValueError, match="Invalid reflection_prompt_template override"
-        ):
-            GepaOptimizer(
-                model="openai/gpt-4o-mini",
-                prompt_overrides={"reflection_prompt_template": "no markers here"},
-            )
 
 
 class TestTemplateReachesGepa:

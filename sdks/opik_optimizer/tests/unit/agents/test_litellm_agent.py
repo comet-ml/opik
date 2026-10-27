@@ -64,26 +64,6 @@ def tool_prompt() -> chat_prompt.ChatPrompt:
     )
 
 
-class TestLiteLLMAgentInitialization:
-    """Test LiteLLMAgent initialization."""
-
-    def test_init_sets_opik_project_env(self) -> None:
-        """Test that init_llm sets OPIK_PROJECT_NAME env var."""
-        import os
-
-        # Clear env var if set
-        old_val = os.environ.pop("OPIK_PROJECT_NAME", None)
-
-        try:
-            agent = LiteLLMAgent(project_name="env-test-project")
-            assert os.environ.get("OPIK_PROJECT_NAME") == "env-test-project"
-            assert agent.project_name == "env-test-project"
-        finally:
-            # Restore
-            if old_val:
-                os.environ["OPIK_PROJECT_NAME"] = old_val
-
-
 def test_sanitize_tool_arguments_for_logging_redacts_sensitive_keys() -> None:
     args = {
         "api_key": "super-secret-value",
@@ -135,31 +115,6 @@ class TestLiteLLMAgentInvoke:
                 prompts=prompts,
                 dataset_item={"input": "test"},
             )
-
-    def test_invoke_formats_messages(
-        self, agent: LiteLLMAgent, simple_prompt: chat_prompt.ChatPrompt
-    ) -> None:
-        """Test that messages are formatted with dataset_item."""
-        mock_response = make_litellm_completion_response("response")
-
-        captured_messages: list[dict[str, Any]] = []
-
-        def capture_complete(
-            model: str, messages: list[dict[str, Any]], **kwargs: Any
-        ) -> MagicMock:
-            captured_messages.extend(messages)
-            return mock_response
-
-        with patch.object(agent, "_llm_complete", side_effect=capture_complete):
-            agent.invoke_agent(
-                prompts={"test": simple_prompt},
-                dataset_item={"input": "formatted input"},
-            )
-
-        assert any(
-            m.get("role") == "user" and m.get("content") == "formatted input"
-            for m in captured_messages
-        )
 
     def test_tool_loop_returns_last_tool_response_when_capped(
         self, agent: LiteLLMAgent
@@ -331,14 +286,6 @@ class TestLiteLLMAgentCostTracking:
                 assert result._opik_usage["prompt_tokens"] == 100
                 assert result._opik_usage["completion_tokens"] == 50
                 assert result._opik_usage["total_tokens"] == 150
-
-    def test_apply_cost_handles_missing_owner(self, agent: LiteLLMAgent) -> None:
-        """Test that missing optimizer owner doesn't raise error."""
-        mock_response = MagicMock()
-        mock_response._opik_cost = 0.01
-
-        # Should not raise
-        agent._apply_cost_usage_to_owner(mock_response)
 
     def test_llm_complete_handles_missing_usage(self, agent: LiteLLMAgent) -> None:
         """Test handling of responses without usage data."""

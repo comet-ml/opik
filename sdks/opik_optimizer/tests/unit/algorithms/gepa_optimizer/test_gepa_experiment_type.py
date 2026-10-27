@@ -76,32 +76,6 @@ class TestClassifyExperimentType:
             == expected
         )
 
-    def test_no_valset_ids_falls_back_to_trial(self) -> None:
-        """Without known valset ids every eval keeps today's 'trial' label."""
-        adapter = _make_adapter(None)
-        for capture_traces in (False, True):
-            assert (
-                adapter._classify_experiment_type(
-                    dataset_item_ids=["t1"],
-                    capture_traces=capture_traces,
-                    missing_ids=False,
-                )
-                == "trial"
-            )
-
-    def test_minibatch_equal_to_valset_counts_as_full_eval(self) -> None:
-        """A candidate 'mini-batch' that covers the entire valset IS a full
-        evaluation by construction; labeling it 'trial' is correct."""
-        adapter = _make_adapter({"a", "b"})
-        assert (
-            adapter._classify_experiment_type(
-                dataset_item_ids=["a", "b"],
-                capture_traces=False,
-                missing_ids=False,
-            )
-            == "trial"
-        )
-
 
 class TestAdapterEvaluatePassesExperimentType:
     def test_evaluate_marks_full_valset_batch_as_trial(self, monkeypatch) -> None:

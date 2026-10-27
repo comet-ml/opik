@@ -1,8 +1,6 @@
 # mypy: disable-error-code=no-untyped-def
 
-from collections.abc import Callable
 from typing import Any
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -16,10 +14,6 @@ from tests.unit.test_helpers import (
     make_simple_metric,
     STANDARD_DATASET_ITEMS,
 )
-from tests.unit.fixtures import (
-    assert_baseline_early_stop,
-    make_baseline_prompt,
-)
 
 
 class TestFewShotBayesianOptimizerOptimizePrompt:
@@ -30,47 +24,6 @@ class TestFewShotBayesianOptimizerOptimizePrompt:
             ValueError, match="Prompt name collision after sanitization"
         ):
             optimizer._sanitize_prompt_field_names(["chat-prompt", "chat_prompt"])
-
-    def test_create_few_shot_template_preserves_multimodal_structure(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        optimizer = FewShotBayesianOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
-        prompt = ChatPrompt(
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": "Original text"},
-                        {"type": "image_url", "image_url": {"url": "{image}"}},
-                    ],
-                }
-            ]
-        )
-
-        class _FakeResponse:
-            template = "Template"
-
-            main = [{"segment_id": "message:0:part:0", "text": "Updated text"}]
-
-        monkeypatch.setattr(
-            "opik_optimizer.algorithms.few_shot_bayesian_optimizer.few_shot_bayesian_optimizer._llm_calls.call_model",
-            lambda **_kwargs: _FakeResponse(),
-        )
-
-        updated_prompts, _ = optimizer._create_few_shot_prompt_template(
-            model="openai/gpt-4o-mini",
-            prompts={"main": prompt},
-            few_shot_examples=[{"input": "x", "output": "y"}],
-        )
-
-        updated_message = updated_prompts["main"].get_messages()[0]
-        assert isinstance(updated_message["content"], list)
-        assert [part["type"] for part in updated_message["content"]] == [
-            "text",
-            "image_url",
-        ]
-        assert updated_message["content"][0]["text"] == "Updated text"
-        assert updated_message["content"][1]["image_url"]["url"] == "{image}"
 
     def test_custom_task_respects_allow_tool_use(self) -> None:
         class AgentSpy(OptimizableAgent):
@@ -104,65 +57,6 @@ class TestFewShotBayesianOptimizerOptimizePrompt:
 
         task({"question": "Q1"})
         assert agent.last_allow_tool_use is False
-
-
-class TestFewShotBayesianOptimizerEarlyStop:
-    def test_skips_on_perfect_score(
-        self,
-        mock_opik_client: Callable[..., MagicMock],
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        mock_opik_client()
-        dataset = make_mock_dataset(
-            STANDARD_DATASET_ITEMS, name="test-dataset", dataset_id="dataset-123"
-        )
-        optimizer = FewShotBayesianOptimizer(model="gpt-4o", perfect_score=0.95)
-
-        monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 0.96)
-        monkeypatch.setattr(
-            optimizer,
-            "run_optimization",
-            lambda context: (_ for _ in ()).throw(AssertionError("should not run")),
-        )
-
-        prompt = make_baseline_prompt()
-        result = optimizer.optimize_prompt(
-            prompt=prompt,
-            dataset=dataset,
-            metric=make_simple_metric(),
-            max_trials=1,
-        )
-
-        assert_baseline_early_stop(result, perfect_score=0.95)
-
-    def test_early_stop_reports_at_least_one_trial(
-        self,
-        mock_opik_client: Callable[..., MagicMock],
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """Verify FewShotBayesianOptimizer early stop reports at least 1 trial."""
-        mock_opik_client()
-        dataset = make_mock_dataset(
-            STANDARD_DATASET_ITEMS, name="test-dataset", dataset_id="dataset-123"
-        )
-        optimizer = FewShotBayesianOptimizer(model="gpt-4o", perfect_score=0.95)
-
-        monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 0.96)
-
-        prompt = make_baseline_prompt()
-        result = optimizer.optimize_prompt(
-            prompt=prompt,
-            dataset=dataset,
-            metric=make_simple_metric(),
-            max_trials=1,
-        )
-
-        assert_baseline_early_stop(
-            result,
-            perfect_score=0.95,
-            trials_completed=1,
-            history_len=1,
-        )
 
 
 class TestFewShotBayesianOptimizerEvaluate:

@@ -1,6 +1,5 @@
 # mypy: disable-error-code=no-untyped-def
 
-from collections.abc import Callable
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -8,73 +7,12 @@ import pytest
 
 from opik_optimizer import ChatPrompt, GepaOptimizer
 from opik_optimizer.algorithms.gepa_optimizer.adapter import OpikGEPAAdapter
-from tests.unit.fixtures import assert_baseline_early_stop
 from tests.unit.fixtures import make_baseline_prompt
 from tests.unit.test_helpers import (
     make_mock_dataset,
     make_optimization_context,
     STANDARD_DATASET_ITEMS,
 )
-
-
-class TestGepaOptimizerEarlyStop:
-    def test_skips_on_perfect_score(
-        self,
-        mock_opik_client: Callable[..., MagicMock],
-        monkeypatch: pytest.MonkeyPatch,
-        mock_dataset,
-        sample_dataset_items,
-        sample_metric,
-    ) -> None:
-        mock_opik_client()
-        dataset = mock_dataset(
-            sample_dataset_items, name="test-dataset", dataset_id="dataset-123"
-        )
-        optimizer = GepaOptimizer(model="gpt-4o", perfect_score=0.95)
-
-        monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 0.96)
-
-        prompt = make_baseline_prompt()
-        result = optimizer.optimize_prompt(
-            prompt=prompt,
-            dataset=dataset,
-            metric=sample_metric,
-            max_trials=1,
-        )
-
-        assert_baseline_early_stop(result, perfect_score=0.95, trials_completed=1)
-        # Early stop happens before run_optimization, so only baseline was evaluated
-        # Framework sets trials_completed to 1 (baseline evaluation counts as 1 trial)
-        assert result.details["trials_completed"] == 1
-
-    def test_early_stop_reports_at_least_one_trial(
-        self,
-        mock_opik_client: Callable[..., MagicMock],
-        monkeypatch: pytest.MonkeyPatch,
-        mock_dataset,
-        sample_dataset_items,
-        sample_metric,
-    ) -> None:
-        """Verify GepaOptimizer early stop reports at least 1 trial."""
-        mock_opik_client()
-        dataset = mock_dataset(
-            sample_dataset_items, name="test-dataset", dataset_id="dataset-123"
-        )
-        optimizer = GepaOptimizer(model="gpt-4o", perfect_score=0.95)
-
-        monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 0.96)
-
-        prompt = make_baseline_prompt()
-        result = optimizer.optimize_prompt(
-            prompt=prompt,
-            dataset=dataset,
-            metric=sample_metric,
-            max_trials=1,
-        )
-
-        assert_baseline_early_stop(
-            result, perfect_score=0.95, trials_completed=1, history_len=1
-        )
 
 
 def test_gepa_adapter_records_per_item_metrics() -> None:

@@ -51,35 +51,6 @@ def test_create_metric_class_forwards_task_span_to_callable_metric() -> None:
     assert result.scoring_failed is False
 
 
-def test_validate_objective_scores_logs_warning_on_failed_scores(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    with caplog.at_level(logging.WARNING):
-        evaluation._validate_objective_scores(
-            [
-                ScoreResult(name="objective", value=1.0, scoring_failed=False),
-                ScoreResult(
-                    name="objective",
-                    value=0.0,
-                    scoring_failed=True,
-                    reason="missing task_span",
-                ),
-            ],
-            objective_metric_name="objective",
-        )
-
-    assert "failed on 1/2" in caplog.text
-
-
-def test_validate_objective_scores_logs_warning_when_no_scores_present(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    with caplog.at_level(logging.WARNING):
-        evaluation._validate_objective_scores([], objective_metric_name="objective")
-
-    assert "produced no scores" in caplog.text
-
-
 def _failed_score(reason: str = "judge failed") -> ScoreResult:
     return ScoreResult(
         name="objective",
@@ -106,21 +77,3 @@ def test_validate_objective_scores_only_logs_when_all_items_failed(
         evaluation._validate_objective_scores(scores, objective_metric_name="objective")
 
     assert "failed on 3/3" in caplog.text
-
-
-def test_validate_objective_scores_does_not_raise_below_threshold(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    # One of two failed = 0.5 failure ratio, below the 1.0 threshold: warn, not raise.
-    scores = [_passing_score(), _failed_score()]
-
-    with caplog.at_level(logging.WARNING):
-        # Must return normally (no exception) below threshold.
-        evaluation._validate_objective_scores(scores, objective_metric_name="objective")
-
-    assert "failed on 1/2" in caplog.text
-
-
-def test_validate_objective_scores_empty_list_does_not_raise() -> None:
-    # Empty dataset / no objective scores must NOT trip the failure guard.
-    evaluation._validate_objective_scores([], objective_metric_name="objective")

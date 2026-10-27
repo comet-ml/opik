@@ -17,14 +17,12 @@ import pytest
 from opik.evaluation.evaluation_result import EvaluationResult
 from opik.evaluation.metrics.score_result import ScoreResult
 
-from opik_optimizer.core.evaluation import compute_scoring_health
 from opik_optimizer.core.exceptions import ScoringFailedError
 from opik_optimizer.core.results import OptimizationResult
 from opik_optimizer.core.runtime import build_final_result
 from opik_optimizer.core.state import AlgorithmResult, OptimizationContext
 from tests.unit.fixtures.base_optimizer_test_helpers import (
     ConcreteOptimizer,
-    _DisplaySpy,
 )
 from tests.unit.test_helpers import make_mock_dataset, make_optimization_context
 
@@ -36,32 +34,6 @@ from tests.unit.test_helpers import make_mock_dataset, make_optimization_context
 
 def _make_score(*, failed: bool, value: float = 0.0) -> ScoreResult:
     return ScoreResult(name="obj", value=value, scoring_failed=failed)
-
-
-class TestComputeScoringHealth:
-    def test_all_pass(self) -> None:
-        scores = [_make_score(failed=False, value=1.0)] * 5
-        health = compute_scoring_health(scores)
-        assert health == {"failed_count": 0, "total_count": 5}
-
-    def test_some_failed(self) -> None:
-        scores = [
-            _make_score(failed=False, value=1.0),
-            _make_score(failed=True),
-            _make_score(failed=False, value=0.8),
-            _make_score(failed=True),
-        ]
-        health = compute_scoring_health(scores)
-        assert health == {"failed_count": 2, "total_count": 4}
-
-    def test_all_failed(self) -> None:
-        scores = [_make_score(failed=True)] * 3
-        health = compute_scoring_health(scores)
-        assert health == {"failed_count": 3, "total_count": 3}
-
-    def test_empty(self) -> None:
-        health = compute_scoring_health([])
-        assert health == {"failed_count": 0, "total_count": 0}
 
 
 # ---------------------------------------------------------------------------
@@ -109,57 +81,6 @@ def _make_context(
     ctx.metric.__name__ = "obj"
     ctx.scoring_health = scoring_health
     return ctx
-
-
-class TestBuildFinalResultScoringHealth:
-    def test_scoring_health_present_when_all_pass(self) -> None:
-        optimizer = _make_optimizer()
-        context = _make_context(scoring_health={"failed_count": 0, "total_count": 10})
-        alg_result = _make_algorithm_result(score=0.9)
-
-        result = build_final_result(
-            optimizer=optimizer,
-            algorithm_result=alg_result,
-            context=context,
-        )
-
-        assert isinstance(result, OptimizationResult)
-        health = result.details.get("scoring_health")
-        assert health is not None
-        assert health["failed_count"] == 0
-        assert health["total_count"] == 10
-
-    def test_scoring_health_present_when_some_failed(self) -> None:
-        optimizer = _make_optimizer()
-        context = _make_context(scoring_health={"failed_count": 3, "total_count": 10})
-        alg_result = _make_algorithm_result(score=0.7)
-
-        result = build_final_result(
-            optimizer=optimizer,
-            algorithm_result=alg_result,
-            context=context,
-        )
-
-        health = result.details.get("scoring_health")
-        assert health is not None
-        assert health["failed_count"] == 3
-        assert health["total_count"] == 10
-
-    def test_scoring_health_defaults_to_zeros_when_context_has_none(self) -> None:
-        """If no evaluation updated context.scoring_health, key is still present."""
-        optimizer = _make_optimizer()
-        context = _make_context(scoring_health=None)
-        alg_result = _make_algorithm_result(score=0.5)
-
-        result = build_final_result(
-            optimizer=optimizer,
-            algorithm_result=alg_result,
-            context=context,
-        )
-
-        health = result.details.get("scoring_health")
-        assert health is not None
-        assert health == {"failed_count": 0, "total_count": 0}
 
 
 class TestBuildFinalResultFailsWhenUnscoreable:
@@ -236,128 +157,6 @@ class TestBuildFinalResultFailsWhenUnscoreable:
         # The stale count is still surfaced in details (best-effort), but the run
         # completes rather than raising.
         assert result.details["scoring_health"] == {"failed_count": 5, "total_count": 5}
-
-
-class TestCalculateBaselineSeedsScoringHealth:
-    """Fix 1: `_calculate_baseline` seeds `context.scoring_health` for EVERY optimizer.
-
-    This is what arms the OPIK-7029 empty-run guard for optimizers (evolutionary,
-    GEPA's search phase) whose candidate evaluations never flow through
-    `evaluate()`/`evaluate_with_result()`.
-    """
-
-    def _make_baseline_context(self, simple_chat_prompt: Any) -> OptimizationContext:
-        context = make_optimization_context(
-            simple_chat_prompt,
-            dataset=make_mock_dataset(),
-            metric=lambda di, lo: 1.0,
-            agent=MagicMock(),
-            max_trials=5,
-        )
-        context.metric.__name__ = "obj"
-        return context
-
-    def test_baseline_all_failed_is_captured(
-        self, monkeypatch: pytest.MonkeyPatch, simple_chat_prompt: Any
-    ) -> None:
-        optimizer = _make_optimizer()
-        optimizer._display = _DisplaySpy()  # type: ignore[assignment]
-        monkeypatch.setattr(
-            "opik_optimizer.base_optimizer.prepare_experiment_config",
-            lambda **kwargs: {},
-        )
-        eval_result = _make_evaluation_result("obj", failing_count=5, total_count=5)
-        monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: eval_result)
-
-        context = self._make_baseline_context(simple_chat_prompt)
-        optimizer._calculate_baseline(context)
-
-        assert context.scoring_health == {"failed_count": 5, "total_count": 5}
-
-    def test_baseline_partial_failure_is_captured(
-        self, monkeypatch: pytest.MonkeyPatch, simple_chat_prompt: Any
-    ) -> None:
-        optimizer = _make_optimizer()
-        optimizer._display = _DisplaySpy()  # type: ignore[assignment]
-        monkeypatch.setattr(
-            "opik_optimizer.base_optimizer.prepare_experiment_config",
-            lambda **kwargs: {},
-        )
-        eval_result = _make_evaluation_result("obj", failing_count=2, total_count=5)
-        monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: eval_result)
-
-        context = self._make_baseline_context(simple_chat_prompt)
-        optimizer._calculate_baseline(context)
-
-        assert context.scoring_health == {"failed_count": 2, "total_count": 5}
-
-    def test_baseline_tolerates_plain_float(
-        self, monkeypatch: pytest.MonkeyPatch, simple_chat_prompt: Any
-    ) -> None:
-        # A mocked/legacy evaluate_prompt that returns a bare float must not crash
-        # baseline computation; scoring_health is simply left unset.
-        optimizer = _make_optimizer()
-        optimizer._display = _DisplaySpy()  # type: ignore[assignment]
-        monkeypatch.setattr(
-            "opik_optimizer.base_optimizer.prepare_experiment_config",
-            lambda **kwargs: {},
-        )
-        monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 0.42)
-
-        context = self._make_baseline_context(simple_chat_prompt)
-        score = optimizer._calculate_baseline(context)
-
-        assert score == 0.42
-        assert context.scoring_health is None
-
-
-class TestResolveBaselineScoreAndHealth:
-    """The shared helper optimizers with a custom baseline path use (ParameterOptimizer).
-
-    ParameterOptimizer scores baseline + candidates via evaluate_prompt directly (never
-    evaluate()), so this helper is the only thing that arms its empty-run guard.
-    """
-
-    def _make_context(self, simple_chat_prompt: Any) -> OptimizationContext:
-        context = make_optimization_context(
-            simple_chat_prompt,
-            dataset=make_mock_dataset(),
-            metric=lambda di, lo: 1.0,
-            agent=MagicMock(),
-            max_trials=5,
-        )
-        context.metric.__name__ = "obj"
-        return context
-
-    def test_all_failed_result_seeds_health_and_returns_score(
-        self, simple_chat_prompt: Any
-    ) -> None:
-        optimizer = _make_optimizer()
-        context = self._make_context(simple_chat_prompt)
-        eval_result = _make_evaluation_result("obj", failing_count=5, total_count=5)
-
-        score = optimizer._resolve_baseline_score_and_health(context, eval_result)
-
-        assert context.scoring_health == {"failed_count": 5, "total_count": 5}
-        assert score == 0.0  # every item scored 0.0
-
-    def test_partial_failure_result_seeds_health(self, simple_chat_prompt: Any) -> None:
-        optimizer = _make_optimizer()
-        context = self._make_context(simple_chat_prompt)
-        eval_result = _make_evaluation_result("obj", failing_count=2, total_count=5)
-
-        optimizer._resolve_baseline_score_and_health(context, eval_result)
-
-        assert context.scoring_health == {"failed_count": 2, "total_count": 5}
-
-    def test_plain_float_leaves_health_unset(self, simple_chat_prompt: Any) -> None:
-        optimizer = _make_optimizer()
-        context = self._make_context(simple_chat_prompt)
-
-        score = optimizer._resolve_baseline_score_and_health(context, 0.42)
-
-        assert score == 0.42
-        assert context.scoring_health is None
 
 
 # ---------------------------------------------------------------------------

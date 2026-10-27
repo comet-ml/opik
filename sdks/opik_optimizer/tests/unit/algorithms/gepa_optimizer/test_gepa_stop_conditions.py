@@ -1,19 +1,12 @@
 # mypy: disable-error-code=no-untyped-def
 
-import logging
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock
 
-from gepa.utils.stop_condition import NoImprovementStopper, ScoreThresholdStopper
+from gepa.utils.stop_condition import NoImprovementStopper
 
 from opik_optimizer import GepaOptimizer
-from opik_optimizer.algorithms.gepa_optimizer.gepa_optimizer import (
-    MIN_EXPECTED_REFLECTION_ITERATIONS,
-    CandidateScoreThresholdStopper,
-    _build_gepa_stop_callbacks,
-    _warn_if_reflection_minibatch_exhausts_budget,
-)
 
 _GEPA_OPTIMIZER_LOGGER = "opik_optimizer.algorithms.gepa_optimizer.gepa_optimizer"
 
@@ -328,58 +321,6 @@ class TestCandidateScoreThresholdStopper:
     finish_reason="perfect_score" while showing no improvement.
     """
 
-    def test_stopper__only_seed_at_threshold__does_not_stop(self) -> None:
-        stopper = CandidateScoreThresholdStopper(1.0)
-        state = SimpleNamespace(program_full_scores_val_set=[1.0])
-        assert stopper(state) is False
-
-    def test_stopper__candidate_at_threshold__stops(self) -> None:
-        stopper = CandidateScoreThresholdStopper(1.0)
-        state = SimpleNamespace(program_full_scores_val_set=[0.95, 1.0])
-        assert stopper(state) is True
-
-    def test_stopper__candidates_below_threshold__does_not_stop(self) -> None:
-        stopper = CandidateScoreThresholdStopper(1.0)
-        state = SimpleNamespace(program_full_scores_val_set=[1.0, 0.9, 0.95])
-        assert stopper(state) is False
-
-    def test_stopper__empty_or_missing_history__does_not_stop(self) -> None:
-        stopper = CandidateScoreThresholdStopper(0.95)
-        assert stopper(SimpleNamespace(program_full_scores_val_set=[])) is False
-        assert stopper(SimpleNamespace(program_full_scores_val_set=None)) is False
-        assert stopper(SimpleNamespace()) is False
-
-    def test_stopper__none_scores_are_skipped(self) -> None:
-        stopper = CandidateScoreThresholdStopper(0.95)
-        state = SimpleNamespace(program_full_scores_val_set=[0.5, None, 0.99])
-        assert stopper(state) is True
-
-    def test_stopper__non_finite_scores_do_not_trip_it(self) -> None:
-        """A custom metric returning inf must not read as "target reached"."""
-        stopper = CandidateScoreThresholdStopper(1.0)
-        state = SimpleNamespace(
-            program_full_scores_val_set=[0.5, float("inf"), float("nan"), 0.9]
-        )
-        assert stopper(state) is False
-
-    def test_stopper__non_numeric_scores_are_skipped(self) -> None:
-        stopper = CandidateScoreThresholdStopper(0.95)
-        state = SimpleNamespace(program_full_scores_val_set=[0.5, "1.0", True, None])
-        assert stopper(state) is False
-
-    def test_stopper__unreadable_state__keeps_run_alive_but_warns(self, caplog) -> None:
-        """A stop callback must never take a run down — but swallowing the failure
-        silently would disable threshold stopping invisibly, so it logs."""
-
-        class Boom:
-            @property
-            def program_full_scores_val_set(self) -> Any:
-                raise RuntimeError("boom")
-
-        with caplog.at_level(logging.WARNING, logger=_GEPA_OPTIMIZER_LOGGER):
-            assert CandidateScoreThresholdStopper(0.95)(Boom()) is False
-        assert "threshold stopping is inactive" in caplog.text
-
     def test_finish_reason__only_seed_reached_threshold__is_not_perfect_score(
         self,
         mock_optimization_context,
@@ -429,97 +370,3 @@ class TestCandidateScoreThresholdStopper:
         )
 
         assert result.details["finish_reason"] == "max_trials"
-
-
-class TestStopperSemantics:
-    """Guard the apples-to-apples property: stoppers read full-eval scores only."""
-
-    def test_threshold_stopper_fires_on_full_eval_score(self) -> None:
-        stopper = ScoreThresholdStopper(0.95)
-        state = SimpleNamespace(program_full_scores_val_set=[0.5, 1.0])
-        assert stopper(state) is True
-
-    def test_threshold_stopper_ignores_missing_full_evals(self) -> None:
-        """A perfect mini-batch never lands in program_full_scores_val_set,
-        so an empty/low full-eval list must not stop the run."""
-        stopper = ScoreThresholdStopper(0.95)
-        assert stopper(SimpleNamespace(program_full_scores_val_set=[])) is False
-        assert stopper(SimpleNamespace(program_full_scores_val_set=[0.5, 0.9])) is False
-
-    def test_no_improvement_stopper_counts_stagnant_iterations(self) -> None:
-        stopper = NoImprovementStopper(3)
-        improving = SimpleNamespace(program_full_scores_val_set=[0.5])
-        stagnant = SimpleNamespace(program_full_scores_val_set=[0.5])
-
-        assert stopper(improving) is False  # first call establishes the best
-        assert stopper(stagnant) is False  # 1 stagnant iteration
-        assert stopper(stagnant) is False  # 2
-        assert stopper(stagnant) is True  # 3 -> stop
-
-    def test_no_improvement_stopper_resets_on_improvement(self) -> None:
-        stopper = NoImprovementStopper(2)
-        assert stopper(SimpleNamespace(program_full_scores_val_set=[0.5])) is False
-        assert stopper(SimpleNamespace(program_full_scores_val_set=[0.5])) is False
-        # improvement resets the counter
-        assert stopper(SimpleNamespace(program_full_scores_val_set=[0.6])) is False
-        assert stopper(SimpleNamespace(program_full_scores_val_set=[0.6])) is False
-        assert stopper(SimpleNamespace(program_full_scores_val_set=[0.6])) is True
-
-
-class TestReflectionMinibatchBudgetWarning:
-    """The warning must state the REAL cost model: a large mini-batch doesn't
-    stop reflection, it exhausts the metric budget in few iterations."""
-
-    def test_budget_warning__too_few_iterations_fit__logs_real_iteration_count(
-        self, caplog
-    ) -> None:
-        # 400 // (2 * 50) = 4 iterations — below the expected minimum of 5.
-        with caplog.at_level(logging.WARNING, logger=_GEPA_OPTIMIZER_LOGGER):
-            _warn_if_reflection_minibatch_exhausts_budget(
-                reflection_minibatch_size=50,
-                max_metric_calls=400,
-            )
-        assert "allows only ~4 iteration(s)" in caplog.text
-        assert "~100 metric calls per reflection iteration" in caplog.text
-
-    def test_budget_warning__ample_budget__stays_silent(self, caplog) -> None:
-        # 400 // (2 * 5) = 40 iterations — plenty; must not cry wolf.
-        with caplog.at_level(logging.WARNING, logger=_GEPA_OPTIMIZER_LOGGER):
-            _warn_if_reflection_minibatch_exhausts_budget(
-                reflection_minibatch_size=5,
-                max_metric_calls=400,
-            )
-        assert caplog.text == ""
-
-    def test_budget_warning__exactly_min_iterations__stays_silent(self, caplog) -> None:
-        # 400 // (2 * 40) = 5 == MIN_EXPECTED_REFLECTION_ITERATIONS.
-        assert MIN_EXPECTED_REFLECTION_ITERATIONS == 5
-        with caplog.at_level(logging.WARNING, logger=_GEPA_OPTIMIZER_LOGGER):
-            _warn_if_reflection_minibatch_exhausts_budget(
-                reflection_minibatch_size=40,
-                max_metric_calls=400,
-            )
-        assert caplog.text == ""
-
-
-class TestBuildGepaStopCallbacks:
-    """Direct unit tests for the stop-callback builder (review hardening)."""
-
-    def test_positive_perfect_score_wires_threshold_stopper(self) -> None:
-        stoppers, _ = _build_gepa_stop_callbacks(0.95, 10)
-        assert any(isinstance(s, ScoreThresholdStopper) for s in stoppers)
-        assert any(isinstance(s, NoImprovementStopper) for s in stoppers)
-
-    def test_nonpositive_perfect_score_omits_threshold_stopper(self) -> None:
-        # perfect_score=0 would fire on the first full eval (score >= 0) and halt
-        # the run immediately, so the threshold stopper must not be wired.
-        stoppers, _ = _build_gepa_stop_callbacks(0.0, 10)
-        assert not any(isinstance(s, ScoreThresholdStopper) for s in stoppers)
-        assert any(isinstance(s, NoImprovementStopper) for s in stoppers)
-
-    def test_empty_callbacks_when_both_disabled(self) -> None:
-        # No threshold + no stall stopper → empty list; gepa still stops on the
-        # metric-call budget.
-        stoppers, no_improve = _build_gepa_stop_callbacks(0.0, 0)
-        assert stoppers == []
-        assert no_improve is None

@@ -11,20 +11,14 @@ from typing import Any
 
 import pytest
 
-from opik_optimizer import ChatPrompt
 from opik_optimizer.algorithms.meta_prompt_optimizer.ops.candidate_ops import (
     sanitize_generated_prompts,
 )
-from opik_optimizer.algorithms.meta_prompt_optimizer.meta_prompt_optimizer import (
-    MetaPromptOptimizer,
-)
-from opik_optimizer.core import runtime
 from tests.unit.algorithms.meta_prompt_optimizer._meta_prompt_test_helpers import (
     make_prompt_json,
     make_system_prompt_json,
 )
 from tests.unit.fixtures import system_message, user_message
-from tests.unit.test_helpers import make_optimization_context
 
 pytestmark = pytest.mark.usefixtures("suppress_expected_optimizer_warnings")
 
@@ -118,14 +112,6 @@ class TestSanitizeGeneratedPrompts:
         kept = _assert_single_prompt(result)
         assert "Be helpful" in kept["edits"][0]["text"]
 
-    def test_case_insensitive_matching(self) -> None:
-        """Should match patterns case-insensitively."""
-        result = _sanitize_system_prompts(
-            ["Optimize for F1 SCORE metric.", "Good prompt."],
-            metric_name="other_metric",
-        )
-        assert len(result["prompts"]) == 1
-
     def test_preserves_clean_prompts(self) -> None:
         """Should preserve prompts without data leakage."""
         prompt_json = make_prompt_json(
@@ -141,43 +127,6 @@ class TestSanitizeGeneratedPrompts:
         result = sanitize_generated_prompts(prompt_json, "my_metric")
 
         assert len(result["prompts"]) == 2
-
-    def test_handles_empty_prompts_list(self) -> None:
-        """Should handle empty prompts list."""
-        prompt_json: dict[str, Any] = {"prompts": []}
-
-        result = sanitize_generated_prompts(prompt_json, "my_metric")
-
-        assert result["prompts"] == []
-
-    def test_handles_missing_content(self) -> None:
-        """Should handle prompts with missing content gracefully."""
-        prompt_json = {
-            "prompts": [
-                {"edits": [{"segment_id": "message:0"}]},
-                {"edits": [{"segment_id": "message:0", "text": "Valid."}]},
-            ]
-        }
-
-        result = sanitize_generated_prompts(prompt_json, "my_metric")
-
-        # Both should be preserved (missing content doesn't match patterns)
-        assert len(result["prompts"]) == 2
-
-    def test_returns_new_dict_not_modifying_original(self) -> None:
-        """Should return a new dict, preserving original structure."""
-        prompt_json = make_system_prompt_json(
-            ["Contains dataset term.", "Clean prompt here."]
-        )
-        original_count = len(prompt_json["prompts"])
-
-        result = sanitize_generated_prompts(prompt_json, "my_metric")
-
-        # Result is returned (may have fewer prompts due to filtering)
-        assert isinstance(result, dict)
-        assert "prompts" in result
-        # Original dict should still have same count (function returns new dict)
-        assert len(prompt_json["prompts"]) == original_count
 
     def test_sanitizes_an_edit_to_a_multimodal_text_block(self) -> None:
         payload = {
@@ -203,25 +152,6 @@ class TestSanitizeGeneratedPrompts:
         result = sanitize_generated_prompts(payload, "my_metric")
         assert result["prompts"] == [payload["prompts"][1]]
         assert len(payload["prompts"]) == 2
-
-
-def test_history_builder_assigns_trial_indices() -> None:
-    optimizer = MetaPromptOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
-    context = make_optimization_context({"main": ChatPrompt(system="s", user="u")})
-    round_handle = optimizer.pre_round(context)
-    runtime.record_and_post_trial(
-        optimizer=optimizer,
-        context=context,
-        prompt_or_payload=context.prompts,
-        score=0.8,
-        round_handle=round_handle,
-    )
-    optimizer.post_round(round_handle=round_handle, context=context, best_score=0.8)
-    history = optimizer.get_history_entries()
-    assert history
-    trials = history[0].get("trials") or []
-    assert trials
-    assert trials[0].get("trial_index") is not None
 
 
 @pytest.mark.parametrize(

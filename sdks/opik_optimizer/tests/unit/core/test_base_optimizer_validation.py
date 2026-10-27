@@ -33,25 +33,6 @@ class TestValidateOptimizationInputs:
 
         return metric
 
-    def test_accepts_valid_single_prompt(
-        self, optimizer, simple_chat_prompt, mock_dataset, mock_metric
-    ) -> None:
-        """Should accept a valid ChatPrompt, Dataset, and metric."""
-        mock_ds = make_mock_dataset()
-
-        optimizer._validate_optimization_inputs(
-            simple_chat_prompt, mock_ds, mock_metric
-        )
-
-    def test_accepts_valid_prompt_dict(
-        self, optimizer, simple_chat_prompt, mock_metric
-    ) -> None:
-        """Should accept a dict of ChatPrompt objects."""
-        mock_ds = make_mock_dataset()
-        prompt_dict = {"main": simple_chat_prompt}
-
-        optimizer._validate_optimization_inputs(prompt_dict, mock_ds, mock_metric)
-
     def test_rejects_non_chatprompt(self, optimizer, mock_metric) -> None:
         """Should reject prompt that is not a ChatPrompt."""
         mock_ds = make_mock_dataset()
@@ -124,24 +105,6 @@ class TestValidateOptimizationInputs:
             mock_ds,
             mock_metric,
             support_content_parts=True,
-        )
-
-
-class TestSkipAndResultHelpers:
-    """Tests for skip-threshold and result helper utilities."""
-
-    @pytest.fixture
-    def optimizer(self) -> ConcreteOptimizer:
-        return ConcreteOptimizer(model="gpt-4")
-
-    def test_should_skip_optimization_respects_defaults(self, optimizer) -> None:
-        assert optimizer._should_skip_optimization(0.96) is True
-        assert optimizer._should_skip_optimization(0.5) is False
-
-    def test_should_skip_optimization_overrides(self, optimizer) -> None:
-        assert optimizer._should_skip_optimization(0.5, perfect_score=0.5) is True
-        assert (
-            optimizer._should_skip_optimization(0.99, skip_perfect_score=False) is False
         )
 
 

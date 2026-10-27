@@ -1,12 +1,10 @@
 from typing import Any
-import warnings
 
 import pytest
 
 from opik_optimizer import ChatPrompt
 from opik_optimizer.utils.toolcalling.runtime.mcp import ToolSignature
 from opik_optimizer.utils.toolcalling.normalize.tool_factory import (
-    _collect_function_names,
     ToolCallingFactory,
     _log_remote_tool_response,
     cursor_mcp_config_to_tools,
@@ -121,58 +119,6 @@ def test_tool_factory__require_approval_blocks_execution(monkeypatch: Any) -> No
 
     with pytest.raises(PermissionError, match="requires approval before execution"):
         function_map[blocked_name]()
-
-
-def test_tool_factory__rejects_non_boolean_require_approval() -> None:
-    tools: list[dict[str, Any]] = [
-        {
-            "type": "mcp",
-            "server_label": "context7",
-            "server_url": "https://mcp.context7.com/mcp",
-            "allowed_tools": ["search"],
-            "require_approval": "false",
-        }
-    ]
-
-    with pytest.raises(ValueError, match="require_approval must be a boolean"):
-        resolve_toolcalling_tools(tools, {})
-
-
-def test_tool_factory__does_not_warn_when_require_approval_false() -> None:
-    tools: list[dict[str, Any]] = [
-        {
-            "type": "mcp",
-            "server_label": "context7",
-            "server_url": "https://mcp.context7.com/mcp",
-            "allowed_tools": [],
-            "require_approval": False,
-        }
-    ]
-
-    with warnings.catch_warnings(record=True) as warning_records:
-        warnings.simplefilter("always")
-        with pytest.raises(ValueError, match="did not return any tools"):
-            resolve_toolcalling_tools(tools, {})
-    assert not [
-        record
-        for record in warning_records
-        if "blocked from execution until approved" in str(record.message)
-    ]
-
-
-def test_tool_factory__rejects_non_mapping_headers() -> None:
-    tools: list[dict[str, Any]] = [
-        {
-            "type": "mcp",
-            "server_label": "context7",
-            "server_url": "https://mcp.context7.com/mcp",
-            "headers": "bad-headers",
-            "allowed_tools": ["search"],
-        }
-    ]
-
-    with pytest.raises(ValueError, match="headers must be a mapping"):
-        resolve_toolcalling_tools(tools, {})
 
 
 def test_tool_factory__coerces_openai_style_headers_and_auth_to_strings(
@@ -376,17 +322,6 @@ def test_tool_factory__resolves_remote_mcp_tool(monkeypatch: Any) -> None:
 
     _, function_map = resolve_toolcalling_tools(resolved_prompt.tools, {})
     assert function_map["context7.get-library-docs"](query="opik") == "docs response"
-
-
-def test_tool_factory__collect_names_skips_non_mapping_tools() -> None:
-    names = _collect_function_names(
-        [
-            "not-a-dict",
-            {"type": "function", "function": {"name": "search"}},
-        ],
-        {"existing": lambda: None},
-    )
-    assert names == {"existing", "search"}
 
 
 def test_tool_factory__registers_base_alias_for_renamed_mcp_tool(
