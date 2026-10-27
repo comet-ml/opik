@@ -1657,11 +1657,20 @@ llmProviderClient:
   destinationScheme: ${LLM_PROVIDER_DESTINATION_SCHEME:-plaintext_or_tls}
   # Default: strict
   # Values: ['strict', 'relaxed']
-  #   - strict: video URLs must be http(s) and resolve only to public addresses
+  #   - strict: media URLs must be http(s) and resolve only to public addresses
   #   - relaxed: no destination restrictions
-  # Description: Destination policy for the HEAD request that detects the MIME type of an extensionless video URL.
-  #   The URL comes from any caller's message, and a refusal only loses the hint
+  # Description: Destination policy for media URLs in a caller's message or in trace data: the HEAD request that
+  #   detects the MIME type of an extensionless video URL, and the download of the image, audio, video and PDF URLs
+  #   that Gemini and Vertex AI receive as inline data
   videoUrlDestinationGuard: ${LLM_PROVIDER_VIDEO_URL_DESTINATION_GUARD:-strict}
+  # Default: 30s
+  # Description: Time allowed for downloading one media URL that Gemini or Vertex AI receives as inline data,
+  #   connecting included
+  mediaDownloadTimeout: ${LLM_PROVIDER_MEDIA_DOWNLOAD_TIMEOUT:-30s}
+  # Default: 20MB
+  # Description: Largest media file downloaded for Gemini or Vertex AI; a Gemini request carries at most 20 MB of
+  #   inline data
+  mediaDownloadMaxSize: ${LLM_PROVIDER_MEDIA_DOWNLOAD_MAX_SIZE:-20MB}
   # Configuration for OpenAI client
   openAiClient:
     # Default:

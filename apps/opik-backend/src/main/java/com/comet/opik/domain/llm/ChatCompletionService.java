@@ -10,6 +10,8 @@ import com.google.api.gax.rpc.ApiException;
 import com.google.api.gax.rpc.StatusCode;
 import com.google.common.base.Throwables;
 import com.openai.errors.OpenAIServiceException;
+import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import dev.langchain4j.exception.AuthenticationException;
 import dev.langchain4j.exception.HttpException;
 import dev.langchain4j.exception.InternalServerException;
@@ -35,6 +37,7 @@ import jakarta.ws.rs.ServerErrorException;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
@@ -53,6 +56,7 @@ import static jakarta.ws.rs.core.Response.Status.Family.familyOf;
 @Slf4j
 public class ChatCompletionService {
     public static final String UNEXPECTED_ERROR_CALLING_LLM_PROVIDER = "Unexpected error calling LLM provider";
+    private static final String UPSTREAM_STATUS_ONLY = "provider responded with HTTP %s";
     public static final String UNSUPPORTED_FEATURE_CALLING_LLM_PROVIDER = "Unsupported feature for the selected LLM provider";
     public static final String ERROR_EMPTY_MESSAGES = "messages cannot be empty";
 
@@ -95,10 +99,12 @@ public class ChatCompletionService {
             providerError
                     .ifPresent(llmProviderError -> failHandlingLLMProviderError(runtimeException, llmProviderError));
 
-            failIfProviderReportedHttpStatus(runtimeException);
+            var hideUpstreamText = hidesUpstreamText(workspaceId, request.model());
+            failIfProviderReportedHttpStatus(runtimeException, hideUpstreamText);
 
             log.warn(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
-            throw new InternalServerErrorException(buildDetailedErrorMessage(runtimeException), runtimeException);
+            throw new InternalServerErrorException(buildDetailedErrorMessage(runtimeException, hideUpstreamText),
+                    runtimeException);
         }
 
         log.info("Created chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
@@ -117,7 +123,7 @@ public class ChatCompletionService {
 
         var llmProviderClient = llmProviderFactory.getService(workspaceId, normalized.model());
         var request = resolve(normalized, llmProviderClient);
-        var errorHandler = getErrorHandler(handlers, llmProviderClient);
+        var errorHandler = getErrorHandler(handlers, llmProviderClient, workspaceId, request.model());
 
         try {
             llmProviderClient.generateStream(
@@ -148,7 +154,7 @@ public class ChatCompletionService {
             @NonNull String workspaceId) {
         var resolved = paramResolver.resolve(modelParameters);
         logChanges(resolved.request().name(), resolved.changes());
-        var languageModelClient = getLanguageModel(workspaceId, resolved.request());
+        var languageModelClient = getLanguageModel(workspaceId, resolved.request(), chatRequest);
 
         ChatResponse chatResponse;
         try {
@@ -177,7 +183,8 @@ public class ChatCompletionService {
 
             log.warn(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
 
-            var detail = buildDetailedErrorMessage(runtimeException);
+            var detail = buildDetailedErrorMessage(runtimeException,
+                    hidesUpstreamText(workspaceId, resolved.request().name()));
             // findProviderHttpStatus only yields error statuses, so these two families are exhaustive. The
             // cause is carried through, unlike failHandlingLLMProviderError, because this exception is logged
             // rather than serialized to an HTTP caller and the provider stack is the diagnostic.
@@ -195,6 +202,14 @@ public class ChatCompletionService {
                 }
             }
         }
+    }
+
+    // The wrap-up call of a tool loop sends no tool specs but replays the tool calls, so it has to reach the model the
+    // way the rounds before it did.
+    private static boolean usesTools(ChatRequest chatRequest) {
+        return CollectionUtils.isNotEmpty(chatRequest.toolSpecifications())
+                || chatRequest.messages().stream().anyMatch(message -> message instanceof ToolExecutionResultMessage
+                        || message instanceof AiMessage aiMessage && aiMessage.hasToolExecutionRequests());
     }
 
     /**
@@ -352,9 +367,12 @@ public class ChatCompletionService {
      * Building the client can already refuse the request (a Vertex AI location or token_uri), before scoreTrace's
      * try, so that refusal is mapped here; anything else propagates as before.
      */
-    private ChatModel getLanguageModel(String workspaceId, LlmAsJudgeModelParameters modelParameters) {
+    private ChatModel getLanguageModel(String workspaceId, LlmAsJudgeModelParameters modelParameters,
+            ChatRequest chatRequest) {
         try {
-            return llmProviderFactory.getLanguageModel(workspaceId, modelParameters);
+            return usesTools(chatRequest)
+                    ? llmProviderFactory.getToolCallingLanguageModel(workspaceId, modelParameters)
+                    : llmProviderFactory.getLanguageModel(workspaceId, modelParameters);
         } catch (RuntimeException runtimeException) {
             failIfRequestRefused(runtimeException);
             throw runtimeException;
@@ -397,10 +415,10 @@ public class ChatCompletionService {
      * reaches the caller as a 4xx. Failures that never reached HTTP (connection refused, closed channel) carry no
      * status and keep falling through to the 500 below.
      */
-    private void failIfProviderReportedHttpStatus(RuntimeException runtimeException) {
+    private void failIfProviderReportedHttpStatus(RuntimeException runtimeException, boolean hideUpstreamText) {
         findProviderHttpStatus(runtimeException)
                 .ifPresent(status -> failHandlingLLMProviderError(runtimeException,
-                        new ErrorMessage(status, buildDetailedErrorMessage(runtimeException))));
+                        new ErrorMessage(status, buildDetailedErrorMessage(runtimeException, hideUpstreamText))));
     }
 
     /**
@@ -511,7 +529,8 @@ public class ChatCompletionService {
         return retryPolicyBuilder.delayMillis(llmProviderClientConfig.getDelayMillis()).build();
     }
 
-    private Consumer<Throwable> getErrorHandler(ChunkedOutputHandlers handlers, LlmProviderService llmProviderClient) {
+    private Consumer<Throwable> getErrorHandler(ChunkedOutputHandlers handlers, LlmProviderService llmProviderClient,
+            String workspaceId, String model) {
         return throwable -> {
             // Checked before the provider-error mapper so the classification matches create() and scoreTrace(): if a
             // provider envelope and an unsupported feature ever collide, the deterministic capability failure wins.
@@ -549,17 +568,29 @@ public class ChatCompletionService {
                 var providerStatus = findProviderHttpStatus(throwable);
                 if (providerStatus.isPresent()) {
                     log.warn(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, throwable);
-                    handlers.handleError(
-                            new ErrorMessage(providerStatus.get(), buildDetailedErrorMessage(throwable)));
+                    handlers.handleError(new ErrorMessage(providerStatus.get(),
+                            buildDetailedErrorMessage(throwable, hidesUpstreamText(workspaceId, model))));
                     return;
                 }
 
                 log.error(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, throwable);
 
-                var errorMessage = new ErrorMessage(buildDetailedErrorMessage(throwable));
+                var errorMessage = new ErrorMessage(
+                        buildDetailedErrorMessage(throwable, hidesUpstreamText(workspaceId, model)));
                 handlers.handleError(errorMessage);
             }
         };
+    }
+
+    // decided only once a call has failed; an unanswerable lookup takes the restrictive path
+    private boolean hidesUpstreamText(String workspaceId, String model) {
+        try {
+            return llmProviderFactory.hasUserConfiguredDestination(workspaceId, model);
+        } catch (RuntimeException exception) {
+            log.warn("Could not tell whether model '{}' has a user-configured destination, workspaceId '{}'", model,
+                    workspaceId, exception);
+            return true;
+        }
     }
 
     /**
@@ -569,8 +600,8 @@ public class ChatCompletionService {
      * @param throwable the exception to extract details from
      * @return a detailed error message combining the base message with exception details
      */
-    private String buildDetailedErrorMessage(Throwable throwable) {
-        String exceptionDetails = extractErrorDetails(throwable);
+    private String buildDetailedErrorMessage(Throwable throwable, boolean hideUpstreamText) {
+        String exceptionDetails = extractErrorDetails(throwable, hideUpstreamText);
         if (StringUtils.isNotBlank(exceptionDetails)) {
             return UNEXPECTED_ERROR_CALLING_LLM_PROVIDER + ": " + exceptionDetails;
         }
@@ -586,7 +617,7 @@ public class ChatCompletionService {
      * @param throwable the exception to extract details from
      * @return the extracted error details, or null if no meaningful details found
      */
-    private String extractErrorDetails(Throwable throwable) {
+    private String extractErrorDetails(Throwable throwable, boolean hideUpstreamText) {
         if (throwable == null) {
             return null;
         }
@@ -608,6 +639,11 @@ public class ChatCompletionService {
             }
             case ClosedChannelException closedChannelException ->
                 "Service is unreachable. Please check the provider URL.";
+            // their message is what the destination answered: only echoed when Opik chose the destination
+            case HttpException httpException when hideUpstreamText ->
+                UPSTREAM_STATUS_ONLY.formatted(httpException.statusCode());
+            case OpenAIServiceException serviceException when hideUpstreamText ->
+                UPSTREAM_STATUS_ONLY.formatted(serviceException.statusCode());
             default -> {
                 // For other exceptions, use the exception message
                 String message = exceptionToHandle.getMessage();

@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.net.UnknownHostException;
+
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -48,6 +50,9 @@ class DestinationGuardTest {
             "https://240.0.0.1/token",
             "https://255.255.255.255/token",
             "https://[64:ff9b::a00:1]/token", // NAT64 of 10.0.0.1
+            "https://[::a00:1]/token", // IPv4-compatible form of 10.0.0.1
+            "https://[2002:a00:1::1]/token", // 6to4 of 10.0.0.1
+            "https://[2001:0:4136:e378:8000:63bf:f5ff:fffe]/token", // Teredo
             "not a url",
     })
     @DisplayName("strict mode refuses non-https, private, internal and malformed destinations")
@@ -62,6 +67,18 @@ class DestinationGuardTest {
         assertThatThrownBy(() -> strict.validate("https://token-endpoint.invalid/token"))
                 .isInstanceOf(DestinationGuardException.class)
                 .hasMessageContaining("could not be resolved");
+    }
+
+    @Test
+    @DisplayName("the resolver refuses a non-public host and passes an unresolvable one through as not found")
+    void resolverTellsRefusedFromUnresolvable() {
+        var dns = new DestinationGuardDns(strict);
+
+        assertThatThrownBy(() -> dns.lookup("127.0.0.1")).isInstanceOf(DestinationGuardDns.RefusedHostException.class);
+        assertThatThrownBy(() -> dns.lookup("token-endpoint.invalid"))
+                .isInstanceOf(UnknownHostException.class)
+                .isNotInstanceOf(DestinationGuardDns.RefusedHostException.class);
+        assertThatCode(() -> new DestinationGuardDns(relaxed).lookup("127.0.0.1")).doesNotThrowAnyException();
     }
 
     @ParameterizedTest
