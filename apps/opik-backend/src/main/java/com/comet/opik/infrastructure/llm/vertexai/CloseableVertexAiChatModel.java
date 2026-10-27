@@ -25,11 +25,12 @@ class CloseableVertexAiChatModel implements ChatModel, AutoCloseable {
     private final @NonNull ChatModel delegate;
     @Getter
     private final @NonNull Client client;
+    private final @NonNull RemoteMediaInliner remoteMediaInliner;
 
     @Override
     public ChatResponse chat(ChatRequest chatRequest) {
         return delegate.chat(chatRequest.toBuilder()
-                .messages(RemoteMediaInliner.inline(chatRequest.messages()))
+                .messages(remoteMediaInliner.inline(chatRequest.messages()))
                 .build());
     }
 

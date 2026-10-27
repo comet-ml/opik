@@ -1,7 +1,7 @@
 package com.comet.opik.infrastructure.llm;
 
+import com.comet.opik.TestConfigUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
-import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException;
 import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder;
@@ -16,7 +16,6 @@ import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.data.message.VideoContent;
 import org.apache.commons.lang3.RandomUtils;
 import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
@@ -47,21 +46,14 @@ class RemoteMediaInlinerTest {
     private final WireMockUtils.WireMockRuntime wireMock = WireMockUtils.startWireMock();
 
     // the mock server is on loopback, which strict mode refuses; the refusal itself is covered through the API
-    @BeforeAll
-    void setUp() {
-        RemoteMediaInliner.setConfig(config(DestinationGuard.Mode.RELAXED));
-    }
+    private final RemoteMediaInliner remoteMediaInliner = LlmTestClients.remoteMediaInliner(
+            DestinationGuard.Mode.RELAXED);
+    private final int maxBytes = Math.toIntExact(
+            TestConfigUtils.loadConfigTest().getLlmProviderClient().getMediaDownloadMaxSize().toBytes());
 
     @AfterAll
     void tearDown() {
-        RemoteMediaInliner.setConfig(config(DestinationGuard.Mode.STRICT));
         wireMock.server().stop();
-    }
-
-    private static LlmProviderClientConfig config(DestinationGuard.Mode mode) {
-        var config = new LlmProviderClientConfig();
-        config.setVideoUrlDestinationGuard(mode);
-        return config;
     }
 
     private Stream<Arguments> mediaIsDownloadedAndInlined() {
@@ -90,7 +82,7 @@ class RemoteMediaInlinerTest {
         List<ChatMessage> messages = List.of(system,
                 UserMessage.from(text, fromUrl.apply(wireMock.runtimeInfo().getHttpBaseUrl() + mediaPath)));
 
-        assertThat(RemoteMediaInliner.inline(messages)).isEqualTo(List.of(system,
+        assertThat(remoteMediaInliner.inline(messages)).isEqualTo(List.of(system,
                 UserMessage.from(text, fromBase64.apply(Base64.getEncoder().encodeToString(bytes), mimeType))));
     }
 
@@ -101,7 +93,7 @@ class RemoteMediaInlinerTest {
                 ImageContent.from("gs://bucket-%s/image.png".formatted(UUID.randomUUID())),
                 AudioContent.from("data:audio/wav,%s".formatted(UUID.randomUUID()))));
 
-        assertThat(RemoteMediaInliner.inline(messages)).isEqualTo(messages);
+        assertThat(remoteMediaInliner.inline(messages)).isEqualTo(messages);
     }
 
     @ParameterizedTest
@@ -111,7 +103,7 @@ class RemoteMediaInlinerTest {
     void otherSchemesAreRefused(String url) {
         List<ChatMessage> messages = List.of(UserMessage.from(ImageContent.from(url)));
 
-        assertThatThrownBy(() -> RemoteMediaInliner.inline(messages))
+        assertThatThrownBy(() -> remoteMediaInliner.inline(messages))
                 .isInstanceOf(ProviderRequestRefusedException.class)
                 .hasMessage(new ProviderRequestRefusedException(MEDIA_URL).getMessage());
     }
@@ -120,7 +112,7 @@ class RemoteMediaInlinerTest {
         return Stream.of(
                 arguments("/missing-" + UUID.randomUUID(), aResponse().withStatus(404)),
                 arguments("/oversized-" + UUID.randomUUID(),
-                        aResponse().withBody(new byte[RemoteMediaInliner.MAX_BYTES + 1])),
+                        aResponse().withBody(new byte[maxBytes + 1])),
                 arguments("/redirect-" + UUID.randomUUID(),
                         aResponse().withStatus(302).withHeader("Location", "/media-" + UUID.randomUUID())));
     }
@@ -133,7 +125,7 @@ class RemoteMediaInlinerTest {
         List<ChatMessage> messages = List.of(
                 UserMessage.from(ImageContent.from(wireMock.runtimeInfo().getHttpBaseUrl() + mediaPath)));
 
-        assertThatThrownBy(() -> RemoteMediaInliner.inline(messages))
+        assertThatThrownBy(() -> remoteMediaInliner.inline(messages))
                 .isInstanceOf(ProviderRequestRefusedException.class)
                 .hasMessage(new ProviderRequestRefusedException(MEDIA_URL_DOWNLOAD).getMessage());
     }

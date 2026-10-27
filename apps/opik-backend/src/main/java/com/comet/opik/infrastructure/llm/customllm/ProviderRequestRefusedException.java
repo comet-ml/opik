@@ -21,7 +21,8 @@ public class ProviderRequestRefusedException extends NonRetriableException {
                 + " (self-hosted deployments serving media from internal networks can set"
                 + " LLM_PROVIDER_VIDEO_URL_DESTINATION_GUARD=relaxed)"),
         MEDIA_URL_DOWNLOAD("a media URL could not be downloaded: it must return the file itself, not a redirect, with a"
-                + " success status within 30 seconds, and the file must be at most 20 MB"),
+                + " success status, within the download time and size limits (LLM_PROVIDER_MEDIA_DOWNLOAD_TIMEOUT,"
+                + " LLM_PROVIDER_MEDIA_DOWNLOAD_MAX_SIZE)"),
                 ;
 
         private final String message;

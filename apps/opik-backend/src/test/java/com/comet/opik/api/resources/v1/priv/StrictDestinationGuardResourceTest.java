@@ -223,6 +223,7 @@ class StrictDestinationGuardResourceTest {
         var update = ProviderApiKeyUpdate.builder()
                 .baseUrl("https://{model}.gw.example.com/v1")
                 .apiKey(UUID.randomUUID().toString())
+                .headers(created.headers())
                 .build();
         client.updateProviderApiKey(created.id(), update, apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
 

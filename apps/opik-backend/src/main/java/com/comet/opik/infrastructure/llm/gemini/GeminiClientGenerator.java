@@ -6,7 +6,9 @@ import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.GeminiThinkingParams;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
+import com.comet.opik.infrastructure.llm.RemoteMediaInliner;
 import com.google.common.base.Preconditions;
+import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.googleai.GoogleAiGeminiChatModel;
 import dev.langchain4j.model.googleai.GoogleAiGeminiStreamingChatModel;
@@ -14,6 +16,7 @@ import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -24,6 +27,12 @@ public class GeminiClientGenerator implements LlmProviderClientGenerator<GoogleA
 
     private static final int MAX_RETRIES = 1;
     private final @NonNull LlmProviderClientConfig llmProviderClientConfig;
+    private final @NonNull RemoteMediaInliner remoteMediaInliner;
+
+    /** The request's messages for Gemini, with media URLs downloaded here rather than by the SDK. */
+    public List<ChatMessage> mapMessages(@NonNull ChatCompletionRequest request) {
+        return remoteMediaInliner.inline(GeminiLangChainMapper.INSTANCE.mapMessagesForGemini(request));
+    }
 
     public GoogleAiGeminiChatModel newGeminiClient(@NonNull String apiKey, @NonNull ChatCompletionRequest request) {
         return GeminiChatModelMapper.INSTANCE.toGeminiChatModel(apiKey, request,
@@ -71,6 +80,6 @@ public class GeminiClientGenerator implements LlmProviderClientGenerator<GoogleA
         GoogleAiGeminiChatModel geminiModel = modelBuilder.build();
 
         // Wrap in OpikGeminiChatModel to convert VideoContent -> ImageContent
-        return new OpikGeminiChatModel(geminiModel);
+        return new OpikGeminiChatModel(geminiModel, remoteMediaInliner);
     }
 }

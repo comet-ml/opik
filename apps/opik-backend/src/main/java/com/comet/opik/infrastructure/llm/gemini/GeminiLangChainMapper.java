@@ -4,7 +4,6 @@ import com.comet.opik.domain.llm.langchain4j.OpikContent;
 import com.comet.opik.domain.llm.langchain4j.OpikUserMessage;
 import com.comet.opik.infrastructure.llm.LlmProviderLangChainMapper;
 import com.comet.opik.infrastructure.llm.MediaContentUtils;
-import com.comet.opik.infrastructure.llm.RemoteMediaInliner;
 import com.comet.opik.infrastructure.llm.VideoMimeTypeUtils;
 import dev.langchain4j.data.image.Image;
 import dev.langchain4j.data.message.ChatMessage;
@@ -40,9 +39,9 @@ public interface GeminiLangChainMapper {
      * Map messages for Gemini, converting VIDEO_URL to ImageContent.
      */
     default List<ChatMessage> mapMessagesForGemini(@NonNull ChatCompletionRequest request) {
-        return RemoteMediaInliner.inline(request.messages().stream()
+        return request.messages().stream()
                 .map(this::toChatMessageForGemini)
-                .toList());
+                .toList();
     }
 
     /**

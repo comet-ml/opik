@@ -199,7 +199,7 @@ class WireBodyTableTest {
                 anthropicModule.clientGenerator(config.getLlmProviderClient(), registryService), registryService);
         var openAiModule = new OpenAIModule();
         openAiModule.llmServiceProvider(llmProviderFactory,
-                openAiModule.clientGenerator(config.getLlmProviderClient()));
+                openAiModule.clientGenerator(config.getLlmProviderClient(), LlmTestClients.RESPONSES_API_HTTP_CLIENT));
 
         chatCompletionService = new ChatCompletionService(config.getLlmProviderClient(), llmProviderFactory,
                 new ParamResolver(llmProviderFactory, registryService));

@@ -344,7 +344,7 @@ Accepted values are `strict` and `relaxed` (case-insensitive). When the variable
 
 Video URLs without a file extension get a `HEAD` request to detect their type. `LLM_PROVIDER_VIDEO_URL_DESTINATION_GUARD` applies the same destination check to that request (default `relaxed` on Docker Compose and Helm, `strict` on every other launch path); a refused URL is still sent to the model, just without the detected type. Set it to `relaxed` to detect the type of videos served from private networks.
 
-Gemini and Vertex AI receive media as inline data, so Opik downloads the image, audio, video and PDF URLs in a message itself; only `gs://` and `data:` URLs are passed through as they are. The same variable applies the destination check to each download. A media URL with another scheme, or one that is refused, redirects, takes longer than 30 seconds or exceeds 20 MB, fails the request with a `400`.
+Gemini and Vertex AI receive media as inline data, so Opik downloads the image, audio, video and PDF URLs in a message itself; only `gs://` and `data:` URLs are passed through as they are. The same variable applies the destination check to each download. A media URL with another scheme, or one that is refused, redirects, or exceeds `LLM_PROVIDER_MEDIA_DOWNLOAD_TIMEOUT` (default `30s`) or `LLM_PROVIDER_MEDIA_DOWNLOAD_MAX_SIZE` (default `20MB`), fails the request with a `400`.
 
 Changing a provider's **URL** requires re-entering its API key (or OAuth2 credentials), since stored secrets are only ever sent to the endpoint they were saved for.
 

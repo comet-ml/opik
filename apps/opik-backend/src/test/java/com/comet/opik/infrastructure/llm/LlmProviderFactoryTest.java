@@ -129,17 +129,20 @@ class LlmProviderFactoryTest {
                 registryService);
         anthropicModule.llmServiceProvider(llmProviderFactory, anthropicClientGenerator, registryService);
 
-        GeminiClientGenerator geminiClientGenerator = geminiModule.clientGenerator(llmProviderClientConfig);
+        GeminiClientGenerator geminiClientGenerator = geminiModule.clientGenerator(llmProviderClientConfig,
+                LlmTestClients.REMOTE_MEDIA_INLINER);
         geminiModule.llmServiceProvider(llmProviderFactory, geminiClientGenerator);
 
-        OpenAIClientGenerator openAIClientGenerator = openAIModule.clientGenerator(llmProviderClientConfig);
+        OpenAIClientGenerator openAIClientGenerator = openAIModule.clientGenerator(llmProviderClientConfig,
+                LlmTestClients.RESPONSES_API_HTTP_CLIENT);
         openAIModule.llmServiceProvider(llmProviderFactory, openAIClientGenerator);
 
-        OpenAIClientGenerator openRouterClientGenerator = openRouterModule.clientGenerator(llmProviderClientConfig);
+        OpenAIClientGenerator openRouterClientGenerator = openRouterModule.clientGenerator(llmProviderClientConfig,
+                LlmTestClients.RESPONSES_API_HTTP_CLIENT);
         openRouterModule.llmServiceProvider(llmProviderFactory, openRouterClientGenerator);
 
         VertexAIClientGenerator vertexAIClientGenerator = vertexAIModule.clientGenerator(llmProviderClientConfig,
-                registryService);
+                registryService, LlmTestClients.REMOTE_MEDIA_INLINER);
         vertexAIModule.llmServiceProvider(llmProviderFactory, vertexAIClientGenerator);
 
         LlmProviderService actual = llmProviderFactory.getService(workspaceId, model);
@@ -583,7 +586,7 @@ class LlmProviderFactoryTest {
                 RELAXED_GUARD);
         var vertexAIModule = new VertexAIModule();
         vertexAIModule.llmServiceProvider(llmProviderFactory,
-                vertexAIModule.clientGenerator(llmProviderClientConfig, registry));
+                vertexAIModule.clientGenerator(llmProviderClientConfig, registry, LlmTestClients.REMOTE_MEDIA_INLINER));
 
         assertThat(llmProviderFactory.getService(workspaceId, model)).isInstanceOf(LlmProviderVertexAI.class);
     }

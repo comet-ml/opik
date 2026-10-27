@@ -6,13 +6,11 @@ import com.comet.opik.infrastructure.llm.CustomParametersOverrides;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
 import com.comet.opik.infrastructure.llm.OpenAiClientConfig;
-import com.comet.opik.infrastructure.net.DestinationGuard;
-import com.comet.opik.infrastructure.net.DestinationGuardDns;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.openai.client.OpenAIClient;
-import com.openai.client.okhttp.OkHttpClient;
+import com.openai.core.http.HttpClient;
 import com.openai.models.ReasoningEffort;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.StreamingChatModel;
@@ -56,6 +54,8 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
     }
 
     private final @NonNull LlmProviderClientConfig llmProviderClientConfig;
+    // see OpenAIModule: no redirects, every connection resolved through the destination guard
+    private final @NonNull HttpClient responsesApiHttpClient;
 
     public OpenAiClient newOpenAiClient(@NonNull LlmProviderClientApiConfig config) {
         var openAiClientBuilder = OpenAiClient.builder()
@@ -132,8 +132,8 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
                 // Treat insufficient_quota (429, out-of-credits) as non-retryable so neither the model's
                 // internal retry nor the outer retry policy keeps hitting an exhausted key.
                 .httpClientBuilder(QuotaAwareHttpClient.builder())
-                .logRequests(true)
-                .logResponses(true);
+                .logRequests(llmProviderClientConfig.getLogRequests())
+                .logResponses(llmProviderClientConfig.getLogResponses());
 
         Optional.ofNullable(llmProviderClientConfig.getConnectTimeout())
                 .ifPresent(connectTimeout -> builder.timeout(connectTimeout.toJavaDuration()));
@@ -251,15 +251,7 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
                 .orElse(null);
         var client = OpenAiOfficialSetup.setupSyncClient(baseUrl, config.apiKey(), null, null, null, null, false,
                 false, modelName, timeout, null, null, config.headers())
-                // the SDK's own transport follows redirects, which would take the request past the base URL check
-                .withOptions(options -> options.httpClient(new OkHttpClient(DestinationGuardDns.clientBuilder(
-                        DestinationGuard.builder()
-                                .mode(llmProviderClientConfig.getDestinationGuard())
-                                .scheme(llmProviderClientConfig.getDestinationScheme())
-                                .build())
-                        .followRedirects(false)
-                        .followSslRedirects(false)
-                        .build())));
+                .withOptions(options -> options.httpClient(responsesApiHttpClient));
         return OpenAiResponsesExtraBody.withExtraBody(client, extraBody);
     }
 }

@@ -25,6 +25,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.ListUtils;
+import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
@@ -317,9 +318,12 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
         boolean storedApiKeyKept = update.apiKey() == null && !newAuthConfig
                 && stored.apiKey() != null && StringUtils.isNotBlank(EncryptionUtils.decrypt(stored.apiKey()));
         boolean storedAuthConfigKept = stored.authConfig() != null && !newAuthConfig && !clearsAuthConfig;
-        if (storedApiKeyKept || storedAuthConfigKept) {
+        // custom headers can carry credentials too, so they must be resent (or cleared with an empty map)
+        boolean storedHeadersKept = update.headers() == null && MapUtils.isNotEmpty(stored.headers());
+        if (storedApiKeyKept || storedAuthConfigKept || storedHeadersKept) {
             throw new BadRequestException(
-                    "changing base_url requires resubmitting the provider credentials (api_key or auth_config)");
+                    "changing base_url requires resubmitting the provider credentials (api_key or auth_config) and"
+                            + " headers");
         }
     }
 

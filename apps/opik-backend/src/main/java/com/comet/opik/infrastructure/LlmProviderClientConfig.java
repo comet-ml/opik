@@ -4,7 +4,9 @@ import com.comet.opik.infrastructure.llm.AnthropicClientConfig;
 import com.comet.opik.infrastructure.llm.OpenAiClientConfig;
 import com.comet.opik.infrastructure.llm.VertexAIClientConfig;
 import com.comet.opik.infrastructure.net.DestinationGuard;
+import io.dropwizard.util.DataSize;
 import io.dropwizard.util.Duration;
+import io.dropwizard.validation.MinDataSize;
 import io.dropwizard.validation.MinDuration;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
@@ -70,4 +72,15 @@ public class LlmProviderClientConfig {
      * themselves. The URL comes from any caller's message, or from trace data for online scoring.
      */
     @NotNull private DestinationGuard.Mode videoUrlDestinationGuard;
+
+    /**
+     * Time allowed for downloading one media URL that Gemini or Vertex AI receives as inline data, connecting
+     * included.
+     */
+    @NotNull @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS)
+    private Duration mediaDownloadTimeout;
+
+    /** Largest media file downloaded for Gemini or Vertex AI. */
+    @NotNull @MinDataSize(1)
+    private DataSize mediaDownloadMaxSize;
 }

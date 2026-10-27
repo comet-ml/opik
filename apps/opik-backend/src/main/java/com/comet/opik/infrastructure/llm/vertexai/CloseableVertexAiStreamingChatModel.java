@@ -25,11 +25,12 @@ class CloseableVertexAiStreamingChatModel implements StreamingChatModel, AutoClo
     private final @NonNull StreamingChatModel delegate;
     @Getter
     private final @NonNull Client client;
+    private final @NonNull RemoteMediaInliner remoteMediaInliner;
 
     @Override
     public void chat(ChatRequest chatRequest, StreamingChatResponseHandler handler) {
         delegate.chat(chatRequest.toBuilder()
-                .messages(RemoteMediaInliner.inline(chatRequest.messages()))
+                .messages(remoteMediaInliner.inline(chatRequest.messages()))
                 .build(), handler);
     }
 

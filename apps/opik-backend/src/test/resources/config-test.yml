@@ -805,6 +805,8 @@ llmProviderClient:
   # Description: Destination policy for the HEAD request that detects the MIME type of an extensionless video URL.
   #   The URL comes from any caller's message, and a refusal only loses the hint
   videoUrlDestinationGuard: strict
+  mediaDownloadTimeout: 30s
+  mediaDownloadMaxSize: 20MB
   openAiClient:
     # See demo endpoint Langchain4j documentation: https://docs.langchain4j.dev/get-started
     # Not https but only used for testing purposes. It's fine as long as not sensitive data is sent.
