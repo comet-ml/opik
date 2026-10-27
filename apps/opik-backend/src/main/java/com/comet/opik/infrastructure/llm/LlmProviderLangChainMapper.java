@@ -8,6 +8,7 @@ import com.comet.opik.infrastructure.llm.customllm.CustomLlmErrorMessage;
 import com.comet.opik.infrastructure.llm.gemini.GeminiErrorObject;
 import com.comet.opik.infrastructure.llm.openai.OpenAiErrorMessage;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterErrorMessage;
+import com.comet.opik.infrastructure.net.LoggableUrl;
 import com.comet.opik.utils.JsonUtils;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
@@ -148,7 +149,7 @@ public interface LlmProviderLangChainMapper {
                     if (mimeType != null) {
                         videoBuilder.mimeType(mimeType);
                         log.debug("Set mimeType '{}' for video URL: '{}'", mimeType,
-                                VideoMimeTypeUtils.loggable(videoUrl));
+                                LoggableUrl.of(videoUrl));
                     }
                     yield new VideoContent(videoBuilder.build());
                 }

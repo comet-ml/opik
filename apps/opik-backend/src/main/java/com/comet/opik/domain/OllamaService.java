@@ -2,9 +2,9 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.OllamaConnectionTestResponse;
 import com.comet.opik.api.OllamaModel;
-import com.comet.opik.infrastructure.llm.VideoMimeTypeUtils;
 import com.comet.opik.infrastructure.llm.customllm.ProviderBaseUrlGuard;
 import com.comet.opik.infrastructure.net.DestinationGuardDnsResolver;
+import com.comet.opik.infrastructure.net.LoggableUrl;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -60,7 +60,7 @@ public class OllamaService {
     public Mono<OllamaConnectionTestResponse> testConnection(@NonNull String baseUrl, String apiKey) {
         String normalizedUrl = normalizeUrl(baseUrl);
         String versionUrl = normalizedUrl + "/api/version";
-        log.debug("Testing Ollama connection at: '{}'", VideoMimeTypeUtils.loggable(versionUrl));
+        log.debug("Testing Ollama connection at: '{}'", LoggableUrl.of(versionUrl));
 
         return performAsyncGet(versionUrl, apiKey)
                 .subscribeOn(Schedulers.boundedElastic())
@@ -74,7 +74,7 @@ public class OllamaService {
                             return createSuccessResponse(version);
                         } else {
                             log.warn("Failed to connect to Ollama at '{}': HTTP '{}'",
-                                    VideoMimeTypeUtils.loggable(normalizedUrl), response.getStatus());
+                                    LoggableUrl.of(normalizedUrl), response.getStatus());
                             // the caller gave the URL, so it is not echoed back
                             return createErrorResponse(CONNECTION_FAILED.formatted(response.getStatus()));
                         }
@@ -97,7 +97,7 @@ public class OllamaService {
     public Mono<List<OllamaModel>> listModels(@NonNull String baseUrl, String apiKey) {
         String normalizedUrl = normalizeUrl(baseUrl);
         String tagsUrl = normalizedUrl + "/api/tags";
-        log.debug("Fetching models from Ollama instance at: '{}'", VideoMimeTypeUtils.loggable(tagsUrl));
+        log.debug("Fetching models from Ollama instance at: '{}'", LoggableUrl.of(tagsUrl));
 
         return performAsyncGet(tagsUrl, apiKey)
                 .subscribeOn(Schedulers.boundedElastic())
@@ -123,7 +123,7 @@ public class OllamaService {
                             return models;
                         } else {
                             log.warn("Failed to fetch models from Ollama at '{}': HTTP '{}'",
-                                    VideoMimeTypeUtils.loggable(normalizedUrl),
+                                    LoggableUrl.of(normalizedUrl),
                                     response.getStatus());
                             return Collections.<OllamaModel>emptyList();
                         }

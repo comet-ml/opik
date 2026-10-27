@@ -6,6 +6,7 @@ import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.comet.opik.infrastructure.net.DestinationGuardDns;
 import com.comet.opik.infrastructure.net.DestinationGuardDnsResolver;
 import com.comet.opik.infrastructure.net.DestinationGuardException;
+import com.comet.opik.infrastructure.net.LoggableUrl;
 import dev.langchain4j.data.image.Image;
 import dev.langchain4j.data.message.AudioContent;
 import dev.langchain4j.data.message.ChatMessage;
@@ -166,7 +167,7 @@ public class RemoteMediaInliner {
             destinationGuard.validate(url);
         } catch (DestinationGuardException exception) {
             // no exception detail: it describes a user-supplied URL and how our network resolves it
-            log.warn("Refused media URL, url '{}'", VideoMimeTypeUtils.loggable(url));
+            log.warn("Refused media URL, url '{}'", LoggableUrl.of(url));
             throw new ProviderRequestRefusedException(MEDIA_URL);
         }
         // a redirect is a failed download, and the guard checks each address connected to, so the only destination
@@ -189,12 +190,12 @@ public class RemoteMediaInliner {
         } catch (ExecutionException | TimeoutException | IOException | ProcessingException exception) {
             future.cancel(true);
             if (DestinationGuardDns.isRefused(exception)) {
-                log.warn("Refused media URL: '{}'", VideoMimeTypeUtils.loggable(url));
+                log.warn("Refused media URL: '{}'", LoggableUrl.of(url));
                 throw new ProviderRequestRefusedException(MEDIA_URL);
             }
             // the message can echo the full URL, credentials included, so only the type is logged
             log.warn("Media URL download failed, error type '{}', url '{}'", exception.getClass().getSimpleName(),
-                    VideoMimeTypeUtils.loggable(url));
+                    LoggableUrl.of(url));
             throw new ProviderRequestRefusedException(MEDIA_URL_DOWNLOAD);
         }
     }
@@ -207,12 +208,12 @@ public class RemoteMediaInliner {
         if (response.getStatusInfo().getFamily() != Response.Status.Family.SUCCESSFUL
                 || response.getLength() > budget.remaining) {
             log.warn("Media URL download failed, status '{}', length '{}', url '{}'", response.getStatus(),
-                    response.getLength(), VideoMimeTypeUtils.loggable(url));
+                    response.getLength(), LoggableUrl.of(url));
             throw new ProviderRequestRefusedException(MEDIA_URL_DOWNLOAD);
         }
         // empty media would be sent on as if it were the file
         if (!response.hasEntity()) {
-            log.warn("Media URL download failed, empty body, url '{}'", VideoMimeTypeUtils.loggable(url));
+            log.warn("Media URL download failed, empty body, url '{}'", LoggableUrl.of(url));
             throw new ProviderRequestRefusedException(MEDIA_URL_DOWNLOAD);
         }
         // the length header can be absent or wrong, so the read itself is capped
@@ -226,7 +227,7 @@ public class RemoteMediaInliner {
                 total += read;
                 if (total > budget.remaining) {
                     log.warn("Media URL download failed, media larger than the size limit, max bytes '{}', url '{}'",
-                            maxBytes, VideoMimeTypeUtils.loggable(url));
+                            maxBytes, LoggableUrl.of(url));
                     throw new ProviderRequestRefusedException(MEDIA_URL_DOWNLOAD);
                 }
                 encoder.write(chunk, 0, read);
