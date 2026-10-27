@@ -352,7 +352,7 @@ def main():
         with optimization_lifecycle(status_manager):
             # Load dataset
             dataset, dataset_size = load_and_validate_dataset(
-                client, config.dataset_name
+                client, config.dataset_name, context.project_name
             )
 
             # Build the optimizer + prompt: resolves the gateway-routed prompt
@@ -367,6 +367,7 @@ def main():
                 config.metric_params,
                 prompt.model,
                 dataset_items_provider=lambda: list(dataset.get_items()),
+                project_name=context.project_name,
             )
 
             # Run optimization
