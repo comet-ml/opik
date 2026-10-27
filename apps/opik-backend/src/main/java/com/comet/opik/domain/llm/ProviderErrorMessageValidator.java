@@ -1,10 +1,12 @@
 package com.comet.opik.domain.llm;
 
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
+import com.google.common.base.CharMatcher;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
@@ -21,6 +23,7 @@ import static com.comet.opik.domain.llm.ChatCompletionService.UNEXPECTED_ERROR_C
 public class ProviderErrorMessageValidator {
 
     /** The error identifiers each provider documents for its error envelope. */
+    @RequiredArgsConstructor
     public enum DocumentedErrors {
         /**
          * https://developers.openai.com/api/docs/guides/error-codes, .../guides/agents-api/errors; error.type or code.
@@ -65,14 +68,17 @@ public class ProviderErrorMessageValidator {
 
         private final Set<String> identifiers;
 
-        DocumentedErrors(Set<String> identifiers) {
-            this.identifiers = identifiers;
-        }
-
         public boolean documents(Object identifier) {
             return identifier != null && identifiers.contains(identifier.toString());
         }
     }
+
+    /**
+     * Markup delimiters, ISO control characters (C0, DEL and C1) and the Unicode line and paragraph separators. All of
+     * them are in the Basic Multilingual Plane, so matching UTF-16 chars matches the same code points.
+     */
+    private static final CharMatcher DISALLOWED = CharMatcher.javaIsoControl()
+            .or(CharMatcher.anyOf("<>\u2028\u2029"));
 
     private final int maxLength;
 
@@ -100,14 +106,6 @@ public class ProviderErrorMessageValidator {
 
     /** A single line of plain text: no markup, control characters or line breaks; length is not checked. */
     public static boolean isPlainText(String text) {
-        return StringUtils.isNotBlank(text)
-                && text.codePoints().noneMatch(ProviderErrorMessageValidator::isDisallowed);
-    }
-
-    private static boolean isDisallowed(int codePoint) {
-        return codePoint == '<' || codePoint == '>'
-                || Character.isISOControl(codePoint)
-                || Character.getType(codePoint) == Character.LINE_SEPARATOR
-                || Character.getType(codePoint) == Character.PARAGRAPH_SEPARATOR;
+        return StringUtils.isNotBlank(text) && DISALLOWED.matchesNoneOf(text);
     }
 }

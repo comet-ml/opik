@@ -210,6 +210,11 @@ public class RemoteMediaInliner {
                     response.getLength(), VideoMimeTypeUtils.loggable(url));
             throw new ProviderRequestRefusedException(MEDIA_URL_DOWNLOAD);
         }
+        // empty media would be sent on as if it were the file
+        if (!response.hasEntity()) {
+            log.warn("Media URL download failed, empty body, url '{}'", VideoMimeTypeUtils.loggable(url));
+            throw new ProviderRequestRefusedException(MEDIA_URL_DOWNLOAD);
+        }
         // the length header can be absent or wrong, so the read itself is capped
         var encoded = new ByteArrayOutputStream(
                 response.getLength() > 0 ? Math.min(base64Length(response.getLength()), MAX_INITIAL_BUFFER_SIZE) : 32);

@@ -353,6 +353,29 @@ class AuthTokenProviderTest {
     }
 
     @Test
+    @DisplayName("an error reply without a body surfaces its status")
+    void emptyErrorReplySurfacesItsStatus() {
+        wireMock.stubFor(post(urlEqualTo(TOKEN_PATH)).willReturn(aResponse().withStatus(401)));
+        var recipe = oauthRecipe().build();
+        var expectedMessage = "token fetch failed with status '401' from '%s': ".formatted(recipe.tokenUrl());
+
+        assertThatThrownBy(() -> provider.testFetch(recipe))
+                .isExactlyInstanceOf(AuthTokenException.class)
+                .hasMessage(expectedMessage);
+    }
+
+    @Test
+    @DisplayName("a success reply without a body names the missing token field")
+    void emptySuccessReplyNamesTheMissingTokenField() {
+        wireMock.stubFor(post(urlEqualTo(TOKEN_PATH)).willReturn(aResponse().withStatus(200)));
+        var expectedMessage = "field 'access_token' not found in the token reply; top-level fields: []";
+
+        assertThatThrownBy(() -> provider.testFetch(oauthRecipe().build()))
+                .isExactlyInstanceOf(AuthTokenException.class)
+                .hasMessage(expectedMessage);
+    }
+
+    @Test
     @DisplayName("an oversized 200 reply is refused while streaming")
     void oversizedReplyIsRefused() {
         stubToken("{\"access_token\": \"%s\"}".formatted("x".repeat(1_100_000)));

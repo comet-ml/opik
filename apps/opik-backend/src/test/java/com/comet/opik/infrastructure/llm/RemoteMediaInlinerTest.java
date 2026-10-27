@@ -279,6 +279,7 @@ class RemoteMediaInlinerTest {
     private Stream<Arguments> failedDownloadIsRefused() {
         return Stream.of(
                 arguments("/missing-" + UUID.randomUUID(), aResponse().withStatus(404)),
+                arguments("/empty-" + UUID.randomUUID(), aResponse().withStatus(200)),
                 arguments("/oversized-" + UUID.randomUUID(),
                         aResponse().withBody(new byte[maxBytes + 1])),
                 arguments("/redirect-" + UUID.randomUUID(),
@@ -287,7 +288,7 @@ class RemoteMediaInlinerTest {
 
     @ParameterizedTest
     @MethodSource
-    @DisplayName("a media URL that isn't found, is too large or redirects fails the request")
+    @DisplayName("a media URL that isn't found, is empty, is too large or redirects fails the request")
     void failedDownloadIsRefused(String mediaPath, ResponseDefinitionBuilder response) {
         wireMock.server().stubFor(get(urlPathEqualTo(mediaPath)).willReturn(response));
         List<ChatMessage> messages = List.of(

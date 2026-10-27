@@ -93,16 +93,16 @@ class OllamaServiceTest {
         wireMockServer.stubFor(get(urlEqualTo("/api/version"))
                 .willReturn(aResponse()
                         .withStatus(404)));
+        var expectedResponse = OllamaConnectionTestResponse.builder()
+                .connected(false)
+                .errorMessage("Failed to connect to Ollama: HTTP 404")
+                .build();
 
         // When
-        OllamaConnectionTestResponse response = ollamaService.testConnection(baseUrl, null).block();
+        OllamaConnectionTestResponse actualResponse = ollamaService.testConnection(baseUrl, null).block();
 
-        // Then
-        assertThat(response).isNotNull();
-        assertThat(response.connected()).isFalse();
-        assertThat(response.version()).isNull();
-        assertThat(response.errorMessage()).contains("Failed to connect to Ollama at");
-        assertThat(response.errorMessage()).contains("HTTP 404");
+        // Then: the URL the caller gave is not echoed back
+        assertThat(actualResponse).isEqualTo(expectedResponse);
     }
 
     @Test

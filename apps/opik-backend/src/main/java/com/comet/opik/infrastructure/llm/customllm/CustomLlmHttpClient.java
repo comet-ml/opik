@@ -64,6 +64,9 @@ class CustomLlmHttpClient implements HttpClient {
     /** Size of each read from a streamed body, in bytes. */
     private static final int STREAMING_READ_SIZE = 8192;
 
+    /** The message of the {@link HttpException} for a non-2xx response whose body could not be read. */
+    static final String UNREADABLE_ERROR_BODY = "Cannot read error response body";
+
     /** Derived from one of the shared clients, whose connection pool and dispatcher it uses. */
     @Getter(AccessLevel.PACKAGE)
     private final @NonNull OkHttpClient client;
@@ -269,7 +272,10 @@ class CustomLlmHttpClient implements HttpClient {
             }
             return new String(bytes, StandardCharsets.UTF_8);
         } catch (IOException exception) {
-            return "Cannot read error response body, message '%s'".formatted(exception.getMessage());
+            // the message can name the destination, so it is neither logged nor passed on
+            log.warn("Cannot read the LLM provider error response body, error type '{}'",
+                    exception.getClass().getSimpleName());
+            return UNREADABLE_ERROR_BODY;
         }
     }
 

@@ -182,8 +182,8 @@ rows:
   - name: a custom_parameters max_tokens that is not a number is rejected
     model: gpt-4.1
     request: {custom_parameters: {max_tokens: lots}}
-    # The 400 says "Invalid custom_parameters.max_tokens for the OpenAI Responses API"; the caller sees its cause.
-    rejected: 'Cannot deserialize value of type `java.lang.Integer` from String "lots"'
+    # The caller sees the message Opik wrote, not that of the parse failure under it.
+    rejected: Invalid custom_parameters.max_tokens for the OpenAI Responses API
 
   # Judge path. gpt-3.5-turbo and o3-mini have no structuredOutput in the registry, so only the row about that
   # uses them.

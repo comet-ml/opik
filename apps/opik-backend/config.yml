@@ -1687,6 +1687,22 @@ llmProviderClient:
   # Description: Most bytes read from a custom provider's error response body; the rest is discarded, as only a
   #   short message parsed from it reaches callers; at most 1MiB
   providerErrorBodyMaxSize: ${LLM_PROVIDER_ERROR_BODY_MAX_SIZE:-64KB}
+  # Default: 1024
+  # Description: Most threads of the shared HTTP client for LLM provider calls. A call made asynchronously, a stream
+  #   included, holds one from start to end, so it must be at least httpClientMaxRequests; at most 10000
+  httpClientMaxThreads: ${LLM_PROVIDER_CLIENT_MAX_THREADS:-1024}
+  # Default: 60s
+  # Description: How long an idle thread of the shared LLM HTTP client lives before it ends, so the pool shrinks
+  #   back after a burst; between 1s and 1h
+  httpClientThreadKeepAlive: ${LLM_PROVIDER_CLIENT_THREAD_KEEP_ALIVE:-60s}
+  # Default: 1024
+  # Description: Most LLM provider calls made asynchronously, streams included, that run at once on the shared
+  #   client. Further calls wait in order for one to end, and their timeouts start once they run; at most 10000
+  httpClientMaxRequests: ${LLM_PROVIDER_CLIENT_MAX_REQUESTS:-1024}
+  # Default: 1024
+  # Description: Most of httpClientMaxRequests that run at once to a single host. Most calls go to a few hosts, such
+  #   as one provider's API, so it defaults to the overall limit and can't exceed it
+  httpClientMaxRequestsPerHost: ${LLM_PROVIDER_CLIENT_MAX_REQUESTS_PER_HOST:-1024}
   # Configuration for OpenAI client
   openAiClient:
     # Default:

@@ -45,6 +45,7 @@ public class OllamaService {
     /** The body of {@code /api/tags}. */
     private static final TypeReference<OllamaModelsResponse> MODELS_RESPONSE = new TypeReference<>() {
     };
+    private static final String CONNECTION_FAILED = "Failed to connect to Ollama: HTTP %d";
 
     private final @NonNull Client httpClient;
     private final @NonNull ProviderBaseUrlGuard providerBaseUrlGuard;
@@ -72,12 +73,10 @@ public class OllamaService {
 
                             return createSuccessResponse(version);
                         } else {
-                            String redactedUrl = ValidationUtils.redactCredentialsFromUrl(normalizedUrl);
-                            String errorMsg = "Failed to connect to Ollama at " + redactedUrl + ": HTTP "
-                                    + response.getStatus();
-                            log.warn("Failed to connect to Ollama at '{}': HTTP '{}'", redactedUrl,
-                                    response.getStatus());
-                            return createErrorResponse(errorMsg);
+                            log.warn("Failed to connect to Ollama at '{}': HTTP '{}'",
+                                    ValidationUtils.redactCredentialsFromUrl(normalizedUrl), response.getStatus());
+                            // the caller gave the URL, so it is not echoed back
+                            return createErrorResponse(CONNECTION_FAILED.formatted(response.getStatus()));
                         }
                     }
                 })

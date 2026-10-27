@@ -13,6 +13,8 @@ import dev.langchain4j.http.client.sse.ServerSentEventParser;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -21,6 +23,7 @@ import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -29,9 +32,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.mock;
@@ -180,6 +185,39 @@ class InterceptingHttpClientTest {
         var captor = ArgumentCaptor.forClass(HttpRequest.class);
         verify(delegate).execute(captor.capture());
         assertThat(captor.getValue().url()).isEqualTo(url);
+    }
+
+    private static Stream<String> degenerateBodyEndsTheModelLookup() {
+        return Stream.of(
+                "{",
+                "{\"model\"",
+                "{\"model\":",
+                "{\"messages\":[{\"role\":\"user\"",
+                "{\"temperature\":1,",
+                "{\"temperature\":1 \"top_p\":1}",
+                "{\"messages\":[]}}}}",
+                "{\"messages\":%s".formatted("[".repeat(100_000)),
+                "[\"model\"]");
+    }
+
+    /** The model lookup always ends, with the URL forwarded unchanged, whatever the body is cut or nested into. */
+    @ParameterizedTest
+    @MethodSource
+    void degenerateBodyEndsTheModelLookup(String body) {
+        when(delegate.execute(any(HttpRequest.class)))
+                .thenReturn(SuccessfulHttpResponse.builder().statusCode(200).body("{}").build());
+        var expectedUrl = "https://example.test/openai/deployments/{model}/chat/completions";
+        var client = new InterceptingHttpClient(delegate, Map.of(), "dummy-key");
+
+        assertTimeoutPreemptively(Duration.ofSeconds(5), () -> client.execute(HttpRequest.builder()
+                .method(HttpMethod.POST)
+                .url(expectedUrl)
+                .body(body)
+                .build()));
+
+        var captor = ArgumentCaptor.forClass(HttpRequest.class);
+        verify(delegate).execute(captor.capture());
+        assertThat(captor.getValue().url()).isEqualTo(expectedUrl);
     }
 
     /**

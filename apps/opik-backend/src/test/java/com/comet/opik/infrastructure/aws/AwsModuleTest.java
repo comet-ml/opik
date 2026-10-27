@@ -226,6 +226,17 @@ class AwsModuleTest {
         }
 
         @Test
+        void rejectsResponseWithoutBody() {
+            endpoint.stubFor(get(PATH).willReturn(aResponse().withStatus(200)));
+            var expectedMessage = "Customer credentials endpoint returned an unreadable response";
+
+            assertThatThrownBy(AwsModule.eventBridgeCredentialsProvider(config(),
+                    TestHttpClientUtils.client())::resolveCredentials)
+                    .isExactlyInstanceOf(SdkClientException.class)
+                    .hasMessage(expectedMessage);
+        }
+
+        @Test
         void withoutEndpointKeepsIrsaContainerDefaultChain() {
             var config = new AlertsEventBridgeConfig();
             config.setEventBus(ARN_BUS);

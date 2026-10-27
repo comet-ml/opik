@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.llm.customllm;
 
+import com.comet.opik.TestConfigUtils;
 import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
@@ -13,6 +14,7 @@ import dev.langchain4j.http.client.sse.HttpResponseReceived;
 import dev.langchain4j.http.client.sse.HttpStreamingEvent;
 import dev.langchain4j.http.client.sse.ServerSentEvent;
 import dev.langchain4j.http.client.sse.ServerSentEventListener;
+import lombok.Builder;
 import okhttp3.OkHttpClient;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.AfterAll;
@@ -23,7 +25,11 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
+import java.io.IOException;
 import java.io.InterruptedIOException;
+import java.net.InetAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -49,6 +55,10 @@ class CustomLlmHttpClientTest {
     private static final String PATH = "/v1/chat/completions";
     private static final int ERROR_BODY_MAX_SIZE = 64;
     private static final Duration WAIT = Duration.ofSeconds(10);
+    private static final ProviderBaseUrlGuard RELAXED_GUARD = ProviderBaseUrlGuard.builder()
+            .mode(DestinationGuard.Mode.RELAXED)
+            .scheme(DestinationGuard.Scheme.PLAINTEXT_OR_TLS)
+            .build();
 
     private WireMockServer wireMock;
     private OkHttpClient okHttpClient;
@@ -66,11 +76,8 @@ class CustomLlmHttpClientTest {
     void setUpAll() {
         wireMock = new WireMockServer(WireMockConfiguration.options().dynamicPort());
         wireMock.start();
-        var relaxedGuard = ProviderBaseUrlGuard.builder()
-                .mode(DestinationGuard.Mode.RELAXED)
-                .scheme(DestinationGuard.Scheme.PLAINTEXT_OR_TLS)
-                .build();
-        okHttpClient = new CustomLlmModule().llmHttpClient(relaxedGuard);
+        okHttpClient = new CustomLlmModule().llmHttpClient(TestConfigUtils.loadConfigTest().getLlmProviderClient(),
+                RELAXED_GUARD);
         client = new CustomLlmHttpClientBuilder(okHttpClient, ERROR_BODY_MAX_SIZE)
                 .readTimeout(WAIT)
                 .build();
@@ -112,6 +119,39 @@ class CustomLlmHttpClientTest {
         assertThat(actualError).isExactlyInstanceOf(HttpException.class)
                 .hasMessage(errorBody.substring(0, ERROR_BODY_MAX_SIZE));
         assertThat(((HttpException) actualError).statusCode()).isEqualTo(400);
+    }
+
+    /** A body cut short reads as a fixed message: the read failure's own message can name the destination. */
+    @ParameterizedTest
+    @EnumSource(CallPath.class)
+    void anUnreadableErrorBodyIsReportedWithoutItsReadFailure(CallPath callPath) throws Exception {
+        var partialBody = RandomStringUtils.secure().nextAlphanumeric(ERROR_BODY_MAX_SIZE / 2);
+        try (var server = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
+            // the body is shorter than its declared length, then the connection closes
+            Thread.ofVirtual().start(() -> {
+                try (Socket socket = server.accept()) {
+                    socket.getOutputStream().write("""
+                            HTTP/1.1 400 Bad Request\r
+                            Content-Length: %d\r
+                            \r
+                            %s""".formatted(ERROR_BODY_MAX_SIZE, partialBody).getBytes(StandardCharsets.UTF_8));
+                    socket.getOutputStream().flush();
+                } catch (IOException ignored) {
+                    // the call reports what it read
+                }
+            });
+            var request = HttpRequest.builder()
+                    .method(HttpMethod.POST)
+                    .url("http://localhost:%d%s".formatted(server.getLocalPort(), PATH))
+                    .body("{}")
+                    .build();
+
+            Throwable actualError = failure(callPath, request);
+
+            assertThat(actualError).isExactlyInstanceOf(HttpException.class)
+                    .hasMessage(CustomLlmHttpClient.UNREADABLE_ERROR_BODY);
+            assertThat(((HttpException) actualError).statusCode()).isEqualTo(400);
+        }
     }
 
     @Test
@@ -159,6 +199,58 @@ class CustomLlmHttpClientTest {
         await().atMost(WAIT).until(() -> okHttpClient.dispatcher().runningCallsCount() == streams);
         CompletableFuture.allOf(actualStreams.toArray(CompletableFuture[]::new)).orTimeout(10, TimeUnit.SECONDS)
                 .join();
+    }
+
+    /** The dispatcher limits of a client. */
+    @Builder(toBuilder = true)
+    private record DispatcherLimits(int maxRequests, int maxRequestsPerHost) {
+        static DispatcherLimits of(OkHttpClient client) {
+            return new DispatcherLimits(client.dispatcher().getMaxRequests(),
+                    client.dispatcher().getMaxRequestsPerHost());
+        }
+    }
+
+    /**
+     * Over the limit, calls wait in the dispatcher and all of them complete. Each finishing call hands the next one to
+     * the executor while its own thread is still busy, so a pool that refused work it can't start at once would fail
+     * those calls instead.
+     */
+    @Test
+    void callsBeyondTheLimitWaitAndAllComplete() throws Exception {
+        int limit = 2;
+        int streams = 6;
+        var config = TestConfigUtils.loadConfigTest().getLlmProviderClient();
+        config.setHttpClientMaxThreads(limit);
+        config.setHttpClientMaxRequests(limit);
+        config.setHttpClientMaxRequestsPerHost(limit);
+        var boundedOkHttpClient = new CustomLlmModule().llmHttpClient(config, RELAXED_GUARD);
+        var boundedClient = new CustomLlmHttpClientBuilder(boundedOkHttpClient, ERROR_BODY_MAX_SIZE)
+                .readTimeout(WAIT)
+                .build();
+        var data = RandomStringUtils.secure().nextAlphanumeric(10);
+        wireMock.stubFor(post(urlEqualTo(PATH)).willReturn(aResponse().withStatus(200)
+                .withHeader("Content-Type", "text/event-stream")
+                .withBody("data: %s\n\n".formatted(data))
+                .withFixedDelay(1_000)));
+
+        var actualStreams = IntStream.range(0, streams)
+                .mapToObj(i -> collect(boundedClient.stream(request("{}"), new DefaultServerSentEventParser()),
+                        Long.MAX_VALUE))
+                .toList();
+
+        assertThat(DispatcherLimits.of(boundedOkHttpClient)).isEqualTo(new DispatcherLimits(limit, limit));
+        await().atMost(WAIT).until(() -> boundedOkHttpClient.dispatcher().runningCallsCount() == limit
+                && boundedOkHttpClient.dispatcher().queuedCallsCount() == streams - limit);
+        var expectedEvents = IntStream.range(0, streams)
+                .mapToObj(i -> List.of(new ServerSentEvent(null, data)))
+                .toList();
+        var actualEvents = new ArrayList<List<HttpStreamingEvent>>();
+        for (var stream : actualStreams) {
+            var events = stream.get(30, TimeUnit.SECONDS);
+            actualEvents.add(events.subList(1, events.size()));
+        }
+        assertThat(actualEvents).isEqualTo(expectedEvents);
+        await().atMost(WAIT).until(() -> boundedOkHttpClient.dispatcher().runningCallsCount() == 0);
     }
 
     @Test

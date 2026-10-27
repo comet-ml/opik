@@ -365,7 +365,9 @@ class InterceptingHttpClient extends DelegatingHttpClient {
      * its size.
      */
     private static Optional<String> topLevelModel(String body) throws IOException {
-        try (JsonParser parser = JsonUtils.getMapper().getFactory().createParser(body)) {
+        // every token read moves forward through a finite string, so the loop ends: at the end of the input
+        // nextToken() is null, and truncated, malformed or too deeply nested input throws
+        try (JsonParser parser = JsonUtils.createParser(body)) {
             if (parser.nextToken() != JsonToken.START_OBJECT) {
                 return Optional.empty();
             }

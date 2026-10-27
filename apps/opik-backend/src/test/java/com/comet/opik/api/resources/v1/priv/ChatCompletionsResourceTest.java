@@ -466,6 +466,26 @@ class ChatCompletionsResourceTest {
                             details),
                     arguments("invalid_request_error", "deployment not found\n" + text, generic, details),
                     arguments("invalid_request_error", "deployment not found <b>" + text + "</b>", generic, details),
+                    // the boundaries of what is refused: C0 and C1 controls, DEL and the Unicode line separators
+                    arguments("invalid_request_error", "deployment not found\u0000%s".formatted(text), generic,
+                            details),
+                    arguments("invalid_request_error", "deployment not found\t%s".formatted(text), generic, details),
+                    arguments("invalid_request_error", "deployment not found\u007F%s".formatted(text), generic,
+                            details),
+                    arguments("invalid_request_error", "deployment not found\u0085%s".formatted(text), generic,
+                            details),
+                    arguments("invalid_request_error", "deployment not found\u009F%s".formatted(text), generic,
+                            details),
+                    arguments("invalid_request_error", "deployment not found\u2028%s".formatted(text), generic,
+                            details),
+                    arguments("invalid_request_error", "deployment not found\u2029%s".formatted(text), generic,
+                            details),
+                    arguments("invalid_request_error", "deployment not found > %s".formatted(text), generic, details),
+                    // and of what is kept: the first printable character past C1, and characters outside the BMP
+                    arguments("invalid_request_error", "deployment not found\u00A0%s".formatted(text),
+                            "deployment not found\u00A0%s".formatted(text), details),
+                    arguments("invalid_request_error", "deployment not found \uD83D\uDE00 %s".formatted(text),
+                            "deployment not found \uD83D\uDE00 %s".formatted(text), details),
                     // one past providerErrorMessageMaxLength in config-test.yml
                     arguments("invalid_request_error", RandomStringUtils.randomAlphanumeric(301), generic, details),
                     // not a type OpenAI documents
