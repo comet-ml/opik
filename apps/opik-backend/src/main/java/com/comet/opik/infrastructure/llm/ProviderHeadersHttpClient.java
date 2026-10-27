@@ -29,23 +29,23 @@ import java.util.concurrent.Flow;
 public class ProviderHeadersHttpClient extends DelegatingHttpClient {
 
     /** Case-insensitive by name, as HTTP header names are. */
-    private final Map<String, String> headers;
+    private final Map<String, String> normalizedProviderHeaders;
 
-    private ProviderHeadersHttpClient(HttpClient delegate, Map<String, String> headers) {
+    private ProviderHeadersHttpClient(HttpClient delegate, Map<String, String> normalizedProviderHeaders) {
         super(delegate);
-        this.headers = headers;
+        this.normalizedProviderHeaders = normalizedProviderHeaders;
     }
 
     /** {@code delegate}, whose every client adds {@code headers} to its requests; as it is when there are none. */
     public static HttpClientBuilder builder(@NonNull HttpClientBuilder delegate, Map<String, String> headers) {
-        var usable = usable(headers);
-        if (usable.isEmpty()) {
+        var normalizedProviderHeaders = normalizedProviderHeaders(headers);
+        if (normalizedProviderHeaders.isEmpty()) {
             return delegate;
         }
         return new DelegatingHttpClientBuilder(delegate) {
             @Override
             protected HttpClient wrap(HttpClient client) {
-                return new ProviderHeadersHttpClient(client, usable);
+                return new ProviderHeadersHttpClient(client, normalizedProviderHeaders);
             }
         };
     }
@@ -55,11 +55,11 @@ public class ProviderHeadersHttpClient extends DelegatingHttpClient {
      * still hold them: a blank name or a missing value is left out, and of names differing only in case, the one
      * sorting last wins.
      */
-    private static Map<String, String> usable(Map<String, String> headers) {
+    private static Map<String, String> normalizedProviderHeaders(Map<String, String> headers) {
         if (MapUtils.isEmpty(headers)) {
             return Map.of();
         }
-        var usable = new TreeMap<String, String>(String.CASE_INSENSITIVE_ORDER);
+        var normalized = new TreeMap<String, String>(String.CASE_INSENSITIVE_ORDER);
         headers.entrySet().stream()
                 .filter(header -> {
                     if (StringUtils.isBlank(header.getKey()) || header.getValue() == null) {
@@ -71,8 +71,8 @@ public class ProviderHeadersHttpClient extends DelegatingHttpClient {
                     return true;
                 })
                 .sorted(Map.Entry.comparingByKey())
-                .forEach(header -> usable.put(header.getKey(), header.getValue()));
-        return Collections.unmodifiableMap(usable);
+                .forEach(header -> normalized.put(header.getKey(), header.getValue()));
+        return Collections.unmodifiableMap(normalized);
     }
 
     /** Sends the request with the provider's headers. */
@@ -102,11 +102,11 @@ public class ProviderHeadersHttpClient extends DelegatingHttpClient {
     private HttpRequest withHeaders(HttpRequest request) {
         var merged = new LinkedHashMap<String, List<String>>();
         request.headers().forEach((name, values) -> {
-            if (!headers.containsKey(name)) {
+            if (!normalizedProviderHeaders.containsKey(name)) {
                 merged.put(name, values);
             }
         });
-        headers.forEach((name, value) -> merged.put(name, List.of(value)));
+        normalizedProviderHeaders.forEach((name, value) -> merged.put(name, List.of(value)));
         return HttpRequest.builder()
                 .method(request.method())
                 .url(request.url())
