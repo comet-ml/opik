@@ -1,11 +1,15 @@
 import atexit
 import concurrent.futures
+import errno
+import functools
 import json
 import logging
 import math
 import os
 import secrets
 import signal
+import socket
+import struct
 import time
 import uuid
 import sys
@@ -102,7 +106,12 @@ READY_TIMEOUT_ENV_VAR = "PYTHON_CODE_EXECUTOR_READY_TIMEOUT_SECONDS"
 
 
 def max_reply_bytes() -> int:
-    """A positive integer, so a bad value fails startup instead of refusing every reply or lifting the cap."""
+    """The largest reply read from a worker; a longer one is refused before its body is read, so it is never buffered.
+
+    The default is far above any real score list. A positive integer, so a bad value fails startup instead of
+    refusing every reply or lifting the cap. Read where workers are used, not at import: a Studio job imports
+    this module whatever the strategy.
+    """
     value = os.getenv(MAX_REPLY_BYTES_ENV_VAR) or str(64 * 1024 * 1024)
     if not value.isdecimal() or int(value) == 0:
         # only an excerpt of the value: it goes to the startup log
@@ -111,7 +120,11 @@ def max_reply_bytes() -> int:
 
 
 def ready_timeout_seconds() -> float:
-    """A positive finite number, so a bad value fails startup instead of failing every worker start or never bounding it."""
+    """How long a new worker may take to report READY; longer and it is stopped and not added to the pool.
+
+    A positive finite number, so a bad value fails startup instead of failing every worker start or never
+    bounding it. Read where workers are used, as max_reply_bytes is.
+    """
     value = os.getenv(READY_TIMEOUT_ENV_VAR) or "10"
     try:
         seconds = float(value)
@@ -123,10 +136,6 @@ def ready_timeout_seconds() -> float:
     return seconds
 
 
-# How long a new worker may take to report READY; longer and it is stopped and not added to the pool.
-READY_TIMEOUT_SECONDS = ready_timeout_seconds()
-# Far above any real score list; a longer reply is refused before it is read, so it is never buffered.
-MAX_REPLY_BYTES = max_reply_bytes()
 MALFORMED_REPLY_ERROR = "Execution failed: the worker returned a malformed or oversized result"
 # A worker holding more pending replies than this is replaced rather than drained.
 _MAX_PENDING_REPLIES = 16
@@ -135,6 +144,13 @@ _MAX_PENDING_REPLIES = 16
 # the kernel delivering it. Not settings: neither depends on the workload.
 _TERMINATE_GRACE_SECONDS = 2
 _KILL_GRACE_SECONDS = 1
+# A worker writes a reply in one go once it has encoded it, so a reply still incomplete this long after its first
+# byte, outside a scoring call's own deadline, is from a worker that stalled mid-message.
+_REPLY_GRACE_SECONDS = 1
+
+
+class _StalledReply(Exception):
+    """The worker sent part of a reply and stopped before the deadline; the pipe is mid-message."""
 
 
 class _IsolationUnavailable(Exception):
@@ -302,17 +318,66 @@ def _close(connection: Connection, worker_id: str) -> None:
         logger.warning(f"Error closing connection for worker {worker_id}: {e}")
 
 
-def _read_reply(connection: Connection) -> Any:
+def _recv_exact(sock: socket.socket, size: int, deadline: float) -> bytearray:
+    buf = bytearray(size)
+    with memoryview(buf) as view:
+        received = 0
+        while received < size:
+            try:
+                # MSG_DONTWAIT, so bytes already on the pipe cost one recv, as with os.read, and only a read
+                # that would block waits, never past the deadline.
+                n = sock.recv_into(view[received:], size - received, socket.MSG_DONTWAIT)
+            except BlockingIOError:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0 or not wait([sock], remaining):
+                    raise _StalledReply()
+                continue
+            if n == 0:
+                raise EOFError
+            received += n
+    return buf
+
+
+def _recv_reply(connection: Connection, deadline: float, max_bytes: int) -> Optional[bytearray]:
+    """One message as Connection.recv_bytes frames it, read without blocking past the deadline.
+
+    None when it is longer than max_bytes, before its body is read. Raises _StalledReply at the deadline
+    and EOFError when the worker closed the pipe.
+    """
+    # The pipe's own descriptor (Pipe() is a Unix socket pair), detached after the read: family, type and protocol are
+    # given, so building it queries nothing. A process-wide default timeout would have made the descriptor
+    # non-blocking, which Connection.send can't handle, so that is undone.
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM, 0, connection.fileno())
+    try:
+        if sock.gettimeout() is not None:
+            sock.settimeout(None)
+        size, = struct.unpack("!i", _recv_exact(sock, 4, deadline))
+        if size == -1:
+            size, = struct.unpack("!Q", _recv_exact(sock, 8, deadline))
+        if size > max_bytes:
+            return None
+        return _recv_exact(sock, size, deadline)
+    finally:
+        sock.detach()
+
+
+def _read_reply(connection: Connection, deadline: float, max_bytes: int) -> Any:
     """One worker reply, decoded as JSON: replies are read as data, not objects.
 
-    None when the reply is too long or not JSON. EOFError still propagates.
+    None when the reply is too long, not JSON or could not be read. EOFError and _StalledReply still propagate.
     """
     try:
-        return json.loads(connection.recv_bytes(MAX_REPLY_BYTES))
+        reply = _recv_reply(connection, deadline, max_bytes)
     except OSError as e:
-        # recv_bytes raises OSError for a reply over the cap; its text carries no reply bytes.
-        logger.warning(f"Discarded a worker reply that could not be read (limit {MAX_REPLY_BYTES} bytes): {e}")
+        # The pipe itself failed; the size limit is checked on the length prefix and never raises.
+        code = errno.errorcode.get(e.errno, e.errno) if e.errno is not None else "none"
+        logger.warning(f"Discarded a worker reply after a connection/read error: {type(e).__name__} (errno {code})")
         return None
+    if reply is None:
+        logger.warning(f"Discarded a worker reply longer than {max_bytes} bytes")
+        return None
+    try:
+        return json.loads(reply)
     except ValueError as e:
         # Only the type: a decode error's text quotes bytes of the reply.
         logger.warning(f"Discarded a worker reply that is not JSON: {type(e).__name__}")
@@ -326,9 +391,9 @@ def _command(code: str, data: dict, payload_type: Optional[str]) -> Tuple[str, d
                         process_worker.REQUEST_ID_KEY: request_id}
 
 
-def _read_result(connection: Connection, request_id: str) -> Optional[dict]:
+def _read_result(connection: Connection, request_id: str, deadline: float, max_bytes: int) -> Optional[dict]:
     """The result of the command with this request id; None for any other reply."""
-    reply = _read_reply(connection)
+    reply = _read_reply(connection, deadline, max_bytes)
     if (
         isinstance(reply, dict)
         and reply.get(process_worker.REQUEST_ID_KEY) == request_id
@@ -338,15 +403,18 @@ def _read_result(connection: Connection, request_id: str) -> Optional[dict]:
     return None
 
 
-def _drain(connection: Connection) -> bool:
+def _drain(connection: Connection, max_bytes: int) -> bool:
     """Discards replies left on the pipe since the last request; False when the worker can't be reused."""
+    deadline = time.monotonic() + _REPLY_GRACE_SECONDS
     try:
         for _ in range(_MAX_PENDING_REPLIES):
             if not connection.poll(0):
                 return True
-            connection.recv_bytes(MAX_REPLY_BYTES)
+            if _recv_reply(connection, deadline, max_bytes) is None:
+                logger.warning(f"Could not discard a worker's pending replies: one is longer than {max_bytes} bytes")
+                return False
         return not connection.poll(0)
-    except (OSError, EOFError) as e:
+    except (OSError, EOFError, _StalledReply) as e:
         logger.warning(f"Could not discard a worker's pending replies: {type(e).__name__}")
         return False
 
@@ -385,7 +453,7 @@ def start_job_isolation_template() -> None:
         _one_shot_isolation_failures.log(str(e), e.__cause__)
 
 
-def _start_isolated_worker() -> Union[dict, Tuple[multiprocessing.Process, Connection]]:
+def _start_isolated_worker(ready_timeout: float, max_bytes: int) -> Union[dict, Tuple[multiprocessing.Process, Connection]]:
     """A READY isolated worker, or the error reply when it could not start."""
     # Idempotent; ensures the template was started with the reduced environment, not lazily by the fork.
     try:
@@ -399,12 +467,13 @@ def _start_isolated_worker() -> Union[dict, Tuple[multiprocessing.Process, Conne
     process = _isolated_context.Process(target=process_worker.worker_process_main, args=(child_conn, True))
     ready = None
     try:
+        deadline = time.monotonic() + ready_timeout
         _start(process)
         # Only the worker holds its end now, so a worker that dies surfaces as EOFError.
         child_conn.close()
-        if not parent_conn.poll(READY_TIMEOUT_SECONDS):
+        if not parent_conn.poll(ready_timeout):
             return {"code": 500, "error": "Isolated worker timed out waiting for READY"}
-        ready = _read_reply(parent_conn)
+        ready = _read_reply(parent_conn, deadline, max_bytes)
         if ready == "READY":
             return process, parent_conn
         reason = _isolation_error(ready)
@@ -413,12 +482,26 @@ def _start_isolated_worker() -> Union[dict, Tuple[multiprocessing.Process, Conne
         _one_shot_isolation_failures.log(reason)
         return ready
     except EOFError:
-        logger.warning("Isolated worker exited before sending READY")
+        # The traceback holds only this module's frames: the worker sent nothing.
+        logger.warning("Isolated worker exited before sending READY", exc_info=True)
         return {"code": 500, "error": "Isolated worker exited before returning a result"}
+    except _StalledReply:
+        logger.warning("Isolated worker stalled while sending READY")
+        return {"code": 500, "error": "Isolated worker timed out waiting for READY"}
     finally:
         child_conn.close()
         if ready != "READY":
             _stop_isolated_worker(process, parent_conn)
+
+
+@functools.lru_cache(maxsize=1)
+def _one_shot_settings() -> Union[Tuple[float, int], dict]:
+    """The worker settings, read once per Studio job; an invalid one is logged once and fails every code metric of it."""
+    try:
+        return ready_timeout_seconds(), max_reply_bytes()
+    except ValueError as e:
+        logger.error(f"Code metrics can't run: {e}")
+        return {"code": 500, "error": f"Invalid configuration: {e}"}
 
 
 def run_user_code_in_isolated_worker(code: str, data: dict, payload_type: Optional[str] = None) -> dict:
@@ -430,6 +513,10 @@ def run_user_code_in_isolated_worker(code: str, data: dict, payload_type: Option
     failure. No timeout here, as before: the job supervisor bounds the run, and isolated
     workers are killed when the job process exits.
     """
+    settings = _one_shot_settings()
+    if isinstance(settings, dict):
+        return settings
+    ready_timeout, max_bytes = settings
     worker = None
     # At most every worker idle now; a fresh one is used as it starts, so this never retries a start.
     for _ in range(_idle_isolated_workers.qsize()):
@@ -437,12 +524,12 @@ def run_user_code_in_isolated_worker(code: str, data: dict, payload_type: Option
             worker = _idle_isolated_workers.get_nowait()
         except Empty:
             break
-        if worker[0].is_alive() and _drain(worker[1]):
+        if worker[0].is_alive() and _drain(worker[1], max_bytes):
             break
         _stop_isolated_worker(*worker)
         worker = None
     if worker is None:
-        started = _isolated_worker_spawner.submit(_start_isolated_worker).result()
+        started = _isolated_worker_spawner.submit(_start_isolated_worker, ready_timeout, max_bytes).result()
         if isinstance(started, dict):
             return started
         worker = started
@@ -451,11 +538,16 @@ def run_user_code_in_isolated_worker(code: str, data: dict, payload_type: Option
     try:
         request_id, command = _command(code, data, payload_type)
         connection.send(command)
-        result = _read_result(connection, request_id)
+        # No deadline for the run itself (see above), only for the rest of a reply once it has started.
+        connection.poll(None)
+        result = _read_result(connection, request_id, time.monotonic() + _REPLY_GRACE_SECONDS, max_bytes)
         if result is None:
             return {"code": 400, "error": MALFORMED_REPLY_ERROR}
         reusable = True
         return result
+    except _StalledReply:
+        logger.warning("Isolated worker stalled while sending a result")
+        return {"code": 504, "error": EXEC_TIMEOUT_ERROR}
     except (EOFError, BrokenPipeError) as e:
         logger.warning(f"Isolated worker exited before returning a result: {type(e).__name__}")
         return {"code": 500, "error": "Isolated worker exited before returning a result"}
@@ -474,6 +566,9 @@ class ProcessExecutor(CodeExecutorBase):
         self.stop_event = Event()
         self.pool_check_interval = int(os.getenv("PYTHON_CODE_EXECUTOR_POOL_CHECK_INTERVAL_IN_SECONDS", "3"))
         self.isolate = isolation_enabled()
+        # Here rather than at import, so only the process strategy depends on them; a bad value still fails startup.
+        self.ready_timeout = ready_timeout_seconds()
+        self.max_reply_bytes = max_reply_bytes()
         self._isolation_failures = _IsolationFailureLog()
 
         self.scheduler_thread = None
@@ -610,6 +705,7 @@ class ProcessExecutor(CodeExecutorBase):
             return
 
         start_time = time.time()
+        start_monotonic = time.monotonic()
         worker_id = str(uuid.uuid4())[:8]
         parent_conn = child_conn = process = None
         try:
@@ -622,8 +718,8 @@ class ProcessExecutor(CodeExecutorBase):
             _start(process)
 
             # Wait for READY signal from worker
-            if parent_conn.poll(timeout=READY_TIMEOUT_SECONDS):
-                ready_signal = _read_reply(parent_conn)
+            if parent_conn.poll(timeout=self.ready_timeout):
+                ready_signal = _read_reply(parent_conn, start_monotonic + self.ready_timeout, self.max_reply_bytes)
                 reason = _isolation_error(ready_signal)
                 if reason is not None:
                     raise _IsolationUnavailable(reason)
@@ -685,7 +781,7 @@ class ProcessExecutor(CodeExecutorBase):
             raise TimeoutError(SATURATED_ERROR) from e
         self._update_pool_size_metric()
         alive = worker['process'].is_alive()
-        if not alive or not _drain(worker['connection']):
+        if not alive or not _drain(worker['connection'], self.max_reply_bytes):
             state = "Dead worker" if not alive else "Worker with undiscardable pending replies"
             logger.warning(
                 f"{state} {worker['id']} retrieved from pool; "
@@ -728,12 +824,13 @@ class ProcessExecutor(CodeExecutorBase):
                 raise Exception(f"Worker {worker_id} has no connection object.")
 
             start_exec_time = time.time()
+            deadline = time.monotonic() + self.exec_timeout
             request_id, command = _command(code, data, payload_type)
             connection.send(command)
 
             # Wait for result with timeout
             if connection.poll(timeout=self.exec_timeout):
-                result = _read_result(connection, request_id)
+                result = _read_result(connection, request_id, deadline, self.max_reply_bytes)
                 if result is None:
                     # The pipe may hold more of the bad reply, so the worker is not reused.
                     self._async_terminate(worker)
@@ -753,6 +850,11 @@ class ProcessExecutor(CodeExecutorBase):
             self.process_pool.put(worker)  # Return worker to pool
             self._update_pool_size_metric()
             return result
+        except _StalledReply:
+            # Mid-message, so the pipe can't be read again: treated as the exec timeout.
+            logger.error(f"Worker {worker_id} stalled while sending a result")
+            self._async_terminate(worker)
+            return {"code": 504, "error": EXEC_TIMEOUT_ERROR}
         except Exception as e:
             logger.error(f"Error in run_scoring with worker {worker.get('id', 'unknown')}: {e}")
             # Dispatch termination off the request thread so the
