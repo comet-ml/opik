@@ -1,19 +1,17 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { X } from "lucide-react";
+import React, { useMemo, useState } from "react";
 
 import { useActiveWorkspaceName } from "@/store/AppStore";
-import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
 import { QUOTA_TYPE } from "@/plugins/comet/types/quotas";
 import useWorkspaceQuotas from "@/plugins/comet/api/useWorkspaceQuotas";
 import useUser from "@/plugins/comet/useUser";
 
-import { Button } from "@/ui/button";
 import useOrganizations from "@/plugins/comet/useOrganizations";
 import { ORGANIZATION_ROLE_TYPE } from "@/plugins/comet/types";
 import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
 import { buildUrl } from "@/plugins/comet/utils";
 import useOrganizationMembers from "@/plugins/comet/api/useOrganizationMembers";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import Banner from "@/v2/layout/Banner/Banner";
 
 interface RetentionBannerProps {
   onChangeHeight: (height: number) => void;
@@ -23,7 +21,6 @@ const SHOW_BANNER_MIN_THRESHOLD = 0.8;
 
 const RetentionBanner = ({ onChangeHeight }: RetentionBannerProps) => {
   const { data: user } = useUser();
-  const heightRef = useRef(0);
 
   const [closed, setClosed] = useState(false);
   const activeWorkspaceName = useActiveWorkspaceName();
@@ -67,11 +64,6 @@ const RetentionBanner = ({ onChangeHeight }: RetentionBannerProps) => {
   const isOrganizationAdmin =
     organization?.role === ORGANIZATION_ROLE_TYPE.admin;
 
-  const { ref } = useObserveResizeNode<HTMLDivElement>((node) => {
-    heightRef.current = node.clientHeight;
-    onChangeHeight(node.clientHeight);
-  });
-
   const spanQuota = quotas?.find((q) => q.type === QUOTA_TYPE.OPIK_SPAN_COUNT);
 
   const isUsedLess80 =
@@ -80,19 +72,7 @@ const RetentionBanner = ({ onChangeHeight }: RetentionBannerProps) => {
 
   const hideBanner = !spanQuota || isUsedLess80 || closed || !user;
 
-  useEffect(() => {
-    onChangeHeight(!hideBanner ? heightRef.current : 0);
-  }, [hideBanner, onChangeHeight]);
-
-  if (hideBanner) {
-    return null;
-  }
-
-  const closeBanner = () => {
-    setClosed(true);
-  };
-
-  const isExceededLimit = spanQuota?.used >= spanQuota?.limit;
+  const isExceededLimit = !!spanQuota && spanQuota.used >= spanQuota.limit;
 
   const getExceededLabel = () => {
     if (isOrganizationAdmin) {
@@ -141,24 +121,17 @@ const RetentionBanner = ({ onChangeHeight }: RetentionBannerProps) => {
   const closable = !isExceededLimit;
 
   return (
-    <div
-      className="z-10 box-border flex min-h-12 items-center justify-center bg-primary p-1.5 text-white transition-all"
-      ref={ref}
+    <Banner
+      visible={!hideBanner}
+      onChangeHeight={onChangeHeight}
+      initialHeight={0}
+      ariaLabel="Plan limits"
+      onDismiss={closable ? () => setClosed(true) : undefined}
+      className="min-h-12 p-1.5 transition-all"
+      contentClassName="comet-body-s"
     >
-      <div className="comet-body-s flex flex-1 items-center justify-center text-center">
-        {label}
-      </div>
-      {closable && (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="justify-self-end hover:text-white"
-          onClick={closeBanner}
-        >
-          <X />
-        </Button>
-      )}
-    </div>
+      {label}
+    </Banner>
   );
 };
 

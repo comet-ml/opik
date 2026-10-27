@@ -1,13 +1,12 @@
-import React, { useCallback, useLayoutEffect, useRef } from "react";
-import { ArrowUpRight, Plug, X } from "lucide-react";
+import React, { useCallback, useLayoutEffect } from "react";
+import { ArrowUpRight, Plug } from "lucide-react";
 
 import useAppStore from "@/store/AppStore";
-import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
 import { useIsPhone } from "@/hooks/useIsPhone";
 import { buildDocsUrl } from "@/lib/utils";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 import { Button } from "@/ui/button";
-import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import Banner from "@/v2/layout/Banner/Banner";
 import {
   MCP_BANNER_CAMPAIGN_ID,
   MCP_BANNER_COPY,
@@ -49,7 +48,6 @@ const McpAnnouncementBanner: React.FC<McpAnnouncementBannerProps> = ({
   onChangeHeight,
   retentionBannerVisible,
 }) => {
-  const heightRef = useRef(MCP_BANNER_HEIGHT);
   const { visible, countable, dismiss } = useMcpAnnouncementBanner({
     retentionBannerVisible,
   });
@@ -59,17 +57,6 @@ const McpAnnouncementBanner: React.FC<McpAnnouncementBannerProps> = ({
   const copyVariant = isPhone
     ? MCP_BANNER_COPY_VARIANT.SHORT
     : MCP_BANNER_COPY_VARIANT.FULL;
-
-  const { ref } = useObserveResizeNode<HTMLDivElement>((node) => {
-    heightRef.current = node.clientHeight;
-    onChangeHeight(node.clientHeight);
-  });
-
-  // Before paint, with the known height: the layout animates its offset, so
-  // publishing a measured height a frame late reads as the page sliding down.
-  useLayoutEffect(() => {
-    onChangeHeight(visible ? heightRef.current : 0);
-  }, [visible, onChangeHeight]);
 
   useLayoutEffect(() => {
     if (!countable || !claimSessionImpression()) return;
@@ -92,54 +79,38 @@ const McpAnnouncementBanner: React.FC<McpAnnouncementBannerProps> = ({
     dismiss();
   }, [dismiss, copyVariant]);
 
-  if (!visible) {
-    return null;
-  }
-
   return (
-    <div
-      ref={ref}
-      role="region"
-      aria-label="Opik MCP announcement"
-      className="z-10 flex h-8 items-center gap-1.5 bg-[linear-gradient(-1.2deg,var(--mcp-banner-gradient-start)_0%,var(--mcp-banner-gradient-end)_68.5%)] px-2"
+    <Banner
+      visible={visible}
+      onChangeHeight={onChangeHeight}
+      initialHeight={MCP_BANNER_HEIGHT}
+      ariaLabel="Opik MCP announcement"
+      icon={<Plug className="size-3.5 shrink-0" />}
+      onDismiss={handleDismiss}
+      dismissLabel="Dismiss announcement"
+      className="h-8 bg-[linear-gradient(-1.2deg,var(--mcp-banner-gradient-start)_0%,var(--mcp-banner-gradient-end)_68.5%)] py-0"
     >
-      <div className="flex min-w-0 flex-1 items-center justify-center gap-1.5">
-        <Plug className="size-3.5 shrink-0 text-white" />
-        <span className="comet-body-xs min-w-0 truncate text-white">
-          {copy}
-        </span>
-        <Button
-          variant="link"
-          size="2xs"
-          asChild
-          // The dark variants are needed because the link variant sets its own
-          // `dark:text-primary-hover`, which otherwise wins here and turns the
-          // CTA blue against the orange bar.
-          className="shrink-0 text-white underline underline-offset-2 hover:text-white focus-visible:ring-white dark:text-white dark:hover:text-white"
+      <span className="min-w-0 truncate">{copy}</span>
+      <Button
+        variant="link"
+        size="2xs"
+        asChild
+        // The dark variants are needed because the link variant sets its own
+        // `dark:text-primary-hover`, which otherwise wins here and turns the
+        // CTA blue against the orange bar.
+        className="shrink-0 text-white underline underline-offset-2 hover:text-white focus-visible:ring-white dark:text-white dark:hover:text-white"
+      >
+        <a
+          href={buildDocsUrl(MCP_BANNER_DOCS_PATH)}
+          target="_blank"
+          rel="noreferrer"
+          onClick={handleCtaClick}
         >
-          <a
-            href={buildDocsUrl(MCP_BANNER_DOCS_PATH)}
-            target="_blank"
-            rel="noreferrer"
-            onClick={handleCtaClick}
-          >
-            <span>Learn more</span>
-            <ArrowUpRight className="ml-0.5 size-3 shrink-0" />
-          </a>
-        </Button>
-      </div>
-      <TooltipWrapper content="Dismiss">
-        <Button
-          variant="ghostInverted"
-          size="icon-2xs"
-          aria-label="Dismiss announcement"
-          onClick={handleDismiss}
-          className="shrink-0 text-white focus-visible:ring-white"
-        >
-          <X />
-        </Button>
-      </TooltipWrapper>
-    </div>
+          <span>Learn more</span>
+          <ArrowUpRight className="ml-0.5 size-3 shrink-0" />
+        </a>
+      </Button>
+    </Banner>
   );
 };
 
