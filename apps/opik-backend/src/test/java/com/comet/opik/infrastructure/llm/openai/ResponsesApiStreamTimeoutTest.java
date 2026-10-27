@@ -235,7 +235,8 @@ class ResponsesApiStreamTimeoutTest {
     @Test
     @DisplayName("a Responses API stream whose headers never arrive fails at the read timeout")
     void headersThatNeverArriveFailAtTheReadTimeout() throws Exception {
-        var readTimeout = Duration.ofMillis(500);
+        // the server's clock starts after accept(), a little after the client's deadline did, so it can read just under
+        var expectedMinWait = Duration.ofMillis(400);
         var expectedMaxWait = Duration.ofMillis(1_500);
         var actualWaits = new CopyOnWriteArrayList<Duration>();
         try (var server = neverAnsweringServer(actualWaits)) {
@@ -246,7 +247,7 @@ class ResponsesApiStreamTimeoutTest {
                     .cause()
                     .isExactlyInstanceOf(SocketTimeoutException.class)
                     .hasMessage("the response headers took longer than the read timeout");
-            assertThat(actualWaits).isNotEmpty().allSatisfy(wait -> assertThat(wait).isBetween(readTimeout,
+            assertThat(actualWaits).isNotEmpty().allSatisfy(wait -> assertThat(wait).isBetween(expectedMinWait,
                     expectedMaxWait));
         }
     }
@@ -278,11 +279,13 @@ class ResponsesApiStreamTimeoutTest {
             var actualOutcome = stream(server, "500ms", "1s");
 
             var actualElapsed = Duration.ofNanos(System.nanoTime() - startNanos);
-            // the SDK's stream failure, over the read that the stream read timeout ended
+            // the SDK's stream failure, over the read that the stream read timeout ended: the body's own timeout
+            // ("timeout") and the socket's ("Read timed out") are both the stream read timeout, so either fires first
             assertThat(actualOutcome.error()).isExactlyInstanceOf(OpenAIIoException.class)
                     .cause()
                     .isExactlyInstanceOf(SocketTimeoutException.class)
-                    .hasMessage("timeout");
+                    .extracting(Throwable::getMessage)
+                    .isIn("timeout", "Read timed out");
             assertThat(actualElapsed).isBetween(streamReadTimeout, expectedMaxElapsed);
         }
     }
