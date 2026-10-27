@@ -4,5 +4,6 @@ export const ExperimentPublicStatus = {
     Running: "running",
     Completed: "completed",
     Cancelled: "cancelled",
+    Failed: "failed",
 } as const;
 export type ExperimentPublicStatus = (typeof ExperimentPublicStatus)[keyof typeof ExperimentPublicStatus];
