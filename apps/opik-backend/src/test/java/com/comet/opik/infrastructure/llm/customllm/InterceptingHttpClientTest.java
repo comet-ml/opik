@@ -1,10 +1,12 @@
 package com.comet.opik.infrastructure.llm.customllm;
 
 import dev.langchain4j.exception.HttpException;
+import dev.langchain4j.http.client.FormDataFile;
 import dev.langchain4j.http.client.HttpClient;
 import dev.langchain4j.http.client.HttpMethod;
 import dev.langchain4j.http.client.HttpRequest;
 import dev.langchain4j.http.client.SuccessfulHttpResponse;
+import dev.langchain4j.http.client.sse.HttpStreamingEvent;
 import dev.langchain4j.http.client.sse.ServerSentEvent;
 import dev.langchain4j.http.client.sse.ServerSentEventListener;
 import dev.langchain4j.http.client.sse.ServerSentEventParser;
@@ -14,9 +16,17 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import reactor.adapter.JdkFlowAdapter;
+import reactor.core.publisher.Flux;
+import reactor.test.StepVerifier;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -456,5 +466,226 @@ class InterceptingHttpClientTest {
         verify(downstream).onError(failure);
         // no second execute: content already flowed, splicing two half-responses would be worse
         verify(delegate, times(1)).execute(any(HttpRequest.class), any(), any());
+    }
+
+    // --- asynchronous and publisher calls ---
+
+    private static String random() {
+        return RandomStringUtils.secure().nextAlphanumeric(12);
+    }
+
+    private static Map<String, String> queryParamsAndAuthHeader(String paramValue, String headerName) {
+        return Map.of(
+                "url_query_params", "{\"api-version\":\"%s\"}".formatted(paramValue),
+                "auth_header_name", headerName);
+    }
+
+    private static HttpRequest modelPlaceholderRequest(String model) {
+        return HttpRequest.builder()
+                .method(HttpMethod.POST)
+                .url("https://example.test/deployments/{model}/chat/completions")
+                .addHeader("X-Extra", "kept")
+                .body("{\"model\":\"%s\"}".formatted(model))
+                .build();
+    }
+
+    private static HttpRequest expectedMutatedRequest(String model, String paramValue, String headerName,
+            String apiKey) {
+        return HttpRequest.builder()
+                .method(HttpMethod.POST)
+                .url("https://example.test/deployments/%s/chat/completions?api-version=%s".formatted(model,
+                        paramValue))
+                .addHeader("X-Extra", "kept")
+                .addHeader(headerName, apiKey)
+                .body("{\"model\":\"%s\"}".formatted(model))
+                .build();
+    }
+
+    /** A model that would move the host when substituted into the authority, so the request is refused. */
+    private static HttpRequest refusedRequest() {
+        return HttpRequest.builder()
+                .method(HttpMethod.POST)
+                .url("https://{model}.example.test/chat/completions")
+                .body("{\"model\":\"evil.test/%s\"}".formatted(random()))
+                .build();
+    }
+
+    @Test
+    void executeAsyncSendsTheMutatedRequest() {
+        var model = random();
+        var paramValue = random();
+        var headerName = "X-" + random();
+        var apiKey = random();
+        var expectedResponse = ok();
+        when(delegate.executeAsync(any(HttpRequest.class)))
+                .thenReturn(CompletableFuture.completedFuture(expectedResponse));
+        var client = new InterceptingHttpClient(delegate, queryParamsAndAuthHeader(paramValue, headerName), apiKey);
+
+        var actualResponse = client.executeAsync(modelPlaceholderRequest(model)).join();
+
+        assertThat(actualResponse).isSameAs(expectedResponse);
+        var captor = ArgumentCaptor.forClass(HttpRequest.class);
+        verify(delegate).executeAsync(captor.capture());
+        assertThat(captor.getValue()).usingRecursiveComparison()
+                .isEqualTo(expectedMutatedRequest(model, paramValue, headerName, apiKey));
+    }
+
+    @Test
+    void executeAsyncAuthFailureInvalidatesAndRetriesOnceWithAFreshToken() {
+        var tokens = new AtomicInteger();
+        var invalidated = new AtomicBoolean();
+        var expectedResponse = ok();
+        when(delegate.executeAsync(any(HttpRequest.class)))
+                .thenReturn(CompletableFuture.failedFuture(new HttpException(401, "token rejected")))
+                .thenReturn(CompletableFuture.completedFuture(expectedResponse));
+        var client = new InterceptingHttpClient(delegate, Map.of(), null,
+                () -> "tok-" + tokens.incrementAndGet(), () -> invalidated.set(true));
+
+        var actualResponse = client.executeAsync(chatRequest()).join();
+
+        assertThat(actualResponse).isSameAs(expectedResponse);
+        assertThat(invalidated).isTrue();
+        var captor = ArgumentCaptor.forClass(HttpRequest.class);
+        verify(delegate, times(2)).executeAsync(captor.capture());
+        assertThat(captor.getAllValues()).extracting(HttpRequest::headers)
+                .containsExactly(
+                        Map.of("Authorization", List.of("Bearer tok-1")),
+                        Map.of("Authorization", List.of("Bearer tok-2")));
+    }
+
+    @Test
+    void executeAsyncAuthFailureIsRetriedExactlyOnce() {
+        var expectedFailure = new HttpException(401, "still rejected");
+        when(delegate.executeAsync(any(HttpRequest.class)))
+                .thenReturn(CompletableFuture.failedFuture(new HttpException(401, "rejected")))
+                .thenReturn(CompletableFuture.failedFuture(expectedFailure));
+        var client = new InterceptingHttpClient(delegate, Map.of(), null, () -> "tok", () -> {
+        });
+
+        assertThatThrownBy(() -> client.executeAsync(chatRequest()).join())
+                .isExactlyInstanceOf(CompletionException.class)
+                .hasCauseReference(expectedFailure);
+        verify(delegate, times(2)).executeAsync(any(HttpRequest.class));
+    }
+
+    @Test
+    void executeAsyncRefusalFailsTheFutureWithoutACall() {
+        var client = new InterceptingHttpClient(delegate, Map.of(), "dummy-key");
+
+        assertThatThrownBy(() -> client.executeAsync(refusedRequest()).join())
+                .isExactlyInstanceOf(CompletionException.class)
+                .cause()
+                .isExactlyInstanceOf(ProviderRequestRefusedException.class);
+        verify(delegate, never()).executeAsync(any(HttpRequest.class));
+    }
+
+    @Test
+    void streamSendsTheMutatedRequest() {
+        var model = random();
+        var paramValue = random();
+        var headerName = "X-" + random();
+        var apiKey = random();
+        var expectedEvent = new ServerSentEvent("message", random());
+        var parser = mock(ServerSentEventParser.class);
+        when(delegate.stream(any(HttpRequest.class), same(parser)))
+                .thenReturn(JdkFlowAdapter.publisherToFlowPublisher(Flux.just(expectedEvent)));
+        var client = new InterceptingHttpClient(delegate, queryParamsAndAuthHeader(paramValue, headerName), apiKey);
+
+        StepVerifier.create(JdkFlowAdapter.flowPublisherToFlux(client.stream(modelPlaceholderRequest(model), parser)))
+                .expectNext(expectedEvent)
+                .verifyComplete();
+
+        var captor = ArgumentCaptor.forClass(HttpRequest.class);
+        verify(delegate).stream(captor.capture(), same(parser));
+        assertThat(captor.getValue()).usingRecursiveComparison()
+                .isEqualTo(expectedMutatedRequest(model, paramValue, headerName, apiKey));
+    }
+
+    @Test
+    void streamRefusalFailsTheSubscriptionWithoutACall() {
+        var client = new InterceptingHttpClient(delegate, Map.of(), "dummy-key");
+
+        StepVerifier.create(JdkFlowAdapter.flowPublisherToFlux(
+                client.stream(refusedRequest(), mock(ServerSentEventParser.class))))
+                .expectErrorSatisfies(
+                        actualError -> assertThat(actualError)
+                                .isExactlyInstanceOf(ProviderRequestRefusedException.class))
+                .verify();
+        verify(delegate, never()).stream(any(HttpRequest.class), any());
+    }
+
+    @Test
+    void streamAuthFailureBeforeTheFirstEventRetriesOnceWithAFreshToken() {
+        var tokens = new AtomicInteger();
+        var invalidated = new AtomicBoolean();
+        var expectedEvent = new ServerSentEvent("message", random());
+        var parser = mock(ServerSentEventParser.class);
+        when(delegate.stream(any(HttpRequest.class), same(parser)))
+                .thenReturn(JdkFlowAdapter.publisherToFlowPublisher(
+                        Flux.<HttpStreamingEvent>error(new HttpException(401, "token rejected"))))
+                .thenReturn(JdkFlowAdapter.publisherToFlowPublisher(Flux.just(expectedEvent)));
+        var client = new InterceptingHttpClient(delegate, Map.of(), null,
+                () -> "tok-" + tokens.incrementAndGet(), () -> invalidated.set(true));
+
+        StepVerifier.create(JdkFlowAdapter.flowPublisherToFlux(client.stream(chatRequest(), parser)))
+                .expectNext(expectedEvent)
+                .verifyComplete();
+
+        assertThat(invalidated).isTrue();
+        var captor = ArgumentCaptor.forClass(HttpRequest.class);
+        verify(delegate, times(2)).stream(captor.capture(), same(parser));
+        assertThat(captor.getAllValues()).extracting(HttpRequest::headers)
+                .containsExactly(
+                        Map.of("Authorization", List.of("Bearer tok-1")),
+                        Map.of("Authorization", List.of("Bearer tok-2")));
+    }
+
+    @Test
+    void streamAuthFailureAfterAnEventPropagatesWithoutRetry() {
+        var invalidated = new AtomicBoolean();
+        var expectedEvent = new ServerSentEvent("message", random());
+        var expectedFailure = new HttpException(401, "cut mid-stream");
+        var parser = mock(ServerSentEventParser.class);
+        when(delegate.stream(any(HttpRequest.class), same(parser)))
+                .thenReturn(JdkFlowAdapter.publisherToFlowPublisher(
+                        Flux.<HttpStreamingEvent>just(expectedEvent).concatWith(Flux.error(expectedFailure))));
+        var client = new InterceptingHttpClient(delegate, Map.of(), null, () -> "tok", () -> invalidated.set(true));
+
+        StepVerifier.create(JdkFlowAdapter.flowPublisherToFlux(client.stream(chatRequest(), parser)))
+                .expectNext(expectedEvent)
+                .verifyErrorSatisfies(actualError -> assertThat(actualError).isSameAs(expectedFailure));
+
+        assertThat(invalidated).isFalse();
+        verify(delegate, times(1)).stream(any(HttpRequest.class), same(parser));
+    }
+
+    @Test
+    void multipartFieldsAndFilesSurviveMutation() {
+        var paramValue = random();
+        var headerName = "X-" + random();
+        var apiKey = random();
+        var fieldValue = random();
+        var fileName = random() + ".wav";
+        var content = random().getBytes(StandardCharsets.UTF_8);
+        when(delegate.execute(any(HttpRequest.class))).thenReturn(ok());
+        var client = new InterceptingHttpClient(delegate, queryParamsAndAuthHeader(paramValue, headerName), apiKey);
+
+        client.execute(HttpRequest.builder()
+                .method(HttpMethod.POST)
+                .url("https://example.test/audio/transcriptions")
+                .addFormDataField("model", fieldValue)
+                .addFormDataFile("file", fileName, "audio/wav", content)
+                .build());
+
+        var expectedRequest = HttpRequest.builder()
+                .method(HttpMethod.POST)
+                .url("https://example.test/audio/transcriptions?api-version=%s".formatted(paramValue))
+                .addHeader(headerName, apiKey)
+                .formDataFields(Map.of("model", fieldValue))
+                .formDataFiles(Map.of("file", new FormDataFile(fileName, "audio/wav", content)))
+                .build();
+        var captor = ArgumentCaptor.forClass(HttpRequest.class);
+        verify(delegate).execute(captor.capture());
+        assertThat(captor.getValue()).usingRecursiveComparison().isEqualTo(expectedRequest);
     }
 }
