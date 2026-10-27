@@ -326,3 +326,28 @@ describe("where the catalog differs from today's tables", () => {
     expect(fromCatalog.maxCompletionTokens).toBe(2000);
   });
 });
+
+describe("a switch away from a max only the Responses API offers", () => {
+  beforeEach(() => {
+    seedTablesOnly();
+    seedCatalog();
+  });
+
+  it.each([
+    ["gpt-5.5", "an unknown mode", "medium"],
+    ["gpt-5.5", "responses_api", "xhigh"],
+    ["gpt-6-luna", "an unknown mode", "max"],
+  ])("switching gpt-6-sol to %s on %s leaves %s", (model, mode, expected) => {
+    expect(
+      updateProviderConfig(
+        { reasoningEffort: "max" },
+        {
+          model: model as PROVIDER_MODEL_TYPE,
+          provider: OPENAI,
+          openAiPipelineMode: modeOf(mode),
+          previousModel: "gpt-6-sol" as PROVIDER_MODEL_TYPE,
+        },
+      )?.reasoningEffort,
+    ).toBe(expected);
+  });
+});
