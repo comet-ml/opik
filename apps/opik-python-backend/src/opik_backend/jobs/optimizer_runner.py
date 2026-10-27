@@ -156,6 +156,17 @@ _dropped_params_logged = set()
 _dropped_headers_logged = set()
 
 
+_LOGGED_NAMES = 5
+_LOGGED_NAME_LENGTH = 64
+
+
+def _name_sample(names):
+    """The count and the first few sorted names, each shortened, so a log line stays readable whatever was sent."""
+    sample = [str(name)[:_LOGGED_NAME_LENGTH] for name in sorted(names, key=str)[:_LOGGED_NAMES]]
+    more = ", ..." if len(names) > _LOGGED_NAMES else ""
+    return f"{len(names)} ({', '.join(sample)}{more})"
+
+
 def route_litellm_calls_through_gateway(workspace_name):
     """Attach the ``Comet-Workspace`` header to gateway LLM calls.
 
@@ -198,7 +209,7 @@ def route_litellm_calls_through_gateway(workspace_name):
         if dropped - _dropped_params_logged:
             _dropped_params_logged.update(dropped)
             # Names only: values can be credentials or URLs.
-            logger.warning(f"Dropped model parameters not passed to the gateway: {sorted(dropped)}")
+            logger.warning(f"Dropped model parameters not passed to the gateway: {_name_sample(dropped)}")
         kwargs["api_base"] = OPENAI_API_BASE
         extra_headers = {}
         dropped_headers = set()
@@ -209,7 +220,7 @@ def route_litellm_calls_through_gateway(workspace_name):
                 extra_headers[name] = value
         if dropped_headers - _dropped_headers_logged:
             _dropped_headers_logged.update(dropped_headers)
-            logger.warning(f"Dropped headers not passed to the gateway: {sorted(dropped_headers)}")
+            logger.warning(f"Dropped headers not passed to the gateway: {_name_sample(dropped_headers)}")
         extra_headers["Comet-Workspace"] = _gateway_workspace["name"]
         kwargs["extra_headers"] = extra_headers
         return kwargs

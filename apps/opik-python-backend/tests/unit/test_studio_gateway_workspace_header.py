@@ -110,7 +110,7 @@ class TestRouteLitellmCallsThroughGateway:
                 fake_litellm.completion(messages=[], extra_headers={"comet-workspace": "other", "Authorization": "x"})
 
         assert [r.getMessage() for r in caplog.records] == [
-            "Dropped headers not passed to the gateway: ['Authorization', 'comet-workspace']"]
+            "Dropped headers not passed to the gateway: 2 (Authorization, comet-workspace)"]
 
     def test_noop_when_gateway_not_active(self, fake_litellm, monkeypatch):
         monkeypatch.setattr(optimizer_runner, "OPENAI_API_BASE", None)
@@ -264,8 +264,20 @@ class TestModelParameterAllowlist:
             for _ in range(3):
                 fake_litellm.completion(model="openai/m", messages=[], **REROUTING_PARAMS)
 
+        expected_sample = ", ".join(sorted(REROUTING_PARAMS)[:5])
         assert [r.getMessage() for r in caplog.records] == [
-            f"Dropped model parameters not passed to the gateway: {sorted(REROUTING_PARAMS)}"]
+            f"Dropped model parameters not passed to the gateway: {len(REROUTING_PARAMS)} ({expected_sample}, ...)"]
+
+    def test_logs_a_bounded_sample_of_dropped_names(self, fake_litellm, gateway_env, caplog):
+        route_litellm_calls_through_gateway("my-workspace")
+        many = {f"unknown_{index:03d}_{'x' * 100}": index for index in range(200)}
+
+        with caplog.at_level(logging.WARNING, logger=optimizer_runner.__name__):
+            fake_litellm.completion(model="openai/m", messages=[], **many)
+
+        expected_sample = ", ".join(name[:64] for name in sorted(many)[:5])
+        assert [r.getMessage() for r in caplog.records] == [
+            f"Dropped model parameters not passed to the gateway: 200 ({expected_sample}, ...)"]
 
 
 @pytest.fixture
