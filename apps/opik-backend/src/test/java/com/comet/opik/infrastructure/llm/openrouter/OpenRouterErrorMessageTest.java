@@ -96,7 +96,7 @@ class OpenRouterErrorMessageTest {
                 Arguments.of("upstream JSON, compact",
                         """
                                 {"error":{"message":"Provider returned error","code":400,"metadata":{"raw":"{\\"error\\":{\\"message\\":\\"Expected <code>...</code> and <update>...</update> tags.\\",\\"type\\":\\"invalid_request_error\\",\\"param\\":null,\\"code\\":null}}","provider_name":"Relace","is_byok":false}}}""",
-                        400, "Relace: Expected <code>...</code> and <update>...</update> tags."),
+                        400, "Provider returned error"),
                 Arguments.of("upstream JSON, retired model",
                         """
                                 {"error":{"message":"Provider returned error","code":404,"metadata":{"raw":"{\\n    \\"error\\": {\\n        \\"message\\": \\"The model `gpt-3.5-turbo-instruct` has been deprecated, learn more here: https://platform.openai.com/docs/deprecations\\",\\n        \\"type\\": \\"invalid_request_error\\",\\n        \\"param\\": null,\\n        \\"code\\": \\"model_not_found\\"\\n    }\\n}\\n","provider_name":"OpenAI","is_byok":false,"provider_error_code":"model_not_found"}}}""",
@@ -105,8 +105,7 @@ class OpenRouterErrorMessageTest {
                 Arguments.of("upstream JSON, top-level message",
                         """
                                 {"error":{"message":"Provider returned error","code":404,"metadata":{"raw":"{\\"message\\":\\"This model version has reached the end of its life. Please refer to the AWS documentation for more details.\\"}","provider_name":"Amazon Bedrock","is_byok":false}}}""",
-                        404,
-                        "Amazon Bedrock: This model version has reached the end of its life. Please refer to the AWS documentation for more details."),
+                        404, "Provider returned error"),
                 Arguments.of("upstream plain text, rate limit",
                         """
                                 {"error":{"message":"Provider returned error","code":429,"metadata":{"raw":"google/gemma-4-31b-it:free is temporarily rate-limited upstream. Please retry shortly, or add your own key to accumulate your rate limits: https://openrouter.ai/settings/integrations","provider_name":"Google AI Studio","is_byok":false,"provider_error_code":"429","limit_source":"upstream_provider_shared_pool","remedy_hint":"Retry shortly, add your own provider key (https://openrouter.ai/settings/integrations), or route to another provider with provider routing: https://openrouter.ai/docs/features/provider-routing"}}}""",
@@ -114,11 +113,23 @@ class OpenRouterErrorMessageTest {
                 Arguments.of("upstream JSON, error as a string",
                         """
                                 {"error":{"message":"Provider returned error","code":400,"metadata":{"raw":"{\\"error\\":\\"  Model   not found  \\"}","provider_name":"DeepInfra"}}}""",
-                        400, "DeepInfra: Model not found"),
+                        400, "Provider returned error"),
                 Arguments.of("upstream JSON, detail shape",
                         """
                                 {"error":{"message":"Provider returned error","code":422,"metadata":{"raw":"{\\"detail\\":\\"Input should be a valid list\\"}","provider_name":"Chutes"}}}""",
-                        422, "Chutes: Input should be a valid list"),
+                        422, "Provider returned error"),
+                Arguments.of("upstream JSON, Anthropic shape",
+                        """
+                                {"error":{"message":"Provider returned error","code":502,"metadata":{"raw":"{\\"type\\":\\"error\\",\\"error\\":{\\"type\\":\\"overloaded_error\\",\\"message\\":\\"Overloaded\\"}}","provider_name":"Anthropic"}}}""",
+                        502, "Anthropic: Overloaded"),
+                Arguments.of("upstream JSON, undocumented OpenAI-style type",
+                        """
+                                {"error":{"message":"Provider returned error","code":400,"metadata":{"raw":"{\\"error\\":{\\"message\\":\\"blocked by gateway\\",\\"type\\":\\"gateway_error\\"}}","provider_name":"Together"}}}""",
+                        400, "Provider returned error"),
+                Arguments.of("upstream JSON, undocumented Google status",
+                        """
+                                {"error":{"message":"Provider returned error","code":429,"metadata":{"raw":"{\\"error\\":{\\"code\\":429,\\"message\\":\\"Slow down\\",\\"status\\":\\"THROTTLED\\"}}","provider_name":"Google AI Studio"}}}""",
+                        429, "Provider returned error"),
                 Arguments.of("upstream JSON, malformed",
                         """
                                 {"error":{"message":"Provider returned error","code":502,"metadata":{"raw":"{\\"error\\": {\\"message\\": \\"upstream conn","provider_name":"Together"}}}""",
@@ -150,9 +161,11 @@ class OpenRouterErrorMessageTest {
     @ParameterizedTest(name = "{0}")
     @MethodSource("openRouterErrors")
     void getLlmProviderErrorShowsTheUpstreamReason(String shape, String body, int code, String expectedMessage) {
-        var error = provider.getLlmProviderError(new HttpException(code, body));
+        var expectedError = new ErrorMessage(code, expectedMessage);
 
-        assertThat(error).contains(new ErrorMessage(code, expectedMessage));
+        var actualError = provider.getLlmProviderError(new HttpException(code, body));
+
+        assertThat(actualError).contains(expectedError);
     }
 
     @Test
@@ -161,8 +174,8 @@ class OpenRouterErrorMessageTest {
                 "message", "Provider returned error",
                 "code", 502,
                 "metadata",
-                Map.of("raw", JsonUtils.writeValueAsString(Map.of("error", Map.of("message",
-                        "Bad gateway ".repeat(100)))), "provider_name", "Groq"))));
+                Map.of("raw", JsonUtils.writeValueAsString(Map.of("error", Map.of("type", "server_error",
+                        "message", "Bad gateway ".repeat(100)))), "provider_name", "Groq"))));
 
         var actualMessage = provider.getLlmProviderError(new HttpException(502, body)).orElseThrow().getMessage();
 

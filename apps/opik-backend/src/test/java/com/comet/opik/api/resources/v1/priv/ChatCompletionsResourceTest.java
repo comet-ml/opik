@@ -637,8 +637,33 @@ class ChatCompletionsResourceTest {
                     .build();
 
             // 400 because `InvalidAPIVersion` isn't in the OpenAI-compat code table and CustomLlmErrorMessage
-            // defaults unknown codes to 400; its text isn't passed on because OpenAI doesn't document the code.
+            // defaults unknown codes to 400; its text isn't passed on because neither OpenAI nor Azure OpenAI
+            // documents the code.
             var expectedError = new ErrorMessage(HttpStatus.SC_BAD_REQUEST, UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
+
+            var actualError = chatCompletionsClient.create(API_KEY, workspaceName, request, HttpStatus.SC_BAD_REQUEST);
+
+            assertThat(actualError).isEqualTo(expectedError);
+        }
+
+        @Test
+        @DisplayName("Azure content filter body — a code Azure OpenAI documents surfaces with its message")
+        void azureContentFilterErrorBodyIsPropagated() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            mockTargetWorkspace(workspaceName, UUID.randomUUID().toString());
+            createCustomProvider(workspaceName);
+            var message = "The response was filtered " + UUID.randomUUID();
+            // the shape Azure OpenAI documents for a prompt its content filter refuses
+            var upstreamBody = """
+                    {"error": {"message": "%s", "type": null, "param": "prompt", "code": "content_filter", \
+                    "status": 400}}""".formatted(message);
+            WIRE_MOCK.server().stubFor(post(urlPathMatching(CHAT_COMPLETIONS_REGEX))
+                    .willReturn(aResponse()
+                            .withStatus(HttpStatus.SC_BAD_REQUEST)
+                            .withHeader("Content-Type", "application/json")
+                            .withBody(upstreamBody)));
+            var request = ChatCompletionRequest.builder().stream(false).model(MODEL).addUserMessage("ping").build();
+            var expectedError = new ErrorMessage(HttpStatus.SC_BAD_REQUEST, message);
 
             var actualError = chatCompletionsClient.create(API_KEY, workspaceName, request, HttpStatus.SC_BAD_REQUEST);
 

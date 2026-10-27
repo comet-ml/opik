@@ -23,16 +23,29 @@ public class ProviderErrorMessageValidator {
     /** The error identifiers each provider documents for its error envelope. */
     public enum DocumentedErrors {
         /**
-         * https://developers.openai.com/api/docs/guides/error-codes, .../guides/agents-api/errors; error.type or code
+         * https://developers.openai.com/api/docs/guides/error-codes, .../guides/agents-api/errors; error.type or code.
+         * {@code unsupported_value} and {@code invalid_value} aren't listed there; they are the codes OpenAI returns,
+         * with type {@code invalid_request_error}, for a parameter value a model doesn't accept.
          */
         OPENAI(Set.of(
                 "invalid_request_error", "authentication_error", "not_found_error", "conflict_error",
                 "rate_limit_error", "insufficient_quota", "service_unavailable_error", "server_error",
                 "internal_error", "invalid_request", "invalid_api_key", "unauthorized", "forbidden",
-                "model_not_found", "context_length_exceeded", "unsupported_parameter", "rate_limit_exceeded",
-                "slow_down", "credit_balance_exhausted", "usage_limit_exceeded",
-                "organization_spend_limit_exceeded", "project_spend_limit_exceeded",
-                "organization_usage_limit_exceeded", "server_is_overloaded", "request_timeout")),
+                "model_not_found", "context_length_exceeded", "unsupported_parameter", "unsupported_value",
+                "invalid_value", "rate_limit_exceeded", "slow_down", "credit_balance_exhausted",
+                "usage_limit_exceeded", "organization_spend_limit_exceeded", "project_spend_limit_exceeded",
+                "organization_usage_limit_exceeded", "server_is_overloaded", "server_overloaded",
+                "request_timeout", "previous_response_not_found", "websocket_connection_limit_reached",
+                "invalid_beta", "agent_not_persisted", "invalid_otlp_endpoint", "invalid_otlp_header",
+                "executor_version_incompatible", "mcp_server_startup_failed", "files_api_rate_limit_exceeded",
+                "session_budget_exceeded", "flex_unavailable", "connection_failed", "resource_not_found",
+                "sandbox_error", "active_turn_not_steerable", "cyber_policy", "misalignment_policy_violation",
+                "environment_connection_failed", "environment_connection_timeout", "idle_timeout")),
+        /**
+         * https://learn.microsoft.com/azure/ai-foundry/openai/concepts/content-filter; error.code of an
+         * OpenAI-compatible envelope. Azure OpenAI otherwise answers with OpenAI's identifiers.
+         */
+        AZURE_OPENAI(Set.of("content_filter")),
         /** https://platform.claude.com/docs/en/api/errors; error.type */
         ANTHROPIC(Set.of(
                 "invalid_request_error", "authentication_error", "billing_error", "permission_error",
@@ -80,8 +93,12 @@ public class ProviderErrorMessageValidator {
     }
 
     private boolean isPlainMessage(String text) {
+        return isPlainText(text) && text.length() <= maxLength;
+    }
+
+    /** A single line of plain text: no markup, control characters or line breaks; length is not checked. */
+    public static boolean isPlainText(String text) {
         return StringUtils.isNotBlank(text)
-                && text.length() <= maxLength
                 && text.codePoints().noneMatch(ProviderErrorMessageValidator::isDisallowed);
     }
 
