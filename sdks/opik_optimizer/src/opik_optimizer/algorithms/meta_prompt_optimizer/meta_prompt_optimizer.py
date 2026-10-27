@@ -158,17 +158,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             constants.META_PROMPT_DEFAULT_HALL_OF_FAME_PATTERN_INJECTION_RATE
         )
 
-        self.hall_of_fame: PromptHallOfFame | None = None
-        if self.use_hall_of_fame:
-            self.hall_of_fame = PromptHallOfFame(
-                max_size=self.hall_of_fame_size,
-                pattern_extraction_interval=self.pattern_extraction_interval,
-                prompts=self._prompts,
-            )
-            logger.debug(
-                f"Hall of Fame enabled: size={self.hall_of_fame_size}, "
-                f"extraction_interval={self.pattern_extraction_interval}"
-            )
+        self.hall_of_fame: PromptHallOfFame | None = self._new_hall_of_fame()
 
         logger.debug(f"Initialized MetaPromptOptimizer with model={model}")
         logger.debug(f"Prompts/round: {prompts_per_round}")
@@ -225,6 +215,15 @@ class MetaPromptOptimizer(BaseOptimizer):
             else None,
         }
 
+    def _new_hall_of_fame(self) -> PromptHallOfFame | None:
+        if not self.use_hall_of_fame:
+            return None
+        return PromptHallOfFame(
+            max_size=self.hall_of_fame_size,
+            pattern_extraction_interval=self.pattern_extraction_interval,
+            prompts=self._prompts,
+        )
+
     def run_optimization(
         self,
         context: OptimizationContext,
@@ -256,6 +255,8 @@ class MetaPromptOptimizer(BaseOptimizer):
 
         self.auto_continue = auto_continue
         self.dataset = dataset
+        # Prompts from an earlier run must not seed this one.
+        self.hall_of_fame = self._new_hall_of_fame()
         self.set_default_dataset_split(
             "validation" if context.validation_dataset is not None else "train"
         )

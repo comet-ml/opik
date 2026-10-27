@@ -333,15 +333,28 @@ def _tool_kwargs(optimizer: Any, scenario: Scenario) -> dict[str, Any]:
     return {"allow_tool_use": True}
 
 
-def run_optimizer(name: str, scenario: Scenario) -> Any:
-    optimizer = make_optimizer(name)
+def run_optimizer(
+    name: str,
+    scenario: Scenario,
+    *,
+    optimizer: Any = None,
+    metric: Callable[..., Any] = answer_match,
+    **kwargs: Any,
+) -> Any:
+    """Run ``name`` on ``scenario`` through its public entrypoint."""
+    optimizer = optimizer or make_optimizer(name)
+    kwargs.setdefault("max_trials", MAX_TRIALS[name])
+    kwargs.setdefault("project_name", "characterization")
+    common = dict(
+        prompt=scenario.prompt,
+        dataset=kwargs.pop("dataset", None) or make_dataset(scenario),
+        metric=metric,
+        agent=scenario.agent,
+        **kwargs,
+    )
     if name == "ParameterOptimizer":
-        # ParameterOptimizer.optimize_prompt raises NotImplementedError (pinned in
-        # its own test); optimize_parameter is the entry point it accepts.
+        # ParameterOptimizer only searches model settings, via optimize_parameter.
         return optimizer.optimize_parameter(
-            prompt=scenario.prompt,
-            dataset=make_dataset(scenario),
-            metric=answer_match,
             parameter_space=ParameterSearchSpace(
                 parameters=[
                     ParameterSpec.model_validate(
@@ -354,19 +367,9 @@ def run_optimizer(name: str, scenario: Scenario) -> Any:
                     )
                 ]
             ),
-            agent=scenario.agent,
-            max_trials=MAX_TRIALS[name],
-            project_name="characterization",
+            **common,
         )
-    return optimizer.optimize_prompt(
-        prompt=scenario.prompt,
-        dataset=make_dataset(scenario),
-        metric=answer_match,
-        agent=scenario.agent,
-        max_trials=MAX_TRIALS[name],
-        project_name="characterization",
-        **_tool_kwargs(optimizer, scenario),
-    )
+    return optimizer.optimize_prompt(**common, **_tool_kwargs(optimizer, scenario))
 
 
 OPTIMIZERS = list(FACTORIES)

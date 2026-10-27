@@ -517,8 +517,10 @@ class BaseOptimizer(ABC):
             agent = LiteLLMAgent(project_name=project_name)
         self._attach_agent_owner(agent)
 
-        # Reset counters
+        # Reset per-run state: counters and the seeded RNG, so a reused optimizer
+        # repeats the same run for the same seed.
         self._reset_counters()
+        self._rng = rng_utils.make_rng(self.seed)
 
         opik_optimization = self._get_or_create_optimization(
             dataset, metric, optimization_id

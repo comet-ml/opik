@@ -411,6 +411,8 @@ class EvolutionaryOptimizer(BaseOptimizer):
         self._generations_without_improvement = 0
         self._current_population = []
         self._generations_without_overall_improvement = 0
+        self._best_primary_score_history = []
+        self._gens_since_pop_improvement = 0
 
         generation_ops.build_deap_evaluator(
             self, context=context, experiment_config=experiment_config
