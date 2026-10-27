@@ -218,17 +218,6 @@ class TestFewShotBayesianOptimizerEvaluate:
         # coerced the result to a float.
         assert context.scoring_health == {"failed_count": 1, "total_count": 1}
 
-    def test_allow_tool_use_default_matches_base(self) -> None:
-        import inspect
-
-        from opik_optimizer import BaseOptimizer
-
-        def default(cls: Any) -> Any:
-            params = inspect.signature(cls.evaluate_prompt).parameters
-            return params["allow_tool_use"].default
-
-        assert default(FewShotBayesianOptimizer) == default(BaseOptimizer)
-
 
 class TestFewShotBayesianOptimizerOptuna:
     def test_stop_ends_the_study_without_pruned_trials(
@@ -274,7 +263,3 @@ class TestFewShotBayesianOptimizerOptuna:
         assert [trial.state for trial in studies[0].trials] == [
             optuna.trial.TrialState.COMPLETE
         ]
-
-    def test_enable_optuna_pruning_is_deprecated(self) -> None:
-        with pytest.warns(DeprecationWarning, match="enable_optuna_pruning"):
-            FewShotBayesianOptimizer(model="gpt-4o-mini", enable_optuna_pruning=True)

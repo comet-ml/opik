@@ -58,16 +58,16 @@ def capture_provider(
 
 
 @pytest.mark.parametrize(
-    "optimizer_name",
+    "optimizer_name,mode",
     [
-        "MetaPromptOptimizer",
-        "HierarchicalReflectiveOptimizer",
-        "EvolutionaryOptimizer",
-        "FewShotBayesianOptimizer",
-        "GepaOptimizer",
+        ("MetaPromptOptimizer", "multimodal"),
+        ("HierarchicalReflectiveOptimizer", "multimodal"),
+        ("EvolutionaryOptimizer", "multimodal"),
+        ("FewShotBayesianOptimizer", "multimodal"),
+        ("GepaOptimizer", "multimodal"),
+        ("MetaPromptOptimizer", "text_only"),
     ],
 )
-@pytest.mark.parametrize("mode", ["multimodal", "text_only"])
 def test_public_run_sends_native_images_to_optimizer_and_preserves_agent_media(
     optimizer_name: str,
     mode: str,

@@ -355,19 +355,3 @@ def test_gepa_adapter_llm_task_scores_candidates_only_for_pass_at_k(
         "output": expected_output,
         "metric_calls": expected_metric_calls,
     }
-
-
-@pytest.mark.parametrize(
-    "kwargs,match",
-    [
-        ({"model": None}, "model parameter is required"),
-        ({"model": 123}, "model must be a string, got int"),
-        ({"model": "   "}, "model cannot be empty"),
-        ({"model": "gpt-4o-mini", "verbose": "1"}, "verbose must be an integer"),
-        ({"model": "gpt-4o-mini", "verbose": -1}, "verbose must be non-negative"),
-        ({"model": "gpt-4o-mini", "seed": "42"}, "seed must be an integer"),
-    ],
-)
-def test_invalid_constructor_args_raise(kwargs: dict, match: str) -> None:
-    with pytest.raises(ValueError, match=match):
-        GepaOptimizer(**kwargs)

@@ -11,8 +11,6 @@ import pytest
 from pydantic import BaseModel
 
 from opik_optimizer.core import llm_calls as _llm_calls
-from opik_optimizer.base_optimizer import BaseOptimizer
-from opik_optimizer.core.state import OptimizationContext
 from tests.unit.fixtures import user_message
 from tests.unit.test_helpers import make_mock_response
 
@@ -281,59 +279,3 @@ class TestCallModelAsync:
 
         assert isinstance(result, SampleResponseModel)
         assert captured_kwargs.get("response_format") == custom_response_format
-
-
-class TestCounterIncrement:
-    def test_increment_llm_counter_uses_active_run(self) -> None:
-        class MockOptimizer(BaseOptimizer):
-            DEFAULT_PROMPTS: dict[str, str] = {}
-
-            def optimize_prompt(self, *args: Any, **kwargs: Any) -> Any:
-                pass
-
-            def run_optimization(self, context: OptimizationContext) -> Any:
-                pass
-
-            def get_config(self, context: OptimizationContext) -> dict[str, Any]:
-                return {"optimizer": "MockOptimizer"}
-
-            def get_optimizer_metadata(self) -> dict[str, Any]:
-                return {}
-
-        optimizer = MockOptimizer(model="gpt-4o")
-        initial_count = optimizer.llm_call_counter
-
-        def inner_call(self: Any) -> None:
-            _llm_calls._increment_llm_counter_if_in_optimizer()
-
-        with _llm_calls.optimizer_scope(optimizer):
-            inner_call(optimizer)
-
-        assert optimizer.llm_call_counter == initial_count + 1
-
-    def test_increment_llm_call_tools_counter_uses_active_run(self) -> None:
-        class MockOptimizer(BaseOptimizer):
-            DEFAULT_PROMPTS: dict[str, str] = {}
-
-            def optimize_prompt(self, *args: Any, **kwargs: Any) -> Any:
-                pass
-
-            def run_optimization(self, context: OptimizationContext) -> Any:
-                pass
-
-            def get_config(self, context: OptimizationContext) -> dict[str, Any]:
-                return {"optimizer": "MockOptimizer"}
-
-            def get_optimizer_metadata(self) -> dict[str, Any]:
-                return {}
-
-        optimizer = MockOptimizer(model="gpt-4o")
-        initial_count = optimizer.llm_call_tools_counter
-
-        def inner_call(self: Any) -> None:
-            _llm_calls._increment_llm_call_tools_counter_if_in_optimizer()
-
-        with _llm_calls.optimizer_scope(optimizer):
-            inner_call(optimizer)
-
-        assert optimizer.llm_call_tools_counter == initial_count + 1

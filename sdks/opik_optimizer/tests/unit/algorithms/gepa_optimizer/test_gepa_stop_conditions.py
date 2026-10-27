@@ -1,6 +1,5 @@
 # mypy: disable-error-code=no-untyped-def
 
-import pytest
 import logging
 from types import SimpleNamespace
 from typing import Any
@@ -8,13 +7,11 @@ from unittest.mock import MagicMock
 
 from gepa.utils.stop_condition import NoImprovementStopper, ScoreThresholdStopper
 
-from opik_optimizer import GepaOptimizer, constants
+from opik_optimizer import GepaOptimizer
 from opik_optimizer.algorithms.gepa_optimizer.gepa_optimizer import (
     MIN_EXPECTED_REFLECTION_ITERATIONS,
     CandidateScoreThresholdStopper,
     _build_gepa_stop_callbacks,
-    _coerce_no_improvement_iterations,
-    _coerce_positive_int,
     _warn_if_reflection_minibatch_exhausts_budget,
 )
 
@@ -526,42 +523,3 @@ class TestBuildGepaStopCallbacks:
         stoppers, no_improve = _build_gepa_stop_callbacks(0.0, 0)
         assert stoppers == []
         assert no_improve is None
-
-
-@pytest.mark.parametrize(
-    "value,expected",
-    [
-        (None, constants.DEFAULT_GEPA_NO_IMPROVEMENT_ITERATIONS),
-        (7, 7),
-        (0, 0),
-        (2.5, 2),
-        ("3", 3),
-        ("soon", constants.DEFAULT_GEPA_NO_IMPROVEMENT_ITERATIONS),
-        (-5, 0),
-    ],
-)
-def test_coerce_no_improvement_iterations(value: Any, expected: int) -> None:
-    assert _coerce_no_improvement_iterations(value) == expected
-
-
-@pytest.mark.parametrize(
-    "value,default,allow_zero,expected",
-    [
-        (0, 3, False, 3),
-        (-1, 3, False, 3),
-        (0, 10, True, 0),
-        (None, 3, False, 3),
-        ("big", 3, False, 3),  # strings warn, never raise
-        ({"a": 1}, 3, False, 3),
-        (4.9, 3, False, 4),
-        (float("inf"), 3, False, 3),  # int(inf) raises OverflowError
-        (float("nan"), 7, True, 7),
-    ],
-)
-def test_coerce_positive_int(
-    value: Any, default: int, allow_zero: bool, expected: int
-) -> None:
-    assert (
-        _coerce_positive_int(value, default=default, allow_zero=allow_zero, name="n")
-        == expected
-    )

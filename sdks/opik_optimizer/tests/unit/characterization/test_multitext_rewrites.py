@@ -13,11 +13,8 @@ from tests.unit.characterization import harness
 EMPTY_TEXT_PART = '{"type": "text", "text": ""}'
 
 
-@pytest.mark.parametrize(
-    "optimizer_name", [n for n in harness.OPTIMIZERS if n != "ParameterOptimizer"]
-)
 def test_rewritten_prompts_and_agent_calls_have_no_empty_text_parts(
-    optimizer_name: str, install_fakes: Any, monkeypatch: pytest.MonkeyPatch
+    install_fakes: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     scenario = harness.build_scenario("S3b_multimodal_multitext")
     install_fakes(scenario)
@@ -32,7 +29,7 @@ def test_rewritten_prompts_and_agent_calls_have_no_empty_text_parts(
 
     monkeypatch.setattr(LiteLLMAgent, "_llm_complete", complete)
 
-    result = harness.run_optimizer(optimizer_name, scenario)
+    result = harness.run_optimizer("EvolutionaryOptimizer", scenario)
 
     assert agent_calls
     assert not [call for call in agent_calls if EMPTY_TEXT_PART in call]

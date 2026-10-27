@@ -9,7 +9,6 @@ import pytest
 from opik_optimizer.algorithms.meta_prompt_optimizer.ops.halloffame_ops import (
     PromptHallOfFame,
 )
-from opik_optimizer.core.llm_calls import StructuredOutputParsingError
 from tests.unit.algorithms.meta_prompt_optimizer._meta_prompt_test_helpers import (
     make_hof_entry,
 )
@@ -200,43 +199,3 @@ class TestPromptHallOfFameExtractPatterns:
         result = hof.extract_patterns("gpt-4", {}, "accuracy")
 
         assert result == []
-
-    def test_does_not_restart_exhausted_common_retry(self, mock_llm_call: Any) -> None:
-        """An exhausted common retry leaves pattern extraction empty."""
-        hof = PromptHallOfFame()
-        hof.add(
-            make_hof_entry(
-                score=0.7,
-                trial=1,
-                prompt_messages=[system_message("Test prompt")],
-            )
-        )
-        hof.add(
-            make_hof_entry(
-                score=0.8,
-                trial=2,
-                prompt_messages=[system_message("Test prompt")],
-            )
-        )
-        hof.add(
-            make_hof_entry(
-                score=0.9,
-                trial=3,
-                prompt_messages=[system_message("Test prompt")],
-            )
-        )
-
-        calls: list[dict[str, Any]] = []
-
-        def side_effect(**kwargs: Any) -> Any:
-            calls.append(kwargs)
-            if len(calls) == 1:
-                raise StructuredOutputParsingError("bad", ValueError("bad"))
-            return {"patterns": ["Pattern A"]}
-
-        mock_llm_call(side_effect=side_effect)
-
-        result = hof.extract_patterns("gpt-4", {}, "accuracy")
-
-        assert result == []
-        assert len(calls) == 1

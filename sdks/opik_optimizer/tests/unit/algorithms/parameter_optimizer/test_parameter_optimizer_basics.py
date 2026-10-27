@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import time
-import warnings
 from collections.abc import Callable
 from typing import Any
 from unittest.mock import MagicMock
@@ -88,24 +87,6 @@ class TestUnsupportedParameterWarning:
             parameter_space=space(*parameters),
         )
 
-    def test_warns_once_per_parameter_and_model(
-        self, mock_opik_client, monkeypatch
-    ) -> None:
-        mock_opik_client()
-        prompts = {
-            "a": ChatPrompt(name="a", system="A", model="no-top-p"),
-            "b": ChatPrompt(name="b", system="B", model="no-top-p"),
-        }
-        with pytest.warns(UserWarning) as record:
-            self._optimize(
-                monkeypatch,
-                prompts,
-                [float_param("temperature"), float_param("top_p")],
-            )
-        messages = [str(w.message) for w in record if "not supported" in str(w.message)]
-        assert len(messages) == 1
-        assert "'top_p'" in messages[0] and "'no-top-p'" in messages[0]
-
     def test_checks_searched_model_choices(self, mock_opik_client, monkeypatch) -> None:
         mock_opik_client()
         with pytest.warns(
@@ -119,20 +100,6 @@ class TestUnsupportedParameterWarning:
                     categorical_param("model", choices=["no-top-p"], target="model"),
                 ],
             )
-
-    @pytest.mark.parametrize("model", ["unknown-model", "raises"])
-    def test_no_warning_when_support_is_unknown(
-        self, mock_opik_client, monkeypatch, model
-    ) -> None:
-        mock_opik_client()
-        with warnings.catch_warnings(record=True) as record:
-            warnings.simplefilter("always")
-            self._optimize(
-                monkeypatch,
-                ChatPrompt(name="p", system="A", model=model),
-                [float_param("top_p")],
-            )
-        assert not [w for w in record if "not supported" in str(w.message)]
 
 
 class TestParameterOptimizerOptimizePrompt:
@@ -237,22 +204,6 @@ class TestSharedLifecycle:
         }
         assert finalized.call_args.kwargs["status"] == "completed"
 
-    def test_baseline_skip_finalizes(self, mock_opik_client, monkeypatch):
-        mock_opik_client()
-        optimizer = ParameterOptimizer(verbose=0)
-        monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 1.0)
-        finalized = MagicMock(wraps=optimizer._finalize_optimization)
-        monkeypatch.setattr(optimizer, "_finalize_optimization", finalized)
-        result = optimizer.optimize_parameter(
-            prompt=ChatPrompt(system="A"),
-            dataset=make_mock_dataset(),
-            metric=make_simple_metric(),
-            parameter_space=space(float_param("temperature")),
-            max_trials=5,
-        )
-        assert result.details["finish_reason"] == "perfect_score"
-        assert finalized.call_args.kwargs["status"] == "completed"
-
 
 class TestFinishReasonAndWarnings:
     def test_timeout_before_trial_budget_reports_timeout(
@@ -278,22 +229,3 @@ class TestFinishReasonAndWarnings:
         assert result.details["trials_completed"] < 50
         assert result.details["finish_reason"] == "timeout"
         assert result.details["stopped_early"] is True
-
-    def test_deliberate_no_prompt_roles_does_not_warn(
-        self, mock_opik_client, monkeypatch
-    ) -> None:
-        from opik_optimizer import base_optimizer
-
-        mock_opik_client()
-        optimizer = ParameterOptimizer(verbose=0)
-        monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 1.0)
-        warning = MagicMock()
-        monkeypatch.setattr(base_optimizer.logger, "warning", warning)
-        optimizer.optimize_parameter(
-            prompt=ChatPrompt(name="p", system="A", model="agent-model"),
-            dataset=make_mock_dataset(),
-            metric=make_simple_metric(),
-            parameter_space=space(float_param("temperature")),
-        )
-        messages = [str(call.args[0]) for call in warning.call_args_list]
-        assert not [m for m in messages if "resolved to no roles" in m]

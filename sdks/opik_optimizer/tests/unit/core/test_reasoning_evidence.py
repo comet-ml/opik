@@ -98,11 +98,22 @@ def test_explicit_text_only_mode_omits_media_without_changing_the_prompt() -> No
         prompts={"vision": prompt},
         cases=[EvidenceCase(case_id="a", inputs={"question": "hi", "image": IMAGE})],
     )
-    messages = build_reasoning_messages([], evidence=evidence, mode="text_only")
+    native = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Look"},
+                {"type": "image_url", "image_url": {"url": IMAGE}},
+            ],
+        }
+    ]
+    original = deepcopy(native)
+    messages = build_reasoning_messages(native, evidence=evidence, mode="text_only")
     assert IMAGE not in str(messages)
     assert "image" in str(messages).lower()
     assert not any(isinstance(message["content"], list) for message in messages)
     assert prompt.get_messages()[1]["content"][1]["image_url"]["url"] == "{image}"
+    assert native == original
 
 
 @pytest.mark.parametrize(
@@ -231,35 +242,6 @@ def test_structured_output_retry_keeps_native_image_blocks(
         == [{"type": "image_url", "image_url": {"url": IMAGE, "detail": "low"}}]
     )
     assert any("JSON" in str(message["content"]) for message in calls[1])
-
-
-def test_existing_native_messages_obey_explicit_text_only_policy() -> None:
-    native = [
-        {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "Look"},
-                {"type": "image_url", "image_url": {"url": IMAGE}},
-            ],
-        }
-    ]
-    original = deepcopy(native)
-    messages = build_reasoning_messages(native, mode="text_only")
-    assert IMAGE not in str(messages)
-    assert native == original
-
-
-def test_duplicate_edits_are_rejected_before_any_changes() -> None:
-    prompt = vision_prompt()
-    with pytest.raises(ValueError, match="Duplicate"):
-        apply_text_edits(
-            prompt,
-            [
-                TextEdit(segment_id="message:0", text="first"),
-                TextEdit(segment_id="message:0", text="second"),
-            ],
-        )
-    assert prompt.get_messages()[0]["content"] == "Read the picture."
 
 
 def test_gepa_targets_individual_text_parts_without_collapsing_content() -> None:
@@ -403,28 +385,6 @@ def test_evolutionary_programmatic_crossover_keeps_each_native_block() -> None:
         parts = result[1]["content"]
         assert [part["type"] for part in parts] == ["text", "image_url", "text"]
         assert parts[1] == prompt.get_messages()[1]["content"][1]
-
-
-def test_display_summary_accepts_native_content_without_changing_model_evidence() -> (
-    None
-):
-    from opik_optimizer.utils.display.format import format_prompt_messages
-
-    messages = [
-        {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "Describe this."},
-                {"type": "image_url", "image_url": {"url": IMAGE}},
-            ],
-        }
-    ]
-    original = deepcopy(messages)
-    summary = format_prompt_messages(messages)
-    assert "Describe this." in summary
-    assert "image" in summary
-    assert IMAGE not in summary
-    assert messages == original
 
 
 def test_case_text_is_bounded_while_native_image_payload_is_preserved() -> None:

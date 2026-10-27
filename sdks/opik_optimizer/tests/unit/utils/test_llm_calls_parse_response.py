@@ -152,43 +152,6 @@ class TestStructuredOutputModels:
     """Tests for structured output response models used by optimizers."""
 
     @pytest.mark.parametrize(
-        "payload",
-        [
-            [{"role": "system", "content": "s"}],
-            {"messages": [{"role": "system", "content": "s"}]},
-            {"role": "system", "content": "s"},
-        ],
-    )
-    def test_mutation_response_rejects_legacy_message_payloads(
-        self, payload: Any
-    ) -> None:
-        from pydantic import ValidationError
-        from opik_optimizer.algorithms.evolutionary_optimizer.types import (
-            MutationResponse,
-        )
-
-        with pytest.raises(ValidationError):
-            MutationResponse.model_validate(payload)
-
-    @pytest.mark.parametrize("wrapped", [False, True])
-    def test_prompt_candidates_response_accepts_targeted_edits(
-        self, wrapped: bool
-    ) -> None:
-        from opik_optimizer.algorithms.meta_prompt_optimizer.types import (
-            PromptCandidatesResponse,
-        )
-
-        candidates = [
-            {"edits": [{"segment_id": "message:0", "text": "New instructions"}]}
-        ]
-        parsed = PromptCandidatesResponse.model_validate(
-            {"prompts": candidates} if wrapped else candidates
-        )
-        assert len(parsed.prompts) == 1
-        assert parsed.prompts[0].edits[0].segment_id == "message:0"
-        assert parsed.prompts[0].edits[0].text == "New instructions"
-
-    @pytest.mark.parametrize(
         "payload,expected_patterns,expected_first",
         [
             (

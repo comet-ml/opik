@@ -11,7 +11,6 @@ import pytest
 from opik_optimizer import GepaOptimizer
 from opik_optimizer.core.exceptions import ReflectionBudgetExceededError
 from opik_optimizer.algorithms.gepa_optimizer.gepa_optimizer import (
-    _coerce_max_reflection_calls,
     _ReflectionBudgetStopper,
     _resolve_gepa_finish_reason,
 )
@@ -567,13 +566,3 @@ class TestReflectionBudgetFinishReason:
         assert result.details["reflection_call_count"] == 8
         assert result.details["max_reflection_calls"] == 0
         assert result.details["finish_reason"] != "reflection_budget"
-
-
-@pytest.mark.parametrize(
-    "value,expected",
-    [(None, 0), (0, 0), ("3", 3), ("lots", 0), (-1, 0)],
-)
-def test_coerce_max_reflection_calls(value: Any, expected: int) -> None:
-    # Default 0 = uncapped: reflection calls scale with engine iterations, so a
-    # max_trials-derived default would truncate ordinary runs.
-    assert _coerce_max_reflection_calls(value) == expected

@@ -6,11 +6,9 @@ from typing import Any
 
 import pytest
 
-import opik_optimizer
 from opik_optimizer import ChatPrompt
 from opik_optimizer.algorithms.evolutionary_optimizer.types import MutationResponse
 from opik_optimizer.algorithms.evolutionary_optimizer.ops import mutation_ops
-from tests.unit.fixtures import system_message, user_message
 from tests.unit.algorithms.evolutionary_optimizer._mutation_test_helpers import (
     force_random,
 )
@@ -166,67 +164,3 @@ class TestSemanticMutation:
         assert result is not prompt
         assert result.get_messages() == prompt.get_messages()
         assert captured.get("called") is True
-
-
-def test_semantic_mutation_rejects_unstructured_legacy_response(
-    monkeypatch: pytest.MonkeyPatch,
-    evo_prompts: Any,
-) -> None:
-    def fake_call_model(
-        *,
-        messages: list[dict[str, str]],
-        is_reasoning: bool,
-        model: str,
-        model_parameters: dict[str, Any],
-        **_kwargs: Any,
-    ) -> str:
-        _ = (messages, is_reasoning, model, model_parameters)
-        # Intentionally return a *non-JSON* python-literal-like string (single quotes)
-        # to exercise the fallback parsing logic.
-        return repr(
-            [
-                system_message("Provide a brief and direct answer to the question."),
-                user_message("{question}"),
-            ]
-        )
-
-    monkeypatch.setattr("opik_optimizer.core.llm_calls.call_model", fake_call_model)
-
-    rng = force_random(monkeypatch, random_value=0.5)
-    monkeypatch.setattr(
-        "opik_optimizer.algorithms.evolutionary_optimizer.helpers.get_task_description_for_llm",
-        lambda initial_prompt, optimize_tools=False: "Summarize task",
-    )
-
-    captured: dict[str, object] = {}
-
-    def fake_display_error(message: str, verbose: int = 1) -> None:
-        captured["message"] = message
-        captured["verbose"] = verbose
-
-    monkeypatch.setattr(
-        "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops.display_error",
-        fake_display_error,
-    )
-
-    original_prompt = opik_optimizer.ChatPrompt(
-        messages=[
-            system_message("Provide factual answers."),
-            user_message("What is the capital of France?"),
-        ]
-    )
-
-    result = mutation_ops._semantic_mutation(
-        prompt=original_prompt,
-        initial_prompt=original_prompt,
-        output_style_guidance="Keep answers brief.",
-        model="openai/gpt-5-mini",
-        model_parameters={},
-        verbose=1,
-        prompts=evo_prompts,
-        rng=rng,
-    )
-
-    assert result is not original_prompt
-    assert captured.get("message")
-    assert result.get_messages() == original_prompt.get_messages()

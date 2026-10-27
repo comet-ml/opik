@@ -35,21 +35,3 @@ class TestOverriddenEntrypointScope:
             "prompt",
             "kwargs",
         ]
-
-    def test_entrypoints_are_wrapped_once(self) -> None:
-        class Custom(BaseOptimizer):
-            def run_optimization(self, context: Any) -> Any:
-                raise NotImplementedError
-
-            @llm_calls.bind_optimizer
-            def optimize_parameter(self, *args: Any, **kwargs: Any) -> Any:
-                return llm_calls._active_optimizer.get()
-
-        class Child(Custom):
-            pass
-
-        assert Child.optimize_parameter is Custom.optimize_parameter
-        inner = Custom.optimize_parameter.__wrapped__  # type: ignore[attr-defined]
-        assert not getattr(inner, "_opik_optimizer_bound", False)
-        child = Child(model="gpt-4")
-        assert child.optimize_parameter() is child

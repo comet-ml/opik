@@ -1,4 +1,4 @@
-"""Deterministic, content-aware fake LLM for the golden characterization tests.
+"""Deterministic, content-aware fake LLM for the characterization tests.
 
 Two boundaries are faked:
 

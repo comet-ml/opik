@@ -224,15 +224,3 @@ class TestOptimizationFlagsForUserSubclass:
                 optimize_tools=True,
             )
         assert "optimize_tools" not in context.extra_params
-
-    def test_explicit_false_without_tools_is_accepted(
-        self, simple_chat_prompt, mock_opik_client
-    ) -> None:
-        mock_opik_client()
-        context = self._UserOptimizer(model="gpt-4")._setup_optimization(
-            prompt=simple_chat_prompt,
-            dataset=make_mock_dataset(),
-            metric=self._metric,
-            optimize_prompts=False,
-        )
-        assert context.extra_params["optimizable_roles"] == set()

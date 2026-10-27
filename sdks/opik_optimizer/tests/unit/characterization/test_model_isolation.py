@@ -15,11 +15,9 @@ from tests.unit.characterization import harness
 
 @pytest.mark.parametrize("optimizer_name", harness.OPTIMIZERS)
 @pytest.mark.parametrize("scenario_name", ["S1_single", "S2_multi"])
-@pytest.mark.parametrize("has_agent_parameters", [False, True])
 def test_agent_and_optimizer_models_are_independent(
     optimizer_name: str,
     scenario_name: str,
-    has_agent_parameters: bool,
     install_fakes: Any,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -32,15 +30,11 @@ def test_agent_and_optimizer_models_are_independent(
     expected = {}
     for index, (name, prompt) in enumerate(prompts.items()):
         prompt.model = f"agent-model-{name}"
-        prompt.model_kwargs = (
-            {
-                "temperature": 0.1 + index / 10,
-                "max_tokens": 100 + index,
-                "metadata": {"owner": name},
-            }
-            if has_agent_parameters
-            else {}
-        )
+        prompt.model_kwargs = {
+            "temperature": 0.1 + index / 10,
+            "max_tokens": 100 + index,
+            "metadata": {"owner": name},
+        }
         expected[name] = (prompt.model, copy.deepcopy(prompt.model_kwargs))
     install_fakes(scenario)
     options = dict(

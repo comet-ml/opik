@@ -1,4 +1,4 @@
-"""Fixtures for the golden characterization tests (no network, no real LLM)."""
+"""Fixtures for the characterization tests (no network, no real LLM)."""
 
 from __future__ import annotations
 

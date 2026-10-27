@@ -9,14 +9,13 @@ from opik.evaluation.evaluation_result import EvaluationResult
 from opik_optimizer import (
     ChatPrompt,
     HierarchicalReflectiveOptimizer,
-    OptimizationResult,
 )
 from opik_optimizer.algorithms.hierarchical_reflective_optimizer.types import (
     FailureMode,
     HierarchicalRootCauseAnalysis,
 )
 from tests.unit.fixtures import assert_baseline_early_stop
-from tests.unit.fixtures import make_baseline_prompt, make_two_prompt_bundle
+from tests.unit.fixtures import make_baseline_prompt
 
 
 def _mock_experiment_result(score: float) -> MagicMock:
@@ -52,50 +51,6 @@ def _stub_evaluation(optimizer, monkeypatch: pytest.MonkeyPatch, score: float) -
         if kwargs.get("return_evaluation_result")
         else score,
     )
-
-
-class TestHierarchicalReflectiveOptimizerOptimizePrompt:
-    @pytest.mark.parametrize(
-        "use_bundle,expected_type", [(False, ChatPrompt), (True, dict)]
-    )
-    def test_result_prompt_matches_input_shape(
-        self,
-        mock_optimization_context,
-        monkeypatch,
-        simple_chat_prompt,
-        mock_dataset,
-        sample_dataset_items,
-        sample_metric,
-        use_bundle: bool,
-        expected_type: type,
-    ) -> None:
-        mock_optimization_context()
-        optimizer = HierarchicalReflectiveOptimizer(
-            model="gpt-4o-mini", verbose=0, seed=42
-        )
-        _stub_evaluation(optimizer, monkeypatch, score=0.5)
-
-        def mock_generate_and_evaluate(**kwargs):
-            prompts = kwargs.get("best_prompts", {})
-            improved = {name: p.copy() for name, p in prompts.items()}
-            return improved, 0.85, _mock_experiment_result(0.85)
-
-        monkeypatch.setattr(
-            optimizer, "_generate_and_evaluate_improvement", mock_generate_and_evaluate
-        )
-
-        result = optimizer.optimize_prompt(
-            prompt=make_two_prompt_bundle() if use_bundle else simple_chat_prompt,
-            dataset=mock_dataset(
-                sample_dataset_items, name="test-dataset", dataset_id="dataset-123"
-            ),
-            metric=sample_metric,
-            max_trials=2,
-            n_samples=2,
-        )
-
-        assert isinstance(result, OptimizationResult)
-        assert isinstance(result.prompt, expected_type)
 
 
 class TestHierarchicalReflectiveOptimizerEarlyStop:

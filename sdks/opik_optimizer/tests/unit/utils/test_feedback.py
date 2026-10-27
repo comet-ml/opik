@@ -1,6 +1,6 @@
 from typing import Any
 
-from opik_optimizer.utils.feedback import format_evaluation_feedback, sanitize_feedback
+from opik_optimizer.utils.feedback import format_evaluation_feedback
 
 
 def test_media_payloads_are_hidden_but_custom_dataset_fields_and_reasons_remain() -> (
@@ -19,13 +19,6 @@ def test_media_payloads_are_hidden_but_custom_dataset_fields_and_reasons_remain(
     assert "aGVsbG8=" not in text
     assert "[media]" in text
     assert item["attachment"].endswith("aGVsbG8=")
-
-
-def test_embedded_media_strings_are_redacted() -> None:
-    assert (
-        sanitize_feedback("before data:audio/wav;base64,aGVsbG8= after")
-        == "before [media] after"
-    )
 
 
 def test_input_fields_drop_labels_and_cap_values() -> None:

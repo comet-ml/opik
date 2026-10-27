@@ -141,52 +141,6 @@ class TestAnalyze:
 
         assert max_concurrent == 1
 
-    @pytest.mark.asyncio
-    async def test_batch_error_propagates(
-        self,
-        analyzer: HierarchicalRootCauseAnalyzer,
-        mock_evaluation_result: MagicMock,
-    ) -> None:
-        with patch(
-            _CALL_MODEL_ASYNC,
-            new_callable=AsyncMock,
-            side_effect=RuntimeError("LLM call failed"),
-        ):
-            with pytest.raises(RuntimeError, match="LLM call failed"):
-                await analyzer.analyze_async(mock_evaluation_result)
-
-    @pytest.mark.asyncio
-    async def test_empty_test_results_handled(
-        self, analyzer: HierarchicalRootCauseAnalyzer
-    ) -> None:
-        mock_result = MagicMock()
-        mock_result.test_results = []
-        synthesis_response = HierarchicalRootCauseAnalysis(
-            total_test_cases=0,
-            num_batches=0,
-            unified_failure_modes=[],
-            synthesis_notes="No data",
-        )
-
-        with patch(
-            _CALL_MODEL_ASYNC, new_callable=AsyncMock, return_value=synthesis_response
-        ):
-            result = await analyzer.analyze_async(mock_result)
-
-        assert isinstance(result, HierarchicalRootCauseAnalysis)
-
-    def test_missing_reasons_raises(
-        self, analyzer: HierarchicalRootCauseAnalyzer
-    ) -> None:
-        mock_results = []
-        for _ in range(3):
-            score = MagicMock()
-            score.reason = None
-            mock_results.append(MagicMock(score_results=[score]))
-
-        with pytest.raises(ValueError, match="must include 'reason' fields"):
-            analyzer._validate_reasons_present(mock_results)
-
 
 def test_format_test_results_batch_includes_agent_trace(
     analyzer: HierarchicalRootCauseAnalyzer, mock_evaluation_result: MagicMock

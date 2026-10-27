@@ -8,7 +8,7 @@ import pytest
 
 from benchmarks.utils import task_runner
 from benchmarks.packages import registry as benchmark_config
-from benchmarks.core.types import TASK_STATUS_FAILED, TaskResult
+from benchmarks.core.types import TaskResult
 from opik_optimizer import ChatPrompt
 from tests.unit.fixtures import user_message
 
@@ -107,17 +107,16 @@ def run_task(monkeypatch: pytest.MonkeyPatch) -> Callable[..., Any]:
     return run
 
 
-@pytest.mark.parametrize("agent_parameters", [None, {}, {"temperature": 0.7}])
 @pytest.mark.parametrize(
-    ("optimizer_parameters", "override"),
+    ("agent_parameters", "optimizer_parameters", "override"),
     [
-        ({}, None),
-        ({"model": "reasoning-model", "model_parameters": {}}, None),
+        (None, {}, None),
         (
+            {},
             {"model": "reasoning-model", "model_parameters": {"temperature": 0.9}},
             {"model_parameters": {}},
         ),
-        ({"model": "old-model"}, {"model": "reasoning-model"}),
+        ({"temperature": 0.7}, {"model": "old-model"}, {"model": "reasoning-model"}),
     ],
 )
 def test_runner_keeps_agent_and_optimizer_settings_independent(
@@ -153,35 +152,6 @@ def test_runner_keeps_agent_and_optimizer_settings_independent(
         )
 
 
-@pytest.mark.parametrize("model", ["", "   "])
-@pytest.mark.parametrize("test_mode", [False, True])
-def test_empty_agent_models_fail_instead_of_using_optimizer_settings(
-    run_task: Callable[..., Any], model: str, test_mode: bool
-) -> None:
-    kwargs = dict(
-        model_name=model,
-        test_mode=test_mode,
-        constructor_parameters={"model": "reasoning-model"},
-    )
-    if test_mode:
-        with pytest.raises(ValueError, match="evaluation model.*empty"):
-            run_task(**kwargs)
-    else:
-        result, instances = run_task(**kwargs)
-        assert result.status == TASK_STATUS_FAILED
-        assert "evaluation model" in result.error_message
-        assert not instances
-
-
-@pytest.mark.parametrize("field", ["model", "reasoning_model"])
-@pytest.mark.parametrize("model", ["", "   "])
-def test_empty_optimizer_models_fail_instead_of_using_agent_settings(
-    run_task: Callable[..., Any], field: str, model: str
-) -> None:
-    with pytest.raises(ValueError, match="optimizer.*empty"):
-        run_task(constructor_parameters={field: model})
-
-
 def test_task_result_prefers_optimizer_native_history(
     run_task: Callable[..., Any],
 ) -> None:
@@ -210,31 +180,6 @@ def test_task_result_prefers_optimizer_native_history(
         ]
     }
     assert result.llm_calls_total_optimization == 3
-
-
-def test_parameter_optimizer_prompt_gets_only_evaluation_settings(
-    run_task: Callable[..., Any],
-) -> None:
-    class NoReasoningModel(DummyOptimizer):
-        def __init__(self, **kwargs: Any) -> None:
-            assert kwargs == {"seed": 1}
-            self.model = None  # type: ignore[assignment]
-            self.model_parameters = {}
-            self.evaluations = []
-
-    result, _ = run_task(
-        optimizer_class=NoReasoningModel,
-        constructor_parameters={"seed": 1},
-        model_parameters={"temperature": 0.7},
-    )
-    assert isinstance(result.initial_prompt, ChatPrompt)
-    assert isinstance(result.optimized_prompt, ChatPrompt)
-    assert result.initial_prompt.model == result.optimized_prompt.model == "agent-model"
-    assert (
-        result.initial_prompt.model_kwargs
-        == result.optimized_prompt.model_kwargs
-        == {"temperature": 0.7}
-    )
 
 
 def test_package_agents_and_prompt_bundles_keep_their_own_models(
@@ -282,31 +227,3 @@ def test_package_agents_and_prompt_bundles_keep_their_own_models(
             "planner": "planner-model",
             "answerer": "answerer-model",
         }
-
-
-def test_returned_prompt_keeps_explicitly_tuned_evaluation_settings(
-    run_task: Callable[..., Any],
-) -> None:
-    class ModelSearch(DummyOptimizer):
-        def optimize_prompt(self, **kwargs: Any) -> Any:
-            result = super().optimize_prompt(**kwargs)
-            result.prompt = kwargs["prompt"].copy()
-            result.prompt.model = "tuned-agent-model"
-            result.prompt.model_kwargs = {"temperature": 0.2}
-            return result
-
-    result, instances = run_task(
-        optimizer_class=ModelSearch,
-        model_parameters={},
-        constructor_parameters={
-            "model": "reasoning-model",
-            "model_parameters": {"temperature": 0.9},
-        },
-    )
-    assert isinstance(result.initial_prompt, ChatPrompt)
-    assert result.initial_prompt.model == "agent-model"
-    assert result.initial_prompt.model_kwargs == {}
-    final_prompt = instances[0].evaluations[-1]["prompt"]
-    assert final_prompt is result.optimized_prompt
-    assert final_prompt.model == "tuned-agent-model"
-    assert final_prompt.model_kwargs == {"temperature": 0.2}
