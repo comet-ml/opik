@@ -10,6 +10,7 @@ import org.jdbi.v3.sqlobject.statement.SqlBatch;
 import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 
+import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
@@ -38,6 +39,29 @@ public interface TopicDAO {
             ORDER BY born, id
             """)
     List<Topic> findLive(@Bind("projectId") UUID projectId);
+
+    /** The nightly update's save of a topic it read: everything but the id, name and born can change. */
+    @SqlBatch("""
+            UPDATE topics SET definition = :definition, retired_at = :retiredAt, retired_reason = :retiredReason,
+                inactive_since = :inactiveSince, low_nights = :lowNights, lo7 = :lo7, hi7 = :hi7, size = :size
+            WHERE id = :id AND project_id = :projectId
+            """)
+    int[] updateTopics(@BindMethods List<Topic> topics);
+
+    /** The projects among {@code projectIds} with at least one live topic. */
+    @SqlQuery("""
+            SELECT DISTINCT project_id FROM topics
+            WHERE project_id IN (<projectIds>) AND retired_at IS NULL
+            """)
+    List<UUID> findProjectsWithLiveTopics(
+            @BindList(value = "projectIds", onEmpty = BindList.EmptyHandling.NULL_STRING) Collection<UUID> projectIds);
+
+    @SqlQuery("SELECT id FROM topics WHERE project_id = :projectId AND retired_at IS NOT NULL")
+    List<UUID> findRetiredIds(@Bind("projectId") UUID projectId);
+
+    /** The born date of the project's first build: its earliest topic, live or retired. */
+    @SqlQuery("SELECT MIN(born) FROM topics WHERE project_id = :projectId")
+    LocalDate findFirstBorn(@Bind("projectId") UUID projectId);
 
     @SqlUpdate("DELETE FROM topic_prototypes WHERE project_id = :projectId")
     int deletePrototypes(@Bind("projectId") UUID projectId);

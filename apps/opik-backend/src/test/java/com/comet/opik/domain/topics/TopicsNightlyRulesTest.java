@@ -419,6 +419,112 @@ class TopicsNightlyRulesTest {
     }
 
     @Nested
+    @DisplayName("churn")
+    class Churns {
+
+        private final UUID a = UUID.randomUUID();
+        private final UUID b = UUID.randomUUID();
+        private final UUID other = TraceTopic.OTHER;
+
+        @Test
+        @DisplayName("churn counts topic-to-topic moves, churn_any every move, over traces labelled on both nights")
+        void churn() {
+            var t = new UUID[]{UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+                    UUID.randomUUID()};
+            var previous = Map.of(t[0], a, t[1], a, t[2], b, t[3], other);
+
+            var result = TopicChurn.of(previous, t, new UUID[]{a, b, other, a, b});
+
+            assertThat(result.churn()).isEqualTo(0.5);
+            assertThat(result.churnAny()).isEqualTo(0.75);
+        }
+
+        @Test
+        @DisplayName("no trace on both nights is no churn; no trace in a topic on both is 0")
+        void empty() {
+            var t = new UUID[]{UUID.randomUUID()};
+
+            assertThat(TopicChurn.of(Map.of(), t, new UUID[]{a})).isNull();
+            assertThat(TopicChurn.of(Map.of(t[0], other), t, new UUID[]{a}))
+                    .isEqualTo(new TopicChurn.Churn(0, 1));
+        }
+    }
+
+    @Nested
+    @DisplayName("invariants")
+    class Invariants {
+
+        @Test
+        @DisplayName("a valid night passes")
+        void valid() {
+            var state = state(0, topic("A", EAST));
+            state.born("B", "B def");
+            state.topic(1).setPrototypes(List.of(NORTH));
+
+            NightInvariants.check(state, names(state, 1), List.of(), new int[]{0, 1, -1}, 3, 10, 2);
+        }
+
+        @Test
+        @DisplayName("11 live topics fail the run")
+        void tooMany() {
+            var topics = new NightState.Topic[11];
+            for (int t = 0; t < topics.length; t++) {
+                topics[t] = topic("T" + t, EAST);
+            }
+            var state = state(0, topics);
+
+            assertInvariant(() -> NightInvariants.check(state, names(state, 11), List.of(), new int[0], 0, 10, 2),
+                    "'11' live topics");
+        }
+
+        @Test
+        @DisplayName("a label on a retired topic fails the run")
+        void labelOnRetired() {
+            var state = state(0, topic("A", EAST), topic("B", NORTH));
+            state.retire(1, RetiredReason.CAP);
+
+            assertInvariant(() -> NightInvariants.check(state, names(state, 2), List.of(), new int[]{0, 1}, 2, 10, 2),
+                    "not a live topic");
+        }
+
+        @Test
+        @DisplayName("a retired id that is live again, a rename, a catch-all newborn or a long prototype fail the run")
+        void others() {
+            var revived = state(0, topic("A", EAST));
+            assertInvariant(() -> NightInvariants.check(revived, names(revived, 1), List.of(revived.topic(0).getId()),
+                    new int[0], 0, 10, 2), "is live");
+
+            var renamed = state(0, topic("A", EAST));
+            assertInvariant(() -> NightInvariants.check(renamed, Map.of(renamed.topic(0).getId(), "Old"), List.of(),
+                    new int[0], 0, 10, 2), "renamed");
+
+            var catchAll = state(0, topic("A", EAST));
+            catchAll.born("Other Things", "x");
+            assertInvariant(() -> NightInvariants.check(catchAll, names(catchAll, 1), List.of(), new int[0], 0, 10,
+                    2), "catch-all");
+
+            var long_ = state(0, topic("A", new float[]{1, 1}));
+            assertInvariant(() -> NightInvariants.check(long_, names(long_, 1), List.of(), new int[0], 0, 10, 2),
+                    "norm");
+        }
+
+        private static Map<UUID, String> names(NightState state, int read) {
+            var out = new LinkedHashMap<UUID, String>();
+            for (int t = 0; t < read; t++) {
+                out.put(state.topic(t).getId(), state.topic(t).getName());
+            }
+            return out;
+        }
+
+        private static void assertInvariant(Runnable check, String message) {
+            assertThatThrownBy(check::run).isInstanceOfSatisfying(TopicsRunException.class, exception -> {
+                assertThat(exception.getCode()).isEqualTo(Code.INVARIANT);
+                assertThat(exception.getMessage()).contains(message);
+            });
+        }
+    }
+
+    @Nested
     @DisplayName("prompts")
     class Prompts {
 
