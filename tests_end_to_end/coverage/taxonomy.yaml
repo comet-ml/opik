@@ -1135,6 +1135,26 @@ areas:
       compare-sub-row-hover:   { covered: false }
       logs-tab:                { covered: true,  tier: t1-smoke, note: "experiment traces inline; replaced the Go to logs tag" }
       export-comparison:       { covered: true,  tier: t2-cuj, note: "browser export off the compare Results tab, asserted on the downloaded file: an unscoped export covers the whole result set untruncated and carries both compared experiments' outputs, filter/search/sort scope and order it, a row selection narrows it and clearing restores it. NOT covered: the over-the-cap disabled state (EXPORT_ROW_LIMIT is 2,000, and seeding past it costs far more than the assertion is worth), and the CSV format — only JSON is read back" }
+      # New for 2.2.122, from the release pass's own staging exploration of
+      # opik#9211. `coverage/pending/` held nothing this release.
+      #
+      # Its own key because no experiments capability named status or cancel at
+      # all — the 2.2.122 release coverage report flagged exactly that under
+      # "Denominator notes", and the exploration withheld its candidate for want
+      # of an honest tag rather than stretch a covered one.
+      #
+      # Not folded under `list-experiments` or `logs-tab`: both are already
+      # `covered: true` at t1 and are about an experiment being LISTED, which
+      # any status at all satisfies. Not `delete-experiment` below either — a
+      # stop is not a removal; the run keeps its items and the outcome it
+      # earned up to the mark, which is the whole difference. And not an
+      # `experiment-item-read` matter: that key is scoped by its own note to
+      # `Experiment.get_items()`, and nothing it asserts reads the run's
+      # lifecycle.
+      #
+      # The backend behaviour predates 2.2.121; what 9211 shipped is the
+      # generated client surface over it, which is what makes it this release's.
+      cancel-run:              { covered: false, note: "Stopping a run and the lifecycle a stop writes — status, finished_at, and the generated client bindings opik#9211 added over them (`cancel_experiments(ids)`, `Experiment.finished_at`, the fourth `ExperimentStatus` member `failed`). Driven as two variants of ONE `/experiments/execute` dispatch over a 120-item dataset so the sibling is a bystander from the same queue: the stopped one settles `cancelled` with a finished_at at or after its created_at and strictly fewer items run than it was given, while the sibling runs every item to `completed` — which is what tells 'the stop took the experiment it named' apart from 'the stop took the whole dispatch'. Also pins that a 204 from the endpoint is NOT confirmation: against an experiment stored as `running` that this service never queued (`itemPublisher.isTracked` false), the stop is accepted and the status is unchanged after a settling window. The status field is asserted on the WIRE before the SDK is asked the same question, since `ExperimentStatus.fromString` falls back to COMPLETED for an unrecognised value — so a member dropped from the enum would be accepted on write and read back as `completed` with no error anywhere. NOT covered, and not claimed: any UI. The Experiments table has no status column (it consumes `status` only to decide whether a row's metric cells shimmer), and the Stop control itself is the Playground's, covered by playground/playground-stop-run.spec.ts. Also NOT covered: the TypeScript half of 9211's regen — the estate pins `opik@^2.2.74` from npm, 48 patch versions behind the client this release ships, so `sdkClient.typescript` has neither binding; bumping that pin is 160 specs' seeding path and stays on the manual list. And not the `failed` status as a run REACHES it — it is seeded here, because what a run whose items all error lands on is the product's decision rather than the seed's." }
       delete-experiment:       { covered: true,  tier: t2-cuj }
 
     visual:
