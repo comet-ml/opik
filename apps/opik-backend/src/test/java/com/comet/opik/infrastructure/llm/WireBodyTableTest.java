@@ -12,6 +12,7 @@ import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.FreeModelConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.llm.antropic.AnthropicModule;
+import com.comet.opik.infrastructure.llm.customllm.CustomLlmModule;
 import com.comet.opik.infrastructure.llm.openai.OpenAIModule;
 import com.comet.opik.utils.ChunkedOutputHandlers;
 import com.comet.opik.utils.JsonUtils;
@@ -191,13 +192,14 @@ class WireBodyTableTest {
         when(opikConfiguration.getFreeModel()).thenReturn(freeModelConfig);
 
         var registryService = new LlmModelRegistryService(registryConfig);
-        llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, opikConfiguration, registryService);
+        llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, opikConfiguration, registryService,
+                new CustomLlmModule().providerBaseUrlGuard(config.getLlmProviderClient()));
         var anthropicModule = new AnthropicModule();
         anthropicModule.llmServiceProvider(llmProviderFactory,
                 anthropicModule.clientGenerator(config.getLlmProviderClient(), registryService), registryService);
         var openAiModule = new OpenAIModule();
         openAiModule.llmServiceProvider(llmProviderFactory,
-                openAiModule.clientGenerator(config.getLlmProviderClient()));
+                openAiModule.clientGenerator(config.getLlmProviderClient(), LlmTestClients.RESPONSES_API_HTTP_CLIENT));
 
         chatCompletionService = new ChatCompletionService(config.getLlmProviderClient(), llmProviderFactory,
                 new ParamResolver(llmProviderFactory, registryService));

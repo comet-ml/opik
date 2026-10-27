@@ -1,11 +1,13 @@
 import React from "react";
-import { act, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useDashboardStore } from "@/store/DashboardStore";
 import useDashboardWidgetQuery from "@/api/dashboards/useDashboardWidgetQuery";
 import { DashboardWidget as DashboardWidgetType } from "@/types/dashboard";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 import OllieChartWidget from "./OllieChartWidget";
+
+const MINUTE = 60_000;
 
 vi.mock("@/api/dashboards/useDashboardWidgetQuery");
 vi.mock("@/lib/analytics/tracking", async (importOriginal) => ({
@@ -35,6 +37,8 @@ vi.mock("@/shared/Dashboard/DashboardWidget/DashboardWidget", () => {
 });
 
 const queryMock = vi.mocked(useDashboardWidgetQuery);
+// Each render runs the value's query, then the KPI comparison's.
+const valueCall = () => queryMock.mock.calls.at(-2)!;
 
 const ollieWidget = (id: string): DashboardWidgetType =>
   ({
@@ -75,7 +79,7 @@ describe("OllieChartWidget preview", () => {
     setStore(ollieWidget("w-1"));
     render(<OllieChartWidget preview />);
 
-    const [params, options] = queryMock.mock.calls.at(-1)!;
+    const [params, options] = valueCall();
     expect(params.widgetId).toBe("w-1");
     expect(options?.enabled).toBe(true);
     expect(screen.getByText("1 rows")).toBeTruthy();
@@ -85,7 +89,7 @@ describe("OllieChartWidget preview", () => {
     setStore(ollieWidget("preview"));
     render(<OllieChartWidget preview />);
 
-    expect(queryMock.mock.calls.at(-1)![1]?.enabled).toBe(false);
+    expect(valueCall()[1]?.enabled).toBe(false);
     expect(screen.getByText("No data")).toBeTruthy();
   });
 });
@@ -187,6 +191,195 @@ describe("OllieChartWidget saved widget", () => {
   ])("retries a 404 only when %s", (_, savedWidgetIds, retryNotFound) => {
     renderSaved(savedWidgetIds);
 
-    expect(queryMock.mock.calls.at(-1)![1]?.retryNotFound).toBe(retryNotFound);
+    expect(valueCall()[1]?.retryNotFound).toBe(retryNotFound);
+  });
+});
+
+describe("OllieChartWidget KPI comparison", () => {
+  // When the value was fetched: an open-ended range, and so its comparison window, runs to it.
+  const fetchedAt = Date.now();
+
+  beforeEach(() => {
+    queryMock.mockReset();
+    queryMock.mockReturnValue({
+      data: [{ value: 5 }],
+      isPending: false,
+      isFetching: false,
+      error: null,
+      refetch: vi.fn(),
+      dataUpdatedAt: fetchedAt,
+    } as never);
+  });
+
+  it("compares a preset range, which has no end, with the window just before it", () => {
+    const kpiWidget = {
+      ...ollieWidget("w-1"),
+      config: {
+        spec: {
+          kpi: {
+            value: "value",
+            format: "cost_total",
+            aggregate: "sum",
+            window_days: 30,
+          },
+        },
+        query: { id: "q-1" },
+      },
+    } as unknown as DashboardWidgetType;
+    setStore(kpiWidget);
+    render(<OllieChartWidget preview />);
+
+    const [current, currentOptions] = valueCall();
+    const [previous, previousOptions] = queryMock.mock.calls.at(-1)!;
+    // The comparison waits out an unsaved widget's 404 like the value does.
+    expect(previousOptions?.retryNotFound).toBe(currentOptions?.retryNotFound);
+    // The dashboard's default range is a preset: it runs to now.
+    expect(current.intervalEnd).toBeUndefined();
+    expect(previousOptions?.enabled).toBe(true);
+    expect(previous.intervalEnd).toBe(current.intervalStart);
+    // As long as the current window, which runs from its start to the minute the value was fetched.
+    const previousLength =
+      new Date(previous.intervalEnd!).getTime() -
+      new Date(previous.intervalStart!).getTime();
+    const currentLength =
+      Math.floor(fetchedAt / MINUTE) * MINUTE -
+      new Date(current.intervalStart!).getTime();
+    expect(previousLength).toBe(currentLength);
+    // A past window's rows don't change: the comparison never refetches on its own.
+    expect(previousOptions?.staleTime).toBe(Infinity);
+    expect(previousOptions?.refetchOnWindowFocus).toBe(false);
+    expect(screen.getByText(/previous 30 days/)).toBeTruthy();
+  });
+
+  it("keeps the comparison window for a refetch within the same minute", () => {
+    const kpiWidget = {
+      ...ollieWidget("w-1"),
+      config: {
+        spec: {
+          kpi: {
+            value: "value",
+            format: "cost_total",
+            aggregate: "sum",
+            window_days: 30,
+          },
+        },
+        query: { id: "q-1" },
+      },
+    } as unknown as DashboardWidgetType;
+    setStore(kpiWidget);
+    const minuteStart = Math.floor(fetchedAt / MINUTE) * MINUTE;
+    const windowAt = (updatedAt: number) => {
+      queryMock.mockReturnValue({
+        data: [{ value: 5 }],
+        isPending: false,
+        isFetching: false,
+        error: null,
+        refetch: vi.fn(),
+        dataUpdatedAt: updatedAt,
+      } as never);
+      cleanup();
+      render(<OllieChartWidget preview />);
+      return queryMock.mock.calls.at(-1)![0];
+    };
+
+    const first = windowAt(minuteStart + 1_000);
+    expect(windowAt(minuteStart + 59_000)).toEqual(first);
+    expect(windowAt(minuteStart + MINUTE).intervalStart).not.toBe(
+      first.intervalStart,
+    );
+  });
+
+  it("reads the past 24 hours in hours", () => {
+    const kpiWidget = {
+      ...ollieWidget("w-1"),
+      config: {
+        spec: {
+          kpi: {
+            value: "value",
+            format: "cost_total",
+            aggregate: "sum",
+            window_days: 1,
+          },
+        },
+        query: { id: "q-1" },
+      },
+    } as unknown as DashboardWidgetType;
+    setStore(kpiWidget);
+    useDashboardStore.setState({
+      runtimeConfig: {
+        dashboardId: "dash-1",
+        dateRange: "past24hours",
+      } as never,
+    });
+    render(<OllieChartWidget preview />);
+
+    expect(screen.getByText(/previous 24 hours/)).toBeTruthy();
+  });
+
+  it("shows no change when the comparison query failed, rather than one on older rows", () => {
+    const kpiWidget = {
+      ...ollieWidget("w-1"),
+      config: {
+        spec: {
+          kpi: {
+            value: "value",
+            format: "cost_total",
+            aggregate: "sum",
+            window_days: 30,
+          },
+        },
+        query: { id: "q-1" },
+      },
+    } as unknown as DashboardWidgetType;
+    setStore(kpiWidget);
+    // The comparison query ends where the dashboard's range starts; the value's query, on a preset, has no end.
+    queryMock.mockImplementation(
+      (params) =>
+        ({
+          data: [{ value: params.intervalEnd ? 2 : 5 }],
+          isPending: false,
+          isFetching: false,
+          error: params.intervalEnd ? new Error("failed") : null,
+          refetch: vi.fn(),
+          dataUpdatedAt: fetchedAt,
+        }) as never,
+    );
+    render(<OllieChartWidget preview />);
+
+    expect(screen.getByText("$5")).toBeTruthy();
+    expect(screen.queryByText(/vs previous/)).toBeNull();
+  });
+
+  it("shows no change while the comparison is still settling", () => {
+    const kpiWidget = {
+      ...ollieWidget("w-1"),
+      config: {
+        spec: {
+          kpi: {
+            value: "value",
+            format: "cost_total",
+            aggregate: "sum",
+            window_days: 30,
+          },
+        },
+        query: { id: "q-1" },
+      },
+    } as unknown as DashboardWidgetType;
+    setStore(kpiWidget);
+    queryMock.mockImplementation(
+      (params) =>
+        ({
+          data: [{ value: params.intervalEnd ? 2 : 5 }],
+          isPending: false,
+          isFetching: Boolean(params.intervalEnd),
+          error: null,
+          refetch: vi.fn(),
+          dataUpdatedAt: fetchedAt,
+        }) as never,
+    );
+    render(<OllieChartWidget preview />);
+
+    expect(screen.getByText("$5")).toBeTruthy();
+    expect(screen.queryByText(/vs previous/)).toBeNull();
   });
 });

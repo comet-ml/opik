@@ -5,12 +5,7 @@ import last from "lodash/last";
 import omitBy from "lodash/omitBy";
 import { PlaygroundPromptType } from "@/types/playground";
 import { generateRandomString } from "@/lib/utils";
-import {
-  getEffortLevels,
-  getModelParams,
-  isAccepted,
-  resolveEffortLevel,
-} from "@/lib/modelParams";
+import { getEffortLevels, getModelParams, isAccepted } from "@/lib/modelParams";
 import {
   DEFAULT_ANTHROPIC_CONFIGS,
   DEFAULT_GEMINI_CONFIGS,
@@ -25,12 +20,12 @@ import {
   getDefaultThinkingLevel,
   getOpenRouterDefaultMaxTokens,
   isClaudeModel,
+  resolveOpenAIEffort,
   supportsAnthropicThinkingEffort,
   supportsGeminiThinkingLevel,
   supportsOpenAIReasoningEffort,
   supportsSamplingParams,
   supportsVertexAIThinkingLevel,
-  toOpenAIReasoningEffort,
 } from "@/lib/modelUtils";
 import {
   LLMAnthropicConfigsType,
@@ -154,9 +149,7 @@ export const getDefaultConfigByProvider = (
     if (params) {
       config.maxCompletionTokens =
         params.max_output_tokens?.default ?? config.maxCompletionTokens;
-      const effort = toOpenAIReasoningEffort(
-        resolveEffortLevel(params.effort, []),
-      );
+      const effort = resolveOpenAIEffort(params, undefined);
       if (effort) {
         config.reasoningEffort = effort;
       }

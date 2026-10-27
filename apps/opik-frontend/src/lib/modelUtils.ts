@@ -29,7 +29,6 @@ import {
 import isPlainObject from "lodash/isPlainObject";
 import isEmpty from "lodash/isEmpty";
 import omit from "lodash/omit";
-import sortBy from "lodash/sortBy";
 import {
   getLatestListedModelParams,
   getLatestModelFlags,
@@ -39,11 +38,13 @@ import {
   adjustConfigForModel,
   getEffortLevels,
   getModelParams,
+  getNearestOfferedLevel,
   isAccepted,
   OPENAI_PARAM_BINDING,
   resolveEffortLevel,
   resolveMaxOutputTokens,
   resolveSampling,
+  SamplingValues,
   toParamsRoute,
 } from "@/lib/modelParams";
 import { ModelParams } from "@/types/modelParams";
@@ -791,11 +792,23 @@ const getOpenAIListedParams = (
   return (route ? params?.routes?.[route] : undefined) ?? params;
 };
 
-const getOpenAIEffortLevels = (params: ModelParams): OpenAIReasoningEffort[] =>
-  getEffortLevels(params.effort).flatMap((level) => {
+// A level the sync adds before this frontend has a name for it is left out everywhere: the request
+// cannot send it, so the panel must not offer or show it either.
+export const getOpenAIEffortLevels = (
+  params?: ModelParams,
+): OpenAIReasoningEffort[] =>
+  getEffortLevels(params?.effort).flatMap((level) => {
     const effort = toOpenAIReasoningEffort(level);
     return effort ? [effort] : [];
   });
+
+export const resolveOpenAIEffort = (
+  params: ModelParams,
+  stored: unknown,
+): OpenAIReasoningEffort | undefined =>
+  toOpenAIReasoningEffort(
+    resolveEffortLevel(params.effort, [stored], getOpenAIEffortLevels(params)),
+  );
 
 export const supportsOpenAIReasoningEffort = (
   model?: PROVIDER_MODEL_TYPE | "",
@@ -837,48 +850,6 @@ export const getOpenAIReasoningEffortOptions = (
     ...(capabilities?.reasoningEffortOptions ?? []),
     ...responsesApiOnly,
   ].map((value) => ({ label: OPENAI_EFFORT_LABELS[value], value }));
-};
-
-// From least to most thinking. "none" and "off" switch thinking off rather than
-// being its smallest amount, so a level that thinks never lands on them:
-// Minimal on a model offering None and Low becomes Low. "auto" has no rank, it
-// leaves the amount to the model.
-const THINKING_AMOUNT_RANK: ReadonlyMap<string, number> = new Map([
-  ["none", 0],
-  ["off", 0],
-  ["minimal", 1],
-  ["low", 2],
-  ["medium", 3],
-  ["high", 4],
-  ["xhigh", 5],
-  ["max", 6],
-]);
-
-// Where a level picked on the previous model lands on a model that does not
-// offer it: the nearest offered level, a tie going to the lower, cheaper one. A
-// level the previous model did not offer either was never on screen (a Max on a
-// Chat Completions key shows as the model's default), so it gets none and falls
-// to the default.
-const getNearestOfferedLevel = <L extends string>(
-  level: L | undefined,
-  options: Array<{ value: L }>,
-  previousOptions: Array<{ value: L }>,
-): L | undefined => {
-  const rank =
-    level === undefined ? undefined : THINKING_AMOUNT_RANK.get(level);
-  if (rank === undefined || !previousOptions.some((o) => o.value === level)) {
-    return undefined;
-  }
-  const ranked = options.flatMap(({ value }) => {
-    const valueRank = THINKING_AMOUNT_RANK.get(value);
-    return valueRank === undefined || (valueRank === 0 && rank > 0)
-      ? []
-      : [{ value, valueRank }];
-  });
-  return sortBy(ranked, [
-    ({ valueRank }) => Math.abs(valueRank - rank),
-    ({ valueRank }) => valueRank,
-  ])[0]?.value;
 };
 
 // Single reconciler called by every model-change handler (playground, judge
@@ -932,6 +903,7 @@ export const updateProviderConfig = <
               toParamsRoute(params.openAiPipelineMode ?? "responses_api"),
             )
           : undefined,
+        getOpenAIEffortLevels,
       );
     }
 
@@ -1353,8 +1325,9 @@ export const resolveEffort = (
   if (provider === PROVIDER_TYPE.OPEN_AI) {
     const params = getOpenAIListedParams(model, openAiPipelineMode);
     if (params) {
-      const reasoningEffort = toOpenAIReasoningEffort(
-        resolveEffortLevel(params.effort, [configs.reasoningEffort]),
+      const reasoningEffort = resolveOpenAIEffort(
+        params,
+        configs.reasoningEffort,
       );
       return reasoningEffort ? { reasoningEffort } : {};
     }
@@ -1516,13 +1489,13 @@ export const resolveOpenRouterMaxTokens = (
 ): number | undefined =>
   value ? Math.min(value, getOpenRouterMaxTokensLimit(model)) : value;
 
-// Today's wire shape from the catalog: temperature or top_p (or neither), max_completion_tokens, and the
-// effort under custom_parameters.output_config. Sending catalog names and letting the backend write the
-// shape is a later step.
-export const writeAnthropicRequest = (
-  model: PROVIDER_MODEL_TYPE | "",
+// What both writers share. Anthropic requires max_tokens, so its request always carries one; OpenAI's
+// is optional and its panel only shows a stored number, so only a stored one is sent.
+const writeCatalogRequest = (
   configs: Record<string, unknown>,
   params: ModelParams,
+  sampling: SamplingValues,
+  requiredMaxTokens?: number,
 ): Record<string, unknown> => {
   const sanitized: Record<string, unknown> = omit(configs, [
     "temperature",
@@ -1531,9 +1504,6 @@ export const writeAnthropicRequest = (
     "thinkingEffort",
   ]);
 
-  const sampling = isAnthropicThinkingRequested(model, configs as EffortParams)
-    ? {}
-    : resolveSampling(params, configs as SamplingParams);
   if (sampling.temperature !== undefined) {
     sanitized.temperature = sampling.temperature;
   }
@@ -1541,15 +1511,44 @@ export const writeAnthropicRequest = (
     sanitized.topP = sampling.topP;
   }
 
-  const maxCompletionTokens = resolveMaxOutputTokens(
-    params.max_output_tokens,
-    configs.maxCompletionTokens as number | null | undefined,
-  );
-  if (maxCompletionTokens === undefined) {
-    delete sanitized.maxCompletionTokens;
-  } else {
-    sanitized.maxCompletionTokens = maxCompletionTokens;
+  const storedMaxTokens =
+    typeof configs.maxCompletionTokens === "number"
+      ? configs.maxCompletionTokens
+      : undefined;
+  if (storedMaxTokens !== undefined || requiredMaxTokens !== undefined) {
+    const maxCompletionTokens =
+      resolveMaxOutputTokens(params.max_output_tokens, storedMaxTokens) ??
+      requiredMaxTokens;
+    if (maxCompletionTokens === undefined) {
+      delete sanitized.maxCompletionTokens;
+    } else {
+      sanitized.maxCompletionTokens = maxCompletionTokens;
+    }
   }
+
+  if (sanitized.thinkingLevel != null) {
+    delete sanitized.thinkingLevel;
+  }
+
+  return sanitized;
+};
+
+// Today's wire shape from the catalog: temperature or top_p (or neither), max_completion_tokens, and the
+// effort under custom_parameters.output_config. Sending catalog names and letting the backend write the
+// shape is a later step.
+export const writeAnthropicRequest = (
+  model: PROVIDER_MODEL_TYPE | "",
+  configs: Record<string, unknown>,
+  params: ModelParams,
+): Record<string, unknown> => {
+  const sanitized = writeCatalogRequest(
+    configs,
+    params,
+    isAnthropicThinkingRequested(model, configs as EffortParams)
+      ? {}
+      : resolveSampling(params, configs as SamplingParams),
+    DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS,
+  );
 
   const effort = resolveEffort(model, configs as EffortParams).thinkingEffort;
   const customParameters = withThinkingEffort(
@@ -1562,10 +1561,6 @@ export const writeAnthropicRequest = (
     delete sanitized.custom_parameters;
   }
 
-  if (sanitized.thinkingLevel != null) {
-    delete sanitized.thinkingLevel;
-  }
-
   return sanitized;
 };
 
@@ -1573,20 +1568,11 @@ export const writeOpenAIRequest = (
   configs: Record<string, unknown>,
   params: ModelParams,
 ): Record<string, unknown> => {
-  const sanitized: Record<string, unknown> = omit(configs, [
-    "temperature",
-    "topP",
-    "reasoningEffort",
-    "thinkingEffort",
-  ]);
-
-  const sampling = resolveSampling(params, configs as SamplingParams);
-  if (sampling.temperature !== undefined) {
-    sanitized.temperature = sampling.temperature;
-  }
-  if (sampling.topP !== undefined) {
-    sanitized.topP = sampling.topP;
-  }
+  const sanitized = writeCatalogRequest(
+    configs,
+    params,
+    resolveSampling(params, configs as SamplingParams),
+  );
 
   if (!isAccepted(params.frequency_penalty)) {
     delete sanitized.frequencyPenalty;
@@ -1595,27 +1581,9 @@ export const writeOpenAIRequest = (
     delete sanitized.presencePenalty;
   }
 
-  if (typeof configs.maxCompletionTokens === "number") {
-    const maxCompletionTokens = resolveMaxOutputTokens(
-      params.max_output_tokens,
-      configs.maxCompletionTokens,
-    );
-    if (maxCompletionTokens === undefined) {
-      delete sanitized.maxCompletionTokens;
-    } else {
-      sanitized.maxCompletionTokens = maxCompletionTokens;
-    }
-  }
-
-  const reasoningEffort = toOpenAIReasoningEffort(
-    resolveEffortLevel(params.effort, [configs.reasoningEffort]),
-  );
+  const reasoningEffort = resolveOpenAIEffort(params, configs.reasoningEffort);
   if (reasoningEffort) {
     sanitized.reasoningEffort = reasoningEffort;
-  }
-
-  if (sanitized.thinkingLevel != null) {
-    delete sanitized.thinkingLevel;
   }
 
   return sanitized;
@@ -1777,7 +1745,7 @@ export const sanitizeConfigForRequest = (
   const panelProvider = promptProvider
     ? parseComposedProviderType(promptProvider as COMPOSED_PROVIDER_TYPE)
     : undefined;
-  const profileTokens =
+  const profile =
     (panelProvider === PROVIDER_TYPE.OPEN_AI ||
       panelProvider === PROVIDER_TYPE.ANTHROPIC) &&
     !getLatestListedModelParams(panelProvider, model)
@@ -1787,13 +1755,29 @@ export const sanitizeConfigForRequest = (
           panelProvider === PROVIDER_TYPE.OPEN_AI
             ? toParamsRoute(openAiPipelineMode)
             : undefined,
-        )?.max_output_tokens
+        )
       : undefined;
-  if (profileTokens && typeof sanitized.maxCompletionTokens === "number") {
+  if (
+    profile?.max_output_tokens &&
+    typeof sanitized.maxCompletionTokens === "number"
+  ) {
     sanitized.maxCompletionTokens = resolveMaxOutputTokens(
-      profileTokens,
+      profile.max_output_tokens,
       sanitized.maxCompletionTokens,
     );
+  }
+  // Only ever removes: a value the profile's panel hides is left out (Anthropic's hides all sampling),
+  // and nothing the rules above dropped comes back.
+  if (profile) {
+    const profileSampling = resolveSampling(
+      profile,
+      sanitized as SamplingParams,
+    );
+    for (const key of ["temperature", "topP"] as const) {
+      if (profileSampling[key] === undefined) {
+        delete sanitized[key];
+      }
+    }
   }
 
   // getProviderFromModel answers OpenAI for any model the registry does not list, a custom gateway's

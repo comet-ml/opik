@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   adjustConfigForModel,
   getModelParams,
-  getNearestEffortLevel,
+  getNearestOfferedLevel,
   getParamControls,
   ParamBinding,
   resolveEffortLevel,
@@ -124,7 +124,9 @@ describe("resolveEffortLevel", () => {
   });
 });
 
-describe("getNearestEffortLevel", () => {
+describe("getNearestOfferedLevel", () => {
+  const options = (levels: string[]) => levels.map((value) => ({ value }));
+
   it.each<[string, string[], string | undefined]>([
     ["xhigh", ["low", "medium", "high", "max"], "high"],
     ["max", ["low", "medium", "high"], "high"],
@@ -132,10 +134,23 @@ describe("getNearestEffortLevel", () => {
     ["none", ["high", "low"], "low"],
     ["minimal", ["none", "low", "medium", "high"], "low"],
     ["none", ["none", "low", "medium"], "none"],
+    ["none", ["off", "low"], "off"],
     ["low", ["none"], undefined],
     ["adaptive", ["low", "high"], undefined],
   ])("moves %s to the nearest of %j", (level, levels, expected) => {
-    expect(getNearestEffortLevel(levels, level)).toBe(expected);
+    expect(
+      getNearestOfferedLevel(level, options(levels), options([level])),
+    ).toBe(expected);
+  });
+
+  it("answers nothing for a level the previous model did not offer either", () => {
+    expect(
+      getNearestOfferedLevel(
+        "xhigh",
+        options(["low", "high"]),
+        options(["low", "medium"]),
+      ),
+    ).toBeUndefined();
   });
 });
 
@@ -310,14 +325,70 @@ describe("adjustConfigForModel", () => {
     expect(adjustConfigForModel(config, SAMPLING_MODEL, BINDING)).toBe(config);
   });
 
-  it("moves an effort the next model does not offer to the nearest level", () => {
+  describe("an effort the next model does not offer", () => {
+    const LOW_DEFAULT_MODEL: ModelParams = {
+      ...SAMPLING_MODEL,
+      effort: {
+        accepted: true,
+        levels: ["low", "medium", "high"],
+        default: "low",
+      },
+    };
+
+    it("moves to the nearest level when the previous model offered it", () => {
+      expect(
+        adjustConfigForModel(
+          { thinkingEffort: "xhigh" },
+          LOW_DEFAULT_MODEL,
+          BINDING,
+          NO_SAMPLING_MODEL,
+        ),
+      ).toEqual({ thinkingEffort: "high" });
+    });
+
+    it("moves to the default without a previous model, as a loaded config is normalised", () => {
+      expect(
+        adjustConfigForModel(
+          { thinkingEffort: "xhigh" },
+          LOW_DEFAULT_MODEL,
+          BINDING,
+        ),
+      ).toEqual({ thinkingEffort: "low" });
+    });
+
+    it("moves to the default when the previous model did not offer it either", () => {
+      expect(
+        adjustConfigForModel(
+          { thinkingEffort: "xhigh" },
+          LOW_DEFAULT_MODEL,
+          BINDING,
+          SAMPLING_MODEL,
+        ),
+      ).toEqual({ thinkingEffort: "low" });
+    });
+  });
+
+  it("never settles on a level getLevels leaves out", () => {
+    const withUnknownLevel: ModelParams = {
+      ...SAMPLING_MODEL,
+      effort: {
+        accepted: true,
+        levels: ["low", "medium", "ultra"],
+        default: "ultra",
+      },
+    };
+    const knownLevels = (params?: ModelParams) =>
+      (params?.effort?.levels ?? []).filter((level) => level !== "ultra");
+
     expect(
       adjustConfigForModel(
-        { thinkingEffort: "xhigh" },
-        SAMPLING_MODEL,
+        { thinkingEffort: "ultra" },
+        withUnknownLevel,
         BINDING,
+        undefined,
+        knownLevels,
       ),
-    ).toEqual({ thinkingEffort: "high" });
+    ).toEqual({ thinkingEffort: "low" });
   });
 
   it("uses the default for an effort that is not a level at all", () => {

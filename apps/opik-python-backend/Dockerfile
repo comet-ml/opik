@@ -1,8 +1,8 @@
-# syntax=docker/dockerfile:1
+# syntax=docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
 #######################################################################
 # Multi-stage build: Build stage
 #######################################################################
-FROM docker:29.8.1 AS builder
+FROM docker:29.9.2@sha256:9e79b879b177fbd72c34376a3dd3d91747da5db49e1f560f76aea59561471977 AS builder
 
 # Alpine base ships /bin/ash, not bash; ash honors -o pipefail for the RUN
 # below whose pipe into xargs would otherwise mask a failing find.
@@ -14,7 +14,7 @@ RUN apk add --no-cache python3 py3-pip build-base python3-dev musl-dev gcc libff
 
 # uv is a drop-in faster pip; the binary is copied from the official distroless
 # image (pinned) and used only in this builder stage — it never reaches runtime.
-COPY --from=ghcr.io/astral-sh/uv:0.11.29 /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.13.5@sha256:32a7bb39b496babbd997b0a39a4d66c126bdaf5661b302bf6f06abda8deca6ff /uv /usr/local/bin/uv
 
 WORKDIR /opt/opik-python-backend
 
@@ -44,13 +44,11 @@ RUN set -eux; \
 #######################################################################
 # Multi-stage build: Runtime stage
 #######################################################################
-FROM docker:29.8.1
+FROM docker:29.9.2@sha256:9e79b879b177fbd72c34376a3dd3d91747da5db49e1f560f76aea59561471977
 
-# libexpat --upgrade mitigates CVEs; tini (PID 1 reaper) + python3 are the
-# runtime-only OS deps.
+# tini (PID 1 reaper) + python3 are the runtime-only OS deps.
 # hadolint ignore=DL3018
-RUN apk add --no-cache --upgrade libexpat && \
-    apk add --no-cache tini python3
+RUN apk add --no-cache tini python3
 
 WORKDIR /opt/opik-python-backend
 

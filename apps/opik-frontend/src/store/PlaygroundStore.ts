@@ -27,7 +27,6 @@ interface PlaygroundOutput {
   stale: boolean;
   staleChanges?: PlaygroundRunInputChange[];
   traceId?: string;
-  selectedRuleIds?: string[] | null;
   usage?: {
     duration?: number;
     totalTokens?: number;

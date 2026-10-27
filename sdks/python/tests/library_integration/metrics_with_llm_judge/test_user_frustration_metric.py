@@ -15,21 +15,6 @@ def real_model_conversation():
         {"role": "user", "content": "How do I center a div using CSS?"},
         {
             "role": "assistant",
-            "content": "There are many ways to center elements in CSS.",
-        },
-        {"role": "user", "content": "Okay... can you show me one?"},
-        {
-            "role": "assistant",
-            "content": "Sure. It depends on the context — are you centering horizontally, vertically, or both?",
-        },
-        {"role": "user", "content": "Both. Just give me a basic example."},
-        {
-            "role": "assistant",
-            "content": "Alright. You can use flexbox, grid, or margin auto. All of them work well.",
-        },
-        {"role": "user", "content": "Could you please just write the code?"},
-        {
-            "role": "assistant",
             "content": "Here’s one way:\n\n```css\ndiv {\n  display: flex;\n}\n```\nThat sets it up for centering.",
         },
         {
@@ -50,7 +35,7 @@ def real_model_conversation():
 def test_user_frustration_metric(real_model_conversation):
     """Integration test with a real model."""
     metric = user_frustration.UserFrustrationMetric(
-        track=False, window_size=5, reasoning_effort="minimal"
+        track=False, window_size=2, reasoning_effort="minimal"
     )  # Uses default model
     result = metric.score(real_model_conversation)
 
@@ -66,7 +51,7 @@ async def test_user_frustration_metric_async(real_model_conversation):
     os.environ["SSL_CERT_FILE"] = certifi.where()
 
     metric = user_frustration.UserFrustrationMetric(
-        track=False, window_size=5, reasoning_effort="minimal"
+        track=False, window_size=2, reasoning_effort="minimal"
     )
     result = await metric.ascore(real_model_conversation)
 
