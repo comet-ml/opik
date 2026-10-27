@@ -212,7 +212,7 @@ class ParameterOptimizer(BaseOptimizer):
         n_samples_minibatch: int | None = None,
         n_samples_strategy: str | None = None,
         agent: OptimizableAgent | None = None,
-        project_name: str = "Optimization",
+        project_name: str | None = None,
         sampler: optuna.samplers.BaseSampler | None = None,
         callbacks: list[Callable[[optuna.study.Study, optuna.trial.FrozenTrial], None]]
         | None = None,
@@ -263,7 +263,7 @@ class ParameterOptimizer(BaseOptimizer):
             n_samples_minibatch: Optional number of samples for inner-loop minibatches
             n_samples_strategy: Sampling strategy name (default "random_sorted")
             agent: Optional custom agent instance to execute evaluations
-            project_name: Opik project name for logging traces (default: "Optimization")
+            project_name: Opik project name for logging traces (defaults to the dataset's project, then OPIK_PROJECT_NAME or "Optimization")
             sampler: Optuna sampler to use (default: TPESampler with seed)
             callbacks: List of callback functions for Optuna study
             timeout: Maximum time in seconds for each search phase (global, then local).

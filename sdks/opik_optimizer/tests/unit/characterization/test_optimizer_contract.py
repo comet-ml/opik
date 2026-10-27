@@ -283,3 +283,25 @@ def test_prompt_media_survives_optimization(
     result = harness.run_optimizer(optimizer_name, scenario)
 
     assert media and task_media(result.prompt) == media
+
+
+@pytest.mark.parametrize("optimizer_name", harness.OPTIMIZERS)
+def test_runs_in_the_dataset_project_without_warning_by_default(
+    optimizer_name: str, install_fakes: Any, caplog: pytest.LogCaptureFixture
+) -> None:
+    scenario = harness.build_scenario("S1_single")
+    install_fakes(scenario)
+    dataset = harness.make_dataset(scenario)
+    dataset.project_name = "dataset-project"
+    optimizer = harness.make_optimizer(optimizer_name)
+
+    harness.run_optimizer(
+        optimizer_name,
+        scenario,
+        optimizer=optimizer,
+        dataset=dataset,
+        project_name=None,
+    )
+
+    assert optimizer.project_name == "dataset-project"
+    assert "is ignored" not in caplog.text

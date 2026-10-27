@@ -345,6 +345,8 @@ def run_optimizer(
     optimizer = optimizer or make_optimizer(name)
     kwargs.setdefault("max_trials", MAX_TRIALS[name])
     kwargs.setdefault("project_name", "characterization")
+    if kwargs["project_name"] is None:
+        del kwargs["project_name"]  # exercise each entrypoint's own default
     common = dict(
         prompt=scenario.prompt,
         dataset=kwargs.pop("dataset", None) or make_dataset(scenario),
