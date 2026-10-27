@@ -8,7 +8,7 @@ import uuid
 import sys
 import multiprocessing
 from queue import Queue, Empty
-from threading import Event, Thread
+from threading import Event, Lock, Thread
 from typing import Optional
 
 
@@ -30,6 +30,19 @@ logger = logging.getLogger(__name__)
 # A forked worker inherits the parent's already-imported modules. Linux only: macOS
 # system frameworks are not fork-safe, which is why "spawn" stays its default.
 _mp_context = multiprocessing.get_context("fork" if sys.platform == "linux" else None)
+
+# filelock refuses os.fork while another thread is mid-fork, and the pool pre-warms its
+# workers from several threads at once, so forks are serialised.
+_fork_lock = Lock()
+
+PROCESS_NETWORK_ISOLATION_ENV_VAR = "PYTHON_CODE_EXECUTOR_PROCESS_NETWORK_ISOLATION"
+
+_isolation_failure_lock = Lock()
+_isolation_failure_logged = False
+
+
+class _IsolationUnavailable(Exception):
+    pass
 
 # OTel metrics setup (assuming this is standard and correct)
 meter = metrics.get_meter("process_executor")
@@ -89,6 +102,62 @@ def terminate_worker(worker):
     logger.info(f"Termination sequence for worker {worker_id} complete.")
 
 
+def isolation_enabled() -> bool:
+    """Opt-in, so installs that run python-backend as non-root keep working unchanged."""
+    return os.getenv(PROCESS_NETWORK_ISOLATION_ENV_VAR, "false").lower() == "true"
+
+
+def _start(process: multiprocessing.Process) -> None:
+    with _fork_lock:
+        process.start()
+
+
+def _log_isolation_failure(reason: str) -> None:
+    """Every worker fails the same way, so the cause is logged once instead of per worker."""
+    global _isolation_failure_logged
+    with _isolation_failure_lock:
+        if _isolation_failure_logged:
+            return
+        _isolation_failure_logged = True
+    logger.error(
+        f"{PROCESS_NETWORK_ISOLATION_ENV_VAR}=true but process workers cannot be isolated ({reason}). "
+        f"It needs Linux, with python-backend running as root (CAP_SETUID and CAP_SETGID, granted by default). "
+        f"No process worker will start until then."
+    )
+
+
+def run_user_code_in_isolated_worker(code: str, data: dict, payload_type: Optional[str] = None) -> dict:
+    """Run user code once in a new isolated worker.
+
+    For callers without a worker pool: Optimization Studio runs code metrics inside its
+    job subprocess, which needs the network itself and so cannot be isolated as a whole.
+    No timeout here, as before: the job supervisor bounds the run, and an isolated
+    worker is killed when the thread that started it exits.
+    """
+    parent_conn, child_conn = _mp_context.Pipe()
+    process = _mp_context.Process(target=process_worker.worker_process_main, args=(child_conn, True))
+    _start(process)
+    # Only the worker holds its end now, so a worker that dies surfaces as EOFError.
+    child_conn.close()
+    try:
+        ready = parent_conn.recv()
+        if ready != "READY":
+            if process_worker.ISOLATION_ERROR_KEY in ready:
+                _log_isolation_failure(ready[process_worker.ISOLATION_ERROR_KEY])
+            return ready
+        parent_conn.send({'code': code, 'data': data, 'payload_type': payload_type})
+        return parent_conn.recv()
+    except EOFError:
+        return {"code": 500, "error": "Isolated worker exited before returning a result"}
+    finally:
+        # Closing the pipe ends the worker's command loop.
+        parent_conn.close()
+        process.join(timeout=1)
+        if process.is_alive():
+            process.kill()
+            process.join()
+
+
 class ProcessExecutor(CodeExecutorBase):
     def __init__(self):
         super().__init__()
@@ -96,6 +165,7 @@ class ProcessExecutor(CodeExecutorBase):
         self.releaser_executor = None
         self.stop_event = Event()
         self.pool_check_interval = int(os.getenv("PYTHON_CODE_EXECUTOR_POOL_CHECK_INTERVAL_IN_SECONDS", "3"))
+        self.isolate = isolation_enabled()
 
         self.scheduler_thread = None
 
@@ -111,7 +181,7 @@ class ProcessExecutor(CodeExecutorBase):
         self.scheduler_thread = Thread(target=self._pool_monitor_loop, daemon=True)
         self.scheduler_thread.start()
 
-        logger.info(f"ProcessExecutor: Services started.")
+        logger.info(f"ProcessExecutor: Services started (network_isolated={self.isolate}).")
 
     def _handle_shutdown_signal(self, signum, frame):
         signal_name = signal.Signals(signum).name
@@ -227,12 +297,14 @@ class ProcessExecutor(CodeExecutorBase):
         parent_conn, child_conn = _mp_context.Pipe()
         process = None
         try:
-            process = _mp_context.Process(target=process_worker.worker_process_main, args=(child_conn,))
-            process.start()
+            process = _mp_context.Process(target=process_worker.worker_process_main, args=(child_conn, self.isolate))
+            _start(process)
 
             # Wait for READY signal from worker
             if parent_conn.poll(timeout=10):
                 ready_signal = parent_conn.recv()
+                if isinstance(ready_signal, dict) and process_worker.ISOLATION_ERROR_KEY in ready_signal:
+                    raise _IsolationUnavailable(ready_signal[process_worker.ISOLATION_ERROR_KEY])
                 if ready_signal != "READY":
                     raise Exception(f"Worker {worker_id} (PID: {process.pid}) sent unexpected signal: {ready_signal}")
             else:
@@ -245,8 +317,11 @@ class ProcessExecutor(CodeExecutorBase):
             process_creation_histogram.record(latency)
             logger.info(f"Created worker {worker_id} (PID: {process.pid}) in {latency:.3f}ms.")
         except Exception as e:
-            logger.error(
-                f"Failed to create worker process {worker_id} (PID: {process.pid if process and process.pid else 'N/A'}): {e}")
+            if isinstance(e, _IsolationUnavailable):
+                _log_isolation_failure(str(e))
+            else:
+                logger.error(
+                    f"Failed to create worker process {worker_id} (PID: {process.pid if process and process.pid else 'N/A'}): {e}")
             if process and process.is_alive():
                 process.terminate()
                 process.join(timeout=1)

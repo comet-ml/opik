@@ -287,8 +287,16 @@ def _run_code_metric(code: str, data: dict) -> dict:
         # Local/self-hosted (process strategy): Use run_user_code directly
         # This is the same core logic used by ProcessExecutor, but without creating
         # a worker pool (which would fail in the nested subprocess context)
+        from opik_backend.executor_process import (
+            isolation_enabled,
+            run_user_code_in_isolated_worker,
+        )
         from opik_backend.process_worker import run_user_code
 
+        # The job subprocess needs the network, so with process network isolation on the
+        # metric runs in a short-lived isolated worker instead.
+        if isolation_enabled():
+            return run_user_code_in_isolated_worker(code, data)
         return run_user_code(code, data)
 
 

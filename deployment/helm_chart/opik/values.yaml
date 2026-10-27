@@ -362,6 +362,11 @@ component:
       PYTHON_CODE_EXECUTOR_PARALLEL_NUM: "5"
       PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS: "3"
       PYTHON_CODE_EXECUTOR_ALLOW_NETWORK: "false"
+      # "true" runs each process-strategy worker as an unprivileged user with a minimal environment,
+      # under a seccomp filter that refuses new sockets and access to other processes. Needs
+      # python-backend running as root (CAP_SETUID/CAP_SETGID, default for root), no privileged mode;
+      # works under a RuntimeDefault seccomp profile. If it can't be applied no worker starts. Off by default.
+      PYTHON_CODE_EXECUTOR_PROCESS_NETWORK_ISOLATION: "false"
       PYTHON_CODE_EXECUTOR_CPU_SHARES: "512"
       PYTHON_CODE_EXECUTOR_MEM_LIMIT: "256m"
       # PYTHON_CODE_EXECUTOR_CPU_LIMIT: "0.5"  # Hard CPU limit per executor container (in CPUs, e.g. "0.5" = half a core). Unset by default — no hard limit.
