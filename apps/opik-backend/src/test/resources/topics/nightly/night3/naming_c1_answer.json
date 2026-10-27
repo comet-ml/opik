@@ -1,0 +1,13 @@
+{
+ "prompt_sha256": "fa4dc264ca57a41000ea06e14bc5aa44d26e5126be071e346571e5a43c156a5a",
+ "max_tokens": 2500,
+ "output": {
+  "topics": [
+   {
+    "cluster": 1,
+    "name": "Recipe Search",
+    "definition": "Users request specific food recipes for various dishes."
+   }
+  ]
+ }
+}

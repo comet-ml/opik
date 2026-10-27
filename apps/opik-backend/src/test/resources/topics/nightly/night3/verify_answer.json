@@ -1,0 +1,12 @@
+{
+ "prompt_sha256": "8894b01608455071d42bb8ec9c43eeea3ea275353abaefffac225a97d7909e46",
+ "max_tokens": 85,
+ "output": {
+  "answers": [
+   {
+    "pair": 0,
+    "same": false
+   }
+  ]
+ }
+}

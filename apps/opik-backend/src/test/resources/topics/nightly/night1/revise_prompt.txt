@@ -1,0 +1,77 @@
+You maintain the topic list of one AI application for its product owner. Topics must stay stable from day to day: a topic keeps its id and name as long as it exists. Today some clusters of user requests are not covered by the current topics; decide what to do with them.
+
+A request is a one-sentence summary of what the user wanted in one interaction. Shares are of all traffic in the last 30 days.
+
+CURRENT TOPICS (id, name, definition, share, example requests)
+  topic 1: Daily Briefing Reports — Generate daily summary reports for specific projects or workspaces.
+    share 39.9% (last 7 days 40.2%)
+    - Generate a daily briefing report for project Opik Demo Agent Observability
+    - Generate a daily briefing report for project Default Project.
+    - Generate a daily briefing report for project CRM Agent Observability.
+    - Generate a daily briefing report for project Mark jack.
+  topic 2: System Retries — Request a retry of the previous response or attempt.
+    share 9.7% (last 7 days 1.0%)
+    - Retry the previous response
+    - Retry the previous response attempt
+  topic 3: Trace and Span Analysis — Analyze traces, spans, and threads to identify errors, latency, and patterns.
+    share 9.0% (last 7 days 3.9%)
+    - Analyze project traces for errors, latency issues, and patterns
+    - Analyze project traces for errors, latency, and patterns
+    - Analyze trace, identify errors, and suggest improvements
+    - Analyze LLM spans and error spans for the project internal-ollie-assist-monitoring from the last 24 hours.
+  topic 4: Project Details Lookup — Read or retrieve specific details and information about a project.
+    share 8.6% (last 7 days 4.9%)
+    - Read the details of the Default Project.
+    - Read project details for charusat
+    - Read project details for Medicore
+    - Read project details for adriangelity-core
+  topic 5: Trace Debugging and Fixes — Debug agent traces, analyze errors, and suggest code fixes or improvements.
+    share 6.5% (last 7 days 4.9%)
+    - Debug the AI agent's trace output
+    - Analyze a model rate limit error trace
+    - Debug API billing error
+    - Explain the total estimated cost of an AI agent trace.
+  topic 6: Visualization and Charts — Generate charts, graphs, or visualizations to compare costs or show metrics.
+    share 3.9% (last 7 days 4.9%)
+    - Connect Ollie to the local environment
+    - Check if experiment results can be added to annotation queues
+    - Compare costs between two experiments in a bar chart.
+    - Compare experiment metrics across datasets and models in the ollie-charts-test project
+  topic 7: Capability and Resource Listing — List automation rules, capabilities, annotation queues, or other workspace resources.
+    share 3.9% (last 7 days 4.9%)
+    - List automation_rule_evaluators in the workspace
+    - Check for race conditions when multiple coworkers write prompts in parallel.
+    - Check the status of the Health-check automation rule
+    - Count spans and add workspace column to output table
+  topic 8: Opik Configuration and Setup — Add tracing, prompts, or feedback scores to codebases and learn Opik features.
+    share 4.2% (last 7 days 2.0%)
+    - Add Opik tracing to the agent's codebase.
+    - Add a new prompt to Opik and determine whether to use a text or chat prompt.
+    - Ask for next steps after reviewing traces
+    - Check if Opik can integrate with LangChain
+  topic 9: Trace Explanation — Explain trace durations, span breakdowns, or technical concepts to engineers.
+    share 2.3% (last 7 days 1.0%)
+    - Explain the trace duration and lack of span breakdown to an engineer.
+    - Explain a single span's duration to an engineer
+    - Explain capabilities for two projects in theoretical physics and software engineering.
+    - Explain the total estimated cost of a trace to an engineer.
+
+CANDIDATE CLUSTERS not covered by the current topics (id, share, example requests, most frequent first)
+  cluster 0: share 7.0% (last 7 days 29.4%), tightness 0.92
+    - are my tire's air pressure good enough to drive on
+    - are my tires full or low
+    - are my tires low
+    - how much air pressure is in my tires
+    - what is the air pressure in my tires
+
+For each candidate cluster choose exactly one:
+- "assign": it belongs to an existing topic (its requests fit that topic's definition).
+- "new": it is a distinct kind of user request that deserves its own topic; give a name (2-5 words, Title Case, specific) and a definition (one sentence, at most 25 words). Several candidate clusters may form one new topic.
+- "other": not a real user request (retries, greetings, empty, system events) or a mix with no dominant kind. A cluster with one dominant kind of real request and a share of 2% or more (overall or in the last 7 days) is never "other": assign it, or make it a new topic even if it is unrelated to the application's main purpose (users may start asking for something new).
+Rules:
+- The list may hold at most 10 topics in total, current plus new. If that would be exceeded, do not create the new topic; use "assign" or "other".
+- Create a new topic only when the cluster is clearly not covered by any current definition. Do not create near-duplicates of current topics.
+- Every candidate id appears exactly once across "assign", "new" and "other".
+
+Output JSON only, no prose:
+{"assign": [{"cluster": id, "topic": id}], "new": [{"name": "...", "definition": "...", "clusters": [ids]}], "other": [ids]}

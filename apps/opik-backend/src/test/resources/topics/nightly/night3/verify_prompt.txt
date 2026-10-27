@@ -1,0 +1,22 @@
+You check decisions in the topic list of an AI application. A request is a one-sentence summary of what a user wanted.
+Each PAIR below shows an existing TOPIC (name, definition, typical requests) and a NEW CLUSTER of requests that was proposed
+to be counted under that topic.
+
+For every pair answer: is the new cluster the same kind of request as the topic, so that the product owner would count these
+requests under this topic? Answer false if the cluster is about a different subject or a different goal, even when the
+wording looks similar. Judge each pair on its own.
+
+PAIR 0
+  TOPIC: Opik Configuration and Setup — Add tracing, prompts, or feedback scores to codebases and learn Opik features.
+  typical requests:
+    - Add Opik tracing to the agent's codebase.
+    - Explain what a trace is in Opik
+    - Add a new prompt to Opik and determine whether to use a text or chat prompt.
+  NEW CLUSTER (share 5.1%):
+    - Apply for high paying jobs on LinkedIn in Delhi NCR
+    - Check MCP connection capability
+    - Check current weather conditions and rain status at user's location
+    - Connect to the AI agent and start building the app
+    - Translate the message to Hungarian
+
+Output JSON only: {"answers": [{"pair": <number>, "same": true|false}, ...]} with every pair exactly once.
