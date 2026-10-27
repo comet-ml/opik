@@ -19,13 +19,22 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
 
+import java.io.UncheckedIOException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.regex.Pattern;
 
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class ExperimentMessageRenderer {
+
+    private static final List<String> MEDIA_URL_FIELDS = List.of("image_url", "video_url", "audio_url");
+
+    private static final Pattern SINGLE_VARIABLE = Pattern.compile(
+            "^\\s*(?:\\{\\{\\{\\s*([^{}]+?)\\s*}}}|\\{\\{\\s*&?\\s*([^{}#^/!>=&][^{}]*?)\\s*}})\\s*$");
 
     private final @NonNull MustacheParser mustacheParser;
     private final @NonNull LlmProviderFactory llmProviderFactory;
@@ -61,7 +70,7 @@ class ExperimentMessageRenderer {
                                 var renderedPart = ((ObjectNode) part.deepCopy()).put("text", rendered);
                                 renderedParts.add(renderedPart);
                             } else {
-                                renderedParts.add(part);
+                                renderedParts.addAll(renderMediaPart(part, context));
                             }
                         }
                         return ExperimentExecutionRequest.PromptVariant.Message.builder()
@@ -72,6 +81,56 @@ class ExperimentMessageRenderer {
                     return msg;
                 })
                 .toList();
+    }
+
+    private List<JsonNode> renderMediaPart(JsonNode part, Map<String, Object> context) {
+        var field = MEDIA_URL_FIELDS.stream()
+                .filter(name -> part.path(name).path("url").isTextual())
+                .findFirst();
+        if (field.isEmpty()) {
+            return List.of(part);
+        }
+
+        String template = part.get(field.get()).get("url").asText();
+        List<String> urls = getListFromSingleVariable(template, context)
+                .orElseGet(() -> List.of(mustacheParser.render(template, context)));
+
+        return urls.stream()
+                .<JsonNode>map(url -> {
+                    ObjectNode renderedPart = part.deepCopy();
+                    ((ObjectNode) renderedPart.get(field.get())).put("url", url);
+                    return renderedPart;
+                })
+                .toList();
+    }
+
+    /**
+     * The context holds a dataset list as JSON text: {@link #buildTemplateContext} serialises arrays, and CSV
+     * uploads store every cell as text.
+     */
+    private Optional<List<String>> getListFromSingleVariable(String template, Map<String, Object> context) {
+        var matcher = SINGLE_VARIABLE.matcher(template);
+        if (!matcher.matches()) {
+            return Optional.empty();
+        }
+        String name = Optional.ofNullable(matcher.group(1)).orElse(matcher.group(2));
+        if (!(context.get(name) instanceof String value) || !value.strip().startsWith("[")) {
+            return Optional.empty();
+        }
+
+        JsonNode parsed;
+        try {
+            parsed = JsonUtils.getJsonNodeFromString(value);
+        } catch (UncheckedIOException e) {
+            return Optional.empty();
+        }
+        if (!parsed.isArray()) {
+            return Optional.empty();
+        }
+
+        var items = new ArrayList<String>();
+        parsed.forEach(item -> items.add(item.isTextual() ? item.asText() : item.toString()));
+        return Optional.of(items);
     }
 
     ChatCompletionRequest buildChatCompletionRequest(
@@ -116,6 +175,18 @@ class ExperimentMessageRenderer {
                                 String url = part.path("image_url").path("url").asText(null);
                                 if (url != null) {
                                     builder.addImageUrl(url);
+                                }
+                            }
+                            case "video_url" -> {
+                                String url = part.path("video_url").path("url").asText(null);
+                                if (url != null) {
+                                    builder.addVideoUrl(url);
+                                }
+                            }
+                            case "audio_url" -> {
+                                String url = part.path("audio_url").path("url").asText(null);
+                                if (url != null) {
+                                    builder.addAudioUrl(url);
                                 }
                             }
                             default -> builder.addText(part.toString());

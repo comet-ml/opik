@@ -18,6 +18,7 @@ import { DEFAULT_LOADED_DATASETS } from "@/v2/pages-shared/DatasetVersionSelectB
 import { useActiveProjectId } from "@/store/AppStore";
 import {
   useDatasetType,
+  useIsRunning,
   useScoresByDatasetId,
   useSelectedRuleIds,
   useResetDatasetFilters,
@@ -30,6 +31,7 @@ import {
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { DATASET_TYPE } from "@/types/datasets";
 import { EvaluatorsRule } from "@/types/automations";
+import { isTraceRule } from "@/v2/pages/PlaygroundPage/metricSelection";
 import {
   parseDatasetVersionKey,
   toPlainDatasetId,
@@ -180,6 +182,7 @@ const RunExperimentControl: React.FC<RunExperimentControlProps> = ({
 
   const handleRuleCreated = useCallback(
     (rule: EvaluatorsRule) => {
+      if (!isTraceRule(rule)) return;
       const next = [...(selectedRuleIds ?? []), rule.id];
       setSelectedRuleIds(next);
       const plainId = toPlainDatasetId(datasetId);
@@ -187,6 +190,8 @@ const RunExperimentControl: React.FC<RunExperimentControlProps> = ({
     },
     [selectedRuleIds, datasetId, setSelectedRuleIds, setScoresForDataset],
   );
+
+  const isRunning = useIsRunning();
 
   const handleClickX = useCallback(() => {
     if (isExperimentMode) {
@@ -212,6 +217,7 @@ const RunExperimentControl: React.FC<RunExperimentControlProps> = ({
         onChange={handleDatasetChange}
         projectId={activeProjectId ?? undefined}
         datasetType={type}
+        disabled={isRunning}
         autoOpen={!isExperimentMode}
         onDismiss={() => !isExperimentMode && setPendingType(null)}
       />
@@ -228,13 +234,15 @@ const RunExperimentControl: React.FC<RunExperimentControlProps> = ({
             open={metricsOpen}
             onOpenChange={setMetricsOpen}
             onRuleCreated={handleRuleCreated}
+            disabled={isRunning}
           />
         </>
       )}
       <Separator orientation="vertical" />
       <button
-        className="flex h-full items-center px-1 text-light-slate hover:text-primary-hover"
+        className="flex h-full items-center px-1 text-light-slate hover:text-primary-hover disabled:pointer-events-none disabled:opacity-50"
         onClick={handleClickX}
+        disabled={isRunning}
         aria-label="Clear selection"
       >
         <X className="size-3.5" />

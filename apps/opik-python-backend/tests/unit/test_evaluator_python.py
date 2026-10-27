@@ -466,6 +466,61 @@ def test_no_scores_returns_bad_request(client):
                "error"] == "400 Bad Request: The provided 'code' field didn't return any 'opik.evaluation.metrics.ScoreResult'"
 
 
+class _CannedExecutor:
+    """Return one executor response verbatim, without running a metric."""
+
+    def __init__(self, response):
+        self.response = response
+
+    def run_scoring(self, code, data, payload_type=None):
+        return self.response
+
+
+@pytest.mark.parametrize(
+    "executor_response,error_text",
+    [
+        pytest.param(
+            {"scores": None},
+            "didn't return any 'opik.evaluation.metrics.ScoreResult'",
+            id="null-scores",
+        ),
+        pytest.param(
+            {"scores": "not a list"},
+            "didn't return any 'opik.evaluation.metrics.ScoreResult'",
+            id="non-list-scores",
+        ),
+        pytest.param(
+            {"scores": {}},
+            "didn't return any 'opik.evaluation.metrics.ScoreResult'",
+            id="object-scores",
+        ),
+        pytest.param(
+            {"error": "metric failed without a code"},
+            "metric failed without a code",
+            id="error-without-code",
+        ),
+    ],
+)
+def test_unservable_executor_response_is_a_bad_request(executor_response, error_text):
+    # None of these may reach the old `len(scores)` / `response["code"]` paths: a
+    # metric-controlled shape has to be a 400, not a 500, and the caller keeps the
+    # message that says which contract was violated.
+    from flask import Flask
+    from opik_backend.evaluator import evaluator as evaluator_blueprint
+
+    app = Flask(__name__)
+    app.register_blueprint(evaluator_blueprint)
+    app.executor = _CannedExecutor(executor_response)
+
+    response = app.test_client().post(EVALUATORS_URL, json={
+        "data": DATA,
+        "code": USER_DEFINED_METRIC,
+    })
+
+    assert response.status_code == 400
+    assert error_text in response.json["error"]
+
+
 # ConversationThreadMetric test definitions
 CONVERSATION_THREAD_METRIC = """
 from typing import Union, List, Any

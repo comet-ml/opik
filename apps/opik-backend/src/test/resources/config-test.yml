@@ -172,13 +172,62 @@ databaseAnalyticsDataModel:
   #   direction and the backend fails readiness at startup with a message naming the flag and the observed engine,
   #   rather than serving traffic whose span deletes are guaranteed to fail.
   spansDistributedWrapEnabled: false
+  #  Default: false
+  #  Description: Register each written span's weekly partition in the span_weeks index (OPIK-8706). Leave false at
+  #   deploy time; turn true before the span weeks backfill starts, so every span written after its snapshot is
+  #   indexed. Off writes nothing.
+  spanWeeksWriteEnabled: false
+  #  Default: false
+  #  Description: Schedule the span weeks backfill job (tuned under spanWeeksBackfill), which fills span_weeks from the
+  #   spans already written, one range of weeks at a time. Turn true only once spanWeeksWriteEnabled is live on every
+  #   instance: the backfill covers the spans written until its first run, live registration the rest.
+  spanWeeksBackfillEnabled: false
+  #  Default: false
+  #  Description: Bound the spans reads keyed by traces or by a project to the weeks the span_weeks index holds for
+  #   them. Effective only while spanColumnsNonNullable is also true (the legacy spans id_at wraps far-future ids). New
+  #   spans are indexed by span_weeks_mv in their insert, older ones by the span weeks backfill: turn true once the
+  #   backfill logs that it is complete, as spans it has not indexed yet would be skipped.
+  spanWeeksReadEnabled: false
 
-bulkInsert:
-  # false: the R2DBC bulk path (one named parameter per column per row). true: rows streamed as
-  # JSONEachRow through the ClickHouse Java client v2, with no parameter binding. Both write identical
-  # cells, so this is safe to flip either way on a running install. Default false so an upgrade does not
-  # silently change the write path.
-  v2ClientEnabled: false
+# Span weeks registration (OPIK-8706): retry of a failed span weeks write, with exponential backoff. Registration is
+# switched on by databaseAnalyticsDataModel.spanWeeksWriteEnabled.
+spanWeeksRegistration:
+  #  Default: 3
+  #  Description: Retries after the first attempt; a repeat registration collapses in span_weeks
+  maxRetries: 3
+  #  Default: 200ms
+  #  Description: First backoff; it doubles on each retry, with jitter, up to maxBackoff
+  minBackoff: 200ms
+  #  Default: 2s
+  #  Description: Upper bound of the exponential backoff
+  maxBackoff: 2s
+
+# Span weeks backfill (OPIK-8706) tuning; the job is switched on by databaseAnalyticsDataModel.spanWeeksBackfillEnabled.
+# It tiles the span ids into ranges of weeks, from the install week (the first project's created_at) to the plan's own
+# week, open at both ends, and backfills one range per run. Progress is kept in the span_weeks_backfill_chunks state
+# table, so it resumes across restarts.
+spanWeeksBackfill:
+  #  Default: 5m
+  #  Description: How often a run starts, and how long it holds the job lock: at most one chunk per interval across
+  #   the cluster, however many instances tick. Must exceed queryTimeout, so a run ends inside its lease
+  interval: 5m
+  #  Default: 4
+  #  Description: Weeks of span ids one run backfills, between the install week and the plan's own week
+  weeksPerChunk: 4
+  #  Default: 4
+  #  Description: ClickHouse threads one run may use (prod replicas have 48 vCPUs); memory is left to the server
+  #   profile's GROUP BY spill
+  maxThreads: 4
+  #  Default: 4m
+  #  Description: ClickHouse max_execution_time for one chunk; must stay under interval. Keep it under
+  #   ~90 x httpHeadersProgressIntervalMs (270s at the default 3s): past that the R2DBC driver runs out of progress
+  #   headers and fails the statement as a connection error. A 4-week range is estimated at 1-3 minutes on prod at
+  #   4 threads (OPIK-8706); if ranges time out, lower weeksPerChunk
+  queryTimeout: 4m
+  #  Default: 1s
+  #  Description: How long a run waits for the job lock before skipping its tick, so a brief Redis hiccup does not
+  #   cost a whole interval
+  lockWaitTime: 1s
 
 # Description: UUIDv7 ingestion validation. Rejects writes whose `id` embeds a timestamp outside the
 #   window, protecting data quality.
@@ -332,6 +381,48 @@ redis:
   #  Default: 1s
   #  Description: Timeout for the Redis health check ping
   healthCheckTimeout: 1s
+  # Redis Sentinel configuration (optional)
+  # When enabled, singleNodeUrl is the seed sentinel, with its port (usually 26379), instead of a Redis data node: its
+  # scheme selects TLS for every sentinel, and its credentials and database number apply to the master data nodes.
+  # Redisson discovers the master through the sentinels and follows it on failover. The Python backend reads the same
+  # variables. Cannot be combined with awsIamAuth: ElastiCache and MemoryDB offer no Sentinel.
+  sentinel:
+    # Default: false
+    # Description: Enable Redis Sentinel master discovery
+    enabled: false
+    # Description: Name of the master group monitored by the sentinels. Required when enabled
+    masterName: ''
+    # Description: Comma separated extra seed sentinels, e.g. redis://sentinel-1:26379,redis://sentinel-2:26379. They
+    # must use the scheme of singleNodeUrl, include a port and carry no credentials. The seed from singleNodeUrl is
+    # always included
+    nodes: ''
+    # Description: Username for the sentinel nodes themselves, if they enforce ACLs
+    username: ''
+    # Description: Password for the sentinel nodes themselves, if they require auth
+    password: ''
+    # Default: 3
+    # Description: Times a failed command is retried, e.g. while a failover is in progress. Between 0 and 20
+    retryAttempts: 3
+    # Default: 500ms
+    # Description: Base of the full-jitter backoff between retries: each waits a random time up to
+    # min(base * 2^attempt, cap). At least 1ms
+    retryBackoffBase: 500ms
+    # Default: 2s
+    # Description: Longest wait between retries. At least retryBackoffBase and at most 5m
+    retryBackoffCap: 2s
+    # Default: true
+    # Description: Require the sentinels to report at least two of them, as a production quorum needs. Set to false to
+    # allow a single sentinel, e.g. in development setups
+    checkSentinelsList: true
+    # Default: 10s
+    # Description: Timeout for establishing connections. Between 100ms and 5m
+    connectTimeout: 10s
+    # Default: 5s
+    # Description: Timeout for command responses. Between 100ms and 5m
+    timeout: 5s
+    # Default: 2s
+    # Description: How often the sentinels are polled for topology changes. Between 100ms and 5m
+    scanInterval: 2s
 
 openTelemetry:
   # Default: 3h
@@ -694,6 +785,28 @@ llmProviderClient:
   # Default: false
   # Description: Whether or not to log responses
   logResponses: false
+  # Default: strict
+  # Values: ['strict', 'relaxed']
+  #   - strict: provider base URLs must be http(s) and resolve only to public addresses
+  #   - relaxed: no destination restrictions, for deployments whose providers run on internal networks
+  # Description: Destination policy for user-configured LLM provider base URLs
+  # Tests point providers at local mock servers
+  destinationGuard: relaxed
+  # Default: plaintext_or_tls
+  # Values: ['plaintext_or_tls', 'https_only']
+  #   - plaintext_or_tls: http and https, as self-hosted model servers commonly run without TLS
+  #   - https_only: https only
+  # Description: Schemes allowed for user-configured LLM provider base URLs, checked in strict mode only
+  destinationScheme: plaintext_or_tls
+  # Default: strict
+  # Values: ['strict', 'relaxed']
+  #   - strict: video URLs must be http(s) and resolve only to public addresses
+  #   - relaxed: no destination restrictions
+  # Description: Destination policy for the HEAD request that detects the MIME type of an extensionless video URL.
+  #   The URL comes from any caller's message, and a refusal only loses the hint
+  videoUrlDestinationGuard: strict
+  mediaDownloadTimeout: 30s
+  mediaDownloadMaxSize: 20MB
   openAiClient:
     # See demo endpoint Langchain4j documentation: https://docs.langchain4j.dev/get-started
     # Not https but only used for testing purposes. It's fine as long as not sensitive data is sent.
@@ -722,6 +835,11 @@ llmProviderClient:
       global: https://aiplatform.googleapis.com
       eu: https://aiplatform.eu.rep.googleapis.com
       us: https://aiplatform.us.rep.googleapis.com
+    # Description: the only token_uri values a service-account key may carry. The credentials refresh by posting to it,
+    # and the key file is user-supplied, so any other value is refused.
+    tokenUris:
+      - https://oauth2.googleapis.com/token
+      - https://accounts.google.com/o/oauth2/token
 
 # Configuration for cache manager
 cacheManager:
@@ -957,6 +1075,9 @@ serviceToggles:
   # Default: true
   # Description: Kill switch for Agent Insights, effective only while ollieEnabled is on.
   agentInsightsEnabled: "true"
+  # Default: false
+  # Description: Whether Agent Insights project guidance is enabled, effective only while Agent Insights is active.
+  agentInsightsGuidanceEnabled: "false"
   # Default: true
   # Description: Whether the online-scoring (LLM-as-judge) evaluation loop is persisted as monitoring traces.
   onlineScoringTracingEnabled: "true"
@@ -969,6 +1090,9 @@ serviceToggles:
   #   listener, the Redis buffer flush job and the routing consumer all stay dormant, and the UI hides the
   #   automation controls on annotation queues.
   annotationQueueAutomationEnabled: "true"
+  # Default: false
+  # Description: Whether every triggered alert is also published to the deployment's AWS EventBridge bus
+  eventBridgeAlertsEnabled: "false"
   # Default: 100
   # Description: Deployment-level default rows-per-page for UI tables (experiments v1/v2).
   #              Lower this value to reduce initial render cost for high-volume workspaces.

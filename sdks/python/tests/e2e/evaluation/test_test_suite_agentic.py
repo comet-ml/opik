@@ -51,6 +51,15 @@ PROJECT_NAME = generate_project_name("e2e", __name__)
 AGENTIC_JUDGE_MODEL = "gpt-5-mini"  #
 
 
+@pytest.fixture(autouse=True)
+def _fast_llm_judge_reasoning_effort():
+    """Keeps the judge's production reasoning effort ("low") instead of the
+    e2e suite's "minimal". These tests depend on the judge choosing to call
+    its tools, and at minimal effort it sometimes answers from the truncated
+    overview without calling any (CI log: "Agentic loop finished: rounds=0,
+    tool_calls=[]")."""
+
+
 @pytest.mark.skipif(
     not environment.has_openai_api_key(), reason="OPENAI_API_KEY is not set"
 )

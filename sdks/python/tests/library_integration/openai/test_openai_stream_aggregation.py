@@ -52,9 +52,8 @@ def _span(fake_backend, name_prefix):
 
 
 def _error_records(caplog):
-    # Only opik's own errors count: an unclosed AsyncOpenAI client from an
-    # earlier test can be garbage-collected mid-test, and its aclose() task
-    # then logs "Event loop is closed" via asyncio.
+    # Only Opik's own errors count: `caplog` also sees third-party noise, such as
+    # asyncio reporting the cleanup of async clients leaked by other tests.
     return [
         record
         for record in caplog.records
@@ -114,6 +113,7 @@ async def test_openai_async_chat_stream__responses_stream_created_before_it_is_r
         async for _ in chat_stream:
             pass
     await other_stream.close()
+    await client.close()
 
     opik.flush_tracker()
 
@@ -135,6 +135,7 @@ async def test_openai_async_responses_stream__chat_stream_created_before_it_is_r
         async for _ in responses_stream:
             pass
     await other_stream.close()
+    await client.close()
 
     opik.flush_tracker()
 

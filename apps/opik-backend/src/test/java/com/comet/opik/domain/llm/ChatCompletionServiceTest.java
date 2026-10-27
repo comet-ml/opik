@@ -1,7 +1,9 @@
 package com.comet.opik.domain.llm;
 
+import com.comet.opik.api.ModelParams;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
+import com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterDecisionModel;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.ChunkedOutputHandlers;
@@ -19,6 +21,7 @@ import dev.langchain4j.exception.TimeoutException;
 import dev.langchain4j.exception.UnsupportedFeatureException;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.request.ChatRequest;
+import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionResponse;
 import io.dropwizard.jersey.errors.ErrorMessage;
@@ -46,11 +49,14 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.net.ConnectException;
 import java.nio.channels.ClosedChannelException;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
+import static com.comet.opik.infrastructure.llm.LlmModelRegistryTestUtils.bundledRegistry;
 import static jakarta.ws.rs.core.Response.Status.Family.familyOf;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -96,7 +102,8 @@ class ChatCompletionServiceTest {
         when(llmProviderClientConfig.getJitterScale()).thenReturn(null);
         when(llmProviderClientConfig.getBackoffExp()).thenReturn(null);
 
-        chatCompletionService = new ChatCompletionService(llmProviderClientConfig, llmProviderFactory);
+        chatCompletionService = new ChatCompletionService(llmProviderClientConfig, llmProviderFactory,
+                new ParamResolver(llmProviderFactory, bundledRegistry()));
     }
 
     @Nested
@@ -348,6 +355,26 @@ class ChatCompletionServiceTest {
         }
 
         @Test
+        @DisplayName("scoreTrace maps a refusal raised while building the client to a 400")
+        void scoreTrace__whenClientRefusesRequest__thenThrowBadRequest() {
+            var chatRequest = ChatRequest.builder().messages(UserMessage.from("score this")).build();
+            var modelParameters = LlmAsJudgeModelParameters.builder()
+                    .name("vertex_ai/gemini-3.1-flash-lite")
+                    .temperature(0.0)
+                    .build();
+            when(llmProviderFactory.getLanguageModel(anyString(), any())).thenThrow(
+                    new ProviderRequestRefusedException(ProviderRequestRefusedException.Reason.VERTEX_AI_LOCATION));
+
+            var thrown = catchThrowable(
+                    () -> chatCompletionService.scoreTrace(chatRequest, modelParameters, "test-workspace-id"));
+
+            assertThat(thrown)
+                    .isExactlyInstanceOf(BadRequestException.class)
+                    .hasMessage("Vertex AI location is not a valid region");
+            assertThat(((BadRequestException) thrown).getResponse().getStatus()).isEqualTo(400);
+        }
+
+        @Test
         @DisplayName("scoreTrace should not consult the provider error mapper for unsupported features")
         void scoreTrace__whenUnsupportedFeatureException__thenSkipProviderErrorLookup() {
             // Given
@@ -428,7 +455,8 @@ class ChatCompletionServiceTest {
             var workspaceId = "test-workspace-id";
 
             when(llmProviderClientConfig.getMaxAttempts()).thenReturn(3);
-            var retryingService = new ChatCompletionService(llmProviderClientConfig, llmProviderFactory);
+            var retryingService = new ChatCompletionService(llmProviderClientConfig, llmProviderFactory,
+                    new ParamResolver(llmProviderFactory, bundledRegistry()));
 
             when(llmProviderFactory.getService(anyString(), anyString())).thenReturn(llmProviderService);
             when(llmProviderService.generate(any(), anyString()))
@@ -451,7 +479,8 @@ class ChatCompletionServiceTest {
             var workspaceId = "test-workspace-id";
 
             when(llmProviderClientConfig.getMaxAttempts()).thenReturn(3);
-            var retryingService = new ChatCompletionService(llmProviderClientConfig, llmProviderFactory);
+            var retryingService = new ChatCompletionService(llmProviderClientConfig, llmProviderFactory,
+                    new ParamResolver(llmProviderFactory, bundledRegistry()));
 
             when(llmProviderFactory.getService(anyString(), anyString())).thenReturn(llmProviderService);
             when(llmProviderService.generate(any(), anyString())).thenThrow(new RuntimeException("transient"));
@@ -985,7 +1014,8 @@ class ChatCompletionServiceTest {
          */
         private Throwable scoreTraceWithBudget(int maxRetries, RuntimeException providerFailure) {
             when(llmProviderClientConfig.getMaxAttempts()).thenReturn(maxRetries);
-            var retryingService = new ChatCompletionService(llmProviderClientConfig, llmProviderFactory);
+            var retryingService = new ChatCompletionService(llmProviderClientConfig, llmProviderFactory,
+                    new ParamResolver(llmProviderFactory, bundledRegistry()));
             var chatRequest = ChatRequest.builder().messages(UserMessage.from("score this")).build();
             var modelParameters = podamFactory.manufacturePojo(LlmAsJudgeModelParameters.class);
 
@@ -1382,6 +1412,194 @@ class ChatCompletionServiceTest {
                     .hasMessageContaining("Unexpected error calling LLM provider")
                     .hasMessageContaining("Service is unreachable")
                     .hasMessageContaining(customMessage);
+        }
+    }
+
+    @Nested
+    @DisplayName("OpenAI reasoning models:")
+    class OpenAiReasoningModels {
+
+        private static final String WORKSPACE_ID = "test-workspace-id";
+
+        private ChatCompletionRequest requestWithSamplingParams(String model) {
+            return ChatCompletionRequest.builder()
+                    .model(model)
+                    .addUserMessage("ping")
+                    .temperature(0.7)
+                    .topP(0.9)
+                    .frequencyPenalty(0.5)
+                    .presencePenalty(0.4)
+                    .maxCompletionTokens(100)
+                    .seed(7)
+                    .build();
+        }
+
+        private static Optional<ModelParams> openAiParams(boolean reasoning) {
+            if (!reasoning) {
+                return Optional.of(ModelParams.builder().build());
+            }
+            var refused = new ModelParams.NumberParam(false, null, null, null);
+            return Optional.of(ModelParams.builder()
+                    .temperature(refused).topP(refused).frequencyPenalty(refused).presencePenalty(refused).build());
+        }
+
+        private ChatCompletionRequest requestSentByCreate(String model, boolean reasoning) {
+            when(llmProviderFactory.openAiParams(model)).thenReturn(openAiParams(reasoning));
+            when(llmProviderFactory.getService(WORKSPACE_ID, model)).thenReturn(llmProviderService);
+            var captor = ArgumentCaptor.forClass(ChatCompletionRequest.class);
+            when(llmProviderService.generate(captor.capture(), anyString()))
+                    .thenReturn(podamFactory.manufacturePojo(ChatCompletionResponse.class));
+
+            chatCompletionService.create(requestWithSamplingParams(model), WORKSPACE_ID);
+
+            return captor.getValue();
+        }
+
+        @Test
+        @DisplayName("create: a reasoning model reaches the provider without sampling params or penalties")
+        void create__whenReasoningModel__thenDropSamplingParamsAndPenalties() {
+            var sent = requestSentByCreate("gpt-5-mini", true);
+
+            assertThat(sent.temperature()).isNull();
+            assertThat(sent.topP()).isNull();
+            assertThat(sent.frequencyPenalty()).isNull();
+            assertThat(sent.presencePenalty()).isNull();
+            assertThat(sent.maxCompletionTokens()).isEqualTo(100);
+            assertThat(sent.seed()).isEqualTo(7);
+        }
+
+        @Test
+        @DisplayName("create: any other model keeps every param")
+        void create__whenNotReasoningModel__thenKeepParams() {
+            var sent = requestSentByCreate("gpt-4o", false);
+
+            assertThat(sent.temperature()).isEqualTo(0.7);
+            assertThat(sent.topP()).isEqualTo(0.9);
+            assertThat(sent.frequencyPenalty()).isEqualTo(0.5);
+            assertThat(sent.presencePenalty()).isEqualTo(0.4);
+        }
+
+        @Test
+        @DisplayName("createAndStreamResponse: a reasoning model reaches the provider without sampling params or penalties")
+        void stream__whenReasoningModel__thenDropSamplingParamsAndPenalties() {
+            var model = "o3";
+            when(llmProviderFactory.openAiParams(model)).thenReturn(openAiParams(true));
+            when(llmProviderFactory.getService(WORKSPACE_ID, model)).thenReturn(llmProviderService);
+            var captor = ArgumentCaptor.forClass(ChatCompletionRequest.class);
+
+            chatCompletionService.createAndStreamResponse(requestWithSamplingParams(model), WORKSPACE_ID,
+                    mock(ChunkedOutputHandlers.class));
+
+            verify(llmProviderService).generateStream(captor.capture(), anyString(), any(), any(), any());
+            var sent = captor.getValue();
+            assertThat(sent.temperature()).isNull();
+            assertThat(sent.topP()).isNull();
+            assertThat(sent.frequencyPenalty()).isNull();
+            assertThat(sent.presencePenalty()).isNull();
+        }
+
+        private LlmAsJudgeModelParameters judgeParametersSentByScoreTrace(String model, boolean reasoning) {
+            when(llmProviderFactory.openAiParams(model)).thenReturn(openAiParams(reasoning));
+            var captor = ArgumentCaptor.forClass(LlmAsJudgeModelParameters.class);
+            when(llmProviderFactory.getLanguageModel(anyString(), captor.capture())).thenReturn(chatModel);
+            when(chatModel.chat(any(ChatRequest.class))).thenReturn(mock(ChatResponse.class));
+            var modelParameters = LlmAsJudgeModelParameters.builder().name(model).temperature(0.0).seed(3).build();
+
+            chatCompletionService.scoreTrace(ChatRequest.builder().messages(UserMessage.from("score this")).build(),
+                    modelParameters, WORKSPACE_ID);
+
+            return captor.getValue();
+        }
+
+        @Test
+        @DisplayName("scoreTrace: a judge rule saved with a temperature does not send it to a reasoning model")
+        void scoreTrace__whenReasoningModel__thenDropTemperature() {
+            var sent = judgeParametersSentByScoreTrace("gpt-5-nano", true);
+
+            assertThat(sent.temperature()).isNull();
+            assertThat(sent.seed()).isEqualTo(3);
+            assertThat(sent.name()).isEqualTo("gpt-5-nano");
+        }
+
+        @Test
+        @DisplayName("scoreTrace: any other model keeps the rule's temperature")
+        void scoreTrace__whenNotReasoningModel__thenKeepTemperature() {
+            var sent = judgeParametersSentByScoreTrace("gpt-4o-mini", false);
+
+            assertThat(sent.temperature()).isEqualTo(0.0);
+        }
+    }
+
+    @Nested
+    @DisplayName("OpenAI Responses route:")
+    class OpenAiResponsesRoute {
+
+        private static final String WORKSPACE_ID = UUID.randomUUID().toString();
+        private static final String MODEL = "gpt-4.1";
+
+        private final ChatCompletionRequest requestWithEverySetting = ChatCompletionRequest.builder()
+                .from(podamFactory.manufacturePojo(ChatCompletionRequest.class))
+                .model(MODEL)
+                .temperature(0.7)
+                .topP(0.9)
+                .frequencyPenalty(0.5)
+                .presencePenalty(0.4)
+                .stop(List.of("END"))
+                .seed(7)
+                .build();
+
+        private void givenTheShippedCatalogAnd(String route) {
+            when(llmProviderFactory.openAiParams(MODEL))
+                    .thenReturn(Optional.ofNullable(bundledRegistry().paramsOf("openai", MODEL)));
+            when(llmProviderFactory.getService(WORKSPACE_ID, MODEL)).thenReturn(llmProviderService);
+            when(llmProviderService.paramsRoute()).thenReturn(route);
+        }
+
+        private ChatCompletionRequest requestSentByCreate(String route) {
+            givenTheShippedCatalogAnd(route);
+            var captor = ArgumentCaptor.forClass(ChatCompletionRequest.class);
+            when(llmProviderService.generate(captor.capture(), anyString()))
+                    .thenReturn(podamFactory.manufacturePojo(ChatCompletionResponse.class));
+
+            chatCompletionService.create(requestWithEverySetting, WORKSPACE_ID);
+
+            return captor.getValue();
+        }
+
+        private ChatCompletionRequest withoutWhatTheResponsesRouteRefuses() {
+            return ChatCompletionRequest.builder()
+                    .from(requestWithEverySetting)
+                    .frequencyPenalty(null)
+                    .presencePenalty(null)
+                    .stop(List.of())
+                    .seed(null)
+                    .build();
+        }
+
+        @Test
+        @DisplayName("create: a Responses key sends no penalties, stop or seed, and keeps the rest")
+        void create__whenResponsesRoute__thenDropWhatTheRouteRefuses() {
+            assertThat(requestSentByCreate(ModelParams.RESPONSES_API_ROUTE))
+                    .isEqualTo(withoutWhatTheResponsesRouteRefuses());
+        }
+
+        @Test
+        @DisplayName("create: a Chat Completions key sends every setting the model takes")
+        void create__whenNoRoute__thenKeepEverySetting() {
+            assertThat(requestSentByCreate(null)).isEqualTo(requestWithEverySetting);
+        }
+
+        @Test
+        @DisplayName("createAndStreamResponse: a Responses key sends no penalties, stop or seed")
+        void stream__whenResponsesRoute__thenDropWhatTheRouteRefuses() {
+            givenTheShippedCatalogAnd(ModelParams.RESPONSES_API_ROUTE);
+            var captor = ArgumentCaptor.forClass(ChatCompletionRequest.class);
+
+            chatCompletionService.createAndStreamResponse(requestWithEverySetting, WORKSPACE_ID,
+                    mock(ChunkedOutputHandlers.class));
+
+            verify(llmProviderService).generateStream(captor.capture(), anyString(), any(), any(), any());
+            assertThat(captor.getValue()).isEqualTo(withoutWhatTheResponsesRouteRefuses());
         }
     }
 }

@@ -1,5 +1,12 @@
 package com.comet.opik.infrastructure.llm.antropic;
 
+import com.comet.opik.api.LlmProvider;
+import com.comet.opik.api.ModelParams;
+import com.comet.opik.domain.llm.LlmProviderFactory;
+import com.comet.opik.domain.llm.ParamResolver;
+import com.comet.opik.infrastructure.LlmModelRegistryConfig;
+import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
+import com.comet.opik.infrastructure.llm.LlmModelRegistryTestUtils;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicCreateMessageRequest;
@@ -20,6 +27,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
+import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -27,11 +35,15 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.Mockito;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
 
+import static com.comet.opik.infrastructure.llm.LlmModelRegistryTestUtils.bundledRegistry;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -68,21 +80,50 @@ public class AnthropicMappersTest {
         }
 
         @Test
+        void toResponseAnswersWithTheTextBesideAThinkingBlock() {
+            var response = Json.fromJson("""
+                    {"id": "msg_1", "type": "message", "role": "assistant", "model": "claude-sonnet-4-6",
+                    "content": [
+                      {"type": "thinking", "thinking": "", "signature": "sig"},
+                      {"type": "redacted_thinking", "data": "opaque"},
+                      {"type": "text", "text": "4"}
+                    ],
+                    "stop_reason": "end_turn", "usage": {"input_tokens": 10, "output_tokens": 20}}""",
+                    AnthropicCreateMessageResponse.class);
+
+            var actual = LlmProviderAnthropicMapper.INSTANCE.toResponse(response);
+
+            assertThat(actual.choices()).extracting(choice -> choice.message().content()).containsExactly("4");
+        }
+
+        @Test
+        void toResponseKeepsOneEmptyChoiceWhenThinkingUsedUpMaxTokens() {
+            var response = Json.fromJson("""
+                    {"id": "msg_1", "type": "message", "role": "assistant", "model": "claude-sonnet-4-6",
+                    "content": [{"type": "thinking", "thinking": "Let me check each candidate", "signature": "sig"}],
+                    "stop_reason": "max_tokens", "usage": {"input_tokens": 10, "output_tokens": 4096}}""",
+                    AnthropicCreateMessageResponse.class);
+
+            var actual = LlmProviderAnthropicMapper.INSTANCE.toResponse(response);
+
+            assertThat(actual.choices()).singleElement().satisfies(choice -> {
+                assertThat(choice.message().content()).isNull();
+                assertThat(choice.finishReason()).isEqualTo("max_tokens");
+            });
+        }
+
+        @Test
         void toCreateMessage() {
             var request = podamFactory.manufacturePojo(ChatCompletionRequest.class);
 
             AnthropicCreateMessageRequest actual = LlmProviderAnthropicMapper.INSTANCE
-                    .toCreateMessageRequest(request);
+                    .toCreateMessageRequest(request, bundledRegistry());
 
             assertThat(actual).isNotNull();
             assertThat(actual.model).isEqualTo(request.model());
             assertThat(actual.stream).isEqualTo(request.stream());
             assertThat(actual.temperature).isEqualTo(request.temperature());
-            if (request.temperature() != null) {
-                assertThat(actual.topP).isNull();
-            } else {
-                assertThat(actual.topP).isEqualTo(request.topP());
-            }
+            assertThat(actual.topP).isEqualTo(request.topP());
             assertThat(actual.stopSequences).isEqualTo(request.stop());
             assertThat(actual.messages).usingRecursiveComparison().ignoringCollectionOrder().isEqualTo(
                     request.messages().stream()
@@ -96,33 +137,29 @@ public class AnthropicMappersTest {
                             .toList());
         }
 
-        @Test
-        void toCreateMessage_appliesDefaultMaxTokens_whenNull() {
+        @ParameterizedTest(name = "max_completion_tokens={0}, max_tokens={1} -> {2}")
+        @MethodSource("maxTokensValues")
+        void toCreateMessage_resolvesMaxTokens(Integer maxCompletionTokens, Integer maxTokens, int expected) {
             var request = ChatCompletionRequest.builder()
                     .model("claude-sonnet-4-6")
                     .stream(false)
                     .addUserMessage("hi")
+                    .maxCompletionTokens(maxCompletionTokens)
+                    .maxTokens(maxTokens)
                     .build();
 
             AnthropicCreateMessageRequest actual = LlmProviderAnthropicMapper.INSTANCE
-                    .toCreateMessageRequest(request);
+                    .toCreateMessageRequest(request, bundledRegistry());
 
-            assertThat(actual.maxTokens).isEqualTo(LlmProviderAnthropicMapper.DEFAULT_MAX_COMPLETION_TOKENS);
+            assertThat(actual.maxTokens).isEqualTo(expected);
         }
 
-        @Test
-        void toCreateMessage_preservesExplicitMaxTokens() {
-            var request = ChatCompletionRequest.builder()
-                    .model("claude-sonnet-4-6")
-                    .stream(false)
-                    .addUserMessage("hi")
-                    .maxCompletionTokens(123)
-                    .build();
-
-            AnthropicCreateMessageRequest actual = LlmProviderAnthropicMapper.INSTANCE
-                    .toCreateMessageRequest(request);
-
-            assertThat(actual.maxTokens).isEqualTo(123);
+        static Stream<Arguments> maxTokensValues() {
+            return Stream.of(
+                    Arguments.of(null, null, LlmProviderAnthropicMapper.DEFAULT_MAX_COMPLETION_TOKENS),
+                    Arguments.of(123, null, 123),
+                    Arguments.of(null, 20, 20),
+                    Arguments.of(123, 8192, 123));
         }
 
         @ParameterizedTest
@@ -135,7 +172,7 @@ public class AnthropicMappersTest {
                     .build();
 
             AnthropicCreateMessageRequest actual = LlmProviderAnthropicMapper.INSTANCE
-                    .toCreateMessageRequest(request);
+                    .toCreateMessageRequest(request, bundledRegistry());
 
             assertThat(actual.stream).isEqualTo(expected);
         }
@@ -150,14 +187,18 @@ public class AnthropicMappersTest {
 
     @Nested
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-    @DisplayName("Sampling params gating")
+    @DisplayName("Sampling params on the Anthropic chat path, after ParamResolver")
     class SamplingParamsGating {
+
+        private final ParamResolver resolver = new ParamResolver(Mockito.mock(LlmProviderFactory.class),
+                bundledRegistry());
 
         @ParameterizedTest(name = "{0}")
         @MethodSource("samplingGatingCases")
         void gatesSamplingParams(String description, ChatCompletionRequest request, Double expectedTemperature,
                 Double expectedTopP) {
-            var actual = LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request);
+            var actual = LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(
+                    resolver.resolve(request, null).request(), bundledRegistry());
 
             // Build the expected payload independently of the mapper (not by re-calling it), so a regression in
             // any collateral field — model, messages, max_tokens, etc. — can't hide by changing actual and
@@ -241,7 +282,8 @@ public class AnthropicMappersTest {
     @Nested
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class ValidateRequest {
-        private final LlmProviderAnthropic provider = new LlmProviderAnthropic(Mockito.mock(AnthropicClient.class));
+        private final LlmProviderAnthropic provider = new LlmProviderAnthropic(Mockito.mock(AnthropicClient.class),
+                bundledRegistry());
 
         @Test
         void acceptsNullMaxCompletionTokens() {
@@ -316,6 +358,39 @@ public class AnthropicMappersTest {
         }
 
         @Test
+        void leavesAnEffortWithoutNamedLevelsToAnthropic() {
+            var registry = Mockito.mock(LlmModelRegistryService.class);
+            Mockito.when(registry.curatedParamsOf(LlmProvider.ANTHROPIC.getValue(), "claude-opus-4-6"))
+                    .thenReturn(ModelParams.builder().effort(new ModelParams.EffortParam(true, null, null)).build());
+            var withUnnamedLevels = new LlmProviderAnthropic(Mockito.mock(AnthropicClient.class), registry);
+
+            assertThatCode(() -> withUnnamedLevels.validateRequest(requestWithEffort("claude-opus-4-6", "xhigh")))
+                    .doesNotThrowAnyException();
+        }
+
+        @Test
+        void rejectsOnlyWhatTheShippedRulesRefuse(@TempDir Path tempDir) throws IOException {
+            var override = tempDir.resolve("override.yaml");
+            Files.writeString(override, """
+                    anthropic:
+                      - id: "claude-opus-4-8"
+                        params:
+                          effort: {accepted: false}
+                    """);
+            var config = new LlmModelRegistryConfig();
+            config.setLocalOverridePath(override.toString());
+            var registry = LlmModelRegistryTestUtils.registry(config);
+            var withBadRow = new LlmProviderAnthropic(Mockito.mock(AnthropicClient.class), registry);
+
+            assertThat(registry.paramsOf(LlmProvider.ANTHROPIC.getValue(), "claude-opus-4-8").effort().accepted())
+                    .isFalse();
+            assertThatCode(() -> withBadRow.validateRequest(requestWithEffort("claude-opus-4-8", "high")))
+                    .doesNotThrowAnyException();
+            assertThatThrownBy(() -> withBadRow.validateRequest(requestWithEffort("claude-haiku-4-5-20251001", "low")))
+                    .isInstanceOf(BadRequestException.class);
+        }
+
+        @Test
         void checksAModelWithoutARowOnlyForAKnownLevelName() {
             assertThatCode(() -> provider.validateRequest(requestWithEffort("claude-opus-9", "xhigh")))
                     .doesNotThrowAnyException();
@@ -350,7 +425,8 @@ public class AnthropicMappersTest {
                 "claude-sonnet-5, xhigh",
                 "claude-opus-5-5, medium"})
         void sendsTheEffortAsTheTopLevelOutputConfig(String model, String effort) {
-            var actual = LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(requestWithEffort(model, effort));
+            var actual = LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(requestWithEffort(model, effort),
+                    bundledRegistry());
 
             // Serialised by the same codec AnthropicClient puts on the wire, so this is the body Anthropic reads.
             var wireBody = Json.toJson(actual);
@@ -370,7 +446,8 @@ public class AnthropicMappersTest {
                     .customParameters(Map.of("output_config", outputConfig))
                     .build();
 
-            var wireBody = Json.toJson(LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request));
+            var wireBody = Json
+                    .toJson(LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request, bundledRegistry()));
 
             assertThat(StringUtils.countMatches(wireBody, "\"output_config\"")).isEqualTo(1);
             assertThat(JsonUtils.getJsonNodeFromString(wireBody).path("output_config"))
@@ -392,7 +469,7 @@ public class AnthropicMappersTest {
                     .customParameters(customParameters)
                     .build();
 
-            var actual = LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request);
+            var actual = LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request, bundledRegistry());
 
             assertThat(actual.customParameters).isNull();
             assertThat(Json.toJson(actual)).doesNotContain("output_config");
@@ -403,6 +480,97 @@ public class AnthropicMappersTest {
                     Arguments.of("no custom_parameters", null),
                     Arguments.of("custom_parameters without output_config", Map.of("max_tokens", 2048)),
                     Arguments.of("an empty output_config", Map.of("output_config", Map.of())));
+        }
+    }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @DisplayName("adaptive thinking from the effort level")
+    class AdaptiveThinkingFromEffort {
+
+        private final ParamResolver resolver = new ParamResolver(Mockito.mock(LlmProviderFactory.class),
+                bundledRegistry());
+
+        private AnthropicCreateMessageRequest toWireRequest(ChatCompletionRequest request) {
+            return LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(resolver.resolve(request, null).request(),
+                    bundledRegistry());
+        }
+
+        @ParameterizedTest(name = "{0} at {1}")
+        @CsvSource({
+                "claude-sonnet-4-6, low",
+                "claude-opus-4-6, max",
+                "claude-opus-4-6-20260205, medium",
+                "claude-opus-4-7, xhigh",
+                "claude-opus-4-7-20260416, high",
+                "claude-opus-4-8, max"})
+        void turnsOnAdaptiveThinkingOnAModelThatThinksOnlyWhenAsked(String model, String effort) {
+            var request = ChatCompletionRequest.builder()
+                    .model(model)
+                    .addUserMessage("hi")
+                    .temperature(0.7)
+                    .topP(0.9)
+                    .customParameters(Map.of("output_config", Map.of("effort", effort)))
+                    .build();
+
+            var wireBody = JsonUtils.getJsonNodeFromString(
+                    Json.toJson(toWireRequest(request)));
+
+            assertThat(wireBody.path("thinking"))
+                    .isEqualTo(JsonUtils.getJsonNodeFromString("{\"type\": \"adaptive\"}"));
+            assertThat(wireBody.path("output_config").path("effort").asText()).isEqualTo(effort);
+            assertThat(wireBody.has("temperature")).isFalse();
+            assertThat(wireBody.has("top_p")).isFalse();
+        }
+
+        @Test
+        void keepsTheOptimizationStudioLimitWhenAnEffortTurnsThinkingOn() {
+            // The shape LiteLLM sends from the runner: its max_tokens default, the task model's temperature pin,
+            // and the panel's own limit under a camelCase name the gateway does not read.
+            var request = JsonUtils.readValue("""
+                    {"model": "claude-sonnet-4-6", "messages": [{"role": "user", "content": "hi"}],
+                    "max_tokens": 8192, "temperature": 0.0, "maxCompletionTokens": 4000,
+                    "custom_parameters": {"output_config": {"effort": "high"}}}""", ChatCompletionRequest.class);
+
+            var wireBody = JsonUtils.getJsonNodeFromString(
+                    Json.toJson(toWireRequest(request)));
+
+            assertThat(wireBody.path("max_tokens").asInt()).isEqualTo(8192);
+            assertThat(wireBody.path("thinking"))
+                    .isEqualTo(JsonUtils.getJsonNodeFromString("{\"type\": \"adaptive\"}"));
+            assertThat(wireBody.has("temperature")).isFalse();
+        }
+
+        @ParameterizedTest(name = "{0}: {1}")
+        @MethodSource
+        void leavesThinkingAlone(String description, String model, Map<String, Object> customParameters,
+                Double expectedTemperature) {
+            var request = ChatCompletionRequest.builder()
+                    .model(model)
+                    .addUserMessage("hi")
+                    .temperature(0.7)
+                    .customParameters(customParameters)
+                    .build();
+
+            var actual = toWireRequest(request);
+
+            assertThat(JsonUtils.getJsonNodeFromString(Json.toJson(actual)).has("thinking")).isFalse();
+            assertThat(actual.temperature).isEqualTo(expectedTemperature);
+        }
+
+        Stream<Arguments> leavesThinkingAlone() {
+            return Stream.of(
+                    Arguments.of("no effort on a model that thinks only when asked", "claude-sonnet-4-6",
+                            Map.of("output_config", Map.of("format", JSON_SCHEMA_FORMAT)), 0.7),
+                    Arguments.of("a request that turns thinking off itself", "claude-sonnet-4-6",
+                            Map.of("output_config", Map.of("effort", "low"), "thinking", Map.of("type", "disabled")),
+                            0.7),
+                    Arguments.of("a model that thinks by default", "claude-sonnet-5",
+                            Map.of("output_config", Map.of("effort", "xhigh")), null),
+                    Arguments.of("a model that thinks by default", "claude-opus-5-5",
+                            Map.of("output_config", Map.of("effort", "medium")), null),
+                    Arguments.of("Opus 4.5, which has no adaptive thinking", "claude-opus-4-5-20251101",
+                            Map.of("output_config", Map.of("effort", "high")), 0.7));
         }
     }
 

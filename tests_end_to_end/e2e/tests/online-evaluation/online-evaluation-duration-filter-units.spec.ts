@@ -3,7 +3,7 @@ import { OnlineEvaluationPage } from '@e2e/pom/online-evaluation.page';
 import { buildConstantScoreMetric } from '@e2e/core/metrics';
 import type { BackendFilter } from '@e2e/core/backend';
 
-/** The label the dialog gives the duration column — and the unit it promises. */
+/** The label the editor gives the duration column, and the unit it promises. */
 const DURATION_COLUMN = 'Duration (s)';
 
 /**
@@ -24,7 +24,7 @@ const NAME_FILTER_VALUE = 'keepme';
  * Seconds ⇄ milliseconds for an online-evaluation rule's duration filter
  * (OPIK-8000).
  *
- * The dialog labels the column "Duration (s)" while the backend stores and
+ * The editor labels the column "Duration (s)" while the backend stores and
  * matches on milliseconds, so every save has to multiply and every load has to
  * divide. Before the fix it did neither: "> 5" was stored as 5, i.e. 5ms, and
  * the rule matched essentially every trace.
@@ -39,10 +39,12 @@ const NAME_FILTER_VALUE = 'keepme';
  *     perfectly through the API and still compounds on the next save. Only the
  *     request tells "converted correctly" apart from "converted twice" or "not
  *     at all".
- *   - **A repeated, UNEDITED save.** One cycle cannot distinguish a two-way
- *     conversion from no conversion at all, because both leave the stored value
- *     where they found it. Two cycles with no edit in between is what makes
- *     drift observable: a one-sided conversion multiplies again each time.
+ *   - **Repeated saves that never touch the filter.** One cycle cannot
+ *     distinguish a two-way conversion from no conversion at all, because both
+ *     leave the stored value where they found it. Two cycles is what makes
+ *     drift observable: a one-sided conversion multiplies again each time. Save
+ *     stays disabled until something changes, so each cycle flips the Enabled
+ *     switch, an edit that has nothing to do with filters.
  *
  * The name filter alongside it is the blast-radius control. The conversion is
  * applied per filter by type, so a change that reached every row instead of the
@@ -63,16 +65,16 @@ test.describe(
         const ruleName = `${testNamespace}-dur-units`;
         const rules = new OnlineEvaluationPage(page);
 
-        await test.step('Open the create-rule dialog on a fresh project', async () => {
+        await test.step('Open the code evaluator editor on a fresh project', async () => {
           await rules.goto(project.id);
           await rules.waitForReady();
-          await rules.openCreateRuleDialog();
-          await rules.dialog.getByRole('textbox', { name: 'Rule name' }).fill(ruleName);
-          await rules.dialog.getByRole('radio', { name: 'Code metric' }).click();
+          await rules.openCreateRulePanel('Code evaluator');
+          await rules.nameInput.fill(ruleName);
         });
 
         await test.step(`Add a "${DURATION_COLUMN} > ${WHOLE.seconds}" filter and a name filter`, async () => {
-          await rules.addFilterRow();
+          // A new rule already shows one empty filter row.
+          await rules.expandFilteringAndSampling();
           await rules.setFilterColumn(0, DURATION_COLUMN);
           await rules.setFilterOperator(0, '>');
           await rules.setFilterValue(0, WHOLE.seconds);
@@ -83,11 +85,11 @@ test.describe(
           await rules.setFilterValue(1, NAME_FILTER_VALUE);
         });
 
-        const created = await test.step('Submit, and capture what the dialog actually sent', async () => {
+        const created = await test.step('Submit, and capture what the editor actually sent', async () => {
           const posted = page.waitForRequest(
             (request) => request.method() === 'POST' && isRuleCreate(request.url()),
           );
-          await rules.submitRuleDialog();
+          await rules.submitPanel();
           return filtersFromRequestBody((await posted).postData());
         });
 
@@ -112,7 +114,7 @@ test.describe(
         });
 
         await test.step('Reopening the rule shows the threshold in seconds again', async () => {
-          await rules.openEditRuleDialogByName(ruleName);
+          await rules.openEditRulePanelByName(ruleName);
           await rules.expandFilteringAndSampling();
           expect(
             await rules.readFilterValue(0),
@@ -123,13 +125,13 @@ test.describe(
             await rules.readFilterValue(1),
             'the name filter hydrates unchanged',
           ).toBe(NAME_FILTER_VALUE);
-          await rules.cancelDialog();
+          await rules.cancelPanel();
         });
       },
     );
 
     test(
-      'a sub-second threshold survives repeated unedited saves without drifting',
+      'a sub-second threshold survives repeated saves without drifting',
       { tag: ['@cap:online-evaluation.edit-rule', '@cap:online-evaluation.rule-filters'] },
       async ({ project, backendClient, testNamespace, automationRulesCleanup, page }) => {
         const ruleName = `${testNamespace}-dur-subsec`;
@@ -138,10 +140,9 @@ test.describe(
         await test.step(`Create a rule filtered at ${SUB_SECOND.seconds}s`, async () => {
           await rules.goto(project.id);
           await rules.waitForReady();
-          await rules.openCreateRuleDialog();
-          await rules.dialog.getByRole('textbox', { name: 'Rule name' }).fill(ruleName);
-          await rules.dialog.getByRole('radio', { name: 'Code metric' }).click();
-          await rules.addFilterRow();
+          await rules.openCreateRulePanel('Code evaluator');
+          await rules.nameInput.fill(ruleName);
+          await rules.expandFilteringAndSampling();
           await rules.setFilterColumn(0, DURATION_COLUMN);
           await rules.setFilterOperator(0, '>');
           await rules.setFilterValue(0, SUB_SECOND.seconds);
@@ -149,20 +150,21 @@ test.describe(
           const posted = page.waitForRequest(
             (request) => request.method() === 'POST' && isRuleCreate(request.url()),
           );
-          await rules.submitRuleDialog();
+          await rules.submitPanel();
           expect(
             filtersFromRequestBody((await posted).postData()),
             `${SUB_SECOND.seconds}s must be sent as ${SUB_SECOND.millis}ms`,
           ).toEqual([{ field: 'duration', operator: '>', value: SUB_SECOND.millis }]);
         });
 
-        // Twice, with no edit in between. One cycle proves nothing: a dialog
-        // that converts in neither direction also re-sends exactly what it
-        // loaded. Two cycles is the smallest number that exposes a one-sided
-        // conversion, because the second save compounds the first.
+        // Twice. One cycle proves nothing: an editor that converts in neither
+        // direction also re-sends exactly what it loaded. Two cycles is the
+        // smallest number that exposes a one-sided conversion, because the
+        // second save compounds the first.
         for (const cycle of [1, 2]) {
-          await test.step(`Open-and-save cycle ${cycle} changes nothing`, async () => {
-            await rules.openEditRuleDialogByName(ruleName);
+          await test.step(`Open-and-save cycle ${cycle} leaves the threshold alone`, async () => {
+            await rules.openEditRulePanelByName(ruleName);
+            await expect(rules.submitButton, 'nothing to save before an edit').toBeDisabled();
             await rules.expandFilteringAndSampling();
             expect(
               await rules.readFilterValue(0),
@@ -172,11 +174,13 @@ test.describe(
             const patched = page.waitForRequest(
               (request) => request.method() === 'PATCH' && isRuleUpdate(request.url()),
             );
-            await rules.submitRuleDialog();
+            await rules.toggleEnabled();
+            await rules.submitPanel();
             expect(
               filtersFromRequestBody((await patched).postData()),
-              `cycle ${cycle}: an unedited save must re-send ${SUB_SECOND.millis}ms — a value ` +
-                'converted on load but not on save comes back multiplied by 1000 each time',
+              `cycle ${cycle}: a save that does not touch the filter must re-send ` +
+                `${SUB_SECOND.millis}ms. A value converted on load but not on save comes back ` +
+                'multiplied by 1000 each time',
             ).toEqual([{ field: 'duration', operator: '>', value: SUB_SECOND.millis }]);
 
             expect(
@@ -221,7 +225,7 @@ test.describe(
             filters: seeded,
             metric: buildConstantScoreMetric(ruleName),
           });
-          // Asserted before the dialog is opened: a round trip over a rule that
+          // Asserted before the editor is opened: a round trip over a rule that
           // never held these filters would pass while proving nothing.
           expect(
             await storedFilters(backendClient, project.id, ruleName),
@@ -232,10 +236,10 @@ test.describe(
           ]);
         });
 
-        await test.step('The dialog shows the duration in seconds', async () => {
+        await test.step('The editor shows the duration in seconds', async () => {
           await rules.goto(project.id);
           await rules.waitForReady();
-          await rules.openEditRuleDialogByName(ruleName);
+          await rules.openEditRulePanelByName(ruleName);
           await rules.expandFilteringAndSampling();
           expect(
             await rules.readFilterValue(1),
@@ -243,14 +247,15 @@ test.describe(
           ).toBe('2.5');
         });
 
-        await test.step('An unedited save re-sends both filters exactly as stored', async () => {
+        await test.step('A save that does not touch the filters re-sends both exactly as stored', async () => {
           const patched = page.waitForRequest(
             (request) => request.method() === 'PATCH' && isRuleUpdate(request.url()),
           );
-          await rules.submitRuleDialog();
+          await rules.toggleEnabled();
+          await rules.submitPanel();
           expect(
             filtersFromRequestBody((await patched).postData()),
-            'an unedited save must re-send the timestamp to the millisecond, unsplit, and the ' +
+            'the save must re-send the timestamp to the millisecond, unsplit, and the ' +
               `duration as ${THREAD_DURATION_MS}ms`,
           ).toEqual([
             { field: 'created_at', operator: '>=', value: CREATED_AT },
@@ -261,7 +266,7 @@ test.describe(
         await test.step('And the stored rule is unchanged', async () => {
           expect(
             await storedFilters(backendClient, project.id, ruleName),
-            'the persisted thread-scope filters after an unedited save',
+            'the persisted thread-scope filters after the save',
           ).toEqual([
             { field: 'created_at', operator: '>=', value: CREATED_AT },
             { field: 'duration', operator: '<=', value: THREAD_DURATION_MS },
@@ -287,13 +292,13 @@ function isRuleUpdate(url: string): boolean {
  *
  * Field/operator/value rather than the whole object, for the reason
  * `online-evaluation-experiment-scope-hidden-filters.spec.ts` sets out at
- * length: the dialog attaches a transient `id` and re-derives `type` from the
+ * length: the editor attaches a transient `id` and re-derives `type` from the
  * column config, neither of which is persisted, so a deep comparison would fail
  * against a perfectly healthy server. The triple is what both ends agree on,
  * and the value — which is the whole subject here — is inside it.
  *
  * Throws rather than returning `[]` on a body it cannot read: an unparseable
- * request is a broken assumption, and an empty list would read as "the dialog
+ * request is a broken assumption, and an empty list would read as "the editor
  * sent no filters", which is a real and different failure.
  */
 function filtersFromRequestBody(
@@ -325,8 +330,8 @@ async function storedFilters(
   projectId: string,
   ruleName: string,
 ): Promise<Array<{ field: unknown; operator: unknown; value: unknown }>> {
-  // Polled, not read once. The caller submits the dialog and waits for it to
-  // close, but a closed dialog is a CLIENT event — the form dismisses on the
+  // Polled, not read once. The caller submits the editor and waits for it to
+  // close, but a closed editor is a CLIENT event: the form dismisses on the
   // mutation resolving and the list is refetched behind it, so a read taken
   // straight after can legitimately land before the rule is listable and see
   // zero. That is a race in the reading, not a fact about the rule, and it

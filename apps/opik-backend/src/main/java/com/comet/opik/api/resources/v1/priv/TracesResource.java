@@ -415,7 +415,8 @@ public class TracesResource {
             @QueryParam("filters") String filters,
             @QueryParam("search") @Schema(description = "Full-text search across trace fields") String search,
             @QueryParam("from_time") @Schema(description = "Filter traces created from this time (ISO-8601 format).") Instant startTime,
-            @QueryParam("to_time") @Schema(description = "Filter traces created up to this time (ISO-8601 format). If not provided, defaults to current time. Must be after 'from_time'.") Instant endTime) {
+            @QueryParam("to_time") @Schema(description = "Filter traces created up to this time (ISO-8601 format). If not provided, defaults to current time. Must be after 'from_time'.") Instant endTime,
+            @QueryParam("annotation_queue_id") @Schema(description = "Compute stats over the traces belonging to this annotation queue and scope feedback scores to it") UUID annotationQueueId) {
 
         validateProjectNameAndProjectId(projectName, projectId);
         validateTimeRangeParameters(startTime, endTime);
@@ -428,6 +429,7 @@ public class TracesResource {
                 .searchText(StringUtils.trimToNull(search))
                 .uuidFromTime(instantToUUIDMapper.toLowerBound(startTime))
                 .uuidToTime(instantToUUIDMapper.toUpperBound(endTime))
+                .annotationQueueId(annotationQueueId)
                 .build();
 
         String workspaceId = requestContext.get().getWorkspaceId();

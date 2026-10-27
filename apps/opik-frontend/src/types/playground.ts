@@ -33,8 +33,11 @@ export interface PlaygroundPromptType {
   configs: LLMPromptConfigsType;
   loadedChatPromptId?: string;
   loadedChatPromptVersionId?: string;
+  appliedChatPromptVersionId?: string;
   skipInitialPromptLoad?: boolean;
 }
+
+export type PlaygroundRunInputChange = "prompt" | "model" | "parameters";
 
 export interface ChatCompletionMessageChoiceType {
   delta: {

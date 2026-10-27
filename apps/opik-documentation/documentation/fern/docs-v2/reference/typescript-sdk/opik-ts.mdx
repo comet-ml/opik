@@ -23,7 +23,7 @@ The Opik TS is an interactive command-line tool that streamlines the process of 
 
 Run the CLI in your project directory:
 
-```bash
+```bash wordWrap
 npx opik-ts configure
 ```
 
@@ -62,31 +62,31 @@ The CLI supports several command-line options for customization:
 
 **Verbose debugging mode:**
 
-```bash
+```bash wordWrap
 npx opik-ts configure --debug
 ```
 
 **Non-interactive mode with defaults:**
 
-```bash
+```bash wordWrap
 npx opik-ts configure --default
 ```
 
 **Install in a specific directory:**
 
-```bash
+```bash wordWrap
 npx opik-ts configure --install-dir=./my-app
 ```
 
 **Force installation (skip peer dependency checks):**
 
-```bash
+```bash wordWrap
 npx opik-ts configure --force-install
 ```
 
 **Local development setup:**
 
-```bash
+```bash wordWrap
 npx opik-ts configure --use-local
 ```
 
@@ -96,7 +96,7 @@ This will skip the deployment selection step and automatically configure your en
 
 The CLI automatically creates or updates your `.env` file with the necessary configuration:
 
-```bash
+```bash wordWrap
 # Opik Configuration
 OPIK_API_KEY=your-api-key-here
 OPIK_URL_OVERRIDE=https://www.comet.com/opik/api
@@ -117,7 +117,7 @@ OPIK_WORKSPACE=default
 
 If you encounter permission errors during installation:
 
-```bash
+```bash wordWrap
 # Use --force-install to bypass peer dependency checks
 npx opik-ts configure --force-install
 ```
@@ -145,7 +145,7 @@ If traces aren't appearing in Opik:
 1. Verify your `OPIK_API_KEY` is correct
 2. Check that `OPIK_URL_OVERRIDE` points to the right endpoint
 3. Ensure you're calling `flush()` before your application exits:
-   ```typescript
+   ```typescript wordWrap
    await trackedClient.flush();
    ```
 
@@ -153,7 +153,7 @@ If traces aren't appearing in Opik:
 
 Enable verbose logging to troubleshoot issues:
 
-```bash
+```bash wordWrap
 npx opik-ts configure --debug
 ```
 
@@ -168,14 +168,14 @@ This will show detailed information about:
 
 For automated deployments, use the non-interactive mode:
 
-```bash
+```bash wordWrap
 # In your CI/CD pipeline
 npx opik-ts configure --default --force-install
 ```
 
 Set environment variables beforehand:
 
-```bash
+```bash wordWrap
 export OPIK_API_KEY="your-api-key"
 export OPENAI_API_KEY="your-openai-key"
 npx opik-ts configure --default

@@ -97,6 +97,7 @@
     --chart-orange: #fb9341;
     --chart-teal: #12a4b4;
     --chart-gray-light: #ebf2f5;
+    --chart-yellow-light: #fef0c8;
     --chart-gray-dark: #45575f;
 
     /* Optimization Studio icon accents (per-algorithm / per-metric) */
@@ -109,6 +110,15 @@
     --metric-icon-levenshtein: #f76808;
     --metric-icon-numerical: #e5484d;
     --metric-icon-code: #d6409f;
+
+    --rule-icon-llm-judge: #22d3ee;
+    --rule-icon-code: #f5d90a;
+    --rule-icon-decision-model: #fb923c;
+    --judge-template-hallucination: #22d3ee;
+    --judge-template-moderation: #f9a8d4;
+    --judge-template-answer-relevance: #a3e635;
+    --judge-template-tool-correctness: #f5d90a;
+    --judge-template-task-completion: #c4b5fd;
 
     /* Template icon colors */
     --template-icon-metrics: #5899da;
@@ -304,6 +314,9 @@
 
     /* Recoverable-waste callout (AI Spend) */
     --waste-bg: #fee8d7;
+
+    /* Diagnostics guidance-changed callout */
+    --guidance-callout-bg: #fee8d7;
     --waste-border: #fb9341;
     --waste-text: #000000;
 
@@ -458,6 +471,7 @@
     --chart-orange: #fb9341;
     --chart-teal: #12a4b4;
     --chart-gray-light: #2e2e2e;
+    --chart-yellow-light: #3f320e;
     --chart-gray-dark: #e2e8f0;
 
     /* 2.0 accent colors - Dark Mode */
@@ -467,6 +481,15 @@
     --accent-magenta: #be48ea;
     --accent-red: #df5a40;
     --accent-indigo: #5356f1;
+
+    --rule-icon-llm-judge: #22d3ee;
+    --rule-icon-code: #f5d90a;
+    --rule-icon-decision-model: #fb923c;
+    --judge-template-hallucination: #22d3ee;
+    --judge-template-moderation: #f9a8d4;
+    --judge-template-answer-relevance: #a3e635;
+    --judge-template-tool-correctness: #f5d90a;
+    --judge-template-task-completion: #c4b5fd;
 
     /* Template icon colors - Dark Mode */
     --template-icon-metrics: #5899da;
@@ -576,6 +599,9 @@
 
     /* Recoverable-waste callout (AI Spend) - Dark Mode */
     --waste-bg: #fb934126;
+
+    /* Diagnostics guidance-changed callout - Dark Mode */
+    --guidance-callout-bg: #fb934126;
     --waste-border: #fb9341;
     --waste-text: #fee8d7;
 
@@ -864,6 +890,28 @@
 @-moz-document url-prefix() {
   .comet-fix-cell-height {
     height: 100%;
+  }
+}
+
+.comet-scroll-linked {
+  timeline-scope: --comet-scroll-linked-x;
+}
+
+.comet-scroll-linked-source {
+  scroll-timeline: --comet-scroll-linked-x x;
+}
+
+// A fixed px range (far wider than any table) maps animation progress 1:1 to
+// the source's scrollLeft, so the follower needs no measured scroll width.
+.comet-scroll-linked-follower {
+  animation: comet-scroll-linked-follow linear;
+  animation-timeline: --comet-scroll-linked-x;
+  animation-range: 0px 1000000px;
+}
+
+@keyframes comet-scroll-linked-follow {
+  to {
+    transform: translateX(-1000000px);
   }
 }
 

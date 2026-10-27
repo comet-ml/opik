@@ -12,9 +12,13 @@ import {
   PROVIDER_TYPE,
 } from "@/types/providers";
 import {
+  OpenRouterParam,
+  getOpenRouterReasoningEffortOptions,
+  isAnthropicThinkingRequested,
   resolveEffort,
   resolveSamplingParams,
   supportsGeminiThinkingLevel,
+  supportsOpenRouterParam,
   supportsPenaltyParams,
   supportsSamplingParams,
   supportsVertexAIThinkingLevel,
@@ -79,7 +83,9 @@ export const getAnthropicVisibleControls = ({
   const { thinkingEffort } = resolveEffort(model ?? "", configs);
 
   return {
-    samplingParams: supportsSamplingParams(model),
+    samplingParams:
+      supportsSamplingParams(model) &&
+      !isAnthropicThinkingRequested(model ?? "", configs),
     maxCompletionTokens: supports("maxCompletionTokens"),
     throttling: supports("throttling"),
     maxConcurrentRequests: supports("maxConcurrentRequests"),
@@ -127,6 +133,11 @@ export const getVertexAIVisibleControls = (
     supportsVertexAIThinkingLevel(input.model),
   );
 
+export const offersOpenRouterTopP = (
+  model: PROVIDER_MODEL_TYPE | "" | undefined,
+  supports: SupportsParam,
+) => supports("topP") && supportsOpenRouterParam(model, "topP");
+
 export const getOpenRouterVisibleControls = ({
   model,
   configs,
@@ -135,21 +146,29 @@ export const getOpenRouterVisibleControls = ({
   const sampling = resolveSamplingPresentation(model);
   const { temperature, topP } = resolveSamplingParams(model ?? "", configs);
   const independent = sampling === "independent";
+  const showPenalties = supportsPenaltyParams(model);
+  const shows = (param: OpenRouterParam) =>
+    supportsOpenRouterParam(model, param) && !isUndefined(configs[param]);
 
   return {
     // ExclusiveSamplingParams renders nothing when it can offer no choice and neither half is live.
     samplingParams:
       sampling === "exclusive" &&
-      (supports("topP") || !isUndefined(temperature) || !isUndefined(topP)),
-    temperature: independent && !isUndefined(configs.temperature),
-    maxTokens: !isUndefined(configs.maxTokens),
-    topP: independent && supports("topP") && !isUndefined(configs.topP),
-    topK: !isUndefined(configs.topK),
-    frequencyPenalty: !isUndefined(configs.frequencyPenalty),
-    presencePenalty: !isUndefined(configs.presencePenalty),
-    repetitionPenalty: !isUndefined(configs.repetitionPenalty),
-    minP: !isUndefined(configs.minP),
-    topA: !isUndefined(configs.topA),
+      (offersOpenRouterTopP(model, supports) ||
+        !isUndefined(temperature) ||
+        !isUndefined(topP)),
+    temperature: independent && !isUndefined(temperature),
+    maxTokens: shows("maxTokens"),
+    topP: independent && supports("topP") && !isUndefined(topP),
+    topK: shows("topK"),
+    frequencyPenalty: showPenalties && shows("frequencyPenalty"),
+    presencePenalty: showPenalties && shows("presencePenalty"),
+    repetitionPenalty: shows("repetitionPenalty"),
+    minP: shows("minP"),
+    topA: shows("topA"),
+    reasoningEffort:
+      supports("reasoningEffort") &&
+      getOpenRouterReasoningEffortOptions(model).length > 0,
     throttling: supports("throttling"),
     maxConcurrentRequests: supports("maxConcurrentRequests"),
   };

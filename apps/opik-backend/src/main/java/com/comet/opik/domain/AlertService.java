@@ -15,6 +15,7 @@ import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.resources.v1.events.webhooks.WebhookHttpClient;
 import com.comet.opik.api.sorting.SortingFactoryAlerts;
 import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.alerts.AlertEventBridgePublisher;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
@@ -271,6 +272,7 @@ class AlertServiceImpl implements AlertService {
         validateNoProjectScopeConflict(alert);
         validateGroupIndices(alert);
         validateThresholdConfigs(alert);
+        validateCustomFields(alert);
         var newAlert = prepareAlert(alert, userName, workspaceId);
 
         return EntityConstraintHandler
@@ -291,6 +293,7 @@ class AlertServiceImpl implements AlertService {
         validateNoProjectScopeConflict(alert);
         validateGroupIndices(alert);
         validateThresholdConfigs(alert);
+        validateCustomFields(alert);
 
         alert = alert.toBuilder()
                 .createdBy(existingAlert.createdBy())
@@ -645,6 +648,21 @@ class AlertServiceImpl implements AlertService {
             throw new BadRequestException(
                     "Config value for key '%s' in trigger config of type '%s' must be a positive number of seconds, got '%d'"
                             .formatted(WINDOW_CONFIG_KEY, type.getValue(), windowSeconds));
+        }
+    }
+
+    private static void validateCustomFields(Alert alert) {
+        if (alert.customFields() == null) {
+            return;
+        }
+        List<String> reservedKeys = alert.customFields().keySet().stream()
+                .filter(AlertEventBridgePublisher.RESERVED_CUSTOM_FIELD_KEYS::contains)
+                .sorted()
+                .toList();
+        if (!reservedKeys.isEmpty()) {
+            throw new BadRequestException(
+                    "'custom_fields' keys %s are reserved by the alert event payload, use different keys"
+                            .formatted(reservedKeys));
         }
     }
 

@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.llm;
 
 import com.comet.opik.api.LlmProvider;
+import com.comet.opik.api.ModelParams;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.domain.LlmProviderApiKeyService;
@@ -12,6 +13,7 @@ import com.comet.opik.domain.llm.structuredoutput.ToolCallingStrategy;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.llm.antropic.AnthropicModelName;
 import com.comet.opik.infrastructure.llm.customllm.CustomLlmModelNameChecker;
+import com.comet.opik.infrastructure.llm.customllm.ProviderBaseUrlGuard;
 import com.comet.opik.infrastructure.llm.gemini.GeminiModelName;
 import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterDecisionModel;
@@ -24,6 +26,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.EnumUtils;
+import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.Arrays;
@@ -46,6 +49,7 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
     private final @NonNull LlmProviderApiKeyService llmProviderApiKeyService;
     private final @NonNull OpikConfiguration configuration;
     private final @NonNull LlmModelRegistryService registryService;
+    private final @NonNull ProviderBaseUrlGuard providerBaseUrlGuard;
     private final Map<LlmProvider, LlmServiceProvider> services = new EnumMap<>(LlmProvider.class);
 
     public void register(LlmProvider llmProvider, LlmServiceProvider service) {
@@ -68,11 +72,29 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
         return buildConfig(getProviderApiKey(workspaceId, llmProvider, model), workspaceId);
     }
 
+    // OPIK_FREE's URL is operator-configured; any other base URL is the workspace's own
+    public boolean hasUserConfiguredDestination(@NonNull String workspaceId, @NonNull String model) {
+        var llmProvider = getLlmProvider(model);
+        return llmProvider != LlmProvider.OPIK_FREE
+                && StringUtils.isNotBlank(getProviderApiKey(workspaceId, llmProvider, model).baseUrl());
+    }
+
     private static final Set<LlmProvider> NAMED_PROVIDERS = Arrays.stream(LlmProvider.values())
             .filter(LlmProvider::supportsProviderName)
             .collect(Collectors.toUnmodifiableSet());
 
+    /**
+     * OPIK_FREE's URL is operator-configured; the others always build their client through
+     * CustomLlmClientGenerator, which checks every request URL itself.
+     */
+    private static final Set<LlmProvider> BASE_URL_GUARD_EXEMPT_PROVIDERS = Set.of(
+            LlmProvider.OPIK_FREE, LlmProvider.CUSTOM_LLM, LlmProvider.BEDROCK, LlmProvider.OLLAMA);
+
     private LlmProviderClientApiConfig buildConfig(ProviderApiKey providerConfig, String workspaceId) {
+        if (!BASE_URL_GUARD_EXEMPT_PROVIDERS.contains(providerConfig.provider())) {
+            providerBaseUrlGuard.validate(providerConfig.baseUrl());
+        }
+
         var configuration = Optional.ofNullable(providerConfig.configuration()).orElse(Map.of());
 
         // For providers that support naming, add provider_name to configuration if present
@@ -130,6 +152,14 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
 
         var provider = getLlmProviderFromEnums(model);
         return StructuredOutputStrategy.getStrategy(provider, model);
+    }
+
+    @Override
+    public Optional<ModelParams> openAiParams(@NonNull String model) {
+        return registryService.findModel(model)
+                .filter(result -> result.provider() == LlmProvider.OPEN_AI)
+                .map(result -> ObjectUtils.getIfNull(result.model().params(),
+                        () -> registryService.paramsOf(LlmProvider.OPEN_AI.getValue(), result.model().id())));
     }
 
     private LlmProvider getLlmProviderFromEnums(@NonNull String model) {

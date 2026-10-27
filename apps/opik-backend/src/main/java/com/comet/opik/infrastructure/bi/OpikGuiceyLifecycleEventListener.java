@@ -2,6 +2,7 @@ package com.comet.opik.infrastructure.bi;
 
 import com.comet.opik.api.resources.v1.jobs.AgentInsightsAutoFirstRunJob;
 import com.comet.opik.api.resources.v1.jobs.AgentInsightsReportJob;
+import com.comet.opik.api.resources.v1.jobs.AiLabelsJob;
 import com.comet.opik.api.resources.v1.jobs.AnnotationQueueRoutingFlushJob;
 import com.comet.opik.api.resources.v1.jobs.ClickHousePartitionMetricsJob;
 import com.comet.opik.api.resources.v1.jobs.DatasetVersionItemsTotalMigrationJob;
@@ -13,6 +14,7 @@ import com.comet.opik.api.resources.v1.jobs.ProjectLastUpdatedFlushJob;
 import com.comet.opik.api.resources.v1.jobs.RetentionCatchUpJob;
 import com.comet.opik.api.resources.v1.jobs.RetentionEstimationJob;
 import com.comet.opik.api.resources.v1.jobs.RetentionSlidingWindowJob;
+import com.comet.opik.api.resources.v1.jobs.SpanWeeksBackfillJob;
 import com.comet.opik.api.resources.v1.jobs.StreamConsumerReaperJob;
 import com.comet.opik.api.resources.v1.jobs.TraceThreadsClosingJob;
 import com.comet.opik.infrastructure.AnnotationQueueRoutingConfig;
@@ -69,11 +71,13 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
                 setExperimentDenormalizationJob();
                 setProjectLastUpdatedFlushJob();
                 setAnnotationQueueRoutingFlushJob();
+                setAiLabelsJob();
                 setLocalRunnerReaperJob();
                 setStreamConsumerReaperJob();
                 setOptimizationStalledReaperJob();
                 setRetentionJobs();
                 setPartitionMetricsJob();
+                setSpanWeeksBackfillJob();
                 setLlmModelRegistryRefreshJob();
                 scheduleDatasetVersionItemsTotalMigrationJobIfEnabled();
             }
@@ -176,6 +180,17 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
                 routingConfig.getJobInterval().toJavaDuration(), null);
     }
 
+    private void setAiLabelsJob() {
+        var aiLabelsConfig = injector.get().getInstance(OpikConfiguration.class).getAiLabels();
+
+        if (!aiLabelsConfig.isEnabled()) {
+            log.info("ai-labels is disabled, skipping job setup");
+            return;
+        }
+
+        scheduleRepeatingJob(AiLabelsJob.class, aiLabelsConfig.getTickInterval().toJavaDuration(), null);
+    }
+
     private void setLocalRunnerReaperJob() {
         LocalRunnerConfig localRunnerConfig = injector.get().getInstance(OpikConfiguration.class).getLocalRunner();
 
@@ -242,6 +257,18 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
 
         scheduleRepeatingJob(ClickHousePartitionMetricsJob.class,
                 partitionMetricsConfig.getInterval().toJavaDuration(), null);
+    }
+
+    private void setSpanWeeksBackfillJob() {
+        var configuration = injector.get().getInstance(OpikConfiguration.class);
+
+        if (!configuration.getDatabaseAnalyticsDataModel().spanWeeksBackfillEnabled()) {
+            log.info("Span weeks backfill job is disabled, skipping job setup");
+            return;
+        }
+
+        scheduleRepeatingJob(SpanWeeksBackfillJob.class,
+                configuration.getSpanWeeksBackfill().interval().toJavaDuration(), null);
     }
 
     private void setAgentInsightsJobs() {

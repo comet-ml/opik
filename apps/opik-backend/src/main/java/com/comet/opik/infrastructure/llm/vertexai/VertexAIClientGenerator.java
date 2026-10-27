@@ -1,10 +1,15 @@
 package com.comet.opik.infrastructure.llm.vertexai;
 
+import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
+import com.comet.opik.infrastructure.llm.GeminiMaxOutputTokens;
 import com.comet.opik.infrastructure.llm.GeminiThinkingParams;
+import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
+import com.comet.opik.infrastructure.llm.RemoteMediaInliner;
+import com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -30,13 +35,17 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
-import java.util.stream.Stream;
+import java.util.regex.Pattern;
 
 @Slf4j
 @RequiredArgsConstructor
 public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatModel> {
 
+    private static final Pattern LOCATION = Pattern.compile("[a-z0-9-]+");
+
     private final @NonNull LlmProviderClientConfig clientConfig;
+    private final @NonNull LlmModelRegistryService registryService;
+    private final @NonNull RemoteMediaInliner remoteMediaInliner;
 
     CloseableVertexAiChatModel newVertexAIClient(LlmProviderClientApiConfig apiKey, ChatCompletionRequest request) {
         return buildOwnedClient(apiKey, request, (client, model) -> {
@@ -49,12 +58,12 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
             Optional.ofNullable(request.stop()).ifPresent(builder::stopSequences);
             Optional.ofNullable(request.presencePenalty()).ifPresent(builder::presencePenalty);
             Optional.ofNullable(request.frequencyPenalty()).ifPresent(builder::frequencyPenalty);
-            maxOutputTokens(request).ifPresent(builder::maxOutputTokens);
+            GeminiMaxOutputTokens.firstPositive(request).ifPresent(builder::maxOutputTokens);
             Optional.ofNullable(request.seed()).ifPresent(builder::seed);
 
             applyThinking(builder::thinkingLevel, builder::thinkingBudget, model, request.customParameters());
 
-            return new CloseableVertexAiChatModel(builder.build(), client);
+            return new CloseableVertexAiChatModel(builder.build(), client, remoteMediaInliner);
         });
     }
 
@@ -70,21 +79,13 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
             Optional.ofNullable(request.stop()).ifPresent(builder::stopSequences);
             Optional.ofNullable(request.presencePenalty()).ifPresent(builder::presencePenalty);
             Optional.ofNullable(request.frequencyPenalty()).ifPresent(builder::frequencyPenalty);
-            maxOutputTokens(request).ifPresent(builder::maxOutputTokens);
+            GeminiMaxOutputTokens.firstPositive(request).ifPresent(builder::maxOutputTokens);
             Optional.ofNullable(request.seed()).ifPresent(builder::seed);
 
             applyThinking(builder::thinkingLevel, builder::thinkingBudget, model, request.customParameters());
 
-            return new CloseableVertexAiStreamingChatModel(builder.build(), client);
+            return new CloseableVertexAiStreamingChatModel(builder.build(), client, remoteMediaInliner);
         });
-    }
-
-    // Zero is never sent: the slider goes down to 0, and a zero cap could only ever produce an empty answer.
-    static Optional<Integer> maxOutputTokens(ChatCompletionRequest request) {
-        return Stream.of(request.maxCompletionTokens(), request.maxTokens())
-                .filter(Objects::nonNull)
-                .filter(tokens -> tokens > 0)
-                .findFirst();
     }
 
     /**
@@ -106,12 +107,16 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
     // Built here rather than by the model builder, which keeps its client private and is not closeable.
     private <T> T buildOwnedClient(LlmProviderClientApiConfig apiKey, ChatCompletionRequest request,
             OwnedClientFactory<T> factory) {
-        var vertexAIModelName = VertexAIModelName.byQualifiedName(request.model())
+        // The enum fallback mirrors LlmProviderFactoryImpl's routing, so every model it sends here can be built here.
+        var modelId = registryService.findModel(request.model())
+                .filter(result -> result.provider() == LlmProvider.VERTEX_AI)
+                .map(result -> result.model().id())
+                .or(() -> VertexAIModelName.byQualifiedName(request.model()).map(VertexAIModelName::toString))
                 .orElseThrow(() -> new IllegalArgumentException("Unsupported model: %s".formatted(request.model())));
 
         Client client = buildClient(apiKey);
         try {
-            return factory.create(client, vertexAIModelName.toString());
+            return factory.create(client, modelId);
         } catch (RuntimeException e) {
             closeSuppressing(client, e);
             throw e;
@@ -141,7 +146,12 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
      * endpoint lookup, whose keys are constrained to this same lower-case form.
      */
     private static String canonicalLocation(String location) {
-        return location.strip().toLowerCase(Locale.ROOT);
+        var canonical = location.strip().toLowerCase(Locale.ROOT);
+        // the SDK formats the location into the endpoint host, so anything else could send the request elsewhere
+        if (!LOCATION.matcher(canonical).matches()) {
+            throw new ProviderRequestRefusedException(ProviderRequestRefusedException.Reason.VERTEX_AI_LOCATION);
+        }
+        return canonical;
     }
 
     private Optional<String> apiEndpointFor(String canonicalLocation) {
@@ -165,6 +175,11 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
         try {
             var credentials = ServiceAccountCredentials.fromStream(
                     new ByteArrayInputStream(config.apiKey().getBytes(StandardCharsets.UTF_8)));
+
+            // the credentials refresh by posting to token_uri, which comes from the user-supplied key file
+            if (!clientConfig.getVertexAIClient().tokenUris().contains(credentials.getTokenServerUri())) {
+                throw new ProviderRequestRefusedException(ProviderRequestRefusedException.Reason.VERTEX_AI_TOKEN_URI);
+            }
 
             var builder = Client.builder()
                     .vertexAI(true)

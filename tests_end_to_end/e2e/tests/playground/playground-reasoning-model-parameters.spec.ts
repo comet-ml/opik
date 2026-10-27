@@ -98,7 +98,7 @@ test.describe(
         });
 
         const body = await test.step('Capture the outbound completion body', async () => {
-          await playground.fillFirstMessage('Reply with the single word OK.');
+          await playground.fillUserMessage('Reply with the single word OK.');
           return captureCompletionBody(page, () => playground.clickRun());
         });
 
@@ -154,7 +154,7 @@ test.describe(
         });
 
         await test.step('And all four are in the body', async () => {
-          await playground.fillFirstMessage('Reply with the single word OK.');
+          await playground.fillUserMessage('Reply with the single word OK.');
           const body = await captureCompletionBody(page, () => playground.clickRun());
 
           expect(body.model).toBe('gpt-4o-mini');
@@ -211,7 +211,7 @@ test.describe(
           });
 
           await test.step('…and its request carries neither', async () => {
-            await playground.fillFirstMessage('Reply with the single word OK.');
+            await playground.fillUserMessage('Reply with the single word OK.');
             const body = await captureCompletionBody(page, () => playground.clickRun());
 
             expect(body.model, 'the Gemini 3 id, with this provider’s spelling').toBe(

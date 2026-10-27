@@ -2,24 +2,31 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import pick from "lodash/pick";
 import mapValues from "lodash/mapValues";
+import union from "lodash/union";
+import isEqual from "fast-deep-equal";
 
-import { LogExperiment, PlaygroundPromptType } from "@/types/playground";
-import { restoreMissingConfigKeys } from "@/lib/playground";
+import {
+  LogExperiment,
+  PlaygroundPromptType,
+  PlaygroundRunInputChange,
+} from "@/types/playground";
+import { LLMMessage } from "@/types/llm";
+import { restoreMissingConfigKeys, RunFailureHint } from "@/lib/playground";
 import { buildExperimentName } from "@/lib/experiments";
 import { JsonObject } from "@/types/shared";
 import { Filters } from "@/types/filters";
 import { DATASET_TYPE } from "@/types/datasets";
+import isEmpty from "lodash/isEmpty";
 import isUndefined from "lodash/isUndefined";
-import get from "lodash/get";
-import lodashSet from "lodash/set";
 
 interface PlaygroundOutput {
   isLoading: boolean;
   value: string | null;
   error?: string;
+  errorHint?: RunFailureHint;
   stale: boolean;
+  staleChanges?: PlaygroundRunInputChange[];
   traceId?: string;
-  selectedRuleIds?: string[] | null;
   usage?: {
     duration?: number;
     totalTokens?: number;
@@ -28,73 +35,100 @@ interface PlaygroundOutput {
   };
 }
 
-interface PlaygroundOutputWithDatasetItem {
-  datasetItemMap: {
-    [datasetItemId: string]: PlaygroundOutput;
-  };
-}
-
 interface PlaygroundOutputMap {
-  [promptId: string]: PlaygroundOutput | PlaygroundOutputWithDatasetItem;
+  [promptId: string]: PlaygroundOutput;
 }
 
-const isPlaygroundOutputWithDatasetItem = (
-  output: PlaygroundOutput | PlaygroundOutputWithDatasetItem,
-): output is PlaygroundOutputWithDatasetItem => {
-  return "datasetItemMap" in output;
+// Returns the same object when nothing new changed, so cells subscribed to an
+// already stale output don't re-render on every keystroke in the prompt.
+const markOutputStale = (
+  output: PlaygroundOutput,
+  changes: PlaygroundRunInputChange[],
+): PlaygroundOutput => {
+  const previousChanges = output.stale ? output.staleChanges ?? [] : [];
+  const staleChanges = union(previousChanges, changes);
+
+  if (output.stale && staleChanges.length === previousChanges.length) {
+    return output;
+  }
+
+  return { ...output, stale: true, staleChanges };
 };
 
-const updateAllStaleStatusesForPromptOutput = (
+const markPromptOutputStale = (
   promptId: string,
   outputMap: PlaygroundOutputMap,
-  value: boolean,
+  changes: PlaygroundRunInputChange[],
 ) => {
-  if (!outputMap[promptId]) {
-    return outputMap;
-  }
-
   const promptOutput = outputMap[promptId];
 
-  if (!isPlaygroundOutputWithDatasetItem(promptOutput)) {
-    const currentStaleStatus = promptOutput.stale;
-    if (currentStaleStatus !== value) {
-      return {
-        ...outputMap,
-        [promptId]: {
-          ...promptOutput,
-          stale: value,
-        },
-      };
-    }
+  if (!promptOutput) {
     return outputMap;
   }
-
-  const datasetItemMap = promptOutput.datasetItemMap;
-  const datasetItemIds = Object.keys(datasetItemMap);
-
-  const updatedDatasetItemMap = datasetItemIds.reduce<
-    PlaygroundOutputWithDatasetItem["datasetItemMap"]
-  >((updatedMap, datasetItemId) => {
-    const datasetItem = datasetItemMap[datasetItemId];
-    const currentStaleStatus = datasetItem.stale;
-
-    if (currentStaleStatus !== value) {
-      updatedMap[datasetItemId] = {
-        ...datasetItem,
-        stale: value,
-      };
-    } else {
-      updatedMap[datasetItemId] = datasetItem;
-    }
-
-    return updatedMap;
-  }, {});
 
   return {
     ...outputMap,
-    [promptId]: {
-      datasetItemMap: updatedDatasetItemMap,
-    },
+    [promptId]: markOutputStale(promptOutput, changes),
+  };
+};
+
+// Only what a run sends. Library links, message ids and one-off flags also go
+// through updatePrompt, often with no user edit (a reload re-applies the loaded
+// prompt), and must not hide the output.
+const toRunMessages = (messages: LLMMessage[]) =>
+  messages.map(({ role, content }) => ({ role, content }));
+
+const getRunInputChanges = (
+  prompt: PlaygroundPromptType,
+  updatedPrompt: PlaygroundPromptType,
+): PlaygroundRunInputChange[] => {
+  const changes: PlaygroundRunInputChange[] = [];
+
+  if (
+    !isEqual(
+      toRunMessages(prompt.messages),
+      toRunMessages(updatedPrompt.messages),
+    )
+  ) {
+    changes.push("prompt");
+  }
+
+  if (
+    prompt.model !== updatedPrompt.model ||
+    prompt.provider !== updatedPrompt.provider
+  ) {
+    changes.push("model");
+  } else if (!isEqual(prompt.configs, updatedPrompt.configs)) {
+    // Not counted on a model switch: it swaps in the new model's default
+    // parameters, which the user didn't change themselves.
+    changes.push("parameters");
+  }
+
+  return changes;
+};
+
+// Prompts stored before appliedChatPromptVersionId existed show their pinned
+// version's messages, maybe edited, and without the marker the loader would
+// apply the template over them once. A prompt that follows the latest version
+// is left alone, since which version it applied is unknown.
+const markStoredPinnedChatPromptApplied = (
+  prompt: PlaygroundPromptType,
+): PlaygroundPromptType => {
+  if (
+    !prompt ||
+    typeof prompt !== "object" ||
+    !prompt.loadedChatPromptId ||
+    !prompt.loadedChatPromptVersionId ||
+    prompt.appliedChatPromptVersionId ||
+    !Array.isArray(prompt.messages) ||
+    !prompt.messages.some((message) => !isEmpty(message?.content))
+  ) {
+    return prompt;
+  }
+
+  return {
+    ...prompt,
+    appliedChatPromptVersionId: prompt.loadedChatPromptVersionId,
   };
 };
 
@@ -116,11 +150,24 @@ export type PlaygroundStore = {
   progressTotal: number;
   progressCompleted: number;
   progressPhase: "running" | "evaluating" | null;
+  // Sets rather than arrays so there is one way to say "nothing" — an empty array beside null is
+  // what let an empty stop queue read as a stop still pending. Safe to hold a Set only because
+  // partialize strips both: neither survives JSON, and neither should outlive the tab.
+  watchLapsed: Set<string>;
+  stopsAwaitingRun: Set<string>;
+  cancelsInFlight: Set<string>;
   experimentName: string | null;
   lastSuggestedExperimentName: string | null;
   datasetType: DATASET_TYPE | null;
   experimentByPromptId: Record<string, string>;
+  runTotalItemsByPromptId: Record<string, number>;
+  datasetItemsTotal: number | null;
+  hasUnseenRunCompletion: boolean;
+  isRunInFlight: boolean;
+  /** True from mount until a reloaded page has learned whether its run is still going. */
+  isResumingRun: boolean;
   scoresByDatasetId: Record<string, string[] | null>;
+  appliedChatPromptVersionsBackfilled: boolean;
 
   setPromptMap: (
     promptIds: string[],
@@ -133,26 +180,24 @@ export type PlaygroundStore = {
   addPrompt: (prompt: PlaygroundPromptType, position?: number) => void;
   deletePrompt: (promptId: string) => void;
   resetOutputMap: () => void;
-  updateOutput: (
-    promptId: string,
-    datasetItemId: string,
-    changes: Partial<PlaygroundOutput>,
-  ) => void;
-  updateOutputTraceId: (
-    promptId: string,
-    datasetItemId: string,
-    traceId: string,
-  ) => void;
+  clearPromptOutputStale: (promptId: string) => void;
+  updateOutput: (promptId: string, changes: Partial<PlaygroundOutput>) => void;
+  updateOutputTraceId: (promptId: string, traceId: string) => void;
   setDatasetVariables: (variables: string[]) => void;
   setDatasetSampleData: (data: JsonObject | null) => void;
   triggerProviderValidation: () => void;
   setSelectedRuleIds: (ruleIds: string[] | null) => void;
   setCreatedExperiments: (experiments: LogExperiment[]) => void;
+  setRunTotalItemsForPrompts: (promptIds: string[], total: number) => void;
+  setDatasetItemsTotal: (total: number | null) => void;
+  setHasUnseenRunCompletion: (value: boolean) => void;
+  setIsRunInFlight: (value: boolean) => void;
   clearCreatedExperiments: () => void;
   setIsRunning: (isRunning: boolean) => void;
   setPromptRunning: (promptId: string, running: boolean) => void;
   setAllRunning: (running: boolean) => void;
-  clearRunningMap: () => void;
+  settleRun: () => void;
+  setIsResumingRun: (value: boolean) => void;
   setExperimentName: (name: string | null) => void;
   setSuggestedExperimentName: (name: string) => void;
   setDatasetFilters: (filters: Filters) => void;
@@ -162,9 +207,18 @@ export type PlaygroundStore = {
   setProgress: (completed: number, total: number) => void;
   setProgressPhase: (phase: "running" | "evaluating" | null) => void;
   resetProgress: () => void;
+  markWatchLapsed: (promptIds: string[]) => void;
+  clearWatchLapsed: (promptIds: string[]) => void;
+  clearAllWatchLapsed: () => void;
+  queueStopAwaitingRun: (promptIds: string[]) => void;
+  clearStopAwaitingRun: (promptIds: string[]) => void;
+  clearAllStopsAwaitingRun: () => void;
+  markCancelInFlight: (promptIds: string[]) => void;
+  clearCancelInFlight: (promptIds: string[]) => void;
   setLastActiveProjectId: (projectId: string | null) => void;
   setDatasetType: (type: DATASET_TYPE | null) => void;
   setExperimentByPromptId: (map: Record<string, string>) => void;
+  forgetExperimentForPrompt: (promptId: string) => void;
   setScoresForDataset: (datasetId: string, ruleIds: string[] | null) => void;
 };
 
@@ -188,30 +242,40 @@ const usePlaygroundStore = create<PlaygroundStore>()(
       progressTotal: 0,
       progressCompleted: 0,
       progressPhase: null,
+      watchLapsed: new Set<string>(),
+      stopsAwaitingRun: new Set<string>(),
+      cancelsInFlight: new Set<string>(),
       experimentName: null,
       lastSuggestedExperimentName: null,
       datasetType: null,
       experimentByPromptId: {},
+      runTotalItemsByPromptId: {},
+      datasetItemsTotal: null,
+      hasUnseenRunCompletion: false,
+      isRunInFlight: false,
+      isResumingRun: false,
       scoresByDatasetId: {},
+      appliedChatPromptVersionsBackfilled: true,
 
       updatePrompt: (promptId, changes) => {
         set((state) => {
-          const newPromptMap = {
-            ...state.promptMap,
-            [promptId]: {
-              ...state.promptMap[promptId],
-              ...changes,
-            },
-          };
+          const prompt = state.promptMap[promptId];
+          const updatedPrompt = { ...prompt, ...changes };
+          const runInputChanges = getRunInputChanges(prompt, updatedPrompt);
 
           return {
             ...state,
-            promptMap: newPromptMap,
-            outputMap: updateAllStaleStatusesForPromptOutput(
-              promptId,
-              state.outputMap,
-              true,
-            ),
+            promptMap: {
+              ...state.promptMap,
+              [promptId]: updatedPrompt,
+            },
+            outputMap: runInputChanges.length
+              ? markPromptOutputStale(
+                  promptId,
+                  state.outputMap,
+                  runInputChanges,
+                )
+              : state.outputMap,
           };
         });
       },
@@ -257,6 +321,20 @@ const usePlaygroundStore = create<PlaygroundStore>()(
           };
         });
       },
+      clearPromptOutputStale: (promptId) => {
+        set((state) => {
+          const output = state.outputMap[promptId];
+          if (!output?.stale) return state;
+
+          return {
+            ...state,
+            outputMap: {
+              ...state.outputMap,
+              [promptId]: { ...output, stale: false, staleChanges: undefined },
+            },
+          };
+        });
+      },
       resetOutputMap: () => {
         set((state) => {
           return {
@@ -265,45 +343,31 @@ const usePlaygroundStore = create<PlaygroundStore>()(
           };
         });
       },
-      updateOutput: (
-        promptId,
-        datasetItemId,
-        changes: Partial<PlaygroundOutput>,
-      ) => {
-        set((state) => {
-          const key = datasetItemId
-            ? [promptId, "datasetItemMap", datasetItemId]
-            : [promptId];
-
-          const output = get(state.outputMap, key);
-          const newOutput = { ...output, stale: false, ...changes };
-          const newOutputMap = { ...state.outputMap };
-
-          lodashSet(newOutputMap, key, newOutput);
-
-          return {
-            ...state,
-            outputMap: newOutputMap,
-          };
-        });
+      updateOutput: (promptId, changes: Partial<PlaygroundOutput>) => {
+        set((state) => ({
+          ...state,
+          outputMap: {
+            ...state.outputMap,
+            [promptId]: {
+              ...state.outputMap[promptId],
+              stale: false,
+              staleChanges: undefined,
+              ...changes,
+            },
+          },
+        }));
       },
-      updateOutputTraceId: (promptId, datasetItemId, traceId) => {
+      updateOutputTraceId: (promptId, traceId) => {
         set((state) => {
-          const key = datasetItemId
-            ? [promptId, "datasetItemMap", datasetItemId]
-            : [promptId];
-
-          const output = get(state.outputMap, key);
+          const output = state.outputMap[promptId];
           if (!output) return state;
 
-          const newOutput = { ...output, traceId };
-          const newOutputMap = { ...state.outputMap };
-
-          lodashSet(newOutputMap, key, newOutput);
-
           return {
             ...state,
-            outputMap: newOutputMap,
+            outputMap: {
+              ...state.outputMap,
+              [promptId]: { ...output, traceId },
+            },
           };
         });
       },
@@ -339,6 +403,26 @@ const usePlaygroundStore = create<PlaygroundStore>()(
           };
         });
       },
+      setRunTotalItemsForPrompts: (promptIds, total) => {
+        set((state) => ({
+          ...state,
+          runTotalItemsByPromptId: {
+            ...state.runTotalItemsByPromptId,
+            ...Object.fromEntries(
+              promptIds.map((promptId) => [promptId, total]),
+            ),
+          },
+        }));
+      },
+      setDatasetItemsTotal: (total) => {
+        set((state) => ({ ...state, datasetItemsTotal: total }));
+      },
+      setHasUnseenRunCompletion: (value) => {
+        set((state) => ({ ...state, hasUnseenRunCompletion: value }));
+      },
+      setIsRunInFlight: (value) => {
+        set((state) => ({ ...state, isRunInFlight: value }));
+      },
       setCreatedExperiments: (experiments) => {
         set((state) => {
           return {
@@ -353,6 +437,7 @@ const usePlaygroundStore = create<PlaygroundStore>()(
             ...state,
             createdExperiments: [],
             experimentByPromptId: {},
+            runTotalItemsByPromptId: {},
           };
         });
       },
@@ -360,22 +445,37 @@ const usePlaygroundStore = create<PlaygroundStore>()(
         set((state) => ({ ...state, isRunning }));
       },
       setPromptRunning: (promptId, running) => {
-        set((state) => ({
-          ...state,
-          isRunningMap: { ...state.isRunningMap, [promptId]: running },
-        }));
-      },
-      setAllRunning: (running) => {
         set((state) => {
-          const map: Record<string, boolean> = {};
-          state.promptIds.forEach((id) => {
-            map[id] = running;
-          });
-          return { ...state, isRunningMap: map };
+          const isRunningMap = { ...state.isRunningMap };
+          if (running) {
+            isRunningMap[promptId] = true;
+          } else {
+            delete isRunningMap[promptId];
+          }
+          return { ...state, isRunningMap };
         });
       },
-      clearRunningMap: () => {
-        set((state) => ({ ...state, isRunningMap: {} }));
+      setAllRunning: (running) => {
+        set((state) => ({
+          ...state,
+          isRunningMap: running
+            ? Object.fromEntries(state.promptIds.map((id) => [id, true]))
+            : {},
+        }));
+      },
+      settleRun: () => {
+        set((state) => ({
+          ...state,
+          isRunningMap: {},
+          isRunInFlight: false,
+          isResumingRun: false,
+          watchLapsed: new Set<string>(),
+          stopsAwaitingRun: new Set<string>(),
+          cancelsInFlight: new Set<string>(),
+        }));
+      },
+      setIsResumingRun: (value) => {
+        set((state) => ({ ...state, isResumingRun: value }));
       },
       setExperimentName: (name) => {
         set((state) => ({
@@ -447,6 +547,51 @@ const usePlaygroundStore = create<PlaygroundStore>()(
           };
         });
       },
+      markWatchLapsed: (promptIds) => {
+        set((state) => ({
+          ...state,
+          watchLapsed: new Set([...state.watchLapsed, ...promptIds]),
+        }));
+      },
+      clearWatchLapsed: (promptIds) => {
+        set((state) => {
+          const watchLapsed = new Set(state.watchLapsed);
+          promptIds.forEach((promptId) => watchLapsed.delete(promptId));
+          return { ...state, watchLapsed };
+        });
+      },
+      clearAllWatchLapsed: () => {
+        set((state) => ({ ...state, watchLapsed: new Set<string>() }));
+      },
+      queueStopAwaitingRun: (promptIds) => {
+        set((state) => ({
+          ...state,
+          stopsAwaitingRun: new Set([...state.stopsAwaitingRun, ...promptIds]),
+        }));
+      },
+      clearStopAwaitingRun: (promptIds) => {
+        set((state) => {
+          const stopsAwaitingRun = new Set(state.stopsAwaitingRun);
+          promptIds.forEach((promptId) => stopsAwaitingRun.delete(promptId));
+          return { ...state, stopsAwaitingRun };
+        });
+      },
+      clearAllStopsAwaitingRun: () => {
+        set((state) => ({ ...state, stopsAwaitingRun: new Set<string>() }));
+      },
+      markCancelInFlight: (promptIds) => {
+        set((state) => ({
+          ...state,
+          cancelsInFlight: new Set([...state.cancelsInFlight, ...promptIds]),
+        }));
+      },
+      clearCancelInFlight: (promptIds) => {
+        set((state) => {
+          const cancelsInFlight = new Set(state.cancelsInFlight);
+          promptIds.forEach((promptId) => cancelsInFlight.delete(promptId));
+          return { ...state, cancelsInFlight };
+        });
+      },
       setLastActiveProjectId: (projectId) => {
         set((state) => ({ ...state, lastActiveProjectId: projectId }));
       },
@@ -473,6 +618,16 @@ const usePlaygroundStore = create<PlaygroundStore>()(
           };
         });
       },
+      forgetExperimentForPrompt: (promptId) => {
+        set((state) => ({
+          ...state,
+          experimentByPromptId: Object.fromEntries(
+            Object.entries(state.experimentByPromptId).filter(
+              ([id]) => id !== promptId,
+            ),
+          ),
+        }));
+      },
       setScoresForDataset: (datasetId, ruleIds) => {
         set((state) => ({
           ...state,
@@ -490,29 +645,48 @@ const usePlaygroundStore = create<PlaygroundStore>()(
       // number — so a migrate hook would skip exactly the states that need repairing. Cheap and
       // idempotent, since restoreMissingConfigKeys returns the prompt untouched when it is complete.
       merge: (persisted, current) => {
+        const stored = persisted as Partial<PlaygroundStore> | undefined;
         const state = {
           ...current,
-          ...(persisted as Partial<PlaygroundStore>),
+          ...stored,
         };
 
         if (!state.promptMap) {
           return state;
         }
 
+        // Only state written before appliedChatPromptVersionId existed is backfilled: current
+        // state can hold a version picked a moment ago whose messages have not loaded yet, and
+        // marking it would keep the old messages under the new version. A stored flag rather
+        // than persist `version`, because an older build that finds a newer version drops the
+        // whole stored state.
+        const backfillAppliedVersions =
+          !stored?.appliedChatPromptVersionsBackfilled;
+
         return {
           ...state,
-          promptMap: mapValues(state.promptMap, restoreMissingConfigKeys),
+          appliedChatPromptVersionsBackfilled: true,
+          promptMap: mapValues(state.promptMap, (prompt) => {
+            const restored = restoreMissingConfigKeys(prompt);
+            return backfillAppliedVersions
+              ? markStoredPinnedChatPromptApplied(restored)
+              : restored;
+          }),
         };
       },
       partialize: (state) => {
         /* eslint-disable @typescript-eslint/no-unused-vars */
         const {
           datasetSampleData,
-          progressPhase,
           progressTotal,
           progressCompleted,
+          datasetItemsTotal,
           isRunning,
           isRunningMap,
+          isResumingRun,
+          watchLapsed,
+          stopsAwaitingRun,
+          cancelsInFlight,
           ...rest
         } = state;
         /* eslint-enable @typescript-eslint/no-unused-vars */
@@ -533,46 +707,11 @@ const usePlaygroundStore = create<PlaygroundStore>()(
   ),
 );
 
-export const useOutputByPromptDatasetItemId = (
-  promptId: string,
-  datasetItemId?: string,
-) =>
-  usePlaygroundStore((state) => {
-    const outputMapEntry = state.outputMap?.[promptId];
-
-    if (
-      outputMapEntry &&
-      datasetItemId &&
-      isPlaygroundOutputWithDatasetItem(outputMapEntry)
-    ) {
-      return outputMapEntry.datasetItemMap?.[datasetItemId] ?? null;
-    }
-
-    if (outputMapEntry && !isPlaygroundOutputWithDatasetItem(outputMapEntry)) {
-      return outputMapEntry;
-    }
-
-    return null;
-  });
-
-export const useFirstOutputUsageByPromptId = (promptId: string) =>
-  usePlaygroundStore((state) => {
-    const outputMapEntry = state.outputMap?.[promptId];
-    if (!outputMapEntry || !isPlaygroundOutputWithDatasetItem(outputMapEntry))
-      return undefined;
-    const firstKey = Object.keys(outputMapEntry.datasetItemMap)[0];
-    return firstKey
-      ? outputMapEntry.datasetItemMap[firstKey]?.usage
-      : undefined;
-  });
+export const useOutputByPromptId = (promptId: string) =>
+  usePlaygroundStore((state) => state.outputMap?.[promptId] ?? null);
 
 export const useIsPromptOutputStale = (promptId: string) =>
-  usePlaygroundStore((state) => {
-    const entry = state.outputMap?.[promptId];
-    if (!entry) return false;
-    if (!isPlaygroundOutputWithDatasetItem(entry)) return entry.stale;
-    return Object.values(entry.datasetItemMap).some((o) => o.stale);
-  });
+  usePlaygroundStore((state) => state.outputMap?.[promptId]?.stale ?? false);
 
 export const usePromptMap = () =>
   usePlaygroundStore((state) => state.promptMap);
@@ -600,6 +739,9 @@ export const useDeletePrompt = () =>
 
 export const useResetOutputMap = () =>
   usePlaygroundStore((state) => state.resetOutputMap);
+
+export const useClearPromptOutputStale = () =>
+  usePlaygroundStore((state) => state.clearPromptOutputStale);
 
 export const useUpdateOutput = () =>
   usePlaygroundStore((state) => state.updateOutput);
@@ -637,6 +779,27 @@ export const useCreatedExperiments = () =>
 export const useSetCreatedExperiments = () =>
   usePlaygroundStore((state) => state.setCreatedExperiments);
 
+export const useSetRunTotalItemsForPrompts = () =>
+  usePlaygroundStore((state) => state.setRunTotalItemsForPrompts);
+
+export const useDatasetItemsTotal = () =>
+  usePlaygroundStore((state) => state.datasetItemsTotal);
+
+export const useIsRunInFlight = () =>
+  usePlaygroundStore((state) => state.isRunInFlight);
+
+export const useSetIsRunInFlight = () =>
+  usePlaygroundStore((state) => state.setIsRunInFlight);
+
+export const useHasUnseenRunCompletion = () =>
+  usePlaygroundStore((state) => state.hasUnseenRunCompletion);
+
+export const useSetHasUnseenRunCompletion = () =>
+  usePlaygroundStore((state) => state.setHasUnseenRunCompletion);
+
+export const useSetDatasetItemsTotal = () =>
+  usePlaygroundStore((state) => state.setDatasetItemsTotal);
+
 export const useClearCreatedExperiments = () =>
   usePlaygroundStore((state) => state.clearCreatedExperiments);
 
@@ -654,14 +817,23 @@ export const useSetIsRunning = () =>
 export const useIsPromptRunning = (promptId: string) =>
   usePlaygroundStore((state) => !!state.isRunningMap[promptId]);
 
+export const getRunningPromptIds = () =>
+  Object.keys(usePlaygroundStore.getState().isRunningMap);
+
 export const useSetPromptRunning = () =>
   usePlaygroundStore((state) => state.setPromptRunning);
 
 export const useSetAllRunning = () =>
   usePlaygroundStore((state) => state.setAllRunning);
 
-export const useClearRunningMap = () =>
-  usePlaygroundStore((state) => state.clearRunningMap);
+export const useSettleRun = () =>
+  usePlaygroundStore((state) => state.settleRun);
+
+export const useIsResumingRun = () =>
+  usePlaygroundStore((state) => state.isResumingRun);
+
+export const useSetIsResumingRun = () =>
+  usePlaygroundStore((state) => state.setIsResumingRun);
 
 export const useExperimentName = () =>
   usePlaygroundStore((state) => state.experimentName);
@@ -699,6 +871,14 @@ export const useResetDatasetFilters = () =>
 export const useProgressTotal = () =>
   usePlaygroundStore((state) => state.progressTotal);
 
+export const useShowsRunProgress = () =>
+  usePlaygroundStore(
+    (state) => state.progressTotal > 0 || state.progressPhase !== null,
+  );
+
+export const useHasRunProgress = () =>
+  usePlaygroundStore((state) => state.progressTotal > 0);
+
 export const useProgressCompleted = () =>
   usePlaygroundStore((state) => state.progressCompleted);
 
@@ -710,6 +890,63 @@ export const useProgressPhase = () =>
 
 export const useSetProgressPhase = () =>
   usePlaygroundStore((state) => state.setProgressPhase);
+
+export const useIsAnyWatchLapsed = () =>
+  usePlaygroundStore((state) => state.watchLapsed.size > 0);
+
+export const useClearAllWatchLapsed = () =>
+  usePlaygroundStore((state) => state.clearAllWatchLapsed);
+
+export const useMarkWatchLapsed = () =>
+  usePlaygroundStore((state) => state.markWatchLapsed);
+
+export const useClearWatchLapsed = () =>
+  usePlaygroundStore((state) => state.clearWatchLapsed);
+
+export const useIsWatchLapsed = (promptId: string) =>
+  usePlaygroundStore((state) => state.watchLapsed.has(promptId));
+
+export const useClearAllStopsAwaitingRun = () =>
+  usePlaygroundStore((state) => state.clearAllStopsAwaitingRun);
+
+export const useQueueStopAwaitingRun = () =>
+  usePlaygroundStore((state) => state.queueStopAwaitingRun);
+
+export const useClearStopAwaitingRun = () =>
+  usePlaygroundStore((state) => state.clearStopAwaitingRun);
+
+export const useForgetExperimentForPrompt = () =>
+  usePlaygroundStore((state) => state.forgetExperimentForPrompt);
+
+/**
+ * Both waits read as Stopping to the user: `stopsAwaitingRun` is waiting for the run to be named,
+ * `cancelsInFlight` for the cancel to answer. They are kept apart because only the first may be
+ * replayed against a later launch — replaying the second would cancel a run that just started.
+ */
+export const useIsStopping = (promptId: string) =>
+  usePlaygroundStore(
+    (state) =>
+      state.stopsAwaitingRun.has(promptId) ||
+      state.cancelsInFlight.has(promptId),
+  );
+
+export const useIsStoppingAll = () =>
+  usePlaygroundStore((state) => {
+    if (state.stopsAwaitingRun.size === 0 && state.cancelsInFlight.size === 0) {
+      return false;
+    }
+    return Object.keys(state.isRunningMap).every(
+      (promptId) =>
+        state.stopsAwaitingRun.has(promptId) ||
+        state.cancelsInFlight.has(promptId),
+    );
+  });
+
+export const useMarkCancelInFlight = () =>
+  usePlaygroundStore((state) => state.markCancelInFlight);
+
+export const useClearCancelInFlight = () =>
+  usePlaygroundStore((state) => state.clearCancelInFlight);
 
 export const useResetProgress = () =>
   usePlaygroundStore((state) => state.resetProgress);

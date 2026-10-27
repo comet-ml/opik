@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import dayjs from "dayjs";
 import get from "lodash/get";
+import isNumber from "lodash/isNumber";
 import isString from "lodash/isString";
 
 import { UsageType } from "@/types/shared";
@@ -12,9 +13,9 @@ import {
   ChatCompletionOpikErrorMessageType,
   ChatCompletionPythonProxyErrorMessageType,
 } from "@/types/playground";
-import { isValidJsonObject, safelyParseJSON, snakeCaseObj } from "@/lib/utils";
+import { isValidJsonObject, safelyParseJSON } from "@/lib/utils";
 import { BASE_API_URL } from "@/api/api";
-import { sanitizeConfigForRequest } from "@/lib/modelUtils";
+import { getRequestParameters } from "@/lib/modelUtils";
 import {
   LLMPromptConfigsType,
   OpenAiPipelineMode,
@@ -88,6 +89,16 @@ const isProviderError = (
   return "code" in response && isValidJsonObject(response.message);
 };
 
+const toHttpErrorStatus = (code: unknown): number | null => {
+  const status = isString(code) && /^\d{3}$/.test(code) ? Number(code) : code;
+  return isNumber(status) &&
+    Number.isInteger(status) &&
+    status >= 400 &&
+    status <= 599
+    ? status
+    : null;
+};
+
 const getCompletionProxyStream = async ({
   model,
   messages,
@@ -96,12 +107,6 @@ const getCompletionProxyStream = async ({
   workspaceName,
   openAiPipelineMode,
 }: GetCompletionProxyStreamParams) => {
-  const configsRecord = sanitizeConfigForRequest(
-    model,
-    configs as unknown as Record<string, unknown>,
-    openAiPipelineMode,
-  );
-
   return fetch(`${BASE_API_URL}/v1/private/chat/completions`, {
     method: "POST",
     headers: {
@@ -113,7 +118,7 @@ const getCompletionProxyStream = async ({
       messages,
       stream: true,
       stream_options: { include_usage: true },
-      ...snakeCaseObj(configsRecord),
+      ...getRequestParameters(model, configs, openAiPipelineMode),
     }),
     credentials: "include",
     signal,
@@ -135,9 +140,11 @@ export interface RunStreamingReturn {
   endTime: string;
   usage: UsageType | null;
   choices: ChatCompletionMessageChoiceType[] | null;
+  finishReason: string | null;
   providerError: null | string;
   opikError: null | string;
   pythonProxyError: null | string;
+  errorStatus: null | number;
   // Resolved model and provider from headers (for span tracking)
   actualModel: string | null;
   actualProvider: string | null;
@@ -164,11 +171,13 @@ const useCompletionProxyStreaming = ({
       let accumulatedValue = "";
       let usage = null;
       let choices: ChatCompletionMessageChoiceType[] = [];
+      let finishReason: string | null = null;
 
       // errors
       let pythonProxyError = null;
       let opikError = null;
       let providerError = null;
+      let errorStatus: number | null = null;
 
       // Resolved model/provider from headers
       let actualModel: string | null = null;
@@ -188,6 +197,10 @@ const useCompletionProxyStreaming = ({
         actualModel = response.headers.get("X-Opik-Actual-Model");
         actualProvider = response.headers.get("X-Opik-Provider");
 
+        if (!response.ok) {
+          errorStatus = response.status;
+        }
+
         const reader = response?.body?.getReader();
         const decoder = new TextDecoder("utf-8");
 
@@ -196,6 +209,11 @@ const useCompletionProxyStreaming = ({
         ) => {
           choices = parsed?.choices;
           const deltaContent = choices?.[0]?.delta?.content;
+
+          // OpenAI sends the finish reason one chunk before the usage chunk, whose choices are empty.
+          if (choices?.[0]?.finish_reason) {
+            finishReason = choices[0].finish_reason;
+          }
 
           if (parsed?.usage) {
             usage = parsed.usage as UsageType;
@@ -213,6 +231,7 @@ const useCompletionProxyStreaming = ({
           const message = safelyParseJSON(parsedMessage?.message);
 
           providerError = message?.error?.message;
+          errorStatus = toHttpErrorStatus(parsedMessage.code) ?? errorStatus;
         };
 
         const handleOpikErrorMessage = (
@@ -220,6 +239,7 @@ const useCompletionProxyStreaming = ({
         ) => {
           if ("code" in parsedMessage && "message" in parsedMessage) {
             opikError = parsedMessage.message;
+            errorStatus = toHttpErrorStatus(parsedMessage.code) ?? errorStatus;
             return;
           }
 
@@ -230,6 +250,29 @@ const useCompletionProxyStreaming = ({
           parsedMessage: ChatCompletionPythonProxyErrorMessageType,
         ) => {
           pythonProxyError = pythonProxyErrorMessage(parsedMessage.detail);
+        };
+
+        const handleLine = (line: string) => {
+          const jsonData = line.startsWith(DATA_PREFIX)
+            ? line.split(DATA_PREFIX)[1]
+            : line;
+
+          if (jsonData.trim() === "[DONE]") {
+            return;
+          }
+
+          const parsed = safelyParseJSON(jsonData) as ChatCompletionResponse;
+
+          // handle different message types
+          if (isPythonProxyError(parsed)) {
+            handlePythonProxyErrorMessage(parsed);
+          } else if (isOpikError(parsed)) {
+            handleOpikErrorMessage(parsed);
+          } else if (isProviderError(parsed)) {
+            handleAIPlatformErrorMessage(parsed);
+          } else {
+            handleSuccessMessage(parsed);
+          }
         };
 
         // buffer to hold incomplete lines across chunks
@@ -248,28 +291,14 @@ const useCompletionProxyStreaming = ({
           const { lines, newBuffer } = processSSEChunk(chunk, lineBuffer);
           lineBuffer = newBuffer;
 
-          for (const line of lines) {
-            const JSONData = line.startsWith(DATA_PREFIX)
-              ? line.split(DATA_PREFIX)[1]
-              : line;
+          lines.forEach(handleLine);
+        }
 
-            if (JSONData.trim() === "[DONE]") {
-              continue;
-            }
-
-            const parsed = safelyParseJSON(JSONData) as ChatCompletionResponse;
-
-            // handle different message types
-            if (isPythonProxyError(parsed)) {
-              handlePythonProxyErrorMessage(parsed);
-            } else if (isOpikError(parsed)) {
-              handleOpikErrorMessage(parsed);
-            } else if (isProviderError(parsed)) {
-              handleAIPlatformErrorMessage(parsed);
-            } else {
-              handleSuccessMessage(parsed);
-            }
-          }
+        // A request the backend rejects before streaming (such as a custom parameter Opik sets itself)
+        // gets a plain JSON 400 with no trailing newline, which is still in the buffer when the stream ends.
+        const lastLine = (lineBuffer + decoder.decode()).trim();
+        if (lastLine && !opikError && !pythonProxyError && !providerError) {
+          handleLine(lastLine);
         }
 
         return {
@@ -279,8 +308,10 @@ const useCompletionProxyStreaming = ({
           providerError,
           opikError,
           pythonProxyError,
+          errorStatus,
           usage,
           choices,
+          finishReason,
           actualModel,
           actualProvider,
         };
@@ -299,8 +330,10 @@ const useCompletionProxyStreaming = ({
           providerError,
           opikError: opikError || defaultErrorMessage,
           pythonProxyError,
+          errorStatus,
           usage: null,
           choices,
+          finishReason,
           actualModel,
           actualProvider,
         };

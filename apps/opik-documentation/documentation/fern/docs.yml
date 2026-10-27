@@ -40,6 +40,12 @@ analytics:
     endpoint: ${POSTHOG_API_HOST}
 theme:
   page-actions: toolbar
+# Fern's docs-search MCP server, off. Its "connect to the MCP server" line tops
+# every page served to agents and llms.txt, and agents asked to install Opik's
+# MCP server registered it instead.
+page-actions:
+  options:
+    mcp: false
 
 
 layout:
@@ -228,6 +234,9 @@ navigation:
               - page: Version control
                 path: ./docs-v2/prompt_engineering/version-control.mdx
                 slug: version-control
+              - page: Environments
+                path: ./docs-v2/prompt_engineering/environments.mdx
+                slug: environments
           - section: Optimization runs
             slug: /optimization-runs
             contents:
@@ -517,6 +526,12 @@ navigation:
             skip-slug: true
             collapsed: true
             contents:
+              - page: Defining and evaluating custom LLM-as-a-judge metrics
+                path: ./docs-v2/evaluation/custom_llm_judge_metrics.mdx
+                slug: custom_llm_judge_metrics
+              - page: Aligning judge metrics with human scores
+                path: ./docs-v2/evaluation/judge_alignment.mdx
+                slug: judge_alignment
               - page: Best practices for evaluating agents
                 path: ./docs-v2/evaluation/evaluate_agents.mdx
                 slug: evaluate_agents
@@ -622,6 +637,9 @@ navigation:
               - page: Service Accounts
                 path: ./docs-v2/administration/admin-dashboard/service_accounts.mdx
                 slug: service_accounts
+              - page: Opik Usage
+                path: ./docs-v2/administration/admin-dashboard/opik_usage.mdx
+                slug: opik_usage
           - section: Authentication
             slug: /authentication
             contents:
@@ -1075,6 +1093,9 @@ navigation:
       - page: ClickHouse cold-tier migration
         path: ./docs-v2/self-host/clickhouse-cold-tier-migration.mdx
         slug: clickhouse-cold-tier-migration
+      - page: ClickHouse tiered-storage TTL and backfill
+        path: ./docs-v2/self-host/clickhouse-tiered-storage-ttl.mdx
+        slug: clickhouse-tiered-storage-ttl
       - page: Platform Architecture
         path: ./docs-v2/self-host/architecture.mdx
         slug: architecture
@@ -1099,6 +1120,9 @@ navigation:
           - page: Large CSV uploads
             path: ./docs-v2/self-host/configure/large_csv_uploads.mdx
             slug: large_csv_uploads
+          - page: Redis Sentinel
+            path: ./docs-v2/self-host/configure/redis-sentinel.mdx
+            slug: redis-sentinel
           - page: Dataset versioning migration
             path: ./docs-v2/self-host/configure/dataset_versioning_migration.mdx
             slug: dataset_versioning_migration

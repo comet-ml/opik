@@ -71,6 +71,7 @@ export interface Alert {
   enabled: boolean;
   alert_type?: ALERT_TYPE;
   metadata?: AlertMetadata;
+  custom_fields?: Record<string, string>;
   webhook: Webhook;
   triggers: AlertTrigger[];
   created_at?: string;

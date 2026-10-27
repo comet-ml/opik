@@ -1,0 +1,69 @@
+# Workflow to run Together tests
+#
+# Please read inputs to provide correct values.
+#
+name: SDK Lib Together Tests
+run-name: "SDK Lib Together Tests ${{ github.ref_name }} by @${{ github.actor }}"
+permissions:
+  contents: read
+env:
+  # Retry transient PyPI/network failures longer before failing the build.
+  PIP_RETRIES: 8
+  PIP_DEFAULT_TIMEOUT: 30
+  UV_HTTP_TIMEOUT: 30
+  UV_HTTP_RETRIES: 8
+  # No TOGETHER_API_KEY: these tests mock the transport and never reach the
+  # API, so the secret would be exposed to PR-controlled code for nothing.
+  OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
+  OPIK_SENTRY_ENABLE: False
+  OPIK_ANALYTICS_ENABLE: False
+on:
+  workflow_call:
+
+jobs:
+  tests:
+    name: Together ${{matrix.together_version}} Python ${{matrix.python_version}}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: sdks/python
+
+    strategy:
+      fail-fast: true
+      matrix:
+        python_version: ${{ fromJSON(vars.PYTHON_VERSIONS) }}
+        # Both majors are supported: 3.x moved type re-exports and the chat host.
+        together_version: ["together>=2,<3", "together>=3"]
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+
+      - name: Setup Python ${{matrix.python_version}}
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{matrix.python_version}}
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10.2.0
+
+      - name: Install opik
+        run: uv pip install --system .
+
+      - name: Install test tools
+        run: |
+          cd ./tests
+          uv pip install --system -r test_requirements.txt
+
+      - name: Install lib
+        env:
+          TOGETHER_VERSION: ${{ matrix.together_version }}
+        run: |
+          cd ./tests
+          uv pip install --system -r library_integration/together/requirements.txt "$TOGETHER_VERSION"
+
+      - name: Run tests
+        run: |
+          cd ./tests/library_integration/together/
+          python -m pytest  -vv .

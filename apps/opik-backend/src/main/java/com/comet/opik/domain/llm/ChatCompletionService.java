@@ -2,6 +2,7 @@ package com.comet.opik.domain.llm;
 
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
+import com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterDecisionModel;
 import com.comet.opik.utils.ChunkedOutputHandlers;
 import com.comet.opik.utils.HttpStatusRetryability;
@@ -19,6 +20,7 @@ import dev.langchain4j.exception.RateLimitException;
 import dev.langchain4j.exception.TimeoutException;
 import dev.langchain4j.exception.UnsupportedFeatureException;
 import dev.langchain4j.internal.RetryUtils;
+import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
@@ -51,28 +53,33 @@ import static jakarta.ws.rs.core.Response.Status.Family.familyOf;
 @Slf4j
 public class ChatCompletionService {
     public static final String UNEXPECTED_ERROR_CALLING_LLM_PROVIDER = "Unexpected error calling LLM provider";
+    private static final String UPSTREAM_STATUS_ONLY = "provider responded with HTTP %s";
     public static final String UNSUPPORTED_FEATURE_CALLING_LLM_PROVIDER = "Unsupported feature for the selected LLM provider";
     public static final String ERROR_EMPTY_MESSAGES = "messages cannot be empty";
 
     private final LlmProviderClientConfig llmProviderClientConfig;
     private final LlmProviderFactory llmProviderFactory;
+    private final ParamResolver paramResolver;
     private final RetryUtils.RetryPolicy retryPolicy;
 
     @Inject
     public ChatCompletionService(
             @NonNull @Config LlmProviderClientConfig llmProviderClientConfig,
-            @NonNull LlmProviderFactory llmProviderFactory) {
+            @NonNull LlmProviderFactory llmProviderFactory,
+            @NonNull ParamResolver paramResolver) {
         this.llmProviderClientConfig = llmProviderClientConfig;
         this.llmProviderFactory = llmProviderFactory;
+        this.paramResolver = paramResolver;
         this.retryPolicy = newRetryPolicy();
     }
 
     public ChatCompletionResponse create(@NonNull ChatCompletionRequest rawRequest, @NonNull String workspaceId) {
-        // must be final or effectively final for lambda
-        var request = SamplingParamsNormalizer.normalizeRequest(MessageContentNormalizer.normalizeRequest(rawRequest));
-        rejectDecisionModel(request.model());
+        var normalized = MessageContentNormalizer.normalizeRequest(rawRequest);
+        rejectDecisionModel(normalized.model());
 
-        var llmProviderClient = llmProviderFactory.getService(workspaceId, request.model());
+        var llmProviderClient = llmProviderFactory.getService(workspaceId, normalized.model());
+        // must be final or effectively final for lambda
+        var request = resolve(normalized, llmProviderClient);
         llmProviderClient.validateRequest(request);
 
         ChatCompletionResponse chatCompletionResponse;
@@ -82,16 +89,19 @@ public class ChatCompletionService {
                     () -> failFastOnUnsupportedFeature(() -> llmProviderClient.generate(request, workspaceId)));
         } catch (RuntimeException runtimeException) {
             failIfUnsupportedFeature(runtimeException);
+            failIfRequestRefused(runtimeException);
 
             Optional<ErrorMessage> providerError = llmProviderClient.getLlmProviderError(runtimeException);
 
             providerError
                     .ifPresent(llmProviderError -> failHandlingLLMProviderError(runtimeException, llmProviderError));
 
-            failIfProviderReportedHttpStatus(runtimeException);
+            var hideUpstreamText = hidesUpstreamText(workspaceId, request.model());
+            failIfProviderReportedHttpStatus(runtimeException, hideUpstreamText);
 
             log.warn(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
-            throw new InternalServerErrorException(buildDetailedErrorMessage(runtimeException), runtimeException);
+            throw new InternalServerErrorException(buildDetailedErrorMessage(runtimeException, hideUpstreamText),
+                    runtimeException);
         }
 
         log.info("Created chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
@@ -102,13 +112,15 @@ public class ChatCompletionService {
             @NonNull ChatCompletionRequest rawRequest,
             @NonNull String workspaceId,
             @NonNull ChunkedOutputHandlers handlers) {
-        var request = SamplingParamsNormalizer.normalizeRequest(MessageContentNormalizer.normalizeRequest(rawRequest));
-        rejectDecisionModel(request.model());
+        var normalized = MessageContentNormalizer.normalizeRequest(rawRequest);
+        rejectDecisionModel(normalized.model());
 
-        log.info("Creating and streaming chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
+        log.info("Creating and streaming chat completions, workspaceId '{}', model '{}'", workspaceId,
+                normalized.model());
 
-        var llmProviderClient = llmProviderFactory.getService(workspaceId, request.model());
-        var errorHandler = getErrorHandler(handlers, llmProviderClient);
+        var llmProviderClient = llmProviderFactory.getService(workspaceId, normalized.model());
+        var request = resolve(normalized, llmProviderClient);
+        var errorHandler = getErrorHandler(handlers, llmProviderClient, workspaceId, request.model());
 
         try {
             llmProviderClient.generateStream(
@@ -137,7 +149,9 @@ public class ChatCompletionService {
     public ChatResponse scoreTrace(@NonNull ChatRequest chatRequest,
             @NonNull LlmAsJudgeModelParameters modelParameters,
             @NonNull String workspaceId) {
-        var languageModelClient = llmProviderFactory.getLanguageModel(workspaceId, modelParameters);
+        var resolved = paramResolver.resolve(modelParameters);
+        logChanges(resolved.request().name(), resolved.changes());
+        var languageModelClient = getLanguageModel(workspaceId, resolved.request());
 
         ChatResponse chatResponse;
         try {
@@ -150,6 +164,7 @@ public class ChatCompletionService {
             return chatResponse;
         } catch (RuntimeException runtimeException) {
             failIfUnsupportedFeature(runtimeException);
+            failIfRequestRefused(runtimeException);
 
             // Report the status the provider actually sent, same as create() and the streaming handler.
             // BaseRedisSubscriber classifies a ClientErrorException by that status, so a truthful 429 is
@@ -165,7 +180,8 @@ public class ChatCompletionService {
 
             log.warn(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
 
-            var detail = buildDetailedErrorMessage(runtimeException);
+            var detail = buildDetailedErrorMessage(runtimeException,
+                    hidesUpstreamText(workspaceId, resolved.request().name()));
             // findProviderHttpStatus only yields error statuses, so these two families are exhaustive. The
             // cause is carried through, unlike failHandlingLLMProviderError, because this exception is logged
             // rather than serialized to an HTTP caller and the provider stack is the diagnostic.
@@ -193,7 +209,8 @@ public class ChatCompletionService {
      * original exception is kept as the cause, so {@link #failIfUnsupportedFeature} still recognises it downstream.
      */
     private <T> T failFastOnUnsupportedFeature(Callable<T> action) throws Exception {
-        return failFastWhen(action, this::isUnsupportedFeature);
+        return failFastWhen(action, runtimeException -> isUnsupportedFeature(runtimeException)
+                || isRequestRefused(runtimeException));
     }
 
     /**
@@ -220,12 +237,18 @@ public class ChatCompletionService {
      */
     private <T> T failFastOnNonRetriableFailure(Callable<T> action) throws Exception {
         return failFastWhen(action, runtimeException -> isUnsupportedFeature(runtimeException)
+                || isRequestRefused(runtimeException)
                 || isPermanentProviderFailure(runtimeException));
     }
 
     /** A feature the selected provider cannot serve, so no number of attempts will change the answer. */
     private boolean isUnsupportedFeature(RuntimeException runtimeException) {
         return findUnsupportedFeature(runtimeException).isPresent();
+    }
+
+    /** A request Opik refused to send, so no attempt can reach the provider. */
+    private boolean isRequestRefused(RuntimeException runtimeException) {
+        return findRequestRefused(runtimeException).isPresent();
     }
 
     /** A status the provider actually sent that {@link HttpStatusRetryability} classifies as never succeeding. */
@@ -249,6 +272,19 @@ public class ChatCompletionService {
                 throw new NonRetriableException(runtimeException);
             }
             throw runtimeException;
+        }
+    }
+
+    // After the key lookup, because the key decides the route, and a route can refuse what the model takes.
+    private ChatCompletionRequest resolve(ChatCompletionRequest request, LlmProviderService llmProviderClient) {
+        var resolved = paramResolver.resolve(request, llmProviderClient.paramsRoute());
+        logChanges(resolved.request().model(), resolved.changes());
+        return resolved.request();
+    }
+
+    private void logChanges(String model, List<ParamResolver.ParamChange> changes) {
+        if (!changes.isEmpty()) {
+            log.debug("Request to model '{}' changed: {}", model, changes);
         }
     }
 
@@ -317,6 +353,44 @@ public class ChatCompletionService {
     }
 
     /**
+     * Building the client can already refuse the request (a Vertex AI location or token_uri), before scoreTrace's
+     * try, so that refusal is mapped here; anything else propagates as before.
+     */
+    private ChatModel getLanguageModel(String workspaceId, LlmAsJudgeModelParameters modelParameters) {
+        try {
+            return llmProviderFactory.getLanguageModel(workspaceId, modelParameters);
+        } catch (RuntimeException runtimeException) {
+            failIfRequestRefused(runtimeException);
+            throw runtimeException;
+        }
+    }
+
+    /**
+     * Opik's own HTTP client refused the request before sending it, e.g. a destination the guard doesn't allow. The
+     * provider was never reached, so this is the caller's 400, never a 500, and its message is already user-facing.
+     * Logged by the client that refused it.
+     */
+    private void failIfRequestRefused(RuntimeException runtimeException) {
+        findRequestRefused(runtimeException).ifPresent(requestRefused -> {
+            var message = requestRefused.getMessage();
+            throw new BadRequestException(
+                    message,
+                    Response.status(Response.Status.BAD_REQUEST)
+                            .entity(new ErrorMessage(Response.Status.BAD_REQUEST.getStatusCode(), message))
+                            .build(),
+                    runtimeException);
+        });
+    }
+
+    /** Walks the cause chain like {@link #findUnsupportedFeature}. */
+    private Optional<ProviderRequestRefusedException> findRequestRefused(Throwable throwable) {
+        return ExceptionUtils.getThrowableList(throwable).stream()
+                .filter(ProviderRequestRefusedException.class::isInstance)
+                .map(ProviderRequestRefusedException.class::cast)
+                .findFirst();
+    }
+
+    /**
      * Last resort before the blanket 500. {@code getLlmProviderError} only recognises payloads it can parse into the
      * provider's own error envelope, so it comes back empty for a plain-text body (an upstream proxy's "service
      * temporarily unavailable", a Cloudflare "error code: 1015") or for a typed exception nested under a retry
@@ -327,10 +401,10 @@ public class ChatCompletionService {
      * reaches the caller as a 4xx. Failures that never reached HTTP (connection refused, closed channel) carry no
      * status and keep falling through to the 500 below.
      */
-    private void failIfProviderReportedHttpStatus(RuntimeException runtimeException) {
+    private void failIfProviderReportedHttpStatus(RuntimeException runtimeException, boolean hideUpstreamText) {
         findProviderHttpStatus(runtimeException)
                 .ifPresent(status -> failHandlingLLMProviderError(runtimeException,
-                        new ErrorMessage(status, buildDetailedErrorMessage(runtimeException))));
+                        new ErrorMessage(status, buildDetailedErrorMessage(runtimeException, hideUpstreamText))));
     }
 
     /**
@@ -441,7 +515,8 @@ public class ChatCompletionService {
         return retryPolicyBuilder.delayMillis(llmProviderClientConfig.getDelayMillis()).build();
     }
 
-    private Consumer<Throwable> getErrorHandler(ChunkedOutputHandlers handlers, LlmProviderService llmProviderClient) {
+    private Consumer<Throwable> getErrorHandler(ChunkedOutputHandlers handlers, LlmProviderService llmProviderClient,
+            String workspaceId, String model) {
         return throwable -> {
             // Checked before the provider-error mapper so the classification matches create() and scoreTrace(): if a
             // provider envelope and an unsupported feature ever collide, the deterministic capability failure wins.
@@ -450,6 +525,13 @@ public class ChatCompletionService {
                 var message = buildUnsupportedFeatureMessage(unsupportedFeature.get());
                 log.warn(message);
                 handlers.handleError(new ErrorMessage(Response.Status.BAD_REQUEST.getStatusCode(), message));
+                return;
+            }
+
+            var requestRefused = findRequestRefused(throwable);
+            if (requestRefused.isPresent()) {
+                handlers.handleError(new ErrorMessage(Response.Status.BAD_REQUEST.getStatusCode(),
+                        requestRefused.get().getMessage()));
                 return;
             }
 
@@ -472,17 +554,29 @@ public class ChatCompletionService {
                 var providerStatus = findProviderHttpStatus(throwable);
                 if (providerStatus.isPresent()) {
                     log.warn(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, throwable);
-                    handlers.handleError(
-                            new ErrorMessage(providerStatus.get(), buildDetailedErrorMessage(throwable)));
+                    handlers.handleError(new ErrorMessage(providerStatus.get(),
+                            buildDetailedErrorMessage(throwable, hidesUpstreamText(workspaceId, model))));
                     return;
                 }
 
                 log.error(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, throwable);
 
-                var errorMessage = new ErrorMessage(buildDetailedErrorMessage(throwable));
+                var errorMessage = new ErrorMessage(
+                        buildDetailedErrorMessage(throwable, hidesUpstreamText(workspaceId, model)));
                 handlers.handleError(errorMessage);
             }
         };
+    }
+
+    // decided only once a call has failed; an unanswerable lookup takes the restrictive path
+    private boolean hidesUpstreamText(String workspaceId, String model) {
+        try {
+            return llmProviderFactory.hasUserConfiguredDestination(workspaceId, model);
+        } catch (RuntimeException exception) {
+            log.warn("Could not tell whether model '{}' has a user-configured destination, workspaceId '{}'", model,
+                    workspaceId, exception);
+            return true;
+        }
     }
 
     /**
@@ -492,8 +586,8 @@ public class ChatCompletionService {
      * @param throwable the exception to extract details from
      * @return a detailed error message combining the base message with exception details
      */
-    private String buildDetailedErrorMessage(Throwable throwable) {
-        String exceptionDetails = extractErrorDetails(throwable);
+    private String buildDetailedErrorMessage(Throwable throwable, boolean hideUpstreamText) {
+        String exceptionDetails = extractErrorDetails(throwable, hideUpstreamText);
         if (StringUtils.isNotBlank(exceptionDetails)) {
             return UNEXPECTED_ERROR_CALLING_LLM_PROVIDER + ": " + exceptionDetails;
         }
@@ -509,7 +603,7 @@ public class ChatCompletionService {
      * @param throwable the exception to extract details from
      * @return the extracted error details, or null if no meaningful details found
      */
-    private String extractErrorDetails(Throwable throwable) {
+    private String extractErrorDetails(Throwable throwable, boolean hideUpstreamText) {
         if (throwable == null) {
             return null;
         }
@@ -531,6 +625,11 @@ public class ChatCompletionService {
             }
             case ClosedChannelException closedChannelException ->
                 "Service is unreachable. Please check the provider URL.";
+            // their message is what the destination answered: only echoed when Opik chose the destination
+            case HttpException httpException when hideUpstreamText ->
+                UPSTREAM_STATUS_ONLY.formatted(httpException.statusCode());
+            case OpenAIServiceException serviceException when hideUpstreamText ->
+                UPSTREAM_STATUS_ONLY.formatted(serviceException.statusCode());
             default -> {
                 // For other exceptions, use the exception message
                 String message = exceptionToHandle.getMessage();
