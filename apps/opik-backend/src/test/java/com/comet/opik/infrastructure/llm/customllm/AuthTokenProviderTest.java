@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.llm.customllm;
 
+import com.comet.opik.TestConfigUtils;
 import com.comet.opik.api.EncryptedAuthConfig;
 import com.comet.opik.api.ProviderAuthConfig;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
@@ -402,6 +403,28 @@ class AuthTokenProviderTest {
         assertThatThrownBy(() -> cappedProvider.testFetch(oauthRecipe().build()))
                 .isExactlyInstanceOf(AuthTokenException.class)
                 .hasMessageContaining("exceeds the maximum accepted size");
+        var actualElapsed = Duration.ofNanos(System.nanoTime() - startNanos);
+        assertThat(actualElapsed).isLessThan(expectedMaxElapsed);
+    }
+
+    @Test
+    @DisplayName("a reply that trickles in is refused at the fetch timeout")
+    void tricklingReplyIsRefusedAtTheFetchTimeout() {
+        var config = relaxedConfig();
+        config.setFetchTimeout(TestConfigUtils.duration("1s"));
+        var shortTimeoutProvider = new AuthTokenProvider(stringRedisClient, PASSTHROUGH_LOCK_SERVICE, config, CLIENT);
+        // 100 chunks over 20 seconds: each wait for bytes is well within the 1 second read timeout
+        wireMock.stubFor(post(urlEqualTo(TOKEN_PATH)).willReturn(aResponse()
+                .withBody("{\"access_token\": \"%s\"}".formatted(RandomStringUtils.secure().nextAlphanumeric(100)))
+                .withChunkedDribbleDelay(100, 20_000)));
+        var recipe = oauthRecipe().build();
+        var expectedMessage = "token reply from '%s' took longer than the fetch timeout".formatted(recipe.tokenUrl());
+        var expectedMaxElapsed = Duration.ofSeconds(5);
+        long startNanos = System.nanoTime();
+
+        assertThatThrownBy(() -> shortTimeoutProvider.testFetch(recipe))
+                .isExactlyInstanceOf(AuthTokenException.class)
+                .hasMessage(expectedMessage);
         var actualElapsed = Duration.ofNanos(System.nanoTime() - startNanos);
         assertThat(actualElapsed).isLessThan(expectedMaxElapsed);
     }

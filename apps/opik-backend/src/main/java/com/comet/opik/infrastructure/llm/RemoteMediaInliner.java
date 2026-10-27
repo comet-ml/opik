@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.llm;
 
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
+import com.comet.opik.infrastructure.http.BodyDeadline;
 import com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException;
 import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.comet.opik.infrastructure.net.DestinationGuardDns;
@@ -35,6 +36,7 @@ import java.io.InputStream;
 import java.net.URI;
 import java.net.URLConnection;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
@@ -185,9 +187,11 @@ public class RemoteMediaInliner {
                 .property(ClientProperties.READ_TIMEOUT, timeoutMillis)
                 .async()
                 .get();
-        // bounds the whole download, body included, where the timeouts above only bound each wait
+        // the headers within the download time; the body within what remains of it, see read
+        long startNanos = System.nanoTime();
         try (var response = future.get(timeoutMillis, TimeUnit.MILLISECONDS)) {
-            return read(url, declaredMimeType, response, budget);
+            var remaining = Duration.ofMillis(timeoutMillis).minusNanos(System.nanoTime() - startNanos);
+            return read(url, declaredMimeType, response, budget, remaining);
         } catch (InterruptedException exception) {
             future.cancel(true);
             Thread.currentThread().interrupt();
@@ -209,7 +213,8 @@ public class RemoteMediaInliner {
      * The body base64 encoded as it is read, so the raw bytes are never held beside their encoding. The limit is
      * checked on the raw bytes, reading at most one byte past what the request may still take.
      */
-    private Media read(String url, String declaredMimeType, Response response, Budget budget) throws IOException {
+    private Media read(String url, String declaredMimeType, Response response, Budget budget, Duration remaining)
+            throws IOException {
         if (response.getStatusInfo().getFamily() != Response.Status.Family.SUCCESSFUL
                 || response.getLength() > budget.remaining) {
             log.warn("Media URL download failed, status '{}', length '{}', url '{}'", response.getStatus(),
@@ -225,10 +230,14 @@ public class RemoteMediaInliner {
         var encoded = new ByteArrayOutputStream(
                 response.getLength() > 0 ? Math.min(base64Length(response.getLength()), MAX_INITIAL_BUFFER_SIZE) : 32);
         long total = 0;
-        try (var body = response.readEntity(InputStream.class); var encoder = Base64.getEncoder().wrap(encoded)) {
+        // a read timeout bounds each wait for bytes, so the deadline bounds the body as a whole
+        try (var body = response.readEntity(InputStream.class);
+                var deadline = BodyDeadline.closing(body, remaining);
+                var encoder = Base64.getEncoder().wrap(encoded)) {
             var chunk = new byte[READ_SIZE];
             int read;
-            while ((read = body.read(chunk, 0, (int) Math.min(READ_SIZE, budget.remaining - total + 1))) != -1) {
+            while ((read = readWithin(deadline, url, body, chunk,
+                    (int) Math.min(READ_SIZE, budget.remaining - total + 1))) != -1) {
                 total += read;
                 if (total > budget.remaining) {
                     log.warn("Media URL download failed, media larger than the size limit, max bytes '{}', url '{}'",
@@ -244,6 +253,24 @@ public class RemoteMediaInliner {
                 .base64Data(encoded.toString(StandardCharsets.ISO_8859_1))
                 .mimeType(mimeType(declaredMimeType, response.getHeaderString(HttpHeaders.CONTENT_TYPE), url))
                 .build();
+    }
+
+    private int readWithin(BodyDeadline deadline, String url, InputStream body, byte[] chunk, int length)
+            throws IOException {
+        try {
+            int read = body.read(chunk, 0, length);
+            if (deadline.expired()) {
+                throw new IOException("the deadline closed the body");
+            }
+            return read;
+        } catch (IOException exception) {
+            if (deadline.expired()) {
+                log.warn("Media URL download failed, longer than the download time limit '{}' ms, url '{}'",
+                        timeoutMillis, LoggableUrl.of(url));
+                throw new ProviderRequestRefusedException(MEDIA_URL_DOWNLOAD);
+            }
+            throw exception;
+        }
     }
 
     /** The length of the base64 encoding of that many bytes, padding included. */
