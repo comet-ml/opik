@@ -86,15 +86,19 @@ public class LlmProviderClientConfig {
     /**
      * Time allowed for downloading one media URL that Gemini or Vertex AI receives as inline data, connecting
      * included. At most 5 minutes: every download completes before the provider is called, so a slow or stalled media
-     * server must fail the request fast, and 5 minutes still fits the largest size cap (1 GiB) at about 3.5 MB/s.
+     * server must fail the request fast, and 5 minutes still fits the largest size cap (100 MB) at about 350 KB/s.
      */
     @NotNull @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS)
     @MaxDuration(value = 5, unit = TimeUnit.MINUTES)
     private Duration mediaDownloadTimeout;
 
-    /** Largest media file downloaded for Gemini or Vertex AI; it is held in memory while it is sent inline. */
+    /**
+     * Most bytes downloaded for all the media of one Gemini or Vertex AI request; they are held in memory, base64
+     * encoded, while they are sent inline. Gemini refuses a request with more than about 20 MB of inline data, so
+     * downloading more would only be refused.
+     */
     @NotNull @MinDataSize(1)
-    @MaxDataSize(value = 1, unit = DataSizeUnit.GIBIBYTES)
+    @MaxDataSize(value = 100, unit = DataSizeUnit.MEGABYTES)
     private DataSize mediaDownloadMaxSize;
 
     /**

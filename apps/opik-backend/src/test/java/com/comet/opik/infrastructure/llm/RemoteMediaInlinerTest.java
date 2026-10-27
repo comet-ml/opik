@@ -16,6 +16,7 @@ import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.TextContent;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.data.message.VideoContent;
+import io.dropwizard.util.DataSize;
 import org.apache.commons.lang3.RandomUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.DisplayName;
@@ -28,6 +29,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.net.URI;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
@@ -41,6 +43,8 @@ import static com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefused
 import static com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException.Reason.MEDIA_URL_DOWNLOAD;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
+import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -172,6 +176,56 @@ class RemoteMediaInlinerTest {
         assertThatThrownBy(() -> gzipInliner.inline(messages))
                 .isExactlyInstanceOf(ProviderRequestRefusedException.class)
                 .hasMessage(expectedMessage);
+    }
+
+    /** An inliner whose limit for all the media of a request is that many bytes. */
+    private RemoteMediaInliner inlinerWithLimit(long maxBytes) {
+        var config = TestConfigUtils.loadConfigTest().getLlmProviderClient();
+        config.setVideoUrlDestinationGuard(DestinationGuard.Mode.RELAXED);
+        config.setMediaDownloadMaxSize(DataSize.bytes(maxBytes));
+        return new RemoteMediaInliner(TestHttpClientUtils.client(), config);
+    }
+
+    /** Serves the bytes at a new path, returning its URL. */
+    private String serve(byte[] bytes) {
+        var mediaPath = "/media-" + UUID.randomUUID();
+        wireMock.server().stubFor(get(urlPathEqualTo(mediaPath))
+                .willReturn(aResponse().withHeader("Content-Type", "image/png").withBody(bytes)));
+        return wireMock.runtimeInfo().getHttpBaseUrl() + mediaPath;
+    }
+
+    @Test
+    @DisplayName("media files under the size limit each but over it together fail the request, and no more are read")
+    void mediaOverTheLimitTogetherAreRefused() {
+        int limit = RandomUtils.secure().randomInt(100, 1_000);
+        var lastUrl = serve(RandomUtils.secure().randomBytes(1));
+        List<ChatMessage> messages = List.of(
+                UserMessage.from(ImageContent.from(serve(RandomUtils.secure().randomBytes(limit / 2 + 1)))),
+                UserMessage.from(ImageContent.from(serve(RandomUtils.secure().randomBytes(limit / 2 + 1))),
+                        ImageContent.from(lastUrl)));
+        var expectedMessage = new ProviderRequestRefusedException(MEDIA_URL_DOWNLOAD).getMessage();
+
+        assertThatThrownBy(() -> inlinerWithLimit(limit).inline(messages))
+                .isExactlyInstanceOf(ProviderRequestRefusedException.class)
+                .hasMessage(expectedMessage);
+        wireMock.server().verify(0, getRequestedFor(urlEqualTo(URI.create(lastUrl).getPath())));
+    }
+
+    @Test
+    @DisplayName("media files exactly at the size limit together are inlined")
+    void mediaAtTheLimitTogetherAreInlined() {
+        int limit = RandomUtils.secure().randomInt(100, 1_000) * 2;
+        var first = RandomUtils.secure().randomBytes(limit / 2);
+        var second = RandomUtils.secure().randomBytes(limit / 2);
+        List<ChatMessage> messages = List.of(UserMessage.from(ImageContent.from(serve(first)),
+                ImageContent.from(serve(second))));
+        var expectedMessages = List.<ChatMessage>of(UserMessage.from(
+                ImageContent.from(Base64.getEncoder().encodeToString(first), "image/png"),
+                ImageContent.from(Base64.getEncoder().encodeToString(second), "image/png")));
+
+        var actualMessages = inlinerWithLimit(limit).inline(messages);
+
+        assertThat(actualMessages).isEqualTo(expectedMessages);
     }
 
     @Test
