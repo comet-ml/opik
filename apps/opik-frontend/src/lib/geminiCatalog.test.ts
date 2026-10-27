@@ -40,18 +40,7 @@ const UNLISTED = [
   ],
 ] as const;
 
-// No curated row refuses sampling for these yet, so they take the provider profile, which accepts it
-// until #9171 makes the Gemini profile refuse it.
-const SAMPLING_FROM_PROFILE = new Set<string>([
-  "gemini-4-argon",
-  "gemini-nano-banana-2.1",
-  "vertex_ai/gemini-3.8-flash-cyber",
-  "vertex_ai/gemini-omni-1.1-flash-preview",
-]);
-
-const MODELS = [...LISTED, ...UNLISTED].filter(
-  ([, model]) => !SAMPLING_FROM_PROFILE.has(model),
-);
+const MODELS = [...LISTED, ...UNLISTED];
 
 const seedTablesOnly = () => {
   resetModelRegistryStoreForTesting();
@@ -161,20 +150,6 @@ describe("the Gemini and Vertex AI catalog against today's tables", () => {
         defaults: getDefaultConfigByProvider(provider, model),
       }));
       expect(fromCatalog).toEqual(fromTables);
-    },
-  );
-
-  it.each([...SAMPLING_FROM_PROFILE])(
-    "sends temperature and top-p for %s, which the tables refused",
-    (value) => {
-      const model = value as PROVIDER_MODEL_TYPE;
-      const config = { temperature: 0.7, topP: 0.9, maxCompletionTokens: 4000 };
-      const [fromTables, fromCatalog] = bothWays(() =>
-        sanitizeConfigForRequest(model, config),
-      );
-
-      expect(fromTables).toEqual({ maxCompletionTokens: 4000 });
-      expect(fromCatalog).toEqual(config);
     },
   );
 
