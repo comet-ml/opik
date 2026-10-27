@@ -21,17 +21,30 @@ public interface LlmProviderFactory {
     ChatModel getLanguageModel(String workspaceId, LlmAsJudgeModelParameters modelParameters);
 
     /**
+     * For a judge call that carries function tools, or replays a conversation that used them: some models take
+     * tools only on another endpoint or setting than the key's default, and every round of one evaluation must
+     * reach the model the same way.
+     */
+    ChatModel getToolCallingLanguageModel(String workspaceId, LlmAsJudgeModelParameters modelParameters);
+
+    /**
      * Resolves the workspace's provider configuration (decrypted API key, headers, base URL) for the model.
      * For callers that reach a provider without a LangChain4j client, e.g. the OpenRouter Decisions API.
      */
     LlmProviderClientApiConfig getClientApiConfig(String workspaceId, String model);
 
+    /**
+     * Whether the model's requests go to a destination the workspace configured (a provider base URL) rather than one
+     * Opik fixes: what such a destination answers is not echoed back beyond a parsed provider error.
+     */
+    boolean hasUserConfiguredDestination(String workspaceId, String model);
+
     LlmProvider getLlmProvider(String model);
 
     StructuredOutputStrategy getStructuredOutputStrategy(String model);
 
-    /** The catalog params of a model the registry lists under OpenAI, or empty for any other model. */
-    Optional<ModelParams> openAiParams(String model);
+    /** The catalog params of a model the registry lists under OpenAI, Gemini or Vertex AI, or empty otherwise. */
+    Optional<ModelParams> catalogParams(String model);
 
     /**
      * Returns the resolved model info for the given model name.

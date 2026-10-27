@@ -1,16 +1,25 @@
 package com.comet.opik.infrastructure.llm;
 
+import com.comet.opik.infrastructure.LlmProviderClientConfig;
+import com.comet.opik.infrastructure.net.DestinationGuard;
+import com.comet.opik.infrastructure.net.DestinationGuardException;
 import com.google.common.io.Files;
+import jakarta.ws.rs.core.Response;
+import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.Objects;
 import java.util.Set;
+
+import static jakarta.ws.rs.core.Response.Status.Family.familyOf;
 
 /**
  * Utility class for detecting MIME types of video URLs.
@@ -34,8 +43,43 @@ public class VideoMimeTypeUtils {
      */
     private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
             .connectTimeout(Duration.ofMillis(HEAD_REQUEST_TIMEOUT_MS))
-            .followRedirects(HttpClient.Redirect.NORMAL)
+            .followRedirects(HttpClient.Redirect.NEVER)
             .build();
+
+    /**
+     * Strict until {@link #setConfig(LlmProviderClientConfig)} runs, so an unconfigured caller takes the restrictive
+     * path.
+     */
+    private static volatile DestinationGuard destinationGuard = destinationGuard(DestinationGuard.Mode.STRICT);
+
+    /**
+     * Called once at startup: the mappers calling this utility are MapStruct singletons outside Guice.
+     */
+    public static void setConfig(@NonNull LlmProviderClientConfig config) {
+        destinationGuard = destinationGuard(config.getVideoUrlDestinationGuard());
+    }
+
+    private static DestinationGuard destinationGuard(DestinationGuard.Mode mode) {
+        return DestinationGuard.builder()
+                .mode(mode)
+                .scheme(DestinationGuard.Scheme.PLAINTEXT_OR_TLS)
+                .build();
+    }
+
+    /**
+     * The URL without userinfo, query or fragment, which can carry credentials such as signed-URL tokens, capped at
+     * 50 characters.
+     */
+    public static String loggable(String url) {
+        try {
+            var uri = new URI(url);
+            var path = Objects.toString(uri.getRawPath(), "");
+            var safe = "%s://%s%s".formatted(uri.getScheme(), uri.getHost(), path);
+            return safe.substring(0, Math.min(50, safe.length()));
+        } catch (URISyntaxException e) {
+            return "<invalid URL>";
+        }
+    }
 
     /**
      * Check if the URL has a recognizable video file extension.
@@ -53,7 +97,7 @@ public class VideoMimeTypeUtils {
             String extension = Files.getFileExtension(path).toLowerCase();
             return VIDEO_EXTENSIONS.contains(extension);
         } catch (IllegalArgumentException e) {
-            log.debug("Invalid URL format: '{}'", url.substring(0, Math.min(50, url.length())));
+            log.debug("Invalid URL format: '{}'", loggable(url));
             return false;
         }
     }
@@ -68,12 +112,10 @@ public class VideoMimeTypeUtils {
     public static String detectMimeTypeFromHttpHead(String url) {
         try {
             var uri = URI.create(url);
-            if (!"http".equalsIgnoreCase(uri.getScheme()) && !"https".equalsIgnoreCase(uri.getScheme())) {
-                return null;
-            }
+            destinationGuard.validate(url);
 
             log.debug("Making HEAD request to detect MIME type for URL without extension: '{}'",
-                    url.substring(0, Math.min(50, url.length())));
+                    loggable(url));
 
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(uri)
@@ -82,6 +124,10 @@ public class VideoMimeTypeUtils {
                     .build();
 
             HttpResponse<Void> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.discarding());
+            // redirects aren't followed, so a 3xx carries the redirect page's type, not the video's
+            if (familyOf(response.statusCode()) != Response.Status.Family.SUCCESSFUL) {
+                return null;
+            }
 
             String contentType = response.headers()
                     .firstValue("Content-Type")
@@ -94,12 +140,15 @@ public class VideoMimeTypeUtils {
                     contentType = contentType.substring(0, semicolonIndex).trim();
                 }
                 log.debug("Detected MIME type '{}' from HTTP HEAD: '{}'", contentType,
-                        url.substring(0, Math.min(50, url.length())));
+                        loggable(url));
                 return contentType;
             }
+        } catch (DestinationGuardException e) {
+            log.warn("Skipped MIME type detection for a refused URL: '{}'", loggable(url));
         } catch (Exception e) {
-            log.error("Failed to detect MIME type for URL: '{}', error: '{}'",
-                    url.substring(0, Math.min(50, url.length())), e.getMessage());
+            // the message can echo the full URL, credentials included (URI.create does), so only the type is logged
+            log.error("Failed to detect MIME type for URL: '{}', error type '{}'", loggable(url),
+                    e.getClass().getSimpleName());
         }
         return null;
     }

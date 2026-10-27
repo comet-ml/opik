@@ -4,8 +4,21 @@
 defaults:
   openai: {profile: openai, reasoningProfile: openai-reasoning}
   anthropic: {profile: anthropic}
-  gemini: {profile: gemini}
-  vertex-ai: {profile: gemini}
+  # The frontend's supportsGeminiSamplingParams draws the same line, so a model the sync adds without a row gets the
+  # same answer on both sides: Gemini 1.x and 2.x, gemini-pro-vision and every id outside the gemini- family (Gemma)
+  # take sampling, and any other gemini- id takes the gemini profile, which refuses it.
+  gemini:
+    profile: gemini
+    idProfiles:
+    - {match: '^(?!gemini-)', profile: gemini-sampling}
+    - {match: '^gemini-(1\.0|1\.5|2\.0|2\.5)(-|$)', profile: gemini-sampling}
+    - {match: '^gemini-pro-vision$', profile: gemini-sampling}
+  vertex-ai:
+    profile: gemini
+    idProfiles:
+    - {match: '^(?!gemini-)', profile: gemini-sampling}
+    - {match: '^gemini-(1\.0|1\.5|2\.0|2\.5)(-|$)', profile: gemini-sampling}
+    - {match: '^gemini-pro-vision$', profile: gemini-sampling}
 profiles:
   openai:
     temperature: {min: 0, max: 2, default: 0}
@@ -45,14 +58,25 @@ profiles:
     temperature: {accepted: true}
     topP: {accepted: true}
     topK: {accepted: true}
+  # Gemini 3.x and 4.x ignore temperature and top-P, and answer frequency or presence penalty with a 400, so a gemini-
+  # id takes none of them unless the defaults above place it in an older generation.
   gemini:
-    temperature: {min: 0, max: 2, default: 0}
-    topP: {min: 0, max: 1, default: 1}
+    temperature: {accepted: false, min: 0, max: 2, default: 0}
+    topP: {accepted: false, min: 0, max: 1, default: 1}
+    frequencyPenalty: {accepted: false}
+    presencePenalty: {accepted: false}
     maxOutputTokens: {min: 1, max: 65535, default: 4000}
     effort: {accepted: false}
+  gemini-sampling:
+    temperature: {accepted: true}
+    topP: {accepted: true}
+    frequencyPenalty: {accepted: true}
+    presencePenalty: {accepted: true}
   gemini-no-sampling:
     temperature: {accepted: false}
     topP: {accepted: false}
+    frequencyPenalty: {accepted: false}
+    presencePenalty: {accepted: false}
 models:
   openai:
   - id: o3
@@ -60,25 +84,25 @@ models:
       effort:
         accepted: true
         levels: [low, medium, high]
-        default: high
+        default: medium
   - id: gpt-5
     params:
       effort:
         accepted: true
         levels: [minimal, low, medium, high]
-        default: high
+        default: medium
   - id: gpt-5-mini
     params:
       effort:
         accepted: true
         levels: [minimal, low, medium, high]
-        default: high
+        default: medium
   - id: gpt-5-nano
     params:
       effort:
         accepted: true
         levels: [minimal, low, medium, high]
-        default: high
+        default: medium
   - id: gpt-5-pro
     params:
       effort:
@@ -90,13 +114,13 @@ models:
       effort:
         accepted: true
         levels: [none, low, medium, high]
-        default: high
+        default: none
   - id: gpt-5.2
     params:
       effort:
         accepted: true
         levels: [none, low, medium, high, xhigh]
-        default: high
+        default: none
   - id: gpt-5.2-pro
     params:
       effort:
@@ -109,24 +133,29 @@ models:
         accepted: true
         levels: [low, medium, high, xhigh]
         default: medium
+  # OpenAI: "Starting with GPT-5.4, Chat Completions does not support tool calling with reasoning_effort values
+  # other than none", and GPT-6 Astra and GPT-6.1 Sol take no tools there at all. Responses takes them at any effort.
   - id: gpt-5.4
     params:
       effort:
         accepted: true
         levels: [none, low, medium, high, xhigh]
-        default: high
+        default: none
+      tools: {chatCompletions: effortNoneOnly}
   - id: gpt-5.4-mini
     params:
       effort:
         accepted: true
         levels: [none, low, medium, high, xhigh]
-        default: high
+        default: none
+      tools: {chatCompletions: effortNoneOnly}
   - id: gpt-5.4-nano
     params:
       effort:
         accepted: true
         levels: [none, low, medium, high, xhigh]
-        default: high
+        default: none
+      tools: {chatCompletions: effortNoneOnly}
   - id: gpt-5.4-pro
     params:
       effort:
@@ -138,7 +167,8 @@ models:
       effort:
         accepted: true
         levels: [none, low, medium, high, xhigh]
-        default: high
+        default: medium
+      tools: {chatCompletions: effortNoneOnly}
   - id: gpt-5.5-pro
     params:
       effort:
@@ -150,7 +180,8 @@ models:
       effort:
         accepted: true
         levels: [none, low, medium, high, xhigh]
-        default: high
+        default: medium
+      tools: {chatCompletions: effortNoneOnly}
       routes:
         responses_api:
           effort:
@@ -160,7 +191,8 @@ models:
       effort:
         accepted: true
         levels: [none, low, medium, high, xhigh]
-        default: high
+        default: medium
+      tools: {chatCompletions: effortNoneOnly}
       routes:
         responses_api:
           effort:
@@ -170,7 +202,8 @@ models:
       effort:
         accepted: true
         levels: [none, low, medium, high, xhigh]
-        default: high
+        default: medium
+      tools: {chatCompletions: effortNoneOnly}
       routes:
         responses_api:
           effort:
@@ -180,7 +213,8 @@ models:
       effort:
         accepted: true
         levels: [low, medium, high, xhigh]
-        default: high
+        default: medium
+      tools: {chatCompletions: refused}
       routes:
         responses_api:
           effort:
@@ -190,7 +224,8 @@ models:
       effort:
         accepted: true
         levels: [none, low, medium, high, xhigh]
-        default: high
+        default: medium
+      tools: {chatCompletions: effortNoneOnly}
       routes:
         responses_api:
           effort:
@@ -200,7 +235,8 @@ models:
       effort:
         accepted: true
         levels: [none, low, medium, high, xhigh]
-        default: high
+        default: medium
+      tools: {chatCompletions: effortNoneOnly}
       routes:
         responses_api:
           effort:
@@ -210,7 +246,12 @@ models:
       effort:
         accepted: true
         levels: [low, medium, high, xhigh]
-        default: high
+        default: medium
+      tools: {chatCompletions: refused}
+      routes:
+        responses_api:
+          effort:
+            levels: [low, medium, high, xhigh, max]
   # Reasoning models served without an effort control: o1-mini and o1-preview refuse reasoning_effort, and
   # OpenAI's model pages list no effort levels for the others, so a level we guessed could get a 400.
   - id: o1-mini
@@ -224,11 +265,14 @@ models:
   - id: o3-pro
     params: {effort: {accepted: false}}
   anthropic:
+  # claude-opus-5-5, claude-sonnet-5-5 and claude-fable-5-1 answer a forced tool_choice (any or tool) with
+  # "not supported for this model"; auto works on every listed Claude.
   - id: claude-opus-5-5
     params:
       effort:
         levels: [low, medium, high, xhigh, max]
         default: medium
+      tools: {forcedChoice: {accepted: false}}
   - id: claude-opus-4-8
     params: {thinksByDefault: false}
   - id: claude-opus-4-7
@@ -297,12 +341,16 @@ models:
   - id: claude-sonnet-5-5
     params:
       maxOutputTokens: {max: 128000}
+      tools: {forcedChoice: {accepted: false}}
   - id: claude-haiku-5-5
     params:
       maxOutputTokens: {max: 128000}
       effort:
         levels: [low, medium, high, xhigh, max]
         default: medium
+  - id: claude-fable-5-1
+    params:
+      tools: {forcedChoice: {accepted: false}}
   gemini:
   - id: gemini-3.8-flash
     profile: gemini-no-sampling

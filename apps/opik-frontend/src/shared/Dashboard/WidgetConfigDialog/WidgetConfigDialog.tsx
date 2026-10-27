@@ -111,7 +111,7 @@ const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
   const { isOllieAvailable, askOllie } = useAskOllieForWidget();
   const handleDescribeToOllie = () => {
     onOpenChange(false);
-    askOllie("widget_dialog");
+    askOllie("widget_dialog", sectionId);
   };
 
   const dialogTitle = isEditMode ? "Edit widget" : "Add widget";
