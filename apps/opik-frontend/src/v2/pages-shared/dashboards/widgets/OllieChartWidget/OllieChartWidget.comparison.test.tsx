@@ -38,7 +38,8 @@ vi.mock("@/shared/Dashboard/DashboardWidget/DashboardWidget", () => {
   };
 });
 
-const HOUR = 60 * 60_000;
+const MINUTE = 60_000;
+const HOUR = 60 * MINUTE;
 
 describe("OllieChartWidget KPI comparison after a refetch", () => {
   it("never pairs the refetched value with the window built for the previous fetch", () => {
@@ -99,7 +100,9 @@ describe("OllieChartWidget KPI comparison after a refetch", () => {
     const compared = renders.filter((r) => r.previousRows);
     expect(compared.length).toBeGreaterThan(0);
     for (const r of compared) {
-      expect(r.previousRows![0].builtFor).toBe(r.fetchedAt);
+      expect(r.previousRows![0].builtFor).toBe(
+        Math.floor(r.fetchedAt / MINUTE) * MINUTE,
+      );
     }
   });
 });

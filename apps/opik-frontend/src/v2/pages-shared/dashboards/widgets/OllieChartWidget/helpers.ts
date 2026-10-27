@@ -6,6 +6,14 @@ export const widgetHelpers = {
     (config.description as string | undefined) || DEFAULT_TITLE,
 };
 
+export type QueryError = Error & {
+  status?: number;
+  response?: { status?: number };
+};
+
+export const queryErrorStatus = (error: QueryError) =>
+  error.status ?? error.response?.status;
+
 const HOUR = 60 * 60_000;
 const DAY = 24 * HOUR;
 

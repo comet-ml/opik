@@ -11,7 +11,9 @@ import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { cn } from "@/lib/utils";
 import OllieChartActionsMenu from "./OllieChartActionsMenu";
 import OllieKpi, { parseKpiSpec } from "./OllieKpi";
-import { comparisonWindow } from "./helpers";
+import { QueryError, queryErrorStatus } from "./helpers";
+import useKpiComparison from "./useKpiComparison";
+import useRefetchOnceSaved from "./useRefetchOnceSaved";
 import {
   useDashboardStore,
   selectRuntimeConfig,
@@ -50,11 +52,6 @@ const QUERY_ERRORS: Record<number, { title: string; message: string }> = {
     message: "Ollie charts are turned off for this workspace",
   },
 };
-
-type QueryError = Error & { status?: number; response?: { status?: number } };
-
-const queryErrorStatus = (error: QueryError) =>
-  error.status ?? error.response?.status;
 
 const describeQueryError = (error: QueryError) =>
   QUERY_ERRORS[queryErrorStatus(error) ?? 0] ?? {
@@ -147,42 +144,15 @@ const OllieChartWidget: React.FunctionComponent<
     [dateRange, hasDateRange],
   );
 
-  // When the value was last fetched. An open-ended range runs to that moment, so its comparison window ends there too
-  // and moves with every refetch (Refresh, refocus, autosave); until the value arrives there is nothing to compare.
-  const [fetchedAt, setFetchedAt] = useState(0);
-
-  // A KPI on a date range compares with the window of the same length just before it.
-  const previousWindow = useMemo(
-    () =>
-      kpi?.window_days && intervalStart && (intervalEnd || fetchedAt)
-        ? comparisonWindow(intervalStart, intervalEnd, fetchedAt)
-        : null,
-    [kpi?.window_days, intervalStart, intervalEnd, fetchedAt],
-  );
-
   // `live` also covers the moment before the dashboard id arrives (skeleton); only `canQuery` may hit the endpoint.
   const canQuery = Boolean(query?.id && dashboardId && queryWidgetId);
-  // Both queries run the widget's saved query; only their windows differ.
+  // The value and its comparison run the widget's saved query; only their windows differ.
   const savedQuery = {
     dashboardId: dashboardId ?? "",
     scope: dashboardScope ?? DASHBOARD_SCOPE.WORKSPACE,
     widgetId: queryWidgetId ?? "",
     queryId: query?.id ?? "",
   };
-  const {
-    data: previousRows,
-    error: previousError,
-    isFetching: previousFetching,
-    refetch: refetchPrevious,
-  } = useDashboardWidgetQuery(
-    {
-      ...savedQuery,
-      intervalStart: previousWindow?.intervalStart,
-      intervalEnd: previousWindow?.intervalEnd,
-    },
-    // The comparison runs the same saved query, so it waits out an unsaved widget's 404 the same way.
-    { enabled: canQuery && Boolean(previousWindow), retryNotFound },
-  );
   const {
     data: rows,
     isPending,
@@ -196,32 +166,20 @@ const OllieChartWidget: React.FunctionComponent<
     { enabled: canQuery, retryNotFound },
   );
   const live = Boolean(query?.id && queryWidgetId);
-  useEffect(() => setFetchedAt(dataUpdatedAt), [dataUpdatedAt]);
+  useRefetchOnceSaved(retryNotFound, error, refetch);
+  const comparison = useKpiComparison({
+    savedQuery,
+    enabled: canQuery && Boolean(kpi?.window_days),
+    retryNotFound,
+    intervalStart,
+    intervalEnd,
+    value: { dataUpdatedAt, isFetching },
+  });
 
-  // A refresh re-runs the comparison too, so the value and its change come from the same moment. An open-ended
-  // range's comparison follows the value's new fetch time and fetches itself; a closed one is re-run here.
   const refresh = () => {
     refetch();
-    if (previousWindow && intervalEnd) refetchPrevious();
+    comparison.refetch();
   };
-
-  // An autosave slower than the 404 retries saves the widget after its queries already gave up; run them once more.
-  const wasSavedRef = useRef(!retryNotFound);
-  useEffect(() => {
-    const justSaved = !retryNotFound && !wasSavedRef.current;
-    const gaveUp = (failure: QueryError | null) =>
-      Boolean(failure) && queryErrorStatus(failure!) === 404;
-    if (justSaved && gaveUp(error)) refetch();
-    if (justSaved && previousWindow && gaveUp(previousError)) refetchPrevious();
-    wasSavedRef.current = !retryNotFound;
-  }, [
-    retryNotFound,
-    error,
-    refetch,
-    previousWindow,
-    previousError,
-    refetchPrevious,
-  ]);
 
   // Once per failed load: the same error object survives re-renders. An unsaved widget's 404 is expected and stays
   // unreported after the save that ends it; masked data and charts turned off are states the widget explains.
@@ -330,21 +288,8 @@ const OllieChartWidget: React.FunctionComponent<
         <OllieKpi
           kpi={kpi}
           rows={chartRows}
-          // A failed or settling comparison shows none, rather than the change on rows from another moment: that
-          // includes the render where the value was refetched but its window hasn't followed yet.
-          previousRows={
-            live &&
-            previousWindow &&
-            (intervalEnd || fetchedAt === dataUpdatedAt) &&
-            !previousError &&
-            !previousFetching &&
-            !isFetching
-              ? previousRows
-              : null
-          }
-          comparedWith={
-            previousWindow ? `previous ${previousWindow.label}` : undefined
-          }
+          previousRows={live ? comparison.previousRows : null}
+          comparedWith={comparison.comparedWith}
         />
       );
     }
