@@ -92,6 +92,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
 import static io.opentelemetry.api.common.AttributeKey.stringKey;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
@@ -302,7 +303,7 @@ class TopicVectorsTickTest {
     void longWindowPass() {
         // Wait for a tick that runs the pass, so the next one certainly doesn't.
         Awaitility.await().atMost(20, TimeUnit.SECONDS).pollInterval(Duration.ofMillis(500))
-                .until(() -> tickService.tick(Instant.now()).longWindow());
+                .until(() -> tickService.tick(Instant.now()).longWindowPass());
         var workspaceId = enabledWorkspace();
         var traceId = ID_GENERATOR.generateId();
         var projectId = UUID.randomUUID();
@@ -311,14 +312,14 @@ class TopicVectorsTickTest {
 
         var normal = tickService.tick(Instant.now());
 
-        assertThat(normal.longWindow()).isFalse();
+        assertThat(normal.longWindowPass()).isFalse();
         assertThat(normal.written()).isZero();
         assertThat(vectors(workspaceId, List.of(traceId))).isEmpty();
 
         Awaitility.await().atMost(20, TimeUnit.SECONDS).pollInterval(Duration.ofMillis(500))
                 .untilAsserted(() -> {
                     var result = tickService.tick(Instant.now());
-                    assertThat(result.longWindow()).isTrue();
+                    assertThat(result.longWindowPass()).isTrue();
                     assertThat(result.written()).isOne();
                 });
         assertThat(vectors(workspaceId, List.of(traceId))).extracting(TopicVector::traceId).containsExactly(traceId);
@@ -367,6 +368,41 @@ class TopicVectorsTickTest {
         verify(meter.counter("topics.vectors.skipped"))
                 .add(4, Attributes.of(stringKey("reason"), TopicVectorsTickService.EMBED_FAILED));
         verify(meter.counter("topics.vectors.written"), never()).add(anyLong());
+    }
+
+    @Test
+    @DisplayName("the find guards reach the window read: max_rows_to_read 1 trips it, counted as a find read failure; "
+            + "the default reads it")
+    void findGuardsReachTheWindowRead() {
+        var workspaceId = enabledWorkspace();
+        labelTraces(workspaceId, 3, 1);
+        var meter = new TopicVectorsTickServiceTest.TestMeter();
+        var metered = new TopicVectorsTickService(opikConfig.getTopics(), opikConfig.getAiLabels(), template,
+                vectorsDAO, inferenceClient, lockService, taskRegistry, meter.meter);
+        var find = config().getFind();
+        var maxRowsToRead = find.getMaxRowsToRead();
+        find.setMaxRowsToRead(1);
+        TopicVectorsTickService.TickResult tripped;
+        try {
+            // ClickHouse's TOO_MANY_ROWS: the guard, not some other failure, fails the read.
+            assertThatThrownBy(() -> vectorsDAO.findUnvectored(workspaceId, TASK,
+                    Instant.now().minus(1, ChronoUnit.HOURS), Instant.now(), Instant.EPOCH, 100, 10)
+                    .collectList().block())
+                    .hasStackTraceContaining("Code: 158");
+            tripped = metered.tick(Instant.now());
+        } finally {
+            find.setMaxRowsToRead(maxRowsToRead);
+        }
+
+        assertThat(tripped.written()).isZero();
+        assertThat(countRows(workspaceId)).isZero();
+        var attributes = ArgumentCaptor.forClass(Attributes.class);
+        verify(meter.counter("topics.vectors.read.failures")).add(eq(1L), attributes.capture());
+        assertThat(attributes.getValue().get(stringKey("phase"))).isEqualTo("find");
+        assertThat(attributes.getValue().get(stringKey("workspace_id"))).isEqualTo(workspaceId);
+        assertThat(attributes.getValue().get(stringKey("error_type"))).isNotBlank();
+
+        assertThat(metered.tick(Instant.now()).written()).isEqualTo(3);
     }
 
     @Test
@@ -480,7 +516,7 @@ class TopicVectorsTickTest {
     void longWindowUntilDrained() {
         // Drain any pass in progress, and wait for a pass to be due, so the next tick is a long one.
         Awaitility.await().atMost(20, TimeUnit.SECONDS).pollInterval(Duration.ofMillis(500))
-                .until(() -> tickService.tick(Instant.now()).longWindow());
+                .until(() -> tickService.tick(Instant.now()).longWindowPass());
         config().setMaxTracesPerTick(2);
         var workspaceId = enabledWorkspace();
         var projectId = UUID.randomUUID();
@@ -492,23 +528,24 @@ class TopicVectorsTickTest {
                     Instant.now().minus(2, ChronoUnit.DAYS).plusSeconds(i));
         }
         Awaitility.await().atMost(20, TimeUnit.SECONDS).pollInterval(Duration.ofMillis(500))
-                .until(() -> !tickService.tick(Instant.now()).longWindow());
+                .until(() -> !tickService.tick(Instant.now()).longWindowPass());
 
         var ticks = new ArrayList<TopicVectorsTickService.TickResult>();
         Awaitility.await().atMost(20, TimeUnit.SECONDS).pollInterval(Duration.ofMillis(500))
                 .until(() -> {
                     var result = tickService.tick(Instant.now());
-                    if (result.longWindow()) {
+                    if (result.longWindowPass()) {
                         ticks.add(result);
                     }
-                    return result.longWindow();
+                    return result.longWindowPass();
                 });
         ticks.add(tickService.tick(Instant.now()));
         ticks.add(tickService.tick(Instant.now()));
         ticks.add(tickService.tick(Instant.now()));
 
         assertThat(ticks)
-                .extracting(TopicVectorsTickService.TickResult::longWindow, TopicVectorsTickService.TickResult::written)
+                .extracting(TopicVectorsTickService.TickResult::longWindowPass,
+                        TopicVectorsTickService.TickResult::written)
                 .containsExactly(tuple(true, 2), tuple(true, 2), tuple(true, 1), tuple(false, 0));
         assertThat(vectors(workspaceId, traceIds)).hasSize(5);
     }

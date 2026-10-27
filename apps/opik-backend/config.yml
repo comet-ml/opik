@@ -2572,7 +2572,7 @@ topics:
       #  Description: Per window read on the shared ClickHouse; a trip fails that workspace's read for the tick
       maxMemoryUsage: ${TOPICS_VECTORS_FIND_MAX_MEMORY_USAGE:-1073741824}
       #  Default: 30s
-      #  Description: Per window read, cut to the time left in the tick. Lengthens the leader lease
+      #  Description: Per window read, cut to the time left in the tick. Lengthens the leader lease. At most tickBudget
       maxExecutionTime: ${TOPICS_VECTORS_FIND_MAX_EXECUTION_TIME:-30s}
       #  Default: 1d
       #  Description: The window read skips traces created before its lower bound minus aiLabels.horizon minus this

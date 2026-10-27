@@ -29,6 +29,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
@@ -355,7 +356,7 @@ class TopicVectorsTickServiceTest {
 
             longWindowDue();
             var result = service.tick(NOW);
-            assertThat(result.longWindow()).isTrue();
+            assertThat(result.longWindowPass()).isTrue();
             verify(dao).findUnvectored(eq(WORKSPACE_ID), eq(TopicVectorsTickService.TASK), eq(APPLIES_FROM),
                     eq(NOW), eq(APPLIES_FROM.minus(horizonAndSlack)), eq(5_000), anyLong());
         }
@@ -369,7 +370,7 @@ class TopicVectorsTickServiceTest {
 
             var result = service.tick(NOW);
 
-            assertThat(result.longWindow()).isTrue();
+            assertThat(result.longWindowPass()).isTrue();
             verify(dao).findUnvectored(eq(WORKSPACE_ID), eq(TopicVectorsTickService.TASK),
                     eq(NOW.minus(Duration.ofDays(12))), eq(NOW), any(), eq(5_000), anyLong());
             assertThat(TopicVectorsTickService.longWindow(new TopicsConfig().getVectors()))
@@ -540,6 +541,32 @@ class TopicVectorsTickServiceTest {
                     .satisfies(left -> assertThat(left).isGreaterThan(Duration.ofMillis(900)));
         }
 
+        @ParameterizedTest(name = "{0} ms left: {1} window reads")
+        @CsvSource({"500, 0", "1500, 1"})
+        @DisplayName("a window read starts only with at least a second left in the tick, and gets the whole seconds left")
+        void noWindowReadUnderASecondLeft(long leftMillis, int reads) {
+            when(registry.find(TopicVectorsTickService.TASK)).thenReturn(java.util.Optional.of(earlyTask()));
+            stub(List.of(), candidate -> "");
+            var budget = config.getVectors().getTickBudget().toJavaDuration();
+            var appender = new ListAppender<ILoggingEvent>();
+            var logger = (Logger) LoggerFactory.getLogger(TopicVectorsTickService.class);
+            appender.start();
+            logger.addAppender(appender);
+            try {
+                service.tick(Instant.now().minus(budget).plusMillis(leftMillis));
+
+                verify(dao, times(reads)).findUnvectored(anyString(), anyString(), any(), any(), any(), anyInt(),
+                        eq(1L));
+                verify(dao, times(reads)).findUnvectored(anyString(), anyString(), any(), any(), any(), anyInt(),
+                        anyLong());
+                assertThat(appender.list)
+                        .filteredOn(event -> event.getFormattedMessage().contains("workspaces not read"))
+                        .hasSize(1 - reads);
+            } finally {
+                logger.detachAppender(appender);
+            }
+        }
+
         @Test
         @DisplayName("done statuses without a summary log one WARN per workspace with the count and the oldest trace")
         void missingSummaryWarn() {
@@ -587,7 +614,8 @@ class TopicVectorsTickServiceTest {
             service.tick(Instant.now());
 
             verify(meter.counter("topics.vectors.read.failures"))
-                    .add(1, Attributes.of(stringKey("phase"), "find"));
+                    .add(1, Attributes.of(stringKey("phase"), "find", stringKey("workspace_id"), "broken",
+                            stringKey("error_type"), "IllegalStateException"));
             assertThat(meter.observeGauge()).containsOnlyKeys("fine");
         }
 
@@ -602,7 +630,8 @@ class TopicVectorsTickServiceTest {
 
             assertThat(result.skipped()).isEqualTo(Map.of(TopicVectorsTickService.READ_FAILED, 1));
             verify(meter.counter("topics.vectors.read.failures"))
-                    .add(1, Attributes.of(stringKey("phase"), "summaries"));
+                    .add(1, Attributes.of(stringKey("phase"), "summaries", stringKey("workspace_id"), WORKSPACE_ID,
+                            stringKey("error_type"), "IllegalStateException"));
             verify(meter.counter("topics.vectors.skipped"))
                     .add(1, Attributes.of(stringKey("reason"), TopicVectorsTickService.READ_FAILED));
         }

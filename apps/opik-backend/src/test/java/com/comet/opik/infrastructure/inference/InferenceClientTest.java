@@ -21,6 +21,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -497,10 +498,15 @@ class InferenceClientTest {
         assertThat(sent.get(0)).isEqualTo(2_000L);
         assertThat(sent.get(1)).isBetween(1L, 5_000L);
         assertThat(sent.get(2)).isEqualTo(InferenceClient.MAX_EMBED_DEADLINE.toMillis());
-        assertThatThrownBy(() -> client.embed(embedRequest().toBuilder().deadlineMs(0L).build(), later()))
-                .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> client.embed(embedRequest().toBuilder().deadlineMs(-1L).build(), later()))
-                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @ParameterizedTest(name = "deadline_ms {0}")
+    @ValueSource(longs = {0L, -1L})
+    void embedRejectsANonPositiveDeadline(long deadlineMs) {
+        var request = embedRequest().toBuilder().deadlineMs(deadlineMs).build();
+
+        assertThatThrownBy(() -> client.embed(request, later())).isInstanceOf(IllegalArgumentException.class);
+        assertThat(server.getAllServeEvents()).isEmpty();
     }
 
     @Test

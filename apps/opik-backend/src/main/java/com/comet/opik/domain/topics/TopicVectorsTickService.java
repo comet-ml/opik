@@ -11,6 +11,7 @@ import com.comet.opik.infrastructure.inference.EmbedResult;
 import com.comet.opik.infrastructure.inference.InferenceClient;
 import com.comet.opik.infrastructure.inference.InferenceException;
 import com.comet.opik.infrastructure.lock.LockService;
+import com.comet.opik.infrastructure.metrics.ErrorMetricsResolver;
 import com.google.common.collect.Lists;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.Attributes;
@@ -43,6 +44,8 @@ import java.util.stream.Collectors;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.lock.LockService.Lock;
+import static com.comet.opik.infrastructure.metrics.ErrorMetricsResolver.ERROR_TYPE_KEY;
+import static com.comet.opik.infrastructure.metrics.ErrorMetricsResolver.WORKSPACE_ID_KEY;
 import static io.opentelemetry.api.common.AttributeKey.longKey;
 import static io.opentelemetry.api.common.AttributeKey.stringKey;
 
@@ -81,6 +84,8 @@ public class TopicVectorsTickService {
     static final Lock LONG_WINDOW_LOCK = new Lock("topics:vectors:long_window");
     // An insert after the last embed call, which has no deadline of its own, still ends within this past the rest.
     private static final Duration LEASE_SLACK = Duration.ofSeconds(5);
+    // ClickHouse's max_execution_time is in whole seconds: a window read starts only with at least one left.
+    private static final Duration MIN_READ_TIME = Duration.ofSeconds(1);
 
     private final TopicsConfig config;
     private final AiLabelsConfig aiLabelsConfig;
@@ -106,7 +111,7 @@ public class TopicVectorsTickService {
 
     /** What one tick did: the vectors it wrote, the traces it skipped by reason, and whether it used the long window. */
     @Builder(toBuilder = true)
-    record TickResult(int written, @NonNull Map<String, Integer> skipped, boolean longWindow) {
+    record TickResult(int written, @NonNull Map<String, Integer> skipped, boolean longWindowPass) {
         static final TickResult NONE = new TickResult(0, Map.of(), false);
 
         TickResult {
@@ -194,7 +199,7 @@ public class TopicVectorsTickService {
                 .build();
         this.readFailures = meter.counterBuilder("topics.vectors.read.failures")
                 .setDescription("ClickHouse reads that failed, by phase: find (one workspace's window read) or "
-                        + "summaries (one workspace's summary read)")
+                        + "summaries (one workspace's summary read), workspace and error type")
                 .build();
         this.longWindowMissed = meter.counterBuilder("topics.vectors.long_window.missed")
                 .setDescription("Vectors the long-window pass wrote for statuses older than the short window, that is, "
@@ -229,14 +234,14 @@ public class TopicVectorsTickService {
             log.warn("Topic vectors tick skipped, ai-labels has no task '{}'", TASK);
             return TickResult.NONE;
         }
-        boolean longWindow = startLongWindowIfDue();
-        var window = (longWindow ? longWindow(vectors) : vectors.getWindow()).toJavaDuration();
+        boolean longWindowPass = startLongWindowIfDue();
+        var window = (longWindowPass ? longWindow(vectors) : vectors.getWindow()).toJavaDuration();
         var lowerBound = lowerBound(earliestAppliesFrom(task.get()), start, window);
         if (lowerBound.isAfter(start)) {
-            if (longWindow) {
+            if (longWindowPass) {
                 finishLongWindow(true);
             }
-            return TickResult.builder().skipped(Map.of()).longWindow(longWindow).build();
+            return TickResult.builder().skipped(Map.of()).longWindowPass(longWindowPass).build();
         }
         var createdAfter = createdAfter(lowerBound, aiLabelsConfig.getHorizon().toJavaDuration(),
                 vectors.getFind().getCreatedAtSlack().toJavaDuration());
@@ -244,12 +249,13 @@ public class TopicVectorsTickService {
         var found = timed("find", () -> find(start, lowerBound, createdAfter, deadline));
         var tally = new Tally();
         // Only the long-window pass can write a status older than the short window: those are the rows it recovers.
-        var missedBefore = longWindow ? start.minus(vectors.getWindow().toJavaDuration()) : null;
+        var missedBefore = longWindowPass ? start.minus(vectors.getWindow().toJavaDuration()) : null;
         timed("embed", () -> embedAndWrite(found.candidates(), deadline, missedBefore, tally));
-        if (longWindow) {
+        if (longWindowPass) {
             finishLongWindow(found.complete() && !tally.cut);
         }
-        return TickResult.builder().written(tally.written).skipped(tally.skipped).longWindow(longWindow).build();
+        return TickResult.builder().written(tally.written).skipped(tally.skipped).longWindowPass(longWindowPass)
+                .build();
     }
 
     /** The long-window pass's window: the backfill window when one is set, else {@code longWindow}. */
@@ -302,7 +308,8 @@ public class TopicVectorsTickService {
         boolean complete = true;
         for (int i = 0; i < workspaceIds.size(); i++) {
             var workspaceId = workspaceIds.get(i);
-            if (!Instant.now().isBefore(deadline)) {
+            var left = Duration.between(Instant.now(), deadline);
+            if (left.compareTo(MIN_READ_TIME) < 0) {
                 complete = false;
                 log.warn("Topic vectors window reads ran out of the tick budget, workspaces not read '{}' of '{}'",
                         workspaceIds.size() - i, workspaceIds.size());
@@ -310,14 +317,14 @@ public class TopicVectorsTickService {
             }
             try {
                 var candidates = dao.findUnvectored(workspaceId, TASK, lowerBound, start, createdAfter, limit,
-                        maxExecutionSeconds(deadline)).collectList().block();
+                        maxExecutionSeconds(left)).collectList().block();
                 oldest.put(workspaceId,
                         candidates.isEmpty() ? Instant.MAX : candidates.getFirst().statusUpdatedAt());
                 found.addAll(candidates);
                 complete = complete && candidates.size() < limit;
             } catch (RuntimeException exception) {
                 complete = false;
-                readFailures.add(1, Attributes.of(stringKey("phase"), "find"));
+                countReadFailure("find", workspaceId, exception);
                 log.warn("Topic vectors window read failed, workspace '{}'; reading it again next tick", workspaceId,
                         exception);
             }
@@ -352,7 +359,7 @@ public class TopicVectorsTickService {
                         .block();
             } catch (RuntimeException exception) {
                 tally.cut(READ_FAILED, group.size());
-                readFailures.add(1, Attributes.of(stringKey("phase"), "summaries"));
+                countReadFailure("summaries", workspaceId, exception);
                 log.warn("Topic vectors summary read failed, workspace '{}', traces '{}'; reading it again next tick",
                         workspaceId, group.size(), exception);
                 continue;
@@ -412,6 +419,11 @@ public class TopicVectorsTickService {
             }
         }
         return null;
+    }
+
+    private void countReadFailure(String phase, String workspaceId, Throwable error) {
+        readFailures.add(1, Attributes.of(stringKey("phase"), phase, WORKSPACE_ID_KEY, workspaceId, ERROR_TYPE_KEY,
+                ErrorMetricsResolver.errorType(error)));
     }
 
     /**
@@ -579,9 +591,12 @@ public class TopicVectorsTickService {
                 .filter(snapshot -> Duration.between(snapshot.at(), now).compareTo(maxAge) <= 0);
     }
 
-    /** A window read's {@code max_execution_time}: the configured one, cut to the whole seconds left in the tick. */
-    private long maxExecutionSeconds(Instant deadline) {
-        return Math.min(config.getVectors().getFind().getMaxExecutionTime().toSeconds(), secondsLeft(deadline));
+    /**
+     * A window read's {@code max_execution_time}: the configured one, cut to the whole seconds left in the tick. The
+     * caller starts a read only with at least {@link #MIN_READ_TIME} left, so it is at least 1.
+     */
+    private long maxExecutionSeconds(Duration left) {
+        return Math.min(config.getVectors().getFind().getMaxExecutionTime().toSeconds(), left.toSeconds());
     }
 
     /** ClickHouse's {@code max_execution_time} for a query started now: the whole seconds left, at least 1. */

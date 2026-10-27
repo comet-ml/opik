@@ -112,6 +112,12 @@ public class TopicsConfig {
             return backfillWindow == null || window == null || backfillWindow.toMilliseconds() == 0
                     || backfillWindow.toMilliseconds() >= window.toMilliseconds();
         }
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.vectors.find.maxExecutionTime must not be longer than topics.vectors.tickBudget") public boolean isFindMaxExecutionTimeValid() {
+            return find == null || find.getMaxExecutionTime() == null || tickBudget == null
+                    || find.getMaxExecutionTime().toMilliseconds() <= tickBudget.toMilliseconds();
+        }
     }
 
     /**
@@ -127,7 +133,7 @@ public class TopicsConfig {
         @JsonProperty
         @Min(1) private long maxMemoryUsage = 1024L * 1024 * 1024;
 
-        /** Cut to the time left in the tick; lengthens the leader lease. */
+        /** Cut to the time left in the tick; lengthens the leader lease. At most {@code tickBudget}. */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.SECONDS)
         private Duration maxExecutionTime = Duration.seconds(30);
