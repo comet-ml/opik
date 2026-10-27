@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.llm.customllm;
 
+import com.comet.opik.domain.llm.ProviderErrorMessageValidator.DocumentedErrors;
 import com.comet.opik.infrastructure.llm.LlmProviderError;
 import com.comet.opik.infrastructure.llm.OpenAiCompatStatusCodes;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -11,22 +12,16 @@ import org.apache.commons.lang3.StringUtils;
  * Deserializes error bodies from OpenAI-compatible Custom LLM providers and
  * maps them into Opik's {@link ErrorMessage} DTO.
  *
- * <p>Two error shapes are supported out of the box:
+ * <p>Two error shapes are supported:
  * <ul>
- *   <li>Text shape: {@code {"error": "message"}} — historical behavior; the string
- *       value becomes the user-visible message with HTTP 400.</li>
- *   <li>Object shape: {@code {"error": {"code": "...", "message": "..."}}} — used by
- *       OpenAI itself, Azure OpenAI, and many APIM-style gateways. The nested
- *       {@code message} surfaces to the caller; the {@code code} is mapped to an HTTP
- *       status via {@link OpenAiCompatStatusCodes} (with Azure-specific codes
- *       layered on top), falling back to 400 for unrecognized codes instead
- *       of 500. This keeps gateway-level errors represented as client errors
- *       rather than server errors.</li>
+ *   <li>Text shape: {@code {"error": "message"}}, reported as HTTP 400.</li>
+ *   <li>Object shape: {@code {"error": {"type": "...", "code": "...", "message": "..."}}}, used by
+ *       OpenAI itself, Azure OpenAI, and many APIM-style gateways. The {@code code} is mapped to an HTTP
+ *       status via {@link OpenAiCompatStatusCodes}, falling back to 400 for unrecognized codes instead
+ *       of 500, so gateway-level errors stay client errors.</li>
  * </ul>
  *
- * <p>Anything else (missing field, null, unexpected shape) falls back to the
- * JSON-serialized form so the error still reaches the caller rather than
- * being swallowed into a generic 500.
+ * <p>The message reaches the caller only when {@link #isDocumented()}; otherwise only the status does.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record CustomLlmErrorMessage(JsonNode error) implements LlmProviderError<JsonNode> {
@@ -54,6 +49,13 @@ public record CustomLlmErrorMessage(JsonNode error) implements LlmProviderError<
         }
 
         return new ErrorMessage(DEFAULT_STATUS, error.toString(), DEFAULT_DETAILS);
+    }
+
+    // OpenAI-compatible servers are held to OpenAI's documented type and code values; the text shape names neither
+    public boolean isDocumented() {
+        return error != null && error.isObject()
+                && (DocumentedErrors.OPENAI.documents(textOrNull(error, "type"))
+                        || DocumentedErrors.OPENAI.documents(textOrNull(error, "code")));
     }
 
     @Override

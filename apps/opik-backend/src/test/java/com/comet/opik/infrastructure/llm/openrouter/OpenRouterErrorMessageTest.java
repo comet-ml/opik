@@ -26,12 +26,14 @@ import java.io.IOException;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Stream;
 
+import static com.comet.opik.domain.llm.ChatCompletionService.UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
@@ -108,8 +110,7 @@ class OpenRouterErrorMessageTest {
                 Arguments.of("upstream plain text, rate limit",
                         """
                                 {"error":{"message":"Provider returned error","code":429,"metadata":{"raw":"google/gemma-4-31b-it:free is temporarily rate-limited upstream. Please retry shortly, or add your own key to accumulate your rate limits: https://openrouter.ai/settings/integrations","provider_name":"Google AI Studio","is_byok":false,"provider_error_code":"429","limit_source":"upstream_provider_shared_pool","remedy_hint":"Retry shortly, add your own provider key (https://openrouter.ai/settings/integrations), or route to another provider with provider routing: https://openrouter.ai/docs/features/provider-routing"}}}""",
-                        429,
-                        "Google AI Studio: google/gemma-4-31b-it:free is temporarily rate-limited upstream. Please retry shortly, or add your own key to accumulate your rate limits: https://openrouter.ai/settings/integrations"),
+                        429, "Provider returned error"),
                 Arguments.of("upstream JSON, error as a string",
                         """
                                 {"error":{"message":"Provider returned error","code":400,"metadata":{"raw":"{\\"error\\":\\"  Model   not found  \\"}","provider_name":"DeepInfra"}}}""",
@@ -121,16 +122,16 @@ class OpenRouterErrorMessageTest {
                 Arguments.of("upstream JSON, malformed",
                         """
                                 {"error":{"message":"Provider returned error","code":502,"metadata":{"raw":"{\\"error\\": {\\"message\\": \\"upstream conn","provider_name":"Together"}}}""",
-                        502, "Together: {\"error\": {\"message\": \"upstream conn"),
+                        502, "Provider returned error"),
                 Arguments.of("no provider name", """
                         {"error":{"message":"Provider returned error","code":400,"metadata":{"raw":"Bad request"}}}""",
-                        400, "Provider returned error: Bad request"),
+                        400, "Provider returned error"),
                 Arguments.of("no provider name, other envelope message", """
                         {"error":{"message":"Gateway rejected request","code":400,"metadata":{"raw":"Bad request"}}}""",
-                        400, "Gateway rejected request: Bad request"),
+                        400, "Gateway rejected request"),
                 Arguments.of("no provider name, blank envelope message", """
                         {"error":{"message":" ","code":400,"metadata":{"raw":"Bad request"}}}""",
-                        400, "Bad request"),
+                        400, " "),
                 Arguments.of("no upstream body, no endpoints",
                         """
                                 {"error":{"message":"No endpoints found for openai/gpt-5.2-chat. Every candidate endpoint was removed during routing: Add BYOK Endpoints removed azure (the Azure endpoint is BYOK-only and you have no Azure key that can serve openai/gpt-5.2-chat-20251211).","code":404,"metadata":{"routing_funnel":[{"step":"Initial Endpoints","endpoint_count":1},{"step":"Add BYOK Endpoints","endpoint_count":0,"reason":"the Azure endpoint is BYOK-only and you have no Azure key that can serve openai/gpt-5.2-chat-20251211"}],"failed_routing_step":"Add BYOK Endpoints"}}}""",
@@ -160,11 +161,21 @@ class OpenRouterErrorMessageTest {
                 "message", "Provider returned error",
                 "code", 502,
                 "metadata",
-                Map.of("raw", "<html>" + "Bad gateway ".repeat(100) + "</html>", "provider_name", "Groq"))));
+                Map.of("raw", JsonUtils.writeValueAsString(Map.of("error", Map.of("message",
+                        "Bad gateway ".repeat(100)))), "provider_name", "Groq"))));
 
         var message = provider.getLlmProviderError(new HttpException(502, body)).orElseThrow().getMessage();
 
-        assertThat(message).startsWith("Groq: <html>Bad gateway").endsWith("...").hasSize("Groq: ".length() + 500);
+        assertThat(message).startsWith("Groq: Bad gateway").endsWith("...").hasSize("Groq: ".length() + 500);
+    }
+
+    @Test
+    void getLlmProviderErrorHidesTheTextOfAnUndocumentedCode() {
+        var body = JsonUtils.writeValueAsString(Map.of("error", Map.of(
+                "message", UUID.randomUUID().toString(), "code", 418)));
+
+        assertThat(provider.getLlmProviderError(new HttpException(418, body)))
+                .contains(new ErrorMessage(418, UNEXPECTED_ERROR_CALLING_LLM_PROVIDER));
     }
 
     @Test

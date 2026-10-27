@@ -136,9 +136,16 @@ public class LlmProviderVertexAI implements LlmProviderService {
 
     // InvalidRequestException is non-retriable, so the cut-off is not re-run (and re-billed) by the retry policy,
     // and it is classified as a 400 on both the streaming and the non-streaming path.
-    private static InvalidRequestException cutOffBeforeAnswering(ChatCompletionRequest request) {
+    private static CutOffBeforeAnsweringException cutOffBeforeAnswering(ChatCompletionRequest request) {
         var limit = GeminiMaxOutputTokens.firstPositive(request).map(" (%s)"::formatted).orElse("");
-        return new InvalidRequestException(CUT_OFF_BEFORE_ANSWERING.formatted(limit));
+        return new CutOffBeforeAnsweringException(CUT_OFF_BEFORE_ANSWERING.formatted(limit));
+    }
+
+    /** Raised by Opik rather than by Vertex AI, so its message is passed on to the caller. */
+    public static final class CutOffBeforeAnsweringException extends InvalidRequestException {
+        public CutOffBeforeAnsweringException(String message) {
+            super(message);
+        }
     }
 
     static StreamingChatResponseHandler failingWhenCutOffBeforeAnswering(ChatCompletionRequest request,

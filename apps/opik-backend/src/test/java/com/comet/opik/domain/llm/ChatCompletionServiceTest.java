@@ -5,6 +5,7 @@ import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterDecisionModel;
+import com.comet.opik.infrastructure.llm.vertexai.LlmProviderVertexAI.CutOffBeforeAnsweringException;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.ChunkedOutputHandlers;
 import com.google.api.gax.rpc.ApiException;
@@ -60,6 +61,7 @@ import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
+import static com.comet.opik.domain.llm.ChatCompletionService.UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
 import static com.comet.opik.infrastructure.llm.LlmModelRegistryTestUtils.bundledRegistry;
 import static jakarta.ws.rs.core.Response.Status.Family.familyOf;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -98,6 +100,8 @@ class ChatCompletionServiceTest {
     private ChatModel chatModel;
 
     private static final int PROVIDER_ERROR_MESSAGE_MAX_LENGTH = 300;
+    private static final String VERTEX_AI_CUT_OFF = "Vertex AI used up the max output tokens limit (1024) before "
+            + "writing any answer. Thinking tokens count toward this limit, so raise Max output tokens and run again";
 
     private ProviderErrorMessageValidator providerErrorMessageValidator;
 
@@ -197,8 +201,8 @@ class ChatCompletionServiceTest {
         }
 
         @Test
-        @DisplayName("when generic RuntimeException occurs, then throw InternalServerErrorException with exception message")
-        void create__whenGenericRuntimeException__thenThrowWithExceptionMessage() {
+        @DisplayName("when generic RuntimeException occurs, then throw InternalServerErrorException without its message")
+        void create__whenGenericRuntimeException__thenThrowWithoutExceptionMessage() {
             // Given
             var request = podamFactory.manufacturePojo(ChatCompletionRequest.class);
             var workspaceId = "test-workspace-id";
@@ -212,14 +216,13 @@ class ChatCompletionServiceTest {
             // When & Then
             assertThatThrownBy(() -> chatCompletionService.create(request, workspaceId))
                     .isExactlyInstanceOf(InternalServerErrorException.class)
-                    .hasMessageContaining("Unexpected error calling LLM provider")
-                    .hasMessageContaining(errorMessage)
+                    .hasMessage(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER)
                     .hasCauseInstanceOf(RuntimeException.class);
         }
 
         @Test
-        @DisplayName("when RuntimeException with no message occurs, then throw InternalServerErrorException with exception class name")
-        void create__whenRuntimeExceptionWithNoMessage__thenThrowWithClassName() {
+        @DisplayName("when RuntimeException with no message occurs, then throw InternalServerErrorException with the generic message")
+        void create__whenRuntimeExceptionWithNoMessage__thenThrowWithGenericMessage() {
             // Given
             var request = podamFactory.manufacturePojo(ChatCompletionRequest.class);
             var workspaceId = "test-workspace-id";
@@ -232,14 +235,13 @@ class ChatCompletionServiceTest {
             // When & Then
             assertThatThrownBy(() -> chatCompletionService.create(request, workspaceId))
                     .isExactlyInstanceOf(InternalServerErrorException.class)
-                    .hasMessageContaining("Unexpected error calling LLM provider")
-                    .hasMessageContaining("RuntimeException")
+                    .hasMessage(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER)
                     .hasCauseInstanceOf(RuntimeException.class);
         }
 
         @Test
-        @DisplayName("when nested exception occurs, then extract root cause message")
-        void create__whenNestedException__thenExtractRootCauseMessage() {
+        @DisplayName("when nested exception occurs, then its root cause message is not passed on")
+        void create__whenNestedException__thenRootCauseMessageIsNotPassedOn() {
             // Given
             var request = podamFactory.manufacturePojo(ChatCompletionRequest.class);
             var workspaceId = "test-workspace-id";
@@ -255,8 +257,7 @@ class ChatCompletionServiceTest {
             // When & Then
             assertThatThrownBy(() -> chatCompletionService.create(request, workspaceId))
                     .isExactlyInstanceOf(InternalServerErrorException.class)
-                    .hasMessageContaining("Unexpected error calling LLM provider")
-                    .hasMessageContaining(rootCauseMessage)
+                    .hasMessage(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER)
                     .hasCauseInstanceOf(RuntimeException.class);
         }
 
@@ -643,60 +644,59 @@ class ChatCompletionServiceTest {
                             "upstream proxy 503 with a plain-text body",
                             new RuntimeException(new HttpException(503, "[PROXY] service temporarily unavailable")),
                             503,
-                            "provider responded with HTTP 503"),
+                            UNEXPECTED_ERROR_CALLING_LLM_PROVIDER),
                     Arguments.of(
                             "Anthropic billing rejection nested under a retry wrapper",
                             new NonRetriableException(new InvalidRequestException(
                                     "{\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Your credit balance is too low to access the Anthropic API.\"}}")),
                             400,
-                            "credit balance is too low"),
+                            UNEXPECTED_ERROR_CALLING_LLM_PROVIDER),
                     Arguments.of(
                             "Vertex AI reply cut off before writing any text",
-                            new InvalidRequestException("Vertex AI used up the max output tokens limit (1024) "
-                                    + "before writing any answer. Thinking tokens count toward this limit, so raise "
-                                    + "Max output tokens and run again"),
+                            new CutOffBeforeAnsweringException(VERTEX_AI_CUT_OFF),
                             400,
-                            "Vertex AI used up the max output tokens limit"),
+                            UNEXPECTED_ERROR_CALLING_LLM_PROVIDER + ": " + VERTEX_AI_CUT_OFF),
                     Arguments.of(
                             "Cloudflare rate limit with a plain-text body",
                             new RuntimeException(new HttpException(429, "error code: 1015")),
                             429,
-                            "provider responded with HTTP 429"),
+                            UNEXPECTED_ERROR_CALLING_LLM_PROVIDER),
                     Arguments.of(
                             "bare RateLimitException with no HttpException in the chain",
                             new RateLimitException("slow down"),
                             429,
-                            "slow down"),
+                            UNEXPECTED_ERROR_CALLING_LLM_PROVIDER),
                     Arguments.of(
                             "bare AuthenticationException",
                             new AuthenticationException("bad key"),
                             401,
-                            "bad key"),
+                            UNEXPECTED_ERROR_CALLING_LLM_PROVIDER),
                     Arguments.of(
                             "bare TimeoutException",
                             new TimeoutException("provider timed out"),
                             408,
-                            "provider timed out"),
+                            UNEXPECTED_ERROR_CALLING_LLM_PROVIDER),
                     Arguments.of(
                             "typed exception wrapping an HttpException",
                             new InternalServerException(new HttpException(503, "upstream is down")),
                             503,
-                            "provider responded with HTTP 503"),
+                            UNEXPECTED_ERROR_CALLING_LLM_PROVIDER),
                     Arguments.of(
                             "failure that never reached HTTP",
                             new RuntimeException("Connection error", new ConnectException("Connection refused")),
                             500,
-                            "Service is unreachable"),
+                            UNEXPECTED_ERROR_CALLING_LLM_PROVIDER
+                                    + ": Service is unreachable. Please check the provider URL."),
                     Arguments.of(
                             "status outside the error families",
                             new RuntimeException(new HttpException(302, "moved")),
                             500,
-                            "provider responded with HTTP 302"),
+                            UNEXPECTED_ERROR_CALLING_LLM_PROVIDER),
                     Arguments.of(
                             "status outside the valid HTTP range",
                             new RuntimeException(new HttpException(0, "no response")),
                             500,
-                            "provider responded with HTTP 0"));
+                            UNEXPECTED_ERROR_CALLING_LLM_PROVIDER));
         }
 
         @ParameterizedTest(name = "create: when {0}, then report status {2}")
@@ -718,7 +718,7 @@ class ChatCompletionServiceTest {
             // Then
             assertThat(thrown)
                     .isInstanceOf(WebApplicationException.class)
-                    .hasMessageContaining(expectedMessagePart);
+                    .hasMessage(expectedMessagePart);
             assertThat(((WebApplicationException) thrown).getResponse().getStatus()).isEqualTo(expectedStatus);
         }
 
@@ -908,8 +908,9 @@ class ChatCompletionServiceTest {
 
             assertRetryable(thrown);
             assertThat(thrown)
-                    .as("the provider body must survive for diagnostics even though it decides nothing")
-                    .hasMessageContaining("insufficient_quota");
+                    .as("the provider body is kept as the cause, not the message")
+                    .hasMessage(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER)
+                    .hasCause(providerFailure);
         }
 
         /**
@@ -969,7 +970,7 @@ class ChatCompletionServiceTest {
                 String testName, RuntimeException providerFailure, int expectedStatus, String expectedMessagePart) {
             var thrown = whenScoreTraceFails(providerFailure, Optional.empty());
 
-            assertThat(thrown).hasMessageContaining(expectedMessagePart);
+            assertThat(thrown).hasMessage(expectedMessagePart);
             assertNonRetryable(thrown, expectedStatus);
         }
 
@@ -980,7 +981,7 @@ class ChatCompletionServiceTest {
                 String testName, RuntimeException providerFailure, int expectedStatus, String expectedMessagePart) {
             var thrown = whenScoreTraceFails(providerFailure, Optional.empty());
 
-            assertThat(thrown).hasMessageContaining(expectedMessagePart);
+            assertThat(thrown).hasMessage(expectedMessagePart);
             assertRetryable(thrown, expectedStatus);
         }
 
@@ -1343,7 +1344,7 @@ class ChatCompletionServiceTest {
             var errorCaptor = ArgumentCaptor.forClass(ErrorMessage.class);
             verify(handlers).handleError(errorCaptor.capture());
             assertThat(errorCaptor.getValue().getCode()).isEqualTo(expectedStatus);
-            assertThat(errorCaptor.getValue().getMessage()).contains(expectedMessagePart);
+            assertThat(errorCaptor.getValue().getMessage()).isEqualTo(expectedMessagePart);
         }
 
         @Test
