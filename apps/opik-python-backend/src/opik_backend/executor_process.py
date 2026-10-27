@@ -2,6 +2,7 @@ import atexit
 import concurrent.futures
 import json
 import logging
+import math
 import os
 import secrets
 import signal
@@ -11,7 +12,7 @@ import sys
 import multiprocessing
 from queue import Queue, Empty
 from threading import Event, Lock, Thread
-from multiprocessing.connection import Connection
+from multiprocessing.connection import Connection, wait
 from typing import Any, Optional, Tuple, Union
 
 
@@ -97,7 +98,7 @@ def _worker_context(isolate: bool):
 PROCESS_NETWORK_ISOLATION_ENV_VAR = "PYTHON_CODE_EXECUTOR_PROCESS_NETWORK_ISOLATION"
 
 MAX_REPLY_BYTES_ENV_VAR = "PYTHON_CODE_EXECUTOR_MAX_RESULT_SIZE_IN_BYTES"
-READY_TIMEOUT_SECONDS = 10
+READY_TIMEOUT_ENV_VAR = "PYTHON_CODE_EXECUTOR_READY_TIMEOUT_SECONDS"
 
 
 def max_reply_bytes() -> int:
@@ -109,11 +110,31 @@ def max_reply_bytes() -> int:
     return int(value)
 
 
+def ready_timeout_seconds() -> float:
+    """A positive finite number, so a bad value fails startup instead of failing every worker start or never bounding it."""
+    value = os.getenv(READY_TIMEOUT_ENV_VAR) or "10"
+    try:
+        seconds = float(value)
+    except ValueError:
+        seconds = math.nan
+    if not math.isfinite(seconds) or seconds <= 0:
+        # only an excerpt of the value: it goes to the startup log
+        raise ValueError(f"{READY_TIMEOUT_ENV_VAR} must be a positive number of seconds, not {value[:32]!r}")
+    return seconds
+
+
+# How long a new worker may take to report READY; longer and it is stopped and not added to the pool.
+READY_TIMEOUT_SECONDS = ready_timeout_seconds()
 # Far above any real score list; a longer reply is refused before it is read, so it is never buffered.
 MAX_REPLY_BYTES = max_reply_bytes()
 MALFORMED_REPLY_ERROR = "Execution failed: the worker returned a malformed or oversized result"
 # A worker holding more pending replies than this is replaced rather than drained.
 _MAX_PENDING_REPLIES = 16
+# Stopping a worker never waits longer than these. SIGTERM ends a worker at once (its handler is the default),
+# so the first only covers a worker whose user code ignores it; SIGKILL can't be ignored, so the second is only
+# the kernel delivering it. Not settings: neither depends on the workload.
+_TERMINATE_GRACE_SECONDS = 2
+_KILL_GRACE_SECONDS = 1
 
 
 class _IsolationUnavailable(Exception):
@@ -202,29 +223,14 @@ def terminate_worker(worker):
     # Close the connection if it exists and is open
     connection = worker.get('connection')
     if connection:
-        try:
-            connection.close()
-        except Exception as e:
-            logger.warning(f"Error closing connection for worker {worker_id}: {e}")
+        _close(connection, worker_id)
 
     if not process.is_alive():
         logger.info(f"Worker {worker_id} (PID: {process.pid if process.pid else 'N/A'}) already terminated.")
         return
 
     logger.info(f"Terminating worker {worker_id} (PID: {process.pid}).")
-    try:
-        process.terminate()  # Send SIGTERM
-        if not _wait_for_exit(process, 2):
-            logger.warning(
-                f"Worker {worker_id} (PID: {process.pid}) did not terminate gracefully after SIGTERM, killing.")
-            process.kill()  # Send SIGKILL
-            _wait_for_exit(process, 1)  # Wait for SIGKILL to take effect
-    except Exception as e:  # Catch any other exceptions during termination
-        logger.error(f"Exception during termination of worker {worker_id} (PID: {process.pid}): {e}")
-        if process.is_alive():
-            process.kill()
-            _wait_for_exit(process, 1)
-
+    _stop_process(process, worker_id)
     logger.info(f"Termination sequence for worker {worker_id} complete.")
 
 
@@ -248,13 +254,52 @@ def _start(process: multiprocessing.Process) -> None:
 
 
 def _wait_for_exit(process: multiprocessing.Process, timeout: float) -> bool:
-    """Polls rather than join(timeout): join waits on a pipe the worker can close, and then blocks unbounded."""
+    """True once the process has exited, False at the deadline; never waits past it.
+
+    Not join(timeout): when the worker has closed its end of the sentinel pipe, join returns from the sentinel at
+    once and then waits on waitpid unbounded. This blocks on the sentinel up to the deadline instead; a sentinel
+    that is readable while the process lives was closed by the worker, and only then does it sleep between checks.
+    """
     deadline = time.monotonic() + timeout
+    pause = 0.01
     while process.is_alive():
-        if time.monotonic() >= deadline:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
             return False
-        time.sleep(0.01)
+        if wait([process.sentinel], remaining):
+            time.sleep(min(pause, remaining))
+            pause = min(pause * 2, 0.2)
     return True
+
+
+def _signal(process: multiprocessing.Process, signum: int, worker_id: str) -> None:
+    """os.kill rather than terminate()/kill(), which wait on the sentinel and then on waitpid when the signal is refused."""
+    if not process.is_alive():
+        return
+    try:
+        os.kill(process.pid, signum)
+    except ProcessLookupError:
+        pass  # exited since the check
+    except OSError as e:
+        logger.error(f"Could not send {signal.Signals(signum).name} to worker {worker_id} (PID: {process.pid}): {e}")
+
+
+def _stop_process(process: multiprocessing.Process, worker_id: str) -> None:
+    """SIGTERM, then SIGKILL; returns within the two grace periods whatever the worker does."""
+    _signal(process, signal.SIGTERM, worker_id)
+    if _wait_for_exit(process, _TERMINATE_GRACE_SECONDS):
+        return
+    logger.warning(f"Worker {worker_id} (PID: {process.pid}) did not terminate gracefully after SIGTERM, killing.")
+    _signal(process, signal.SIGKILL, worker_id)
+    if not _wait_for_exit(process, _KILL_GRACE_SECONDS):
+        logger.error(f"Worker {worker_id} (PID: {process.pid}) still running after SIGKILL; leaving it.")
+
+
+def _close(connection: Connection, worker_id: str) -> None:
+    try:
+        connection.close()
+    except OSError as e:
+        logger.warning(f"Error closing connection for worker {worker_id}: {e}")
 
 
 def _read_reply(connection: Connection) -> Any:
@@ -264,7 +309,13 @@ def _read_reply(connection: Connection) -> Any:
     """
     try:
         return json.loads(connection.recv_bytes(MAX_REPLY_BYTES))
-    except (OSError, ValueError):
+    except OSError as e:
+        # recv_bytes raises OSError for a reply over the cap; its text carries no reply bytes.
+        logger.warning(f"Discarded a worker reply that could not be read (limit {MAX_REPLY_BYTES} bytes): {e}")
+        return None
+    except ValueError as e:
+        # Only the type: a decode error's text quotes bytes of the reply.
+        logger.warning(f"Discarded a worker reply that is not JSON: {type(e).__name__}")
         return None
 
 
@@ -295,7 +346,8 @@ def _drain(connection: Connection) -> bool:
                 return True
             connection.recv_bytes(MAX_REPLY_BYTES)
         return not connection.poll(0)
-    except (OSError, EOFError):
+    except (OSError, EOFError) as e:
+        logger.warning(f"Could not discard a worker's pending replies: {type(e).__name__}")
         return False
 
 
@@ -306,18 +358,16 @@ def _isolation_error(reply: Any) -> Optional[str]:
 
 
 def _stop_isolated_worker(process: multiprocessing.Process, connection: Connection) -> None:
-    # Closing the pipe ends the worker's command loop.
-    connection.close()
-    if process.pid is not None and not _wait_for_exit(process, 1):
-        process.kill()
-        process.join()
+    _close(connection, "isolated")
+    _stop_process(process, "isolated")
 
 
 @atexit.register
 def _stop_idle_isolated_workers() -> None:
     # Isolated workers are not daemonic, so a metric can start its own processes. Stop the idle ones at
     # exit before multiprocessing's own atexit joins them, which would otherwise block on a live worker.
-    while True:
+    # Nothing returns a worker by then (threads are joined before atexit), so the count is final.
+    for _ in range(_idle_isolated_workers.qsize()):
         try:
             _stop_isolated_worker(*_idle_isolated_workers.get_nowait())
         except Empty:
@@ -363,6 +413,7 @@ def _start_isolated_worker() -> Union[dict, Tuple[multiprocessing.Process, Conne
         _one_shot_isolation_failures.log(reason)
         return ready
     except EOFError:
+        logger.warning("Isolated worker exited before sending READY")
         return {"code": 500, "error": "Isolated worker exited before returning a result"}
     finally:
         child_conn.close()
@@ -380,17 +431,21 @@ def run_user_code_in_isolated_worker(code: str, data: dict, payload_type: Option
     workers are killed when the job process exits.
     """
     worker = None
-    while worker is None:
+    # At most every worker idle now; a fresh one is used as it starts, so this never retries a start.
+    for _ in range(_idle_isolated_workers.qsize()):
         try:
             worker = _idle_isolated_workers.get_nowait()
         except Empty:
-            started = _isolated_worker_spawner.submit(_start_isolated_worker).result()
-            if isinstance(started, dict):
-                return started
-            worker = started
-        if not worker[0].is_alive() or not _drain(worker[1]):
-            _stop_isolated_worker(*worker)
-            worker = None
+            break
+        if worker[0].is_alive() and _drain(worker[1]):
+            break
+        _stop_isolated_worker(*worker)
+        worker = None
+    if worker is None:
+        started = _isolated_worker_spawner.submit(_start_isolated_worker).result()
+        if isinstance(started, dict):
+            return started
+        worker = started
     process, connection = worker
     reusable = False
     try:
@@ -401,7 +456,8 @@ def run_user_code_in_isolated_worker(code: str, data: dict, payload_type: Option
             return {"code": 400, "error": MALFORMED_REPLY_ERROR}
         reusable = True
         return result
-    except (EOFError, BrokenPipeError):
+    except (EOFError, BrokenPipeError) as e:
+        logger.warning(f"Isolated worker exited before returning a result: {type(e).__name__}")
         return {"code": 500, "error": "Isolated worker exited before returning a result"}
     finally:
         if reusable:
@@ -572,7 +628,9 @@ class ProcessExecutor(CodeExecutorBase):
                 if reason is not None:
                     raise _IsolationUnavailable(reason)
                 if ready_signal != "READY":
-                    raise Exception(f"Worker {worker_id} (PID: {process.pid}) sent unexpected signal: {ready_signal}")
+                    # Only the type: the reply is the worker's data.
+                    raise Exception(f"Worker {worker_id} (PID: {process.pid}) sent an unexpected ready reply "
+                                    f"({type(ready_signal).__name__})")
             else:
                 raise Exception(f"Worker {worker_id} (PID: {process.pid}) timed out waiting for READY signal.")
 
@@ -588,13 +646,12 @@ class ProcessExecutor(CodeExecutorBase):
             else:
                 logger.error(
                     f"Failed to create worker process {worker_id} (PID: {process.pid if process and process.pid else 'N/A'}): {e}")
-            if process and process.is_alive():
-                process.terminate()
-                _wait_for_exit(process, 1)
             if parent_conn:
-                parent_conn.close()
+                _close(parent_conn, worker_id)
             if child_conn:
-                child_conn.close()
+                _close(child_conn, worker_id)
+            if process:
+                _stop_process(process, worker_id)
 
     def _update_pool_size_metric(self):
         process_pool_size_gauge.set(self.process_pool.qsize())

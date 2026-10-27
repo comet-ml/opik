@@ -13,6 +13,7 @@ import signal
 import socket
 import subprocess
 import sys
+import threading
 import time
 from typing import Iterator, List
 
@@ -1012,3 +1013,168 @@ def test_runner_starts_the_template_before_reading_the_job(tmp_path, outcome):
         assert len(errors) == 1 and "cannot be isolated (start worker template failed: template unavailable)" in errors[0], errors
         # Logged with the failure's own traceback, and the job still went on to read its input.
         assert "OSError: template unavailable" in run.stderr
+
+
+@pytest.mark.parametrize("value", ["0", "-1", "abc", "nan", "inf", "10s"])
+def test_invalid_ready_timeout_fails_startup(monkeypatch, value):
+    monkeypatch.setenv(executor_process.READY_TIMEOUT_ENV_VAR, value)
+
+    with pytest.raises(ValueError) as actual:
+        executor_process.ready_timeout_seconds()
+
+    assert str(actual.value) == f"{executor_process.READY_TIMEOUT_ENV_VAR} must be a positive number of seconds, not {value!r}"
+
+
+@pytest.mark.parametrize("value", ["0", "abc"])
+def test_invalid_ready_timeout_fails_the_module_import(value):
+    env = {**os.environ, executor_process.READY_TIMEOUT_ENV_VAR: value, "PYTHON_COLORS": "0"}
+    actual = subprocess.run([sys.executable, "-c", "import opik_backend.executor_process"],
+                            env=env, capture_output=True, text=True, timeout=60)
+
+    assert actual.returncode != 0
+    assert (f"ValueError: {executor_process.READY_TIMEOUT_ENV_VAR} must be a positive number of seconds, not {value!r}"
+            in actual.stderr), actual.stderr
+
+
+def test_invalid_ready_timeout_names_only_an_excerpt(monkeypatch):
+    monkeypatch.setenv(executor_process.READY_TIMEOUT_ENV_VAR, "x" * 100)
+
+    with pytest.raises(ValueError) as actual:
+        executor_process.ready_timeout_seconds()
+
+    assert str(actual.value) == f"{executor_process.READY_TIMEOUT_ENV_VAR} must be a positive number of seconds, not {'x' * 32!r}"
+
+
+@pytest.mark.parametrize("value, expected", [(None, 10.0), ("", 10.0), ("2.5", 2.5), ("30", 30.0)])
+def test_ready_timeout_defaults_when_unset(monkeypatch, value, expected):
+    if value is None:
+        monkeypatch.delenv(executor_process.READY_TIMEOUT_ENV_VAR, raising=False)
+    else:
+        monkeypatch.setenv(executor_process.READY_TIMEOUT_ENV_VAR, value)
+
+    assert executor_process.ready_timeout_seconds() == expected
+
+
+# Ignores SIGTERM and outlives the exec timeout, and a lingering thread keeps it alive past the pipe closing.
+IGNORES_SIGTERM_METRIC = """
+import signal
+import threading
+import time
+
+from opik.evaluation.metrics import base_metric, score_result
+
+
+class IgnoresSigterm(base_metric.BaseMetric):
+    def __init__(self):
+        super().__init__(name="ignores_sigterm", track=False)
+
+    def score(self, sleep=0, **ignored_kwargs):
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        threading.Thread(target=time.sleep, args=(60,)).start()
+        time.sleep(sleep)
+        return score_result.ScoreResult(name=self.name, value=1.0)
+"""
+
+# SIGTERM grace, SIGKILL grace and some slack.
+STOP_BOUND_SECONDS = executor_process._TERMINATE_GRACE_SECONDS + executor_process._KILL_GRACE_SECONDS + 2
+
+
+@pytest.mark.parametrize("isolation", ISOLATION_SETTINGS)
+def test_pool_worker_that_ignores_sigterm_is_reaped_within_a_bound(monkeypatch, isolation, workers):
+    monkeypatch.setenv(PROCESS_NETWORK_ISOLATION_ENV_VAR, isolation)
+    monkeypatch.setenv("PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS", "1")
+    executor = ProcessExecutor()
+    executor.create_worker_process()
+
+    # No releaser pool here, so the timed-out worker is stopped on this thread and the call includes the stop.
+    start = time.monotonic()
+    result = executor.run_scoring(IGNORES_SIGTERM_METRIC, {"sleep": 30})
+    elapsed = time.monotonic() - start
+
+    assert result == {"code": 504, "error": executor_process.EXEC_TIMEOUT_ERROR}
+    assert elapsed < 1 + STOP_BOUND_SECONDS, elapsed
+    assert not workers[0].is_alive()
+
+
+@needs_isolation
+def test_idle_isolated_worker_that_ignores_sigterm_is_stopped_within_a_bound(workers):
+    assert run_user_code_in_isolated_worker(IGNORES_SIGTERM_METRIC, {}) == _only_score("ignores_sigterm", 1.0)
+
+    start = time.monotonic()
+    executor_process._stop_idle_isolated_workers()
+    elapsed = time.monotonic() - start
+
+    assert elapsed < STOP_BOUND_SECONDS, elapsed
+    assert not workers[0].is_alive()
+    assert executor_process._idle_isolated_workers.qsize() == 0
+
+
+def _closes_its_sentinel_and_ignores_sigterm() -> None:
+    # Closing every inherited descriptor closes the worker's end of the sentinel pipe, so the parent's
+    # sentinel reports an exit while the worker still runs.
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
+    os.closerange(3, 65536)
+    time.sleep(60)
+
+
+def test_worker_that_closed_its_sentinel_is_reaped_within_a_bound(workers):
+    process = executor_process._mp_context.Process(target=_closes_its_sentinel_and_ignores_sigterm)
+    process.start()
+    time.sleep(1)
+
+    start = time.monotonic()
+    executor_process.terminate_worker({"id": "sentinel", "process": process})
+    elapsed = time.monotonic() - start
+
+    assert elapsed < STOP_BOUND_SECONDS, elapsed
+    assert not process.is_alive()
+
+
+def test_wait_for_exit_returns_when_the_process_exits(workers):
+    process = executor_process._mp_context.Process(target=time.sleep, args=(0.3,))
+    process.start()
+
+    start = time.monotonic()
+    exited = executor_process._wait_for_exit(process, 30)
+
+    assert (exited, time.monotonic() - start < 10) == (True, True)
+
+
+def test_wait_for_exit_returns_at_the_deadline(workers):
+    process = executor_process._mp_context.Process(target=time.sleep, args=(60,))
+    process.start()
+
+    start = time.monotonic()
+    exited = executor_process._wait_for_exit(process, 0.5)
+
+    assert (exited, 0.5 <= time.monotonic() - start < 5) == (False, True)
+
+
+def test_one_shot_worker_that_dies_after_ready_is_not_restarted(monkeypatch, workers):
+    starts = []
+
+    def start_dead_worker():
+        # READY was read, then the worker exited: the start succeeded and the worker is gone.
+        starts.append(1)
+        parent_conn, child_conn = executor_process._mp_context.Pipe()
+        process = executor_process._mp_context.Process(target=os._exit, args=(0,))
+        process.start()
+        child_conn.close()
+        executor_process._wait_for_exit(process, 30)
+        return process, parent_conn
+
+    monkeypatch.setattr(executor_process, "_start_isolated_worker", start_dead_worker)
+    # An idle worker that died meanwhile is discarded, not reused.
+    executor_process._idle_isolated_workers.put(start_dead_worker())
+    starts.clear()
+    results = []
+    call = threading.Thread(target=lambda: results.append(run_user_code_in_isolated_worker(PROBE_METRIC, {})),
+                            daemon=True)
+
+    call.start()
+    call.join(30)
+
+    assert not call.is_alive(), "the call kept replacing a worker that dies"
+    assert results == [{"code": 500, "error": "Isolated worker exited before returning a result"}]
+    assert starts == [1]
+    assert executor_process._idle_isolated_workers.qsize() == 0
