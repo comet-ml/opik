@@ -363,7 +363,14 @@ test.describe(
                     (s) => s.totalEstimatedCost !== null && s.totalEstimatedCost > 0,
                   ).length;
                 },
-                { timeout: 60_000, intervals: [500, 1_000, 2_000] },
+                {
+                  message:
+                    `the server to price at least the ${prefixed.length} prefixed-spelling ` +
+                    `vectors on trace ${openRouterCostSpans.traceId} — a timeout here means the ` +
+                    'seed never resolved a price, not that the panel rendered the wrong amount',
+                  timeout: 60_000,
+                  intervals: [500, 1_000, 2_000],
+                },
               )
               .toBeGreaterThanOrEqual(prefixed.length);
 

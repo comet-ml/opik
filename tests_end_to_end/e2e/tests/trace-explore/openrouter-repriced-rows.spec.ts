@@ -246,7 +246,14 @@ test.describe(
                     (s) => s.totalEstimatedCost !== null && s.totalEstimatedCost > 0,
                   ).length;
                 },
-                { timeout: 60_000, intervals: [500, 1_000, 2_000] },
+                {
+                  message:
+                    `the server to price the ${vectors.length} re-priced vectors on trace ` +
+                    `${openRouterRepricedSpans.traceId} — a timeout here means the seed never ` +
+                    'resolved a price, not that the panel rendered the wrong amount',
+                  timeout: 60_000,
+                  intervals: [500, 1_000, 2_000],
+                },
               )
               .toBe(vectors.length);
 
