@@ -112,6 +112,7 @@ def _get_synonym(
     """Get a synonym for a word using LLM."""
     try:
         response = _llm_calls.call_model(
+            metadata={"opik_call_type": "synonym_mutation"},
             messages=[
                 {
                     "role": "system",
@@ -145,6 +146,7 @@ def _modify_phrase(
     """Modify a phrase while preserving meaning using LLM."""
     try:
         response = _llm_calls.call_model(
+            metadata={"opik_call_type": "phrase_mutation"},
             messages=[
                 {
                     "role": "system",
@@ -353,6 +355,7 @@ def _semantic_mutation(
             strategy_instruction=strategy_prompts[strategy],
         )
         response = _llm_calls.call_model(
+            metadata={"opik_call_type": "semantic_mutation"},
             evidence=ReasoningEvidence(prompts={prompt.name: prompt}),
             messages=[
                 {
@@ -409,6 +412,7 @@ def _radical_innovation_mutation(
     )
     try:
         new_prompt_str = _llm_calls.call_model(
+            metadata={"opik_call_type": "radical_innovation"},
             evidence=ReasoningEvidence(prompts={prompt.name: prompt}),
             messages=[
                 {

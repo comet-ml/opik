@@ -469,8 +469,20 @@ class BaseOptimizer(ABC):
                 optimizable_prompts, dataset, optimizable_roles
             )
 
-        # Resolve project name
-        project_name = resolve_project_name(project_name)
+        # Like Opik's evaluator, the dataset's project wins, so the optimization
+        # run, its trials and the optimizer's own calls land in one project.
+        dataset_project = getattr(dataset, "project_name", None)
+        if not isinstance(dataset_project, str):
+            dataset_project = None
+        if dataset_project and project_name and project_name != dataset_project:
+            logger.warning(
+                "project_name=%r is ignored: dataset %r belongs to project %r, "
+                "where Opik records this optimization's trials.",
+                project_name,
+                getattr(dataset, "name", None),
+                dataset_project,
+            )
+        project_name = dataset_project or resolve_project_name(project_name)
         self.project_name = project_name
 
         # Create agent if not provided

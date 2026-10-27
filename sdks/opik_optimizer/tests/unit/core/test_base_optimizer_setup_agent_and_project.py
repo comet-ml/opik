@@ -59,3 +59,28 @@ class TestSetupOptimizationAgent:
         assert optimizer.project_name == "TestProject"
         assert isinstance(context.agent, LiteLLMAgent)
         assert context.agent.project_name == "TestProject"  # type: ignore[attr-defined]
+
+    def test_dataset_project_wins_so_trials_and_run_share_it(
+        self,
+        optimizer: ConcreteOptimizer,
+        simple_chat_prompt,
+        mock_opik_client,
+        mock_metric: MetricFunction,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Opik records trials in the dataset's project; the run must follow."""
+        mock_opik_client()
+        mock_ds = make_mock_dataset(
+            [{"id": "1", "input": "test"}], name="test-dataset", dataset_id="ds-123"
+        )
+        mock_ds.project_name = "dataset-project"
+
+        context = optimizer._setup_optimization(
+            prompt=simple_chat_prompt,
+            dataset=mock_ds,
+            metric=mock_metric,
+            project_name="other-project",
+        )
+
+        assert context.project_name == optimizer.project_name == "dataset-project"
+        assert "project_name='other-project' is ignored" in caplog.text

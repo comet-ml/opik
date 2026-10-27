@@ -129,6 +129,7 @@ class PromptHallOfFame:
                 {"role": "user", "content": prompt_analysis},
             ]
             response = _llm_calls.call_model(
+                metadata={"opik_call_type": "pattern_extraction"},
                 messages=messages,
                 model=model,
                 model_parameters=model_parameters,

@@ -196,6 +196,7 @@ def _call_llm_for_crossover(
         style=output_style_guidance,
     )
     response = _llm_calls.call_model(
+        metadata={"opik_call_type": "crossover"},
         evidence=ReasoningEvidence(
             prompts={
                 "parent_1": chat_prompt.ChatPrompt(messages=messages_1),

@@ -408,6 +408,10 @@ def _run_evaluator(
     verbose: int,
     experiment_type: str | None = None,
 ) -> opik_evaluation_result.EvaluationResult:
+    # Opik records evaluations in the dataset's project and warns when a caller
+    # also passes one, so only pass it for datasets without a project.
+    if isinstance(getattr(dataset, "project_name", None), str):
+        project_name = None
     if optimization_id is not None:
         trial_kwargs: dict[str, Any] = {
             "optimization_id": optimization_id,

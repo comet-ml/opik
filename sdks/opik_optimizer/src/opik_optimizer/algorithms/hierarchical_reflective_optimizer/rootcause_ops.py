@@ -106,6 +106,7 @@ class HierarchicalRootCauseAnalyzer:
 
         # TODO: Check which project this data gets logged to
         root_cause_response = await _llm_calls.call_model_async(
+            metadata={"opik_call_type": "root_cause_analysis"},
             evidence=ReasoningEvidence(
                 cases=cases_from_evaluation(
                     test_results[batch_start:actual_end], traces=traces
@@ -172,6 +173,7 @@ class HierarchicalRootCauseAnalyzer:
         )
 
         synthesis_response = await _llm_calls.call_model_async(
+            metadata={"opik_call_type": "root_cause_synthesis"},
             model=self.reasoning_model,
             messages=[{"role": "user", "content": synthesis_prompt}],
             seed=self.seed,

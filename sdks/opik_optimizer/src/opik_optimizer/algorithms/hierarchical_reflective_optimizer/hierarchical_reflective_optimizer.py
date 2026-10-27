@@ -267,6 +267,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         )
 
         improve_prompt_response = _llm_calls.call_model(
+            metadata={"opik_call_type": "prompt_improvement"},
             evidence=ReasoningEvidence(prompts=prompts),
             messages=[{"role": "user", "content": improve_prompt_prompt}],
             model=self.reasoning_model,

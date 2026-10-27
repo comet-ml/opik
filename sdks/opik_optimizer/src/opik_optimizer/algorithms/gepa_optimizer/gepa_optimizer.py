@@ -608,7 +608,11 @@ class GepaOptimizer(BaseOptimizer):
                 self._reflection_call_count += 1
                 return True
 
-        @opik.track(name="gepa_reflection", project_name=self.project_name)
+        @opik.track(
+            name="gepa_reflection",
+            project_name=self.project_name,
+            source="optimization",
+        )
         def _tracked_reflection_call(messages: list[dict[str, Any]]) -> str:
             self._tag_trace(phase="Reflection")
             result = _llm_calls.call_model(

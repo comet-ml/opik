@@ -377,6 +377,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         for attempt in range(2):
             try:
                 response_content = _llm_calls.call_model(
+                    metadata={"opik_call_type": "few_shot_template"},
                     evidence=ReasoningEvidence(
                         prompts=prompts,
                         cases=[

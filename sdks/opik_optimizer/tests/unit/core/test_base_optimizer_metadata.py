@@ -68,3 +68,23 @@ def test_model_parameters_accept_non_copyable_values():
     assert optimizer.model_parameters["client"] is client
     assert optimizer.reasoning_model_parameters["client"] is client
     assert optimizer.model_parameters is not optimizer.reasoning_model_parameters
+
+
+def test_agent_config_records_agent_settings_without_credentials(simple_chat_prompt):
+    simple_chat_prompt.model_kwargs = {
+        "temperature": 0.2,
+        "max_tokens": 64,
+        "api_key": "sk-test",
+        "extra_headers": {"Authorization": "Bearer x"},
+        "client": object(),
+    }
+    config = agent_utils.build_agent_config(
+        optimizer=ConcreteOptimizer(model="optimizer-model"), prompt=simple_chat_prompt
+    )
+    assert config["model_parameters"] == {
+        "temperature": 0.2,
+        "max_tokens": 64,
+        "api_key": "***REDACTED***",
+        "extra_headers": "***REDACTED***",
+        "client": "object",
+    }

@@ -390,6 +390,7 @@ def _call_and_normalize_model_response(
     evidence: ReasoningEvidence | None = None,
 ) -> list[PopulationResponse]:
     response_content = _llm_calls.call_model(
+        metadata={"opik_call_type": "population_generation"},
         evidence=evidence,
         response_model=PopulationResponse,
         messages=messages,

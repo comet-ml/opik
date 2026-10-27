@@ -163,7 +163,9 @@ def _invoke_traced(
     tags = _optimization_trace_tags(params)
     prepared = _strip_project_name(params)
 
-    @opik.track(name=_trace_name(params), project_name=project_name)
+    @opik.track(
+        name=_trace_name(params), project_name=project_name, source="optimization"
+    )
     def _call() -> Any:
         if tags:
             try:
@@ -200,7 +202,9 @@ async def _invoke_traced_async(
     tags = _optimization_trace_tags(params)
     prepared = _strip_project_name(params)
 
-    @opik.track(name=_trace_name(params), project_name=project_name)
+    @opik.track(
+        name=_trace_name(params), project_name=project_name, source="optimization"
+    )
     async def _call() -> Any:
         if tags:
             try:

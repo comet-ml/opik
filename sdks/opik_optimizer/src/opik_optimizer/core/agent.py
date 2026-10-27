@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from typing import Any, TYPE_CHECKING
 
 from ..agents.optimizable_agent import OptimizableAgent
@@ -54,6 +56,26 @@ def instantiate_agent(
     return bind_optimizer(optimizer, agent)
 
 
+_SECRET_SUFFIXES = ("api_key", "secret", "password", "access_token", "auth_token")
+_SECRET_KEYS = {"authorization", "headers", "extra_headers"}
+
+
+def _loggable_settings(settings: dict[str, Any] | None) -> dict[str, Any] | None:
+    """The agent's model settings as experiment metadata, without credentials."""
+    loggable: dict[str, Any] = {}
+    for key, value in (settings or {}).items():
+        lowered = str(key).lower()
+        if lowered in _SECRET_KEYS or lowered.endswith(_SECRET_SUFFIXES):
+            loggable[key] = "***REDACTED***"
+        elif value is None or isinstance(value, (str, int, float, bool)):
+            loggable[key] = value
+        elif isinstance(value, (dict, list, tuple)):
+            loggable[key] = json.loads(json.dumps(value, default=repr))
+        else:
+            loggable[key] = type(value).__name__
+    return loggable or None
+
+
 def build_agent_config(
     *,
     optimizer: Any,
@@ -62,6 +84,7 @@ def build_agent_config(
     agent_config: dict[str, Any] = dict(prompt.to_dict())
     agent_config["project_name"] = getattr(prompt, "project_name", None)
     agent_config["model"] = getattr(prompt, "model", None)
+    agent_config["model_parameters"] = _loggable_settings(prompt.model_kwargs)
     agent_config["tools"] = serialize_tools(prompt)
     agent_config["optimizer"] = optimizer.__class__.__name__
     return helpers.drop_none(agent_config)

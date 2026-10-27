@@ -53,6 +53,7 @@ def infer_output_style_from_dataset(
 
         try:
             response = _llm_calls.call_model(
+                metadata={"opik_call_type": "output_style_inference"},
                 evidence=ReasoningEvidence(
                     cases=[
                         EvidenceCase(case_id=str(i), inputs=item)
