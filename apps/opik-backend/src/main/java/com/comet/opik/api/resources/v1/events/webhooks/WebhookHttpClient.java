@@ -25,6 +25,9 @@ import org.slf4j.Logger;
 import reactor.core.publisher.Mono;
 import reactor.util.retry.Retry;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -42,8 +45,10 @@ public class WebhookHttpClient {
     private static final String USER_AGENT_VALUE = "Opik-Webhook/1.0";
     public static final String BEARER_PREFIX = "Bearer ";
 
-    // A webhook destination is caller-supplied, so its response body is arbitrary content we should
-    // not let flood the logs. Same cap as the other diagnostic body reads in this service.
+    /**
+     * A webhook destination is caller-supplied, so its response body is arbitrary content we should not let flood
+     * the logs or memory. Same cap as the other diagnostic body reads in this service.
+     */
     private static final int MAX_LOGGED_BODY_LENGTH = 512;
 
     private final @NonNull Client httpClient;
@@ -160,7 +165,7 @@ public class WebhookHttpClient {
                                 readResponseBody(response).ifPresent(body -> log.debug(
                                         "Webhook delivery failed, id '{}', status '{}', body '{}'",
                                         event.getId(), response.getStatus(),
-                                        StringUtils.abbreviate(body, MAX_LOGGED_BODY_LENGTH)));
+                                        body));
                                 sink.error(new RetryUtils.RetryableHttpException(
                                         "Webhook failed with status %d".formatted(response.getStatus()),
                                         response.getStatus()));
@@ -187,17 +192,15 @@ public class WebhookHttpClient {
         return Response.Status.Family.SUCCESSFUL.equals(response.getStatusInfo().getFamily());
     }
 
+    /** At most the first {@link #MAX_LOGGED_BODY_LENGTH} bytes of the body: it is only logged. */
     private Optional<String> readResponseBody(Response response) {
-        try {
-            // Only read if entity exists and has content
-            if (!response.hasEntity()) {
-                return Optional.empty();
-            }
-
-            response.bufferEntity();
-            String body = response.readEntity(String.class);
-            return StringUtils.isNotBlank(body) ? Optional.of(body) : Optional.empty();
-        } catch (Exception exception) {
+        if (!response.hasEntity()) {
+            return Optional.empty();
+        }
+        try (var body = response.readEntity(InputStream.class)) {
+            String text = new String(body.readNBytes(MAX_LOGGED_BODY_LENGTH), StandardCharsets.UTF_8);
+            return StringUtils.isNotBlank(text) ? Optional.of(text) : Optional.empty();
+        } catch (IOException | RuntimeException exception) {
             log.debug("Failed to read response body for webhook", exception);
             return Optional.empty();
         }

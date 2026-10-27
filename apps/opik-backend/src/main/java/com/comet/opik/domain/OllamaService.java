@@ -8,6 +8,7 @@ import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.ValidationUtils;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.core.type.TypeReference;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.client.Client;
@@ -21,6 +22,7 @@ import org.glassfish.jersey.client.ClientProperties;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
+import java.io.InputStream;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
@@ -36,6 +38,13 @@ import java.util.List;
 @Slf4j
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class OllamaService {
+
+    /** The body of {@code /api/version}. */
+    private static final TypeReference<OllamaVersionResponse> VERSION_RESPONSE = new TypeReference<>() {
+    };
+    /** The body of {@code /api/tags}. */
+    private static final TypeReference<OllamaModelsResponse> MODELS_RESPONSE = new TypeReference<>() {
+    };
 
     private final @NonNull Client httpClient;
     private final @NonNull ProviderBaseUrlGuard providerBaseUrlGuard;
@@ -55,20 +64,21 @@ public class OllamaService {
         return performAsyncGet(versionUrl, apiKey)
                 .subscribeOn(Schedulers.boundedElastic())
                 .map(response -> {
-                    if (response.getStatus() == 200 && response.hasEntity()) {
-                        String responseBody = response.readEntity(String.class);
-                        OllamaVersionResponse versionResponse = JsonUtils.readValue(responseBody,
-                                OllamaVersionResponse.class);
-                        String version = versionResponse.version();
-                        log.info("Successfully connected to Ollama instance, version: '{}'", version);
+                    try (response) {
+                        if (response.getStatus() == 200 && response.hasEntity()) {
+                            OllamaVersionResponse versionResponse = readBody(response, VERSION_RESPONSE);
+                            String version = versionResponse.version();
+                            log.info("Successfully connected to Ollama instance, version: '{}'", version);
 
-                        return createSuccessResponse(version);
-                    } else {
-                        String redactedUrl = ValidationUtils.redactCredentialsFromUrl(normalizedUrl);
-                        String errorMsg = "Failed to connect to Ollama at " + redactedUrl + ": HTTP "
-                                + response.getStatus();
-                        log.warn("Failed to connect to Ollama at '{}': HTTP '{}'", redactedUrl, response.getStatus());
-                        return createErrorResponse(errorMsg);
+                            return createSuccessResponse(version);
+                        } else {
+                            String redactedUrl = ValidationUtils.redactCredentialsFromUrl(normalizedUrl);
+                            String errorMsg = "Failed to connect to Ollama at " + redactedUrl + ": HTTP "
+                                    + response.getStatus();
+                            log.warn("Failed to connect to Ollama at '{}': HTTP '{}'", redactedUrl,
+                                    response.getStatus());
+                            return createErrorResponse(errorMsg);
+                        }
                     }
                 })
                 .onErrorResume(e -> {
@@ -93,37 +103,42 @@ public class OllamaService {
         return performAsyncGet(tagsUrl, apiKey)
                 .subscribeOn(Schedulers.boundedElastic())
                 .map(response -> {
-                    if (response.getStatus() == 200 && response.hasEntity()) {
-                        String responseBody = response.readEntity(String.class);
-                        OllamaModelsResponse modelsResponse = JsonUtils.readValue(responseBody,
-                                OllamaModelsResponse.class);
+                    try (response) {
+                        if (response.getStatus() == 200 && response.hasEntity()) {
+                            OllamaModelsResponse modelsResponse = readBody(response, MODELS_RESPONSE);
 
-                        List<OllamaModelResponse> modelResponses = modelsResponse.models() != null
-                                ? modelsResponse.models()
-                                : Collections.emptyList();
+                            List<OllamaModelResponse> modelResponses = modelsResponse.models() != null
+                                    ? modelsResponse.models()
+                                    : Collections.emptyList();
 
-                        List<OllamaModel> models = modelResponses.stream()
-                                .map(model -> OllamaModel.builder()
-                                        .name(model.name())
-                                        .size(model.size())
-                                        .digest(model.digest())
-                                        .modifiedAt(model.modifiedAt())
-                                        .build())
-                                .toList();
+                            List<OllamaModel> models = modelResponses.stream()
+                                    .map(model -> OllamaModel.builder()
+                                            .name(model.name())
+                                            .size(model.size())
+                                            .digest(model.digest())
+                                            .modifiedAt(model.modifiedAt())
+                                            .build())
+                                    .toList();
 
-                        log.info("Found '{}' models on Ollama instance", models.size());
-                        return models;
-                    } else {
-                        String redactedUrl = ValidationUtils.redactCredentialsFromUrl(normalizedUrl);
-                        log.warn("Failed to fetch models from Ollama at '{}': HTTP '{}'", redactedUrl,
-                                response.getStatus());
-                        return Collections.<OllamaModel>emptyList();
+                            log.info("Found '{}' models on Ollama instance", models.size());
+                            return models;
+                        } else {
+                            String redactedUrl = ValidationUtils.redactCredentialsFromUrl(normalizedUrl);
+                            log.warn("Failed to fetch models from Ollama at '{}': HTTP '{}'", redactedUrl,
+                                    response.getStatus());
+                            return Collections.<OllamaModel>emptyList();
+                        }
                     }
                 })
                 .onErrorResume(e -> {
                     log.error("Failed to fetch models from Ollama", e);
                     return Mono.just(Collections.emptyList());
                 });
+    }
+
+    /** The body parsed as it is read, with no copy of it as a string. */
+    private static <T> T readBody(Response response, TypeReference<T> type) {
+        return JsonUtils.readValue(response.readEntity(InputStream.class), type);
     }
 
     /**

@@ -1,8 +1,9 @@
 package com.comet.opik.infrastructure.llm.customllm;
 
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.JsonNode;
 import dev.langchain4j.exception.HttpException;
 import dev.langchain4j.http.client.HttpClient;
 import dev.langchain4j.http.client.HttpRequest;
@@ -17,11 +18,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.http.client.utils.URIBuilder;
 
+import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.URISyntaxException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
@@ -66,6 +69,9 @@ class InterceptingHttpClient implements HttpClient {
     static final String AUTH_HEADER_NAME_CONFIG_KEY = "auth_header_name";
     static final String SUPPRESS_DEFAULT_AUTH_CONFIG_KEY = "suppress_default_auth";
     static final String MODEL_PLACEHOLDER = "{model}";
+
+    /** The request body field whose value replaces {@link #MODEL_PLACEHOLDER}. */
+    private static final String MODEL_FIELD = "model";
 
     private static final String AUTHORIZATION_HEADER = "Authorization";
 
@@ -255,23 +261,21 @@ class InterceptingHttpClient implements HttpClient {
                     MODEL_PLACEHOLDER);
             return url;
         }
-        JsonNode root;
+        Optional<String> model;
         try {
-            root = JsonUtils.getJsonNodeFromString(body);
-        } catch (UncheckedIOException exception) {
+            model = topLevelModel(body);
+        } catch (IOException exception) {
             log.warn("Failed to parse request body as JSON for '{}' substitution; forwarding URL unchanged",
                     MODEL_PLACEHOLDER, exception);
             return url;
         }
-
-        JsonNode modelNode = root == null ? null : root.get("model");
-        if (modelNode == null || !modelNode.isTextual() || StringUtils.isBlank(modelNode.asText())) {
+        if (model.filter(StringUtils::isNotBlank).isEmpty()) {
             log.warn(
                     "Base URL contains '{}' but request body has no string 'model' field; forwarding URL unchanged",
                     MODEL_PLACEHOLDER);
             return url;
         }
-        String modelName = modelNode.asText();
+        String modelName = model.get();
         // a raw substitution into the authority must not move the host, or the credential follows it elsewhere
         if (ProviderBaseUrlGuard.hasModelPlaceholderInAuthority(url)
                 && !AUTHORITY_MODEL_NAME.matcher(modelName).matches()) {
@@ -283,6 +287,28 @@ class InterceptingHttpClient implements HttpClient {
                     modelName);
         }
         return url.replace(MODEL_PLACEHOLDER, modelName);
+    }
+
+    /**
+     * The top-level {@code "model"} string of a JSON object body, if any. Read with a streaming parser that stops at
+     * that field: the body is the whole chat request, inline media included, so a tree of it would cost several times
+     * its size.
+     */
+    private static Optional<String> topLevelModel(String body) throws IOException {
+        try (JsonParser parser = JsonUtils.getMapper().getFactory().createParser(body)) {
+            if (parser.nextToken() != JsonToken.START_OBJECT) {
+                return Optional.empty();
+            }
+            while (parser.nextToken() == JsonToken.FIELD_NAME) {
+                String field = parser.currentName();
+                JsonToken value = parser.nextToken();
+                if (MODEL_FIELD.equals(field)) {
+                    return value == JsonToken.VALUE_STRING ? Optional.of(parser.getText()) : Optional.empty();
+                }
+                parser.skipChildren();
+            }
+            return Optional.empty();
+        }
     }
 
     private Map<String, List<String>> applyAuthHeaders(Map<String, List<String>> headers) {

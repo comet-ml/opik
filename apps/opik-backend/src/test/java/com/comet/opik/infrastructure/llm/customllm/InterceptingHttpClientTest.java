@@ -8,6 +8,7 @@ import dev.langchain4j.http.client.SuccessfulHttpResponse;
 import dev.langchain4j.http.client.sse.ServerSentEvent;
 import dev.langchain4j.http.client.sse.ServerSentEventListener;
 import dev.langchain4j.http.client.sse.ServerSentEventParser;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -16,6 +17,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -67,6 +70,49 @@ class InterceptingHttpClientTest {
         verify(delegate).execute(captor.capture());
         assertThat(captor.getValue().url())
                 .isEqualTo("https://example.test/openai/deployments/gpt-4o-mini-ZA/chat/completions");
+    }
+
+    /** The model is read from a streamed body, so a large request before it is only skipped. */
+    @Test
+    void modelAfterALargeMessagesArrayIsSubstituted() {
+        when(delegate.execute(any(HttpRequest.class)))
+                .thenReturn(SuccessfulHttpResponse.builder().statusCode(200).body("{}").build());
+        var model = "deployment-" + RandomStringUtils.secure().nextAlphanumeric(8);
+        var messages = IntStream.range(0, 2_000)
+                .mapToObj(i -> "{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"%s\"}]}"
+                        .formatted(RandomStringUtils.secure().nextAlphanumeric(100)))
+                .collect(Collectors.joining(",", "[", "]"));
+        var client = new InterceptingHttpClient(delegate, null, "dummy-key");
+
+        client.execute(HttpRequest.builder()
+                .method(HttpMethod.POST)
+                .url("https://example.test/openai/deployments/{model}/chat/completions")
+                .body("{\"messages\":%s,\"model\":\"%s\"}".formatted(messages, model))
+                .build());
+
+        var captor = ArgumentCaptor.forClass(HttpRequest.class);
+        verify(delegate).execute(captor.capture());
+        assertThat(captor.getValue().url())
+                .isEqualTo("https://example.test/openai/deployments/%s/chat/completions".formatted(model));
+    }
+
+    /** Only the request's own top-level model names the deployment. */
+    @Test
+    void nestedModelIsNotSubstituted() {
+        when(delegate.execute(any(HttpRequest.class)))
+                .thenReturn(SuccessfulHttpResponse.builder().statusCode(200).body("{}").build());
+        var url = "https://example.test/openai/deployments/{model}/chat/completions";
+        var client = new InterceptingHttpClient(delegate, null, "dummy-key");
+
+        client.execute(HttpRequest.builder()
+                .method(HttpMethod.POST)
+                .url(url)
+                .body("{\"metadata\":{\"model\":\"%s\"}}".formatted(RandomStringUtils.secure().nextAlphanumeric(8)))
+                .build());
+
+        var captor = ArgumentCaptor.forClass(HttpRequest.class);
+        verify(delegate).execute(captor.capture());
+        assertThat(captor.getValue().url()).isEqualTo(url);
     }
 
     /**
