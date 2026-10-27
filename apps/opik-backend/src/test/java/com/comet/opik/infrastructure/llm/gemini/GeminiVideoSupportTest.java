@@ -309,7 +309,7 @@ class GeminiVideoSupportTest {
 
             // When: Convert using GeminiLangChainMapper
             List<ChatMessage> results = new GeminiClientGenerator(new LlmProviderClientConfig(), REMOTE_MEDIA_INLINER,
-                    LlmTestClients.VIDEO_MIME_TYPE_UTILS)
+                    LlmTestClients.VIDEO_MIME_TYPE_UTILS, LlmTestClients.LLM_HTTP_CLIENT_BUILDERS)
                     .mapMessages(request);
 
             // Then: Should convert message with VIDEO_URL to ImageContent

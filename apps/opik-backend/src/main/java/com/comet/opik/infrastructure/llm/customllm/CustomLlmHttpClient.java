@@ -12,6 +12,8 @@ import dev.langchain4j.http.client.sse.ServerSentEvent;
 import dev.langchain4j.http.client.sse.ServerSentEventListener;
 import dev.langchain4j.http.client.sse.ServerSentEventParser;
 import jakarta.ws.rs.core.HttpHeaders;
+import lombok.AccessLevel;
+import lombok.Getter;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -62,6 +64,8 @@ class CustomLlmHttpClient implements HttpClient {
     /** Size of each read from a streamed body, in bytes. */
     private static final int STREAMING_READ_SIZE = 8192;
 
+    /** Derived from one of the shared clients, whose connection pool and dispatcher it uses. */
+    @Getter(AccessLevel.PACKAGE)
     private final @NonNull OkHttpClient client;
 
     /** Most bytes read from a non-2xx response body; the rest is discarded. */

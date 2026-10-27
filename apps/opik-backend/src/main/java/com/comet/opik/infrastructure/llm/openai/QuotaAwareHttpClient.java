@@ -5,7 +5,6 @@ import dev.langchain4j.exception.HttpException;
 import dev.langchain4j.exception.NonRetriableException;
 import dev.langchain4j.http.client.HttpClient;
 import dev.langchain4j.http.client.HttpClientBuilder;
-import dev.langchain4j.http.client.HttpClientBuilderLoader;
 import dev.langchain4j.http.client.HttpRequest;
 import dev.langchain4j.http.client.SuccessfulHttpResponse;
 import dev.langchain4j.http.client.sse.ServerSentEventListener;
@@ -70,11 +69,9 @@ public class QuotaAwareHttpClient implements HttpClient {
                 && StringUtils.containsIgnoreCase(httpException.getMessage(), INSUFFICIENT_QUOTA);
     }
 
-    /**
-     * Wraps the default (classpath) {@link HttpClientBuilder} so every client it builds is quota-aware.
-     */
-    public static HttpClientBuilder builder() {
-        return new Builder(HttpClientBuilderLoader.loadHttpClientBuilder());
+    /** Wraps the given {@link HttpClientBuilder} so every client it builds is quota-aware. */
+    public static HttpClientBuilder builder(@NonNull HttpClientBuilder delegate) {
+        return new Builder(delegate);
     }
 
     private static final class Builder extends DelegatingHttpClientBuilder {

@@ -4,6 +4,7 @@ import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
+import com.comet.opik.infrastructure.llm.LlmTestClients;
 import com.comet.opik.infrastructure.llm.MediaContentUtils;
 import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.comet.opik.utils.JsonUtils;
@@ -13,7 +14,6 @@ import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import dev.langchain4j.data.message.TextContent;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.openai.internal.chat.UserMessage;
-import io.dropwizard.util.DataSize;
 import jakarta.ws.rs.BadRequestException;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.AfterAll;
@@ -73,13 +73,12 @@ class CustomLlmProviderTest {
         var clientConfig = new LlmProviderClientConfig();
         clientConfig.setLogRequests(false);
         clientConfig.setLogResponses(false);
-        clientConfig.setProviderErrorBodyMaxSize(DataSize.kilobytes(64));
         var relaxedGuard = ProviderBaseUrlGuard.builder()
                 .mode(DestinationGuard.Mode.RELAXED)
                 .scheme(DestinationGuard.Scheme.PLAINTEXT_OR_TLS)
                 .build();
         clientGenerator = new CustomLlmClientGenerator(clientConfig, relaxedGuard, mock(AuthTokenProvider.class),
-                new CustomLlmModule().customLlmHttpClient(relaxedGuard));
+                LlmTestClients.LLM_HTTP_CLIENT_BUILDERS);
     }
 
     @AfterAll

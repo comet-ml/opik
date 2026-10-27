@@ -6,12 +6,14 @@ import com.comet.opik.infrastructure.llm.CustomParametersOverrides;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
 import com.comet.opik.infrastructure.llm.OpenAiClientConfig;
+import com.comet.opik.infrastructure.llm.customllm.LlmHttpClientBuilders;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.openai.client.OpenAIClient;
 import com.openai.core.http.HttpClient;
 import com.openai.models.ReasoningEffort;
+import dev.langchain4j.http.client.HttpClientBuilder;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
@@ -56,13 +58,20 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
     private final @NonNull LlmProviderClientConfig llmProviderClientConfig;
     /** See {@link OpenAIModule}: no redirects, every connection resolved through the destination guard. */
     private final @NonNull HttpClient responsesApiHttpClient;
+    private final @NonNull LlmHttpClientBuilders httpClientBuilders;
 
     public OpenAiClient newOpenAiClient(@NonNull LlmProviderClientApiConfig config) {
+        return newOpenAiClient(config, httpClientBuilders.forProviderBaseUrl(config.baseUrl()));
+    }
+
+    /** As {@link #newOpenAiClient(LlmProviderClientApiConfig)}, over the given HTTP client builder. */
+    public OpenAiClient newOpenAiClient(@NonNull LlmProviderClientApiConfig config,
+            @NonNull HttpClientBuilder httpClientBuilder) {
         var openAiClientBuilder = OpenAiClient.builder()
                 .baseUrl(DEFAULT_OPENAI_URL)
                 // Treat insufficient_quota (429, out-of-credits) as non-retryable, so the outer retry
                 // policy in ChatCompletionService does not keep hitting an exhausted key.
-                .httpClientBuilder(QuotaAwareHttpClient.builder())
+                .httpClientBuilder(QuotaAwareHttpClient.builder(httpClientBuilder))
                 .logRequests(llmProviderClientConfig.getLogRequests())
                 .logResponses(llmProviderClientConfig.getLogResponses());
 
@@ -124,7 +133,8 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
                 .apiKey(config.apiKey())
                 // Treat insufficient_quota (429, out-of-credits) as non-retryable so neither the model's
                 // internal retry nor the outer retry policy keeps hitting an exhausted key.
-                .httpClientBuilder(QuotaAwareHttpClient.builder())
+                .httpClientBuilder(QuotaAwareHttpClient.builder(
+                        httpClientBuilders.forProviderBaseUrl(config.baseUrl())))
                 .logRequests(llmProviderClientConfig.getLogRequests())
                 .logResponses(llmProviderClientConfig.getLogResponses());
 

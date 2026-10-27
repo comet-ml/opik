@@ -128,20 +128,20 @@ class LlmProviderFactoryTest {
         VertexAIModule vertexAIModule = new VertexAIModule();
 
         AnthropicClientGenerator anthropicClientGenerator = anthropicModule.clientGenerator(llmProviderClientConfig,
-                registryService);
+                registryService, LlmTestClients.LLM_HTTP_CLIENT_BUILDERS);
         anthropicModule.llmServiceProvider(llmProviderFactory, anthropicClientGenerator, registryService);
 
         GeminiClientGenerator geminiClientGenerator = geminiModule.clientGenerator(llmProviderClientConfig,
                 LlmTestClients.REMOTE_MEDIA_INLINER,
-                LlmTestClients.VIDEO_MIME_TYPE_UTILS);
+                LlmTestClients.VIDEO_MIME_TYPE_UTILS, LlmTestClients.LLM_HTTP_CLIENT_BUILDERS);
         geminiModule.llmServiceProvider(llmProviderFactory, geminiClientGenerator);
 
         OpenAIClientGenerator openAIClientGenerator = openAIModule.clientGenerator(llmProviderClientConfig,
-                LlmTestClients.RESPONSES_API_HTTP_CLIENT);
+                LlmTestClients.RESPONSES_API_HTTP_CLIENT, LlmTestClients.LLM_HTTP_CLIENT_BUILDERS);
         openAIModule.llmServiceProvider(llmProviderFactory, openAIClientGenerator);
 
         OpenAIClientGenerator openRouterClientGenerator = openRouterModule.clientGenerator(llmProviderClientConfig,
-                LlmTestClients.RESPONSES_API_HTTP_CLIENT);
+                LlmTestClients.RESPONSES_API_HTTP_CLIENT, LlmTestClients.LLM_HTTP_CLIENT_BUILDERS);
         openRouterModule.llmServiceProvider(llmProviderFactory, openRouterClientGenerator);
 
         VertexAIClientGenerator vertexAIClientGenerator = vertexAIModule.clientGenerator(llmProviderClientConfig,
@@ -205,7 +205,7 @@ class LlmProviderFactoryTest {
         // Register custom LLM service (required for getService to work)
         CustomLlmModule customLlmModule = new CustomLlmModule();
         CustomLlmClientGenerator customLlmClientGenerator = customLlmModule.clientGenerator(llmProviderClientConfig,
-                RELAXED_GUARD, mock(AuthTokenProvider.class), customLlmModule.customLlmHttpClient(RELAXED_GUARD));
+                RELAXED_GUARD, mock(AuthTokenProvider.class), LlmTestClients.LLM_HTTP_CLIENT_BUILDERS);
         customLlmModule.llmServiceProvider(llmProviderFactory, customLlmClientGenerator);
 
         // When & Then - Should successfully get the service
@@ -243,7 +243,7 @@ class LlmProviderFactoryTest {
         // Register custom LLM service (required for getService to work)
         CustomLlmModule customLlmModule = new CustomLlmModule();
         CustomLlmClientGenerator customLlmClientGenerator = customLlmModule.clientGenerator(llmProviderClientConfig,
-                RELAXED_GUARD, mock(AuthTokenProvider.class), customLlmModule.customLlmHttpClient(RELAXED_GUARD));
+                RELAXED_GUARD, mock(AuthTokenProvider.class), LlmTestClients.LLM_HTTP_CLIENT_BUILDERS);
         customLlmModule.llmServiceProvider(llmProviderFactory, customLlmClientGenerator);
 
         // When & Then - Should throw BadRequestException

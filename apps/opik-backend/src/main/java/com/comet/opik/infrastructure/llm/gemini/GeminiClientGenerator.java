@@ -8,6 +8,7 @@ import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
 import com.comet.opik.infrastructure.llm.RemoteMediaInliner;
 import com.comet.opik.infrastructure.llm.VideoMimeTypeUtils;
+import com.comet.opik.infrastructure.llm.customllm.LlmHttpClientBuilders;
 import com.google.common.base.Preconditions;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.model.chat.ChatModel;
@@ -30,6 +31,7 @@ public class GeminiClientGenerator implements LlmProviderClientGenerator<GoogleA
     private final @NonNull LlmProviderClientConfig llmProviderClientConfig;
     private final @NonNull RemoteMediaInliner remoteMediaInliner;
     private final @NonNull VideoMimeTypeUtils videoMimeTypeUtils;
+    private final @NonNull LlmHttpClientBuilders httpClientBuilders;
 
     /** The request's messages for Gemini, with media URLs downloaded here rather than by the SDK. */
     public List<ChatMessage> mapMessages(@NonNull ChatCompletionRequest request) {
@@ -41,7 +43,7 @@ public class GeminiClientGenerator implements LlmProviderClientGenerator<GoogleA
         return GeminiChatModelMapper.INSTANCE.toGeminiChatModel(apiKey, request,
                 llmProviderClientConfig.getCallTimeout().toJavaDuration(), MAX_RETRIES,
                 llmProviderClientConfig.getLogRequests(),
-                llmProviderClientConfig.getLogResponses());
+                llmProviderClientConfig.getLogResponses(), httpClientBuilders.unguarded());
     }
 
     public GoogleAiGeminiStreamingChatModel newGeminiStreamingClient(
@@ -49,7 +51,7 @@ public class GeminiClientGenerator implements LlmProviderClientGenerator<GoogleA
         return GeminiChatModelMapper.INSTANCE.toGeminiStreamingChatModel(apiKey, request,
                 llmProviderClientConfig.getCallTimeout().toJavaDuration(), MAX_RETRIES,
                 llmProviderClientConfig.getLogRequests(),
-                llmProviderClientConfig.getLogResponses());
+                llmProviderClientConfig.getLogResponses(), httpClientBuilders.unguarded());
     }
 
     @Override
@@ -66,6 +68,7 @@ public class GeminiClientGenerator implements LlmProviderClientGenerator<GoogleA
         GoogleAiGeminiChatModelBuilder modelBuilder = GoogleAiGeminiChatModel.builder()
                 .modelName(modelParameters.name())
                 .apiKey(config.apiKey())
+                .httpClientBuilder(httpClientBuilders.unguarded())
                 .logRequests(llmProviderClientConfig.getLogRequests())
                 .logResponses(llmProviderClientConfig.getLogResponses())
                 // Gemini 3 rejects a tool loop's next round unless each earlier function call carries the thought

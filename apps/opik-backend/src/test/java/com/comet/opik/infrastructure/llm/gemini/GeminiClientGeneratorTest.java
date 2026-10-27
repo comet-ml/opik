@@ -66,7 +66,7 @@ class GeminiClientGeneratorTest {
         clientConfig.setLogRequests(false);
         clientConfig.setLogResponses(false);
         generator = new GeminiClientGenerator(clientConfig, LlmTestClients.REMOTE_MEDIA_INLINER,
-                LlmTestClients.VIDEO_MIME_TYPE_UTILS);
+                LlmTestClients.VIDEO_MIME_TYPE_UTILS, LlmTestClients.LLM_HTTP_CLIENT_BUILDERS);
     }
 
     @AfterAll

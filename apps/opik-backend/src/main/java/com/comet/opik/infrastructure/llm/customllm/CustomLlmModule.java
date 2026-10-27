@@ -31,28 +31,37 @@ public class CustomLlmModule extends AbstractModule {
     }
 
     /**
-     * Shared by every custom provider client, each connection going only to addresses the destination guard approves.
-     * The rest keeps what the JDK client did: HTTP/1.1 (vLLM and other FastAPI servers speak only that), no redirects,
-     * no retry of a request on a broken connection, which could send a model call twice, no cap on concurrent calls,
-     * which streams would otherwise queue behind, and daemon threads.
+     * Shared by every langchain4j model calling a destination a user configured, each connection going only to
+     * addresses the destination guard approves. HTTP/1.1 only, as vLLM and other FastAPI servers speak only that.
      */
     @Provides
     @Singleton
     @Named("customLlmHttpClient")
     public OkHttpClient customLlmHttpClient(@NonNull ProviderBaseUrlGuard providerBaseUrlGuard) {
-        var dispatcher = new Dispatcher(Executors.newCachedThreadPool(new ThreadFactoryBuilder()
-                .setNameFormat("custom-llm-http-%d")
-                .setDaemon(true)
-                .build()));
-        dispatcher.setMaxRequests(Integer.MAX_VALUE);
-        dispatcher.setMaxRequestsPerHost(Integer.MAX_VALUE);
-        return DestinationGuardDns.clientBuilder(providerBaseUrlGuard.destinationGuard())
-                .protocols(List.of(Protocol.HTTP_1_1))
-                .followRedirects(false)
-                .followSslRedirects(false)
-                .retryOnConnectionFailure(false)
-                .dispatcher(dispatcher)
-                .build();
+        return llmHttpClient(DestinationGuardDns.clientBuilder(providerBaseUrlGuard.destinationGuard())
+                .protocols(List.of(Protocol.HTTP_1_1)), "guarded");
+    }
+
+    /**
+     * Shared by every langchain4j model calling a destination the operator or Opik configured; it may be internal. As
+     * with the JDK client, HTTP/2 is used where the server offers it over TLS.
+     */
+    @Provides
+    @Singleton
+    @Named("unguardedLlmHttpClient")
+    public OkHttpClient unguardedLlmHttpClient() {
+        return llmHttpClient(new OkHttpClient.Builder(), "unguarded");
+    }
+
+    /** The HTTP client builders every langchain4j model is given, over the two shared clients. */
+    @Provides
+    @Singleton
+    public LlmHttpClientBuilders llmHttpClientBuilders(
+            @NonNull @Config("llmProviderClient") LlmProviderClientConfig config,
+            @NonNull @Named("customLlmHttpClient") OkHttpClient guardedClient,
+            @NonNull @Named("unguardedLlmHttpClient") OkHttpClient unguardedClient) {
+        return new LlmHttpClientBuilders(guardedClient, unguardedClient,
+                Math.toIntExact(config.getProviderErrorBodyMaxSize().toBytes()));
     }
 
     @Provides
@@ -62,8 +71,29 @@ public class CustomLlmModule extends AbstractModule {
             @NonNull @Config("llmProviderClient") LlmProviderClientConfig config,
             @NonNull ProviderBaseUrlGuard providerBaseUrlGuard,
             @NonNull AuthTokenProvider authTokenProvider,
-            @NonNull @Named("customLlmHttpClient") OkHttpClient httpClient) {
-        return new CustomLlmClientGenerator(config, providerBaseUrlGuard, authTokenProvider, httpClient);
+            @NonNull LlmHttpClientBuilders httpClientBuilders) {
+        return new CustomLlmClientGenerator(config, providerBaseUrlGuard, authTokenProvider, httpClientBuilders);
+    }
+
+    /**
+     * The rest keeps what the JDK client did: no redirects, no retry of a request on a broken connection, which could
+     * send a model call twice, no cap on concurrent calls, which streams would otherwise queue behind, and daemon
+     * threads. Each model's client derives from this one, so
+     * all of them share its connection pool and dispatcher.
+     */
+    private static OkHttpClient llmHttpClient(OkHttpClient.Builder builder, String name) {
+        var dispatcher = new Dispatcher(Executors.newCachedThreadPool(new ThreadFactoryBuilder()
+                .setNameFormat("llm-http-%s-%%d".formatted(name))
+                .setDaemon(true)
+                .build()));
+        dispatcher.setMaxRequests(Integer.MAX_VALUE);
+        dispatcher.setMaxRequestsPerHost(Integer.MAX_VALUE);
+        return builder
+                .followRedirects(false)
+                .followSslRedirects(false)
+                .retryOnConnectionFailure(false)
+                .dispatcher(dispatcher)
+                .build();
     }
 
     @Provides

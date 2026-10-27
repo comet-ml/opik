@@ -3,6 +3,8 @@ package com.comet.opik.infrastructure.llm;
 import com.comet.opik.TestConfigUtils;
 import com.comet.opik.api.resources.utils.TestHttpClientUtils;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
+import com.comet.opik.infrastructure.llm.customllm.CustomLlmModule;
+import com.comet.opik.infrastructure.llm.customllm.LlmHttpClientBuilders;
 import com.comet.opik.infrastructure.llm.openai.OpenAIModule;
 import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.openai.core.http.HttpClient;
@@ -25,6 +27,14 @@ public class LlmTestClients {
             CONFIG);
 
     public static final HttpClient RESPONSES_API_HTTP_CLIENT = new OpenAIModule().responsesApiHttpClient(CONFIG);
+
+    public static final LlmHttpClientBuilders LLM_HTTP_CLIENT_BUILDERS = llmHttpClientBuilders();
+
+    private static LlmHttpClientBuilders llmHttpClientBuilders() {
+        var module = new CustomLlmModule();
+        return module.llmHttpClientBuilders(CONFIG, module.customLlmHttpClient(module.providerBaseUrlGuard(CONFIG)),
+                module.unguardedLlmHttpClient());
+    }
 
     /** For tests serving media from a local mock server, which the strict mode of config-test.yml refuses. */
     public static RemoteMediaInliner remoteMediaInliner(DestinationGuard.Mode mode) {

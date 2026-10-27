@@ -80,7 +80,8 @@ class OpenAiResponsesJudgeExtraBodyTest {
                 .withStatus(400)
                 .withHeader("Content-Type", "application/json")
                 .withBody("{\"error\":{\"message\":\"stub\",\"type\":\"invalid_request_error\"}}")));
-        generator = new OpenAIClientGenerator(new LlmProviderClientConfig(), LlmTestClients.RESPONSES_API_HTTP_CLIENT);
+        generator = new OpenAIClientGenerator(new LlmProviderClientConfig(), LlmTestClients.RESPONSES_API_HTTP_CLIENT,
+                LlmTestClients.LLM_HTTP_CLIENT_BUILDERS);
     }
 
     @AfterEach

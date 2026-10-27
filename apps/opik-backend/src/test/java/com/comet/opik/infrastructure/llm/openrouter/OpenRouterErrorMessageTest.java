@@ -71,7 +71,7 @@ class OpenRouterErrorMessageTest {
         clientConfig.setOpenRouterUrl(wireMock.baseUrl() + "/api/v1");
 
         var clientGenerator = new OpenRouterModule().clientGenerator(clientConfig,
-                LlmTestClients.RESPONSES_API_HTTP_CLIENT);
+                LlmTestClients.RESPONSES_API_HTTP_CLIENT, LlmTestClients.LLM_HTTP_CLIENT_BUILDERS);
         provider = new OpenRouterLlmServiceProvider(clientGenerator, mock(LlmProviderFactory.class))
                 .getService(LlmProviderClientApiConfig.builder().apiKey("test-key").build());
     }

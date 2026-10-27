@@ -197,10 +197,13 @@ class WireBodyTableTest {
                 new CustomLlmModule().providerBaseUrlGuard(config.getLlmProviderClient()));
         var anthropicModule = new AnthropicModule();
         anthropicModule.llmServiceProvider(llmProviderFactory,
-                anthropicModule.clientGenerator(config.getLlmProviderClient(), registryService), registryService);
+                anthropicModule.clientGenerator(config.getLlmProviderClient(), registryService,
+                        LlmTestClients.LLM_HTTP_CLIENT_BUILDERS),
+                registryService);
         var openAiModule = new OpenAIModule();
         openAiModule.llmServiceProvider(llmProviderFactory,
-                openAiModule.clientGenerator(config.getLlmProviderClient(), LlmTestClients.RESPONSES_API_HTTP_CLIENT));
+                openAiModule.clientGenerator(config.getLlmProviderClient(), LlmTestClients.RESPONSES_API_HTTP_CLIENT,
+                        LlmTestClients.LLM_HTTP_CLIENT_BUILDERS));
 
         chatCompletionService = new ChatCompletionService(config.getLlmProviderClient(), llmProviderFactory,
                 new ParamResolver(llmProviderFactory, registryService),

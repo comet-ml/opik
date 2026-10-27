@@ -11,7 +11,6 @@ import dev.langchain4j.model.openai.internal.OpenAiClient;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import okhttp3.OkHttpClient;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 
@@ -26,7 +25,7 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
     private final @NonNull LlmProviderClientConfig llmProviderClientConfig;
     private final @NonNull ProviderBaseUrlGuard providerBaseUrlGuard;
     private final @NonNull AuthTokenProvider authTokenProvider;
-    private final @NonNull OkHttpClient httpClient;
+    private final @NonNull LlmHttpClientBuilders httpClientBuilders;
 
     public OpenAiClient newCustomLlmClient(@NonNull LlmProviderClientApiConfig config) {
         var baseUrl = Optional.ofNullable(config.baseUrl())
@@ -114,9 +113,7 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
      */
     private HttpClientBuilder newHttpClientBuilder(LlmProviderClientApiConfig config) {
         // innermost, so it sees the URL after InterceptingHttpClient's mutations
-        var guardedBuilder = new DestinationGuardHttpClientBuilder(new CustomLlmHttpClientBuilder(httpClient,
-                Math.toIntExact(llmProviderClientConfig.getProviderErrorBodyMaxSize().toBytes())),
-                providerBaseUrlGuard);
+        var guardedBuilder = new DestinationGuardHttpClientBuilder(httpClientBuilders.guarded(), providerBaseUrlGuard);
 
         if (!requiresInterceptingBuilder(config)) {
             return guardedBuilder;
