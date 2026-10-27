@@ -712,7 +712,8 @@ def test_invalid_max_reply_bytes_fails_startup(monkeypatch, value):
 
 @pytest.mark.parametrize("value", ["0", "-1", "abc"])
 def test_invalid_max_reply_bytes_fails_the_module_import(value):
-    env = {**os.environ, executor_process.MAX_REPLY_BYTES_ENV_VAR: value}
+    # no colour, which CI forces and which 3.14 applies to tracebacks
+    env = {**os.environ, executor_process.MAX_REPLY_BYTES_ENV_VAR: value, "PYTHON_COLORS": "0"}
     actual = subprocess.run([sys.executable, "-c", "import opik_backend.executor_process"],
                             env=env, capture_output=True, text=True, timeout=60)
 
