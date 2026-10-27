@@ -4,6 +4,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 
 import { LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
+import { PROMPT_LOAD_FAILED_TOAST } from "@/constants/prompts";
 import usePlaygroundStore from "@/store/PlaygroundStore";
 import { PlaygroundPromptType } from "@/types/playground";
 import useProjectPromptsList from "@/api/prompts/useProjectPromptsList";
@@ -16,6 +17,10 @@ import {
 } from "@/hooks/useLLMProviderModelsData";
 import PlaygroundPrompt from "./PlaygroundPrompt";
 
+const mockToast = vi.fn();
+vi.mock("@/ui/use-toast", () => ({
+  useToast: () => ({ toast: mockToast }),
+}));
 vi.mock("@/api/prompts/useProjectPromptsList", () => ({ default: vi.fn() }));
 vi.mock("@/api/prompts/usePromptById", () => ({
   default: () => ({ data: undefined, error: null }),
@@ -233,6 +238,7 @@ const mockLibraryTotal = (total: number) =>
   } as unknown as ReturnType<typeof useProjectPromptsList>);
 
 beforeEach(() => {
+  mockToast.mockReset();
   fetchPrompt.mockReset();
   fetchPromptVersion.mockReset();
   mockLibraryTotal(3);
@@ -291,6 +297,46 @@ describe("PlaygroundPrompt header Load", () => {
     expect(
       usePlaygroundStore.getState().promptMap[CARD_ID].loadedChatPromptId,
     ).toBeUndefined();
+  });
+
+  it("keeps the role a text prompt was saved with", async () => {
+    fetchPrompt.mockResolvedValue({
+      id: "system-text",
+      latest_version: {
+        id: "text-v2",
+        template: JSON.stringify([
+          { role: LLM_MESSAGE_ROLE.system, content: "You are terse." },
+        ]),
+        metadata: { created_from: "opik_ui", type: "messages_json" },
+      },
+    });
+    seedPlaygroundPrompt({ messages: [USER_MESSAGE] });
+    renderCard();
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("Pick text prompt"));
+    });
+
+    expect(storedMessages()).toEqual([
+      expect.objectContaining({
+        role: LLM_MESSAGE_ROLE.system,
+        content: "You are terse.",
+        promptVersionId: "text-v2",
+      }),
+    ]);
+  });
+
+  it("shows an error and keeps the messages when the prompt can't be fetched", async () => {
+    fetchPrompt.mockRejectedValue(new Error("Network Error"));
+    seedPlaygroundPrompt({ messages: [SYSTEM_MESSAGE, USER_MESSAGE] });
+    renderCard();
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("Pick text prompt"));
+    });
+
+    expect(mockToast).toHaveBeenCalledWith(PROMPT_LOAD_FAILED_TOAST);
+    expect(storedMessages()).toEqual([SYSTEM_MESSAGE, USER_MESSAGE]);
   });
 
   it("loads the picked version of a text prompt", async () => {

@@ -19,6 +19,12 @@ export const PROMPT_MEDIA_NOT_LOADED_TOAST = {
     "Only user messages support images, video and audio, so only the prompt's text was loaded.",
 };
 
+export const PROMPT_LOAD_FAILED_TOAST = {
+  title: "Prompt not loaded",
+  description: "Couldn't load the prompt from the library. Try again.",
+  variant: "destructive" as const,
+};
+
 export const PROMPT_SAVE_NEW_VERSION_TOOLTIP = "Save as new version";
 
 export const PROMPT_UNSAVED_CHANGES_LABEL = "Unsaved changes";

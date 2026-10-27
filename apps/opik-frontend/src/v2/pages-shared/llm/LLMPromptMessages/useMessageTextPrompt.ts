@@ -32,14 +32,16 @@ const useMessageTextPrompt = (message?: LLMMessage) => {
     { enabled: !!promptVersionId },
   );
 
-  const baselineVersion =
-    promptVersionId && loadedVersionData?.id === promptVersionId
+  const baselineVersion = promptVersionId
+    ? loadedVersionData?.id === promptVersionId
       ? loadedVersionData
-      : promptData?.latest_version;
+      : undefined
+    : promptData?.latest_version;
   const hasUnsavedChanges = Boolean(
     message &&
       promptId &&
       promptData?.id === promptId &&
+      baselineVersion &&
       !isEqual(
         message.content,
         toContentForRole(

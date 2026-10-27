@@ -17,6 +17,7 @@ import {
 } from "@/types/providers";
 import { Button } from "@/ui/button";
 import { Separator } from "@/ui/separator";
+import { useToast } from "@/ui/use-toast";
 
 import {
   generateDefaultPrompt,
@@ -34,6 +35,7 @@ import {
   generateDefaultLLMPromptMessage,
   getNextMessageType,
   parsePromptVersionContent,
+  parsePromptVersionRole,
 } from "@/lib/llm";
 import LLMPromptMessages from "@/v2/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
 import PromptModelSelect from "@/v2/pages-shared/llm/PromptModelSelect/PromptModelSelect";
@@ -69,6 +71,7 @@ import AddNewPromptVersionDialog from "@/v2/pages-shared/llm/LLMPromptMessages/A
 import useMessageTextPrompt from "@/v2/pages-shared/llm/LLMPromptMessages/useMessageTextPrompt";
 import { PromptVersion, PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import {
+  PROMPT_LOAD_FAILED_TOAST,
   PROMPT_LOAD_TOOLTIP,
   PROMPT_NO_SAVED_PROMPTS_TOOLTIP,
   PROMPT_SAVE_AS_CHAT_TOOLTIP,
@@ -118,6 +121,7 @@ const PlaygroundPrompt = ({
   const { datasetId } = usePlaygroundDataset();
   const isBackendRun = !!datasetId;
   const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   const prompt = usePromptById(promptId);
   const promptCount = usePromptCount();
@@ -409,15 +413,22 @@ const PlaygroundPrompt = ({
 
   const handleImportTextPrompt = useCallback(
     async (textPromptId: string, versionId?: string) => {
-      const version = versionId
-        ? await fetchPromptVersion({ versionId })
-        : (await fetchPrompt({ promptId: textPromptId })).latest_version;
+      let version: PromptVersion | undefined;
+      try {
+        version = versionId
+          ? await fetchPromptVersion({ versionId })
+          : (await fetchPrompt({ promptId: textPromptId })).latest_version;
+      } catch {
+        toast(PROMPT_LOAD_FAILED_TOAST);
+        return;
+      }
 
       if (!version) return;
 
       updatePrompt(promptId, {
         messages: [
           generateDefaultLLMPromptMessage({
+            role: parsePromptVersionRole(version) ?? LLM_MESSAGE_ROLE.user,
             content: parsePromptVersionContent(version),
             promptId: textPromptId,
             promptVersionId: version.id,
@@ -425,7 +436,7 @@ const PlaygroundPrompt = ({
         ],
       });
     },
-    [fetchPrompt, fetchPromptVersion, promptId, updatePrompt],
+    [fetchPrompt, fetchPromptVersion, promptId, toast, updatePrompt],
   );
 
   const handleLibrarySelect = useCallback(
