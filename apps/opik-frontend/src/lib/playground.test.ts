@@ -24,19 +24,20 @@ import {
 import { PlaygroundPromptType } from "@/types/playground";
 import { LLM_MESSAGE_ROLE, LLMMessage, MessageContent } from "@/types/llm";
 
-// The prices bot rewrites this file from OpenRouter's live list every day, and OpenRouter drops models without
-// notice: a live model used as an example here turns the bot's PR red the day it goes.
+// The prices bot rewrites this file from OpenRouter's live list every day, and OpenRouter adds, changes and drops
+// models without notice, so each model the max-token cases look up gets a fixed row here, or a fixed absence.
 vi.mock("@/data/model_prices_openrouter.json", async (importOriginal) => {
   const { default: rows } = await importOriginal<{
     default: Record<string, object>;
   }>();
-  return {
-    default: {
-      ...rows,
-      "openrouter/acme/short-output-model": { max_output_tokens: 2048 },
-      "openrouter/openai/gpt-3.5-turbo-instruct": { max_output_tokens: 3685 },
-    },
+  const fixedRows: Record<string, object> = {
+    ...rows,
+    "openrouter/acme/short-output-model": { max_output_tokens: 2048 },
+    "openrouter/openai/gpt-3.5-turbo-instruct": { max_output_tokens: 3685 },
+    "openrouter/openai/gpt-4o-mini": { max_output_tokens: 16384 },
   };
+  delete fixedRows["openrouter/openai/computer-use-preview"];
+  return { default: fixedRows };
 });
 
 const userMessage = (content: MessageContent): LLMMessage => ({
