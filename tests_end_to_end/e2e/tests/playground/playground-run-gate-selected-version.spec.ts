@@ -98,7 +98,7 @@ test.describe(
           // A second variant, because the per-variant Run control only renders
           // once there is more than one (`showPerPromptRunControls`) — so a
           // single-variant page cannot exercise that half of the gate at all.
-          await playground.duplicateLastVariant();
+          await playground.duplicateVariant(0);
           await playground.clickRunExperiment();
           await playground.selectRunExperimentSource({
             mode: 'dataset',
