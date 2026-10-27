@@ -29,7 +29,7 @@ class CloseableVertexAiStreamingChatModel implements StreamingChatModel, AutoClo
     @Override
     public void chat(ChatRequest chatRequest, StreamingChatResponseHandler handler) {
         delegate.chat(chatRequest.toBuilder()
-                .messages(RemoteMediaInliner.inlineForVertexAi(chatRequest.messages()))
+                .messages(RemoteMediaInliner.inline(chatRequest.messages()))
                 .build(), handler);
     }
 

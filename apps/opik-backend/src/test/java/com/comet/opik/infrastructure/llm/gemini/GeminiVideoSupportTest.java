@@ -58,7 +58,7 @@ class GeminiVideoSupportTest {
     @Captor
     private ArgumentCaptor<ChatRequest> chatRequestCaptor;
 
-    // Gemini downloads image URLs itself, so the videos converted to images are served locally and arrive inlined
+    // media URLs are downloaded and inlined before Gemini sees them, so they are served locally
     private static final WireMockUtils.WireMockRuntime WIRE_MOCK = WireMockUtils.startWireMock();
     private static final byte[] VIDEO_BYTES = RandomUtils.secure().randomBytes(64);
     private static final ImageContent INLINED_VIDEO = ImageContent.from(
@@ -421,7 +421,7 @@ class GeminiVideoSupportTest {
         void shouldKeepAudioContentAlongsideVideo() {
             var opikGeminiModel = new OpikGeminiChatModel(mockDelegate);
 
-            var audioUrl = "https://storage.googleapis.com/example-bucket/clip.mp3";
+            var audioUrl = stubVideo("clip.mp3");
             var videoUrl = stubVideo("demo.mp4");
             var userMessage = UserMessage.from(List.of(
                     AudioContent.from(audioUrl),
@@ -434,9 +434,8 @@ class GeminiVideoSupportTest {
             var processedUserMessage = (UserMessage) chatRequestCaptor.getValue().messages().get(0);
 
             assertThat(processedUserMessage.contents()).hasSize(2);
-            assertThat(processedUserMessage.contents().get(0)).isInstanceOf(AudioContent.class);
-            assertThat(((AudioContent) processedUserMessage.contents().get(0)).audio().url())
-                    .hasToString(audioUrl);
+            assertThat(processedUserMessage.contents().get(0)).isEqualTo(AudioContent.from(
+                    INLINED_VIDEO.image().base64Data(), INLINED_VIDEO.image().mimeType()));
             assertThat(processedUserMessage.contents().get(1)).isEqualTo(INLINED_VIDEO);
         }
 

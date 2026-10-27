@@ -3,7 +3,7 @@ package com.comet.opik.infrastructure.llm;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException;
 import com.comet.opik.infrastructure.net.DestinationGuard;
-import com.comet.opik.infrastructure.net.DestinationGuardException;
+import com.comet.opik.infrastructure.net.DestinationGuardDns;
 import dev.langchain4j.data.message.AudioContent;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.Content;
@@ -11,34 +11,30 @@ import dev.langchain4j.data.message.ImageContent;
 import dev.langchain4j.data.message.PdfFileContent;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.data.message.VideoContent;
-import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
+import okhttp3.HttpUrl;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
 import org.apache.commons.lang3.StringUtils;
 
+import java.io.IOException;
 import java.net.URI;
 import java.net.URLConnection;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-import java.util.function.Predicate;
+import java.util.Set;
 
 import static com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException.Reason.MEDIA_URL;
 import static com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException.Reason.MEDIA_URL_DOWNLOAD;
-import static jakarta.ws.rs.core.Response.Status.Family.familyOf;
 
 /**
- * The Google SDKs download media URLs themselves, with a client that follows redirects and has no destination policy.
- * This downloads those URLs first, through the destination guard, and hands the SDK inline data instead, so it never
- * opens a connection of its own. Everything else is left for the provider to fetch.
+ * The Google SDKs download some media URLs themselves, with no destination policy. So that no SDK ever opens such a
+ * connection, whichever URLs a given SDK version happens to fetch, every media URL is downloaded here through the
+ * destination guard and handed over as inline data. Only URLs that never reach the network from here pass through.
  */
 @Slf4j
 @UtilityClass
@@ -46,172 +42,133 @@ public class RemoteMediaInliner {
 
     // the inline data limit of a Gemini request
     static final int MAX_BYTES = 20 * 1024 * 1024;
-    private static final int MAX_REDIRECTS = 5;
-    private static final Duration TIMEOUT = Duration.ofSeconds(30);
 
-    // redirects are followed here, so each hop is checked before it is requested
-    private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(5))
-            .followRedirects(HttpClient.Redirect.NEVER)
-            .build();
+    // Cloud Storage objects are read by Google, and data: URIs carry their own bytes; any other scheme is downloaded
+    // here or refused. Compared exactly, as the SDKs do: a differently cased scheme takes the restrictive path.
+    private static final Set<String> PASS_THROUGH_SCHEMES = Set.of("gs", "data");
 
     /**
      * Strict until {@link #setConfig(LlmProviderClientConfig)} runs, so an unconfigured caller takes the restrictive
      * path.
      */
-    private static volatile DestinationGuard destinationGuard = destinationGuard(DestinationGuard.Mode.STRICT);
+    private static volatile OkHttpClient httpClient = httpClient(DestinationGuard.Mode.STRICT);
 
     /**
      * Called once at startup: some callers are MapStruct singletons or models built outside Guice.
      */
     public static void setConfig(@NonNull LlmProviderClientConfig config) {
-        destinationGuard = destinationGuard(config.getVideoUrlDestinationGuard());
+        httpClient = httpClient(config.getVideoUrlDestinationGuard());
     }
 
-    private static DestinationGuard destinationGuard(DestinationGuard.Mode mode) {
-        return DestinationGuard.builder()
+    // a redirect is a failed download, so the only destination is the URL that was checked
+    private static OkHttpClient httpClient(DestinationGuard.Mode mode) {
+        return DestinationGuardDns.clientBuilder(DestinationGuard.builder()
                 .mode(mode)
                 .scheme(DestinationGuard.Scheme.PLAINTEXT_OR_TLS)
+                .build())
+                .followRedirects(false)
+                .followSslRedirects(false)
+                .connectTimeout(Duration.ofSeconds(5))
+                .callTimeout(Duration.ofSeconds(30))
                 .build();
     }
 
-    /** Gemini (Google AI) downloads http(s) image URLs and passes every other URL to the API as file data. */
-    public static List<ChatMessage> inlineForGemini(@NonNull List<ChatMessage> messages) {
-        return inline(messages, content -> content instanceof ImageContent image
-                && isDownloadedByGemini(image.image().url()));
-    }
-
-    /** Vertex AI downloads every image, audio, video and PDF URL except a Cloud Storage {@code gs://} one. */
-    public static List<ChatMessage> inlineForVertexAi(@NonNull List<ChatMessage> messages) {
-        return inline(messages, content -> url(content)
-                .filter(url -> !"gs".equals(url.getScheme()))
-                .isPresent());
-    }
-
-    private static boolean isDownloadedByGemini(URI url) {
-        return url != null && url.getScheme() != null && url.getScheme().startsWith("http");
-    }
-
-    private static List<ChatMessage> inline(List<ChatMessage> messages, Predicate<Content> downloadedBySdk) {
+    public static List<ChatMessage> inline(@NonNull List<ChatMessage> messages) {
         return messages.stream()
                 .map(message -> message instanceof UserMessage userMessage
-                        && userMessage.contents().stream().anyMatch(downloadedBySdk)
+                        && userMessage.contents().stream().anyMatch(RemoteMediaInliner::isDownloaded)
                                 ? userMessage.toBuilder()
                                         .contents(userMessage.contents().stream()
-                                                .map(content -> downloadedBySdk.test(content)
-                                                        ? inline(content)
-                                                        : content)
+                                                .map(content -> isDownloaded(content) ? inline(content) : content)
                                                 .toList())
                                         .build()
                                 : message)
                 .toList();
     }
 
+    private static boolean isDownloaded(Content content) {
+        return url(content).filter(url -> !PASS_THROUGH_SCHEMES.contains(url.getScheme())).isPresent();
+    }
+
     private static Optional<URI> url(Content content) {
-        return Optional.ofNullable(switch (content) {
-            case ImageContent image -> image.image().url();
-            case AudioContent audio -> audio.audio().url();
-            case VideoContent video -> video.video().url();
-            case PdfFileContent pdf -> pdf.pdfFile().url();
-            default -> null;
-        });
+        return switch (content.type()) {
+            case TEXT -> Optional.empty();
+            case IMAGE -> Optional.ofNullable(((ImageContent) content).image().url());
+            case AUDIO -> Optional.ofNullable(((AudioContent) content).audio().url());
+            case VIDEO -> Optional.ofNullable(((VideoContent) content).video().url());
+            case PDF -> Optional.ofNullable(((PdfFileContent) content).pdfFile().url());
+        };
     }
 
     private static Content inline(Content content) {
-        var url = url(content).orElseThrow();
-        return switch (content) {
-            case ImageContent image -> {
+        var url = url(content).orElseThrow().toString();
+        return switch (content.type()) {
+            case TEXT -> content;
+            case IMAGE -> {
+                var image = (ImageContent) content;
                 var media = download(url, image.image().mimeType());
                 yield ImageContent.from(media.base64Data(), media.mimeType(), image.detailLevel());
             }
-            case AudioContent audio -> {
-                var media = download(url, audio.audio().mimeType());
+            case AUDIO -> {
+                var media = download(url, ((AudioContent) content).audio().mimeType());
                 yield AudioContent.from(media.base64Data(), media.mimeType());
             }
-            case VideoContent video -> {
-                var media = download(url, video.video().mimeType());
+            case VIDEO -> {
+                var media = download(url, ((VideoContent) content).video().mimeType());
                 yield VideoContent.from(media.base64Data(), media.mimeType());
             }
-            case PdfFileContent pdf -> {
-                var media = download(url, pdf.pdfFile().mimeType());
+            case PDF -> {
+                var media = download(url, ((PdfFileContent) content).pdfFile().mimeType());
                 yield PdfFileContent.from(media.base64Data(), media.mimeType());
             }
-            default -> content;
         };
     }
 
     private record Media(String base64Data, String mimeType) {
     }
 
-    private static Media download(URI url, String declaredMimeType) {
-        var current = url;
-        for (int hop = 0; hop <= MAX_REDIRECTS; hop++) {
-            validate(current);
-            var response = get(current);
-            var status = familyOf(response.statusCode());
-            if (status == Response.Status.Family.REDIRECTION) {
-                current = redirectTarget(current, response);
-                continue;
-            }
-            if (status != Response.Status.Family.SUCCESSFUL) {
-                log.warn("Media URL download failed, status '{}': '{}'", response.statusCode(),
-                        VideoMimeTypeUtils.loggable(url.toString()));
-                throw new ProviderRequestRefusedException(MEDIA_URL_DOWNLOAD);
-            }
-            return new Media(Base64.getEncoder().encodeToString(response.body()),
-                    mimeType(declaredMimeType, response, current));
-        }
-        log.warn("Media URL download failed, too many redirects: '{}'", VideoMimeTypeUtils.loggable(url.toString()));
-        throw new ProviderRequestRefusedException(MEDIA_URL_DOWNLOAD);
-    }
-
-    private static void validate(URI url) {
-        try {
-            destinationGuard.validate(url.toString());
-        } catch (DestinationGuardException exception) {
-            // no exception detail: it describes a user-supplied URL and how our network resolves it
-            log.warn("Refused media URL: '{}'", VideoMimeTypeUtils.loggable(url.toString()));
+    private static Media download(String url, String declaredMimeType) {
+        // null for anything but an http or https URL
+        var httpUrl = HttpUrl.parse(url);
+        if (httpUrl == null) {
+            log.warn("Refused media URL with an unsupported scheme: '{}'", VideoMimeTypeUtils.loggable(url));
             throw new ProviderRequestRefusedException(MEDIA_URL);
         }
-    }
-
-    private static HttpResponse<byte[]> get(URI url) {
-        var request = HttpRequest.newBuilder(url).timeout(TIMEOUT).GET().build();
-        // the timeout above stops at the headers, this one also bounds reading the body
-        var response = HTTP_CLIENT.sendAsync(request,
-                HttpResponse.BodyHandlers.limiting(HttpResponse.BodyHandlers.ofByteArray(), MAX_BYTES));
-        try {
-            return response.get(TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
-        } catch (InterruptedException exception) {
-            response.cancel(true);
-            Thread.currentThread().interrupt();
-            throw new ProviderRequestRefusedException(MEDIA_URL_DOWNLOAD);
-        } catch (ExecutionException | TimeoutException exception) {
-            response.cancel(true);
+        try (var response = httpClient.newCall(new Request.Builder().url(httpUrl).build()).execute()) {
+            var body = response.body();
+            if (!response.isSuccessful() || body == null || body.contentLength() > MAX_BYTES) {
+                log.warn("Media URL download failed, status '{}', length '{}': '{}'", response.code(),
+                        body == null ? null : body.contentLength(), VideoMimeTypeUtils.loggable(url));
+                throw new ProviderRequestRefusedException(MEDIA_URL_DOWNLOAD);
+            }
+            // the length header can be absent or wrong, so the read itself is capped
+            var bytes = body.byteStream().readNBytes(MAX_BYTES + 1);
+            if (bytes.length > MAX_BYTES) {
+                log.warn("Media URL download failed, larger than '{}' bytes: '{}'", MAX_BYTES,
+                        VideoMimeTypeUtils.loggable(url));
+                throw new ProviderRequestRefusedException(MEDIA_URL_DOWNLOAD);
+            }
+            return new Media(Base64.getEncoder().encodeToString(bytes),
+                    mimeType(declaredMimeType, response.header("Content-Type"), response.request().url()));
+        } catch (IOException exception) {
+            if (DestinationGuardDns.isRefused(exception)) {
+                // no exception detail: it describes a user-supplied URL and how our network resolves it
+                log.warn("Refused media URL: '{}'", VideoMimeTypeUtils.loggable(url));
+                throw new ProviderRequestRefusedException(MEDIA_URL);
+            }
             // the message can echo the full URL, credentials included, so only the type is logged
-            var cause = exception instanceof ExecutionException ? exception.getCause() : exception;
-            log.warn("Media URL download failed, error type '{}': '{}'", cause.getClass().getSimpleName(),
-                    VideoMimeTypeUtils.loggable(url.toString()));
-            throw new ProviderRequestRefusedException(MEDIA_URL_DOWNLOAD);
-        }
-    }
-
-    private static URI redirectTarget(URI current, HttpResponse<?> response) {
-        try {
-            return current.resolve(response.headers().firstValue("Location").orElseThrow());
-        } catch (RuntimeException exception) {
-            log.warn("Media URL download failed, invalid redirect: '{}'",
-                    VideoMimeTypeUtils.loggable(current.toString()));
+            log.warn("Media URL download failed, error type '{}': '{}'", exception.getClass().getSimpleName(),
+                    VideoMimeTypeUtils.loggable(url));
             throw new ProviderRequestRefusedException(MEDIA_URL_DOWNLOAD);
         }
     }
 
     // the order the SDKs use, with the response's own type ahead of a guess from the extension
-    private static String mimeType(String declaredMimeType, HttpResponse<?> response, URI url) {
+    private static String mimeType(String declaredMimeType, String contentType, HttpUrl finalUrl) {
         return Optional.ofNullable(declaredMimeType)
-                .or(() -> response.headers().firstValue("Content-Type")
-                        .map(contentType -> StringUtils.substringBefore(contentType, ';').strip())
+                .or(() -> Optional.ofNullable(contentType)
+                        .map(type -> StringUtils.substringBefore(type, ';').strip())
                         .filter(StringUtils::isNotBlank))
-                .orElseGet(() -> URLConnection.guessContentTypeFromName(url.getPath()));
+                .orElseGet(() -> URLConnection.guessContentTypeFromName(finalUrl.encodedPath()));
     }
 }

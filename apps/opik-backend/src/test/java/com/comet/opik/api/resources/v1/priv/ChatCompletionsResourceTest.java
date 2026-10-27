@@ -1450,6 +1450,63 @@ class ChatCompletionsResourceTest {
             WIRE_MOCK.server().verify(0, anyRequestedFor(urlPathEqualTo(mediaPath)));
         }
 
+        @ParameterizedTest
+        @ValueSource(strings = {"file:///etc/hosts", "jar:file:///app.jar!/image.png", "ftp://example.com/image.png"})
+        @DisplayName("a media URL that isn't http or https is refused before Gemini or Vertex AI can read it")
+        void mediaUrlWithOtherSchemeIsRefused(String mediaUrl) throws Exception {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            mockTargetWorkspace(workspaceName, UUID.randomUUID().toString());
+            llmProviderApiKeyResourceClient.createProviderApiKey(ProviderApiKey.builder()
+                    .provider(LlmProvider.VERTEX_AI)
+                    .apiKey(serviceAccountJson("https://oauth2.googleapis.com/token"))
+                    .configuration(Map.of("location", "us-central1"))
+                    .build(), API_KEY, workspaceName, HttpStatus.SC_CREATED);
+            var message = OpikUserMessage.builder()
+                    .content(List.of(OpikContent.builder().type(OpikContentType.IMAGE_URL)
+                            .imageUrl(ImageUrl.builder().url(mediaUrl).build()).build()))
+                    .build();
+            var request = ChatCompletionRequest.builder().stream(false)
+                    .model(VertexAIModelName.GEMINI_2_5_FLASH.qualifiedName()).messages(message).build();
+
+            assertThat(chatCompletionsClient.create(API_KEY, workspaceName, request, HttpStatus.SC_BAD_REQUEST))
+                    .isEqualTo(new ErrorMessage(HttpStatus.SC_BAD_REQUEST,
+                            "a media URL was refused: it must be an http or https URL that resolves to a public"
+                                    + " address (self-hosted deployments serving media from internal networks can set"
+                                    + " LLM_PROVIDER_VIDEO_URL_DESTINATION_GUARD=relaxed)"));
+        }
+
+        @Test
+        @DisplayName("the OpenAI Responses API client doesn't follow a redirect from the provider")
+        void responsesApiDoesNotFollowRedirects() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            mockTargetWorkspace(workspaceName, UUID.randomUUID().toString());
+            var basePath = "/v1-" + UUID.randomUUID();
+            var redirectTarget = "/elsewhere-" + UUID.randomUUID();
+            WIRE_MOCK.server().stubFor(any(urlPathMatching(basePath + "/.*"))
+                    .willReturn(aResponse().withStatus(307).withHeader("Location", redirectTarget)));
+            WIRE_MOCK.server().stubFor(any(urlPathEqualTo(redirectTarget)).willReturn(aResponse().withStatus(200)));
+            llmProviderApiKeyResourceClient.createProviderApiKey(ProviderApiKey.builder()
+                    .provider(LlmProvider.OPEN_AI)
+                    .apiKey(RandomStringUtils.randomAlphanumeric(20))
+                    .baseUrl(WIRE_MOCK.runtimeInfo().getHttpBaseUrl() + basePath)
+                    .configuration(Map.of("openai_pipeline_mode", "responses_api"))
+                    .build(), API_KEY, workspaceName, HttpStatus.SC_CREATED);
+            var request = ChatCompletionRequest.builder().stream(false)
+                    .model(OpenaiModelName.GPT_4O.toString()).addUserMessage("ping").build();
+
+            clientSupport.target(TestUtils.getBaseUrl(clientSupport) + "/v1/private/chat/completions")
+                    .request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                    .post(Entity.json(request))
+                    .close();
+
+            // the provider was reached, so the redirect was answered and not followed
+            assertThat(WIRE_MOCK.server().findAll(anyRequestedFor(urlPathMatching(basePath + "/.*")))).isNotEmpty();
+            WIRE_MOCK.server().verify(0, anyRequestedFor(urlPathEqualTo(redirectTarget)));
+        }
+
         @Test
         @DisplayName("an extensionless video URL on an internal address is never probed for its MIME type")
         void videoMimeTypeLookupSkipsInternalAddress() {

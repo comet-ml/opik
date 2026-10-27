@@ -40,7 +40,7 @@ public interface GeminiLangChainMapper {
      * Map messages for Gemini, converting VIDEO_URL to ImageContent.
      */
     default List<ChatMessage> mapMessagesForGemini(@NonNull ChatCompletionRequest request) {
-        return RemoteMediaInliner.inlineForGemini(request.messages().stream()
+        return RemoteMediaInliner.inline(request.messages().stream()
                 .map(this::toChatMessageForGemini)
                 .toList());
     }

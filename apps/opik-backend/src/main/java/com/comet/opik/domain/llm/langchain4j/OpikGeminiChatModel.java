@@ -32,7 +32,7 @@ public class OpikGeminiChatModel implements ChatModel {
     @Override
     public ChatResponse chat(ChatRequest chatRequest) {
         // Convert messages: if any UserMessage has VideoContent, convert to ImageContent
-        List<ChatMessage> convertedMessages = RemoteMediaInliner.inlineForGemini(
+        List<ChatMessage> convertedMessages = RemoteMediaInliner.inline(
                 convertMessagesForGemini(chatRequest.messages()));
 
         // Create new request with converted messages

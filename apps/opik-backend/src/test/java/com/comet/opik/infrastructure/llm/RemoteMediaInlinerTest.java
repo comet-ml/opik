@@ -23,6 +23,7 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.Base64;
 import java.util.List;
@@ -31,9 +32,9 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
+import static com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException.Reason.MEDIA_URL;
 import static com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException.Reason.MEDIA_URL_DOWNLOAD;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
-import static com.github.tomakehurst.wiremock.client.WireMock.anyRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -63,7 +64,7 @@ class RemoteMediaInlinerTest {
         return config;
     }
 
-    private Stream<Arguments> vertexAiMediaIsDownloadedAndInlined() {
+    private Stream<Arguments> mediaIsDownloadedAndInlined() {
         return Stream.of(
                 arguments("image/png", (Function<String, Content>) ImageContent::from,
                         (BiFunction<String, String, Content>) ImageContent::from),
@@ -77,57 +78,62 @@ class RemoteMediaInlinerTest {
 
     @ParameterizedTest
     @MethodSource
-    @DisplayName("Vertex AI media URLs are downloaded, following redirects, and inlined with the response's type")
-    void vertexAiMediaIsDownloadedAndInlined(String mimeType, Function<String, Content> fromUrl,
+    @DisplayName("media URLs are downloaded and inlined with the response's type")
+    void mediaIsDownloadedAndInlined(String mimeType, Function<String, Content> fromUrl,
             BiFunction<String, String, Content> fromBase64) {
         var bytes = RandomUtils.secure().randomBytes(64);
         var mediaPath = "/media-" + UUID.randomUUID();
-        var redirectPath = "/redirect-" + UUID.randomUUID();
-        wireMock.server().stubFor(get(urlPathEqualTo(redirectPath))
-                .willReturn(aResponse().withStatus(302).withHeader("Location", mediaPath)));
         wireMock.server().stubFor(get(urlPathEqualTo(mediaPath))
                 .willReturn(aResponse().withHeader("Content-Type", mimeType + "; charset=binary").withBody(bytes)));
         var system = SystemMessage.from("be brief");
         var text = TextContent.from("describe");
         List<ChatMessage> messages = List.of(system,
-                UserMessage.from(text, fromUrl.apply(wireMock.runtimeInfo().getHttpBaseUrl() + redirectPath)));
+                UserMessage.from(text, fromUrl.apply(wireMock.runtimeInfo().getHttpBaseUrl() + mediaPath)));
 
-        assertThat(RemoteMediaInliner.inlineForVertexAi(messages)).isEqualTo(List.of(system,
+        assertThat(RemoteMediaInliner.inline(messages)).isEqualTo(List.of(system,
                 UserMessage.from(text, fromBase64.apply(Base64.getEncoder().encodeToString(bytes), mimeType))));
     }
 
     @Test
-    @DisplayName("media the SDK passes to the provider by URL is left untouched and never downloaded")
-    void mediaNotDownloadedBySdkIsLeftUntouched() {
-        var mediaPath = "/media-" + UUID.randomUUID();
-        var mediaUrl = wireMock.runtimeInfo().getHttpBaseUrl() + mediaPath;
-        List<ChatMessage> gemini = List.of(UserMessage.from(VideoContent.from(mediaUrl), AudioContent.from(mediaUrl)));
-        List<ChatMessage> vertexAi = List.of(
-                UserMessage.from(ImageContent.from("gs://bucket-%s/image.png".formatted(UUID.randomUUID()))));
+    @DisplayName("Cloud Storage and data: URLs never reach the network from here, so they are left untouched")
+    void passThroughUrlsAreLeftUntouched() {
+        List<ChatMessage> messages = List.of(UserMessage.from(
+                ImageContent.from("gs://bucket-%s/image.png".formatted(UUID.randomUUID())),
+                AudioContent.from("data:audio/wav,%s".formatted(UUID.randomUUID()))));
 
-        assertThat(RemoteMediaInliner.inlineForGemini(gemini)).isEqualTo(gemini);
-        assertThat(RemoteMediaInliner.inlineForVertexAi(vertexAi)).isEqualTo(vertexAi);
-        wireMock.server().verify(0, anyRequestedFor(urlPathEqualTo(mediaPath)));
+        assertThat(RemoteMediaInliner.inline(messages)).isEqualTo(messages);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"file:///etc/hosts", "ftp://example.com/image.png", "GS://bucket/image.png",
+            "jar:file:///app.jar!/image.png"})
+    @DisplayName("a media URL with any other scheme is refused before anything is read")
+    void otherSchemesAreRefused(String url) {
+        List<ChatMessage> messages = List.of(UserMessage.from(ImageContent.from(url)));
+
+        assertThatThrownBy(() -> RemoteMediaInliner.inline(messages))
+                .isInstanceOf(ProviderRequestRefusedException.class)
+                .hasMessage(new ProviderRequestRefusedException(MEDIA_URL).getMessage());
     }
 
     private Stream<Arguments> failedDownloadIsRefused() {
-        var loopPath = "/loop-" + UUID.randomUUID();
         return Stream.of(
                 arguments("/missing-" + UUID.randomUUID(), aResponse().withStatus(404)),
                 arguments("/oversized-" + UUID.randomUUID(),
                         aResponse().withBody(new byte[RemoteMediaInliner.MAX_BYTES + 1])),
-                arguments(loopPath, aResponse().withStatus(302).withHeader("Location", loopPath)));
+                arguments("/redirect-" + UUID.randomUUID(),
+                        aResponse().withStatus(302).withHeader("Location", "/media-" + UUID.randomUUID())));
     }
 
     @ParameterizedTest
     @MethodSource
-    @DisplayName("a media URL that isn't found, is too large or redirects too often fails the request")
+    @DisplayName("a media URL that isn't found, is too large or redirects fails the request")
     void failedDownloadIsRefused(String mediaPath, ResponseDefinitionBuilder response) {
         wireMock.server().stubFor(get(urlPathEqualTo(mediaPath)).willReturn(response));
         List<ChatMessage> messages = List.of(
                 UserMessage.from(ImageContent.from(wireMock.runtimeInfo().getHttpBaseUrl() + mediaPath)));
 
-        assertThatThrownBy(() -> RemoteMediaInliner.inlineForGemini(messages))
+        assertThatThrownBy(() -> RemoteMediaInliner.inline(messages))
                 .isInstanceOf(ProviderRequestRefusedException.class)
                 .hasMessage(new ProviderRequestRefusedException(MEDIA_URL_DOWNLOAD).getMessage());
     }
