@@ -6,12 +6,14 @@ import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterColumnMapper;
 import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
 import org.jdbi.v3.sqlobject.customizer.Bind;
+import org.jdbi.v3.sqlobject.customizer.BindList;
 import org.jdbi.v3.sqlobject.customizer.BindMethods;
 import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -57,6 +59,9 @@ public interface TopicRunDAO {
             WHERE status = 'running' AND started_at < :startedBefore
             """)
     int failAbandoned(@Bind("startedBefore") Instant startedBefore, @Bind("now") Instant now);
+
+    @SqlUpdate("DELETE FROM topic_runs WHERE project_id IN (<projectIds>)")
+    int deleteByProjects(@BindList("projectIds") Collection<UUID> projectIds);
 
     @SqlUpdate("DELETE FROM topic_runs WHERE started_at < :before")
     int deleteStartedBefore(@Bind("before") Instant before);

@@ -251,36 +251,6 @@ it never holds back newer traces.
 
 ClickHouse queries of the job have a `log_comment` that starts with `topics:`.
 
-### Alerts
-
-| Alert | Condition | Check | First step |
-|---|---|---|---|
-| Churn | `churn` over 0.05 on any project's saved run. | The churn query below. | Read the run's `born`, `retired` and `forced` stats and its revise answer in the logs. A merge or a replaced topic explains a one-night jump; a high churn every night means the list does not settle. |
-| Failed runs | More than 20% of a night's finished runs failed. | `topics.runs` by `status`, or the failed-share query below. | Group the failures by `error_code`: `qwen_*` points at opik-inference, `window_read` and `save` at ClickHouse or MySQL. |
-| No saved run | A project with a list has no `saved` run for 3 nights. | The stale-project query below. | Find its runs in `topic_runs`: failed (read `error_code`), never started (`not_reached`: the budget), or skipped (under `TOPICS_NIGHTLY_MIN_VECTORS`: quiet traffic, no action). |
-
-`topics.run.churn` has no project attribute: use it for the trend, and the SQL for which project.
-
-```sql
--- MySQL: saved runs of the last day with churn over 0.05
-SELECT run_id, workspace_id, project_id, started_at,
-       JSON_EXTRACT(stats, '$.churn') AS churn, JSON_EXTRACT(stats, '$.churn_any') AS churn_any,
-       JSON_EXTRACT(stats, '$.born') AS born, JSON_EXTRACT(stats, '$.retired') AS retired
-FROM topic_runs
-WHERE status = 'saved' AND mode = 'nightly_update' AND started_at >= NOW() - INTERVAL 1 DAY
-  AND JSON_EXTRACT(stats, '$.churn') > 0.05;
-
--- MySQL: the failed share of the runs started since midnight UTC
-SELECT SUM(status = 'failed') / NULLIF(SUM(status <> 'running'), 0) AS failed_share
-FROM topic_runs
-WHERE started_at >= UTC_DATE();
-
--- MySQL: projects with a list and no saved run for 3 nights
-SELECT project_id, workspace_id, last_success_at
-FROM topic_project_states
-WHERE last_success_at < UTC_DATE() - INTERVAL 2 DAY;
-```
-
 ### Deletes
 
 A vector lives as long as its trace. Retention deletes vectors with the traces (the same rules as `ai_labels`), and a
@@ -330,10 +300,17 @@ or to Other. It writes:
 To turn it off, set `TOPICS_NIGHTLY_ENABLED=false` and restart. Saved lists stay and freeze at their last saved night.
 This is also the rollback of the nightly update.
 
+To stop it for one workspace without a restart, opt the workspace out (`UPDATE topic_workspaces SET enabled = FALSE
+WHERE workspace_id = '<workspace_id>'`). This also stops its topic vectors. The next night skips it; a night already
+running reads the workspaces once, at its start, so it still runs the workspace's projects.
+
 ### How a night runs
 
 - Every pod fires the job on the cron. The first to take the Redis lock `topics:nightly:lock` runs the night and keeps
-  the lock until it expires (budget + project timeout + 5 minutes), so no other pod runs the same night.
+  the lock until it expires (budget + project timeout + 5 minutes), so no other pod runs the same night. If that pod
+  dies during the night (a deploy), the rest of the night waits for the next night: the cron does not fire again, and
+  the night endpoint answers `409` until the lock expires. To finish the night sooner, delete the Redis key
+  `topics:nightly:lock` and call the night endpoint (see "Running by hand").
 - The night first fails runs left `running` by an earlier night (`error_code = 'abandoned'`), and deletes runs older
   than the retention.
 - It counts each enabled workspace's projects in the window, drops those under `TOPICS_NIGHTLY_MIN_VECTORS`, and runs
@@ -350,11 +327,11 @@ night does not count: the lifecycle counters and `rebuilds` change only on a sav
 |---|---|
 | `qwen_timeout` | A Qwen call ran out of its deadline: `TOPICS_NIGHTLY_QWEN_DEADLINE` for author and revise, 60s for verify, 30s for naming. |
 | `qwen_error` | A Qwen call (author, revise, verify or naming) failed after its 2 retries, or with a 4xx. `error_message` has the call's kind, code and HTTP status. |
-| `qwen_bad_answer` | The author or revise answer is not a JSON object, or the author answer breaks the schema. The answer is in the logs. |
+| `qwen_bad_answer` | The author or revise answer is not a JSON object, or the author answer breaks the schema. Or opik-inference answered `schema_violation` to any call: a cut or off-schema answer, which is not retried. The answer is in the DEBUG logs. |
 | `window_read` | The ClickHouse window read failed, the window had no usable vector, or the nightly update could not read last night's labels. |
 | `invariant` | A check before the save failed: more than 10 live topics, a retired id live again, a renamed topic, a new topic not born tonight, a blank or catch-all name, a prototype not of unit length, a trace not labelled once or labelled with a retired topic. |
 | `timeout` | The run outlasted `TOPICS_NIGHTLY_PROJECT_TIMEOUT`, or the job was interrupted. |
-| `save` | The ClickHouse insert or the MySQL transaction failed. A ClickHouse insert that went through leaves `trace_topics` rows no saved run points at; the next saved run replaces them. |
+| `save` | The ClickHouse insert or the MySQL transaction failed, or another run saved the project meanwhile (`error_message` says so; only if the project's Redis lock was lost). The run deletes the `trace_topics` rows it inserted; if that delete fails too (a WARN names the run), they stay until the next saved run replaces them. |
 | `abandoned` | The pod stopped during the run. |
 | `internal` | A bug: read the logs for the run id. |
 
@@ -475,11 +452,13 @@ A nightly update's `stats` holds, besides `vectors`, `topics`, `other_share`, `s
 
 ```sql
 -- ClickHouse: a project's trace counts per topic in the last saved window
+-- (window_from and window_until are in the run's stats)
 SELECT topic_id, count() AS traces
 FROM (
     SELECT trace_id, topic_id
     FROM trace_topics
     WHERE workspace_id = '<workspace_id>' AND project_id = '<project_id>'
+    AND trace_created_at >= '<window_from>' AND trace_created_at < '<window_until>'
     ORDER BY trace_id, updated_at DESC
     LIMIT 1 BY trace_id
 )
@@ -499,7 +478,7 @@ Search the logs for `Topics run '<run_id>'`.
 Two internal endpoints start work now instead of waiting for the night. Call them from inside the cluster. Both answer
 `501` when `TOPICS_ENABLED` is off and `409` when `TOPICS_NIGHTLY_ENABLED` is off. Both take `&night=yyyy-MM-dd`
 (`?night=` for the night endpoint): the night is today (UTC) by default, so the window ends at today's start. `night`
-is at most tomorrow, whose window holds today's traces so far.
+is at most tomorrow, whose window holds today's traces so far, and at least 365 days ago.
 
 **One project.** The night's rules apply: the workspace is opted in to topics, and the project's window holds at least
 `TOPICS_NIGHTLY_MIN_VECTORS` vectors. Only one run by hand goes at a time across the cluster.
@@ -551,7 +530,41 @@ DELETE FROM topic_project_states WHERE project_id = '<project_id>';
 
 ClickHouse queries of the job have a `log_comment` that starts with `topics:`.
 
+### Alerts
+
+| Alert | Condition | Check | First step |
+|---|---|---|---|
+| Churn | `churn` over 0.05 on any project's saved run. | The churn query below. | Read the run's `born`, `retired` and `forced` stats and its revise answer in the logs. A merge or a replaced topic explains a one-night jump; a high churn every night means the list does not settle. |
+| Failed runs | More than 20% of a night's finished runs failed. | `topics.runs` by `status`, or the failed-share query below. A run whose pod died is failed as `abandoned` only by the next night. | Group the failures by `error_code`: `qwen_*` points at opik-inference, `window_read` and `save` at ClickHouse or MySQL. |
+| No saved run | A project with a list has no `saved` run for 3 nights. | The stale-project query below. | Find its runs in `topic_runs`: failed (read `error_code`), never started (`not_reached`: the budget), or skipped (under `TOPICS_NIGHTLY_MIN_VECTORS`: quiet traffic, no action). |
+
+`topics.run.churn` has no project attribute: use it for the trend, and the SQL for which project.
+
+```sql
+-- MySQL: saved runs of the last day with churn over 0.05
+SELECT run_id, workspace_id, project_id, started_at,
+       JSON_EXTRACT(stats, '$.churn') AS churn, JSON_EXTRACT(stats, '$.churn_any') AS churn_any,
+       JSON_EXTRACT(stats, '$.born') AS born, JSON_EXTRACT(stats, '$.retired') AS retired
+FROM topic_runs
+WHERE status = 'saved' AND mode = 'nightly_update' AND started_at >= NOW() - INTERVAL 1 DAY
+  AND JSON_EXTRACT(stats, '$.churn') > 0.05;
+
+-- MySQL: the failed share of the runs started since midnight UTC
+SELECT SUM(status = 'failed') / NULLIF(SUM(status <> 'running'), 0) AS failed_share
+FROM topic_runs
+WHERE started_at >= UTC_DATE();
+
+-- MySQL: projects with a list and no saved run for 3 nights, in workspaces still opted in
+SELECT s.project_id, s.workspace_id, s.last_success_at
+FROM topic_project_states s
+JOIN topic_workspaces t ON t.workspace_id = s.workspace_id AND t.enabled = TRUE
+JOIN ai_label_workspaces a ON a.workspace_id = s.workspace_id AND a.enabled = TRUE
+WHERE s.last_success_at < UTC_DATE() - INTERVAL 2 DAY;
+```
+
 ### Deletes
 
 A `trace_topics` row lives as long as its trace, as for `topic_vectors`: retention and the trace-delete cascade delete
-both. MySQL rows stay when a project or workspace is deleted, as for `ai_labels`; `topic_runs` rows go after 90 days.
+both. Deleting a project deletes its MySQL rows too: `topics`, `topic_prototypes`, `topic_project_states` and
+`topic_runs`, since names, definitions and prototypes come from its traces. `topic_runs` rows go after 90 days anyway.
+Deleting a workspace does not delete its MySQL rows, as for `ai_labels`.

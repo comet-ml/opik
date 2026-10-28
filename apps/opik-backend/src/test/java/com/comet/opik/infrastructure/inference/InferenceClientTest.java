@@ -576,6 +576,18 @@ class InferenceClientTest {
     }
 
     @Test
+    void generateSchemaViolationIsNotRetried() {
+        server.stubFor(post(urlEqualTo(REALTIME_GENERATE_PATH)).willReturn(error("schema_violation", 500)));
+
+        assertThatThrownBy(() -> client.generate(generateRequest(), later()).block())
+                .isInstanceOfSatisfying(InferenceException.class, exception -> {
+                    assertThat(exception.isSchemaViolation()).isTrue();
+                    assertThat(exception.getHttpStatus()).isEqualTo(500);
+                });
+        assertThat(server.findAll(postRequestedFor(urlEqualTo(REALTIME_GENERATE_PATH)))).hasSize(1);
+    }
+
+    @Test
     void generateServerErrorIsRetriedWithTheSameRequestIdThenSucceeds() {
         stubSequence(() -> post(urlEqualTo(REALTIME_GENERATE_PATH)), error("overloaded", 503),
                 error("overloaded", 503), generated());

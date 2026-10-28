@@ -70,15 +70,34 @@ public interface TopicDAO {
     @SqlQuery("SELECT * FROM topic_prototypes WHERE project_id = :projectId ORDER BY position")
     List<TopicPrototype> findPrototypes(@Bind("projectId") UUID projectId);
 
+    /** The first save of a project: a second run that saved meanwhile fails it on the primary key. */
     @SqlUpdate("""
             INSERT INTO topic_project_states (project_id, workspace_id, rebuilds, first_built_at, last_run_id,
                 last_success_at, window_until)
             VALUES (:projectId, :workspaceId, :rebuilds, :firstBuiltAt, :lastRunId, :lastSuccessAt, :windowUntil)
-            ON DUPLICATE KEY UPDATE rebuilds = VALUES(rebuilds), first_built_at = VALUES(first_built_at),
-                last_run_id = VALUES(last_run_id), last_success_at = VALUES(last_success_at),
-                window_until = VALUES(window_until)
             """)
-    void upsertState(@BindMethods TopicProjectState state);
+    void insertState(@BindMethods TopicProjectState state);
+
+    /**
+     * A later save: updates the row only while its {@code last_run_id} is still the one the run read, so a run that
+     * saved meanwhile makes this return 0. The Redis project lock alone can be lost.
+     */
+    @SqlUpdate("""
+            UPDATE topic_project_states
+            SET rebuilds = :rebuilds, first_built_at = :firstBuiltAt, last_run_id = :lastRunId,
+                last_success_at = :lastSuccessAt, window_until = :windowUntil
+            WHERE project_id = :projectId AND last_run_id <=> :expectedRunId
+            """)
+    int updateState(@BindMethods TopicProjectState state, @Bind("expectedRunId") UUID expectedRunId);
+
+    @SqlUpdate("DELETE FROM topics WHERE project_id IN (<projectIds>)")
+    int deleteTopicsByProjects(@BindList("projectIds") Collection<UUID> projectIds);
+
+    @SqlUpdate("DELETE FROM topic_prototypes WHERE project_id IN (<projectIds>)")
+    int deletePrototypesByProjects(@BindList("projectIds") Collection<UUID> projectIds);
+
+    @SqlUpdate("DELETE FROM topic_project_states WHERE project_id IN (<projectIds>)")
+    int deleteStatesByProjects(@BindList("projectIds") Collection<UUID> projectIds);
 
     @SqlQuery("SELECT * FROM topic_project_states WHERE project_id IN (<projectIds>)")
     List<TopicProjectState> findStates(

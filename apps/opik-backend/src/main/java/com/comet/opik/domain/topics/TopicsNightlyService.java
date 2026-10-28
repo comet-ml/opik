@@ -63,6 +63,9 @@ public class TopicsNightlyService {
     /** How long a night started by hand waits to learn whether it got the night lock. */
     private static final Duration LOCK_WAIT = Duration.ofSeconds(10);
 
+    /** ClickHouse {@code max_execution_time} of one window count: a workspace's, or one project's by hand. */
+    private static final long COUNT_SECONDS = 60;
+
     private final @NonNull @Config("topics") TopicsConfig config;
     private final @NonNull TransactionTemplate template;
     private final @NonNull TopicWindowDAO windowDAO;
@@ -254,14 +257,14 @@ public class TopicsNightlyService {
 
     /**
      * The project's traces with a vector in the window of {@code night}, read within the workspace: 0 for a project of
-     * another workspace.
+     * another workspace. The request waits for it, so it gets the night's own count limit, not the project timeout.
      */
     private long windowVectors(String workspaceId, UUID projectId, LocalDate night) {
         var nightly = config.getNightly();
         var to = night.atStartOfDay(ZoneOffset.UTC).toInstant();
         var from = night.minusDays(nightly.getWindowDays()).atStartOfDay(ZoneOffset.UTC).toInstant();
-        var counts = windowDAO.countByProject(workspaceId, from, to,
-                Math.max(1, nightly.getProjectTimeout().toSeconds())).collectList().block();
+        var counts = windowDAO.countByProject(workspaceId, projectId, from, to, COUNT_SECONDS)
+                .collectList().block();
         return counts.stream().filter(count -> count.projectId().equals(projectId))
                 .mapToLong(TopicWindowDAO.ProjectCount::traces).findFirst().orElse(0);
     }
@@ -401,8 +404,8 @@ public class TopicsNightlyService {
         var found = new ArrayList<Candidate>();
         for (var workspaceId : workspaceIds) {
             try {
-                var counts = windowDAO.countByProject(workspaceId, from, to,
-                        Math.max(1, nightly.getProjectTimeout().toSeconds())).collectList().block();
+                var counts = windowDAO.countByProject(workspaceId, null, from, to, COUNT_SECONDS)
+                        .collectList().block();
                 for (var count : counts) {
                     if (count.traces() >= nightly.getMinVectors()) {
                         found.add(new Candidate(workspaceId, count.projectId(), count.traces(),

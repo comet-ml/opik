@@ -1,5 +1,6 @@
 package com.comet.opik.domain.topics;
 
+import com.comet.opik.api.events.ProjectsDeleted;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
@@ -9,6 +10,7 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import com.comet.opik.api.resources.utils.TestUtils;
+import com.comet.opik.api.resources.v1.events.TopicsProjectDeletedListener;
 import com.comet.opik.api.resources.v1.jobs.TopicsNightlyJob;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.TestIdGeneratorFactory;
@@ -141,6 +143,7 @@ class TopicsNightlyJobTest {
     private TopicsNightlyService nightlyService;
     private TopicVectorsDAO vectorsDAO;
     private TraceTopicsDAO traceTopicsDAO;
+    private TopicsProjectDeletedListener projectDeletedListener;
     private GuiceJobManager jobManager;
     private ClientSupport client;
     private String baseUrl;
@@ -148,7 +151,7 @@ class TopicsNightlyJobTest {
     @BeforeAll
     void beforeAll(ClientSupport client, TransactionTemplate template, GuiceJobManager jobManager,
             @Jit TopicsNightlyService nightlyService, @Jit TopicVectorsDAO vectorsDAO,
-            @Jit TraceTopicsDAO traceTopicsDAO) {
+            @Jit TraceTopicsDAO traceTopicsDAO, @Jit TopicsProjectDeletedListener projectDeletedListener) {
         this.client = client;
         this.baseUrl = TestUtils.getBaseUrl(client);
         this.template = template;
@@ -156,6 +159,7 @@ class TopicsNightlyJobTest {
         this.nightlyService = nightlyService;
         this.vectorsDAO = vectorsDAO;
         this.traceTopicsDAO = traceTopicsDAO;
+        this.projectDeletedListener = projectDeletedListener;
     }
 
     @AfterAll
@@ -243,6 +247,9 @@ class TopicsNightlyJobTest {
             assertThat(prototype.vector()).hasSize(TopicsRebuildService.DIMENSIONS * Float.BYTES);
             assertThat(prototype.topicId() == null || topicIds.contains(prototype.topicId())).isTrue();
         });
+        // Every Other group's centre is saved, the gated ones too.
+        assertThat(prototypes.stream().filter(prototype -> prototype.topicId() == null))
+                .hasSize(json(run.getFirst().stats()).path("other_groups").asInt());
 
         var traceTopics = traceTopicsDAO.findByProject(workspaceId, built).collectList().block();
         assertThat(traceTopics).hasSize(BUILT);
@@ -270,6 +277,9 @@ class TopicsNightlyJobTest {
             assertThat(body.path("lane").asText()).isEqualTo("batch");
             assertThat(body.path("max_tokens").asInt()).isEqualTo(TopicsRebuildService.QWEN_MAX_TOKENS);
             assertThat(body.path("schema")).isEqualTo(TopicPrompts.AUTHOR_SCHEMA);
+            // The service decodes the keys in schema order: the topics before Other.
+            assertThat(request.getBodyAsString())
+                    .contains("\"schema\":{\"type\":\"object\",\"properties\":{\"topics\":");
             assertThat(body.path("messages").get(0).path("content").asText()).contains("cluster 14:");
         });
 
@@ -323,6 +333,13 @@ class TopicsNightlyJobTest {
         assertThat(items(stats.path("born"))).extracting(JsonNode::asText).contains("Tire Pressure Checks");
         assertThat(stats.path("churn").isNumber()).isTrue();
         assertThat(stats.path("qwen").findValuesAsText("kind")).startsWith("revise", "verify");
+        // The service decodes the keys in schema order: assign first in revise, answers in verify.
+        var bodies = wireMock.findAll(postRequestedFor(urlEqualTo(GENERATE_PATH))).stream()
+                .map(request -> request.getBodyAsString()).toList();
+        assertThat(bodies).anySatisfy(body -> assertThat(body).contains("You maintain the topic list")
+                .contains("\"schema\":{\"type\":\"object\",\"properties\":{\"assign\":"));
+        assertThat(bodies).anySatisfy(body -> assertThat(body)
+                .contains("\"schema\":{\"type\":\"object\",\"properties\":{\"answers\":"));
 
         var keptId = before.getFirst().id();
         var retiredId = before.get(1).id();
@@ -515,6 +532,84 @@ class TopicsNightlyJobTest {
     }
 
     @Test
+    @DisplayName("an answer the service finds off-schema fails the run with qwen_bad_answer, without a retry")
+    void schemaViolation() {
+        var workspaceId = enabledWorkspace();
+        var projectId = UUID.randomUUID();
+        seed(workspaceId, projectId, 0, BUILT);
+        wireMock.stubFor(post(urlEqualTo(GENERATE_PATH)).willReturn(aResponse().withStatus(500)
+                .withHeader("Content-Type", "application/json")
+                .withBody("{\"error\":{\"code\":\"schema_violation\",\"message\":\"m\",\"retryable\":true}}")));
+
+        var result = nightlyService.runNight(start());
+
+        assertThat(result.failed()).isEqualTo(1);
+        assertThat(wireMock.findAll(postRequestedFor(urlEqualTo(GENERATE_PATH)))).hasSize(1);
+        assertFailedWithNothingWritten(workspaceId, projectId, "qwen_bad_answer");
+    }
+
+    @Test
+    @DisplayName("a run whose project another run saved meanwhile fails with save and takes its labels back")
+    void savedMeanwhile() {
+        var workspaceId = enabledWorkspace();
+        var projectId = UUID.randomUUID();
+        var today = LocalDate.now(ZoneOffset.UTC).atStartOfDay(ZoneOffset.UTC).toInstant();
+        seed(workspaceId, projectId, 0, BUILT, FIXTURE.night, today);
+        stubAnswer(FIXTURE.answer, 3_000);
+
+        try (var response = rebuild(workspaceId, projectId)) {
+            assertThat(response.getStatus()).isEqualTo(202);
+        }
+        // While Qwen answers, another run (its Redis lock lost) saves the project.
+        Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> assertThat(
+                wireMock.findAll(postRequestedFor(urlEqualTo(GENERATE_PATH)))).hasSize(1));
+        var other = UUID.randomUUID();
+        template.inTransaction(WRITE, handle -> {
+            handle.attach(TopicDAO.class).insertState(TopicProjectState.builder()
+                    .projectId(projectId)
+                    .workspaceId(workspaceId)
+                    .rebuilds(1)
+                    .firstBuiltAt(today)
+                    .lastRunId(other)
+                    .lastSuccessAt(today)
+                    .windowUntil(today)
+                    .build());
+            return null;
+        });
+
+        Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> assertThat(runs(projectId))
+                .singleElement().satisfies(run -> {
+                    assertThat(run.status()).isEqualTo(TopicRun.Status.FAILED);
+                    assertThat(run.errorCode()).isEqualTo("save");
+                    assertThat(run.errorMessage()).contains("another run saved this project meanwhile");
+                }));
+        assertThat(topics(projectId)).isEmpty();
+        assertThat(state(projectId).lastRunId()).isEqualTo(other);
+        assertThat(traceTopicsDAO.findByProject(workspaceId, projectId).collectList().block()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("deleting a project deletes its topics, prototypes, state and runs")
+    void projectDeleted() {
+        var workspaceId = enabledWorkspace();
+        var projectId = UUID.randomUUID();
+        var kept = UUID.randomUUID();
+        seed(workspaceId, projectId, 0, BUILT);
+        seed(workspaceId, kept, 0, BUILT);
+        stubAnswer(FIXTURE.answer);
+        assertThat(nightlyService.runNight(start()).saved()).isEqualTo(2);
+
+        projectDeletedListener.onProjectsDeleted(new ProjectsDeleted(Set.of(projectId), workspaceId, "test"));
+
+        assertThat(topics(projectId)).isEmpty();
+        assertThat(prototypes(projectId)).isEmpty();
+        assertThat(state(projectId)).isNull();
+        assertThat(runs(projectId)).isEmpty();
+        assertThat(topics(kept)).isNotEmpty();
+        assertThat(runs(kept)).hasSize(1);
+    }
+
+    @Test
     @DisplayName("the internal endpoint starts a first build now, and refuses the same night twice")
     void rebuildByHand() {
         var workspaceId = enabledWorkspace();
@@ -547,6 +642,9 @@ class TopicsNightlyJobTest {
         }
         try (var response = rebuild(workspaceId, UUID.randomUUID(),
                 LocalDate.now(ZoneOffset.UTC).plusDays(2).toString())) {
+            assertThat(response.getStatus()).isEqualTo(400);
+        }
+        try (var response = rebuild(workspaceId, UUID.randomUUID(), "-999999999-01-05")) {
             assertThat(response.getStatus()).isEqualTo(400);
         }
     }
@@ -866,11 +964,19 @@ class TopicsNightlyJobTest {
     }
 
     private void stubAnswer(JsonNode output) {
-        stubAnswer(output, null);
+        stubAnswer(output, null, 0);
     }
 
     /** Answers {@code output} to the calls whose body contains {@code prompt}, or to every call when it is null. */
     private void stubAnswer(JsonNode output, String prompt) {
+        stubAnswer(output, prompt, 0);
+    }
+
+    private void stubAnswer(JsonNode output, int delayMillis) {
+        stubAnswer(output, null, delayMillis);
+    }
+
+    private void stubAnswer(JsonNode output, String prompt, int delayMillis) {
         ObjectNode body = InferenceJson.MAPPER.createObjectNode();
         body.put("request_id", "r-1");
         body.putObject("usage").put("input_tokens", 1_000).put("output_tokens", 200);
@@ -883,6 +989,7 @@ class TopicsNightlyJobTest {
         }
         wireMock.stubFor(request.willReturn(aResponse().withStatus(200)
                 .withHeader("Content-Type", "application/json")
+                .withFixedDelay(delayMillis)
                 .withBody(body.toString())));
     }
 

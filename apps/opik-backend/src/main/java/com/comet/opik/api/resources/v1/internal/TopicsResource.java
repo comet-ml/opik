@@ -41,12 +41,15 @@ import java.util.UUID;
 @Tag(name = "Topics", description = "Internal topics operations")
 public class TopicsResource {
 
+    /** The oldest night a run may take, in days before today. */
+    private static final int MAX_NIGHT_AGE_DAYS = 365;
+
     private final @NonNull TopicsNightlyService nightlyService;
     private final @NonNull @Config("topics") TopicsConfig config;
 
     @POST
     @Path("/projects/{projectId}/run")
-    @Operation(operationId = "runProjectTopics", summary = "Run a project's topics now", description = "Starts the project's run for the night (default today, UTC; at most tomorrow) in the background and returns its run id: a nightly update when the project has live topics, else a first build. The run's outcome is its topic_runs row. The night's rules apply: the workspace is opted in to topics, the window holds topics.nightly.minVectors vectors of the project, one run by hand at a time.", responses = {
+    @Operation(operationId = "runProjectTopics", summary = "Run a project's topics now", description = "Starts the project's run for the night (default today, UTC; at most tomorrow, at least 365 days ago) in the background and returns its run id: a nightly update when the project has live topics, else a first build. The run's outcome is its topic_runs row. The night's rules apply: the workspace is opted in to topics, the window holds topics.nightly.minVectors vectors of the project, one run by hand at a time.", responses = {
             @ApiResponse(responseCode = "202", description = "The run started"),
             @ApiResponse(responseCode = "400", description = "The night is not a date, or is after tomorrow"),
             @ApiResponse(responseCode = "409", description = "The nightly job is off, the workspace is not opted in, the window is too small, a run is in progress, or the project's last saved run already covers the night"),
@@ -63,7 +66,7 @@ public class TopicsResource {
 
     @POST
     @Path("/nights/run")
-    @Operation(operationId = "runTopicsNight", summary = "Run the topics night now", description = "Runs the whole night (default today, UTC; at most tomorrow) in the background, as the scheduled job does and under the same lock, which is released when it ends. Each project's outcome is its topic_runs row.", responses = {
+    @Operation(operationId = "runTopicsNight", summary = "Run the topics night now", description = "Runs the whole night (default today, UTC; at most tomorrow, at least 365 days ago) in the background, as the scheduled job does and under the same lock, which is released when it ends. Each project's outcome is its topic_runs row.", responses = {
             @ApiResponse(responseCode = "202", description = "The night started"),
             @ApiResponse(responseCode = "400", description = "The night is not a date, or is after tomorrow"),
             @ApiResponse(responseCode = "409", description = "The nightly job is off, or a night is in progress"),
@@ -91,6 +94,11 @@ public class TopicsResource {
         }
         if (runNight.isAfter(today.plusDays(1))) {
             throw new BadRequestException("night must not be after tomorrow, night '%s'".formatted(runNight));
+        }
+        // Older than any window the vectors keep: the backfill reaches 365 days back at most.
+        if (runNight.isBefore(today.minusDays(MAX_NIGHT_AGE_DAYS))) {
+            throw new BadRequestException("night must be within '%s' days before today, night '%s'"
+                    .formatted(MAX_NIGHT_AGE_DAYS, runNight));
         }
         return runNight;
     }
