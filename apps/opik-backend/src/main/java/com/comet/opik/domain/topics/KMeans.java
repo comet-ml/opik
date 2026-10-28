@@ -124,6 +124,10 @@ public class KMeans {
             }
             update(x, w, n, d, k, labels, distance, centres);
         }
+        if (iterations == MAX_ITERATIONS) {
+            // Stopped by the cap after an update: as scikit-learn, label and score against the centres returned.
+            assign(x, centres, n, d, k, labels, distance);
+        }
         double inertia = 0;
         for (int i = 0; i < n; i++) {
             inertia += w[i] * distance[i];

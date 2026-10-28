@@ -35,7 +35,8 @@ public class AuthorApplier {
         var topics = new ArrayList<NewTopic>();
         int taken = 0;
         for (var topic : ordered) {
-            if (isCatchAll(topic.name())) {
+            // A blank name is no name: its groups go to Other, as a catch-all's do.
+            if (isCatchAll(topic.name()) || TopicText.pythonStrip(topic.name()).isEmpty()) {
                 continue;
             }
             if (taken++ >= maxTopics) {
@@ -51,7 +52,7 @@ public class AuthorApplier {
                 continue;
             }
             mine.forEach(j -> claimed[j] = true);
-            topics.add(new NewTopic(TopicText.pythonStrip(topic.name()), TopicText.pythonStrip(topic.definition()),
+            topics.add(new NewTopic(TopicText.name(topic.name()), TopicText.pythonStrip(topic.definition()),
                     List.copyOf(mine)));
         }
         var other = new ArrayList<Integer>();

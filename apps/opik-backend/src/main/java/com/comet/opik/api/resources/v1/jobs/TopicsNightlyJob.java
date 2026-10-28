@@ -18,8 +18,6 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import java.time.Duration;
 import java.time.Instant;
 
-import static com.comet.opik.infrastructure.lock.LockService.Lock;
-
 /**
  * The topics nightly job, on {@code topics.nightly.schedule} (UTC). Every pod fires it; the first to take the night lock
  * runs the night and holds the lock until it expires ({@link TopicsNightlyService#lease()}), so no other pod runs the
@@ -30,8 +28,6 @@ import static com.comet.opik.infrastructure.lock.LockService.Lock;
 @DisallowConcurrentExecution
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class TopicsNightlyJob extends Job {
-
-    static final Lock NIGHT_LOCK = new Lock("topics:nightly:lock");
 
     private final @NonNull @Config("topics") TopicsConfig config;
     private final @NonNull TopicsNightlyService nightlyService;
@@ -44,10 +40,10 @@ public class TopicsNightlyJob extends Job {
         }
         var start = Instant.now();
         lockService.bestEffortLock(
-                NIGHT_LOCK,
+                TopicsNightlyService.NIGHT_LOCK,
                 Mono.fromRunnable(() -> nightlyService.runNight(start)).subscribeOn(Schedulers.boundedElastic()),
                 Mono.fromRunnable(() -> log.info("Topics night skipped, lock '{}' is held by another instance",
-                        NIGHT_LOCK.key())),
+                        TopicsNightlyService.NIGHT_LOCK.key())),
                 nightlyService.lease(),
                 Duration.ZERO,
                 true)

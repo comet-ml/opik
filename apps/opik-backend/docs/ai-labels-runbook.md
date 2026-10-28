@@ -98,8 +98,31 @@ LIMIT 1 BY workspace_id, project_id, task, trace_id, key;
 
 The topic vectors job stores one bge-small vector (384 numbers, unit length) for every trace that has a `done`
 `trace_summary` label. It embeds the summary text through opik-inference `/v1/embed` and writes the row to the
-ClickHouse table `topic_vectors`, one row per (trace, task version). It reads the same workspaces as ai-labels: there is
-no separate opt-in. It is off by default everywhere.
+ClickHouse table `topic_vectors`, one row per (trace, task version). It is off by default everywhere.
+
+### Opting workspaces in and out
+
+Topics have their own opt-in, the `topic_workspaces` table in the state database (MySQL). It works like
+`ai_label_workspaces`, and there is no API. Topics read the ai-labels `trace_summary`, so a workspace runs topics only
+when it is enabled in **both** tables. Opting a workspace in to ai-labels does not turn topics on.
+
+```sql
+-- MySQL: enable (or re-enable) topics for a workspace. It must also be enabled in ai_label_workspaces.
+INSERT INTO topic_workspaces (workspace_id, enabled, added_by)
+VALUES ('<workspace_id>', TRUE, '<your name>')
+ON DUPLICATE KEY UPDATE enabled = TRUE, added_by = '<your name>';
+
+-- MySQL: disable topics for a workspace. The next tick drops it. Stored vectors stay.
+UPDATE topic_workspaces SET enabled = FALSE WHERE workspace_id = '<workspace_id>';
+
+-- MySQL: the workspaces topics run for
+SELECT t.workspace_id, t.added_at, t.added_by
+FROM topic_workspaces t JOIN ai_label_workspaces a ON a.workspace_id = t.workspace_id
+WHERE t.enabled = TRUE AND a.enabled = TRUE ORDER BY t.added_at;
+```
+
+A workspace opted in after its traces were labeled gets vectors for the last 7 days (the long window). For older
+labels, see "Backfill".
 
 ### Turning it on
 
@@ -152,7 +175,7 @@ Older ones need a backfill.
 ### Backfill
 
 The job only looks back as far as the long window (7 days). To write vectors for older labels, for example when
-topics is turned on weeks after ai-labels or a workspace is opted in again:
+topics is turned on weeks after ai-labels, or a workspace is opted in to topics later than to ai-labels:
 
 1. Set `TOPICS_VECTORS_BACKFILL_WINDOW` to the age to cover (for example `30d`), and restart.
 2. Delete the Redis key `topics:vectors:long_window` to start the pass now. Otherwise it starts at the next interval.
@@ -172,15 +195,15 @@ Run both queries for one workspace. The counts must match, up to the traces labe
 stays means the job skips traces: see `topics.vectors.skipped` and the logs.
 
 ```sql
--- ClickHouse: traces with a done trace_summary label in the last 24 hours (latest status per trace and version)
+-- ClickHouse: traces with a done trace_summary label in the last 24 hours (latest status per trace, as the job reads it)
 SELECT count()
 FROM (
     SELECT status, updated_at
     FROM ai_label_status
     WHERE workspace_id = '<workspace_id>'
       AND task = 'trace_summary'
-    ORDER BY workspace_id, project_id, task, trace_id, task_version, updated_at DESC
-    LIMIT 1 BY workspace_id, project_id, task, trace_id, task_version
+    ORDER BY workspace_id, project_id, task, trace_id, updated_at DESC
+    LIMIT 1 BY workspace_id, project_id, task, trace_id
 )
 WHERE status = 'done'
   AND updated_at >= now64(6) - INTERVAL 24 HOUR;
@@ -198,8 +221,8 @@ FROM (
               FROM ai_label_status
               WHERE workspace_id = '<workspace_id>'
                 AND task = 'trace_summary'
-              ORDER BY workspace_id, project_id, task, trace_id, task_version, updated_at DESC
-              LIMIT 1 BY workspace_id, project_id, task, trace_id, task_version
+              ORDER BY workspace_id, project_id, task, trace_id, updated_at DESC
+              LIMIT 1 BY workspace_id, project_id, task, trace_id
           )
           WHERE status = 'done'
             AND updated_at >= now64(6) - INTERVAL 24 HOUR
@@ -285,7 +308,7 @@ or to Other. It writes:
 |---|---|---|
 | `topics` | MySQL | One row per topic: name, definition, `born` (the night), `size` (window traces), and the nightly update's lifecycle columns: `low_nights`, `lo7`, `hi7`, `inactive_since`, `retired_at`, `retired_reason`. A retired topic keeps its row; its id is never reused. |
 | `topic_prototypes` | MySQL | The vectors traces are assigned by, several per topic, and the known-Other ones (`topic_id` null). |
-| `topic_project_state` | MySQL | One row per project with a saved list: `rebuilds` (saved nights), `last_run_id`, `window_until`. |
+| `topic_project_states` | MySQL | One row per project with a saved list: `rebuilds` (saved nights), `last_run_id`, `window_until`. |
 | `topic_runs` | MySQL | One row per run: `running`, then `saved` or `failed` with `error_code`. Kept 90 days. |
 | `trace_topics` | ClickHouse | One row per window trace and run: its `topic_id`, the all-zeros id for Other. The latest row wins. |
 
@@ -455,25 +478,42 @@ GROUP BY topic_id
 ORDER BY traces DESC;
 ```
 
-Each run logs at INFO, by run id: every prompt (author, or revise, verify and naming), Qwen's raw answer to each with
-its token counts, and one summary line. A first build's line has the window, vectors, unique texts, k, seed, the
-topics with their sizes, the Other share and the phase timings; a nightly update's has the review flag, the
-unassigned, candidates and big counts, the topics born and retired, the Other share, the churn and the timings. Search
-the logs for `Topics run '<run_id>'`.
+Each run logs at INFO, by run id: Qwen's token counts for each call, and one summary line. A first build's line has the
+window, vectors, unique texts, k, seed, the topics with their sizes, the Other share and the phase timings; a nightly
+update's has the review flag, the unassigned, candidates and big counts, the topics born and retired, the Other share,
+the churn and the timings. The prompts (author, or revise, verify and naming) and Qwen's raw answers hold
+trace-derived text, so they are logged at DEBUG only (logger `com.comet.opik.domain.topics.TopicsRebuildService`).
+Search the logs for `Topics run '<run_id>'`.
 
-### Running a project by hand
+### Running by hand
 
-To build a project now instead of waiting for the night, call the internal endpoint from inside the cluster:
+Two internal endpoints start work now instead of waiting for the night. Call them from inside the cluster. Both answer
+`501` when `TOPICS_ENABLED` is off and `409` when `TOPICS_NIGHTLY_ENABLED` is off. Both take `&night=yyyy-MM-dd`
+(`?night=` for the night endpoint): the night is today (UTC) by default, so the window ends at today's start. `night`
+is at most tomorrow, whose window holds today's traces so far.
+
+**One project.** The night's rules apply: the workspace is opted in to topics, and the project's window holds at least
+`TOPICS_NIGHTLY_MIN_VECTORS` vectors. Only one run by hand goes at a time across the cluster.
 
 ```bash
-curl -X POST "http://<opik-backend>:8080/v1/internal/topics/projects/<project_id>/rebuild?workspace_id=<workspace_id>"
+curl -X POST "http://<opik-backend>:8080/v1/internal/topics/projects/<project_id>/run?workspace_id=<workspace_id>"
 ```
 
-It answers `202` with the `run_id`, and the run goes on in the background with the same timeout; read its outcome in
-`topic_runs`. The night is today (UTC), so the window ends at today's start. Add `&night=yyyy-MM-dd` for another
-night's window; `night` is at most tomorrow, whose window holds today's traces so far. It answers `409` when a run of the project
-is in progress, or the project already has a list (a run by hand is a first build only; the night updates a list),
-and `501` when `TOPICS_ENABLED` is off. It does not check the workspace's ai-labels opt-in or `TOPICS_NIGHTLY_MIN_VECTORS`.
+It answers `202` with the `run_id`. The run goes on in the background with the same timeout; read its outcome in
+`topic_runs`. The mode is the night's: a `nightly_update` when the project has live topics, else a `first_build`. It
+answers `409` when the workspace is not opted in, the window is too small (or the project is not the workspace's), a run
+of the project or another run by hand is in progress, or the project's last saved run already covers the night (its
+`window_until` is at or after the night's start).
+
+**A whole night.** It runs every eligible project, as the scheduled job does, under the same night lock. The lock is
+released when the night ends, so the scheduled job is skipped only while a night started by hand is still running.
+
+```bash
+curl -X POST "http://<opik-backend>:8080/v1/internal/topics/nights/run"
+```
+
+It answers `202` with the `night`, and `409` when a night is in progress. Each project's outcome is its `topic_runs`
+row.
 
 To build a project that already has a list again (for example after a bad first build), delete its list first. Its
 `trace_topics` rows stay until the new run replaces them:
@@ -482,7 +522,7 @@ To build a project that already has a list again (for example after a bad first 
 -- MySQL: forget a project's list, so the next night (or the endpoint) builds it again
 DELETE FROM topics WHERE project_id = '<project_id>';
 DELETE FROM topic_prototypes WHERE project_id = '<project_id>';
-DELETE FROM topic_project_state WHERE project_id = '<project_id>';
+DELETE FROM topic_project_states WHERE project_id = '<project_id>';
 ```
 
 ### What to watch

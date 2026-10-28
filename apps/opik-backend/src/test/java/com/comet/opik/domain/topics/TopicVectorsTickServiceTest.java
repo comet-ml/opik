@@ -392,6 +392,8 @@ class TopicVectorsTickServiceTest {
 
             verify(lockService).lockUsingToken(TopicVectorsTickService.LONG_WINDOW_LOCK, lease);
             verify(lockService).unlockUsingToken(TopicVectorsTickService.LONG_WINDOW_LOCK);
+            // Not drained: due again after one normal tick (1.5 tick intervals), so the short window is served too.
+            verify(lockService).lockUsingToken(TopicVectorsTickService.LONG_WINDOW_LOCK, Duration.ofSeconds(90));
             verify(lockService, never()).lockUsingToken(TopicVectorsTickService.LONG_WINDOW_LOCK,
                     Duration.ofDays(1));
 
@@ -415,6 +417,7 @@ class TopicVectorsTickServiceTest {
             var result = service.tick(NOW);
 
             assertThat(result.skipped()).isEqualTo(Map.of(TopicVectorsTickService.EMBED_FAILED, 1));
+            verify(lockService).lockUsingToken(TopicVectorsTickService.LONG_WINDOW_LOCK, Duration.ofSeconds(90));
             verify(lockService, never()).lockUsingToken(TopicVectorsTickService.LONG_WINDOW_LOCK,
                     Duration.ofDays(1));
         }
@@ -748,7 +751,8 @@ class TopicVectorsTickServiceTest {
     }
 
     private static TopicSummary summary(TopicVectorCandidate candidate, int taskVersion, String text) {
-        return TopicSummary.builder().traceId(candidate.traceId()).taskVersion(taskVersion).summary(text).build();
+        return TopicSummary.builder().projectId(candidate.projectId()).traceId(candidate.traceId())
+                .taskVersion(taskVersion).summary(text).build();
     }
 
     private static TopicVectorCandidate candidate(String workspaceId, Instant statusUpdatedAt) {

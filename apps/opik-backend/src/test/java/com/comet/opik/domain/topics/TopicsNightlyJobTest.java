@@ -164,7 +164,11 @@ class TopicsNightlyJobTest {
     @BeforeEach
     void setUp() {
         // Each test builds its own workspaces: the earlier ones must not be eligible again.
-        template.inTransaction(WRITE, handle -> handle.execute("UPDATE ai_label_workspaces SET enabled = FALSE"));
+        template.inTransaction(WRITE, handle -> {
+            handle.execute("UPDATE ai_label_workspaces SET enabled = FALSE");
+            handle.execute("UPDATE topic_workspaces SET enabled = FALSE");
+            return null;
+        });
         wireMock.resetAll();
     }
 
@@ -506,6 +510,85 @@ class TopicsNightlyJobTest {
     }
 
     @Test
+    @DisplayName("a workspace opted in to ai-labels but not to topics is neither built by the night nor by hand")
+    void topicsOptIn() {
+        var workspaceId = aiLabelsOnlyWorkspace();
+        var projectId = UUID.randomUUID();
+        seed(workspaceId, projectId, 0, BUILT);
+        stubAnswer(FIXTURE.answer);
+
+        assertThat(nightlyService.runNight(start()).saved()).isZero();
+        assertThat(runs(projectId)).isEmpty();
+        try (var response = rebuild(workspaceId, projectId, night().toString())) {
+            assertThat(response.getStatus()).isEqualTo(409);
+        }
+        assertThat(runs(projectId)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("by hand, a window under minVectors, or another workspace's project, is refused")
+    void byHandFollowsTheNightsRules() {
+        var workspaceId = enabledWorkspace();
+        var small = UUID.randomUUID();
+        seed(workspaceId, small, BUILT, SMALL);
+        var foreign = UUID.randomUUID();
+        seed(enabledWorkspace(), foreign, 0, BUILT);
+
+        try (var response = rebuild(workspaceId, small, night().toString())) {
+            assertThat(response.getStatus()).isEqualTo(409);
+        }
+        try (var response = rebuild(workspaceId, foreign, night().toString())) {
+            assertThat(response.getStatus()).isEqualTo(409);
+        }
+        assertThat(runs(small)).isEmpty();
+        assertThat(runs(foreign)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("the night endpoint runs the whole night now and builds the eligible project")
+    void runNightByHand() {
+        var workspaceId = enabledWorkspace();
+        var projectId = UUID.randomUUID();
+        seed(workspaceId, projectId, 0, BUILT);
+        stubAnswer(FIXTURE.answer);
+
+        try (var response = runNight(night().toString())) {
+            assertThat(response.getStatus()).isEqualTo(202);
+            assertThat(response.readEntity(JsonNode.class).path("night").asText()).isEqualTo(night().toString());
+        }
+        Awaitility.await().atMost(Duration.ofSeconds(60)).untilAsserted(() -> assertThat(runs(projectId))
+                .singleElement().satisfies(run -> assertThat(run.status()).isEqualTo(TopicRun.Status.SAVED)));
+        // Released when the night ended: a second night can start.
+        Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
+            try (var response = runNight(night().toString())) {
+                assertThat(response.getStatus()).isEqualTo(202);
+            }
+        });
+        try (var response = runNight("tomorrow")) {
+            assertThat(response.getStatus()).isEqualTo(400);
+        }
+    }
+
+    @Test
+    @DisplayName("housekeeping leaves a run younger than a run can last: it may be a live run started by hand")
+    void housekeepingSparesALiveRun() {
+        var workspaceId = enabledWorkspace();
+        var projectId = UUID.randomUUID();
+        var runId = UUID.randomUUID();
+        template.inTransaction(WRITE, handle -> {
+            handle.attach(TopicRunDAO.class).insert(TopicRun.builder().runId(runId).workspaceId(workspaceId)
+                    .projectId(projectId).mode(TopicRun.Mode.FIRST_BUILD).status(TopicRun.Status.RUNNING)
+                    .startedAt(Instant.now().minus(Duration.ofMinutes(2))).build());
+            return null;
+        });
+
+        nightlyService.runNight(Instant.now());
+
+        assertThat(runs(projectId)).singleElement()
+                .satisfies(run -> assertThat(run.status()).isEqualTo(TopicRun.Status.RUNNING));
+    }
+
+    @Test
     @DisplayName("a run left running by an earlier night is failed as abandoned")
     void abandonedRun() {
         var workspaceId = enabledWorkspace();
@@ -645,9 +728,28 @@ class TopicsNightlyJobTest {
         var workspaceId = UUID.randomUUID().toString();
         template.inTransaction(WRITE, handle -> {
             handle.attach(AiLabelWorkspaceDAO.class).upsert(workspaceId, true, "test");
+            handle.attach(TopicWorkspaceDAO.class).upsert(workspaceId, true, "test");
             return null;
         });
         return workspaceId;
+    }
+
+    /** Opted in to ai-labels only: its vectors exist (written before topics were turned off for it). */
+    private String aiLabelsOnlyWorkspace() {
+        var workspaceId = UUID.randomUUID().toString();
+        template.inTransaction(WRITE, handle -> {
+            handle.attach(AiLabelWorkspaceDAO.class).upsert(workspaceId, true, "test");
+            handle.attach(TopicWorkspaceDAO.class).upsert(workspaceId, false, "test");
+            return null;
+        });
+        return workspaceId;
+    }
+
+    private Response runNight(String night) {
+        var target = client.target("%s/v1/internal/topics/nights/run".formatted(baseUrl));
+        return (night == null ? target : target.queryParam("night", night))
+                .request(MediaType.APPLICATION_JSON_TYPE)
+                .post(Entity.json(""));
     }
 
     private Response rebuild(String workspaceId, UUID projectId) {
@@ -655,7 +757,7 @@ class TopicsNightlyJobTest {
     }
 
     private Response rebuild(String workspaceId, UUID projectId, String night) {
-        var target = client.target("%s/v1/internal/topics/projects/%s/rebuild".formatted(baseUrl, projectId))
+        var target = client.target("%s/v1/internal/topics/projects/%s/run".formatted(baseUrl, projectId))
                 .queryParam("workspace_id", workspaceId);
         return (night == null ? target : target.queryParam("night", night))
                 .request(MediaType.APPLICATION_JSON_TYPE)

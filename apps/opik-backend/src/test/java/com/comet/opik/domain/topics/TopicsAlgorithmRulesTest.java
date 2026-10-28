@@ -192,6 +192,27 @@ class TopicsAlgorithmRulesTest {
         }
 
         @Test
+        @DisplayName("a blank name is no name: its groups go to Other and it takes no slot")
+        void blankName() {
+            var answer = new AuthorAnswer(List.of(
+                    new AuthorAnswer.Topic(" \u00A0 ", "d", List.of(1)),
+                    new AuthorAnswer.Topic("Billing", "d", List.of(2))), List.of());
+            var applied = AuthorApplier.apply(answer, groups, 1);
+            assertThat(applied.topics()).extracting(AuthorApplier.NewTopic::name).containsExactly("Billing");
+            assertThat(applied.other()).contains(1).doesNotContain(2);
+        }
+
+        @Test
+        @DisplayName("a name over 255 code points is cut to 255, so the save can't fail on it")
+        void longName() {
+            var name = "\uD83D\uDE00".repeat(300);
+            var answer = new AuthorAnswer(List.of(new AuthorAnswer.Topic(name, "d", List.of(1))), List.of());
+            var stored = AuthorApplier.apply(answer, groups, 10).topics().getFirst().name();
+            assertThat(stored.codePointCount(0, stored.length())).isEqualTo(TopicText.MAX_NAME_LENGTH);
+            assertThat(TopicText.name(" Billing ")).isEqualTo("Billing");
+        }
+
+        @Test
         @DisplayName("the name key strips, collapses whitespace as Python does, and lower-cases")
         void nameKey() {
             assertThat(AuthorApplier.nameKey("\u00A0 Email \t\u2003Drafting \n")).isEqualTo("email drafting");

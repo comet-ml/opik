@@ -54,11 +54,12 @@ class TraceDeletedListenerTopicVectorsTest {
     }
 
     @Test
-    @DisplayName("the vectors and the trace topics are deleted before ai-labels")
+    @DisplayName("the vectors and the trace topics are deleted after ai-labels, so a tick that read the status first "
+            + "has written by then")
     void order() {
         listener.onTracesDeleted(event());
 
-        assertThat(deleted).containsExactly("topic_vectors", "trace_topics", "ai_labels", "ai_label_status", "spans");
+        assertThat(deleted).containsExactly("ai_labels", "ai_label_status", "topic_vectors", "trace_topics", "spans");
     }
 
     @Test
@@ -79,7 +80,7 @@ class TraceDeletedListenerTopicVectorsTest {
 
         listener.onTracesDeleted(event());
 
-        assertThat(deleted).containsExactly("trace_topics", "ai_labels", "ai_label_status", "spans");
+        assertThat(deleted).containsExactly("ai_labels", "ai_label_status", "trace_topics", "spans");
     }
 
     @Test
@@ -90,7 +91,7 @@ class TraceDeletedListenerTopicVectorsTest {
 
         listener.onTracesDeleted(event());
 
-        assertThat(deleted).containsExactly("topic_vectors", "ai_labels", "ai_label_status", "spans");
+        assertThat(deleted).containsExactly("ai_labels", "ai_label_status", "topic_vectors", "spans");
     }
 
     private Mono<Void> record(String table) {

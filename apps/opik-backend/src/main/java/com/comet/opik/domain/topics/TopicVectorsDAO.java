@@ -81,7 +81,6 @@ public class TopicVectorsDAO {
                 FROM topic_vectors
                 WHERE workspace_id = :workspace_id
                 AND trace_created_at >= fromUnixTimestamp64Micro(:created_after_micros, 'UTC')
-                AND trace_id IN (SELECT trace_id FROM done)
             )
             ORDER BY updated_at, trace_id
             LIMIT :limit
@@ -91,15 +90,17 @@ public class TopicVectorsDAO {
 
     /** The runbook's summary read: each trace's latest output row, its text extracted in SQL exactly as stored. */
     private static final String FIND_SUMMARIES = """
-            SELECT trace_id, task_version, JSONExtractString(output, 'summary') AS summary
+            SELECT project_id, trace_id, task_version, JSONExtractString(output, 'summary') AS summary
             FROM ai_labels
             WHERE workspace_id = :workspace_id
             AND task = :task
             AND key = 'output'
+            AND id_at >= toDateTime(:min_id_at_seconds, 'UTC')
             AND trace_id IN :trace_ids
             ORDER BY workspace_id, project_id, task, trace_id, key, updated_at DESC
             LIMIT 1 BY workspace_id, project_id, task, trace_id, key
-            SETTINGS log_comment = '<log_comment>', max_execution_time = <max_execution_time>
+            SETTINGS log_comment = '<log_comment>', max_execution_time = <max_execution_time>,
+                max_rows_to_read = <max_rows_to_read>, max_memory_usage = <max_memory_usage>
             """;
 
     private static final String FIND_BY_TRACE_IDS = """
@@ -230,16 +231,24 @@ public class TopicVectorsDAO {
         if (traceIds.isEmpty()) {
             return Flux.empty();
         }
+        var find = config.getVectors().getFind();
+        // id_at is derived from the UUIDv7 trace id, so the oldest id bounds the partitions read.
+        long minIdAtSeconds = traceIds.stream().mapToLong(id -> id.getMostSignificantBits() >>> 16).min()
+                .orElseThrow() / 1000;
         var template = getSTWithLogComment(FIND_SUMMARIES, "topics:find_summaries", workspaceId, null,
                 "trace_ids=%d".formatted(traceIds.size()))
+                .add("max_rows_to_read", find.getMaxRowsToRead())
+                .add("max_memory_usage", find.getMaxMemoryUsage())
                 .add("max_execution_time", maxExecutionSeconds);
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> connection.createStatement(template.render())
                         .bind("workspace_id", workspaceId)
                         .bind("task", task)
+                        .bind("min_id_at_seconds", minIdAtSeconds)
                         .bind("trace_ids", traceIds.stream().map(UUID::toString).toArray(String[]::new))
                         .execute())
                 .flatMap(result -> result.map((row, metadata) -> TopicSummary.builder()
+                        .projectId(UUID.fromString(row.get("project_id", String.class)))
                         .traceId(UUID.fromString(row.get("trace_id", String.class)))
                         .taskVersion(row.get("task_version", Long.class).intValue())
                         .summary(row.get("summary", String.class))

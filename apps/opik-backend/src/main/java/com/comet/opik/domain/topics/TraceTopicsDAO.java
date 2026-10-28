@@ -135,6 +135,15 @@ public class TraceTopicsDAO {
             ;
             """;
 
+    /** The rows one run wrote: a run whose MySQL save failed takes them back. */
+    private static final String DELETE_BY_RUN_ID = """
+            DELETE FROM trace_topics
+            WHERE workspace_id = :workspace_id
+            AND project_id = :project_id
+            AND run_id = :run_id
+            SETTINGS log_comment = '<log_comment>'
+            """;
+
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull JsonEachRowBulkInsert jsonBulkInsert;
 
@@ -157,6 +166,19 @@ public class TraceTopicsDAO {
                     node.put("run_id", row.runId());
                     return node;
                 });
+    }
+
+    public Mono<Long> deleteByRunId(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull UUID runId) {
+        var template = getSTWithLogComment(DELETE_BY_RUN_ID, "topics:delete_run_trace_topics", workspaceId, null,
+                "project_id=%s, run_id=%s".formatted(projectId, runId));
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> connection.createStatement(template.render())
+                        .bind("workspace_id", workspaceId)
+                        .bind("project_id", projectId.toString())
+                        .bind("run_id", runId.toString())
+                        .execute())
+                .flatMap(result -> Mono.from(result.getRowsUpdated()))
+                .reduce(0L, Long::sum);
     }
 
     public Flux<TraceTopic> findByProject(@NonNull String workspaceId, @NonNull UUID projectId) {
