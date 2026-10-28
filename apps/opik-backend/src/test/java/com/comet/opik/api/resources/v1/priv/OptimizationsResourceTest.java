@@ -2539,8 +2539,10 @@ class OptimizationsResourceTest {
             for (int i = 0; i < 5; i++) {
                 var optimization = optimizationResourceClient.createPartialOptimization().build();
                 var id = optimizationResourceClient.create(optimization, apiKey, workspaceName);
-                createTrialWithUnfinishedTraceItem(id, true, apiKey, workspaceName);
-                optimizations.add(optimization.toBuilder().id(id).numTrials(1L).build());
+                for (int t = 0; t <= i; t++) {
+                    createTrialWithUnfinishedTraceItem(id, true, apiKey, workspaceName);
+                }
+                optimizations.add(optimization.toBuilder().id(id).numTrials((long) i + 1).build());
             }
 
             var page1 = optimizationResourceClient.find(
