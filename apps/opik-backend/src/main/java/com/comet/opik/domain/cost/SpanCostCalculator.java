@@ -10,6 +10,7 @@ import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 
 import java.math.BigDecimal;
+import java.math.MathContext;
 import java.util.Optional;
 
 @UtilityClass
@@ -36,8 +37,7 @@ class SpanCostCalculator {
         BigDecimal inputPrice = modelPrice.effectiveInputPrice(tierBasis);
         BigDecimal fiveMinuteWritePrice = orInputPrice(
                 modelPrice.effectiveCacheCreationInputTokenPrice(tierBasis), inputPrice);
-        BigDecimal oneHourWritePrice = orInputPrice(modelPrice.cacheCreationInputTokenPriceAbove1hr(),
-                fiveMinuteWritePrice);
+        BigDecimal oneHourWritePrice = oneHourWritePrice(modelPrice, tierBasis, fiveMinuteWritePrice);
         return cost(inputPrice, usage.inputTokens())
                 .add(cost(orInputPrice(modelPrice.effectiveCacheReadInputTokenPrice(tierBasis), inputPrice),
                         usage.cacheReadInputTokens()))
@@ -49,11 +49,14 @@ class SpanCostCalculator {
     private static BigDecimal bedrockCost(ModelPrice modelPrice, BedrockConverseNativeUsage usage) {
         int tierBasis = tierBasis(usage.toOpenAiLike().promptTokens());
         BigDecimal inputPrice = modelPrice.effectiveInputPrice(tierBasis);
+        BigDecimal fiveMinuteWritePrice = orInputPrice(
+                modelPrice.effectiveCacheCreationInputTokenPrice(tierBasis), inputPrice);
         return cost(inputPrice, usage.inputTokens())
                 .add(cost(orInputPrice(modelPrice.effectiveCacheReadInputTokenPrice(tierBasis), inputPrice),
                         usage.cacheReadInputTokens()))
-                .add(cost(orInputPrice(modelPrice.effectiveCacheCreationInputTokenPrice(tierBasis), inputPrice),
-                        usage.cacheWriteInputTokens()))
+                .add(cost(fiveMinuteWritePrice, usage.cacheWriteInputTokens() - usage.cacheWrite1hInputTokens()))
+                .add(cost(oneHourWritePrice(modelPrice, tierBasis, fiveMinuteWritePrice),
+                        usage.cacheWrite1hInputTokens()))
                 .add(cost(modelPrice.effectiveOutputPrice(tierBasis), usage.outputTokens()));
     }
 
@@ -67,8 +70,8 @@ class SpanCostCalculator {
                 .add(cost(orInputPrice(modelPrice.effectiveCacheReadInputTokenPrice(tierBasis), inputPrice),
                         cachedTokens))
                 .add(cost(outputPrice, usage.candidatesTokenCount()))
-                .add(cost(orInputPrice(modelPrice.outputReasoningTokenPrice(), outputPrice),
-                        usage.thoughtsTokenCount()));
+                .add(cost(orInputPrice(scaledToTier(modelPrice.outputReasoningTokenPrice(), modelPrice.outputPrice(),
+                        outputPrice), outputPrice), usage.thoughtsTokenCount()));
     }
 
     private static BigDecimal openAiCost(ModelPrice modelPrice, OpenAiNativeUsage usage) {
@@ -91,15 +94,20 @@ class SpanCostCalculator {
                 ? Math.clamp(usage.reasoningTokens(), 0, textCompletionTokens)
                 : 0;
 
+        BigDecimal fiveMinuteWritePrice = orInputPrice(
+                modelPrice.effectiveCacheCreationInputTokenPrice(tierBasis), inputPrice);
         return cost(inputPrice, textPromptTokens)
-                .add(cost(modelPrice.inputAudioTokenPrice(), audioPromptTokens))
+                .add(cost(scaledToTier(modelPrice.inputAudioTokenPrice(), modelPrice.inputPrice(), inputPrice),
+                        audioPromptTokens))
                 .add(cost(orInputPrice(modelPrice.effectiveCacheReadInputTokenPrice(tierBasis), inputPrice),
                         usage.cachedTokens()))
-                .add(cost(orInputPrice(modelPrice.effectiveCacheCreationInputTokenPrice(tierBasis), inputPrice),
-                        usage.cacheWriteTokens()))
+                .add(cost(fiveMinuteWritePrice, usage.cacheWriteTokens() - usage.cacheWrite1hTokens()))
+                .add(cost(oneHourWritePrice(modelPrice, tierBasis, fiveMinuteWritePrice), usage.cacheWrite1hTokens()))
                 .add(cost(outputPrice, textCompletionTokens - reasoningTokens))
-                .add(cost(modelPrice.outputAudioTokenPrice(), audioCompletionTokens))
-                .add(cost(modelPrice.outputReasoningTokenPrice(), reasoningTokens));
+                .add(cost(scaledToTier(modelPrice.outputAudioTokenPrice(), modelPrice.outputPrice(), outputPrice),
+                        audioCompletionTokens))
+                .add(cost(scaledToTier(modelPrice.outputReasoningTokenPrice(), modelPrice.outputPrice(), outputPrice),
+                        reasoningTokens));
     }
 
     private static BigDecimal totalsCost(ModelPrice modelPrice, OpenAiLikeUsage usage) {
@@ -136,6 +144,23 @@ class SpanCostCalculator {
         return Optional.ofNullable(usage.original().keys().get(name))
                 .or(() -> Optional.ofNullable(usage.original().outerKeys().get(name)))
                 .orElse(0);
+    }
+
+    // Claude bills 1-hour cache writes at their own rate, never below a 5-minute write.
+    private static BigDecimal oneHourWritePrice(ModelPrice modelPrice, int tierBasis, BigDecimal fiveMinuteWritePrice) {
+        return modelPrice.applicableTier(tierBasis, ModelPrice.PromptTier::cacheCreationInputTokenPriceAbove1hr)
+                .orElse(scaledToTier(modelPrice.cacheCreationInputTokenPriceAbove1hr(),
+                        modelPrice.cacheCreationInputTokenPrice(), fiveMinuteWritePrice))
+                .max(fiveMinuteWritePrice);
+    }
+
+    // A rate no tier publishes keeps its base ratio to the rate the matched tier changes: a 1-hour cache write to the
+    // 5-minute one, as Claude's own tiers do, and reasoning and audio tokens to the text rate they're part of, as
+    // Gemini Pro's do. LiteLLM keeps the base rate there.
+    private static BigDecimal scaledToTier(BigDecimal baseRate, BigDecimal baseTextRate, BigDecimal tierTextRate) {
+        return isPositive(baseTextRate) && tierTextRate.compareTo(baseTextRate) != 0
+                ? baseRate.multiply(tierTextRate).divide(baseTextRate, MathContext.DECIMAL64)
+                : baseRate;
     }
 
     // A provider that publishes no cache rate bills its cached tokens as plain input.
