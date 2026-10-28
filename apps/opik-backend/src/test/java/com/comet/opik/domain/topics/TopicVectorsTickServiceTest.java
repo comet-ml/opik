@@ -827,4 +827,17 @@ class TopicVectorsTickServiceTest {
             return values;
         }
     }
+
+    @Test
+    @DisplayName("the window read's non-blank pattern agrees with String.isBlank on every single char")
+    void nonBlankPatternMatchesIsBlank() {
+        var pattern = java.util.regex.Pattern.compile(TopicVectorsDAO.NON_BLANK);
+        for (int c = 0; c <= Character.MAX_VALUE; c++) {
+            var text = String.valueOf((char) c);
+            if (Character.isSurrogate((char) c)) {
+                continue;
+            }
+            assertThat(pattern.matcher(text).find()).as("U+%04X", c).isEqualTo(!text.isBlank());
+        }
+    }
 }
