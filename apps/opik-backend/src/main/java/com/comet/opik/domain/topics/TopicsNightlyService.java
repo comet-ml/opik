@@ -240,7 +240,7 @@ public class TopicsNightlyService {
             throw new ConflictException("The topics nightly job is off: topics.nightly.enabled is false");
         }
         boolean optedIn = template.inTransaction(READ_ONLY,
-                handle -> handle.attach(TopicWorkspaceDAO.class).isEnabled(workspaceId));
+                handle -> handle.attach(TopicWorkspaceDAO.class).isEligible(workspaceId));
         if (!optedIn) {
             throw new ConflictException(("Workspace '%s' is not opted in to topics: it needs enabled rows in "
                     + "topic_workspaces and ai_label_workspaces").formatted(workspaceId));
@@ -369,7 +369,7 @@ public class TopicsNightlyService {
         var to = night.atStartOfDay(ZoneOffset.UTC).toInstant();
         var from = night.minusDays(nightly.getWindowDays()).atStartOfDay(ZoneOffset.UTC).toInstant();
         var workspaceIds = template.inTransaction(READ_ONLY,
-                handle -> handle.attach(TopicWorkspaceDAO.class).enabledWorkspaceIds());
+                handle -> handle.attach(TopicWorkspaceDAO.class).eligibleWorkspaceIds());
         int small = 0;
         var found = new ArrayList<Candidate>();
         for (var workspaceId : workspaceIds) {
