@@ -357,6 +357,48 @@ class TestAskForUrl:
         )
 
 
+class TestSetApiKey:
+    @pytest.mark.parametrize("blank_key", ["", "   ", "\t"])
+    @patch("opik.configurator.configure.opik_rest_helpers.is_api_key_correct")
+    def test_blank_api_key_argument_is_treated_as_missing(
+        self, mock_is_api_key_correct, blank_key
+    ):
+        """
+        The configure() argument does not go through OpikConfig, so a blank
+        argument is normalized in _set_api_key itself: it must land on the
+        same "no key anywhere" path as api_key=None (ask for a key) instead
+        of being validated and counted as a key.
+        """
+        configurator = OpikConfigurator(api_key=blank_key)
+
+        def _ask_for_api_key():
+            configurator.api_key = "valid_api_key"
+
+        configurator._ask_for_api_key = Mock(side_effect=_ask_for_api_key)
+
+        needs_update = configurator._set_api_key()
+
+        configurator._ask_for_api_key.assert_called_once_with()
+        mock_is_api_key_correct.assert_not_called()
+        assert needs_update is True
+
+    @patch(
+        "opik.configurator.configure.opik_rest_helpers.is_api_key_correct",
+        return_value=True,
+    )
+    def test_api_key_argument_is_stripped_before_validation(
+        self, mock_is_api_key_correct
+    ):
+        configurator = OpikConfigurator(api_key="  valid_api_key  ")
+
+        configurator._set_api_key()
+
+        assert configurator.api_key == "valid_api_key"
+        mock_is_api_key_correct.assert_called_once_with(
+            "valid_api_key", url=configurator.base_url
+        )
+
+
 class TestAskForApiKey:
     @patch("opik.configurator.configure.is_interactive", return_value=True)
     @patch("opik.configurator.configure.getpass.getpass", return_value="valid_api_key")

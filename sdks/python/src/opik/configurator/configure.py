@@ -297,6 +297,13 @@ class OpikConfigurator:
         """
         config_file_needs_updating = False
 
+        if self.api_key is not None:
+            # The configure() argument does not go through OpikConfig, so
+            # normalize it here too: a blank key (an empty `set
+            # OPIK_API_KEY=`-style value passed explicitly) is no key at
+            # all, not a key to validate and store.
+            self.api_key = self.api_key.strip() or None
+
         if self.api_key:
             extracted_base_url = _extract_base_url_from_api_key(self.api_key)
             if extracted_base_url is None and self.self_hosted_comet:

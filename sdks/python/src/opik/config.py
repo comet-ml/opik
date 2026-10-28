@@ -426,6 +426,22 @@ class OpikConfig(pydantic_settings.BaseSettings):
             return self.guardrails_url_override
         return url_helpers.get_base_url(self.url_override) + "guardrails/"
 
+    @pydantic.field_validator("api_key", mode="before")
+    @classmethod
+    def _normalize_api_key(cls, value: Optional[str]) -> Optional[str]:
+        """Treat a blank API key as missing, whatever source it came from.
+
+        A blank value usually comes from an accidentally exported empty
+        environment variable (for example `set OPIK_API_KEY=` on Windows).
+        Keeping it would make the key look configured while the SDK sends
+        an empty Authorization header, so normalize it at the root instead
+        of checking for blankness at every place the key is read.
+        """
+        if value is None:
+            return None
+        stripped = value.strip()
+        return stripped if stripped else None
+
     @pydantic.model_validator(mode="after")
     def _set_url_override_from_api_key(self) -> OpikConfig:
         url_was_not_provided = (

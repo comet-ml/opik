@@ -157,6 +157,57 @@ def test_unset_opik_config_path_uses_default(monkeypatch):
     assert config.config_file_fullpath == Path(CONFIG_FILE_PATH_DEFAULT).expanduser()
 
 
+@pytest.mark.parametrize("blank_key", ["", "   ", "\t"])
+def test_blank_opik_api_key_from_env_is_treated_as_missing(monkeypatch, blank_key):
+    """
+    A blank assignment (Windows ``set OPIK_API_KEY=``, a `.env` line with
+    no value) must behave like no key at all; otherwise the key looks
+    configured while an empty Authorization header is sent.
+    """
+    monkeypatch.setenv("OPIK_API_KEY", blank_key)
+
+    config = OpikConfig()
+
+    assert config.api_key is None
+
+
+@pytest.mark.parametrize("blank_key", ["", "   ", "\t"])
+def test_blank_opik_api_key_passed_directly_is_treated_as_missing(blank_key):
+    config = OpikConfig(api_key=blank_key)
+
+    assert config.api_key is None
+
+
+def test_opik_api_key_with_surrounding_whitespace_is_stripped():
+    config = OpikConfig(api_key="  test_api_key  ")
+
+    assert config.api_key == "test_api_key"
+
+
+@pytest.mark.parametrize("blank_key", ["", "   ", "\t"])
+def test_blank_opik_api_key_is_misconfigured_for_cloud(monkeypatch, blank_key):
+    monkeypatch.delenv("OPIK_TRACK_DISABLE", raising=False)
+    monkeypatch.setenv("OPIK_API_KEY", blank_key)
+
+    config = OpikConfig()
+
+    is_misconfigured, _ = config.get_misconfiguration_detection_results()
+    assert is_misconfigured is True
+
+
+def test_present_opik_api_key_is_not_misconfigured_for_cloud(monkeypatch):
+    # OPIK_TRACK_DISABLE may be inherited from the shell; remove it so the
+    # result depends only on the key being present.
+    monkeypatch.delenv("OPIK_TRACK_DISABLE", raising=False)
+    monkeypatch.setenv("OPIK_API_KEY", "test_api_key")
+
+    config = OpikConfig()
+
+    assert config.api_key == "test_api_key"
+    is_misconfigured, _ = config.get_misconfiguration_detection_results()
+    assert is_misconfigured is False
+
+
 def test_custom_opik_config_path_is_honored(monkeypatch, tmp_path):
     custom = tmp_path / "custom.opik.config"
     monkeypatch.setenv("OPIK_CONFIG_PATH", str(custom))
