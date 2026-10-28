@@ -72,3 +72,57 @@ def test_gepa_reflective_inputs_are_bounded_and_exclude_labels(
 
 
 INLINE_IMAGE = "data:image/png;base64," + "QUJD" * 500
+
+
+def _capture_meta_prompt_cases(monkeypatch: pytest.MonkeyPatch) -> list[list[Any]]:
+    cases: list[list[Any]] = []
+    original = llm_calls.call_model
+
+    def call(**kwargs: Any) -> Any:
+        evidence = kwargs.get("evidence")
+        if evidence is not None and evidence.cases:
+            cases.append(list(evidence.cases))
+        return original(**kwargs)
+
+    monkeypatch.setattr(llm_calls, "call_model", call)
+    return cases
+
+
+def test_meta_prompt_reasons_over_how_the_prompt_scored(
+    install_fakes: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Inputs alone don't say why a prompt loses points; the outputs and metric
+    # reasons do.
+    scenario = harness.build_scenario("S1_single")
+    install_fakes(scenario)
+    requests = _capture_meta_prompt_cases(monkeypatch)
+
+    harness.run_optimizer("MetaPromptOptimizer", scenario)
+
+    assert requests
+    for cases in requests:
+        assert all(case.output is not None and case.scores for case in cases)
+        values = [case.scores[0].value for case in cases]
+        assert values == sorted(values)  # the failures come first
+
+
+def test_meta_prompt_never_reasons_over_validation_scores(
+    install_fakes: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tests.unit.test_helpers import make_mock_dataset
+
+    scenario = harness.build_scenario("S1_single")
+    install_fakes(scenario)
+    requests = _capture_meta_prompt_cases(monkeypatch)
+    validation = make_mock_dataset(
+        scenario.items, name="characterization-validation", dataset_id="ds-validation"
+    )
+
+    harness.run_optimizer(
+        "MetaPromptOptimizer", scenario, validation_dataset=validation
+    )
+
+    assert requests
+    assert all(
+        case.output is None and not case.scores for cases in requests for case in cases
+    )

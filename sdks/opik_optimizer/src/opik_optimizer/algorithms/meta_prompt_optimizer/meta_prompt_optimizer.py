@@ -14,6 +14,7 @@ from ...utils.logging import debug_log
 from ...utils.scoring import improves_over
 from collections.abc import Sequence
 from .ops.halloffame_ops import PromptHallOfFame, add_best_candidate_to_hof
+from ...core.reasoning import cases_from_evaluation
 from ...core.results import OptimizationRound
 
 # Import ops modules
@@ -125,6 +126,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         )
         self.n_threads = n_threads
         self.dataset: Dataset | None = None
+        self._round_prompts: dict[str, chat_prompt.ChatPrompt] | None = None
         self.enable_context = enable_context
         self.num_task_examples = num_task_examples
         self.task_context_columns = task_context_columns
@@ -265,6 +267,7 @@ class MetaPromptOptimizer(BaseOptimizer):
 
                 self._current_round = round_num
                 self._lineage.derive_from(best_prompts)
+                self._round_prompts = best_prompts
                 debug_log(
                     "round_loop_start",
                     round_index=round_num + 1,
@@ -460,8 +463,15 @@ class MetaPromptOptimizer(BaseOptimizer):
     def _get_task_context(
         self, metric: MetricFunction
     ) -> tuple[str, list[EvidenceCase]]:
-        """Task description plus the training examples shown as evidence cases."""
-        return context_learning_ops.get_task_context(
+        """Task description plus the evidence cases shown to the reasoning model.
+
+        The cases are the round's starting prompt as it was scored on training
+        items, worst first, so the model sees what the prompt produced and why it
+        lost points. With a validation split candidates are only scored on
+        validation items, which must not reach the model, so the cases stay
+        unscored training inputs.
+        """
+        task_context, cases = context_learning_ops.get_task_context(
             dataset=self.dataset,
             metric=metric,
             num_examples=self.num_task_examples,
@@ -469,6 +479,25 @@ class MetaPromptOptimizer(BaseOptimizer):
             extract_metric_understanding=self.extract_metric_understanding,
             seed=self.seed,
         )
+        scored = self._scored_cases(metric)
+        return task_context, scored or cases
+
+    def _scored_cases(self, metric: MetricFunction) -> list[EvidenceCase]:
+        source = self._round_prompts
+        if source is None or self.dataset is None:
+            return []
+        result = self._latest_evaluation(source, self.dataset)
+        if result is None:
+            return []
+
+        def objective(test_result: Any) -> float:
+            for score in test_result.score_results:
+                if score.name == metric.__name__ and score.value is not None:
+                    return float(score.value)
+            return 0.0
+
+        worst_first = sorted(result.test_results, key=objective)
+        return cases_from_evaluation(worst_first[: self.num_task_examples])
 
     def _build_history_context(
         self, previous_rounds: Sequence[OptimizationRound]

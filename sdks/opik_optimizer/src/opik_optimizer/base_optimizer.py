@@ -925,6 +925,16 @@ class BaseOptimizer(ABC):
             str(n_samples_strategy),
         )
 
+    def _latest_evaluation(
+        self,
+        prompts: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
+        dataset: Dataset,
+    ) -> EvaluationResult | EvaluationResultOnDictItems | None:
+        """The most recent evaluation of ``prompts`` on ``dataset`` in this run."""
+        prefix = (prompt_fingerprint(prompts), str(dataset.id))
+        matches = [r for key, r in self._evaluations.items() if key[:2] == prefix]
+        return matches[-1] if matches else None
+
     def _evaluation_on_items(
         self,
         prompts: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
