@@ -2118,6 +2118,58 @@ class FindTraceThreadsResourceTest {
             assertThreadPage(null, projectId, expectedThreads, List.of(), Map.of("search", term), API_KEY,
                     TEST_WORKSPACE);
         }
+
+        /**
+         * The search matches each trace's latest version: an update that removes the term drops its thread, and an
+         * update that adds it brings its thread in, on the page, its total and the stats.
+         */
+        @Test
+        void searchThreadsMatchesTheLatestVersionOfEachTrace() {
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var term = "term-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+            var droppedTrace = createTrace().toBuilder()
+                    .projectName(projectName)
+                    .threadId("thread-" + RandomStringUtils.secure().nextAlphanumeric(32))
+                    .usage(null)
+                    .input(JsonUtils.getJsonNodeFromString("{\"content\": \"%s\"}".formatted(term)))
+                    .startTime(now)
+                    .endTime(now.plusMillis(10))
+                    .build();
+            var addedTrace = createTrace().toBuilder()
+                    .projectName(projectName)
+                    .threadId("thread-" + RandomStringUtils.secure().nextAlphanumeric(32))
+                    .usage(null)
+                    .startTime(now.plusMillis(20))
+                    .endTime(now.plusMillis(30))
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(droppedTrace, addedTrace), API_KEY, TEST_WORKSPACE);
+            var createdTrace = traceResourceClient.getById(addedTrace.id(), TEST_WORKSPACE, API_KEY);
+            traceResourceClient.updateTrace(droppedTrace.id(), TraceUpdate.builder()
+                    .projectName(projectName)
+                    .input(JsonUtils.getJsonNodeFromString("{\"content\": \"%s\"}"
+                            .formatted(RandomStringUtils.secure().nextAlphanumeric(32))))
+                    .build(), API_KEY, TEST_WORKSPACE);
+            traceResourceClient.updateTrace(addedTrace.id(), TraceUpdate.builder()
+                    .projectName(projectName)
+                    .output(JsonUtils.getJsonNodeFromString("{\"content\": \"%s\"}".formatted(term)))
+                    .build(), API_KEY, TEST_WORKSPACE);
+            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+            // The thread's last_updated_at is its row's, written when the trace was created; the update leaves it
+            var expectedTrace = traceResourceClient.getById(addedTrace.id(), TEST_WORKSPACE, API_KEY).toBuilder()
+                    .lastUpdatedAt(createdTrace.lastUpdatedAt())
+                    .build();
+
+            var expectedThreads = getExpectedThreads(List.of(expectedTrace), projectId, addedTrace.threadId(),
+                    List.of(), TraceThreadStatus.ACTIVE);
+            var expectedStats = StatsUtils.getProjectThreadStatItems(List.of(expectedTrace), List.of(), null);
+
+            assertThreadPage(null, projectId, expectedThreads, List.of(), Map.of("search", term), API_KEY,
+                    TEST_WORKSPACE);
+            var actualStats = traceResourceClient.getTraceThreadStats(null, projectId, API_KEY, TEST_WORKSPACE,
+                    List.of(), Map.of("search", term));
+            TraceAssertions.assertStats(actualStats.stats(), expectedStats);
+        }
     }
 
     @Nested

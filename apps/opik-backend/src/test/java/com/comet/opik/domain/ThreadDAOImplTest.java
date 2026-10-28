@@ -60,7 +60,7 @@ class ThreadDAOImplTest {
     @DisplayName("traces_final_ids prefilter gate")
     class TracesFinalIdsPrefilterGate {
 
-        private static final String SPANS_PREFILTER = "AND trace_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM traces_final_ids)))";
+        private static final String SPANS_PREFILTER = "AND trace_id IN (SELECT arrayJoin(arrayMap(t -> t.1, (SELECT groupArray((id, thread_id)) FROM traces_final_ids))))";
         // Rendered into the query only when searchText is set (FilterUtils#newTraceThreadFindTemplate);
         // the searchText case below is the one that exercises it.
         private static final String SEARCH_CLAUSE = "ilike(thread_id, :search_text)";
@@ -165,7 +165,7 @@ class ThreadDAOImplTest {
     class ThreadIdPushdownTemplateSync {
 
         private static final String THREAD_ID_PUSHDOWN = "AND thread_id = :thread_id_pushdown";
-        private static final String TRACES_FINAL_IDS_IN = "thread_id IN (SELECT thread_id FROM traces_final_ids)";
+        private static final String TRACES_FINAL_IDS_IN = "thread_id IN (SELECT arrayJoin(arrayMap(t -> t.2, (SELECT groupArray((id, thread_id)) FROM traces_final_ids))))";
         private static final String TRACES_FINAL_IN = "thread_id IN (SELECT thread_id FROM traces_final)";
         private static final String ROW_ID_RANGE = "AND id >= :uuid_from_time";
         private static final String SEARCH_CLAUSE = "ilike(thread_id, :search_text)";
