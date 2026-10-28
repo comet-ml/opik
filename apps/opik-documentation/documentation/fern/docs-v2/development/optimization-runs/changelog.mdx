@@ -19,6 +19,10 @@ These changes are pending release and are not included in the published package 
 - MetaPrompt, Evolutionary, GEPA, and HRPO support tool-description optimization in agent prompt bundles, including qualified selectors such as `planner.lookup`.
 - HRPO root-cause analysis includes bounded agent trace context. Nested local trace recordings remain unsupported; see the [HRPO guide](/development/optimization-runs/algorithms/hierarchical_adaptive_optimizer).
 - Candidate evaluation, trial accounting, and call attribution share the base lifecycle. Winner selection, ties, stopping, malformed MetaPrompt generations, and Context7 test-mode dataset sizes are corrected.
+- MetaPrompt now shows its reasoning model how the best prompt scored: its worst training cases with outputs and metric reasons. Validation scores are never shown.
+- Trial experiments record which candidate each was derived from, so the Opik UI marks trials Passed or Discarded from the real search tree, including GEPA's reflection parents.
+- A prompt already scored on the same items is not evaluated again. HRPO's failure analysis reuses the best prompt's evaluation, and GEPA reuses the baseline's; MetaPrompt and Evolutionary no longer re-score repeated prompts.
+- With a validation split, HRPO's analysis of training items is logged as a mini-batch experiment instead of counting toward a trial's validation score. `evaluate_prompt` accepts `experiment_type` for this.
 
 ### Migration
 

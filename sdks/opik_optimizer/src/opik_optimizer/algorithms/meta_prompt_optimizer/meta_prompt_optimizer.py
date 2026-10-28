@@ -49,8 +49,9 @@ class MetaPromptOptimizer(BaseOptimizer):
 
     The optimizer works by:
     1. Evaluating the current prompt on a dataset
-    2. Using an LLM to reason about improvements based on performance
-    3. Generating candidate prompt variations
+    2. Showing a reasoning LLM how the best prompt so far scored (its worst
+       training cases, with outputs and metric reasons) and the score history
+    3. Generating candidate prompt variations from it
     4. Evaluating candidates and selecting the best
     5. Repeating until max_trials is reached or performance plateaus
 
@@ -64,13 +65,13 @@ class MetaPromptOptimizer(BaseOptimizer):
             See: https://docs.litellm.ai/docs/completion/input
         prompts_per_round: Number of candidate prompts to generate per optimization round
         enable_context: Whether to include task-specific context learning when reasoning
-        num_task_examples: Number of dataset examples to show in task context (default: 10)
+        num_task_examples: Number of scored training cases (or, with a validation
+            split, unscored training inputs) shown to the reasoning model (default: 5)
         task_context_columns: Specific dataset columns to include in context (None = all input columns)
         n_threads: Number of parallel threads for prompt evaluation
         verbose: Controls internal logging/progress bars (0=off, 1=on)
         seed: Random seed for reproducibility
         use_hall_of_fame: Enable Hall of Fame pattern extraction and re-injection
-        prettymode_prompt_history: (removed) history formatting follows display settings
         prompt_overrides: Optional dict or callable to customize internal prompts.
             Dict: {"prompt_key": "new_template"} to override specific prompts.
             Callable: function(prompts: PromptLibrary) -> None to modify prompts programmatically.

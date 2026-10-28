@@ -290,11 +290,12 @@ result.display()
 | Component | Description |
 |-----------|-------------|
 | `optimize_prompt()` | Public entrypoint: setup, baseline, perfect-baseline skip, Opik optimization run, result building. Calls your `run_optimization()`. |
-| `evaluate(context, prompts)` | Scores a candidate bundle. Counts the trial, tracks the best score, updates scoring health and sets `context.should_stop`. |
+| `evaluate(context, prompts)` | Scores a candidate bundle. Counts the trial, tracks the best score, updates scoring health and sets `context.should_stop`. A bundle already scored on the same items in this run returns the earlier result instead of being evaluated again. |
 | `evaluate_with_result(context, prompts)` | Same as `evaluate()`, also returning the `EvaluationResult` with per-item scores. |
 | `pre_round()` / `post_round()` | Open and close a history round. |
 | `pre_trial()` / `on_trial()` / `post_trial()` | Trial lifecycle hooks; `post_trial()` records a candidate in the current round. |
 | `get_history_entries()` | Returns the recorded history to pass to `AlgorithmResult`. |
+| Trial lineage | Each evaluation is logged with its candidate ID and parent so the Opik UI can show which trials were built on. Candidates of a custom optimizer are shown as children of the baseline. |
 | `get_prompt(key, **fmt)` | Gets internal prompt template with optional formatting. Respects `prompt_overrides`. |
 | `list_prompts()` | Lists all available prompt keys for this optimizer. |
 | `llm_call_counter` | Tracks number of LLM calls made during the run. |
@@ -306,11 +307,10 @@ removed; use `pre_round`, `post_round`, `pre_trial` and `post_trial`.
 
 ## Structured evidence and text edits
 
-Pass `ReasoningEvidence(prompts=current_prompts)` to shared LLM calls. During an optimization
-run, the client attaches bounded selected cases with native images, outputs and scores. Use an
-explicit `cases` list to select your own evidence, or `cases=()` for template-only context.
-Agent messages remain user-provided evidence; their system roles are not promoted into the
-optimizer's system instructions.
+Pass `ReasoningEvidence(prompts=current_prompts)` to shared LLM calls for template-only context,
+and add `cases=[...]` to show the model specific cases (see below). Agent messages remain
+user-provided evidence; their system roles are not promoted into the optimizer's system
+instructions.
 
 Use `TextEdit` and `apply_text_edits()` to update existing text slots. `message:0` addresses a
 string message; `message:1:part:0` addresses a native text content block. This retains media and

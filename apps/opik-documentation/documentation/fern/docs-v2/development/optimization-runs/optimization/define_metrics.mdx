@@ -136,7 +136,7 @@ objective = MultiMetricObjective(
 
 ## Checklist for great metrics
 
-- **Return explanations** – populate `reason` so reflective optimizers can group failure modes.
+- **Return explanations** – populate `reason`: MetaPrompt, HRPO and GEPA show it to their reasoning model, and HRPO groups failure modes by it.
 - **Avoid randomness** – deterministic metrics keep optimizers from chasing noise.
 - **Bound runtime** – use cached references or lightweight models where possible; heavy metrics slow down trials.
 - **Log metadata** – include `details` in the `ScoreResult` if you want to visualize per-sample attributes later.

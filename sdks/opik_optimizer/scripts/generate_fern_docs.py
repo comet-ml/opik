@@ -461,7 +461,7 @@ Import `EvidenceCase`, `ReasoningEvidence`, `TextEdit`, `describe_text_segments`
 
 - `ReasoningEvidence(prompts=..., cases=None, sections=None, editable=True)` supplies named prompt
   templates, selected cases and optional observations to `llm_calls.call_model` or its async
-  equivalent. `cases=None` uses the active run's bounded cases; `cases=()` supplies none.
+  equivalent. The client sends only the cases you pass; `cases=None` and `cases=()` send none.
 - `EvidenceCase(case_id, inputs, output=None, scores=None, observations=None)` keeps a case's
   rendered inputs, native images and feedback together.
 - `describe_text_segments(prompt, allowed_roles=None)` returns existing editable segment IDs.
@@ -469,6 +469,15 @@ Import `EvidenceCase`, `ReasoningEvidence`, `TextEdit`, `describe_text_segments`
 - `apply_text_edits(prompt, edits, allowed_roles=None)` validates the full edit set and applies it
   to a copy. It retains media, role order, tools and agent model settings. Placeholder preservation
   is enabled by default; callers with their own guard can explicitly disable that check.
+
+## Trial experiments
+
+Each candidate evaluation is logged as an experiment in the Opik optimization run. Its metadata
+records `candidate_id`, `parent_candidate_ids` (the prompt the candidate was derived from; the
+baseline is the root) and `step_index` (its depth in that tree), which the Opik UI uses to mark
+trials as Passed or Discarded. A prompt already scored on the same items in the run is not
+scored again. `evaluate_prompt(..., experiment_type="mini-batch")` logs an evaluation that is not a
+ranking trial, such as HRPO's failure analysis on training items, so it stays out of trial scores.
 
 ## Migration and deprecated APIs
 

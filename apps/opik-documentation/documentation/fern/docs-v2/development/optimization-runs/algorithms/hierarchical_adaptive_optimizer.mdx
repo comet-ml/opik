@@ -39,12 +39,19 @@ synthesize the findings across all batches to identify the core issues with the 
   <img src="/img/agent_optimization/hierarchical_reflective_optimizer.png" alt="HRPO (Hierarchical Reflective Prompt Optimizer)" />
 </Frame>
 
+Each iteration analyzes the best prompt so far. When that prompt was already scored on the items
+the analysis needs (the default, with no sampling or validation split), HRPO reuses that
+evaluation instead of running it again. Otherwise it evaluates the prompt on a fresh training
+sample. With a `validation_dataset`, candidates are ranked on validation items while the analysis
+reads training items; those analysis runs appear in Opik as mini-batch experiments, so they never
+count toward a trial's score.
+
 The analysis sees each test case's agent trace (its LLM and tool steps), not only the final output.
-To capture it, HRPO records the root-cause evaluation's traces locally with
-`opik.record_traces_locally()`. Opik doesn't allow nested local recordings, so a custom agent or
-metric that itself calls `record_traces_locally()` during evaluation is not supported. HRPO skips its
-own recording, and analyzes final outputs only, when the metric needs `task_span` or when another
-recording is already active around `optimize_prompt`.
+To capture it, HRPO records its evaluations' traces locally with `opik.record_traces_locally()`.
+Opik doesn't allow nested local recordings, so a custom agent or metric that itself calls
+`record_traces_locally()` during evaluation is not supported. HRPO skips its own recording, and
+analyzes final outputs only, when the metric needs `task_span` or when another recording is already
+active around `optimize_prompt`.
 
 <Tip>
 The optimizer is open-source, you can check out the root cause analysis code and prompts in the

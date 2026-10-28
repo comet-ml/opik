@@ -25,6 +25,12 @@ After each optimization run, visit the Opik dashboard to understand what changed
   <Accordion title="Trial table">
     Lists each trial, the optimizer used, the prompt JSON, and per-trial scores. Click a trial row to expand dataset items and attached traces.
   </Accordion>
+  <Accordion title="Trial status">
+    Each trial records the candidate it was derived from, so the run forms a tree rooted at the baseline.
+    **Passed** marks a candidate the optimizer built on (or the best one), **Discarded** one nothing
+    was built on. Optimizers that sample settings around your prompt (Few-Shot Bayesian, Parameter)
+    derive every candidate from the baseline, so only the baseline and the best trial show as Passed.
+  </Accordion>
   <Accordion title="Examples & traces">
     When you expand a trial, you can inspect every dataset item that ran during that trial plus the corresponding trace tree (tool calls, attachments, etc.).
   </Accordion>
