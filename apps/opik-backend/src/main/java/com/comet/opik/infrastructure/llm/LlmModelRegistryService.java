@@ -32,6 +32,9 @@ import java.io.UncheckedIOException;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Clock;
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -61,6 +64,8 @@ public class LlmModelRegistryService {
     // volatile: reload() is called from the scheduled job thread
     private volatile Map<String, List<LlmModelDefinition>> registry;
     private volatile Map<String, List<ModelEntry>> lastGoodRemote;
+    private final Clock clock;
+    private volatile ServedRegistry served;
     private final Set<String> reportedAwaitingSyncRows = ConcurrentHashMap.newKeySet();
     private final Set<String> reportedUnknownProfiles = ConcurrentHashMap.newKeySet();
     // Kept across reloads because the curated files ship with the release; the reasoning flag, which a reload can
@@ -70,6 +75,10 @@ public class LlmModelRegistryService {
             .build(CacheLoader.from(this::resolveCuratedParams));
 
     private record CuratedParamsKey(String provider, String modelId, boolean reasoning) {
+    }
+
+    private record ServedRegistry(Map<String, List<LlmModelDefinition>> source, LocalDate day,
+            Map<String, List<LlmModelDefinition>> registry) {
     }
 
     @Inject
@@ -82,14 +91,21 @@ public class LlmModelRegistryService {
     LlmModelRegistryService(@NonNull LlmModelRegistryConfig config, @NonNull Client httpClient) {
         this.config = config;
         this.httpClient = httpClient;
+        this.clock = Clock.systemUTC();
         this.catalog = loadCuratedCatalog();
         this.registry = load();
     }
 
     // visible for testing (no remote fetch)
     LlmModelRegistryService(@NonNull LlmModelRegistryConfig config) {
+        this(config, Clock.systemUTC());
+    }
+
+    // visible for testing (no remote fetch)
+    LlmModelRegistryService(@NonNull LlmModelRegistryConfig config, @NonNull Clock clock) {
         this.config = config;
         this.httpClient = null;
+        this.clock = clock;
         this.catalog = loadCuratedCatalog();
         this.registry = load();
     }
@@ -103,19 +119,34 @@ public class LlmModelRegistryService {
     @JsonIgnoreProperties(ignoreUnknown = true)
     record ModelEntry(String id, String qualifiedName, String label, Boolean structuredOutput, Boolean reasoning,
             List<String> supportedParameters, List<String> reasoningEfforts, String profile, ModelParams params,
-            Boolean awaitingSync) {
+            Boolean awaitingSync, Boolean hidden, String retiresOn) {
 
         LlmModelDefinition toDefinition(ModelParams resolvedParams) {
             return LlmModelDefinition.builder()
                     .id(id)
                     .qualifiedName(qualifiedName)
-                    .label(label)
+                    // The picker shows a model when it has a label, and a layer that leaves the label out keeps the
+                    // one below, so hiding needs its own field: an upper layer (the CDN) can then take a model out.
+                    .label(BooleanUtils.isTrue(hidden) ? null : label)
                     .structuredOutput(BooleanUtils.isTrue(structuredOutput))
                     .reasoning(BooleanUtils.isTrue(reasoning))
                     .supportedParameters(supportedParameters)
                     .reasoningEfforts(reasoningEfforts)
                     .params(resolvedParams)
+                    .retiresOn(isoDateOrNull(id, retiresOn))
                     .build();
+        }
+
+        private static String isoDateOrNull(String id, String value) {
+            if (StringUtils.isBlank(value)) {
+                return null;
+            }
+            try {
+                return LocalDate.parse(value.strip()).toString();
+            } catch (DateTimeParseException e) {
+                log.warn("Ignoring retiresOn '{}' of model '{}': not an ISO date", value, id);
+                return null;
+            }
         }
     }
 
@@ -233,8 +264,33 @@ public class LlmModelRegistryService {
         }
     }
 
+    /**
+     * The registry the picker reads: a model whose retirement date has come is served without a label, so it leaves
+     * the picker that day even before a sync marks it hidden. Lookups keep it, so saved prompts and rules still
+     * resolve. Checked here rather than at load because the refresh job only reloads with a remote copy configured,
+     * so a self-hosted backend may serve one load for weeks.
+     */
     public Map<String, List<LlmModelDefinition>> getRegistry() {
-        return registry;
+        var source = registry;
+        var today = LocalDate.now(clock);
+        var current = served;
+        if (current == null || current.source() != source || !current.day().equals(today)) {
+            current = new ServedRegistry(source, today, withoutRetiredLabels(source, today));
+            served = current;
+        }
+        return current.registry();
+    }
+
+    private static Map<String, List<LlmModelDefinition>> withoutRetiredLabels(
+            Map<String, List<LlmModelDefinition>> source, LocalDate today) {
+        var copy = new LinkedHashMap<String, List<LlmModelDefinition>>(source.size());
+        source.forEach((provider, models) -> copy.put(provider, models.stream()
+                .map(m -> m.label() != null && m.retiresOn() != null
+                        && !LocalDate.parse(m.retiresOn()).isAfter(today)
+                                ? m.toBuilder().label(null).build()
+                                : m)
+                .toList()));
+        return Collections.unmodifiableMap(copy);
     }
 
     public Map<String, ModelParams> getProfiles() {
@@ -598,6 +654,8 @@ public class LlmModelRegistryService {
                 .reasoningEfforts(ObjectUtils.getIfNull(override.reasoningEfforts(), existing.reasoningEfforts()))
                 .profile(ObjectUtils.getIfNull(override.profile(), existing.profile()))
                 .params(ModelParams.overlay(existing.params(), override.params()))
+                .hidden(ObjectUtils.getIfNull(override.hidden(), existing.hidden()))
+                .retiresOn(ObjectUtils.getIfNull(override.retiresOn(), existing.retiresOn()))
                 .build();
     }
 }

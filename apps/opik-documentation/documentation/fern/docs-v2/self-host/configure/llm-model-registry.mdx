@@ -46,6 +46,8 @@ Fields:
 - `label` (optional) — the human-readable name shown in dropdowns. Falls back to `id` when omitted.
 - `structuredOutput` (optional, default `false`) — whether the model supports JSON schema / tool-calling structured output mode.
 - `reasoning` (optional, default `false`) — whether the model is a reasoning model (enforces temperature = 1.0 and unlocks reasoning-effort parameters in the UI).
+- `hidden` (optional, default `false`) — takes the model out of the dropdowns. Saved prompts and rules that use it keep running.
+- `retiresOn` (optional) — the date the provider retires the model, as `YYYY-MM-DD`. From 30 days before that date, the Playground and the Online Evaluation rules show a warning next to the model. They don't block it. On that date (UTC) the model leaves the dropdowns by itself, as if it were `hidden`, with no reload or restart. A value that isn't a date is ignored and logged.
 
 An optional field that an override leaves out keeps the lower layer's value (see below). The defaults apply only when no layer sets the field.
 
@@ -54,8 +56,8 @@ An optional field that an override leaves out keeps the lower layer's value (see
 Models are keyed by `id` across every provider. `qualifiedName` is used for routing lookups (to disambiguate `gemini-2.5-pro` under the Gemini direct API vs. Vertex AI), but override deduplication always uses `id`. When a merge happens:
 
 - **Add**: an `id` not present in lower layers is appended to that provider's list.
-- **Override**: an `id` that matches a lower layer updates that model. Fields the overriding entry sets replace the lower layer's values. Fields it leaves out (`qualifiedName`, `label`, `structuredOutput`, `reasoning`) keep them. So an override can change a single field, and an older remote copy can't turn off a flag your release sets. To turn a flag off, set it to `false` explicitly.
-- **Remove**: not currently supported. Contact support if you need to hide a default model entirely.
+- **Override**: an `id` that matches a lower layer updates that model. Fields the overriding entry sets replace the lower layer's values. Fields it leaves out (`qualifiedName`, `label`, `structuredOutput`, `reasoning`, `hidden`, `retiresOn`) keep them. So an override can change a single field, and an older remote copy can't turn off a flag your release sets. To turn a flag off, set it to `false` explicitly.
+- **Hide**: set `hidden: true` on the model's `id`. It stays routable, so anything that already uses it keeps working. Removing a model entirely is not supported.
 - **Order**: providers keep the order of the classpath file. A provider that only an upper layer adds comes last.
 
 ## Configuration scenarios
