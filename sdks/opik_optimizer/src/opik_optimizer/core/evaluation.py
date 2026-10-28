@@ -184,6 +184,7 @@ def evaluate(
     verbose: int = 1,
     return_evaluation_result: Literal[False] = False,
     use_evaluate_on_dict_items: bool = False,
+    experiment_type: str | None = None,
 ) -> float: ...
 
 
@@ -201,6 +202,7 @@ def evaluate(
     verbose: int = 1,
     return_evaluation_result: Literal[True] = True,
     use_evaluate_on_dict_items: bool = False,
+    experiment_type: str | None = None,
 ) -> (
     opik_evaluation_result.EvaluationResult
     | opik_evaluation_result.EvaluationResultOnDictItems
@@ -220,6 +222,7 @@ def evaluate(
     verbose: int = 1,
     return_evaluation_result: bool = False,
     use_evaluate_on_dict_items: bool = False,
+    experiment_type: str | None = None,
 ) -> (
     float
     | opik_evaluation_result.EvaluationResult
@@ -260,6 +263,7 @@ def evaluate(
         experiment_config=experiment_config,
         verbose=verbose,
         use_evaluate_on_dict_items=use_evaluate_on_dict_items,
+        experiment_type=experiment_type,
     )
 
     if return_evaluation_result:

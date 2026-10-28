@@ -204,6 +204,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         return_evaluation_result: bool = False,
         allow_tool_use: bool | None = None,
         use_evaluate_on_dict_items: bool | None = None,
+        experiment_type: str | None = None,
     ) -> float | EvaluationResult | EvaluationResultOnDictItems:
         """Evaluate as usual, keeping the result and traces of in-run evaluations."""
         keep = return_evaluation_result
@@ -226,6 +227,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 return_evaluation_result=return_evaluation_result,
                 allow_tool_use=allow_tool_use,
                 use_evaluate_on_dict_items=use_evaluate_on_dict_items,
+                experiment_type=experiment_type,
             )
             # Read before the recording closes: closing resets the local store.
             traces = (

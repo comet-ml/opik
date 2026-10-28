@@ -182,6 +182,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         return_evaluation_result: bool = False,
         allow_tool_use: bool | None = None,
         use_evaluate_on_dict_items: bool | None = None,
+        experiment_type: str | None = None,
     ) -> float | EvaluationResult | EvaluationResultOnDictItems:
         """
         Override evaluate_prompt to support custom evaluated_task.
@@ -201,6 +202,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 allow_tool_use=allow_tool_use,
                 use_evaluate_on_dict_items=use_evaluate_on_dict_items,
                 return_evaluation_result=return_evaluation_result,
+                experiment_type=experiment_type,
             )
 
         return super().evaluate_prompt(  # type: ignore[call-overload,misc]
@@ -218,6 +220,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             return_evaluation_result=return_evaluation_result,
             allow_tool_use=allow_tool_use,
             use_evaluate_on_dict_items=use_evaluate_on_dict_items,
+            experiment_type=experiment_type,
         )
 
     def _evaluate_custom_task(
@@ -231,6 +234,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         allow_tool_use: bool | None,
         use_evaluate_on_dict_items: bool | None,
         return_evaluation_result: bool = False,
+        experiment_type: str | None = None,
     ) -> float | EvaluationResult | EvaluationResultOnDictItems:
         n_threads = normalize_eval_threads(n_threads or self.n_threads)
         if self._custom_evaluated_task is None:
@@ -243,7 +247,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             n_samples=self._custom_eval_n_samples,
             dataset_item_ids_count=len(self._custom_eval_item_ids or []),
         )
-        return task_evaluator.evaluate(
+        return task_evaluator.evaluate(  # type: ignore[misc]
             dataset=dataset,
             evaluated_task=self._custom_evaluated_task,
             metric=metric,
@@ -256,6 +260,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             n_samples=self._custom_eval_n_samples,
             use_evaluate_on_dict_items=bool(use_evaluate_on_dict_items),
             return_evaluation_result=return_evaluation_result,  # type: ignore[call-overload]
+            experiment_type=experiment_type,
         )
 
     def get_config(self, context: OptimizationContext) -> dict[str, Any]:

@@ -541,6 +541,14 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
         Uses the component keys from the candidate (e.g., "prompt_name_role_idx")
         to organize feedback for each optimizable component.
         """
+        # GEPA proposes its next candidate by reflecting on this one.
+        parent_prompts, _ = candidate_ops.rebuild_prompts_from_candidate(
+            base_prompts=self._base_prompts,
+            candidate=candidate,
+            allowed_roles=self._allowed_roles,
+            known_placeholder_keys=self._known_placeholder_keys,
+        )
+        self._optimizer._lineage.derive_from(parent_prompts)
         # If no specific components requested, use all component keys from candidate
         # that match our prompt structure
         if not components_to_update:

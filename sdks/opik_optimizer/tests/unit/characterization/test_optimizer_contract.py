@@ -25,6 +25,7 @@ BUILDS_ON_IMPROVEMENTS = {
     "MetaPromptOptimizer",
     "HierarchicalReflectiveOptimizer",
     "EvolutionaryOptimizer",
+    "GepaOptimizer",
 }
 
 

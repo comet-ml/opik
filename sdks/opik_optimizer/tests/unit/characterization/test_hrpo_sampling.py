@@ -52,3 +52,34 @@ def test_each_iteration_analyses_new_items_while_ranking_stays_fixed(
     analysis_samples = [items for items in evaluated if items != ranking_items]
     assert evaluated.count(ranking_items) >= 2  # candidates ranked on the same items
     assert len(set(analysis_samples)) == len(analysis_samples) >= 2
+
+
+def test_analysis_on_training_items_stays_out_of_validation_trials(
+    install_fakes: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tests.unit.test_helpers import make_mock_dataset
+
+    scenario = harness.build_scenario("S1_single")
+    install_fakes(scenario)
+    validation = make_mock_dataset(
+        scenario.items, name="characterization-validation", dataset_id="ds-validation"
+    )
+    logged: list[tuple[str, str]] = []
+
+    def recording_trial(**kwargs: Any) -> Any:
+        logged.append((kwargs.get("experiment_type", "trial"), kwargs["dataset"].id))
+        return fake_opik.fake_evaluate(**kwargs)
+
+    monkeypatch.setattr(
+        "opik_optimizer.core.evaluation.opik_evaluator.evaluate_optimization_trial",
+        recording_trial,
+    )
+
+    harness.run_optimizer(
+        "HierarchicalReflectiveOptimizer", scenario, validation_dataset=validation
+    )
+
+    # Trials are ranked on validation items; the failure analysis reads training
+    # items and is logged apart, so the UI never averages the two.
+    assert {ds for kind, ds in logged if kind == "trial"} == {"ds-validation"}
+    assert ("mini-batch", "ds-characterization") in logged

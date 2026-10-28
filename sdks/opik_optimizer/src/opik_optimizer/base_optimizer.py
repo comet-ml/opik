@@ -2013,6 +2013,7 @@ class BaseOptimizer(ABC):
         return_evaluation_result: Literal[True] = True,
         allow_tool_use: bool | None = None,
         use_evaluate_on_dict_items: bool | None = None,
+        experiment_type: str | None = None,
     ) -> EvaluationResult | EvaluationResultOnDictItems: ...
 
     @overload
@@ -2032,6 +2033,7 @@ class BaseOptimizer(ABC):
         return_evaluation_result: Literal[False] = False,
         allow_tool_use: bool | None = None,
         use_evaluate_on_dict_items: bool | None = None,
+        experiment_type: str | None = None,
     ) -> float: ...
 
     def evaluate_prompt(
@@ -2050,6 +2052,7 @@ class BaseOptimizer(ABC):
         return_evaluation_result: bool = False,
         allow_tool_use: bool | None = None,
         use_evaluate_on_dict_items: bool | None = None,
+        experiment_type: str | None = None,
     ) -> float | EvaluationResult | EvaluationResultOnDictItems:
         sampling_seed = seed if seed is not None else self.seed
         n_threads = normalize_eval_threads(n_threads)
@@ -2203,5 +2206,6 @@ class BaseOptimizer(ABC):
             return_evaluation_result=return_evaluation_result,  # type: ignore[call-overload]
             n_samples=resolved_n_samples,
             use_evaluate_on_dict_items=use_evaluate_on_dict_items,
+            experiment_type=experiment_type,
         )
         return result

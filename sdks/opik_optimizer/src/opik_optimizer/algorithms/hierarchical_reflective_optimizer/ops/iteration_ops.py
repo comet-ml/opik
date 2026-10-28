@@ -134,6 +134,8 @@ def _evaluate_for_analysis(
             experiment_config=context.experiment_config,
             return_evaluation_result=True,
             allow_tool_use=context.allow_tool_use,
+            # Analysis, not a ranking: keep it out of the candidate's trial score.
+            experiment_type="mini-batch",
         )
 
 
