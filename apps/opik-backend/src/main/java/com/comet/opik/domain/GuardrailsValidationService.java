@@ -34,7 +34,6 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
@@ -164,11 +163,11 @@ class GuardrailsValidationServiceImpl implements GuardrailsValidationService {
                     .formatted(index, ALLOWED_TOPICS, RESTRICTED_TOPICS));
         }
         // Topics are compared ignoring case, as the model reads them.
-        var restrictedLowerCase = restricted.stream()
-                .map(topic -> topic.toLowerCase(Locale.ROOT))
+        var restrictedKeys = restricted.stream()
+                .map(GuardrailsValidationServiceImpl::caseKey)
                 .collect(Collectors.toSet());
         allowed.stream()
-                .filter(topic -> restrictedLowerCase.contains(topic.toLowerCase(Locale.ROOT)))
+                .filter(topic -> restrictedKeys.contains(caseKey(topic)))
                 .findFirst()
                 .ifPresent(topic -> {
                     throw new BadRequestException("validations[%d].config has '%s' in both %s and %s"
@@ -184,7 +183,7 @@ class GuardrailsValidationServiceImpl implements GuardrailsValidationService {
             return List.of();
         }
         var topics = stringList(index, config, field, MAX_TOPICS);
-        var topicsLowerCase = new HashSet<String>();
+        var topicKeys = new HashSet<String>();
         for (var topic : topics) {
             if (topic.length() > MAX_TOPIC_LENGTH) {
                 throw new BadRequestException("validations[%d].config.%s has a topic longer than %d characters"
@@ -196,12 +195,23 @@ class GuardrailsValidationServiceImpl implements GuardrailsValidationService {
                         .formatted(index, field, GuardrailQuestions.NONE_OF_THESE));
             }
             // Case variants would be separate options of one choice question and split its probability.
-            if (!topicsLowerCase.add(topic.toLowerCase(Locale.ROOT))) {
+            if (!topicKeys.add(caseKey(topic))) {
                 throw new BadRequestException("validations[%d].config.%s contains '%s' more than once, ignoring case"
                         .formatted(index, field, topic));
             }
         }
         return topics;
+    }
+
+    /**
+     * Equal exactly when equalsIgnoreCase matches the topics: it compares each character upper-cased, then
+     * lower-cased, which a whole-string toLowerCase does not reproduce ('ı' and 'I', 'İ' and 'i').
+     */
+    private static String caseKey(String topic) {
+        return topic.codePoints()
+                .map(codePoint -> Character.toLowerCase(Character.toUpperCase(codePoint)))
+                .collect(StringBuilder::new, StringBuilder::appendCodePoint, StringBuilder::append)
+                .toString();
     }
 
     private static List<String> stringList(int index, JsonNode config, String field, int maxSize) {

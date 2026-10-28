@@ -214,7 +214,7 @@ class GuardrailsValidationsResourceTest {
                 Arguments.of("a null check", GuardrailsValidationRequest.builder()
                         .text("some text")
                         .validations(Arrays.asList(descriptor(GuardrailType.PROMPT_INJECTION, "{}"), null))
-                        .build(), "must not be null"));
+                        .build(), "validations[1].<list element> must not be null"));
     }
 
     @ParameterizedTest(name = "{0}")
@@ -225,7 +225,7 @@ class GuardrailsValidationsResourceTest {
         try (var response = guardrailsResourceClient.validate(request, API_KEY, TEST_WORKSPACE)) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
             assertThat(response.readEntity(com.comet.opik.api.error.ErrorMessage.class).errors())
-                    .anyMatch(error -> error.contains(expectedError));
+                    .containsExactly(expectedError);
         }
         wireMock.server().verify(0, postRequestedFor(urlPathEqualTo(DECIDE_PATH)));
     }
