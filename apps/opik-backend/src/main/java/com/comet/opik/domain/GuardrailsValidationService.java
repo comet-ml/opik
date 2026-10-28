@@ -33,7 +33,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -68,16 +67,11 @@ class GuardrailsValidationServiceImpl implements GuardrailsValidationService {
     private final @NonNull InferenceClient inferenceClient;
     private final @NonNull OpikConfiguration configuration;
     private final @NonNull GuardrailsAccess guardrailsAccess;
-    private final @NonNull GuardrailPolicyService guardrailPolicyService;
 
     @Override
     public Mono<GuardrailsValidationResponse> validate(@NonNull GuardrailsValidationRequest request) {
         guardrailsAccess.check();
-        var rules = parseRules(withPolicyRules(request));
-        if (rules.isEmpty()) {
-            return Mono.just(GuardrailsValidationResponse.builder().validationPassed(true).validations(List.of())
-                    .build());
-        }
+        var rules = parseRules(request.validations());
         var questions = new LinkedHashMap<String, Question>();
         rules.forEach(rule -> questions.putAll(rule.questions()));
         if (questions.size() > DecideRequest.MAX_QUESTIONS) {
@@ -114,20 +108,6 @@ class GuardrailsValidationServiceImpl implements GuardrailsValidationService {
         var results = rules.stream().map(verdict).toList();
         boolean passed = results.stream().allMatch(ValidationResult::validationPassed);
         return GuardrailsValidationResponse.builder().validationPassed(passed).validations(results).build();
-    }
-
-    /**
-     * The request's own checks, then the rules of the policies it names and of every global policy of the
-     * workspace, which apply to every check.
-     */
-    private List<ValidationDescriptor> withPolicyRules(GuardrailsValidationRequest request) {
-        var descriptors = new ArrayList<>(Optional.ofNullable(request.validations()).orElse(List.of()));
-        guardrailPolicyService.retrieve(Optional.ofNullable(request.policies()).orElse(Set.of()))
-                .forEach(policy -> policy.rules().forEach(rule -> descriptors.add(ValidationDescriptor.builder()
-                        .type(rule.type())
-                        .config(rule.config())
-                        .build())));
-        return descriptors;
     }
 
     private static List<Rule> parseRules(List<ValidationDescriptor> descriptors) {
