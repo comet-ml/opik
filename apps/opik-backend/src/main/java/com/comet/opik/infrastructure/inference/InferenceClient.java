@@ -30,7 +30,8 @@ import java.util.UUID;
 import java.util.function.Function;
 
 /**
- * Client for the opik-inference v1 batch API. Its retries mirror the Python client's: up to 2, backing off 0.1 s then
+ * Client for the opik-inference v1 API: the batch endpoints, and the synchronous {@link #decide} that guardrail checks
+ * use. Its retries mirror the Python client's: up to 2, backing off 0.1 s then
  * 0.2 s or honoring {@code Retry-After}, except that a submit answered with {@code quota_exceeded} fails at once, so
  * the caller can back that one workspace off.
  * <p>
@@ -56,6 +57,7 @@ public class InferenceClient {
      */
     private static final long SUBMIT_BYTES_PER_SECOND = 1024L * 1024;
 
+    private static final String DECIDE_PATH = "v1/decide";
     private static final String BATCH_DECIDE_PATH = "v1/batch/decide";
     private static final String BATCH_GENERATE_PATH = "v1/batch/generate";
     private static final String JOB_PATH_TEMPLATE = "v1/batch/jobs/{job_id}";
@@ -115,6 +117,31 @@ public class InferenceClient {
                 .type(BatchJobStatusResponse.class)
                 .build())
                 .map(BatchJobStatusResponse::jobs);
+    }
+
+    /**
+     * One synchronous decide call: every question answered about the same state. {@code request.deadlineMs()} is the
+     * time the service may spend; {@code deadline} bounds the client, retries included, and should leave room for one
+     * retry on top of the service's.
+     */
+    public Mono<DecideResponse> decide(@NonNull DecideRequest request, @NonNull Instant deadline) {
+        Preconditions.checkArgument(!request.questions().isEmpty()
+                && request.questions().size() <= DecideRequest.MAX_QUESTIONS,
+                "a decide call takes 1 to '%s' questions, questions '%s'", DecideRequest.MAX_QUESTIONS,
+                request.questions().size());
+        request.questions().values().forEach(Question::validate);
+        return Mono.defer(() -> {
+            var withId = request.requestId() == null ? request.toBuilder().requestId(newRequestId()).build() : request;
+            return execute(Call.<DecideResponse>builder()
+                    .method(HttpMethod.POST)
+                    .path(DECIDE_PATH)
+                    .target(base -> base.path(DECIDE_PATH))
+                    .body(InferenceJson.writeBytes(withId))
+                    .readTimeout(config.getInference().getReadTimeout().toJavaDuration())
+                    .deadline(deadline)
+                    .type(DecideResponse.class)
+                    .build());
+        });
     }
 
     private Mono<BatchSubmitResponse> submit(String path, Object request, int items, Instant deadline) {

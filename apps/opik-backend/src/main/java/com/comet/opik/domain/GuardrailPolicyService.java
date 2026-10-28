@@ -250,7 +250,15 @@ class GuardrailPolicyServiceImpl implements GuardrailPolicyService {
         }
         var normalized = JsonUtils.createObjectNode();
         if (rule.type() == GuardrailType.PII) {
-            strings(index, config, "entities").forEach(normalized.putArray("entities")::add);
+            var entities = strings(index, config, "entities");
+            entities.stream()
+                    .filter(entity -> !GuardrailQuestions.PII_DESCRIPTIONS.containsKey(entity))
+                    .findFirst()
+                    .ifPresent(entity -> {
+                        throw new BadRequestException("rules[%d].config.entities contains the unsupported class '%s'"
+                                .formatted(index, entity));
+                    });
+            entities.forEach(normalized.putArray("entities")::add);
         } else if (rule.type() == GuardrailType.TOPIC) {
             var allowed = topics(index, config, ALLOWED_TOPICS);
             var restricted = topics(index, config, RESTRICTED_TOPICS);
@@ -293,6 +301,11 @@ class GuardrailPolicyServiceImpl implements GuardrailPolicyService {
         if (topics.stream().anyMatch(topic -> topic.length() > MAX_TOPIC_LENGTH)) {
             throw new BadRequestException("rules[%d].config.%s has a topic longer than %d characters"
                     .formatted(index, field, MAX_TOPIC_LENGTH));
+        }
+        // The check adds this option itself; a topic with the same name would make its answer ambiguous.
+        if (topics.stream().anyMatch(GuardrailQuestions.NONE_OF_THESE::equalsIgnoreCase)) {
+            throw new BadRequestException("rules[%d].config.%s cannot contain '%s'"
+                    .formatted(index, field, GuardrailQuestions.NONE_OF_THESE));
         }
         return topics;
     }

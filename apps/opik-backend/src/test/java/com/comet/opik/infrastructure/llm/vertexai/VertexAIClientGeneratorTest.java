@@ -9,6 +9,7 @@ import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmTestClients;
+import com.comet.opik.utils.ClientDisconnectedException;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
@@ -21,7 +22,12 @@ import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import io.dropwizard.util.Duration;
 import jakarta.ws.rs.client.Client;
+import lombok.Builder;
+import okhttp3.ConnectionPool;
+import okhttp3.Dispatcher;
+import okhttp3.OkHttpClient;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -36,7 +42,10 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.io.IOException;
 import java.lang.reflect.Method;
+import java.net.InetAddress;
+import java.net.ServerSocket;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -53,6 +62,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static com.comet.opik.domain.llm.ChatCompletionService.UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
@@ -1067,6 +1077,163 @@ class VertexAIClientGeneratorTest {
             }
             assertThat(generationConfig.has("maxOutputTokens")).isTrue();
             assertThat(generationConfig.get("maxOutputTokens").asInt()).isEqualTo(expected);
+        }
+    }
+
+    /** The pool and dispatcher a client runs on. */
+    @Builder(toBuilder = true)
+    private record Transport(ConnectionPool connectionPool, Dispatcher dispatcher) {
+        static Transport of(OkHttpClient client) {
+            return Transport.builder().connectionPool(client.connectionPool()).dispatcher(client.dispatcher()).build();
+        }
+    }
+
+    /** Every call, streamed or not, runs on the one connection pool and dispatcher, rather than on its own. */
+    @Test
+    @DisplayName("Vertex AI calls share one connection pool and dispatcher")
+    void callsShareOneTransport() {
+        var generator = new VertexAIClientGenerator(clientConfig(), registry, LlmTestClients.REMOTE_MEDIA_INLINER,
+                LlmTestClients.VIDEO_MIME_TYPE_UTILS);
+        var config = LlmProviderClientApiConfig.builder()
+                .apiKey(serviceAccountJson)
+                .configuration(Map.of("location", "global"))
+                .build();
+        var request = ChatCompletionRequest.builder().model(MODEL).build();
+
+        try (var first = (CloseableVertexAiChatModel) generator.generate(config, request);
+                var second = generator.newVertexAIStreamingClient(config, request)) {
+            var expectedTransport = Transport.of(VertexAITestClients.httpClientOf(first.client()));
+
+            var actualTransport = Transport.of(VertexAITestClients.httpClientOf(second.client()));
+
+            assertThat(actualTransport.connectionPool()).isSameAs(expectedTransport.connectionPool());
+            assertThat(actualTransport.dispatcher()).isSameAs(expectedTransport.dispatcher());
+        }
+    }
+
+    /** Calls made per kind, chat and streamed, by {@link #callsLeaveNoThreadsBehind}. */
+    private static final int CALLS = 50;
+
+    /**
+     * The shared, bounded pools a round of calls may grow: the virtual-thread and common fork-join pools, Reactor's
+     * bounded elastic scheduler the stream starts on, OkHttp's one task runner and the shared dispatcher, and
+     * WireMock's own Jetty pool. Anything else started by the calls is theirs alone, and must end with them.
+     */
+    private static final List<String> SHARED_POOL_PREFIXES = List.of(
+            "ForkJoinPool", "boundedElastic", "OkHttp TaskRunner", "OkHttp Dispatcher", "qtp");
+
+    private static Set<Long> liveThreadIds() {
+        return Thread.getAllStackTraces().keySet().stream().map(Thread::threadId).collect(Collectors.toSet());
+    }
+
+    /**
+     * Calls, streamed or not, leave no thread of their own behind: a client per call runs on the shared transport,
+     * and the SDK starts no executor on these paths. The threads alive after a first round, which brings the shared
+     * pools up, are left out; of those a second round starts, only the shared pools' may still be alive once it
+     * settled.
+     */
+    @Test
+    @DisplayName("Vertex AI calls, streamed or not, leave no thread behind")
+    void callsLeaveNoThreadsBehind() {
+        wireMock.server().stubFor(post(urlPathMatching(".*:streamGenerateContent"))
+                .willReturn(aResponse()
+                        .withHeader("Content-Type", "text/event-stream")
+                        .withBody("data: %s\n\n".formatted(GENERATE_CONTENT_RESPONSE.replace("\n", " ")))));
+        var provider = new LlmProviderVertexAI(new VertexAIClientGenerator(clientConfig(), registry,
+                LlmTestClients.REMOTE_MEDIA_INLINER, LlmTestClients.VIDEO_MIME_TYPE_UTILS),
+                LlmProviderClientApiConfig.builder()
+                        .apiKey(serviceAccountJson)
+                        .configuration(Map.of("location", "global"))
+                        .build());
+        var request = ChatCompletionRequest.builder().model(MODEL).addUserMessage("hello").build();
+        Runnable round = () -> {
+            for (int i = 0; i < CALLS; i++) {
+                provider.generate(request, "workspace");
+                var ended = new CompletableFuture<Void>();
+                provider.generateStream(request, "workspace", message -> {
+                }, () -> ended.complete(null), ended::completeExceptionally);
+                assertThat(ended).succeedsWithin(10, TimeUnit.SECONDS);
+            }
+        };
+        round.run();
+        var threadsBefore = liveThreadIds();
+
+        round.run();
+
+        Awaitility.await()
+                .atMost(30, TimeUnit.SECONDS)
+                .pollInterval(500, TimeUnit.MILLISECONDS)
+                // polled on this thread, so that the wait starts none of its own
+                .pollInSameThread()
+                .untilAsserted(() -> assertThat(Thread.getAllStackTraces().keySet())
+                        .filteredOn(thread -> !threadsBefore.contains(thread.threadId()))
+                        .extracting(Thread::getName)
+                        .allMatch(name -> SHARED_POOL_PREFIXES.stream().anyMatch(name::startsWith)));
+    }
+
+    /**
+     * A raw server answering one streamed call with two events, then holding it open until the client lets go. Two,
+     * as the SDK reads one event ahead: the first reaches the caller once the second arrived.
+     */
+    private static ServerSocket streamHeldOpen(CompletableFuture<Void> providerClosed) throws IOException {
+        var server = new ServerSocket(0, 1, InetAddress.getLoopbackAddress());
+        Thread.ofVirtual().start(() -> {
+            try (var socket = server.accept(); var out = socket.getOutputStream()) {
+                var in = socket.getInputStream();
+                var head = new StringBuilder();
+                while (!head.toString().endsWith("\r\n\r\n")) {
+                    head.append((char) in.read());
+                }
+                out.write("""
+                        HTTP/1.1 200 OK\r
+                        Content-Type: text/event-stream\r
+                        Connection: close\r
+                        \r
+                        data: {"candidates": [{"content": {"role": "model", "parts": [{"text": "hi"}]}}]}\r
+                        \r
+                        data: {"candidates": [{"content": {"role": "model", "parts": [{"text": "there"}]}}]}\r
+                        \r
+                        """.getBytes(StandardCharsets.UTF_8));
+                out.flush();
+                // the request body, then nothing until the client closes the connection
+                while (in.read() != -1) {
+                    // nothing more is expected
+                }
+                providerClosed.complete(null);
+            } catch (IOException exception) {
+                // a reset is the client letting go too
+                providerClosed.complete(null);
+            }
+        });
+        return server;
+    }
+
+    /** A caller gone after the first chunk ends the Vertex AI call, rather than the stream being read to its end. */
+    @Test
+    @DisplayName("a disconnected caller cancels the Vertex AI stream")
+    void aDisconnectedCallerCancelsTheStream() throws Exception {
+        var providerClosed = new CompletableFuture<Void>();
+        try (var server = streamHeldOpen(providerClosed)) {
+            var endpoint = "http://localhost:%d/".formatted(server.getLocalPort());
+            var config = clientConfig();
+            config.setVertexAIClient(config.getVertexAIClient().toBuilder()
+                    .multiRegionApiEndpoints(Map.of("global", endpoint))
+                    .build());
+            var provider = new LlmProviderVertexAI(new VertexAIClientGenerator(config, registry,
+                    LlmTestClients.REMOTE_MEDIA_INLINER, LlmTestClients.VIDEO_MIME_TYPE_UTILS),
+                    LlmProviderClientApiConfig.builder()
+                            .apiKey(serviceAccountJson)
+                            .configuration(Map.of("location", "global"))
+                            .build());
+
+            provider.generateStream(ChatCompletionRequest.builder().model(MODEL).addUserMessage("hello").build(),
+                    "workspace", message -> {
+                        throw new ClientDisconnectedException(new IOException("closed"));
+                    }, () -> {
+                    }, error -> {
+                    });
+
+            assertThat(providerClosed).succeedsWithin(10, TimeUnit.SECONDS);
         }
     }
 }

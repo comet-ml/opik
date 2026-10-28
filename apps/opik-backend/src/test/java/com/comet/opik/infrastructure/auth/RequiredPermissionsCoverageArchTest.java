@@ -101,10 +101,16 @@ class RequiredPermissionsCoverageArchTest {
             // a permission to ask the question would be circular — and would change a 204 into a 403 that means
             // the opposite of what the caller asked.
             "AuthenticationResource.checkAccess",
+            // Runs guardrail checks on the caller's text and writes nothing. The gate is not a workspace role but
+            // the organization's guardrails enablement, which GuardrailsValidationService asks the platform's
+            // workspace features API for (403 "Guardrails is available on the Enterprise plan"), behind the
+            // serviceToggles.guardrailsValidationsEnabled toggle. Any member of an enabled workspace may call it, as
+            // any member may log the traces the checks belong to.
+            "GuardrailsResource.validateGuardrails",
             // Guardrail policies: any workspace member creates and edits them, as the design decided; there is no
-            // guardrails role. The gate is the backend guardrails feature (serviceToggles.guardrailsValidationsEnabled),
-            // with the organization's guardrails enablement to follow. retrieve is read-shaped: the SDK loads the
-            // policies of every check with the API key of whoever runs the agent.
+            // guardrails role. The gate is the same as for validateGuardrails: the toggle and the organization's
+            // guardrails enablement. retrieve is read-shaped: the SDK loads the policies of every check with the
+            // API key of whoever runs the agent.
             "GuardrailPoliciesResource.createGuardrailPolicy",
             "GuardrailPoliciesResource.updateGuardrailPolicy",
             "GuardrailPoliciesResource.deleteGuardrailPoliciesBatch",

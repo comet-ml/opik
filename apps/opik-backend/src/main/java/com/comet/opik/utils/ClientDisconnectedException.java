@@ -1,5 +1,7 @@
 package com.comet.opik.utils;
 
+import lombok.NonNull;
+
 import java.io.IOException;
 import java.io.UncheckedIOException;
 
@@ -9,7 +11,7 @@ import java.io.UncheckedIOException;
  */
 public class ClientDisconnectedException extends UncheckedIOException {
 
-    public ClientDisconnectedException(IOException cause) {
+    public ClientDisconnectedException(@NonNull IOException cause) {
         super("The client of the stream disconnected", cause);
     }
 }

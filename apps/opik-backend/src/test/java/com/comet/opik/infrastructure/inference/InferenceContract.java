@@ -15,6 +15,7 @@ import java.util.Set;
 @UtilityClass
 public class InferenceContract {
 
+    public static final String DECIDE = "POST /v1/decide";
     public static final String BATCH_DECIDE = "POST /v1/batch/decide";
     public static final String BATCH_GENERATE = "POST /v1/batch/generate";
     public static final String GET_JOB = "GET /v1/batch/jobs/{job_id}";
