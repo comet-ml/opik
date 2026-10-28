@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 2.2.128](https://img.shields.io/badge/Version-2.2.128-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.2.128](https://img.shields.io/badge/AppVersion-2.2.128-informational?style=flat-square)
+![Version: 2.2.129](https://img.shields.io/badge/Version-2.2.129-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.2.129](https://img.shields.io/badge/AppVersion-2.2.129-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -286,6 +286,7 @@ Call opik api on http://localhost:5173/api
 | component.backend.env.STATE_DB_URL | string | `"opik-mysql:3306/opik?rewriteBatchedStatements=true&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true"` |  |
 | component.backend.env.STATE_DB_USER | string | `"opik"` |  |
 | component.backend.env.UI_DEFAULT_PAGE_SIZE | string | `"100"` |  |
+| component.backend.env.WEBHOOK_DESTINATION_GUARD | string | `"relaxed"` |  |
 | component.backend.envFrom[0].configMapRef.name | string | `"opik-backend"` |  |
 | component.backend.image.pullPolicy | string | `"IfNotPresent"` |  |
 | component.backend.image.registry | string | `nil` | Registry for this component only. Defaults to the chart-wide `registry`. Set it when one component is pulled from a different registry. |
