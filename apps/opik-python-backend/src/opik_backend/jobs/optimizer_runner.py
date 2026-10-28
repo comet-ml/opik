@@ -10,12 +10,20 @@ streamed to Redis for S3 sync.
 """
 
 import functools
+import heapq
 import json
 import logging
 import os
 import sys
+import threading
 import traceback
 import warnings
+
+# The backend runs this file as a script, so its source root isn't on sys.path by itself and opik_backend would
+# only import if something else happened to add it. Appended, so an installed opik_backend still comes first.
+_SOURCE_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if _SOURCE_ROOT not in sys.path:
+    sys.path.append(_SOURCE_ROOT)
 
 # =============================================================================
 # IMPORTANT: Deferred imports pattern
@@ -129,9 +137,58 @@ def reconfigure_rich_console():
 # a mutable container so the (single) set of wrappers always reflects the latest
 # workspace without needing to be torn down and rebuilt.
 _gateway_workspace = {"name": None}
+# The run's model seed, for gateway calls that carry none: opik_optimizer sends the task model's calls with seed=None,
+# so a seed in the model parameters would otherwise not reach them (see build_optimizer_and_prompt).
+_gateway_seed = {"value": None}
 
-# LiteLLM parameters that choose where a completion goes or how it authenticates, other than api_base
-_DESTINATION_PARAMS = ("base_url", "custom_llm_provider", "api_key", "api_version", "organization")
+# The only LiteLLM parameters a gateway call keeps; api_base is then set to the gateway. Model parameters come from
+# the caller's optimization config and reach LiteLLM as they are, and LiteLLM reads many of them as a destination,
+# a handler or a credential (fallbacks, model_list, sagemaker_base_url, ...), so anything not listed is dropped.
+_ALLOWED_PARAMS = frozenset({
+    # What Studio's call sites (opik_optimizer, LiteLLMAgent, the GEval and JSON schema metrics) pass themselves.
+    "model", "messages", "tools", "tool_choice", "parallel_tool_calls", "response_format", "metadata",
+    "num_retries", "timeout", "stream", "extra_headers", "n", "seed", "logprobs", "top_logprobs",
+    # Generation settings the Studio form saves under the API's own names; custom_parameters carries the
+    # provider-specific ones (thinking level, Anthropic effort, OpenRouter sampling) in the gateway's request body.
+    "temperature", "top_p", "max_tokens", "max_completion_tokens", "stop", "presence_penalty",
+    "frequency_penalty", "reasoning_effort", "custom_parameters",
+    # The same OpenRouter sampling settings, as older saved runs carry them, flat.
+    "top_k", "min_p", "top_a", "repetition_penalty",
+    # LiteLLM's other OpenAI parameters that only shape the output or attribute the call. Left out on purpose: those
+    # that pick a service tier, store or cache the call, add retries or server-side tools, or change the output type.
+    "user", "safety_identifier", "logit_bias", "verbosity", "prediction", "stream_options", "thinking",
+})
+# Headers the gateway reads a caller's identity from (opik-backend's AuthFilter: the workspace header, the API key in
+# Authorization, the session cookie), plus the proxy's, compared in lower case. A caller's value is dropped, so a
+# gateway call always carries the job's own workspace and the credential LiteLLM sets.
+_IDENTITY_HEADERS = frozenset({"comet-workspace", "authorization", "proxy-authorization", "cookie"})
+# Names already logged as dropped; one job runs in one process, so this logs each name once per job.
+_dropped_params_logged = set()
+_dropped_headers_logged = set()
+
+
+_LOGGED_NAMES = 5
+_LOGGED_NAME_LENGTH = 64
+
+
+_dropped_names_lock = threading.Lock()
+
+
+def _name_sample(names):
+    """The count and the first few names, shortened and escaped, so a log line stays one bounded line."""
+    sample = [repr(str(name)[:_LOGGED_NAME_LENGTH]) for name in heapq.nsmallest(_LOGGED_NAMES, names, key=str)]
+    more = ", ..." if len(names) > _LOGGED_NAMES else ""
+    return f"{len(names)} ({', '.join(sample)}{more})"
+
+
+def _log_dropped_once(message, names, logged):
+    """Logs names not logged before; claiming them under the lock keeps concurrent calls from logging them twice."""
+    with _dropped_names_lock:
+        new = names - logged
+        logged.update(new)
+    if new:
+        # Names only: values can be credentials or URLs.
+        logger.warning(f"{message}: {_name_sample(new)}")
 
 
 def route_litellm_calls_through_gateway(workspace_name):
@@ -169,13 +226,23 @@ def route_litellm_calls_through_gateway(workspace_name):
         return
 
     def _add_workspace_header(kwargs):
-        # Model parameters come from the caller's optimization config and reach this call as they are, so the
-        # destination is pinned to the gateway: nothing passed in can pick another host, handler or credential.
-        for name in _DESTINATION_PARAMS:
-            kwargs.pop(name, None)
+        # Pinned to the gateway: nothing passed in can pick another host, handler or credential.
+        dropped = kwargs.keys() - _ALLOWED_PARAMS
+        for name in dropped:
+            del kwargs[name]
+        _log_dropped_once("Dropped model parameters not passed to the gateway", dropped, _dropped_params_logged)
         kwargs["api_base"] = OPENAI_API_BASE
-        extra_headers = dict(kwargs.get("extra_headers") or {})
-        extra_headers.setdefault("Comet-Workspace", _gateway_workspace["name"])
+        if kwargs.get("seed") is None and _gateway_seed["value"] is not None:
+            kwargs["seed"] = _gateway_seed["value"]
+        extra_headers = {}
+        dropped_headers = set()
+        for name, value in dict(kwargs.get("extra_headers") or {}).items():
+            if str(name).lower() in _IDENTITY_HEADERS:
+                dropped_headers.add(str(name))
+            else:
+                extra_headers[name] = value
+        _log_dropped_once("Dropped headers not passed to the gateway", dropped_headers, _dropped_headers_logged)
+        extra_headers["Comet-Workspace"] = _gateway_workspace["name"]
         kwargs["extra_headers"] = extra_headers
         return kwargs
 
@@ -215,6 +282,13 @@ def _with_stream(params):
     return params
 
 
+def _pop_seed(params):
+    """``(params without seed, seed)``. opik_optimizer passes its own ``seed`` argument on every LLM call, next to
+    the model parameters, so a seed left among them fails the call with "multiple values for 'seed'"."""
+    params = dict(params)
+    return params, params.pop("seed", None)
+
+
 def build_optimizer_and_prompt(config):
     """Build the optimizer and the prompt for a parsed ``OptimizationConfig``.
 
@@ -235,11 +309,12 @@ def build_optimizer_and_prompt(config):
     )
 
     task_model = _gateway_model(config.model)
-    task_params = _with_stream(config.model_params)
+    task_params, task_seed = _pop_seed(_with_stream(config.model_params))
+    optimizer_seed = None
 
     if config.optimizer_model:
         optimizer_model = _gateway_model(config.optimizer_model)
-        optimizer_model_params = _with_stream(config.optimizer_model_params)
+        optimizer_model_params, optimizer_seed = _pop_seed(_with_stream(config.optimizer_model_params))
     else:
         # No separate algorithm model — default to the prompt model. Still honor
         # optimizer model_parameters if the config set them without a model
@@ -249,25 +324,36 @@ def build_optimizer_and_prompt(config):
         # whole prompts and JSON analyses, so it gets at least the factory default,
         # under the prompt's field name: the same model's gateway route reads that
         # name, while some routes ignore the factory's max_tokens.
-        optimizer_model_params = (
-            _with_stream(config.optimizer_model_params)
+        optimizer_model_params, optimizer_seed = (
+            _pop_seed(_with_stream(config.optimizer_model_params))
             if config.optimizer_model_params is not None
-            else {
+            else ({
                 key: (
                     max(value or 0, LLM_MAX_TOKENS)
                     if key in ("max_tokens", "max_completion_tokens")
                     else value
                 )
                 for key, value in task_params.items()
-            }
+            }, None)
         )
+
+    # opik_optimizer sends the optimizer's seed on its own LLM calls and seed=None on the task model's, so the run's
+    # model seed (the prompt model's first) becomes the optimizer's seed, unless the optimizer parameters set one,
+    # and the gateway wrapper fills it into the calls that carry none.
+    optimizer_params = dict(config.optimizer_params or {})
+    seed = task_seed if task_seed is not None else optimizer_seed
+    _gateway_seed["value"] = seed
+    if seed is not None:
+        optimizer_params.setdefault("seed", seed)
+        if optimizer_params["seed"] != seed:
+            logger.info("The model parameters' seed is not used: the optimizer's own seed is sent on its LLM calls")
 
     # The factory injects defaults (e.g. max_tokens) into the optimizer params.
     optimizer = OptimizerFactory.build(
         config.optimizer_type,
         optimizer_model,
         optimizer_model_params,
-        config.optimizer_params or {},
+        optimizer_params,
     )
     # Set the model on the prompt itself — the optimizer uses its own model for
     # reasoning, while baseline/per-trial task calls run through the prompt's

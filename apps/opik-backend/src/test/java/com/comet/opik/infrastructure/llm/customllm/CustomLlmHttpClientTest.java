@@ -640,8 +640,10 @@ class CustomLlmHttpClientTest {
     @Builder(toBuilder = true)
     private record DispatcherLimits(int maxRequests, int maxRequestsPerHost) {
         static DispatcherLimits of(OkHttpClient client) {
-            return new DispatcherLimits(client.dispatcher().getMaxRequests(),
-                    client.dispatcher().getMaxRequestsPerHost());
+            return DispatcherLimits.builder()
+                    .maxRequests(client.dispatcher().getMaxRequests())
+                    .maxRequestsPerHost(client.dispatcher().getMaxRequestsPerHost())
+                    .build();
         }
     }
 
@@ -675,7 +677,8 @@ class CustomLlmHttpClientTest {
                             Long.MAX_VALUE))
                     .toList();
 
-            assertThat(DispatcherLimits.of(boundedOkHttpClient)).isEqualTo(new DispatcherLimits(limit, limit));
+            assertThat(DispatcherLimits.of(boundedOkHttpClient))
+                    .isEqualTo(DispatcherLimits.builder().maxRequests(limit).maxRequestsPerHost(limit).build());
             await().atMost(WAIT).until(() -> boundedOkHttpClient.dispatcher().runningCallsCount() == limit
                     && boundedOkHttpClient.dispatcher().queuedCallsCount() == streams - limit);
             var expectedEvents = IntStream.range(0, streams)

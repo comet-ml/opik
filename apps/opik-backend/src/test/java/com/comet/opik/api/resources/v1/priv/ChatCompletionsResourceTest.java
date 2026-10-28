@@ -7,9 +7,11 @@ import ch.qos.logback.classic.spi.ThrowableProxyUtil;
 import ch.qos.logback.core.read.ListAppender;
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.ProviderApiKey;
+import com.comet.opik.api.ProviderApiKeyUpdate;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
+import com.comet.opik.api.resources.utils.LogCaptureUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
@@ -624,6 +626,47 @@ class ChatCompletionsResourceTest {
             assertThat(actualErrors).isEqualTo(List.of(expectedError, expectedStreamedError));
             assertThat(actualProviderCalls).isEqualTo(EXPECTED_PROVIDER_CALLS);
             assertThat(actualEvents).isNotEmpty().noneMatch(event -> event.contains(marker));
+        }
+
+        /**
+         * A provider's header values are sent, but never logged: not when the provider is saved or updated, nor when
+         * it's called.
+         */
+        @Test
+        @DisplayName("a custom provider's header values reach the provider but never the logs")
+        void providerHeaderValuesAreNeverLogged() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            mockTargetWorkspace(workspaceName, UUID.randomUUID().toString());
+            var headerName = "X-Route-%s".formatted(RandomStringUtils.secure().nextAlphabetic(8));
+            var savedValue = "saved-marker-%s".formatted(RandomStringUtils.secure().nextAlphanumeric(16));
+            var updatedValue = "updated-marker-%s".formatted(RandomStringUtils.secure().nextAlphanumeric(16));
+            WIRE_MOCK.server().stubFor(post(urlPathMatching(CHAT_COMPLETIONS_REGEX)).willReturn(okJson(SUCCESS_BODY)));
+            var request = ChatCompletionRequest.builder().stream(false).model(MODEL).addUserMessage("ping").build();
+            var expectedContent = "ok";
+            var actualContents = new ArrayList<String>();
+
+            var actualEvents = LogCaptureUtils.logEventsOf(() -> {
+                var providerApiKey = llmProviderApiKeyResourceClient.createProviderApiKey(ProviderApiKey.builder()
+                        .provider(LlmProvider.CUSTOM_LLM)
+                        .providerName(CUSTOM_PROVIDER_NAME)
+                        .apiKey("dummy-key")
+                        .baseUrl(WIRE_MOCK.runtimeInfo().getHttpBaseUrl())
+                        .headers(Map.of(headerName, savedValue))
+                        .configuration(Map.of("provider_name", CUSTOM_PROVIDER_NAME, "models", MODEL))
+                        .build(), API_KEY, workspaceName, HttpStatus.SC_CREATED);
+                llmProviderApiKeyResourceClient.updateProviderApiKey(providerApiKey.id(), ProviderApiKeyUpdate.builder()
+                        .apiKey("dummy-key")
+                        .headers(Map.of(headerName, updatedValue))
+                        .build(), API_KEY, workspaceName, HttpStatus.SC_NO_CONTENT);
+                actualContents.add(chatCompletionsClient.create(API_KEY, workspaceName, request).choices()
+                        .getFirst().message().content());
+            });
+
+            assertThat(actualContents).containsExactly(expectedContent);
+            WIRE_MOCK.server().verify(1, postRequestedFor(urlPathMatching(CHAT_COMPLETIONS_REGEX))
+                    .withHeader(headerName, equalTo(updatedValue)));
+            assertThat(actualEvents).isNotEmpty()
+                    .noneMatch(event -> event.contains(savedValue) || event.contains(updatedValue));
         }
 
         /**
@@ -1374,6 +1417,11 @@ class ChatCompletionsResourceTest {
                     arguments(named("documented code", HttpStatus.SC_UNAUTHORIZED), "application/json",
                             openAiError(message, "invalid_request_error", "invalid_api_key"),
                             new ErrorMessage(HttpStatus.SC_UNAUTHORIZED, message)),
+                    arguments(named("documented code beside a top-level status", HttpStatus.SC_UNAUTHORIZED),
+                            "application/json",
+                            openAiErrorWithStatus(message, "invalid_request_error", "invalid_api_key",
+                                    HttpStatus.SC_UNAUTHORIZED),
+                            new ErrorMessage(HttpStatus.SC_UNAUTHORIZED, message)),
                     // the 500 is what OpenAiErrorMessage reports for a code it can't map, as before
                     arguments(named("undocumented type and code", HttpStatus.SC_BAD_REQUEST), "application/json",
                             openAiError(message, "gateway_error", "blocked"),
@@ -1481,6 +1529,12 @@ class ChatCompletionsResourceTest {
         private static String openAiError(String message, String type, String code) {
             return JsonUtils.writeValueAsString(Map.of("error",
                     Map.of("message", message, "type", type, "code", code)));
+        }
+
+        /** As {@link #openAiError}, with the top-level {@code status} field OpenAI also sends. */
+        private static String openAiErrorWithStatus(String message, String type, String code, int status) {
+            return JsonUtils.writeValueAsString(Map.of("error",
+                    Map.of("message", message, "type", type, "code", code), "status", status));
         }
 
         private static String anthropicError(String type, String message) {

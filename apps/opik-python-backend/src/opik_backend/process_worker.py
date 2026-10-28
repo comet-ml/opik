@@ -656,9 +656,12 @@ def worker_process_main(connection: Connection, isolate: bool = False) -> None:
     if isolate:
         try:
             isolate_worker(connection.fileno())
-        except Exception as e:
-            # The parent logs the cause once for the whole pool.
-            send_reply(connection, {"code": 500, "error": f"Worker isolation failed: {e}", ISOLATION_ERROR_KEY: str(e)})
+        except OSError as e:
+            # isolate_worker raises only OSError, naming the step; the parent logs the cause once for the whole pool.
+            try:
+                send_reply(connection, {"code": 500, "error": f"Worker isolation failed: {e}", ISOLATION_ERROR_KEY: str(e)})
+            except OSError as send_e:
+                logger.warning(f"Could not report the isolation failure to the parent: {type(send_e).__name__}")
             # A forked worker must not run the parent's exit handlers.
             os._exit(1)
 
@@ -705,8 +708,8 @@ def worker_process_main(connection: Connection, isolate: bool = False) -> None:
                 }
                 try:
                     send_reply(connection, {REQUEST_ID_KEY: request_id, RESULT_KEY: error_msg})
-                except Exception as send_e:
-                    logger.error(f"Failed to send error to parent: {send_e}")
+                except OSError as send_e:
+                    logger.error(f"Failed to send error to parent: {type(send_e).__name__}")
                 logger.error(f"Encountered error: {e}")
                 logger.error(traceback.format_exc())
 
@@ -720,7 +723,8 @@ def worker_process_main(connection: Connection, isolate: bool = False) -> None:
         }
         try:
             send_reply(connection, error_payload)
-        except Exception:
-            pass  # Pipe might not be usable
+        except OSError as send_e:
+            # The pipe might not be usable; the error itself is logged below.
+            logger.warning(f"Could not report the initialization error to the parent: {type(send_e).__name__}")
         logger.error(f"Worker initialization error: {str(e)}\n{traceback.format_exc()}")
         sys.exit(1)

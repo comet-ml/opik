@@ -3,16 +3,19 @@ package com.comet.opik.api.resources.utils.resources;
 import com.comet.opik.api.DeleteIdsHolder;
 import com.comet.opik.api.Optimization;
 import com.comet.opik.api.OptimizationStatus;
+import com.comet.opik.api.OptimizationStudioConfig;
 import com.comet.opik.api.OptimizationUpdate;
 import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.utils.JsonUtils;
 import com.google.common.net.HttpHeaders;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.Response;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.RandomUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.http.HttpStatus;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
@@ -49,6 +52,21 @@ public class OptimizationResourceClient {
                 .baselineCost(null)
                 .bestCost(null)
                 .totalOptimizationCost(null);
+    }
+
+    /**
+     * A random Studio config whose model parameters are ones the Studio runner passes on, as the Studio UI saves them;
+     * opikApiKey is left out, as it's populated server-side.
+     */
+    public OptimizationStudioConfig createStudioConfig() {
+        var config = podamFactory.manufacturePojo(OptimizationStudioConfig.class);
+        var parameters = JsonUtils.getJsonNodeFromString("""
+                {"temperature": %s, "max_completion_tokens": %d, "custom_parameters": {"thinking": {"level": "low"}}}"""
+                .formatted(RandomUtils.secure().randomDouble(0, 1), RandomUtils.secure().randomInt(1, 4096)));
+        return config.toBuilder()
+                .llmModel(config.llmModel().toBuilder().parameters(parameters).build())
+                .opikApiKey(null)
+                .build();
     }
 
     public UUID create(Optimization optimization, String apiKey, String workspaceName) {
