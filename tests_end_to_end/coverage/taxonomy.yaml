@@ -1327,6 +1327,35 @@ areas:
       - online-evaluation/online-evaluation-thread-judge-provider-failure.spec.ts
       - online-evaluation/online-evaluation-thread-scope-batch-close.spec.ts
     capabilities:
+      # OPEN, needs a human call — two of them, both about what this key is
+      # being asked to carry as of 2.2.119. Nothing flips either way: the key
+      # was already `covered: true` at t1 on the happy path
+      # (online-evaluation-smoke.spec.ts), and both specs below really do create
+      # a rule through the panel and read its id back, so the tag is honest for
+      # the CREATE itself. What has no key is everything else they assert.
+      #
+      # 1. The START CARDS (opik#9143). A card is a prompt plus a question list,
+      #    and two specs now ride here for it:
+      #    online-evaluation-decision-model-start-cards.spec.ts asserts WHICH
+      #    prompt, questions and score names each of the six cards applies, and
+      #    online-evaluation-start-card-validation.spec.ts asserts the two
+      #    submit blocks the cards brought with them (`requirePrompt` and
+      #    `requirePromptVariable`, refused exhaustively and posting nothing).
+      #    Neither is "a judge rule can be created" — every assertion in both
+      #    passes over a card wired to another card's prompt. Either add a
+      #    capability (candidates: online-evaluation.start-card-templates and
+      #    online-evaluation.start-card-validation) or drop those tags and leave
+      #    the behaviour honestly uncovered. Do NOT read this key's coverage as
+      #    evidence about either.
+      #
+      # 2. The decision-model TYPE itself. `EvaluatorType` is three values and
+      #    `automations.ts` keys `decision_model` separately from
+      #    `llm_as_judge`, but no capability names it, so decision-model rule
+      #    creation has always been folded under this judge key — the
+      #    pre-existing online-evaluation-jev-decision-model.spec.ts does it
+      #    too, which is the precedent the new specs follow. Flagged rather than
+      #    fixed here because splitting it is a denominator decision, and it is
+      #    estate-wide rather than this PR's: three specs would retag.
       create-llm-judge-rule:   { covered: true,  tier: t1-smoke }
       llm-judge-scores:        { covered: true,  tier: t1-smoke, note: "bimodal safe/unsafe; t2 also covers provider-failure classification (OPIK-8262) — a permanent status costs exactly one upstream call, a transient one the whole retry budget, and neither writes a score; t2 also pins the no-score half on EVERY deployment (online-evaluation-llm-judge-provider-failure.spec.ts), where a refused judge leaves the trace carrying its control rule's score and nothing else — the classification spec needs the host-run mock gateway and so can only make that claim on oss" }
       create-python-rule:      { covered: true,  tier: t1-smoke }
