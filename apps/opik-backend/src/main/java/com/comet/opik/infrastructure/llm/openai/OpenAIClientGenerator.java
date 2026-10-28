@@ -246,7 +246,8 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
                         options.timeout(streamingTimeout());
                     }
                 });
-        return OpenAiResponsesExtraBody.withExtraBody(client, extraBody);
+        var withExtraBody = OpenAiResponsesExtraBody.withExtraBody(client, extraBody);
+        return streaming ? OpenAiResponsesStreamEnd.failingUnfinishedStreams(withExtraBody) : withExtraBody;
     }
 
     /**

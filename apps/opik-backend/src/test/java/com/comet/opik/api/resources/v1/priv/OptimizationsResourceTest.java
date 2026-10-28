@@ -49,6 +49,7 @@ import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.google.common.eventbus.EventBus;
 import com.redis.testcontainers.RedisContainer;
+import io.dropwizard.jersey.errors.ErrorMessage;
 import org.apache.commons.collections4.SetUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.http.HttpStatus;
@@ -104,6 +105,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
 import static org.awaitility.Awaitility.await;
+import static org.junit.jupiter.api.Named.named;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -2586,10 +2588,76 @@ class OptimizationsResourceTest {
     class OptimizationStudioTests {
 
         private OptimizationStudioConfig createStudioConfig() {
-            // opikApiKey is @JsonIgnore and populated server-side, so we don't include it
-            return podamFactory.manufacturePojo(OptimizationStudioConfig.class).toBuilder()
-                    .opikApiKey(null)
+            return optimizationResourceClient.createStudioConfig();
+        }
+
+        Stream<Arguments> studioModelParametersOutsideTheRunnersAreRejected() {
+            var value = "value-%s".formatted(RandomStringUtils.secure().nextAlphanumeric(16));
+            return Stream.of(
+                    arguments(named("a model parameter the runner drops", """
+                            {"temperature": 0.2, "api_base": "%s"}""".formatted(value)), null,
+                            "llm_model.parameters has keys the Studio runner doesn't pass on, keys '[api_base]'"),
+                    arguments(named("an optimizer model parameter the runner drops", null), """
+                            {"base_url": "%s", "model_list": []}""".formatted(value), """
+                            optimizer.parameters.model_parameters has keys the Studio runner doesn't pass on, \
+                            keys '[base_url, model_list]'"""),
+                    arguments(named("a body key picking a destination or a credential", """
+                            {"custom_parameters": {"api_key": "%s", "OPENAI_BASE_URL": "%s", "top_k": 5}}"""
+                            .formatted(value, value)), null, """
+                                    llm_model.parameters.custom_parameters can't pick a destination or a credential, \
+                                    keys '[OPENAI_BASE_URL, api_key]'"""),
+                    arguments(named("parameters that aren't an object", """
+                            ["%s"]""".formatted(value)), null, "llm_model.parameters must be an object"));
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource
+        @DisplayName("Create Studio optimization - model parameters the runner wouldn't pass on are rejected")
+        void studioModelParametersOutsideTheRunnersAreRejected(String llmModelParameters,
+                String optimizerModelParameters, String expectedMessage) {
+            var studioConfig = createStudioConfig();
+            if (llmModelParameters != null) {
+                studioConfig = studioConfig.toBuilder().llmModel(studioConfig.llmModel().toBuilder()
+                        .parameters(JsonUtils.getJsonNodeFromString(llmModelParameters)).build()).build();
+            }
+            if (optimizerModelParameters != null) {
+                studioConfig = studioConfig.toBuilder().optimizer(studioConfig.optimizer().toBuilder()
+                        .parameters(JsonUtils.getJsonNodeFromString("{\"model_parameters\": %s}"
+                                .formatted(optimizerModelParameters)))
+                        .build()).build();
+            }
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .studioConfig(studioConfig)
                     .build();
+            var expectedError = new ErrorMessage(HttpStatus.SC_BAD_REQUEST,
+                    expectedMessage);
+
+            try (var response = optimizationResourceClient.callCreate(optimization, API_KEY, TEST_WORKSPACE_NAME)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                assertThat(response.readEntity(ErrorMessage.class))
+                        .isEqualTo(expectedError);
+            }
+        }
+
+        @Test
+        @DisplayName("Create Studio optimization - the parameters the Studio UI saves are accepted")
+        void studioModelParametersTheUiSavesAreAccepted() {
+            var studioConfig = createStudioConfig();
+            var optimizerParameters = JsonUtils.getJsonNodeFromString("""
+                    {"model": "openrouter/some-model", "model_parameters": {"temperature": 0.7, "max_tokens": 512,
+                     "seed": 3, "reasoning_effort": "low", "custom_parameters": {"top_k": 40, "min_p": 0.1,
+                     "reasoning": {"effort": "low"}, "output_config": {"effort": "high"}}}}""");
+            studioConfig = studioConfig.toBuilder()
+                    .optimizer(studioConfig.optimizer().toBuilder().parameters(optimizerParameters).build())
+                    .build();
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .studioConfig(studioConfig)
+                    .build();
+
+            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
+            var actualOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+
+            assertThat(actualOptimization.studioConfig()).isEqualTo(studioConfig);
         }
 
         @Test

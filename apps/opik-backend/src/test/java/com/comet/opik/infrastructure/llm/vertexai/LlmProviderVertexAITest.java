@@ -36,7 +36,8 @@ class LlmProviderVertexAITest {
         var generator = mock(VertexAIClientGenerator.class);
         when(generator.newVertexAIStreamingClient(any(), any()))
                 .thenReturn(
-                        new CloseableVertexAiStreamingChatModel(delegate, client, LlmTestClients.REMOTE_MEDIA_INLINER));
+                        new CloseableVertexAiStreamingChatModel(delegate, client, new CancellableCalls(),
+                                LlmTestClients.REMOTE_MEDIA_INLINER));
         return new LlmProviderVertexAI(generator,
                 LlmProviderClientApiConfig.builder().apiKey("key").configuration(Map.of()).build());
     }
@@ -105,7 +106,8 @@ class LlmProviderVertexAITest {
         var client = mock(Client.class);
         var delegate = mock(StreamingChatModel.class, withSettings().extraInterfaces(AutoCloseable.class));
 
-        new CloseableVertexAiStreamingChatModel(delegate, client, LlmTestClients.REMOTE_MEDIA_INLINER).close();
+        new CloseableVertexAiStreamingChatModel(delegate, client, new CancellableCalls(),
+                LlmTestClients.REMOTE_MEDIA_INLINER).close();
 
         verify(client).close();
         verify((AutoCloseable) delegate).close();

@@ -9,6 +9,7 @@ import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmTestClients;
+import com.comet.opik.utils.ClientDisconnectedException;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
@@ -36,7 +37,10 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.io.IOException;
 import java.lang.reflect.Method;
+import java.net.InetAddress;
+import java.net.ServerSocket;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -1067,6 +1071,72 @@ class VertexAIClientGeneratorTest {
             }
             assertThat(generationConfig.has("maxOutputTokens")).isTrue();
             assertThat(generationConfig.get("maxOutputTokens").asInt()).isEqualTo(expected);
+        }
+    }
+
+    /**
+     * A raw server answering one streamed call with two events, then holding it open until the client lets go. Two,
+     * as the SDK reads one event ahead: the first reaches the caller once the second arrived.
+     */
+    private static ServerSocket streamHeldOpen(CompletableFuture<Void> providerClosed) throws IOException {
+        var server = new ServerSocket(0, 1, InetAddress.getLoopbackAddress());
+        Thread.ofVirtual().start(() -> {
+            try (var socket = server.accept(); var out = socket.getOutputStream()) {
+                var in = socket.getInputStream();
+                var head = new StringBuilder();
+                while (!head.toString().endsWith("\r\n\r\n")) {
+                    head.append((char) in.read());
+                }
+                out.write("""
+                        HTTP/1.1 200 OK\r
+                        Content-Type: text/event-stream\r
+                        Connection: close\r
+                        \r
+                        data: {"candidates": [{"content": {"role": "model", "parts": [{"text": "hi"}]}}]}\r
+                        \r
+                        data: {"candidates": [{"content": {"role": "model", "parts": [{"text": "there"}]}}]}\r
+                        \r
+                        """.getBytes(StandardCharsets.UTF_8));
+                out.flush();
+                // the request body, then nothing until the client closes the connection
+                while (in.read() != -1) {
+                    // nothing more is expected
+                }
+                providerClosed.complete(null);
+            } catch (IOException exception) {
+                // a reset is the client letting go too
+                providerClosed.complete(null);
+            }
+        });
+        return server;
+    }
+
+    /** A caller gone after the first chunk ends the Vertex AI call, rather than the stream being read to its end. */
+    @Test
+    @DisplayName("a disconnected caller cancels the Vertex AI stream")
+    void aDisconnectedCallerCancelsTheStream() throws Exception {
+        var providerClosed = new CompletableFuture<Void>();
+        try (var server = streamHeldOpen(providerClosed)) {
+            var endpoint = "http://localhost:%d/".formatted(server.getLocalPort());
+            var config = clientConfig();
+            config.setVertexAIClient(config.getVertexAIClient().toBuilder()
+                    .multiRegionApiEndpoints(Map.of("global", endpoint))
+                    .build());
+            var provider = new LlmProviderVertexAI(new VertexAIClientGenerator(config, registry,
+                    LlmTestClients.REMOTE_MEDIA_INLINER, LlmTestClients.VIDEO_MIME_TYPE_UTILS),
+                    LlmProviderClientApiConfig.builder()
+                            .apiKey(serviceAccountJson)
+                            .configuration(Map.of("location", "global"))
+                            .build());
+
+            provider.generateStream(ChatCompletionRequest.builder().model(MODEL).addUserMessage("hello").build(),
+                    "workspace", message -> {
+                        throw new ClientDisconnectedException(new IOException("closed"));
+                    }, () -> {
+                    }, error -> {
+                    });
+
+            assertThat(providerClosed).succeedsWithin(10, TimeUnit.SECONDS);
         }
     }
 }

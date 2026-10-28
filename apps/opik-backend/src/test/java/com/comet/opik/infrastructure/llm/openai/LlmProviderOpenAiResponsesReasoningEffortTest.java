@@ -43,7 +43,7 @@ class LlmProviderOpenAiResponsesReasoningEffortTest {
 
     @BeforeEach
     void setUp() {
-        openAi = new WireMockServer(0);
+        openAi = LlmTestClients.newLoopbackWireMock();
         openAi.start();
         openAi.stubFor(post(urlPathEqualTo(RESPONSES_PATH)).willReturn(aResponse()
                 .withStatus(400)
@@ -104,7 +104,7 @@ class LlmProviderOpenAiResponsesReasoningEffortTest {
                         LlmTestClients.LLM_HTTP_CLIENT_BUILDERS),
                 LlmProviderClientApiConfig.builder()
                         .apiKey("test-key")
-                        .baseUrl(openAi.baseUrl())
+                        .baseUrl(LlmTestClients.baseUrlOf(openAi))
                         .build());
         var errors = new ArrayList<Throwable>();
 

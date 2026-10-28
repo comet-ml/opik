@@ -25,7 +25,14 @@ class CloseableVertexAiStreamingChatModel implements StreamingChatModel, AutoClo
     private final @NonNull StreamingChatModel delegate;
     @Getter
     private final @NonNull Client client;
+    /** The calls {@link #client} makes, and only its; see {@link #cancel()}. */
+    private final @NonNull CancellableCalls calls;
     private final @NonNull RemoteMediaInliner remoteMediaInliner;
+
+    /** Ends the stream's call, which also ends a read blocked on it: the SDK's stream has no cancel of its own. */
+    void cancel() {
+        calls.cancelAll();
+    }
 
     @Override
     public void chat(ChatRequest chatRequest, StreamingChatResponseHandler handler) {

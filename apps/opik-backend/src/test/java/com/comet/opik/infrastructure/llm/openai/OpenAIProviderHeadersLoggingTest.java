@@ -52,7 +52,7 @@ class OpenAIProviderHeadersLoggingTest {
 
     @BeforeEach
     void setUp() {
-        openAi = new WireMockServer(0);
+        openAi = LlmTestClients.newLoopbackWireMock();
         openAi.start();
         openAi.stubFor(post(urlPathEqualTo(CHAT_COMPLETIONS_PATH)).willReturn(okJson(CHAT_COMPLETION)));
         openAi.stubFor(post(urlPathEqualTo(CHAT_COMPLETIONS_PATH))
@@ -81,7 +81,7 @@ class OpenAIProviderHeadersLoggingTest {
         var headerValue = "marker-%s".formatted(RandomStringUtils.secure().nextAlphanumeric(16));
         var service = serviceProvider.getService(LlmProviderClientApiConfig.builder()
                 .apiKey(RandomStringUtils.secure().nextAlphanumeric(20))
-                .baseUrl(openAi.baseUrl())
+                .baseUrl(LlmTestClients.baseUrlOf(openAi))
                 .headers(Map.of(headerName, headerValue))
                 .build());
         var request = ChatCompletionRequest.builder().model("gpt-4o").addUserMessage("hi").build();
@@ -125,7 +125,7 @@ class OpenAIProviderHeadersLoggingTest {
         headers.put("x-route", lowerCaseValue);
         var config = LlmProviderClientApiConfig.builder()
                 .apiKey(RandomStringUtils.secure().nextAlphanumeric(20))
-                .baseUrl(openAi.baseUrl())
+                .baseUrl(LlmTestClients.baseUrlOf(openAi))
                 .headers(headers)
                 .build();
         var request = ChatCompletionRequest.builder().model("gpt-4o").addUserMessage("hi").build();
