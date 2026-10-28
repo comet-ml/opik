@@ -1,4 +1,4 @@
-export { test, expect } from './studio-allowlist-runs.fixture';
+export { test, expect } from './image-model-token-cost-spans.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -365,6 +365,7 @@ export {
   CACHE_WRITE_1H_KEY,
   CACHE_WRITE_TOTAL_KEY,
   CACHE_WRITE_RATES,
+  CACHE_WRITE_TTL_MODEL,
 } from './cache-write-ttl-spans.fixture';
 export type {
   CacheDialectWriter,
@@ -578,3 +579,23 @@ export type {
 } from './paged-optimization-runs.fixture';
 export { TRIAL_COST, TRIALS_PER_RUN } from './paged-optimization-runs.fixture';
 export type { StudioAllowlistRunsFixtures } from './studio-allowlist-runs.fixture';
+export type {
+  ClaudeCodeOtelSpanSeed,
+  ClaudeCodeOtelCacheSpansRef,
+  ClaudeCodeOtelCacheSpansFixtures,
+} from './claude-code-otel-cache-spans.fixture';
+export {
+  CLAUDE_CODE_SCOPE,
+  CLAUDE_CODE_LLM_SPAN_NAME,
+  CLAUDE_CODE_MODEL,
+  CLAUDE_CODE_USAGE_ATTR,
+  CLAUDE_CODE_CACHE_WRITE_RATES,
+  CLAUDE_CODE_UNMAPPED_ATTR,
+  CLAUDE_CODE_UNMAPPED_VALUE,
+  CACHE_CREATION_1H_USAGE_KEY,
+} from './claude-code-otel-cache-spans.fixture';
+export type {
+  ImageModelTokenCostSpanSeed,
+  ImageModelTokenCostSpansRef,
+  ImageModelTokenCostSpansFixtures,
+} from './image-model-token-cost-spans.fixture';

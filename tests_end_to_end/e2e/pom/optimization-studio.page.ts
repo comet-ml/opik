@@ -606,6 +606,144 @@ export class OptimizationStudioPage {
   }
 
   /**
+   * Open the prompt model's parameters popover and leave it open.
+   *
+   * Separate from {@link readModelParameters}, which opens and closes in one
+   * call: a caller reading the effort dropdown has to keep the popover standing
+   * across several reads, because the dropdown's own options render in a portal
+   * and every close/reopen cycle re-runs the panel's remount race.
+   */
+  async openModelParameters(): Promise<void> {
+    return test.step('Open the prompt model’s parameters panel', async () => {
+      const panel = this.modelParametersPanel();
+      if (await panel.isVisible().catch(() => false)) return;
+      // Retried for the reason `selectModel` is: the panel remounts when the
+      // /llm/models and provider-key queries resolve, which detaches the
+      // trigger mid-click.
+      await expect(async () => {
+        await this.modelParametersTrigger().click({ timeout: 2_000 });
+        await expect(panel).toBeVisible({ timeout: 2_000 });
+      }).toPass({ timeout: 15_000 });
+    });
+  }
+
+  /**
+   * The effort `Select` the open prompt-model parameters panel mounts.
+   *
+   * Addressed by role rather than by its label: `SelectBox` does put the id on
+   * the trigger, but the label differs per provider ("Reasoning effort",
+   * "Thinking effort", "Effort") and this POM must run against the deployed
+   * image as it renders. The panel's only other controls are
+   * `SliderInputControl` number inputs and the Extra body parameters editor, so
+   * its one combobox is this dropdown — asserted `toHaveCount(1)` before every
+   * read rather than taken as `.first()`, so a panel that grew a second
+   * dropdown fails loudly instead of reading whichever came first.
+   *
+   * `PromptModelConfigs` is the same component the playground and the
+   * online-evaluation rule editor mount, so this mirrors
+   * `PlaygroundPage.reasoningEffortTrigger` and
+   * `OnlineEvaluationPage.judgeEffortTrigger`.
+   */
+  private promptEffortTrigger(): Locator {
+    return this.modelParametersPanel().getByRole('combobox');
+  }
+
+  /**
+   * Every effort the prompt model's control OFFERS, in the order it lists them.
+   *
+   * The whole list rather than one membership check: the Responses-API-only
+   * levels are APPENDED to the base set, so "Max is absent" and "the base
+   * levels are still there" are different claims and a caller wants both at
+   * once. A build that dropped the entire effort control and one that dropped
+   * only the Responses branch look identical through a single negative.
+   *
+   * Leaves the parameters panel open.
+   */
+  async promptEffortOptions(): Promise<string[]> {
+    return test.step('Read the offered prompt-model effort levels', async () => {
+      const current = await this.readPromptEffortValue();
+      const listbox = await this.openPromptEffortListbox();
+      const options = (await listbox.getByRole('option').allTextContents()).map((o) => o.trim());
+
+      // Closed by re-picking the level already in force, which is a no-op for
+      // the form. NOT Escape, for the reason `closeModelParameters` spells out:
+      // inside the `ResizableSidePanel` the keypress bubbles past the dropdown
+      // and dismisses the whole new-run sidebar, so a caller that then read the
+      // effort would find no control to read. Not the trigger either — while a
+      // Radix Select is open its trigger is not a hit target at all, and even a
+      // forced click waits for one that never comes.
+      const same = listbox.getByRole('option', { name: current, exact: true });
+      await expect(
+        same,
+        `the displayed level "${current}" is one of the levels offered`,
+      ).toHaveCount(1);
+      await same.click();
+      await expect(listbox).toHaveCount(0);
+      await expect(
+        this.modelParametersPanel(),
+        'reading the offered levels left the parameters panel open',
+      ).toBeVisible();
+      return options;
+    });
+  }
+
+  /**
+   * The effort the prompt model's panel currently DISPLAYS.
+   *
+   * Which is not always the effort that is stored: `updateProviderConfig` moves
+   * a carried-over level to the nearest one the new model offers, and
+   * `resolveEffort` masks a stored value the model cannot take — so the panel is
+   * the only place the reconciled level is visible before a run is launched.
+   *
+   * Leaves the parameters panel open.
+   */
+  async readPromptEffort(): Promise<string> {
+    return test.step('Read the displayed prompt-model effort', async () =>
+      this.readPromptEffortValue());
+  }
+
+  /** Pick a prompt-model effort by its rendered label, e.g. `xHigh`. */
+  async selectPromptEffort(label: string): Promise<void> {
+    return test.step(`Select prompt-model effort "${label}"`, async () => {
+      const listbox = await this.openPromptEffortListbox();
+      const option = listbox.getByRole('option', { name: label, exact: true });
+      // Exactly one, not `.first()`: "High" and "xHigh" are both offered, and
+      // an ambiguous match would silently store the wrong level.
+      await expect(option, `"${label}" is offered`).toHaveCount(1);
+      await option.click();
+      await expect(listbox).toHaveCount(0);
+      // The trigger, not the form state: a click Radix swallowed mid-remount
+      // would otherwise leave the caller asserting the next step against the
+      // level it meant to leave behind. Exact, so picking "High" cannot be
+      // satisfied by a trigger still reading "xHigh".
+      await expect(this.promptEffortTrigger()).toHaveText(label);
+    });
+  }
+
+  private async readPromptEffortValue(): Promise<string> {
+    await expect(
+      this.promptEffortTrigger(),
+      'the prompt-model parameters panel mounts exactly one effort control',
+    ).toHaveCount(1);
+    return ((await this.promptEffortTrigger().textContent()) ?? '').trim();
+  }
+
+  private async openPromptEffortListbox(): Promise<Locator> {
+    await expect(
+      this.promptEffortTrigger(),
+      'the prompt-model parameters panel mounts exactly one effort control',
+    ).toHaveCount(1);
+    const listbox = this.page.getByRole('listbox');
+    // Retried: the panel remounts when /llm/models and the provider-key query
+    // resolve, which detaches the trigger mid-click.
+    await expect(async () => {
+      await this.promptEffortTrigger().click();
+      await expect(listbox).toBeVisible({ timeout: 2_000 });
+    }).toPass({ timeout: 15_000 });
+    return listbox;
+  }
+
+  /**
    * Open the prompt model's parameters popover and read every slider it mounts,
    * by control id, then close it again.
    *
