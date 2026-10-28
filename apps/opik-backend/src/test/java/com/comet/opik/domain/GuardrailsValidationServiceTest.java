@@ -165,7 +165,10 @@ class GuardrailsValidationServiceTest {
                         "validations[0].config needs allowed_topics or restricted_topics"),
                 Arguments.of("a topic in both lists, ignoring case",
                         "{\"allowed_topics\":[\"Billing\"],\"restricted_topics\":[\"billing\"]}",
-                        "validations[0].config has 'Billing' in both allowed_topics and restricted_topics"));
+                        "validations[0].config has 'Billing' in both allowed_topics and restricted_topics"),
+                Arguments.of("a topic in both lists, ignoring case with a dotless i",
+                        "{\"allowed_topics\":[\"Işık\"],\"restricted_topics\":[\"IŞIK\"]}",
+                        "validations[0].config has 'Işık' in both allowed_topics and restricted_topics"));
     }
 
     @ParameterizedTest(name = "{0}")
