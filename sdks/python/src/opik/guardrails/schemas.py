@@ -18,6 +18,9 @@ class ValidationResult(pydantic.BaseModel):
     type: ValidationType
     validation_config: Dict[str, Any]
     validation_details: Dict[str, Any]
+    # Set by the Opik backend when the check could not run; the entry then passes (the
+    # backend fails open on an outage of its inference service).
+    error: Optional[str] = None
 
 
 class ValidationResponse(pydantic.BaseModel):

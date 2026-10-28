@@ -7,9 +7,9 @@ og:description: Create and manage named guardrail policies in the Opik UI, then 
 og:site_name: Opik Documentation
 ---
 
-A **policy** is a named group of one or more guards, stored in your Opik workspace. Your application references the policy by name rather than spelling out the checks itself.
+A **policy** is a named group of one or more rules, stored in your Opik workspace. Your application references the policy by name rather than spelling out the checks itself.
 
-That splits the work cleanly in two. Policies are created and edited **in the Opik UI**, and the SDK's job is to fetch them and run the checks. Changing what a guardrail enforces — adding an entity, tightening a threshold, switching a model — is something a teammate does in the UI, with no code change and no redeploy.
+That splits the work cleanly in two. Policies are created and edited **in the Opik UI**, and the SDK's job is to name them when it asks Opik to check a text. Changing what a guardrail enforces — adding a category of personal data, restricting another topic — is something a teammate does in the UI, with no code change and no redeploy.
 
 This is how we recommend running guardrails. It keeps the checks visible to everyone on the team, lets you tighten them in response to something you saw in production without waiting on a release, and applies the same protection consistently across every application that references the policy.
 
@@ -19,9 +19,9 @@ This is how we recommend running guardrails. It keeps the checks visible to ever
 
 ## Create a policy
 
-Open **Guardrails** in the sidebar and stay on the **Policies** tab, then choose **Create policy**.
+Open **Guardrails** in the sidebar, then choose **Create policy**.
 
-A policy has a name, an optional description, an execution mode, and the guards it runs.
+A policy has a name, an optional description, an execution scope, and the rules it runs.
 
 <Steps>
   <Step title="Name it">
@@ -31,20 +31,20 @@ A policy has a name, an optional description, an execution mode, and the guards 
       Applications reference a policy by name. Renaming a policy that is already in use breaks every application still asking for the old name, so treat the name as part of your public interface.
     </Warning>
   </Step>
-  <Step title="Choose an execution mode">
+  <Step title="Choose an execution scope">
     - **On request** — the policy applies only to applications that name it. This is the default.
-    - **Always** — the policy applies to every application in the workspace, whether or not it names the policy. Use this for baseline protection you want enforced everywhere, such as blocking personal data.
+    - **Global** — the policy applies to every application in the workspace, whether or not it names the policy. Use this for baseline protection you want enforced everywhere, such as blocking personal data.
   </Step>
-  <Step title="Switch on the guards it runs">
-    Turn on the checks you want and configure each one. A policy holds at most one guard of each type, so a policy is a set of distinct checks rather than a list that can repeat.
+  <Step title="Switch on the rules it runs">
+    Turn on the checks you want and configure each one. A policy holds at most one rule of each type, so a policy is a set of distinct checks rather than a list that can repeat.
 
     <Frame>
       <img src="/img/guardrails/policy-configuration.png" />
     </Frame>
 
-    Most guards take a **threshold** — the score at or above which the guard fails. Lower is stricter. The other fields depend on the type: PII asks which categories of personal data to block, Topic takes lists of allowed and restricted topics, the LLM judge takes your rule in plain language plus a model, and the custom classifier takes one of your models.
+    A policy can hold the **PII**, **Topic**, and **Prompt injection** rules. PII asks which categories of personal data to block, Topic takes lists of allowed and restricted topics, and prompt injection has nothing to configure.
 
-    The five types are described in full on the [Guards](/guardrails/guardrails) page. The **LLM judge** guard needs a model from the providers configured under [AI Providers](/administration/workspace-settings/ai_providers), and the **custom classifier** guard needs one of your [custom models](/guardrails/custom-guardrails).
+    The rule types are described in full on the [Rules](/guardrails/guardrails) page. The **LLM judge** and **custom classifier** rules are not stored in policies: [define them in code](/guardrails/guardrails#defining-rules-in-code).
   </Step>
 </Steps>
 
@@ -68,7 +68,7 @@ except exceptions.GuardrailValidationFailed as e:
     print("Guardrail failed:", e)
 ```
 
-Pass several names to combine policies. Their guards are checked together as one set, and the guardrail fails if any single guard fails:
+Pass several names to combine policies. Their rules are checked together as one set, and the guardrail fails if any single rule fails:
 
 ```python wordWrap
 guardrail = Guardrail.from_stored_policies(
@@ -76,31 +76,33 @@ guardrail = Guardrail.from_stored_policies(
 )
 ```
 
-Policies set to **Always** are included automatically, so a workspace-wide rule applies even to an application that names nothing:
+**Global** policies are included automatically, so a workspace-wide rule applies even to an application that names nothing:
 
 ```python wordWrap
-# Runs every "Always" policy in the workspace
+# Runs every global policy in the workspace
 guardrail = Guardrail.from_stored_policies()
 ```
 
+Global policies also run whenever Opik checks rules [defined in code](/guardrails/guardrails#defining-rules-in-code).
+
 A few things worth knowing about the call:
 
-- Policies are read **once**, when you build the guardrail. Build it at startup rather than on every request, and restart (or rebuild the guardrail) to pick up a change made in the UI.
-- Every name you pass must exist. A name that does not is an error, rather than a check quietly not running.
+- Opik reads the policies on **every** `validate` call, so a change saved in the UI applies to the next check, with no restart or redeploy.
+- Every name you pass must exist. A name that does not makes `validate` raise `GuardrailValidationError`, rather than a check quietly not running.
 
 ## Manage policies
 
-The **Policies** tab lists every policy in the workspace with the guards it holds, its execution mode, and who last changed it. Selecting a row opens the policy for editing, and the row menu offers **Duplicate** — a quick way to build a variant without retyping the guards.
+The **Guardrails** page lists every policy in the workspace with the rules it holds, its execution scope, and who created it and when it last changed. Selecting a row opens the policy for editing, and the row menu offers **Duplicate** — a quick way to build a variant without retyping the rules.
 
-Saved changes apply to every application that references the policy the next time it builds its guardrail.
+Saved changes apply to every application that references the policy on its next check.
 
 ## Next steps
 
 <CardGroup cols={2}>
-  <Card title="Guards" href="/guardrails/guardrails" icon="fa-regular fa-shield-check">
-    What each of the five guard types checks, and how to configure it.
+  <Card title="Rules" href="/guardrails/guardrails" icon="fa-regular fa-shield-check">
+    What each of the five rule types checks, and how to configure it.
   </Card>
   <Card title="Custom models" href="/guardrails/custom-guardrails" icon="fa-regular fa-brain">
-    Fine-tune a model for a check the built-in guards do not cover.
+    Fine-tune a model for a check the built-in rules do not cover.
   </Card>
 </CardGroup>

@@ -1,11 +1,53 @@
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Sequence
 
 import httpx
 
 import opik.guardrails.schemas as schemas
 from opik import config as opik_config
 from opik import httpx_client
+from opik.api_objects import opik_client
 from opik.rest_api import core as rest_api_core
+
+VALIDATIONS_PATH = "v1/private/guardrails/v2/validations"
+
+
+def validate_on_opik(
+    client: opik_client.Opik,
+    text: str,
+    validations: List[Dict[str, Any]],
+    policies: Optional[Sequence[str]],
+    timeout_seconds: int,
+) -> schemas.ValidationResponse:
+    """
+    Check the text on the Opik backend against the given rules, the named stored policies
+    and every global policy of the workspace.
+
+    Composed by hand rather than through the generated REST client: the endpoint is not
+    yet part of the published OpenAPI definition the client is generated from.
+    """
+    payload: Dict[str, Any] = {"text": text, "validations": validations}
+    if policies is not None:
+        payload["policies"] = list(policies)
+
+    response = client.rest_client._client_wrapper.httpx_client.request(
+        VALIDATIONS_PATH,
+        method="POST",
+        json=payload,
+        request_options={"timeout_in_seconds": timeout_seconds},
+    )
+    if response.status_code != 200:
+        raise rest_api_core.ApiError(
+            status_code=response.status_code, body=_error_body(response)
+        )
+
+    return schemas.ValidationResponse(**response.json())
+
+
+def _error_body(response: httpx.Response) -> Any:
+    try:
+        return response.json()
+    except ValueError:
+        return response.text
 
 
 def build_httpx_client(

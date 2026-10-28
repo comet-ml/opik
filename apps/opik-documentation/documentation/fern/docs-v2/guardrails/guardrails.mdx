@@ -1,15 +1,15 @@
 ---
-headline: Guards
-og:description: The five guard types available in Opik guardrails — PII, topic, prompt
+headline: Rules
+og:description: The five rule types available in Opik guardrails — PII, topic, prompt
   injection, LLM judge, and custom classifier — what each one checks and what you configure.
 og:site_name: Opik Documentation
-og:title: Guards for LLM Guardrails - Opik
-title: Guards
+og:title: Rules for LLM Guardrails - Opik
+title: Rules
 ---
 
-A **guard** is one check, configured. This page covers the five guard types Opik offers: what each one detects, what you configure on it, and what it needs in order to run.
+A **rule** is one check, configured. This page covers the five rule types Opik offers: what each one detects, what you configure on it, and what it needs in order to run.
 
-You put guards into a [policy](/guardrails/policies) in the Opik UI, and your application runs that policy by name. Configuration lives in Opik; your code only calls `validate`.
+You put PII, Topic, and prompt injection rules into a [policy](/guardrails/policies) in the Opik UI, and your application runs that policy by name. Configuration lives in Opik; your code only calls `validate`.
 
 <Frame>
   <img src="/img/production/guardrails_results.gif" />
@@ -17,7 +17,7 @@ You put guards into a [policy](/guardrails/policies) in the Opik UI, and your ap
 
 ## Quickstart
 
-Create a policy in the UI with the guards you want, then build a guardrail from it and validate your text. A failing check raises, so the protected path only continues when `validate` returns.
+Create a policy in the UI with the rules you want, then build a guardrail from it and validate your text. A failing check raises, so the protected path only continues when `validate` returns.
 
 ```python wordWrap
 from opik.guardrails import Guardrail
@@ -41,18 +41,18 @@ The call is blocking, since the whole point is to stop your application before i
 </Tip>
 
 <Note>
-  If you self-host Opik, the PII, Topic, prompt injection, and custom classifier guards need the guardrails server
-  running. Start it alongside the rest of the stack with `./opik.sh --guardrails`, and see the
-  [Guardrails server](/guardrails/server) page for GPU and deployment options. The LLM judge guard does not need it.
+  PII, Topic, and prompt injection rules, and the policies that hold them, are checked by Opik itself and are
+  available on the Enterprise plan of Opik Cloud. The LLM judge rule runs in the SDK, and the custom classifier rule
+  runs on a self-hosted [guardrails server](/guardrails/server).
 </Note>
 
-## The five guard types
+## The five rule types
 
-Providers like OpenAI or Anthropic already block the most universal risks, such as harmful or malicious content. Opik's guards cover the residual risks, which tend to be specific to your product and need configuring in more detail.
+Providers like OpenAI or Anthropic already block the most universal risks, such as harmful or malicious content. Opik's rules cover the residual risks, which tend to be specific to your product and need configuring in more detail.
 
-Each guard picks the method that gives the best balance of accuracy, latency, and cost for its problem — traditional NLP for personal data, small language models for topic and injection detection, a full LLM for nuanced judgement.
+Each rule picks the method that gives the best balance of accuracy, latency, and cost for its problem — a small language model answering focused questions for personal data, topics, and injection detection, a full LLM for nuanced judgement.
 
-All five are configured the same way: switch the guard on in a policy and fill in its fields.
+PII, Topic, and prompt injection rules are configured in a policy: switch the rule on and fill in its fields. The LLM judge and custom classifier rules are [defined in code](#defining-rules-in-code).
 
 ### PII
 
@@ -60,10 +60,9 @@ Detects sensitive personal information such as names, addresses, email addresses
 
 **What you configure**
 
-- **Personal data to block** — which categories to look for. The UI offers the categories that come up most often; the underlying detector supports a [much longer list](https://microsoft.github.io/presidio/supported_entities/).
-- **Threshold** — the confidence at or above which a detection counts. Lower is stricter. Default is 0.5.
+- **Personal data to block** — which categories to look for: credit card numbers, phone numbers, email addresses, bank account numbers (IBAN), IP addresses, vehicle registration plates, postal addresses, person names, cryptocurrency wallet addresses, medical license numbers, and URLs.
 
-_The method used here leverages traditional NLP models for tokenization and named entity recognition._
+_Each category is one yes-or-no question to a small language model._
 
 ### Topic
 
@@ -71,25 +70,20 @@ Keeps inputs and outputs on topic.
 
 **What you configure**
 
-- **Restricted topics** — text must not match any of these.
-- **Allowed topics** — text must match at least one of these.
-- **Threshold** — the score at or above which a topic counts as detected.
+- **Restricted topics** — text must not be about any of these.
+- **Allowed topics** — text must be about at least one of these.
 
-You can set either list or both. Restricted topics are the common case: name what your application must stay away from.
+You can set either list or both, but a topic cannot be in both. Restricted topics are the common case: name what your application must stay away from.
 
-_This guardrail relies on a small language model, specifically a zero-shot classifier._
+_A small language model picks the topic the text is about from each list._
 
 ### Prompt injection
 
 Detects attempts to make your LLM ignore, override, or reveal its instructions, along with other malicious queries. Use it on user inputs to block jailbreaks and injection attacks before they reach your model.
 
-**What you configure**
+There is nothing to configure: switch the rule on.
 
-- **Threshold** — the injection probability at or above which the guard fails. Lower is stricter.
-
-The model is fixed: this guard runs [Opik Guard](/guardrails/prompt-injection-model), a classifier we trained for this job. On a self-hosted deployment the server needs a Hugging Face token to fetch it — see the [server configuration](/guardrails/server#configuration).
-
-_This guardrail relies on a small language model fine-tuned for prompt-injection detection._
+_This guardrail relies on a small language model._
 
 ### LLM judge
 
@@ -106,18 +100,18 @@ Checks text against a rule you describe in plain language. Because a full LLM do
   `gpt-4o-mini`, a Google Gemini Flash model, or an Anthropic Claude Haiku model.
 </Note>
 
-This is the one guard that does not use the guardrails server. Its model call is recorded as a nested LLM span under the guardrail span, so you can inspect the exact prompt, response, and token usage in the trace.
+The SDK runs this rule itself. Its model call is recorded as a nested LLM span under the guardrail span, so you can inspect the exact prompt, response, and token usage in the trace.
 
 _This guardrail relies on a large language model, and is best suited to complex checks where accuracy matters more than latency._
 
 ### Custom classifier
 
-Runs a [model you fine-tuned yourself](/guardrails/custom-guardrails) — a check that answers one yes-or-no question specific to your product, such as whether a reply is off-brand. Opik trains it on your labeled examples and serves it, so there is nothing to deploy.
+Runs a [model you fine-tuned yourself](/guardrails/custom-guardrails) — a check that answers one yes-or-no question specific to your product, such as whether a reply is off-brand. The [guardrails server](/guardrails/server) trains it on your labeled examples and serves it.
 
 **What you configure**
 
-- **Model** — which of your models to run. Only models that are ready can be selected.
-- **Threshold** — the score at or above which the guard fails.
+- **Model** — which of your models to run.
+- **Threshold** — the score at or above which the rule fails.
 
 See [Custom models](/guardrails/custom-guardrails) for how to fine-tune one.
 
@@ -128,9 +122,9 @@ _This guardrail relies on a small language model fine-tuned on your own labeled 
 A failing guardrail raises an exception, and your application code needs to handle it — retry, fall back to a safe default, or return an error, whichever suits the situation.
 
 <Warning>
-  Guardrails fail closed. If a check cannot be evaluated (for example the guardrails server is unreachable, the
-  request times out, or an LLM judge provider call fails), `validate` raises `opik.exceptions.GuardrailValidationError`
-  rather than letting the text through. This exception subclasses `GuardrailValidationFailed`, so an existing
+  Guardrails fail closed. If a check cannot be evaluated (for example Opik is unreachable, the request times out,
+  guardrails are not available in the workspace, a named policy does not exist, or an LLM judge provider call fails),
+  `validate` raises `opik.exceptions.GuardrailValidationError` rather than letting the text through. This exception subclasses `GuardrailValidationFailed`, so an existing
   `except GuardrailValidationFailed` block also stops the request. Structure your code so the protected path only
   proceeds when `validate` returns successfully.
 </Warning>
@@ -157,21 +151,17 @@ When a guardrail fails on an LLM call, Opik adds the information to the trace au
 
 To see how often each guardrail is failing over time, open the **Metrics** section of the project.
 
-## Performance and limits
+## Limits
 
-The guardrails backend uses a GPU automatically if one is available. For production use, running it on a GPU node is strongly recommended.
+- A Topic rule takes up to 254 topics in each list, each up to 256 characters.
+- A guardrail call checks at most 32 rules defined in code, plus the rules of the policies it names and of every global policy.
 
-Current limits:
+## Defining rules in code
 
-- Topic guardrail: the maximum input size is 1024 tokens
-- Both Topic and PII guardrails support English language
-
-## Defining guards in code
-
-Guards can also be listed inline instead of stored in a policy. This is handy for a quick experiment or a check that only one script cares about.
+Rules can also be listed inline instead of stored in a policy. This is handy for a quick experiment or a check that only one script cares about, and it is how the LLM judge and custom classifier rules are used.
 
 <Warning>
-  Guards defined this way are invisible to everyone else and can only be changed by editing and redeploying your
+  Rules defined this way are invisible to everyone else and can only be changed by editing and redeploying your
   application. Prefer a [policy](/guardrails/policies) for anything that runs in production.
 </Warning>
 
@@ -180,9 +170,9 @@ from opik.guardrails import Guardrail, PII, Topic
 from opik import exceptions
 
 guardrail = Guardrail(
-    guards=[
-        Topic(restricted_topics=["finance", "health"], threshold=0.9),
-        PII(blocked_entities=["CREDIT_CARD", "PERSON"]),
+    rules=[
+        Topic(restricted_topics=["finance", "health"]),
+        PII(entities=["CREDIT_CARD", "PERSON"]),
     ]
 )
 
@@ -192,19 +182,21 @@ except exceptions.GuardrailValidationFailed as e:
     print(e)
 ```
 
-Each guard type has a matching class, taking the same settings the UI exposes:
+Rules in code and stored policies combine: pass `policies=["no-contact-information"]` alongside `rules` to check both in one call.
 
-| Guard | Class | Arguments |
+Each rule type has a matching class, taking the same settings the UI exposes:
+
+| Rule | Class | Arguments |
 | --- | --- | --- |
-| PII | `PII` | `blocked_entities`, `threshold`, `language` |
-| Topic | `Topic` | `restricted_topics`, `allowed_topics`, `threshold` |
-| Prompt injection | `PromptInjection` | `threshold` |
+| PII | `PII` | `entities` (any of `CREDIT_CARD`, `PHONE_NUMBER`, `EMAIL_ADDRESS`, `IBAN_CODE`, `IP_ADDRESS`, `NRP`, `LOCATION`, `PERSON`, `CRYPTO`, `MEDICAL_LICENSE`, `URL`) |
+| Topic | `Topic` | `restricted_topics`, `allowed_topics` |
+| Prompt injection | `PromptInjection` | none |
 | LLM judge | `LLMJudge` | `name`, `instructions`, `model` |
 | Custom classifier | `CustomGuardrail` | `model_name`, `threshold` |
 
 ## Manual guardrails
 
-For a check that fits none of the five guard types — a one-off heuristic, or a business rule that is genuinely just code — you can run it yourself and log the result to Opik directly. No guard class and no guardrails server are involved.
+For a check that fits none of the five rule types — a one-off heuristic, or a business rule that is genuinely just code — you can run it yourself and log the result to Opik directly. No rule class and no guardrails server are involved.
 
 <Tip>
   This is different from a [custom model](/guardrails/custom-guardrails), which Opik fine-tunes and serves for you.
@@ -288,7 +280,7 @@ For a check that fits none of the five guard types — a one-off heuristic, or a
   </Accordion>
 </AccordionGroup>
 
-The guardrail spans appear alongside your traces just like the built-in guards, showing what was detected and whether the check passed or failed.
+The guardrail spans appear alongside your traces just like the built-in rules, showing what was detected and whether the check passed or failed.
 
 <Frame>
   <img src="/img/production/custom-guardrails-dashboard.png" />
@@ -298,9 +290,9 @@ The guardrail spans appear alongside your traces just like the built-in guards, 
 
 <CardGroup cols={2}>
   <Card title="Policies" href="/guardrails/policies" icon="fa-regular fa-list-check">
-    Group these guards into a named policy your application references.
+    Group these rules into a named policy your application references.
   </Card>
   <Card title="Custom models" href="/guardrails/custom-guardrails" icon="fa-regular fa-brain">
-    Fine-tune a model for a check none of the five guard types cover.
+    Fine-tune a model for a check none of the built-in rule types cover.
   </Card>
 </CardGroup>

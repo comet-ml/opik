@@ -12,9 +12,9 @@ Guardrails are real-time checks that run inline with your LLM calls to catch uns
 
 ## What Opik offers
 
-- **Five guard types** — PII detection, allowed and restricted topics, prompt injection and jailbreak detection, an LLM-as-a-judge check written in plain language, and your own trained classifier.
+- **Five rule types** — PII detection, allowed and restricted topics, prompt injection and jailbreak detection, an LLM-as-a-judge check written in plain language, and your own trained classifier.
 - **Stored policies** — define your checks once in the Opik UI and reference them by name from your application. Workspace-wide policies can also be enforced on every application, whether or not it asks for them.
-- **Model fine-tuning** — for a check the built-in guards do not cover, fine-tune a language model on your own labeled examples. Opik hosts the training, reports how accurate the result is, and serves the model inline. No training infrastructure of your own, and no deployment step.
+- **Model fine-tuning** — for a check the built-in rules do not cover, fine-tune a language model on your own labeled examples. Opik hosts the training, reports how accurate the result is, and serves the model inline. No training infrastructure of your own, and no deployment step.
 - **Full observability** — every guardrail run is logged as a span on the trace it protects, so you can inspect what failed and track failure rates over time.
 
 ## Concepts
@@ -23,9 +23,9 @@ Three words come up throughout these pages, and it helps to separate them up fro
 
 | Term | What it is |
 | --- | --- |
-| **Guard** | One check, configured — for example "block credit card numbers". Each guard has a type: PII, topic, prompt injection, LLM judge, or custom classifier. |
-| **Policy** | A named group of guards, stored in your workspace. Your application references the name, so the checks can change without a code change. |
-| **Guardrail** | What your application actually calls. You build it from one or more policies, and it runs every guard those policies hold on each piece of text you give it. |
+| **Rule** | One check, configured — for example "block credit card numbers". Each rule has a type: PII, topic, prompt injection, LLM judge, or custom classifier. |
+| **Policy** | A named group of rules, stored in your workspace. Your application references the name, so the checks can change without a code change. |
+| **Guardrail** | What your application actually calls. You build it from one or more policies, rules defined in code, or both, and it runs every rule they hold on each piece of text you give it. |
 
 In short: a policy is configuration, a guardrail is what executes. One guardrail can combine several policies, and one policy can be used by any number of applications.
 
@@ -71,8 +71,8 @@ Use **[online evaluation](/production/online-evaluation/rules)** when you want t
   <Card title="Policies" href="/guardrails/policies" icon="fa-regular fa-list-check">
     Define your checks once in the UI and reference them by name from your application.
   </Card>
-  <Card title="Guards" href="/guardrails/guardrails" icon="fa-regular fa-shield-check">
-    What each of the five guard types detects, and what you configure on it.
+  <Card title="Rules" href="/guardrails/guardrails" icon="fa-regular fa-shield-check">
+    What each of the five rule types detects, and what you configure on it.
   </Card>
   <Card title="Custom models" href="/guardrails/custom-guardrails" icon="fa-regular fa-brain">
     Fine-tune a model on your own labeled examples for a check of your own.

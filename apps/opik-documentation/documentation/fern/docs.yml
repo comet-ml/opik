@@ -553,7 +553,7 @@ navigation:
           - page: Policies
             path: ./docs-v2/guardrails/policies.mdx
             slug: policies
-          - page: Guards
+          - page: Rules
             path: ./docs-v2/guardrails/guardrails.mdx
             slug: guardrails
           - page: Prompt injection model

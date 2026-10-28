@@ -1,7 +1,12 @@
+import json
+import types
+
 import httpx
+import pytest
 
 import opik.config as config
 import opik.guardrails.rest_api_client as rest_api_client
+from opik.rest_api import core as rest_api_core
 
 
 def _config():
@@ -37,3 +42,86 @@ def test_guardrails_api_client_validate__request_carries_auth_headers():
     assert sent_requests[0].headers["Comet-Workspace"] == "test-workspace"
     # The guardrails backend cannot read a gzipped body.
     assert "Content-Encoding" not in sent_requests[0].headers
+
+
+def _opik_client(handler):
+    httpx_client = httpx.Client(
+        base_url="http://opik/api/", transport=httpx.MockTransport(handler)
+    )
+
+    def request(path, method, json, request_options):
+        return httpx_client.request(method, path, json=json)
+
+    return types.SimpleNamespace(
+        rest_client=types.SimpleNamespace(
+            _client_wrapper=types.SimpleNamespace(
+                httpx_client=types.SimpleNamespace(request=request)
+            )
+        )
+    )
+
+
+def test_validate_on_opik__posts_text_rules_and_policies():
+    sent_requests = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent_requests.append(request)
+        return httpx.Response(200, json={"validation_passed": True, "validations": []})
+
+    result = rest_api_client.validate_on_opik(
+        client=_opik_client(handler),
+        text="some text",
+        validations=[{"type": "PII", "config": {"entities": ["EMAIL_ADDRESS"]}}],
+        policies=["no_contact_information"],
+        timeout_seconds=7,
+    )
+
+    assert result.validation_passed is True
+    assert sent_requests[0].url.path == "/api/v1/private/guardrails/v2/validations"
+    assert json.loads(sent_requests[0].content) == {
+        "text": "some text",
+        "validations": [{"type": "PII", "config": {"entities": ["EMAIL_ADDRESS"]}}],
+        "policies": ["no_contact_information"],
+    }
+
+
+def test_validate_on_opik__no_policies__policies_not_sent():
+    sent_requests = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent_requests.append(request)
+        return httpx.Response(200, json={"validation_passed": True, "validations": []})
+
+    rest_api_client.validate_on_opik(
+        client=_opik_client(handler),
+        text="some text",
+        validations=[],
+        policies=None,
+        timeout_seconds=7,
+    )
+
+    assert "policies" not in json.loads(sent_requests[0].content)
+
+
+@pytest.mark.parametrize(
+    "response,expected_body",
+    [
+        (
+            httpx.Response(404, json={"message": "Guardrail policy not found"}),
+            {"message": "Guardrail policy not found"},
+        ),
+        (httpx.Response(502, text="Bad Gateway"), "Bad Gateway"),
+    ],
+)
+def test_validate_on_opik__error_status__raises_api_error(response, expected_body):
+    with pytest.raises(rest_api_core.ApiError) as error:
+        rest_api_client.validate_on_opik(
+            client=_opik_client(lambda request: response),
+            text="some text",
+            validations=[],
+            policies=["missing"],
+            timeout_seconds=7,
+        )
+
+    assert error.value.status_code == response.status_code
+    assert error.value.body == expected_body

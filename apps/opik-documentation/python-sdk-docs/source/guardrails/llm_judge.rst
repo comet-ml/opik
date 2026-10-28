@@ -1,7 +1,7 @@
 LLM judge guardrail
 ===================
 
-.. automodule:: opik.guardrails.guards.llm_judge
+.. automodule:: opik.guardrails.rules.llm_judge
     :members:
     :undoc-members:
     :show-inheritance:

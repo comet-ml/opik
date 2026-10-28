@@ -1,7 +1,7 @@
 Custom guardrail
 ================
 
-.. automodule:: opik.guardrails.guards.custom_guardrail
+.. automodule:: opik.guardrails.rules.custom_guardrail
     :members:
     :undoc-members:
     :show-inheritance:

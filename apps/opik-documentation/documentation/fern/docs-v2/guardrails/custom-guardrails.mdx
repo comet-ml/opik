@@ -1,21 +1,21 @@
 ---
 title: Custom models
-subtitle: Fine-tune a language model for a check the built-in guards do not cover
+subtitle: Fine-tune a language model for a check the built-in rules do not cover
 headline: Custom Guardrail Models | Opik Documentation
 og:title: Custom Guardrail Models — Opik
-og:description: Fine-tune a language model on your own labeled examples to create a custom guardrail in Opik, then run it from a policy. Opik hosts the training and serves the model for you.
+og:description: Fine-tune a language model on your own labeled examples to create a custom guardrail in Opik, then run it from your application. Opik hosts the training and serves the model for you.
 og:site_name: Opik Documentation
 ---
 
-The built-in guards cover checks that most applications share — personal data, topics, prompt injection. When you need something specific to your product, **fine-tune your own model**: give Opik a labeled dataset and a description of what to catch, and it trains a language model into a check that answers one yes-or-no question about a piece of text, such as "does this reply read as off-brand?" or "is this abusive?".
+The built-in rules cover checks that most applications share — personal data, topics, prompt injection. When you need something specific to your product, **fine-tune your own model**: give Opik a labeled dataset and a description of what to catch, and it trains a language model into a check that answers one yes-or-no question about a piece of text, such as "does this reply read as off-brand?" or "is this abusive?".
 
 Opik runs the whole loop for you. There is no training infrastructure to set up and nothing to deploy: you supply the examples, Opik fine-tunes the model on its GPUs, reports how accurate it turned out, and serves it inline from that point on. You can do it [from the UI](#create-a-model-in-the-ui) or [from the SDK](#fine-tune-from-the-sdk).
 
-Once created, a model behaves like any other guard: select it in the **custom classifier** guard of a [policy](/guardrails/policies), or reference it by name from code.
+Once created, a model behaves like any other rule: reference it by name from code with the **custom classifier** rule.
 
 ## When to fine-tune
 
-A fine-tuned model is not the only way to cover a check the built-in guards miss, and it is not always the right one:
+A fine-tuned model is not the only way to cover a check the built-in rules miss, and it is not always the right one:
 
 - An [LLM judge](/guardrails/guardrails#llm-judge) needs no model of your own — you write the rule in plain language and a model from your workspace's providers judges it. Fastest to get running, most expensive per call.
 - A [manual guardrail](/guardrails/guardrails#manual-guardrails) suits a one-off heuristic or a business rule that is genuinely just code, like a list of competitor names.
@@ -105,22 +105,20 @@ The panel also lists which policies currently use the model, so you can see what
 
 ## Use it in a guardrail
 
-Add the model to a [policy](/guardrails/policies): switch on the **custom classifier** guard, select your model, and set a threshold. Only models that are ready can be selected.
+Run the model with the `CustomGuardrail` rule, which takes the model's name and a threshold. Only models that are ready can be used.
 
-The guard fails when the model's score is at or above the threshold. Lower it to be stricter, raise it to be more permissive.
-
-From then on, any application that references the policy runs your model along with the policy's other checks — no application change needed to roll it out:
+The rule fails when the model's score is at or above the threshold. Lower it to be stricter, raise it to be more permissive.
 
 ```python wordWrap
-from opik.guardrails import Guardrail
+from opik.guardrails import CustomGuardrail, Guardrail
 
-guardrail = Guardrail.from_stored_policies(names=["support-tone"])
+guardrail = Guardrail(
+    rules=[CustomGuardrail(model_name="support-tone", threshold=0.5)],
+    policies=["no-contact-information"],
+)
 ```
 
-<Note>
-  A model can also be referenced directly in code with the `CustomGuardrail` guard, which takes `model_name` and
-  `threshold`. See [defining guards in code](/guardrails/guardrails#defining-guards-in-code).
-</Note>
+Passing `policies` is optional: it checks your stored [policies](/guardrails/policies) in the same call. See [defining rules in code](/guardrails/guardrails#defining-rules-in-code).
 
 ## Fine-tune from the SDK
 
@@ -173,7 +171,7 @@ By default the call blocks until training finishes and returns evaluation metric
 
 <CardGroup cols={2}>
   <Card title="Policies" href="/guardrails/policies" icon="fa-regular fa-list-check">
-    Group your guards into a named policy your application references.
+    Group the built-in rules into a named policy your application references.
   </Card>
   <Card title="Guardrails server" href="/guardrails/server" icon="fa-regular fa-server">
     Configuration and deployment options for self-hosted Opik.

@@ -3,13 +3,14 @@ import pytest
 
 import opik
 import opik.exceptions as exceptions
-from opik.guardrails import Guardrail, schemas
-from opik.guardrails.guards import guard as guard_module
+from opik.guardrails import Guardrail, PII, rest_api_client, schemas
+from opik.guardrails.rules import rule as rule_module
 from opik.message_processing.messages import GuardrailBatchMessage
+from opik.rest_api import core as rest_api_core
 
 
-class _FailingLocalGuard(guard_module.Guard):
-    local = True
+class _FailingLocalRule(rule_module.Rule):
+    location = rule_module.RuleLocation.LOCAL
 
     def validate_local(self, text, client):
         raise exceptions.GuardrailValidationError(
@@ -17,8 +18,8 @@ class _FailingLocalGuard(guard_module.Guard):
         )
 
 
-class _PassingLocalGuard(guard_module.Guard):
-    local = True
+class _PassingLocalRule(rule_module.Rule):
+    location = rule_module.RuleLocation.LOCAL
 
     def validate_local(self, text, client):
         return [
@@ -31,13 +32,6 @@ class _PassingLocalGuard(guard_module.Guard):
         ]
 
 
-class _RemoteGuard(guard_module.Guard):
-    local = False
-
-    def get_validation_configs(self):
-        return [{"type": "PII", "config": {}}]
-
-
 def _guardrail_span_output(fake_backend):
     output = fake_backend.trace_trees[0].spans[0].output
     if hasattr(output, "model_dump"):
@@ -45,10 +39,38 @@ def _guardrail_span_output(fake_backend):
     return output
 
 
-def test_guardrail_validate__local_guard_fails_closed__span_records_output(
+def _record_opik_calls(monkeypatch, response):
+    calls = []
+
+    def validate_on_opik(client, text, validations, policies, timeout_seconds):
+        calls.append({"text": text, "validations": validations, "policies": policies})
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+    monkeypatch.setattr(rest_api_client, "validate_on_opik", validate_on_opik)
+
+    return calls
+
+
+def _pii_result(passed):
+    return schemas.ValidationResponse(
+        validation_passed=passed,
+        validations=[
+            schemas.ValidationResult(
+                validation_passed=passed,
+                type=schemas.ValidationType.PII,
+                validation_config={"entities": ["EMAIL_ADDRESS"]},
+                validation_details={},
+            )
+        ],
+    )
+
+
+def test_guardrail_validate__local_rule_fails_closed__span_records_output(
     fake_backend,
 ):
-    guardrail = Guardrail(guards=[_FailingLocalGuard()])
+    guardrail = Guardrail(rules=[_FailingLocalRule()])
 
     with pytest.raises(exceptions.GuardrailValidationError):
         guardrail.validate("some text")
@@ -64,12 +86,8 @@ def test_guardrail_validate__local_guard_fails_closed__span_records_output(
 def test_guardrail_validate__backend_unreachable__span_records_output(
     fake_backend, monkeypatch
 ):
-    guardrail = Guardrail(guards=[_RemoteGuard()])
-
-    def raise_connect_error(*args, **kwargs):
-        raise httpx.ConnectError("connection refused")
-
-    monkeypatch.setattr(guardrail._api_client, "validate", raise_connect_error)
+    _record_opik_calls(monkeypatch, httpx.ConnectError("connection refused"))
+    guardrail = Guardrail(rules=[PII(entities=["EMAIL_ADDRESS"])])
 
     with pytest.raises(exceptions.GuardrailValidationError):
         guardrail.validate("some text")
@@ -81,8 +99,94 @@ def test_guardrail_validate__backend_unreachable__span_records_output(
     assert "failing closed" in output["error"]
 
 
-def test_guardrail_validate__passing_guard__span_records_passed_output(fake_backend):
-    guardrail = Guardrail(guards=[_PassingLocalGuard()])
+def test_guardrail_validate__guardrails_not_available__backend_message_surfaced(
+    fake_backend, monkeypatch
+):
+    _record_opik_calls(
+        monkeypatch,
+        rest_api_core.ApiError(
+            status_code=403,
+            body={"message": "Guardrails is available on the Enterprise plan"},
+        ),
+    )
+    guardrail = Guardrail(rules=[PII(entities=["EMAIL_ADDRESS"])])
+
+    with pytest.raises(
+        exceptions.GuardrailValidationError,
+        match="Guardrails is available on the Enterprise plan",
+    ):
+        guardrail.validate("some text")
+
+
+def test_guardrail_validate__opik_rules_and_policies__sent_to_opik_in_one_call(
+    fake_backend, monkeypatch
+):
+    calls = _record_opik_calls(monkeypatch, _pii_result(passed=True))
+    guardrail = Guardrail(
+        rules=[PII(entities=["EMAIL_ADDRESS"])], policies=["no_contact_information"]
+    )
+
+    result = guardrail.validate("some text")
+
+    assert result.validation_passed is True
+    assert calls == [
+        {
+            "text": "some text",
+            "validations": [
+                {
+                    "type": schemas.ValidationType.PII,
+                    "config": {"entities": ["EMAIL_ADDRESS"]},
+                }
+            ],
+            "policies": ["no_contact_information"],
+        }
+    ]
+
+
+def test_guardrail_validate__opik_check_fails__raises_validation_failed(
+    fake_backend, monkeypatch
+):
+    _record_opik_calls(monkeypatch, _pii_result(passed=False))
+    guardrail = Guardrail(rules=[PII(entities=["EMAIL_ADDRESS"])])
+
+    with pytest.raises(exceptions.GuardrailValidationFailed) as error:
+        guardrail.validate("mail me at someone@example.com")
+
+    assert [validation.type for validation in error.value.failed_validations] == [
+        schemas.ValidationType.PII
+    ]
+
+
+@pytest.mark.parametrize(
+    "names,expected_policies",
+    [(["no_contact_information"], ["no_contact_information"]), (None, [])],
+)
+def test_guardrail_from_stored_policies__policies_sent_without_rules(
+    fake_backend, monkeypatch, names, expected_policies
+):
+    calls = _record_opik_calls(monkeypatch, _pii_result(passed=True))
+    guardrail = Guardrail.from_stored_policies(names=names)
+
+    guardrail.validate("some text")
+
+    assert calls == [
+        {"text": "some text", "validations": [], "policies": expected_policies}
+    ]
+
+
+def test_guardrail_validate__local_rules_only__opik_not_called(
+    fake_backend, monkeypatch
+):
+    calls = _record_opik_calls(monkeypatch, _pii_result(passed=True))
+    guardrail = Guardrail(rules=[_PassingLocalRule()])
+
+    guardrail.validate("some text")
+
+    assert calls == []
+
+
+def test_guardrail_validate__passing_rule__span_records_passed_output(fake_backend):
+    guardrail = Guardrail(rules=[_PassingLocalRule()])
 
     result = guardrail.validate("some text")
 
@@ -111,12 +215,12 @@ def _recorded_guardrail_batches(guardrail, monkeypatch):
     return batches
 
 
-def test_guardrail_validate__no_guards__no_guardrail_batch_sent(
+def test_guardrail_validate__no_rules__no_guardrail_batch_sent(
     fake_backend, monkeypatch
 ):
     # The backend rejects an empty guardrail batch, so sending one would report data loss
     # for a guardrail that simply had nothing to check.
-    guardrail = Guardrail(guards=[])
+    guardrail = Guardrail(rules=[])
     batches = _recorded_guardrail_batches(guardrail, monkeypatch)
 
     result = guardrail.validate("some text")
@@ -126,10 +230,10 @@ def test_guardrail_validate__no_guards__no_guardrail_batch_sent(
     assert batches == []
 
 
-def test_guardrail_validate__guard_produced_results__guardrail_batch_sent(
+def test_guardrail_validate__rule_produced_results__guardrail_batch_sent(
     fake_backend, monkeypatch
 ):
-    guardrail = Guardrail(guards=[_PassingLocalGuard()])
+    guardrail = Guardrail(rules=[_PassingLocalRule()])
     batches = _recorded_guardrail_batches(guardrail, monkeypatch)
 
     guardrail.validate("some text")

@@ -9,7 +9,7 @@ import opik.exceptions as exceptions
 from opik import datetime_helpers, opik_context
 from opik.api_objects import opik_client
 
-from . import guard
+from . import rule
 from .. import schemas
 
 
@@ -46,16 +46,16 @@ def _usage_dict(response: Any) -> Optional[Dict[str, Any]]:
     return values
 
 
-class LLMJudge(guard.Guard):
+class LLMJudge(rule.Rule):
     """
-    Guard that validates text against a natural-language policy using an LLM as a judge.
+    Rule that validates text against a natural-language policy using an LLM as a judge.
 
     The judge runs in the SDK and calls the Opik chat completions endpoint, which uses
     the LLM provider configured in your Opik workspace. It does not require the guardrails
     backend. The judge call is logged as a nested LLM span under the guardrail span.
     """
 
-    local = True
+    location = rule.RuleLocation.LOCAL
 
     def __init__(
         self,
@@ -64,7 +64,7 @@ class LLMJudge(guard.Guard):
         model: str,
     ) -> None:
         """
-        Initialize an LLM judge guard.
+        Initialize an LLM judge rule.
 
         Args:
             name: Name of the check, used to label the guardrail results.
