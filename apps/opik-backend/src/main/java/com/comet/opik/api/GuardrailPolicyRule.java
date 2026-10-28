@@ -9,13 +9,13 @@ import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
 
 /**
- * One check of a policy. The config uses the same fields as the guardrails validations contract, so a policy's
- * rules can be sent to the check as they are stored.
+ * One check of a policy, holding only what the user set. A topic rule can carry both an allowed and a restricted
+ * list, since a policy holds one rule per type.
  */
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record GuardrailPolicyRule(
         @NotNull GuardrailType type,
-        @Schema(implementation = JsonNode.class, ref = "JsonNode", description = "User settings only: PII entities, or topics and a mode ('allow' or 'restrict'). Empty for prompt injection. Thresholds are set by the server and rejected here.") @NotNull JsonNode config) {
+        @Schema(implementation = JsonNode.class, ref = "JsonNode", description = "User settings only: PII entities, or topic allowed_topics and restricted_topics (at least one). Empty for prompt injection. Thresholds are set by the server and rejected here.") @NotNull JsonNode config) {
 }

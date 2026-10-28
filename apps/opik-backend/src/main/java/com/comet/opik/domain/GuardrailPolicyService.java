@@ -33,6 +33,7 @@ import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -65,11 +66,14 @@ public interface GuardrailPolicyService {
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class GuardrailPolicyServiceImpl implements GuardrailPolicyService {
 
-    /** The check asks one choice question over the topics plus "none of these", within the service's limit. */
+    /**
+     * Each list becomes one choice question over its topics plus "none of these", within the service's option
+     * limit.
+     */
     static final int MAX_TOPICS = Question.ChoiceQuestion.MAX_OPTIONS - 1;
     static final int MAX_TOPIC_LENGTH = 256;
-    static final String MODE_ALLOW = "allow";
-    static final String MODE_RESTRICT = "restrict";
+    static final String ALLOWED_TOPICS = "allowed_topics";
+    static final String RESTRICTED_TOPICS = "restricted_topics";
     private static final Set<GuardrailType> SUPPORTED_TYPES = EnumSet.of(GuardrailType.PII, GuardrailType.TOPIC,
             GuardrailType.PROMPT_INJECTION);
     private static final String POLICY_NOT_FOUND = "Guardrail policy not found";
@@ -248,24 +252,49 @@ class GuardrailPolicyServiceImpl implements GuardrailPolicyService {
         if (rule.type() == GuardrailType.PII) {
             strings(index, config, "entities").forEach(normalized.putArray("entities")::add);
         } else if (rule.type() == GuardrailType.TOPIC) {
-            var topics = strings(index, config, "topics");
-            if (topics.size() > MAX_TOPICS) {
-                throw new BadRequestException("rules[%d].config.topics has more than %d topics"
-                        .formatted(index, MAX_TOPICS));
+            var allowed = topics(index, config, ALLOWED_TOPICS);
+            var restricted = topics(index, config, RESTRICTED_TOPICS);
+            if (allowed.isEmpty() && restricted.isEmpty()) {
+                throw new BadRequestException("rules[%d].config needs %s or %s"
+                        .formatted(index, ALLOWED_TOPICS, RESTRICTED_TOPICS));
             }
-            if (topics.stream().anyMatch(topic -> topic.length() > MAX_TOPIC_LENGTH)) {
-                throw new BadRequestException("rules[%d].config.topics has a topic longer than %d characters"
-                        .formatted(index, MAX_TOPIC_LENGTH));
+            // Topics are compared ignoring case, as the model reads them.
+            var restrictedLowerCase = restricted.stream()
+                    .map(topic -> topic.toLowerCase(Locale.ROOT))
+                    .collect(Collectors.toSet());
+            allowed.stream()
+                    .filter(topic -> restrictedLowerCase.contains(topic.toLowerCase(Locale.ROOT)))
+                    .findFirst()
+                    .ifPresent(topic -> {
+                        throw new BadRequestException("rules[%d].config has '%s' in both %s and %s"
+                                .formatted(index, topic, ALLOWED_TOPICS, RESTRICTED_TOPICS));
+                    });
+            if (!allowed.isEmpty()) {
+                allowed.forEach(normalized.putArray(ALLOWED_TOPICS)::add);
             }
-            var mode = config.path("mode").asText(null);
-            if (!MODE_ALLOW.equals(mode) && !MODE_RESTRICT.equals(mode)) {
-                throw new BadRequestException("rules[%d].config.mode must be '%s' or '%s'"
-                        .formatted(index, MODE_ALLOW, MODE_RESTRICT));
+            if (!restricted.isEmpty()) {
+                restricted.forEach(normalized.putArray(RESTRICTED_TOPICS)::add);
             }
-            topics.forEach(normalized.putArray("topics")::add);
-            normalized.put("mode", mode);
         }
         return normalized;
+    }
+
+    /** An absent or empty list means the rule does not use it. */
+    private static Set<String> topics(int index, JsonNode config, String field) {
+        var node = config.path(field);
+        if (node.isMissingNode() || node.isNull() || (node.isArray() && node.isEmpty())) {
+            return Set.of();
+        }
+        var topics = strings(index, config, field);
+        if (topics.size() > MAX_TOPICS) {
+            throw new BadRequestException("rules[%d].config.%s has more than %d topics"
+                    .formatted(index, field, MAX_TOPICS));
+        }
+        if (topics.stream().anyMatch(topic -> topic.length() > MAX_TOPIC_LENGTH)) {
+            throw new BadRequestException("rules[%d].config.%s has a topic longer than %d characters"
+                    .formatted(index, field, MAX_TOPIC_LENGTH));
+        }
+        return topics;
     }
 
     private static Set<String> strings(int index, JsonNode config, String field) {

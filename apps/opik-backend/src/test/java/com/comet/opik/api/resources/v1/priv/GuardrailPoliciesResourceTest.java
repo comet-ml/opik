@@ -194,7 +194,8 @@ class GuardrailPoliciesResourceTest {
                 .name("support-bot")
                 .description("Checks for the support agent")
                 .rules(List.of(
-                        rule(GuardrailType.TOPIC, "{\"topics\":[\" billing \",\"shipping\"],\"mode\":\"allow\"}"),
+                        rule(GuardrailType.TOPIC,
+                                "{\"allowed_topics\":[\" billing \",\"shipping\"],\"restricted_topics\":[]}"),
                         rule(GuardrailType.PII, "{\"entities\":[\"EMAIL_ADDRESS\"],\"language\":\"en\"}"),
                         rule(GuardrailType.PROMPT_INJECTION, "{}")))
                 .build();
@@ -208,7 +209,7 @@ class GuardrailPoliciesResourceTest {
         assertThat(created.lastUpdatedBy()).isEqualTo(USER);
         assertThat(created.createdAt()).isNotNull();
         assertThat(created.rules()).containsExactly(
-                rule(GuardrailType.TOPIC, "{\"topics\":[\"billing\",\"shipping\"],\"mode\":\"allow\"}"),
+                rule(GuardrailType.TOPIC, "{\"allowed_topics\":[\"billing\",\"shipping\"]}"),
                 rule(GuardrailType.PII, "{\"entities\":[\"EMAIL_ADDRESS\"]}"),
                 rule(GuardrailType.PROMPT_INJECTION, "{}"));
     }
@@ -243,14 +244,16 @@ class GuardrailPoliciesResourceTest {
                         "rules[0].config.entities must contain only non-blank strings"),
                 Arguments.of(List.of(rule(GuardrailType.PII, "{\"entities\":[\"PERSON\",\"PERSON \"]}")),
                         "rules[0].config.entities contains a value more than once"),
-                Arguments.of(List.of(rule(GuardrailType.TOPIC, "{\"topics\":[\"billing\"]}")),
-                        "rules[0].config.mode must be 'allow' or 'restrict'"),
+                Arguments.of(List.of(rule(GuardrailType.TOPIC, "{\"allowed_topics\":[]}")),
+                        "rules[0].config needs allowed_topics or restricted_topics"),
                 Arguments.of(List.of(rule(GuardrailType.TOPIC,
-                        "{\"topics\":[\"" + "a".repeat(257) + "\"],\"mode\":\"allow\"}")),
-                        "rules[0].config.topics has a topic longer than 256 characters"),
+                        "{\"allowed_topics\":[\"Billing\"],\"restricted_topics\":[\"politics\",\"billing\"]}")),
+                        "rules[0].config has 'Billing' in both allowed_topics and restricted_topics"),
                 Arguments.of(List.of(rule(GuardrailType.TOPIC,
-                        "{\"topics\":" + tooManyTopics + ",\"mode\":\"restrict\"}")),
-                        "rules[0].config.topics has more than 254 topics"));
+                        "{\"restricted_topics\":[\"" + "a".repeat(257) + "\"]}")),
+                        "rules[0].config.restricted_topics has a topic longer than 256 characters"),
+                Arguments.of(List.of(rule(GuardrailType.TOPIC, "{\"allowed_topics\":" + tooManyTopics + "}")),
+                        "rules[0].config.allowed_topics has more than 254 topics"));
     }
 
     @ParameterizedTest
@@ -285,7 +288,8 @@ class GuardrailPoliciesResourceTest {
         var replacement = GuardrailPolicy.builder()
                 .name("renamed")
                 .executionScope(GuardrailExecutionScope.GLOBAL)
-                .rules(List.of(rule(GuardrailType.TOPIC, "{\"topics\":[\"politics\"],\"mode\":\"restrict\"}")))
+                .rules(List.of(rule(GuardrailType.TOPIC,
+                        "{\"allowed_topics\":[\"billing\"],\"restricted_topics\":[\"politics\"]}")))
                 .build();
 
         try (var response = request(workspace, "/" + created.id()).put(Entity.json(replacement))) {
@@ -297,7 +301,7 @@ class GuardrailPoliciesResourceTest {
         assertThat(updated.description()).isNull();
         assertThat(updated.executionScope()).isEqualTo(GuardrailExecutionScope.GLOBAL);
         assertThat(updated.rules()).containsExactly(
-                rule(GuardrailType.TOPIC, "{\"topics\":[\"politics\"],\"mode\":\"restrict\"}"));
+                rule(GuardrailType.TOPIC, "{\"allowed_topics\":[\"billing\"],\"restricted_topics\":[\"politics\"]}"));
         assertThat(updated.createdAt()).isEqualTo(created.createdAt());
         assertThat(updated.lastUpdatedAt()).isAfter(created.lastUpdatedAt());
     }
