@@ -435,11 +435,6 @@ def _resolve_gepa_finish_reason(
 
 
 class GepaOptimizer(BaseOptimizer):
-    # FIXME(opik_optimizer/#gepa-tool-optimization): Re-enable when GEPA adapter
-    # can mutate and score tool descriptions end-to-end.
-    supports_tool_optimization: bool = True
-    supports_prompt_optimization: bool = True
-    supports_multimodal: bool = True
     """
     The GEPA (Genetic-Pareto) Optimizer uses a genetic algorithm with Pareto optimization
     to improve prompts while balancing multiple objectives.
@@ -460,6 +455,10 @@ class GepaOptimizer(BaseOptimizer):
             through to gepa.optimize() as the instruction-proposal prompt; it must
             contain the <curr_param> and <side_info> markers.
     """
+
+    supports_tool_optimization: bool = True
+    supports_prompt_optimization: bool = True
+    supports_multimodal: bool = True
 
     DEFAULT_PROMPTS = gepa_prompts.DEFAULT_PROMPTS
 
@@ -895,6 +894,7 @@ class GepaOptimizer(BaseOptimizer):
                 "max_merge_invocations": max_merge_invocations,
                 "max_metric_calls": max_metric_calls,
                 "stop_callbacks": stop_callbacks,
+                "callbacks": [adapter.lineage_callback()],
                 "run_dir": run_dir,
                 "track_best_outputs": track_best_outputs,
                 "display_progress_bar": use_adapter_progress_bar,

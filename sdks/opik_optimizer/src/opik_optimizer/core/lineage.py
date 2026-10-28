@@ -6,10 +6,11 @@ label trials: a candidate something was built on shows as "Passed", one nothing
 was built on as "Discarded". Without these keys the UI chains trials in creation
 order, so every trial but the last looks "Passed".
 
-A candidate's parent is the prompt the optimizer derived it from, which the
-optimizer declares with ``derive_from`` before generating a round of candidates.
-Optimizers that sample around the original prompt (or don't declare a source)
-parent every candidate on the baseline, the root. Re-evaluating the same prompt
+A candidate's parents are the prompts the optimizer derived it from. An optimizer
+declares them with ``derive_from`` before generating a round of candidates, or
+with ``declare_parents`` for one candidate (an Evolutionary crossover child has
+two). Optimizers that sample around the original prompt (or don't declare a
+source) parent every candidate on the baseline, the root. Re-evaluating the same prompt
 reuses its candidate id, so the UI groups those experiments as one candidate.
 """
 
@@ -59,13 +60,20 @@ class CandidateLineage:
         with self._lock:
             self._by_fingerprint: dict[str, _Candidate] = {}
             self._root: _Candidate | None = None
-            self._source: str | None = None
+            self._sources: tuple[str, ...] = ()
+            self._declared: dict[str, tuple[str, ...]] = {}
 
-    def derive_from(self, source: _PromptLike) -> None:
-        """Declare the prompt the next new candidates are generated from."""
-        fingerprint = prompt_fingerprint(source)
+    def derive_from(self, *sources: _PromptLike) -> None:
+        """Declare the prompts the next new candidates are generated from."""
+        fingerprints = tuple(prompt_fingerprint(source) for source in sources)
         with self._lock:
-            self._source = fingerprint
+            self._sources = fingerprints
+
+    def declare_parents(self, child: _PromptLike, parents: list[_PromptLike]) -> None:
+        """Declare the parents of one candidate, ahead of its evaluation."""
+        fingerprints = tuple(prompt_fingerprint(parent) for parent in parents)
+        with self._lock:
+            self._declared[prompt_fingerprint(child)] = fingerprints
 
     def tag(
         self, experiment_config: dict[str, Any] | None, prompt: _PromptLike
@@ -90,13 +98,23 @@ class CandidateLineage:
                 candidate = _Candidate("baseline", 0, ())
                 self._root = candidate
             else:
-                parent = (
-                    self._by_fingerprint.get(self._source) if self._source else None
-                ) or self._root
+                root = self._root
+                parents = self._known_parents(
+                    self._declared.pop(fingerprint, ()) or self._sources
+                ) or [root]
                 candidate = _Candidate(
                     f"candidate-{len(self._by_fingerprint)}",
-                    parent.step_index + 1,
-                    (parent.candidate_id,),
+                    1 + max(parent.step_index for parent in parents),
+                    tuple(parent.candidate_id for parent in parents),
                 )
             self._by_fingerprint[fingerprint] = candidate
             return candidate
+
+    def _known_parents(self, fingerprints: tuple[str, ...]) -> list[_Candidate]:
+        # A parent that was never evaluated has no trial to point at.
+        found: dict[str, _Candidate] = {}
+        for fingerprint in fingerprints:
+            parent = self._by_fingerprint.get(fingerprint)
+            if parent is not None:
+                found.setdefault(parent.candidate_id, parent)
+        return list(found.values())

@@ -241,6 +241,9 @@ def run_generation(
     if optimizer._reporter:
         optimizer._reporter.performing_crossover()
     offspring = [copy.deepcopy(ind) for ind in offspring]
+    # The prompts each offspring is built from, so its trial records its real
+    # parents: both sides of a crossover, or the individual a mutation changed.
+    parents_of: dict[int, list[Any]] = {}
     for i in range(0, len(offspring), 2):
         if i + 1 < len(offspring):
             c1, c2 = offspring[i], offspring[i + 1]
@@ -266,6 +269,11 @@ def run_generation(
                         verbose=optimizer.verbose,
                         rng=crossover_rng,
                     )
+                crossed = [
+                    optimizer._individual_to_prompts(c1),
+                    optimizer._individual_to_prompts(c2),
+                ]
+                parents_of[i] = parents_of[i + 1] = crossed
                 offspring[i], offspring[i + 1] = c1_new, c2_new
                 del offspring[i].fitness.values, offspring[i + 1].fitness.values
 
@@ -279,6 +287,8 @@ def run_generation(
     mut_rate = optimizer._get_adaptive_mutation_rate()
     for i, ind in enumerate(offspring):
         if gen_rng.random() < mut_rate:
+            # A crossover child was never evaluated, so keep its parents.
+            parents_of.setdefault(i, [optimizer._individual_to_prompts(ind)])
             new_ind = mutation_ops.deap_mutation(
                 individual=ind,
                 optimizer=optimizer,
@@ -297,6 +307,10 @@ def run_generation(
             offspring[i] = new_ind
             del offspring[i].fitness.values
 
+    for i, parents in parents_of.items():
+        optimizer._lineage.declare_parents(
+            optimizer._individual_to_prompts(offspring[i]), parents
+        )
     invalid = [ind for ind in offspring if not ind.fitness.valid]
     if optimizer._reporter:
         optimizer._reporter.performing_evaluation(len(invalid))

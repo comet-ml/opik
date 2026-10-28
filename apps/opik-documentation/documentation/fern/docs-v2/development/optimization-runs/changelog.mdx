@@ -20,7 +20,7 @@ These changes are pending release and are not included in the published package 
 - HRPO root-cause analysis includes bounded agent trace context. Nested local trace recordings remain unsupported; see the [HRPO guide](/development/optimization-runs/algorithms/hierarchical_adaptive_optimizer).
 - Candidate evaluation, trial accounting, and call attribution share the base lifecycle. Winner selection, ties, stopping, malformed MetaPrompt generations, and Context7 test-mode dataset sizes are corrected.
 - MetaPrompt now shows its reasoning model how the best prompt scored: its worst training cases with outputs and metric reasons. Validation scores are never shown.
-- Trial experiments record which candidate each was derived from, so the Opik UI marks trials Passed or Discarded from the real search tree, including GEPA's reflection parents.
+- Trial experiments record which candidate each was derived from, so the Opik UI marks trials Passed or Discarded from the real search tree, including GEPA's reflection and merge parents and both parents of an Evolutionary crossover.
 - A prompt already scored on the same items is not evaluated again. HRPO's failure analysis reuses the best prompt's evaluation, and GEPA reuses the baseline's; MetaPrompt and Evolutionary no longer re-score repeated prompts.
 - With a validation split, HRPO's analysis of training items is logged as a mini-batch experiment instead of counting toward a trial's validation score. `evaluate_prompt` accepts `experiment_type` for this.
 
@@ -33,7 +33,7 @@ These changes are pending release and are not included in the published package 
 - **ParameterOptimizer:** set models and baseline settings on each `ChatPrompt`, then call `optimize_parameter()`. Constructor `model` and `model_parameters` are deprecated and ignored. Search changes only selected fields; result parameter maps are keyed by prompt name.
 - **Benchmarks:** task `model` / `model_parameters` and CLI `--models` configure evaluation only. Configure optimizer reasoning independently through `optimizer_params`; omitted reasoning settings use optimizer defaults. Neither side borrows from the other. Empty parameter dictionaries stay empty, and blank model names are rejected. Resume and retry reject legacy unversioned checkpoints; start a new benchmark with explicit model configuration.
 - **MCP:** install `opik-optimizer[mcp]` for MCP tools. The extra requires MCP 1.x; plain function tools work without it.
-- **Custom optimizers:** implement `run_optimization(context)` and use `pre_round`, `post_round`, `pre_trial`, and `post_trial`. The legacy `begin_round`, `finish_round`, `start_candidate` and `finish_candidate` aliases are removed. See [Extending optimizers](/development/optimization-runs/advanced/extending_optimizers).
+- **Custom optimizers:** implement `run_optimization(context)` and use `pre_round`, `post_round`, `pre_trial`, and `post_trial`. The legacy `begin_round`, `finish_round`, `start_candidate` and `finish_candidate` aliases are removed.
 - **FewShot:** `enable_optuna_pruning` is deprecated and has no effect.
 - **Prompt overrides:** HRPO's `batch_analysis_prompt` no longer takes `{formatted_batch}` and Evolutionary's `style_inference_user_prompt_template` no longer takes `{examples_str}`; the cases are attached to the request instead. Remove those placeholders from custom overrides.
 

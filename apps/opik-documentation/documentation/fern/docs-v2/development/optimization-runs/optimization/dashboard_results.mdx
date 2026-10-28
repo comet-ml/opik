@@ -26,7 +26,7 @@ After each optimization run, visit the Opik dashboard to understand what changed
     Lists each trial, the optimizer used, the prompt JSON, and per-trial scores. Click a trial row to expand dataset items and attached traces.
   </Accordion>
   <Accordion title="Trial status">
-    Each trial records the candidate it was derived from, so the run forms a tree rooted at the baseline.
+    Each trial records the candidates it was derived from (two for an Evolutionary crossover or a GEPA merge), so the run forms a tree rooted at the baseline.
     **Passed** marks a candidate the optimizer built on (or the best one), **Discarded** one nothing
     was built on. Optimizers that sample settings around your prompt (Few-Shot Bayesian, Parameter)
     derive every candidate from the baseline, so only the baseline and the best trial show as Passed.

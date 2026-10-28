@@ -153,9 +153,25 @@ def test_candidates_that_never_beat_the_baseline_all_derive_from_it(
     candidates = {c["candidate_id"]: c for c in configs}
     # GEPA sees no score signal and stops after the baseline.
     assert len(candidates) > 1 or optimizer_name == "GepaOptimizer"
+    if optimizer_name == "EvolutionaryOptimizer":
+        return  # it breeds from its whole population, not from the best prompt
     for candidate_id, config in candidates.items():
         if candidate_id != "baseline":
             assert config["parent_candidate_ids"] == ["baseline"], candidate_id
+
+
+def test_evolutionary_children_record_both_crossover_parents(
+    install_fakes: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    scenario = harness.build_scenario("S1_single")
+    install_fakes(scenario)
+    configs = _record_trial_configs(monkeypatch)
+
+    # A flat score keeps it from stopping early, so crossover children get scored.
+    harness.run_optimizer("EvolutionaryOptimizer", scenario, metric=_flat, max_trials=8)
+
+    parents = [c["parent_candidate_ids"] for c in configs]
+    assert any(len(set(p)) == 2 for p in parents)
 
 
 @pytest.mark.parametrize("optimizer_name", harness.OPTIMIZERS)

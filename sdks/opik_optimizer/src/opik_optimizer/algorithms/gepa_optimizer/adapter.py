@@ -216,6 +216,22 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
             extras={"score_label": "per_item"},
         )
 
+    def lineage_callback(self) -> LineageCallback:
+        """A GEPA callback that logs each candidate's real parents."""
+        return LineageCallback(self)
+
+    def prompts_for(
+        self, candidate: dict[str, str]
+    ) -> dict[str, chat_prompt.ChatPrompt]:
+        """The prompts a GEPA candidate stands for, without logging warnings."""
+        prompts, _ = candidate_ops.rebuild_prompts_from_candidate(
+            base_prompts=self._base_prompts,
+            candidate=candidate,
+            allowed_roles=self._allowed_roles,
+            known_placeholder_keys=self._known_placeholder_keys,
+        )
+        return prompts
+
     def _rebuild_prompts_from_candidate(
         self, candidate: dict[str, str]
     ) -> tuple[dict[str, chat_prompt.ChatPrompt], list[str]]:
@@ -541,14 +557,6 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
         Uses the component keys from the candidate (e.g., "prompt_name_role_idx")
         to organize feedback for each optimizable component.
         """
-        # GEPA proposes its next candidate by reflecting on this one.
-        parent_prompts, _ = candidate_ops.rebuild_prompts_from_candidate(
-            base_prompts=self._base_prompts,
-            candidate=candidate,
-            allowed_roles=self._allowed_roles,
-            known_placeholder_keys=self._known_placeholder_keys,
-        )
-        self._optimizer._lineage.derive_from(parent_prompts)
         # If no specific components requested, use all component keys from candidate
         # that match our prompt structure
         if not components_to_update:
@@ -620,3 +628,30 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
         return {
             component: list(_records(component)) for component in components_to_update
         }
+
+
+class LineageCallback:
+    """Tells the run's lineage which GEPA programs a new candidate comes from.
+
+    GEPA announces every evaluation of a new candidate with its parent program
+    indices: one for a reflective proposal, two for a merge. Programs are known
+    by index once GEPA has scored them on the validation set.
+    """
+
+    def __init__(self, adapter: OpikGEPAAdapter) -> None:
+        self._adapter = adapter
+        self._programs: dict[int, dict[str, str]] = {}
+
+    def on_valset_evaluated(self, event: dict[str, Any]) -> None:
+        self._programs[event["candidate_idx"]] = event["candidate"]
+
+    def on_evaluation_start(self, event: dict[str, Any]) -> None:
+        if event["candidate_idx"] is not None or event["is_seed_candidate"]:
+            return  # re-scoring a known program, not proposing one
+        parents = [
+            self._adapter.prompts_for(self._programs[idx])
+            for idx in event["parent_ids"]
+            if idx in self._programs
+        ]
+        if parents:
+            self._adapter._optimizer._lineage.derive_from(*parents)
