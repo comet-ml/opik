@@ -4,6 +4,8 @@ import com.comet.opik.api.resources.utils.TestUtils;
 import org.glassfish.jersey.client.ClientProperties;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.UUID;
 
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
@@ -11,6 +13,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 public class RedirectResourceClient {
     private static final String RESOURCE_PATH = "%s/v1/session/redirect";
+    private static final String PROJECT_REDIRECT_URL = "%s/%s/projects/%s/traces?tab=logs&logsType=traces&trace=%s";
 
     private final ClientSupport client;
     private final String baseURI;
@@ -106,5 +109,17 @@ public class RedirectResourceClient {
 
             return null;
         }
+    }
+
+    /** The {@code path} the UI sends: its backend base URL, from which the redirect derives the frontend one. */
+    public String encodedBackendPath(String frontendBaseUrl) {
+        return Base64.getUrlEncoder().withoutPadding()
+                .encodeToString((frontendBaseUrl + "/api").getBytes(StandardCharsets.UTF_8));
+    }
+
+    /** Where {@link #projectsRedirect} sends the browser for a trace. */
+    public String expectedProjectRedirectUrl(String frontendBaseUrl, String workspaceName, UUID projectId,
+            UUID traceId) {
+        return PROJECT_REDIRECT_URL.formatted(frontendBaseUrl, workspaceName, projectId, traceId);
     }
 }
