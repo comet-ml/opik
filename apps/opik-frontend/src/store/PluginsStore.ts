@@ -26,6 +26,7 @@ type PluginStore = {
   GoogleColabCard: React.ComponentType<GoogleColabCardCoreProps> | null;
   RetentionBanner: React.ComponentType<{
     onChangeHeight: (height: number) => void;
+    hidden?: boolean;
   }> | null;
   InviteDevButton: React.ComponentType<InviteDevButtonProps> | null;
   CollaboratorsTab: React.ComponentType | null;

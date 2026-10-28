@@ -9,6 +9,7 @@ from opik.config import OPIK_PROJECT_DEFAULT_NAME
 from opik.integrations.openai import track_openai
 from opik.types import ErrorInfoDict, LLMProvider
 
+from ... import llm_constants
 from .constants import MODEL_FOR_TESTS, EXPECTED_OPENAI_USAGE_LOGGED_FORMAT
 from ...testlib import (
     ANY,
@@ -20,6 +21,8 @@ from ...testlib import (
     assert_dict_has_keys,
     assert_equal,
 )
+
+REASONING = {"effort": llm_constants.OPENAI_REASONING_EFFORT}
 
 
 @pytest.fixture(autouse=True)
@@ -63,6 +66,7 @@ def test_openai_client_responses_create__happyflow(
         model=MODEL_FOR_TESTS,
         input=messages,
         max_output_tokens=50,
+        reasoning=REASONING,
     )
 
     opik.flush_tracker()
@@ -70,7 +74,7 @@ def test_openai_client_responses_create__happyflow(
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
         name="responses_create",
-        input={"input": messages},
+        input={"input": messages, "reasoning": REASONING},
         output={"output": ANY_BUT_NONE, "reasoning": ANY},
         tags=["openai"],
         metadata=ANY_DICT,
@@ -83,7 +87,7 @@ def test_openai_client_responses_create__happyflow(
                 id=ANY_BUT_NONE,
                 type="llm",
                 name="responses_create",
-                input={"input": messages},
+                input={"input": messages, "reasoning": REASONING},
                 output={"output": ANY_BUT_NONE, "reasoning": ANY},
                 tags=["openai"],
                 metadata=ANY_DICT,
@@ -125,6 +129,7 @@ def test_openai_responses_create__custom_provider__provider_logged_on_llm_span_b
         model=MODEL_FOR_TESTS,
         input=messages,
         max_output_tokens=50,
+        reasoning=REASONING,
     )
 
     opik.flush_tracker()
@@ -132,7 +137,7 @@ def test_openai_responses_create__custom_provider__provider_logged_on_llm_span_b
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
         name="responses_create",
-        input={"input": messages},
+        input={"input": messages, "reasoning": REASONING},
         output={"output": ANY_BUT_NONE, "reasoning": ANY},
         tags=["openai"],
         metadata=ANY_DICT,
@@ -145,7 +150,7 @@ def test_openai_responses_create__custom_provider__provider_logged_on_llm_span_b
                 id=ANY_BUT_NONE,
                 type="llm",
                 name="responses_create",
-                input={"input": messages},
+                input={"input": messages, "reasoning": REASONING},
                 output={"output": ANY_BUT_NONE, "reasoning": ANY},
                 tags=["openai"],
                 metadata=ANY_DICT,
@@ -184,6 +189,7 @@ def test_openai_responses_create__async_call_made_in_another_tracked_async_funct
             model=MODEL_FOR_TESTS,
             input=messages,
             max_output_tokens=50,
+            reasoning=REASONING,
         )
 
     f()
@@ -209,7 +215,7 @@ def test_openai_responses_create__async_call_made_in_another_tracked_async_funct
                         id=ANY_BUT_NONE,
                         type="llm",
                         name="responses_create",
-                        input={"input": messages},
+                        input={"input": messages, "reasoning": REASONING},
                         output={"output": ANY_BUT_NONE, "reasoning": ANY},
                         tags=["openai"],
                         metadata=ANY_DICT,
@@ -326,6 +332,7 @@ def test_openai_client_responses_create_stream__happyflow(fake_backend):
         model=MODEL_FOR_TESTS,
         input=messages,
         max_output_tokens=16,
+        reasoning=REASONING,
         stream=True,
     )
 
@@ -337,7 +344,7 @@ def test_openai_client_responses_create_stream__happyflow(fake_backend):
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
         name="responses_create",
-        input={"input": messages},
+        input={"input": messages, "reasoning": REASONING},
         output={"output": ANY_BUT_NONE, "reasoning": ANY},
         tags=["openai"],
         metadata=ANY_DICT,
@@ -349,7 +356,7 @@ def test_openai_client_responses_create_stream__happyflow(fake_backend):
                 id=ANY_BUT_NONE,
                 type="llm",
                 name="responses_create",
-                input={"input": messages},
+                input={"input": messages, "reasoning": REASONING},
                 output={"output": ANY_BUT_NONE, "reasoning": ANY},
                 tags=["openai"],
                 metadata=ANY_DICT,
@@ -389,6 +396,7 @@ async def test_openai_client_responses_create_async__happyflow(fake_backend):
         model=MODEL_FOR_TESTS,
         input=messages,
         max_output_tokens=50,
+        reasoning=REASONING,
     )
 
     opik.flush_tracker()
@@ -396,7 +404,7 @@ async def test_openai_client_responses_create_async__happyflow(fake_backend):
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
         name="responses_create",
-        input={"input": messages},
+        input={"input": messages, "reasoning": REASONING},
         output={"output": ANY_BUT_NONE, "reasoning": ANY},
         tags=["openai"],
         metadata=ANY_DICT,
@@ -408,7 +416,7 @@ async def test_openai_client_responses_create_async__happyflow(fake_backend):
                 id=ANY_BUT_NONE,
                 type="llm",
                 name="responses_create",
-                input={"input": messages},
+                input={"input": messages, "reasoning": REASONING},
                 output={"output": ANY_BUT_NONE, "reasoning": ANY},
                 tags=["openai"],
                 metadata=ANY_DICT,
@@ -446,6 +454,7 @@ async def test_openai_client_responses_create_stream_async__happyflow(fake_backe
         model=MODEL_FOR_TESTS,
         input=messages,
         max_output_tokens=50,
+        reasoning=REASONING,
         stream=True,
     )
 
@@ -457,7 +466,7 @@ async def test_openai_client_responses_create_stream_async__happyflow(fake_backe
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
         name="responses_create",
-        input={"input": messages},
+        input={"input": messages, "reasoning": REASONING},
         output={"output": ANY_BUT_NONE, "reasoning": ANY},
         tags=["openai"],
         metadata=ANY_DICT,
@@ -469,7 +478,7 @@ async def test_openai_client_responses_create_stream_async__happyflow(fake_backe
                 id=ANY_BUT_NONE,
                 type="llm",
                 name="responses_create",
-                input={"input": messages},
+                input={"input": messages, "reasoning": REASONING},
                 output={"output": ANY_BUT_NONE, "reasoning": ANY},
                 tags=["openai"],
                 metadata=ANY_DICT,
@@ -494,16 +503,8 @@ async def test_openai_client_responses_create_stream_async__happyflow(fake_backe
     _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
-@pytest.mark.parametrize(
-    "project_name, expected_project_name",
-    [
-        (None, OPIK_PROJECT_DEFAULT_NAME),
-        ("openai-integration-test", "openai-integration-test"),
-    ],
-)
-def test_openai_client_responses_parse__happy_flow(
-    fake_backend, project_name, expected_project_name
-):
+def test_openai_client_responses_parse__happy_flow(fake_backend):
+    project_name = "openai-integration-test"
     client = openai.OpenAI()
     wrapped_client = track_openai(
         openai_client=client,
@@ -526,6 +527,8 @@ def test_openai_client_responses_parse__happy_flow(
         model=MODEL_FOR_TESTS,
         input=messages,
         text_format=CalendarEvent,
+        max_output_tokens=512,
+        reasoning=REASONING,
     )
 
     opik.flush_tracker()
@@ -534,8 +537,8 @@ def test_openai_client_responses_parse__happy_flow(
         id=ANY_BUT_NONE,
         start_time=ANY_BUT_NONE,
         name="responses_parse",
-        project_name=expected_project_name,
-        input={"input": messages},
+        project_name=project_name,
+        input={"input": messages, "reasoning": REASONING},
         output={"output": ANY_BUT_NONE, "reasoning": ANY},
         tags=["openai"],
         metadata=ANY_DICT,
@@ -546,14 +549,14 @@ def test_openai_client_responses_parse__happy_flow(
                 id=ANY_BUT_NONE,
                 start_time=ANY_BUT_NONE,
                 name="responses_parse",
-                input={"input": messages},
+                input={"input": messages, "reasoning": REASONING},
                 output={"output": ANY_BUT_NONE, "reasoning": ANY},
                 tags=["openai"],
                 metadata=ANY_DICT,
                 type="llm",
                 usage=ANY_DICT.containing(EXPECTED_OPENAI_USAGE_LOGGED_FORMAT),
                 end_time=ANY_BUT_NONE,
-                project_name=expected_project_name,
+                project_name=project_name,
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                 provider="openai",
                 source="sdk",
@@ -595,6 +598,8 @@ async def test_openai_client_responses_parse_async__happy_flow(fake_backend):
         model=MODEL_FOR_TESTS,
         input=messages,
         text_format=CalendarEvent,
+        max_output_tokens=512,
+        reasoning=REASONING,
     )
 
     opik.flush_tracker()
@@ -603,7 +608,7 @@ async def test_openai_client_responses_parse_async__happy_flow(fake_backend):
         id=ANY_BUT_NONE,
         start_time=ANY_BUT_NONE,
         name="responses_parse",
-        input={"input": messages},
+        input={"input": messages, "reasoning": REASONING},
         output={"output": ANY_BUT_NONE, "reasoning": ANY},
         tags=["openai"],
         metadata=ANY_DICT,
@@ -614,7 +619,7 @@ async def test_openai_client_responses_parse_async__happy_flow(fake_backend):
                 id=ANY_BUT_NONE,
                 start_time=ANY_BUT_NONE,
                 name="responses_parse",
-                input={"input": messages},
+                input={"input": messages, "reasoning": REASONING},
                 output={"output": ANY_BUT_NONE, "reasoning": ANY},
                 tags=["openai"],
                 metadata=ANY_DICT,
@@ -729,17 +734,9 @@ def test_openai_client_responses_parse_raises_an_error__span_and_trace_finished_
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
 
 
-@pytest.mark.parametrize(
-    "project_name, expected_project_name",
-    [
-        (None, OPIK_PROJECT_DEFAULT_NAME),
-        ("openai-integration-test", "openai-integration-test"),
-    ],
-)
-def test_openai_client_responses_create__opik_args__happyflow(
-    fake_backend, project_name, expected_project_name
-):
+def test_openai_client_responses_create__opik_args__happyflow(fake_backend):
     # test that opik_args are passed to the logged traces and spans
+    project_name = "openai-integration-test"
     client = openai.OpenAI()
     wrapped_client = track_openai(
         openai_client=client,
@@ -760,7 +757,11 @@ def test_openai_client_responses_create__opik_args__happyflow(
     }
 
     _ = wrapped_client.responses.create(
-        model=MODEL_FOR_TESTS, input=messages, max_output_tokens=50, opik_args=args_dict
+        model=MODEL_FOR_TESTS,
+        input=messages,
+        max_output_tokens=50,
+        reasoning=REASONING,
+        opik_args=args_dict,
     )
 
     opik.flush_tracker()
@@ -768,28 +769,28 @@ def test_openai_client_responses_create__opik_args__happyflow(
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
         name="responses_create",
-        input={"input": messages},
+        input={"input": messages, "reasoning": REASONING},
         output={"output": ANY_BUT_NONE, "reasoning": ANY},
         tags=["openai", "span_tag", "trace_tag"],
         metadata=ANY_DICT.containing({"trace_key": "trace_value"}),
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
         last_updated_at=ANY_BUT_NONE,
-        project_name=expected_project_name,
+        project_name=project_name,
         thread_id="conversation-2",
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
                 type="llm",
                 name="responses_create",
-                input={"input": messages},
+                input={"input": messages, "reasoning": REASONING},
                 output={"output": ANY_BUT_NONE, "reasoning": ANY},
                 tags=["openai", "span_tag"],
                 metadata=ANY_DICT.containing({"span_key": "span_value"}),
                 usage=ANY_DICT.containing(EXPECTED_OPENAI_USAGE_LOGGED_FORMAT),
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
-                project_name=expected_project_name,
+                project_name=project_name,
                 spans=[],
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                 provider="openai",

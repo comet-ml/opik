@@ -37,7 +37,7 @@ import { PlaygroundPage } from '@e2e/pom/playground.page';
  */
 
 /** `PROMPT_SAVE_TO_LIBRARY_TOOLTIP` — the message still matches its version. */
-const SAVE_TOOLTIP = 'Save to prompt library';
+const SAVE_TOOLTIP = 'Save as text prompt';
 /** `PROMPT_UNSAVED_TOOLTIP` — the message has diverged from its version. */
 const UNSAVED_TOOLTIP = "This prompt version hasn't been saved";
 

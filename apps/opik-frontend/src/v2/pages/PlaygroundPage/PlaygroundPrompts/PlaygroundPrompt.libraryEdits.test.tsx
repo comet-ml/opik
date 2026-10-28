@@ -9,13 +9,23 @@ import { TooltipProvider } from "@/ui/tooltip";
 import { LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
 import { PlaygroundPromptType } from "@/types/playground";
 import {
+  DropdownModelCheck,
   ModelResolver,
   ProviderResolver,
 } from "@/hooks/useLLMProviderModelsData";
 import PlaygroundPrompt from "./PlaygroundPrompt";
 
-vi.mock("@/api/prompts/usePromptById", () => ({ default: vi.fn() }));
-vi.mock("@/api/prompts/usePromptVersionById", () => ({ default: vi.fn() }));
+vi.mock("@/api/prompts/usePromptById", () => ({
+  default: vi.fn(),
+  useFetchPrompt: vi.fn(),
+}));
+vi.mock("@/api/prompts/usePromptVersionById", () => ({
+  default: vi.fn(),
+  useFetchPromptVersion: vi.fn(),
+}));
+vi.mock("@/api/prompts/useProjectPromptsList", () => ({
+  default: () => ({ data: undefined }),
+}));
 
 vi.mock("@/contexts/PermissionsContext", () => ({
   usePermissions: () => ({
@@ -211,6 +221,7 @@ const renderCard = () =>
           hasRegistryModels={false}
           providerResolver={vi.fn(() => "") as unknown as ProviderResolver}
           modelResolver={vi.fn((model) => model) as unknown as ModelResolver}
+          isDropdownModel={vi.fn(() => false) as unknown as DropdownModelCheck}
         />
       </TooltipProvider>
     </QueryClientProvider>,

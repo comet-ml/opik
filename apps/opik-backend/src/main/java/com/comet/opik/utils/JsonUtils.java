@@ -1,6 +1,7 @@
 package com.comet.opik.utils;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.StreamReadConstraints;
 import com.fasterxml.jackson.core.json.JsonReadFeature;
@@ -197,6 +198,14 @@ public class JsonUtils {
         } catch (JsonProcessingException e) {
             throw new UncheckedIOException(e);
         }
+    }
+
+    /**
+     * A streaming parser over {@code content}, under the shared mapper's read constraints, for reading part of a
+     * document without building a tree of all of it.
+     */
+    public static JsonParser createParser(@NonNull String content) throws IOException {
+        return MAPPER.getFactory().createParser(content);
     }
 
     public static JsonNode getJsonNodeFromString(@NonNull String value) {

@@ -320,6 +320,40 @@ Use this option to add any other OpenAI API-compliant provider such as vLLM, etc
   If you're running Opik locally, you would need to use `http://host.docker.internal:<PORT>/v1` for Mac and Windows or `http://172.17.0.1:<PORT>/v1` for Linux, and not `http://localhost`.
 </Tip>
 
+<Tip>
+  **Self-hosted deployments:** The Docker Compose and Helm deployments allow provider URLs on private networks (`LLM_PROVIDER_DESTINATION_GUARD=relaxed`), so local servers such as Ollama or vLLM work out of the box. Other launch paths default to `strict`, which allows only public `http`/`https` provider URLs; set the variable to `relaxed` if your provider runs on a private network, or to `strict` on Compose/Helm to harden them. Note that `relaxed` disables the SSRF protection on provider URLs, so it is only appropriate where provider configuration is restricted to trusted administrators. On Opik Cloud, the provider URL must be publicly reachable.
+</Tip>
+
+| Launch path | Default | How to change it |
+|---|---|---|
+| Docker Compose (`./opik.sh` or `docker compose`) | `relaxed` | Export it before starting, e.g. `LLM_PROVIDER_DESTINATION_GUARD=strict ./opik.sh` |
+| Helm chart | `relaxed` | Set `component.backend.env.LLM_PROVIDER_DESTINATION_GUARD` in your values file (example below) |
+| Backend started any other way | `strict` | Set the `LLM_PROVIDER_DESTINATION_GUARD` environment variable on the backend |
+
+```yaml
+# Helm values: harden a deployment whose providers are all public
+component:
+  backend:
+    env:
+      LLM_PROVIDER_DESTINATION_GUARD: "strict"
+```
+
+Accepted values are `strict` and `relaxed` (case-insensitive). When the variable is unset, the default for your launch path applies. Any other value, including an empty one, stops the backend at startup with a configuration error, so a typo never silently turns the check off. Docker Compose is the one exception for an empty value: it treats it as unset and uses its `relaxed` default.
+
+The check applies to every LLM provider call except Vertex AI, including the built-in providers' default endpoints and the free model. Vertex AI calls go to Google's endpoint for the configured location through the Google client library, which this check doesn't cover. With `strict`, a provider host that your DNS resolves to a private address, for example through a private endpoint or an egress proxy, is refused; use `relaxed` for such networks.
+
+`LLM_PROVIDER_DESTINATION_SCHEME` sets which schemes `strict` mode accepts: `plaintext_or_tls` (the default on every launch path) allows `http` and `https`, as self-hosted model servers commonly run without TLS, and `https_only` allows `https` only. Values are case-insensitive, and any other value stops the backend at startup. `relaxed` mode doesn't check the scheme.
+
+Video URLs without a file extension get a `HEAD` request to detect their type. `LLM_PROVIDER_VIDEO_URL_DESTINATION_GUARD` applies the same destination check to that request (default `relaxed` on Docker Compose and Helm, `strict` on every other launch path); a refused URL is still sent to the model, just without the detected type. Set it to `relaxed` to detect the type of videos served from private networks.
+
+Gemini and Vertex AI receive media as inline data, so Opik downloads the image, audio, video and PDF URLs in a message itself; only `gs://` and `data:` URLs are passed through as they are. The same variable applies the destination check to each download. A media URL with another scheme, or one that is refused, redirects, or exceeds `LLM_PROVIDER_MEDIA_DOWNLOAD_TIMEOUT` (default `30s`), fails the request with a `400`, as do downloads that together exceed `LLM_PROVIDER_MEDIA_DOWNLOAD_MAX_SIZE` (default `20MB`, the limit for all media in one request). With `relaxed`, these downloads can reach any address the backend can, including your internal network, so use it only when everyone who can send messages or log traces is trusted with that access.
+
+`LLM_PROVIDER_MEDIA_URL_DESTINATION_SCHEME` sets which schemes `strict` mode accepts for these downloads: `plaintext_or_tls` (the default on every launch path) allows `http` and `https`, and `https_only` allows `https` only. Values are case-insensitive, and any other value stops the backend at startup. `relaxed` mode doesn't check it, but only `http` and `https` media URLs are ever downloaded.
+
+Opik reads at most `LLM_PROVIDER_ERROR_BODY_MAX_SIZE` (default `64KB`, at most `1MiB`) of a custom provider's error response and discards the rest; only a short message parsed from it is returned.
+
+Changing a provider's **URL** requires re-entering its API key (or OAuth2 credentials), since stored secrets are only ever sent to the endpoint they were saved for.
+
 ##### Custom Headers
 
 Some custom providers may require additional HTTP headers beyond the API key for authentication or routing purposes. You can configure these headers using the "Custom headers" section:
