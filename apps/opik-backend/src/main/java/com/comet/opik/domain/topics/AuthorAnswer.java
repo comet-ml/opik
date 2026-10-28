@@ -8,8 +8,10 @@ import lombok.NonNull;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 /**
  * Qwen's author answer: {@code {topics: [{name, definition, clusters: [int]}], other: [int]}}, both keys required.
@@ -53,6 +55,13 @@ public record AuthorAnswer(@NonNull List<Topic> topics, @NonNull List<Integer> o
             topics.add(new Topic(name.asText(), definition.asText(), integers(clusters)));
         }
         return new AuthorAnswer(List.copyOf(topics), integers(otherNode));
+    }
+
+    /** True when a cluster id appears more than once across the topics and {@code other}. */
+    public boolean repeatsCluster() {
+        var seen = new HashSet<Integer>();
+        return Stream.concat(topics.stream().flatMap(topic -> topic.clusters().stream()), other.stream())
+                .anyMatch(id -> !seen.add(id));
     }
 
     private static List<Integer> integers(JsonNode array) {

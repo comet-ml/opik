@@ -17,6 +17,7 @@ import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.DoubleHistogram;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.Meter;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.Builder;
@@ -202,7 +203,7 @@ public class TopicVectorsTickService {
                 .setDescription("Traces a tick found but did not write, by reason; all are found again by a later tick")
                 .build();
         this.embedFailures = meter.counterBuilder("topics.vectors.embed.failures")
-                .setDescription("Embed calls that failed, by HTTP status (0 without a response) and code")
+                .setDescription("Embed calls that failed, by HTTP status (0 without a response), code and error type")
                 .build();
         this.readFailures = meter.counterBuilder("topics.vectors.read.failures")
                 .setDescription("ClickHouse reads that failed, by phase: find (one workspace's window read) or "
@@ -311,7 +312,7 @@ public class TopicVectorsTickService {
     private Found find(Instant start, Instant lowerBound, Instant createdAfter, Instant deadline) {
         int limit = config.getVectors().getMaxTracesPerTick();
         var workspaceIds = rotated(template.inTransaction(READ_ONLY,
-                handle -> handle.attach(TopicWorkspaceDAO.class).enabledWorkspaceIds()), tickSequence(start));
+                handle -> handle.attach(TopicWorkspaceDAO.class).eligibleWorkspaceIds()), tickSequence(start));
         var oldest = new LinkedHashMap<String, Instant>();
         var found = new ArrayList<TopicVectorCandidate>();
         boolean complete = true;
@@ -474,7 +475,7 @@ public class TopicVectorsTickService {
             embedDuration.record((System.nanoTime() - started) / 1e9,
                     Attributes.of(stringKey("outcome"), exception.getCode()));
             embedFailures.add(1, Attributes.of(longKey("http_status"), (long) exception.getHttpStatus(),
-                    stringKey("code"), exception.getCode()));
+                    stringKey("code"), exception.getCode(), ERROR_TYPE_KEY, ErrorMetricsResolver.errorType(exception)));
             throw exception;
         }
         embedDuration.record((System.nanoTime() - started) / 1e9, Attributes.of(stringKey("outcome"), "ok"));
@@ -538,8 +539,10 @@ public class TopicVectorsTickService {
      * The text to embed: the summary exactly as stored, when the trace's latest output row is of the status's task
      * version and its summary is not blank. Anything else waits for the next tick: the label row lags the status on
      * this replica, or the trace is being relabelled.
+     *
+     * @param summary the trace's latest output row, or {@code null} when the summary read found none
      */
-    static Optional<String> summaryText(@NonNull TopicVectorCandidate candidate, TopicSummary summary) {
+    static Optional<String> summaryText(@NonNull TopicVectorCandidate candidate, @Nullable TopicSummary summary) {
         if (summary == null || summary.taskVersion() != candidate.taskVersion() || summary.summary().isBlank()) {
             return Optional.empty();
         }

@@ -428,7 +428,7 @@ public class TopicsRebuildService {
             };
             // The prompt holds trace-derived text: DEBUG only.
             log.debug("Topics run '{}' {} prompt, project '{}':\n{}", runId, tag, projectId, prompt);
-            var output = call(kind, runId + ":" + tag, prompt, schema, maxTokens, deadline);
+            var output = call(kind, runId + ":" + tag, prompt, schema, maxTokens, deadline, true);
             metrics.qwen(kind, "ok");
             return output == null ? NullNode.getInstance() : output;
         }
@@ -461,13 +461,32 @@ public class TopicsRebuildService {
             return kept;
         }
 
+        /**
+         * Asks Qwen for the topics. An answer that lists a cluster id twice is broken (the prompt asks for each id
+         * exactly once): the job asks once more, uncached, and fails the run with {@code qwen_bad_answer} if the
+         * second answer is broken too. Not in the stand.
+         */
         private AuthorAnswer author(String prompt) {
-            var output = call(AUTHOR_KIND, runId.toString(), prompt, TopicPrompts.AUTHOR_SCHEMA, QWEN_MAX_TOKENS,
-                    config.getNightly().getQwenDeadline().toJavaDuration());
+            var answer = parse(call(AUTHOR_KIND, runId.toString(), prompt, TopicPrompts.AUTHOR_SCHEMA, QWEN_MAX_TOKENS,
+                    config.getNightly().getQwenDeadline().toJavaDuration(), true));
+            if (answer.repeatsCluster()) {
+                log.warn("Topics run '{}' author answer lists a cluster twice, asking again, project '{}'", runId,
+                        projectId);
+                metrics.qwen(AUTHOR_KIND, "repeated_cluster");
+                answer = parse(call(AUTHOR_KIND, runId + ":retry", prompt, TopicPrompts.AUTHOR_SCHEMA, QWEN_MAX_TOKENS,
+                        config.getNightly().getQwenDeadline().toJavaDuration(), false));
+                if (answer.repeatsCluster()) {
+                    metrics.qwen(AUTHOR_KIND, "repeated_cluster");
+                    throw new TopicsRunException(Code.QWEN_BAD_ANSWER, "the author answer lists a cluster twice");
+                }
+            }
+            metrics.qwen(AUTHOR_KIND, "ok");
+            return answer;
+        }
+
+        private AuthorAnswer parse(JsonNode output) {
             try {
-                var answer = AuthorAnswer.parse(output);
-                metrics.qwen(AUTHOR_KIND, "ok");
-                return answer;
+                return AuthorAnswer.parse(output);
             } catch (TopicsRunException exception) {
                 metrics.qwen(AUTHOR_KIND, "bad_answer");
                 throw exception;
@@ -477,15 +496,15 @@ public class TopicsRebuildService {
         /**
          * One Qwen call on the batch lane: logs the answer, adds the call to the stats ({@code qwen_calls}, the token
          * sums, one {@code qwen} entry per call) and returns the output. A failed call is counted and thrown as
-         * {@code qwen_timeout} or {@code qwen_error}.
+         * {@code qwen_timeout} or {@code qwen_error}. With {@code cache} false, the service answers afresh.
          */
         private JsonNode call(String kind, String requestId, String prompt, JsonNode schema, int maxTokens,
-                Duration deadline) {
+                Duration deadline, boolean cache) {
             var request = GenerateRequest.builder()
                     .orgId(workspaceId)
                     .workspaceId(workspaceId)
                     .requestId(requestId)
-                    .cache(true)
+                    .cache(cache)
                     .lane(GenerateRequest.Lane.BATCH)
                     .messages(List.of(Message.builder().role(Message.Role.USER).content(prompt).build()))
                     .schema(schema)
