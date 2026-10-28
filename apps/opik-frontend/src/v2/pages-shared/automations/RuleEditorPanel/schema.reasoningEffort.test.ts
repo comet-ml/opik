@@ -178,9 +178,19 @@ describe("LLM judge OpenAI effort in a Responses-shaped reasoning object", () =>
   it.each<[string, Record<string, unknown>, string]>([
     ["reads reasoning.effort", { reasoning: { effort: "low" } }, "low"],
     [
-      "prefers reasoning_effort when both are set",
+      "prefers reasoning.effort, the one the Responses API runs, when both are set",
       { reasoning_effort: "high", reasoning: { effort: "low" } },
+      "low",
+    ],
+    [
+      "reads reasoning_effort past a reasoning.effort that is not a level",
+      { reasoning_effort: "high", reasoning: { effort: "adaptive" } },
       "high",
+    ],
+    [
+      "reads reasoning.effort past a reasoning_effort that is not a level",
+      { reasoning_effort: "adaptive", reasoning: { effort: "low" } },
+      "low",
     ],
   ])("%s", (_, stored, expected) => {
     expect(open(PROVIDER_MODEL_TYPE.GPT_6_LUNA, stored).reasoningEffort).toBe(
@@ -231,6 +241,15 @@ describe("LLM judge OpenAI effort in a Responses-shaped reasoning object", () =>
     ],
   ])("%s", (_, stored, reasoningEffort, expected) => {
     expect(pick(stored, reasoningEffort)).toEqual(expected);
+  });
+
+  it("keeps the nested level on an unchanged save and drops a reasoning_effort that is not a level", () => {
+    expect(
+      unchangedSave(PROVIDER_MODEL_TYPE.GPT_6_LUNA, {
+        reasoning_effort: "adaptive",
+        reasoning: { effort: "low", summary: "auto" },
+      }),
+    ).toEqual({ reasoning: { summary: "auto", effort: "low" } });
   });
 
   it("sets reasoning_effort next to a reasoning that is not an object", () => {
@@ -406,6 +425,28 @@ describe("LLM judge OpenRouter effort", () => {
     expect(
       unchangedSave(OPEN_ROUTER_MODEL, { reasoning: { effort: "xhigh" } }),
     ).toBeUndefined();
+  });
+
+  it("reads a flat reasoning_effort", () => {
+    expect(
+      open(OPEN_ROUTER_MODEL, { reasoning_effort: "high" }).reasoningEffort,
+    ).toBe("high");
+  });
+
+  it.each<[string, string | undefined, Record<string, unknown> | undefined]>([
+    [
+      "replaces it with reasoning.effort on a pick",
+      "low",
+      { reasoning: { effort: "low" }, user: "judge" },
+    ],
+    ["drops it on Default", undefined, { user: "judge" }],
+  ])("a flat reasoning_effort: %s", (_, reasoningEffort, expected) => {
+    expect(
+      save(OPEN_ROUTER_MODEL, {
+        ...open(OPEN_ROUTER_MODEL, { reasoning_effort: "high", user: "judge" }),
+        reasoningEffort,
+      }),
+    ).toEqual(expected);
   });
 
   it("leaves a reasoning that is not an object alone", () => {

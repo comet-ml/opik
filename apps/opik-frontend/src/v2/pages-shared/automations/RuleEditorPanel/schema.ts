@@ -710,15 +710,18 @@ const getPersistedReasoningEffort = (
   model: string,
   customParameters: unknown,
 ): OpenAIReasoningEffort | undefined => {
-  const provider = getReasoningEffortProvider(model);
-  if (!provider || !isPlainObject(customParameters)) return undefined;
+  if (!getReasoningEffortProvider(model) || !isPlainObject(customParameters)) {
+    return undefined;
+  }
   const params = customParameters as Record<string, unknown>;
-  const nested = (params.reasoning as { effort?: unknown } | undefined)?.effort;
-  const stored =
-    provider === PROVIDER_TYPE.OPEN_ROUTER
-      ? nested
-      : params.reasoning_effort ?? nested;
-  return OPENAI_REASONING_EFFORT_VALUES.find((level) => level === stored);
+  const toLevel = (value: unknown) =>
+    OPENAI_REASONING_EFFORT_VALUES.find((level) => level === value);
+  // Nested first: on the Responses API a stored reasoning object replaces the one built from
+  // reasoning_effort, so of two copies the nested one is what the model runs at.
+  return (
+    toLevel((params.reasoning as { effort?: unknown } | undefined)?.effort) ??
+    toLevel(params.reasoning_effort)
+  );
 };
 
 const withOpenAIReasoningEffort = (
@@ -756,14 +759,16 @@ const withReasoningEffort = (
   ) {
     return customParameters;
   }
+  // OpenRouter also takes a flat reasoning_effort, and answers 400 when it differs from reasoning.effort.
+  const rest = omit(customParameters, "reasoning_effort");
   const reasoning = omit(
-    (customParameters.reasoning ?? {}) as Record<string, unknown>,
+    (rest.reasoning ?? {}) as Record<string, unknown>,
     "effort",
   );
   const nextReasoning = effort ? { ...reasoning, effort } : reasoning;
   return isEmpty(nextReasoning)
-    ? omit(customParameters, "reasoning")
-    : { ...customParameters, reasoning: nextReasoning };
+    ? omit(rest, "reasoning")
+    : { ...rest, reasoning: nextReasoning };
 };
 
 export const updateConfigForModelChange = <
