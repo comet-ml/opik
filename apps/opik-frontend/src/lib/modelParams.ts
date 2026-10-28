@@ -256,13 +256,13 @@ export const getParamControls = (
   const numberControl = (param: NumberParamName): NumberControl | undefined => {
     const configKey = shownKey(param);
     const spec = params[param];
-    const backAtEffortNone =
+    const samplingAtEffortNone =
       params.sampling_at_effort_none === true &&
       (param === "temperature" || param === "top_p");
     if (
       !configKey ||
       !spec ||
-      !(isAccepted(spec) || backAtEffortNone) ||
+      !(isAccepted(spec) || samplingAtEffortNone) ||
       spec.min === undefined ||
       spec.max === undefined
     ) {
