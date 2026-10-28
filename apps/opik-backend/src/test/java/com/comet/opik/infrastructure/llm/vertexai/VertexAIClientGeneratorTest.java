@@ -22,6 +22,9 @@ import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import io.dropwizard.util.Duration;
 import jakarta.ws.rs.client.Client;
+import okhttp3.ConnectionPool;
+import okhttp3.Dispatcher;
+import okhttp3.OkHttpClient;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -1071,6 +1074,36 @@ class VertexAIClientGeneratorTest {
             }
             assertThat(generationConfig.has("maxOutputTokens")).isTrue();
             assertThat(generationConfig.get("maxOutputTokens").asInt()).isEqualTo(expected);
+        }
+    }
+
+    /** The pool and dispatcher a client runs on. */
+    private record Transport(ConnectionPool connectionPool, Dispatcher dispatcher) {
+        static Transport of(OkHttpClient client) {
+            return new Transport(client.connectionPool(), client.dispatcher());
+        }
+    }
+
+    /** Every call, streamed or not, runs on the one connection pool and dispatcher, rather than on its own. */
+    @Test
+    @DisplayName("Vertex AI calls share one connection pool and dispatcher")
+    void callsShareOneTransport() {
+        var generator = new VertexAIClientGenerator(clientConfig(), registry, LlmTestClients.REMOTE_MEDIA_INLINER,
+                LlmTestClients.VIDEO_MIME_TYPE_UTILS);
+        var config = LlmProviderClientApiConfig.builder()
+                .apiKey(serviceAccountJson)
+                .configuration(Map.of("location", "global"))
+                .build();
+        var request = ChatCompletionRequest.builder().model(MODEL).build();
+
+        try (var first = (CloseableVertexAiChatModel) generator.generate(config, request);
+                var second = generator.newVertexAIStreamingClient(config, request)) {
+            var expectedTransport = Transport.of(VertexAITestClients.httpClientOf(first.client()));
+
+            var actualTransport = Transport.of(VertexAITestClients.httpClientOf(second.client()));
+
+            assertThat(actualTransport.connectionPool()).isSameAs(expectedTransport.connectionPool());
+            assertThat(actualTransport.dispatcher()).isSameAs(expectedTransport.dispatcher());
         }
     }
 

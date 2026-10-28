@@ -55,6 +55,16 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
     private final @NonNull RemoteMediaInliner remoteMediaInliner;
     private final @NonNull VideoMimeTypeUtils videoMimeTypeUtils;
 
+    /**
+     * The connection pool and dispatcher every Vertex AI call runs on, set up as the SDK sets up its own client: no
+     * connect, read or write timeout. Each call derives its own client from it, sharing both.
+     */
+    private final OkHttpClient baseHttpClient = new OkHttpClient.Builder()
+            .connectTimeout(Duration.ZERO)
+            .readTimeout(Duration.ZERO)
+            .writeTimeout(Duration.ZERO)
+            .build();
+
     List<ChatMessage> mapMessages(@NonNull ChatCompletionRequest request) {
         return LlmProviderLangChainMapper.INSTANCE.mapMessages(request, videoMimeTypeUtils);
     }
@@ -115,8 +125,8 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
         params.wireBudgetFor(model).ifPresent(budget);
     }
 
-    // Fresh Client per call, handed to the wrapper that owns and closes it; closed here if setup fails first.
-    // Built here rather than by the model builder, which keeps its client private and is not closeable.
+    // A Client per call, on the shared transport, so that the call's own calls can be cancelled. Built here rather
+    // than by the model builder, which keeps its client private.
     private <T> T buildOwnedClient(LlmProviderClientApiConfig apiKey, ChatCompletionRequest request,
             OwnedClientFactory<T> factory) {
         // The enum fallback mirrors LlmProviderFactoryImpl's routing, so every model it sends here can be built here.
@@ -127,13 +137,7 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
                 .orElseThrow(() -> new IllegalArgumentException("Unsupported model: %s".formatted(request.model())));
 
         var calls = new CancellableCalls();
-        Client client = buildClient(apiKey, newHttpClient(calls));
-        try {
-            return factory.create(client, calls, modelId);
-        } catch (RuntimeException e) {
-            closeSuppressing(client, e);
-            throw e;
-        }
+        return factory.create(buildClient(apiKey, newHttpClient(calls)), calls, modelId);
     }
 
     @FunctionalInterface
@@ -142,15 +146,13 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
     }
 
     /**
-     * The client's own HTTP client, given to the SDK so that {@code calls} can cancel its calls. Set up as the SDK sets
-     * up its own: no connect, read or write timeout, and the call timeout as the whole-call bound.
+     * The call's HTTP client, given to the SDK: on the shared pool and dispatcher, with the call timeout as the
+     * whole-call bound, as the SDK sets it, and {@code calls} keeping this call's own calls only, so that they alone can
+     * be cancelled.
      */
     private OkHttpClient newHttpClient(CancellableCalls calls) {
-        var builder = new OkHttpClient.Builder()
-                .addInterceptor(calls)
-                .connectTimeout(Duration.ZERO)
-                .readTimeout(Duration.ZERO)
-                .writeTimeout(Duration.ZERO);
+        var builder = baseHttpClient.newBuilder()
+                .addInterceptor(calls);
         // The SDK takes milliseconds as an int, and the configuration is only bounded below, so it is clamped alike.
         Optional.ofNullable(clientConfig.getCallTimeout())
                 .map(timeout -> Duration.ofMillis(Math.min(timeout.toMilliseconds(), Integer.MAX_VALUE)))
@@ -160,15 +162,6 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
 
     private InternalServerErrorException failWithError(Exception e) {
         return new InternalServerErrorException("Failed to create GoogleCredentials", e);
-    }
-
-    // Close a client we built but couldn't hand to a wrapping owner, so it can't outlive the failure.
-    private static void closeSuppressing(Client client, RuntimeException failure) {
-        try {
-            client.close();
-        } catch (Exception e) {
-            failure.addSuppressed(e);
-        }
     }
 
     /**
