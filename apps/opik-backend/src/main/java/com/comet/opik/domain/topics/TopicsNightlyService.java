@@ -21,6 +21,7 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -31,6 +32,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
@@ -419,10 +421,17 @@ public class TopicsNightlyService {
                         exception);
             }
         }
+        // A deleted project keeps its window vectors until ClickHouse drops them: run only projects that exist.
+        Set<UUID> existing = new HashSet<>();
+        found.stream().collect(Collectors.groupingBy(Candidate::workspaceId,
+                Collectors.mapping(Candidate::projectId, Collectors.toSet())))
+                .forEach((workspaceId, ids) -> existing.addAll(template.inTransaction(READ_ONLY,
+                        handle -> handle.attach(TopicDAO.class).findExistingProjectIds(workspaceId, ids))));
         found.stream()
+                .filter(candidate -> existing.contains(candidate.projectId()))
                 .sorted(Comparator.comparingLong(Candidate::vectors).thenComparing(Candidate::projectId))
                 .forEach(candidates::add);
-        int skipped = small;
+        int skipped = small + (found.size() - candidates.size());
         metrics.project(TopicsMetrics.DECISION_SKIP, skipped);
         return skipped;
     }

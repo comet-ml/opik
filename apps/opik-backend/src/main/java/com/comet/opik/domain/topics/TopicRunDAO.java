@@ -60,8 +60,9 @@ public interface TopicRunDAO {
             """)
     int failAbandoned(@Bind("startedBefore") Instant startedBefore, @Bind("now") Instant now);
 
-    @SqlUpdate("DELETE FROM topic_runs WHERE project_id IN (<projectIds>)")
-    int deleteByProjects(@BindList("projectIds") Collection<UUID> projectIds);
+    @SqlUpdate("DELETE FROM topic_runs WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>)")
+    int deleteByProjects(@Bind("workspaceId") String workspaceId,
+            @BindList("projectIds") Collection<UUID> projectIds);
 
     @SqlUpdate("DELETE FROM topic_runs WHERE started_at < :before")
     int deleteStartedBefore(@Bind("before") Instant before);

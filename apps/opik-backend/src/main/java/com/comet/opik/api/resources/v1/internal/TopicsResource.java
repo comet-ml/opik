@@ -51,7 +51,7 @@ public class TopicsResource {
     @Path("/projects/{projectId}/run")
     @Operation(operationId = "runProjectTopics", summary = "Run a project's topics now", description = "Starts the project's run for the night (default today, UTC; at most tomorrow, at least 365 days ago) in the background and returns its run id: a nightly update when the project has live topics, else a first build. The run's outcome is its topic_runs row. The night's rules apply: the workspace is opted in to topics, the window holds topics.nightly.minVectors vectors of the project, one run by hand at a time.", responses = {
             @ApiResponse(responseCode = "202", description = "The run started"),
-            @ApiResponse(responseCode = "400", description = "The night is not a date, or is after tomorrow"),
+            @ApiResponse(responseCode = "400", description = "The night is not a date, is after tomorrow, or is more than 365 days ago"),
             @ApiResponse(responseCode = "409", description = "The nightly job is off, the workspace is not opted in, the window is too small, a run is in progress, or the project's last saved run already covers the night"),
             @ApiResponse(responseCode = "501", description = "Topics are off")})
     public Response runProject(@PathParam("projectId") UUID projectId,
@@ -68,7 +68,7 @@ public class TopicsResource {
     @Path("/nights/run")
     @Operation(operationId = "runTopicsNight", summary = "Run the topics night now", description = "Runs the whole night (default today, UTC; at most tomorrow, at least 365 days ago) in the background, as the scheduled job does and under the same lock, which is released when it ends. Each project's outcome is its topic_runs row.", responses = {
             @ApiResponse(responseCode = "202", description = "The night started"),
-            @ApiResponse(responseCode = "400", description = "The night is not a date, or is after tomorrow"),
+            @ApiResponse(responseCode = "400", description = "The night is not a date, is after tomorrow, or is more than 365 days ago"),
             @ApiResponse(responseCode = "409", description = "The nightly job is off, or a night is in progress"),
             @ApiResponse(responseCode = "501", description = "Topics are off")})
     public Response runNight(@QueryParam("night") String night) {

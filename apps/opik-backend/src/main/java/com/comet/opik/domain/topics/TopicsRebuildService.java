@@ -262,9 +262,12 @@ public class TopicsRebuildService {
             stats.put("prototypes", prototypes.size());
             stats.set("seconds", seconds);
             log.info("Topics run '{}' built, project '{}', window ['{}', '{}'), vectors '{}', unique texts '{}', "
-                    + "k '{}', seed '{}', topics '{}', Other share '{}', seconds '{}'", runId, projectId, from, to, n,
-                    unique, k, seed, topics.stream().map(topic -> topic.name() + " (" + topic.size() + ")").toList(),
+                    + "k '{}', seed '{}', topic sizes '{}', Other share '{}', seconds '{}'", runId, projectId, from, to,
+                    n, unique, k, seed, topics.stream().map(Topic::size).toList(),
                     TopicText.fixed((double) other / n, 3), seconds);
+            // Topic names come from trace text: DEBUG only.
+            log.debug("Topics run '{}' topics, project '{}': '{}'", runId, projectId,
+                    topics.stream().map(topic -> topic.name() + " (" + topic.size() + ")").toList());
 
             timed("save", () -> {
                 save(rows, assigned.labels(), topics, prototypes);
@@ -350,8 +353,10 @@ public class TopicsRebuildService {
             log.info("Topics run '{}' updated, project '{}', window ['{}', '{}'), vectors '{}', review '{}', "
                     + "unassigned '{}', candidates '{}', big '{}', born '{}', retired '{}', topics '{}', Other share "
                     + "'{}', churn '{}', seconds '{}'", runId, projectId, from, to, n, result.review(),
-                    result.unassigned(), result.candidates().size(), result.big().size(), born, retired,
+                    result.unassigned(), result.candidates().size(), result.big().size(), born.size(), retired,
                     state.liveCount(), TopicText.fixed((double) other / n, 3), churn, seconds);
+            // Topic names come from trace text: DEBUG only.
+            log.debug("Topics run '{}' born, project '{}': '{}'", runId, projectId, born);
 
             timed("save", () -> {
                 saveUpdate(rows, labels, state, saved, born.size());
