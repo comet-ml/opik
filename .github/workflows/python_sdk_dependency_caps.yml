@@ -22,7 +22,7 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@v10.3.0
 
-      - name: Raise the caps to releases at least 3 days old
+      - name: Regenerate the caps from the requirements
         env:
           # The job's own tooling waits out the same cooldown it enforces.
           UV_EXCLUDE_NEWER: 3 days
@@ -40,7 +40,8 @@ jobs:
             ## Details
             Automated update of the dependency caps in `sdks/python/setup.py` (between `BEGIN dependency caps` and `END dependency caps`).
 
-            - Each cap is raised to the newest release of its package that has been on PyPI for at least 3 days.
+            - Each cap is the newest release that satisfies its requirement in `install_requires` and has been on PyPI for at least 3 days.
+            - A requirement added to or removed from `install_requires` gets its cap added or removed.
             - `pip install opik` picks up the new caps with the next SDK release.
 
             ## Change checklist
@@ -52,7 +53,7 @@ jobs:
 
             ## Testing
             - The Python SDK workflows run against the new caps on this PR.
-            - A failing run means a newly admitted release breaks the SDK. Exclude that version in the package's own requirement in `setup.py` (e.g. `!=1.2.3`) on main; the next run rebases this PR onto it.
+            - A failing run means a newly admitted release breaks the SDK. Exclude that version in the package's requirement in `setup.py` (e.g. `!=1.2.3`) on main; the next run regenerates the caps from it.
 
             ## Documentation
             N/A
