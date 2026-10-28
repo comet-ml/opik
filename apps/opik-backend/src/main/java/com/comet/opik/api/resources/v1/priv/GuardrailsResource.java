@@ -31,6 +31,10 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 
 @Path("/v1/private/guardrails")
@@ -69,18 +73,21 @@ public class GuardrailsResource {
 
     @POST
     @Path("/v2/validations")
-    @Operation(operationId = "validateGuardrails", summary = "Run guardrail checks on a text", description = "Runs the requested checks on the text through the Opik inference decision service and returns a verdict per check. Writes nothing: the SDK reports the results to the guardrails batch endpoint, as before.", responses = {
+    @Operation(operationId = "validateGuardrails", summary = "Run guardrail checks on a text", description = "Runs the given checks, the rules of the named policies and those of every global policy on the text through the Opik inference decision service, and returns a verdict per check. Writes nothing: the SDK reports the results to the guardrails batch endpoint, as before.", responses = {
             @ApiResponse(responseCode = "200", description = "A verdict per check", content = @Content(schema = @Schema(implementation = GuardrailsValidationResponse.class))),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "401", description = "Missing or unknown credentials", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "403", description = "Guardrail checks are not enabled for this deployment, or not enabled for the workspace's organization", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
-            @ApiResponse(responseCode = "422", description = "Unprocessable Content: blank text, or a validations list outside 1 to 32 entries", content = @Content(schema = @Schema(implementation = com.comet.opik.api.error.ErrorMessage.class))),
+            @ApiResponse(responseCode = "404", description = "A named policy does not exist", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "422", description = "Unprocessable Content: blank text, or more than 32 validations", content = @Content(schema = @Schema(implementation = com.comet.opik.api.error.ErrorMessage.class))),
             @ApiResponse(responseCode = "429", description = "Too many requests", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     @RateLimited
     public Response validateGuardrails(
             @RequestBody(content = @Content(schema = @Schema(implementation = GuardrailsValidationRequest.class))) @NotNull @Valid GuardrailsValidationRequest request) {
         String workspaceId = requestContext.get().getWorkspaceId();
-        log.info("Validating guardrails, {} checks on workspaceId '{}'", request.validations().size(), workspaceId);
+        log.info("Validating guardrails, '{}' checks and '{}' named policies on workspaceId '{}'",
+                Optional.ofNullable(request.validations()).map(List::size).orElse(0),
+                Optional.ofNullable(request.policies()).map(Set::size).orElse(0), workspaceId);
         var response = guardrailsValidationService.validate(request)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();

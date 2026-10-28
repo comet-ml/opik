@@ -4,7 +4,6 @@ import com.comet.opik.api.GuardrailsValidationRequest;
 import com.comet.opik.api.GuardrailsValidationRequest.ValidationDescriptor;
 import com.comet.opik.api.GuardrailsValidationResponse;
 import com.comet.opik.api.GuardrailsValidationResponse.ValidationResult;
-import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.GuardrailsConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -18,10 +17,8 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
-import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.BadRequestException;
-import jakarta.ws.rs.ForbiddenException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,6 +33,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -66,22 +64,20 @@ class GuardrailsValidationServiceImpl implements GuardrailsValidationService {
     static final String FAIL_OPEN_MESSAGE = "Guardrail check unavailable; it passed without running";
     static final String ALLOWED_TOPICS = "allowed_topics";
     static final String RESTRICTED_TOPICS = "restricted_topics";
-    /** FR-5: what a workspace whose organization is not enabled is told. */
-    static final String NOT_ENABLED_MESSAGE = "Guardrails is available on the Enterprise plan";
 
     private final @NonNull InferenceClient inferenceClient;
-    private final @NonNull FeatureFlags featureFlags;
     private final @NonNull OpikConfiguration configuration;
-    private final @NonNull Provider<RequestContext> requestContext;
-    private final @NonNull WorkspaceFeaturesService workspaceFeaturesService;
+    private final @NonNull GuardrailsAccess guardrailsAccess;
+    private final @NonNull GuardrailPolicyService guardrailPolicyService;
 
     @Override
     public Mono<GuardrailsValidationResponse> validate(@NonNull GuardrailsValidationRequest request) {
-        featureFlags.checkGuardrailsValidationsEnabled();
-        if (!workspaceFeaturesService.isEnabled(requestContext.get(), WorkspaceFeature.GUARDRAILS)) {
-            throw new ForbiddenException(NOT_ENABLED_MESSAGE);
+        guardrailsAccess.check();
+        var rules = parseRules(withPolicyRules(request));
+        if (rules.isEmpty()) {
+            return Mono.just(GuardrailsValidationResponse.builder().validationPassed(true).validations(List.of())
+                    .build());
         }
-        var rules = parseRules(request.validations());
         var questions = new LinkedHashMap<String, Question>();
         rules.forEach(rule -> questions.putAll(rule.questions()));
         if (questions.size() > DecideRequest.MAX_QUESTIONS) {
@@ -118,6 +114,20 @@ class GuardrailsValidationServiceImpl implements GuardrailsValidationService {
         var results = rules.stream().map(verdict).toList();
         boolean passed = results.stream().allMatch(ValidationResult::validationPassed);
         return GuardrailsValidationResponse.builder().validationPassed(passed).validations(results).build();
+    }
+
+    /**
+     * The request's own checks, then the rules of the policies it names and of every global policy of the
+     * workspace, which apply to every check.
+     */
+    private List<ValidationDescriptor> withPolicyRules(GuardrailsValidationRequest request) {
+        var descriptors = new ArrayList<>(Optional.ofNullable(request.validations()).orElse(List.of()));
+        guardrailPolicyService.retrieve(Optional.ofNullable(request.policies()).orElse(Set.of()))
+                .forEach(policy -> policy.rules().forEach(rule -> descriptors.add(ValidationDescriptor.builder()
+                        .type(rule.type())
+                        .config(rule.config())
+                        .build())));
+        return descriptors;
     }
 
     private static List<Rule> parseRules(List<ValidationDescriptor> descriptors) {

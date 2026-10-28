@@ -4,6 +4,7 @@ import com.comet.opik.api.GuardrailType;
 import com.comet.opik.api.GuardrailsValidationRequest;
 import com.comet.opik.api.GuardrailsValidationRequest.ValidationDescriptor;
 import com.comet.opik.api.GuardrailsValidationResponse;
+import com.comet.opik.api.GuardrailsValidationResponse.ValidationResult;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -19,6 +20,7 @@ import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.JsonUtils;
 import com.redis.testcontainers.RedisContainer;
+import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import org.apache.http.HttpStatus;
 import org.junit.jupiter.api.AfterAll;
@@ -36,9 +38,11 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 
 import java.util.List;
+import java.util.Set;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
+import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
@@ -261,6 +265,61 @@ class GuardrailsValidationsResourceTest {
         wireMock.server().verify(1, postRequestedFor(urlPathEqualTo(FEATURES_PATH))
                 .withHeader(HttpHeaders.AUTHORIZATION, equalTo(apiKey)));
         wireMock.server().verify(2, postRequestedFor(urlPathEqualTo(DECIDE_PATH)));
+    }
+
+    @Test
+    @DisplayName("the named policies and every global policy add their rules to the checks")
+    void validate__withPolicies__thenTheirRulesAreChecked() {
+        var apiKey = randomUUID().toString();
+        var workspaceName = randomUUID().toString();
+        AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, randomUUID().toString(), USER);
+        mockWorkspaceFeatures(apiKey, workspaceName, true);
+        wireMock.server().stubFor(post(urlPathEqualTo(DECIDE_PATH)).willReturn(okJson("""
+                {"request_id":"req_2","cache_hit":false,"latency_ms":40,"result":{"answers":{
+                  "0.injection":{"type":"noul","noul":0.01},
+                  "1.pii.PERSON":{"type":"noul","noul":0.93},
+                  "2.topic.restricted":{"type":"choice","choice":"none of these",
+                         "probabilities":{"politics":0.02,"none of these":0.98},"confidence":0.98}}}}
+                """)));
+        createPolicy(apiKey, workspaceName, """
+                {"name":"support-bot","rules":[{"type":"PII","config":{"entities":["PERSON"]}}]}""");
+        createPolicy(apiKey, workspaceName, """
+                {"name":"workspace-wide","execution_scope":"global",
+                 "rules":[{"type":"TOPIC","config":{"restricted_topics":["politics"]}}]}""");
+        var request = request(descriptor(GuardrailType.PROMPT_INJECTION, "{}")).toBuilder()
+                .policies(Set.of("support-bot"))
+                .build();
+
+        try (var response = guardrailsResourceClient.validate(request, apiKey, workspaceName)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            var actual = response.readEntity(GuardrailsValidationResponse.class);
+            assertThat(actual.validationPassed()).isFalse();
+            assertThat(actual.validations()).extracting(ValidationResult::type)
+                    .containsExactly(GuardrailType.PROMPT_INJECTION, GuardrailType.PII, GuardrailType.TOPIC);
+            assertThat(actual.validations()).extracting(ValidationResult::validationPassed)
+                    .containsExactly(true, false, true);
+        }
+        wireMock.server().verify(1, postRequestedFor(urlPathEqualTo(DECIDE_PATH))
+                .withRequestBody(matchingJsonPath("$.questions['0.injection']"))
+                .withRequestBody(matchingJsonPath("$.questions['1.pii.PERSON']"))
+                .withRequestBody(matchingJsonPath("$.questions['2.topic.restricted']")));
+
+        var unknown = request(descriptor(GuardrailType.PROMPT_INJECTION, "{}")).toBuilder()
+                .policies(Set.of("missing"))
+                .build();
+        try (var response = guardrailsResourceClient.validate(unknown, apiKey, workspaceName)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+        }
+    }
+
+    private void createPolicy(String apiKey, String workspaceName, String policy) {
+        try (var response = client.target(baseURI + "/v1/private/guardrails/policies")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(JsonUtils.getJsonNodeFromString(policy)))) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CREATED);
+        }
     }
 
     private void mockWorkspaceFeatures(String apiKey, String workspaceName, boolean guardrails) {
