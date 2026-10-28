@@ -616,6 +616,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 f"Starting iteration {iteration} (trials: {context.trials_completed}/{max_trials})"
             )
             round_handle = self.pre_round(context)
+            self._lineage.derive_from(best_prompts)
 
             hierarchical_analysis = iteration_ops.run_root_cause_analysis(
                 optimizer=self,

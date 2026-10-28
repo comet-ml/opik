@@ -353,6 +353,9 @@ def run_generations(
                 )
                 evo_reporter.start_gen(generation_idx, optimizer.num_generations)
                 round_handle = optimizer.pre_round(context)
+                # Offspring come from the whole population; the best so far is
+                # the closest single parent to show.
+                optimizer._lineage.derive_from(best_prompts_overall)
 
                 deap_population = population_ops.maybe_restart_population(
                     optimizer=optimizer,

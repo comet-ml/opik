@@ -6,10 +6,11 @@ label trials: a candidate something was built on shows as "Passed", one nothing
 was built on as "Discarded". Without these keys the UI chains trials in creation
 order, so every trial but the last looks "Passed".
 
-A candidate's parent is the incumbent (best prompt so far) when its round began,
-since every optimizer proposes new candidates from the best it has found. The
-baseline is the root. Re-evaluating the same prompt reuses its candidate id, so
-the UI groups those experiments as one candidate.
+A candidate's parent is the prompt the optimizer derived it from, which the
+optimizer declares with ``derive_from`` before generating a round of candidates.
+Optimizers that sample around the original prompt (or don't declare a source)
+parent every candidate on the baseline, the root. Re-evaluating the same prompt
+reuses its candidate id, so the UI groups those experiments as one candidate.
 """
 
 from __future__ import annotations
@@ -58,13 +59,13 @@ class CandidateLineage:
         with self._lock:
             self._by_fingerprint: dict[str, _Candidate] = {}
             self._root: _Candidate | None = None
-            self._incumbent: str | None = None
+            self._source: str | None = None
 
-    def start_round(self, incumbent: _PromptLike | None) -> None:
-        """Record the prompt the next candidates are derived from."""
-        fingerprint = _fingerprint(incumbent) if incumbent else None
+    def derive_from(self, source: _PromptLike) -> None:
+        """Declare the prompt the next new candidates are generated from."""
+        fingerprint = _fingerprint(source)
         with self._lock:
-            self._incumbent = fingerprint
+            self._source = fingerprint
 
     def tag(
         self, experiment_config: dict[str, Any] | None, prompt: _PromptLike
@@ -90,9 +91,7 @@ class CandidateLineage:
                 self._root = candidate
             else:
                 parent = (
-                    self._by_fingerprint.get(self._incumbent)
-                    if self._incumbent
-                    else None
+                    self._by_fingerprint.get(self._source) if self._source else None
                 ) or self._root
                 candidate = _Candidate(
                     f"candidate-{len(self._by_fingerprint)}",

@@ -1256,7 +1256,6 @@ class BaseOptimizer(ABC):
     def pre_round(self, context: OptimizationContext, **extras: Any) -> Any:
         """Hook fired before a round begins."""
         handle = self._history_builder.start_round(extras=extras or None)
-        self._lineage.start_round(context.current_best_prompt or context.prompts)
         debug_log(
             "round_context",
             round_index=handle,

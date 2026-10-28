@@ -264,6 +264,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                     break
 
                 self._current_round = round_num
+                self._lineage.derive_from(best_prompts)
                 debug_log(
                     "round_loop_start",
                     round_index=round_num + 1,

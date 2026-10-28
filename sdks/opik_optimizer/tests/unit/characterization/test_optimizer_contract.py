@@ -21,6 +21,11 @@ from opik_optimizer.core.exceptions import ScoringFailedError
 from tests.unit.characterization import fake_opik, harness
 
 PROMPT_OPTIMIZERS = [n for n in harness.OPTIMIZERS if n != "ParameterOptimizer"]
+BUILDS_ON_IMPROVEMENTS = {
+    "MetaPromptOptimizer",
+    "HierarchicalReflectiveOptimizer",
+    "EvolutionaryOptimizer",
+}
 
 
 def _as_dict(prompt: ChatPrompt | dict[str, ChatPrompt]) -> dict[str, ChatPrompt]:
@@ -86,14 +91,7 @@ def test_improves_the_score_without_touching_the_callers_prompt(
             assert optimized == messages
 
 
-@pytest.mark.parametrize("optimizer_name", harness.OPTIMIZERS)
-def test_trial_experiments_record_the_candidate_tree(
-    optimizer_name: str, install_fakes: Any, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    # Opik draws the search tree and labels trials Passed/Discarded from these
-    # keys; without them it chains trials in creation order.
-    scenario = harness.build_scenario("S1_single")
-    install_fakes(scenario)
+def _record_trial_configs(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
     configs: list[dict[str, Any]] = []
 
     def _recording_trial(**kwargs: Any) -> Any:
@@ -105,6 +103,18 @@ def test_trial_experiments_record_the_candidate_tree(
         "opik_optimizer.core.evaluation.opik_evaluator.evaluate_optimization_trial",
         _recording_trial,
     )
+    return configs
+
+
+@pytest.mark.parametrize("optimizer_name", harness.OPTIMIZERS)
+def test_trial_experiments_record_the_candidate_tree(
+    optimizer_name: str, install_fakes: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Opik draws the search tree and labels trials Passed/Discarded from these
+    # keys; without them it chains trials in creation order.
+    scenario = harness.build_scenario("S1_single")
+    install_fakes(scenario)
+    configs = _record_trial_configs(monkeypatch)
 
     result = harness.run_optimizer(optimizer_name, scenario)
 
@@ -124,6 +134,27 @@ def test_trial_experiments_record_the_candidate_tree(
         seen[candidate_id] = node
     assert len(seen) > 1
     assert all(parents for cid, (_, parents) in seen.items() if cid != "baseline")
+    if optimizer_name in BUILDS_ON_IMPROVEMENTS:
+        # Later rounds start from the improved prompt, not the baseline.
+        assert any(parents != ["baseline"] for _, parents in seen.values() if parents)
+
+
+@pytest.mark.parametrize("optimizer_name", harness.OPTIMIZERS)
+def test_candidates_that_never_beat_the_baseline_all_derive_from_it(
+    optimizer_name: str, install_fakes: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    scenario = harness.build_scenario("S1_single")
+    install_fakes(scenario)
+    configs = _record_trial_configs(monkeypatch)
+
+    harness.run_optimizer(optimizer_name, scenario, metric=_flat, max_trials=8)
+
+    candidates = {c["candidate_id"]: c for c in configs}
+    # GEPA sees no score signal and stops after the baseline.
+    assert len(candidates) > 1 or optimizer_name == "GepaOptimizer"
+    for candidate_id, config in candidates.items():
+        if candidate_id != "baseline":
+            assert config["parent_candidate_ids"] == ["baseline"], candidate_id
 
 
 @pytest.mark.parametrize("optimizer_name", harness.OPTIMIZERS)
