@@ -5,13 +5,13 @@ import com.comet.opik.domain.llm.langchain4j.OpikOpenAiChatModel;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
+import com.comet.opik.infrastructure.llm.ProviderHeadersHttpClient;
 import dev.langchain4j.http.client.HttpClientBuilder;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.openai.internal.OpenAiClient;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.Map;
@@ -38,10 +38,6 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
                 .httpClientBuilder(newHttpClientBuilder(config))
                 .logRequests(llmProviderClientConfig.getLogRequests())
                 .logResponses(llmProviderClientConfig.getLogResponses());
-
-        Optional.ofNullable(config.headers())
-                .filter(MapUtils::isNotEmpty)
-                .ifPresent(openAiClientBuilder::customHeaders);
 
         Optional.ofNullable(llmProviderClientConfig.getConnectTimeout())
                 .ifPresent(connectTimeout -> openAiClientBuilder.connectTimeout(connectTimeout.toJavaDuration()));
@@ -82,10 +78,6 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
         Optional.ofNullable(llmProviderClientConfig.getConnectTimeout())
                 .ifPresent(connectTimeout -> builder.timeout(connectTimeout.toJavaDuration()));
 
-        Optional.ofNullable(config.headers())
-                .filter(MapUtils::isNotEmpty)
-                .ifPresent(builder::customHeaders);
-
         Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
         Optional.ofNullable(modelParameters.seed()).ifPresent(builder::seed);
 
@@ -115,11 +107,13 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
         // innermost, so it sees the URL after InterceptingHttpClient's mutations
         var guardedBuilder = new DestinationGuardHttpClientBuilder(httpClientBuilders.builder(), providerBaseUrlGuard);
 
+        // outermost, so the provider's headers are on the request before InterceptingHttpClient's mutations
         if (!requiresInterceptingBuilder(config)) {
-            return guardedBuilder;
+            return ProviderHeadersHttpClient.builder(guardedBuilder, config.headers());
         }
-        return new InterceptingHttpClientBuilder(guardedBuilder, config.configuration(), config.apiKey(),
-                bearerSupplier(config), tokenInvalidator(config));
+        return ProviderHeadersHttpClient.builder(new InterceptingHttpClientBuilder(guardedBuilder,
+                config.configuration(), config.apiKey(), bearerSupplier(config), tokenInvalidator(config)),
+                config.headers());
     }
 
     /**

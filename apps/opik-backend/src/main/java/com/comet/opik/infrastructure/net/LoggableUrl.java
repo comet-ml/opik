@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.net;
 
+import jakarta.annotation.Nullable;
 import lombok.experimental.UtilityClass;
 import org.apache.commons.lang3.StringUtils;
 
@@ -17,7 +18,7 @@ public class LoggableUrl {
      * they can carry credentials: a webhook's token is in its path, a signed URL's token in its path or query. A missing
      * URL is a placeholder, so logging a failure never fails itself.
      */
-    public static String of(String url) {
+    public static String of(@Nullable String url) {
         if (url == null) {
             return "<no URL>";
         }

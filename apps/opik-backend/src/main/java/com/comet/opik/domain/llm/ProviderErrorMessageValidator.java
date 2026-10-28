@@ -3,6 +3,7 @@ package com.comet.opik.domain.llm;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.google.common.base.CharMatcher;
 import io.dropwizard.jersey.errors.ErrorMessage;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
@@ -78,7 +79,7 @@ public class ProviderErrorMessageValidator {
      * ISO control characters (C0, DEL and C1) and the Unicode line and paragraph separators. All of them are in the
      * Basic Multilingual Plane, so matching UTF-16 chars matches the same code points.
      */
-    private static final CharMatcher LINE_BREAKING = CharMatcher.javaIsoControl()
+    private static final CharMatcher CONTROL_CHARACTERS = CharMatcher.javaIsoControl()
             .or(CharMatcher.anyOf("\u2028\u2029"));
 
     /**
@@ -100,7 +101,7 @@ public class ProviderErrorMessageValidator {
      * The first line of a message, stripped. Google APIs put a one-line summary first and the specifics, such as the
      * quota that was exceeded, on the lines after it.
      */
-    public static String firstLine(String text) {
+    public static @Nullable String firstLine(@Nullable String text) {
         return text == null ? null : LINE_BREAK.split(text, 2)[0].strip();
     }
 
@@ -123,6 +124,6 @@ public class ProviderErrorMessageValidator {
 
     /** A single line of plain text: no markup, control characters or line breaks; length is not checked. */
     public static boolean isPlainText(String text) {
-        return StringUtils.isNotBlank(text) && LINE_BREAKING.matchesNoneOf(text) && !MARKUP.matcher(text).find();
+        return StringUtils.isNotBlank(text) && CONTROL_CHARACTERS.matchesNoneOf(text) && !MARKUP.matcher(text).find();
     }
 }

@@ -185,6 +185,8 @@ component:
       LLM_PROVIDER_DESTINATION_GUARD: "relaxed"
       # And for detecting the type of videos served from internal hosts
       LLM_PROVIDER_VIDEO_URL_DESTINATION_GUARD: "relaxed"
+      # And for alert webhooks pointed at internal services; also the application default
+      WEBHOOK_DESTINATION_GUARD: "relaxed"
       ANALYTICS_DB_MIGRATIONS_PASS: opik
       ANALYTICS_DB_PASS: opik
       STATE_DB_PASS: opik
@@ -369,6 +371,12 @@ component:
       # root (CAP_SETUID/CAP_SETGID, default for root), no privileged mode; works under a RuntimeDefault
       # seccomp profile. If it can't be applied no worker starts. Off by default.
       PYTHON_CODE_EXECUTOR_PROCESS_NETWORK_ISOLATION: "false"
+      # Seconds a new process-strategy worker may take to report ready before it is stopped and left out
+      # of the pool. A positive number; any other value fails startup.
+      PYTHON_CODE_EXECUTOR_READY_TIMEOUT_SECONDS: "10"
+      # Largest result, in bytes as JSON, a process-strategy worker may return; a longer one fails that
+      # evaluation. A positive integer; any other value fails startup. 67108864 is 64 MiB.
+      PYTHON_CODE_EXECUTOR_MAX_RESULT_SIZE_IN_BYTES: "67108864"
       PYTHON_CODE_EXECUTOR_CPU_SHARES: "512"
       PYTHON_CODE_EXECUTOR_MEM_LIMIT: "256m"
       # PYTHON_CODE_EXECUTOR_CPU_LIMIT: "0.5"  # Hard CPU limit per executor container (in CPUs, e.g. "0.5" = half a core). Unset by default — no hard limit.

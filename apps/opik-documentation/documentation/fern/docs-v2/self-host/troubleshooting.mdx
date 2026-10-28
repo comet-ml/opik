@@ -116,7 +116,7 @@ A default self-hosted or open-source install has both settings `false` and the `
 
 #### Resolution
 
-Start from the health check message — it names both the setting and the engine it actually found. The readiness endpoint does not carry it (`/health-check` returns the verdict only), so read it from the admin connector, which listens on `SERVER_ADMIN_PORT` (8081 by default):
+Start from the health check message — it names both the setting and the engine it actually found. The readiness endpoint does not carry it (`/health-check` returns the verdict only), so read it from the admin connector, which listens on `SERVER_ADMIN_PORT` (8081 by default). If you run the backend with `SERVER_ADMIN_ENABLED=false`, nothing listens on that port: set it back to `true` (the default) while you investigate.
 
 ```bash wordWrap
 # Kubernetes — the Helm chart's Service does not expose the admin port, so forward it.

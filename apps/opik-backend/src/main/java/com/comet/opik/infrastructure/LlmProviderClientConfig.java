@@ -88,11 +88,11 @@ public class LlmProviderClientConfig {
 
     /**
      * Time allowed for downloading one media URL that Gemini or Vertex AI receives as inline data, connecting
-     * included. At most 5 minutes: every download completes before the provider is called, so a slow or stalled media
-     * server must fail the request fast, and 5 minutes still fits the largest size cap (100 MB) at about 350 KB/s.
+     * included. At most 2 minutes: every download completes before the provider is called, so a slow or stalled media
+     * server must fail the request fast, and 2 minutes still fits the largest size cap (100 MB) at about 850 KB/s.
      */
     @NotNull @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS)
-    @MaxDuration(value = 5, unit = TimeUnit.MINUTES)
+    @MaxDuration(value = 2, unit = TimeUnit.MINUTES)
     private Duration mediaDownloadTimeout;
 
     /**
@@ -121,37 +121,38 @@ public class LlmProviderClientConfig {
     /**
      * Longest a provider's stream may stay silent once its headers arrived; the read timeout bounds only the wait for
      * the headers. Models that reason before answering can be silent for a while, so it is above the ingress idle
-     * timeout, beyond which the caller is gone anyway.
+     * timeout, beyond which the caller is gone anyway. At most 10 minutes: a stream silent for longer has stalled.
      */
     @NotNull @MinDuration(value = 1, unit = TimeUnit.SECONDS)
-    @MaxDuration(value = 1, unit = TimeUnit.HOURS)
+    @MaxDuration(value = 10, unit = TimeUnit.MINUTES)
     private Duration streamReadTimeout;
 
     /**
      * Most threads of the shared LLM HTTP client. A call made asynchronously, a stream included, holds one from start
-     * to end, so there are at least as many as {@link #httpClientMaxRequests}.
+     * to end, so there are at least as many as {@link #httpClientMaxRequests}. At most 2048, twice Jetty's default
+     * thread count, which bounds how many callers can wait on these calls at once.
      */
-    @NotNull @Min(1) @Max(10_000) private Integer httpClientMaxThreads;
+    @NotNull @Min(1) @Max(2048) private Integer httpClientMaxThreads;
 
     /**
      * How long a thread of the shared LLM HTTP client stays idle before it ends, so the pool shrinks back after a
-     * burst.
+     * burst. At most 5 minutes, so the threads of a burst don't outlive it for long.
      */
     @NotNull @MinDuration(value = 1, unit = TimeUnit.SECONDS)
-    @MaxDuration(value = 1, unit = TimeUnit.HOURS)
+    @MaxDuration(value = 5, unit = TimeUnit.MINUTES)
     private Duration httpClientThreadKeepAlive;
 
     /**
      * Most LLM provider calls made asynchronously, streams included, that run at once on the shared client. Further
-     * calls wait in order for one to end; their timeouts start once they run.
+     * calls wait in order for one to end; their timeouts start once they run. At most 2048, as the threads.
      */
-    @NotNull @Min(1) @Max(10_000) private Integer httpClientMaxRequests;
+    @NotNull @Min(1) @Max(2048) private Integer httpClientMaxRequests;
 
     /**
      * Most of {@link #httpClientMaxRequests} that run at once to a single host. Most calls go to a few hosts, such as
      * one provider's API, so it is at most, and by default equal to, the overall limit.
      */
-    @NotNull @Min(1) @Max(10_000) private Integer httpClientMaxRequestsPerHost;
+    @NotNull @Min(1) @Max(2048) private Integer httpClientMaxRequestsPerHost;
 
     @JsonIgnore
     @AssertTrue(message = "llmProviderClient.httpClientMaxThreads must be at least llmProviderClient.httpClientMaxRequests") public boolean isHttpClientMaxThreadsAtLeastMaxRequests() {
