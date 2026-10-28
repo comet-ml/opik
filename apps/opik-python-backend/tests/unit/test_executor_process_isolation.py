@@ -1353,7 +1353,7 @@ def slow_writer(pipe):
 
 
 def _read_slow_reply(parent):
-    return executor_process._read_result(parent, "a" * 32, math.inf, 64 * 1024 * 1024,
+    return executor_process._read_result(parent, "a" * 32, time.monotonic() + 30, 64 * 1024 * 1024,
                                          idle=executor_process._REPLY_GRACE_SECONDS)
 
 
@@ -1519,3 +1519,77 @@ def test_oversized_reply_is_logged_as_oversized(pipe, caplog):
 
     assert actual is None
     assert [r.getMessage() for r in caplog.records] == ["Discarded a worker reply longer than 16 bytes"]
+
+
+# A length prefix, then one byte at a time, each well within the reply grace, without ever finishing.
+DRIBBLE_REPLY_METRIC = """
+import os
+import struct
+import sys
+import time
+
+from opik.evaluation.metrics import base_metric, score_result
+
+
+class DribbleReply(base_metric.BaseMetric):
+    def __init__(self):
+        super().__init__(name="dribble_reply", track=False)
+
+    def score(self, **ignored_kwargs):
+        frame = sys._getframe()
+        while "connection" not in frame.f_locals:
+            frame = frame.f_back
+        fd = frame.f_locals["connection"].fileno()
+        os.write(fd, struct.pack("!i", 1 << 20))
+        while True:
+            os.write(fd, b"x")
+            time.sleep(0.2)
+"""
+
+
+@needs_isolation
+def test_one_shot_reply_that_never_finishes_ends_at_the_reply_deadline(monkeypatch, workers):
+    monkeypatch.setattr(executor_process, "_ONE_SHOT_REPLY_SECONDS", 2)
+
+    start = time.monotonic()
+    result = run_user_code_in_isolated_worker(DRIBBLE_REPLY_METRIC, {})
+    elapsed = time.monotonic() - start
+
+    assert result == {"code": 504, "error": executor_process.EXEC_TIMEOUT_ERROR}
+    assert 2 <= elapsed < 2 + STOP_BOUND_SECONDS, elapsed
+    assert not workers[0].is_alive()
+    assert executor_process._idle_isolated_workers.qsize() == 0
+
+
+def test_dribbled_reply_ends_at_the_deadline(pipe):
+    parent, child = pipe
+    child_fd = child.fileno()
+    stop = threading.Event()
+
+    def dribble():
+        os.write(child_fd, struct.pack("!i", 1 << 20))
+        while not stop.wait(0.2):
+            os.write(child_fd, b"x")
+
+    writer = threading.Thread(target=dribble, daemon=True)
+    writer.start()
+    start = time.monotonic()
+    try:
+        with pytest.raises(executor_process._StalledReply):
+            executor_process._read_reply(parent, time.monotonic() + 1.5, 64 * 1024 * 1024,
+                                         idle=executor_process._REPLY_GRACE_SECONDS)
+        elapsed = time.monotonic() - start
+    finally:
+        stop.set()
+        writer.join(5)
+
+    assert 1.5 <= elapsed < 3, elapsed
+
+
+@pytest.mark.parametrize("deadline", [math.inf, -math.inf, math.nan])
+def test_reply_read_without_a_finite_deadline_is_refused(pipe, deadline):
+    parent, child = pipe
+    child.send_bytes(b"{}")
+
+    with pytest.raises(ValueError, match="^a reply read needs a finite deadline$"):
+        executor_process._read_reply(parent, deadline, 1024)

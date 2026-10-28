@@ -149,6 +149,10 @@ _KILL_GRACE_SECONDS = 1
 # it bounds each pause rather than the whole reply, so a large reply that keeps arriving completes. Draining uses it
 # as a fixed bound: pending replies are discarded, and a worker that can't be drained in time is just replaced.
 _REPLY_GRACE_SECONDS = 1
+# The whole of a Studio one-shot reply once its first byte has arrived (the run before it has no deadline). The
+# largest reply, 64 MiB by default, crosses a local pipe in well under a second, so this only ends a worker that
+# keeps a reply going without finishing it.
+_ONE_SHOT_REPLY_SECONDS = 30
 
 
 class _StalledReply(Exception):
@@ -321,24 +325,33 @@ def _close(connection: Connection, worker_id: str) -> None:
 
 
 def _recv_exact(sock: socket.socket, size: int, deadline: float, idle: float) -> bytearray:
+    """Ends by the deadline, which must be finite: a worker sending a byte at a time, each within `idle`, would
+    otherwise keep the read going until the size cap."""
+    if not math.isfinite(deadline):
+        raise ValueError("a reply read needs a finite deadline")
     buf = bytearray(size)
     with memoryview(buf) as view:
         received = 0
+        # When the current pause becomes a stall; set when the pipe runs dry, cleared by the next bytes, so a
+        # wakeup that brings none (spurious, or EAGAIN again) never extends it.
+        stalled_at = None
         while received < size:
             try:
                 # MSG_DONTWAIT, so bytes already on the pipe cost one recv, as with os.read, and only a read
                 # that would block waits, never past the deadline.
                 n = sock.recv_into(view[received:], size - received, socket.MSG_DONTWAIT)
             except BlockingIOError:
-                # Each time the pipe runs dry it waits at most `idle`, and never past the deadline: bytes that keep
-                # arriving restart the wait, and a pause of `idle` is a stall.
-                timeout = min(deadline - time.monotonic(), idle)
+                now = time.monotonic()
+                if stalled_at is None:
+                    stalled_at = now + idle
+                timeout = min(deadline, stalled_at) - now
                 if timeout <= 0 or not wait([sock], timeout):
                     raise _StalledReply("the worker sent part of a reply and stalled")
                 continue
             if n == 0:
                 raise EOFError
             received += n
+            stalled_at = None
     return buf
 
 
@@ -543,9 +556,10 @@ def run_user_code_in_isolated_worker(code: str, data: dict, payload_type: Option
     try:
         request_id, command = _command(code, data, payload_type)
         connection.send(command)
-        # No deadline for the run itself (see above), only a bound on pauses once the reply has started.
+        # No deadline for the run itself (see above); once the reply has started, it has a whole and a per-pause bound.
         connection.poll(None)
-        result = _read_result(connection, request_id, math.inf, max_bytes, idle=_REPLY_GRACE_SECONDS)
+        result = _read_result(connection, request_id, time.monotonic() + _ONE_SHOT_REPLY_SECONDS, max_bytes,
+                              idle=_REPLY_GRACE_SECONDS)
         if result is None:
             return {"code": 400, "error": MALFORMED_REPLY_ERROR}
         reusable = True
