@@ -51,7 +51,9 @@ class CloseableVertexAiChatModel implements ChatModel, AutoCloseable {
 
     /**
      * Closes the delegate only. The client is left open: closing it would shut the dispatcher and empty the connection
-     * pool that every Vertex AI call shares, see {@link VertexAIClientGenerator}, and it holds nothing else.
+     * pool that every Vertex AI call shares, see {@link VertexAIClientGenerator}, and it holds nothing else. The
+     * per-request close of OPIK-7847 targeted the old {@code VertexAI} client's GAX executor, which google-genai on the
+     * shared HTTP client doesn't have.
      */
     @Override
     public void close() {

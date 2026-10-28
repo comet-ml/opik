@@ -26,6 +26,7 @@ import okhttp3.ConnectionPool;
 import okhttp3.Dispatcher;
 import okhttp3.OkHttpClient;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -41,6 +42,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
+import java.lang.management.ManagementFactory;
 import java.lang.reflect.Method;
 import java.net.InetAddress;
 import java.net.ServerSocket;
@@ -1105,6 +1107,52 @@ class VertexAIClientGeneratorTest {
             assertThat(actualTransport.connectionPool()).isSameAs(expectedTransport.connectionPool());
             assertThat(actualTransport.dispatcher()).isSameAs(expectedTransport.dispatcher());
         }
+    }
+
+    /** Calls made per kind, chat and streamed, by {@link #callsLeaveNoThreadsBehind}. */
+    private static final int CALLS = 50;
+
+    /** Threads the JVM may start or end for its own reasons while the calls run, the shared pools' included. */
+    private static final int THREAD_SLACK = 10;
+
+    /**
+     * Calls, streamed or not, leave no thread behind: a client per call runs on the shared transport, and the SDK
+     * starts no executor of its own on these paths. Counted against a baseline taken after a first round of calls, so
+     * the shared pools' threads are already up, and given time to settle, as idle threads of those pools may end.
+     */
+    @Test
+    @DisplayName("Vertex AI calls, streamed or not, leave no thread behind")
+    void callsLeaveNoThreadsBehind() {
+        wireMock.server().stubFor(post(urlPathMatching(".*:streamGenerateContent"))
+                .willReturn(aResponse()
+                        .withHeader("Content-Type", "text/event-stream")
+                        .withBody("data: %s\n\n".formatted(GENERATE_CONTENT_RESPONSE.replace("\n", " ")))));
+        var provider = new LlmProviderVertexAI(new VertexAIClientGenerator(clientConfig(), registry,
+                LlmTestClients.REMOTE_MEDIA_INLINER, LlmTestClients.VIDEO_MIME_TYPE_UTILS),
+                LlmProviderClientApiConfig.builder()
+                        .apiKey(serviceAccountJson)
+                        .configuration(Map.of("location", "global"))
+                        .build());
+        var request = ChatCompletionRequest.builder().model(MODEL).addUserMessage("hello").build();
+        Runnable round = () -> {
+            for (int i = 0; i < CALLS; i++) {
+                provider.generate(request, "workspace");
+                var ended = new CompletableFuture<Void>();
+                provider.generateStream(request, "workspace", message -> {
+                }, () -> ended.complete(null), ended::completeExceptionally);
+                assertThat(ended).succeedsWithin(10, TimeUnit.SECONDS);
+            }
+        };
+        round.run();
+        var threads = ManagementFactory.getThreadMXBean();
+        var baseline = threads.getThreadCount();
+
+        round.run();
+
+        Awaitility.await()
+                .atMost(30, TimeUnit.SECONDS)
+                .pollInterval(500, TimeUnit.MILLISECONDS)
+                .untilAsserted(() -> assertThat(threads.getThreadCount()).isLessThanOrEqualTo(baseline + THREAD_SLACK));
     }
 
     /**
