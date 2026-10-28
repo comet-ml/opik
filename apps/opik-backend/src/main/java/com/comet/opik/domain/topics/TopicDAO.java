@@ -10,7 +10,6 @@ import org.jdbi.v3.sqlobject.statement.SqlBatch;
 import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 
-import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
@@ -58,10 +57,6 @@ public interface TopicDAO {
 
     @SqlQuery("SELECT id FROM topics WHERE project_id = :projectId AND retired_at IS NOT NULL")
     List<UUID> findRetiredIds(@Bind("projectId") UUID projectId);
-
-    /** The born date of the project's first build: its earliest topic, live or retired. */
-    @SqlQuery("SELECT MIN(born) FROM topics WHERE project_id = :projectId")
-    LocalDate findFirstBorn(@Bind("projectId") UUID projectId);
 
     @SqlUpdate("DELETE FROM topic_prototypes WHERE project_id = :projectId")
     int deletePrototypes(@Bind("projectId") UUID projectId);

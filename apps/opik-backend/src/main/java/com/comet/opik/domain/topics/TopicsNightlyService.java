@@ -115,7 +115,7 @@ public class TopicsNightlyService {
                     continue;
                 }
                 if (!lockProject(candidate.projectId())) {
-                    log.info("Topics night skipped project '{}', a run started by hand holds it",
+                    log.info("Topics night skipped project '{}', its lock is held (a run by hand) or Redis is down",
                             candidate.projectId());
                     skipped++;
                     metrics.project(TopicsMetrics.DECISION_SKIP, 1);
@@ -147,7 +147,8 @@ public class TopicsNightlyService {
     }
 
     /**
-     * Starts the project's first build now, outside the night, and returns its run id. The run goes on in the background
+     * Runs the project now, outside the night, and returns its run id: a {@code nightly_update} when it has live
+     * topics, else a {@code first_build}, chosen under its lock. The run goes on in the background
      * with the same timeout, and its outcome is its {@code topic_runs} row. The window is the one of {@code night}: it
      * ends at that day's start (UTC). The night's rules apply: the workspace must be opted in to topics, the window must
      * hold {@code minVectors} vectors of the project, and only one run by hand goes at a time across the cluster.

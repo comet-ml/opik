@@ -57,8 +57,12 @@ public class Verifier {
                     verdicts.put(pairs.get(pair)[0], truthy(entry.get("same")));
                 }
             }
+        } catch (TopicsRunException exception) {
+            // The call failed (timeout or error): the run fails and the project keeps yesterday's list. Read as "no
+            // pair verified", it would turn revise's sound assigns into forced births.
+            throw exception;
         } catch (RuntimeException exception) {
-            log.warn("topics verify call failed, no pair is verified", exception);
+            log.warn("topics verify answer unreadable, no pair is verified", exception);
             verdicts.clear();
             failed = true;
         }

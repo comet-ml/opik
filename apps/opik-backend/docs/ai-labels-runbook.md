@@ -276,7 +276,7 @@ WHERE started_at >= UTC_DATE();
 
 -- MySQL: projects with a list and no saved run for 3 nights
 SELECT project_id, workspace_id, last_success_at
-FROM topic_project_state
+FROM topic_project_states
 WHERE last_success_at < UTC_DATE() - INTERVAL 2 DAY;
 ```
 
@@ -310,7 +310,7 @@ or to Other. It writes:
 | `topic_prototypes` | MySQL | The vectors traces are assigned by, several per topic, and the known-Other ones (`topic_id` null). |
 | `topic_project_states` | MySQL | One row per project with a saved list: `rebuilds` (saved nights), `last_run_id`, `window_until`. |
 | `topic_runs` | MySQL | One row per run: `running`, then `saved` or `failed` with `error_code`. Kept 90 days. |
-| `trace_topics` | ClickHouse | One row per window trace and run: its `topic_id`, the all-zeros id for Other. The latest row wins. |
+| `trace_topics` | ClickHouse | One row per window trace and run: its `topic_id`, the all-zeros id for Other. The latest row wins; a failed run deletes its rows (best effort). |
 
 ### Turning it on and off
 
@@ -341,13 +341,14 @@ This is also the rollback of the nightly update.
   same project at once.
 - A first build under 1,000 traces is saved with `"provisional": true` in its stats.
 
-A failed run writes nothing but its `topic_runs` row; the project runs again the next night. A skipped or failed
+A failed run keeps only its `topic_runs` row: when its save fails after the `trace_topics` insert, it deletes those
+rows again (best effort). The project runs again the next night. A skipped or failed
 night does not count: the lifecycle counters and `rebuilds` change only on a saved run.
 
 | `error_code` | Meaning |
 |---|---|
-| `qwen_timeout` | The author or revise call ran out of `TOPICS_NIGHTLY_QWEN_DEADLINE`. |
-| `qwen_error` | The author or revise call failed after its 2 retries, or with a 4xx. `error_message` has the call's kind, code and HTTP status. |
+| `qwen_timeout` | A Qwen call ran out of its deadline: `TOPICS_NIGHTLY_QWEN_DEADLINE` for author and revise, 60s for verify, 30s for naming. |
+| `qwen_error` | A Qwen call (author, revise, verify or naming) failed after its 2 retries, or with a 4xx. `error_message` has the call's kind, code and HTTP status. |
 | `qwen_bad_answer` | The author or revise answer is not a JSON object, or the author answer breaks the schema. The answer is in the logs. |
 | `window_read` | The ClickHouse window read failed, the window had no usable vector, or the nightly update could not read last night's labels. |
 | `invariant` | A check before the save failed: more than 10 live topics, a retired id live again, a renamed topic, a new topic not born tonight, a blank or catch-all name, a prototype not of unit length, a trace not labelled once or labelled with a retired topic. |
@@ -372,11 +373,12 @@ their prototypes, the known-Other prototypes, `rebuilds`), then:
      topics (not when the list holds 10), send candidates to Other; on review nights also merge, retire and redefine
      topics. A failed revise fails the run.
    - `verify` (`verify_batch.md`): one call checks every candidate given to a topic. A rejected or unanswered pair is
-     undone. A failed verify undoes every pair and the run goes on.
+     undone. An unreadable verify answer undoes every pair and the run goes on. A failed verify call fails the run:
+     read as "no pair verified", it would turn sound assigns into forced births.
    - `naming` (`naming.md`), one call per big candidate left without a topic and tight enough (0.80): it becomes a
      new topic. On a full list it replaces the topic (not born tonight) with the lowest 7-day share, if that share is
-     below the candidate's. A loose candidate, a full list with no such topic, a catch-all name or a failed naming
-     call send it to known Other, and the run goes on.
+     below the candidate's. A loose candidate, a full list with no such topic, a catch-all or blank name, or an
+     unreadable naming answer send it to known Other, and the run goes on. A failed naming call fails the run.
 6. The centre of each candidate given to a topic becomes one more prototype of that topic; one given to Other becomes
    a known-Other prototype.
 7. Every window trace is assigned again, as in the first build (cosine 0.75, the 0.95 gate on known Other).
@@ -407,7 +409,7 @@ the weekly cadence moves with it. `rebuilds` also seeds the night's k-means, so 
 
 ```sql
 -- MySQL: make the project's next night a review night
-UPDATE topic_project_state SET rebuilds = 7 * CEIL(rebuilds / 7)
+UPDATE topic_project_states SET rebuilds = 7 * CEIL(rebuilds / 7)
 WHERE project_id = '<project_id>' AND rebuilds > 0;
 ```
 
@@ -456,7 +458,7 @@ A nightly update's `stats` holds, besides `vectors`, `topics`, `other_share`, `s
 | `rebuilds_before`, `topics_before` | `rebuilds` and the live topics the run started from. |
 | `review_night`, `review` | A review night by `rebuilds`; a review at all (also forced by a full list). |
 | `unassigned`, `candidates`, `big` | Traces no prototype took at 0.75; candidate groups; big ones. `big` 0 and `review` false mean no Qwen call. |
-| `verify_pairs`, `verify_failed` | Pairs sent to verify; true when the call failed and every pair was undone. |
+| `verify_pairs`, `verify_failed` | Pairs sent to verify; true when the answer was unreadable and every pair was undone. |
 | `forced` | Big candidates left without a topic, by outcome: `born`, `other_loose`, `other_full`, `other_name`. |
 | `born`, `retired` | Names of tonight's new topics; tonight's retirements by reason. |
 | `other_prototypes` | Known-Other prototypes after the night. |
@@ -532,7 +534,7 @@ DELETE FROM topic_project_states WHERE project_id = '<project_id>';
 | `topics.nightly.projects` by `decision` | Projects the night looked at: `skip` (under the minimum, or held by a run started by hand), `first_build`, `nightly_update`, `not_reached` (the budget ran out: they run the next night). `not_reached` above zero means the budget is too short. |
 | `topics.runs` by `status`, `error_code` | Finished runs. |
 | `topics.run.duration_seconds` by `phase` | Time in `window` (ClickHouse read), `kmeans`, `qwen`, `assign`, `save` (first build); `window`, `state`, `update`, `churn`, `save` (nightly update). |
-| `topics.qwen.calls` by `kind`, `outcome` | `kind` is `author`, `revise`, `verify` or `naming`; `outcome` is `ok`, `timeout`, `error` or `bad_answer`. Failed `verify` and `naming` calls do not fail the run. |
+| `topics.qwen.calls` by `kind`, `outcome` | `kind` is `author`, `revise`, `verify` or `naming`; `outcome` is `ok`, `timeout`, `error` or `bad_answer`. A failed call of any kind fails the run. |
 | `topics.topics.live` | Live topics of a project after each saved run. |
 | `topics.topics.born` by `mode` | Topics born by saved runs. A few a week per project is normal; many every night means the list does not settle. |
 | `topics.topics.retired` by `reason` | `low_share`, `cap`, `merged`, `review`, `replaced`. |

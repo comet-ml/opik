@@ -94,7 +94,10 @@ public class ForcedBirth {
         return shown == null ? 0 : shown.recentShare();
     }
 
-    /** The naming call's first entry, or null for an empty or catch-all name, a bad answer or a failed call. */
+    /**
+     * The naming call's first entry, or null for a blank or catch-all name or an unreadable answer. A failed call
+     * throws.
+     */
     private static AuthorApplier.NewTopic name(GroupSummary candidate, NightLlm llm) {
         try {
             var answer = llm.generate(TAG_PREFIX + candidate.group(), TopicPrompts.naming(candidate),
@@ -105,15 +108,19 @@ public class ForcedBirth {
             }
             var name = entries.get(0).get("name");
             var definition = entries.get(0).get("definition");
-            if (name == null || !name.isTextual() || name.asText().isEmpty()
+            if (name == null || !name.isTextual() || TopicText.pythonStrip(name.asText()).isEmpty()
                     || AuthorApplier.isCatchAll(name.asText())) {
                 return null;
             }
             var text = definition != null && definition.isTextual() ? definition.asText() : "";
-            return new AuthorApplier.NewTopic(TopicText.pythonStrip(name.asText()), TopicText.pythonStrip(text),
+            return new AuthorApplier.NewTopic(TopicText.name(name.asText()), TopicText.pythonStrip(text),
                     List.of(candidate.group()));
+        } catch (TopicsRunException exception) {
+            // The call failed (timeout or error): the run fails, so a topic retired to make room is not lost.
+            throw exception;
         } catch (RuntimeException exception) {
-            log.warn("topics naming call failed for group '{}', it goes to known Other", candidate.group(), exception);
+            log.warn("topics naming answer unreadable for group '{}', it goes to known Other", candidate.group(),
+                    exception);
             return null;
         }
     }

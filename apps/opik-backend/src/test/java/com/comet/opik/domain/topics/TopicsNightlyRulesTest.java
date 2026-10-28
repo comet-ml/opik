@@ -157,10 +157,19 @@ class TopicsNightlyRulesTest {
         }
 
         @Test
-        @DisplayName("a failed call verifies nothing and the night goes on")
+        @DisplayName("a failed call fails the run: revise's assigns are not turned into forced births")
         void failed() {
+            assertThatThrownBy(() -> Verifier.verify(ordered, topics(state), map, (tag, prompt, schema, maxTokens) -> {
+                throw new TopicsRunException(Code.QWEN_TIMEOUT, "timeout");
+            })).isInstanceOfSatisfying(TopicsRunException.class,
+                    exception -> assertThat(exception.getCode()).isEqualTo(Code.QWEN_TIMEOUT));
+        }
+
+        @Test
+        @DisplayName("an unreadable answer verifies nothing and the night goes on")
+        void unreadable() {
             var result = Verifier.verify(ordered, topics(state), map, (tag, prompt, schema, maxTokens) -> {
-                throw new IllegalStateException("timeout");
+                throw new IllegalStateException("unreadable");
             });
 
             assertThat(result.called()).isTrue();
@@ -211,8 +220,9 @@ class TopicsNightlyRulesTest {
         @CsvSource(delimiter = '|', value = {
                 "a catch-all name|{\"topics\": [{\"name\": \"General Help\", \"definition\": \"x\"}]}",
                 "an empty name|{\"topics\": [{\"name\": \"\", \"definition\": \"x\"}]}",
+                "a blank name|{\"topics\": [{\"name\": \" \\u00A0 \", \"definition\": \"x\"}]}",
                 "no topics|{\"topics\": []}",
-                "a failed call|"})
+                "an unreadable answer|"})
         @DisplayName("a naming answer without a usable name sends the candidate to known Other")
         void noName(String label, String answer) {
             var state = state(0, topic("A"));
@@ -610,6 +620,31 @@ class TopicsNightlyRulesTest {
         return new GroupSummary(group, size, 0.1, recentShare, tightness, List.of("a", "b"), 2);
     }
 
+    @Nested
+    @DisplayName("a failed naming call")
+    class FailedNaming {
+
+        @Test
+        @DisplayName("fails the run, so a full list's weakest topic is not retired for nothing")
+        void failsTheRun() {
+            var live = new ArrayList<NightState.Topic>();
+            for (int i = 0; i < 10; i++) {
+                live.add(topic("T" + i));
+            }
+            var state = state(0, live.toArray(NightState.Topic[]::new));
+            var map = new LinkedHashMap<Integer, Integer>();
+            NightLlm failing = (tag, prompt, schema, maxTokens) -> {
+                throw new TopicsRunException(Code.QWEN_ERROR, "down");
+            };
+
+            assertThatThrownBy(
+                    () -> ForcedBirth.apply(state, List.of(group(0, 60, 0.95, 0.9)), Set.of(0), topics(state),
+                            verified(Map.of()), map, 10, failing))
+                    .isInstanceOfSatisfying(TopicsRunException.class,
+                            exception -> assertThat(exception.getCode()).isEqualTo(Code.QWEN_ERROR));
+        }
+    }
+
     private static Verifier.Verified verified(Map<Integer, Boolean> verdicts) {
         return Verifier.Verified.builder().pairs(List.of()).verdicts(verdicts).called(true).failed(false).build();
     }
@@ -620,7 +655,7 @@ class TopicsNightlyRulesTest {
             assertThat(tag).startsWith("naming_c");
             assertThat(maxTokens).isEqualTo(2500);
             if (answer == null) {
-                throw new IllegalStateException("timeout");
+                throw new IllegalStateException("unreadable");
             }
             return json(answer);
         };

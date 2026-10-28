@@ -305,7 +305,7 @@ public class TopicsRebuildService {
                 other += label == PrototypeAssigner.OTHER ? 1 : 0;
                 labels[i] = label == PrototypeAssigner.OTHER ? TraceTopic.OTHER : state.topic(label).getId();
             }
-            var previous = timed("churn", this::readPreviousLabels);
+            var previous = timed("churn", () -> readPreviousLabels(saved.projectState().lastRunId()));
             var churn = TopicChurn.of(previous, traceIds, labels);
 
             stats.put("review_night", result.reviewNight());
@@ -394,7 +394,7 @@ public class TopicsRebuildService {
                         .topics(topics)
                         .otherPrototypes(other)
                         .rebuilds(states.getFirst().rebuilds())
-                        .firstBuild(dao.findFirstBorn(projectId))
+                        .firstBuild(LocalDate.ofInstant(states.getFirst().firstBuiltAt(), ZoneOffset.UTC))
                         .night(night)
                         .ids(idGenerator::generateId)
                         .build();
@@ -403,9 +403,12 @@ public class TopicsRebuildService {
         }
 
         /** D6: last saved night's label of each window trace, before tonight's are written. */
-        private Map<UUID, UUID> readPreviousLabels() {
+        private Map<UUID, UUID> readPreviousLabels(UUID lastRunId) {
+            if (lastRunId == null) {
+                return Map.of();
+            }
             try {
-                return traceTopicsDAO.findLabels(workspaceId, projectId, from, to).block();
+                return traceTopicsDAO.findLabels(workspaceId, projectId, from, to, lastRunId).block();
             } catch (RuntimeException exception) {
                 throw new TopicsRunException(Code.WINDOW_READ, "the previous labels read failed", exception);
             }
@@ -413,8 +416,8 @@ public class TopicsRebuildService {
 
         /**
          * {@link NightLlm} for the nightly update: the revise deadline is {@code qwenDeadline}, verify and naming have
-         * their own (D5). A failure throws; {@link Verifier} and {@link ForcedBirth} catch theirs, a revise failure
-         * fails the run.
+         * their own (D5). A failed call throws and fails the run, whichever call it is; the project keeps yesterday's
+         * list.
          */
         private JsonNode generate(String tag, String prompt, JsonNode schema, int maxTokens) {
             var kind = tag.startsWith(ForcedBirth.TAG_PREFIX) ? "naming" : tag;
@@ -423,6 +426,7 @@ public class TopicsRebuildService {
                 case "naming" -> NAMING_DEADLINE;
                 default -> config.getNightly().getQwenDeadline().toJavaDuration();
             };
+            // The prompt holds trace-derived text: DEBUG only.
             log.debug("Topics run '{}' {} prompt, project '{}':\n{}", runId, tag, projectId, prompt);
             var output = call(kind, runId + ":" + tag, prompt, schema, maxTokens, deadline);
             metrics.qwen(kind, "ok");
@@ -502,6 +506,17 @@ public class TopicsRebuildService {
                         "the Qwen %s call failed, code '%s', status '%s'".formatted(kind, exception.getCode(),
                                 exception.getHttpStatus()),
                         exception);
+            } catch (RuntimeException exception) {
+                // Not an unreadable answer: the call itself failed (a bad request, an interrupt).
+                entry.put("outcome", "error");
+                metrics.qwen(kind, "error");
+                throw new TopicsRunException(Code.QWEN_ERROR, "the Qwen %s call failed".formatted(kind), exception);
+            }
+            if (response == null || response.result() == null || response.usage() == null) {
+                entry.put("outcome", "error");
+                metrics.qwen(kind, "error");
+                throw new TopicsRunException(Code.QWEN_ERROR,
+                        "the Qwen %s call answered without a result or usage".formatted(kind));
             }
             var output = response.result().output();
             log.info("Topics run '{}' {} answer, project '{}', input tokens '{}', output tokens '{}', cache hit "
@@ -609,8 +624,9 @@ public class TopicsRebuildService {
         }
 
         /**
-         * Deletes the trace_topics rows of a run whose MySQL save did not commit. Best effort: a row left behind
-         * belongs to a run that never saved, and readers keep only rows of saved runs.
+         * Deletes the trace_topics rows of a run whose MySQL save did not commit, so the latest row of each trace is
+         * the last saved run's again. Best effort: when the delete fails, or a merge already replaced the saved run's
+         * row, the trace keeps this run's row, or none, until the next saved night writes it again.
          */
         private void takeBack(boolean inserted) {
             if (!inserted) {
@@ -657,7 +673,8 @@ public class TopicsRebuildService {
                             .projectId(projectId)
                             .workspaceId(workspaceId)
                             .rebuilds(1)
-                            .firstBuiltAt(now)
+                            // The night, not the save time: a run by hand may build an earlier night's window.
+                            .firstBuiltAt(to)
                             .lastRunId(runId)
                             .lastSuccessAt(now)
                             .windowUntil(to)
@@ -733,8 +750,10 @@ public class TopicsRebuildService {
                 prototypes.add(prototype(prototypes.size(), null, vector));
             }
             var statsJson = stats.toString();
+            boolean written = false;
             try {
                 traceTopicsDAO.insert(traceTopics).block();
+                written = true;
                 var now = Instant.now();
                 template.inTransaction(WRITE, handle -> {
                     var topicDAO = handle.attach(TopicDAO.class);
@@ -760,8 +779,10 @@ public class TopicsRebuildService {
                     return null;
                 });
             } catch (TopicsRunException exception) {
+                takeBack(written);
                 throw exception;
             } catch (RuntimeException exception) {
+                takeBack(written);
                 throw new TopicsRunException(Code.SAVE, "the save failed", exception);
             }
             metrics.run(TopicRun.Status.SAVED, null);

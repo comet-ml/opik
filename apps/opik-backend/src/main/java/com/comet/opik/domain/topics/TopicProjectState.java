@@ -9,7 +9,8 @@ import java.util.UUID;
 
 /**
  * One row of {@code topic_project_states}: a project with a saved run. {@code rebuilds} counts the saved nights and seeds
- * the next run's k-means; {@code windowUntil} is the end of the last saved run's window.
+ * the next run's k-means; {@code firstBuiltAt} is the start of the last first build's night (UTC), the date its
+ * topics were born; {@code windowUntil} is the end of the last saved run's window.
  */
 @Builder(toBuilder = true)
 public record TopicProjectState(

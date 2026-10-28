@@ -79,6 +79,7 @@ public class TraceTopicsDAO {
             AND project_id = :project_id
             AND trace_created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
             AND trace_created_at \\< fromUnixTimestamp64Micro(:to_micros, 'UTC')
+            AND run_id = :run_id
             ORDER BY workspace_id, project_id, trace_id, updated_at DESC
             LIMIT 1 BY workspace_id, project_id, trace_id
             SETTINGS log_comment = '<log_comment>'
@@ -210,17 +211,21 @@ public class TraceTopicsDAO {
                 .collectMap(Map.Entry::getKey, Map.Entry::getValue);
     }
 
-    /** Per trace created in {@code [from, to)}, its latest topic id ({@link TraceTopic#OTHER} for Other). */
+    /**
+     * Per trace created in {@code [from, to)}, its topic id in run {@code runId} ({@link TraceTopic#OTHER} for Other).
+     * Only that run's rows: a later row of another run (one that failed after its insert) must not count.
+     */
     public Mono<Map<UUID, UUID>> findLabels(@NonNull String workspaceId, @NonNull UUID projectId,
-            @NonNull Instant from, @NonNull Instant to) {
+            @NonNull Instant from, @NonNull Instant to, @NonNull UUID runId) {
         var template = getSTWithLogComment(FIND_LABELS, "topics:find_labels", workspaceId, null,
-                "project_id=%s, from=%s, to=%s".formatted(projectId, from, to));
+                "project_id=%s, from=%s, to=%s, run_id=%s".formatted(projectId, from, to, runId));
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> connection.createStatement(template.render())
                         .bind("workspace_id", workspaceId)
                         .bind("project_id", projectId.toString())
                         .bind("from_micros", toEpochMicros(from))
                         .bind("to_micros", toEpochMicros(to))
+                        .bind("run_id", runId.toString())
                         .execute())
                 .flatMap(result -> result.map((row, metadata) -> Map.entry(
                         UUID.fromString(row.get("trace_id", String.class)),

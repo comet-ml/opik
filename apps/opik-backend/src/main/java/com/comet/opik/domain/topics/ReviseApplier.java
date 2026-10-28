@@ -87,7 +87,9 @@ public class ReviseApplier {
         }
         for (var entry : objects(answer.get("new"))) {
             var name = entry.get("name");
-            if (name != null && name.isTextual() && AuthorApplier.isCatchAll(name.asText())) {
+            // A catch-all or blank name is no topic.
+            if (name != null && name.isTextual() && (AuthorApplier.isCatchAll(name.asText())
+                    || TopicText.pythonStrip(name.asText()).isEmpty())) {
                 continue;
             }
             var groups = new ArrayList<Integer>();
@@ -101,7 +103,7 @@ public class ReviseApplier {
                     || definition == null || !definition.isTextual()) {
                 continue;
             }
-            int born = state.born(TopicText.pythonStrip(name.asText()), TopicText.pythonStrip(definition.asText()));
+            int born = state.born(TopicText.name(name.asText()), TopicText.pythonStrip(definition.asText()));
             groups.forEach(group -> map.put(group, born));
         }
         for (var group : integers(answer.get("other"))) {

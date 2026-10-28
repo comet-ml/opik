@@ -353,10 +353,11 @@ class TopicsNightlyJobTest {
     }
 
     @Test
-    @DisplayName("a failing verify call verifies nothing and the night is saved")
+    @DisplayName("a failing verify call fails the run and leaves the previous night's list")
     void verifyFails() {
         var workspaceId = enabledWorkspace();
         var projectId = firstBuilt(workspaceId);
+        var topics = topics(projectId);
         forceReview(projectId);
         plant(workspaceId, projectId, PLANTED);
         var revise = InferenceJson.MAPPER.createObjectNode();
@@ -370,14 +371,65 @@ class TopicsNightlyJobTest {
 
         var result = nightlyService.runNight(secondStart());
 
-        assertThat(result.saved()).isEqualTo(1);
-        var stats = json(nightlyRun(projectId).stats());
-        assertThat(stats.path("verify_pairs").asInt()).isPositive();
-        assertThat(stats.path("verify_failed").asBoolean()).isTrue();
-        assertThat(items(stats.path("qwen"))).anySatisfy(call -> {
-            assertThat(call.path("kind").asText()).isEqualTo("verify");
-            assertThat(call.path("outcome").asText()).isEqualTo("error");
-        });
+        // Read as "no pair verified", a failed verify would turn revise's assigns into forced births.
+        assertThat(result.failed()).isEqualTo(1);
+        var update = nightlyRun(projectId);
+        assertThat(update.status()).isEqualTo(TopicRun.Status.FAILED);
+        assertThat(update.errorCode()).isEqualTo("qwen_error");
+        assertThat(topics(projectId)).isEqualTo(topics);
+        assertThat(state(projectId).rebuilds()).isEqualTo(REVIEW_REBUILDS);
+    }
+
+    @Test
+    @DisplayName("by hand, a project with a list gets a nightly update, and the same night is not run twice")
+    void nightlyUpdateByHand() {
+        var workspaceId = enabledWorkspace();
+        var projectId = firstBuilt(workspaceId);
+        stubNightly(emptyRevise(), sameAnswers(), NAMED);
+
+        int status;
+        try (var response = rebuild(workspaceId, projectId, secondNight().toString())) {
+            status = response.getStatus();
+        }
+
+        assertThat(status).isEqualTo(202);
+        Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> assertThat(nightlyRun(projectId)
+                .status()).isEqualTo(TopicRun.Status.SAVED));
+        assertThat(state(projectId).rebuilds()).isEqualTo(2);
+        try (var response = rebuild(workspaceId, projectId, secondNight().toString())) {
+            assertThat(response.getStatus()).isEqualTo(409);
+        }
+
+        var result = nightlyService.runNight(secondStart());
+
+        assertThat(result.saved()).isZero();
+        assertThat(result.failed()).isZero();
+        assertThat(result.skipped()).isEqualTo(1);
+        assertThat(runs(projectId)).hasSize(2);
+    }
+
+    @Test
+    @DisplayName("three nights count the rebuilds and keep the first build's night")
+    void threeNights() {
+        var workspaceId = enabledWorkspace();
+        var projectId = UUID.randomUUID();
+        // The fixture's traces are 21 to 29 days old on its night: 5 days later, all three windows hold all of them.
+        seed(workspaceId, projectId, 0, BUILT, FIXTURE.night, FIXTURE.night.plus(Duration.ofDays(5)));
+        stubAnswer(FIXTURE.answer);
+        assertThat(nightlyService.runNight(start()).saved()).isEqualTo(1);
+        wireMock.resetAll();
+        stubNightly(emptyRevise(), sameAnswers(), NAMED);
+
+        assertThat(nightlyService.runNight(secondStart()).saved()).isEqualTo(1);
+        assertThat(nightlyService.runNight(secondStart().plus(Duration.ofDays(1))).saved()).isEqualTo(1);
+
+        var state = state(projectId);
+        assertThat(state.rebuilds()).isEqualTo(3);
+        assertThat(state.firstBuiltAt()).isEqualTo(night().atStartOfDay(ZoneOffset.UTC).toInstant());
+        assertThat(state.windowUntil())
+                .isEqualTo(secondNight().plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant());
+        assertThat(runs(projectId)).extracting(TopicRun::status).containsOnly(TopicRun.Status.SAVED);
+        assertThat(topics(projectId)).isNotEmpty().allSatisfy(topic -> assertThat(topic.born()).isEqualTo(night()));
     }
 
     @Test
@@ -457,7 +509,7 @@ class TopicsNightlyJobTest {
     }
 
     @Test
-    @DisplayName("the internal endpoint starts a first build now, and refuses a project that has a list")
+    @DisplayName("the internal endpoint starts a first build now, and refuses the same night twice")
     void rebuildByHand() {
         var workspaceId = enabledWorkspace();
         var projectId = UUID.randomUUID();
@@ -622,7 +674,7 @@ class TopicsNightlyJobTest {
     /** Stage 2b's way to force a review night by hand: {@code rebuilds} a multiple of 7. */
     private void forceReview(UUID projectId) {
         template.inTransaction(WRITE, handle -> handle.execute(
-                "UPDATE topic_project_state SET rebuilds = ? WHERE project_id = ?", REVIEW_REBUILDS,
+                "UPDATE topic_project_states SET rebuilds = ? WHERE project_id = ?", REVIEW_REBUILDS,
                 projectId.toString()));
     }
 
@@ -672,6 +724,15 @@ class TopicsNightlyJobTest {
         } else {
             stubAnswer(naming, "You name topics");
         }
+    }
+
+    /** A revise answer that changes nothing. */
+    private static JsonNode emptyRevise() {
+        var revise = InferenceJson.MAPPER.createObjectNode();
+        revise.putArray("assign");
+        revise.putArray("new");
+        revise.putArray("other");
+        return revise;
     }
 
     private static JsonNode sameAnswers() {
