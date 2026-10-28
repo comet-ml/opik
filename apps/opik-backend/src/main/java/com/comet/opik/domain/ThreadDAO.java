@@ -226,7 +226,10 @@ class ThreadDAOImpl implements ThreadDAO {
      * The search matches each trace's latest version outside FINAL: a key-only {@code max(last_updated_at)} pass picks
      * the version, the ilike reads only those rows, and the FINAL read keeps the matching ids. Under FINAL the ilike ran
      * after the in-order merge, which holds every part's payload blocks at once and ran a project with multi-MiB
-     * messages past the query memory limit.
+     * messages past the query memory limit. Two rows of one trace share a {@code last_updated_at} only if two inserts
+     * land in the same microsecond: it defaults to the insert's {@code now64(6)}, and {@code optimize_on_insert} collapses
+     * a trace repeated within one insert. FINAL's pick between such rows follows the commit order of that race, so either
+     * is the trace's latest version.
      * <p>
      * The page pushdown reads its page's trace ids once, without FINAL or payload, into {@code page_trace_ids}
      * (OPIK-8894), and traces_final, the spans filter and the span_weeks lookup all take them through that scalar.
