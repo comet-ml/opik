@@ -259,7 +259,11 @@ class GuardrailsValidationServiceTest {
                         GuardrailQuestions.NONE_OF_THESE),
                 Arguments.of("a repeated topic", List.of("billing", "billing"), "more than once"),
                 Arguments.of("a topic repeated in another case", List.of("Billing", "billing"),
-                        "contains 'billing' more than once, ignoring case"));
+                        "contains 'billing' more than once, ignoring case"),
+                Arguments.of("a topic repeated with a dotless i", List.of("Işık", "IŞIK"),
+                        "contains 'IŞIK' more than once, ignoring case"),
+                Arguments.of("a topic repeated with a dotted capital I", List.of("İstanbul", "istanbul"),
+                        "contains 'istanbul' more than once, ignoring case"));
     }
 
     @ParameterizedTest(name = "{0}")

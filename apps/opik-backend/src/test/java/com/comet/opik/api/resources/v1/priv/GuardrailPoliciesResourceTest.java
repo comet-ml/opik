@@ -47,6 +47,8 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -278,7 +280,9 @@ class GuardrailPoliciesResourceTest {
                 Arguments.of(List.of(rule(GuardrailType.TOPIC, "{\"allowed_topics\":" + tooManyTopics + "}")),
                         "rules[0].config.allowed_topics has more than 254 topics"),
                 Arguments.of(List.of(rule(GuardrailType.TOPIC, "{\"allowed_topics\":[\"Billing\",\"billing\"]}")),
-                        "rules[0].config.allowed_topics contains 'billing' more than once, ignoring case"));
+                        "rules[0].config.allowed_topics contains 'billing' more than once, ignoring case"),
+                Arguments.of(List.of(rule(GuardrailType.TOPIC, "{\"restricted_topics\":[\"Işık\",\"IŞIK\"]}")),
+                        "rules[0].config.restricted_topics contains 'IŞIK' more than once, ignoring case"));
     }
 
     @ParameterizedTest
@@ -435,16 +439,19 @@ class GuardrailPoliciesResourceTest {
     @DisplayName("retrieve returns the named policies plus every global policy")
     void retrieve(String scenario, Set<String> names, List<String> expectedNames) {
         var workspace = newWorkspace();
-        create(workspace, piiPolicy("support-bot"));
-        create(workspace, piiPolicy("padded-bot "));
-        create(workspace, piiPolicy("sales-bot"));
-        create(workspace, piiPolicy("workspace-wide").toBuilder()
-                .executionScope(GuardrailExecutionScope.GLOBAL).build());
+        var created = Stream.of(
+                piiPolicy("support-bot").toBuilder().description("Support bot checks").build(),
+                piiPolicy("padded-bot "),
+                piiPolicy("sales-bot"),
+                policy("workspace-wide", rule(GuardrailType.TOPIC, "{\"restricted_topics\":[\"politics\"]}"))
+                        .toBuilder().executionScope(GuardrailExecutionScope.GLOBAL).build())
+                .map(policy -> create(workspace, policy))
+                .collect(Collectors.toMap(GuardrailPolicy::name, Function.identity()));
         create(newWorkspace(), piiPolicy("other-global").toBuilder()
                 .executionScope(GuardrailExecutionScope.GLOBAL).build());
 
-        assertThat(retrieve(workspace, names)).extracting(GuardrailPolicy::name)
-                .containsExactlyElementsOf(expectedNames);
+        assertThat(retrieve(workspace, names))
+                .containsExactlyElementsOf(expectedNames.stream().map(created::get).toList());
     }
 
     @Test
