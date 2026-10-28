@@ -30,6 +30,7 @@ import reactor.core.publisher.Mono;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -183,6 +184,7 @@ class GuardrailsValidationServiceImpl implements GuardrailsValidationService {
             return List.of();
         }
         var topics = stringList(index, config, field, MAX_TOPICS);
+        var topicsLowerCase = new HashSet<String>();
         for (var topic : topics) {
             if (topic.length() > MAX_TOPIC_LENGTH) {
                 throw new BadRequestException("validations[%d].config.%s has a topic longer than %d characters"
@@ -192,6 +194,11 @@ class GuardrailsValidationServiceImpl implements GuardrailsValidationService {
             if (GuardrailQuestions.NONE_OF_THESE.equalsIgnoreCase(topic)) {
                 throw new BadRequestException("validations[%d].config.%s cannot contain '%s'"
                         .formatted(index, field, GuardrailQuestions.NONE_OF_THESE));
+            }
+            // Case variants would be separate options of one choice question and split its probability.
+            if (!topicsLowerCase.add(topic.toLowerCase(Locale.ROOT))) {
+                throw new BadRequestException("validations[%d].config.%s contains '%s' more than once, ignoring case"
+                        .formatted(index, field, topic));
             }
         }
         return topics;

@@ -22,7 +22,7 @@ import java.util.List;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record GuardrailsValidationRequest(
         @NotBlank String text,
-        @NotNull @Size(min = 1, max = 32) @Valid List<ValidationDescriptor> validations) {
+        @Schema(description = "The checks to run. Together they must fit in 32 questions to the decision service: each PII class and each topic list is one question, prompt injection is one") @NotNull @Size(min = 1, max = 32) @Valid List<@NotNull @Valid ValidationDescriptor> validations) {
 
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
