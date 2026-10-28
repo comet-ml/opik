@@ -3,6 +3,8 @@ package com.comet.opik.infrastructure.llm.openai;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmServiceProvider;
+import com.comet.opik.infrastructure.llm.customllm.LlmHttpClientBuilders;
+import com.comet.opik.infrastructure.llm.customllm.StreamCallTimeouts;
 import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.comet.opik.infrastructure.net.DestinationGuardDns;
 import com.google.inject.AbstractModule;
@@ -14,13 +16,16 @@ import jakarta.inject.Named;
 import lombok.NonNull;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.time.Duration;
+import java.util.Optional;
+
 public class OpenAIModule extends AbstractModule {
     @Provides
     @Singleton
     @Named("openaiGenerator")
     public OpenAIClientGenerator clientGenerator(@NonNull @Config("llmProviderClient") LlmProviderClientConfig config,
-            @NonNull HttpClient responsesApiHttpClient) {
-        return new OpenAIClientGenerator(config, responsesApiHttpClient);
+            @NonNull HttpClient responsesApiHttpClient, @NonNull LlmHttpClientBuilders httpClientBuilders) {
+        return new OpenAIClientGenerator(config, responsesApiHttpClient, httpClientBuilders);
     }
 
     /**
@@ -36,7 +41,18 @@ public class OpenAIModule extends AbstractModule {
                 .build())
                 .followRedirects(false)
                 .followSslRedirects(false)
+                // the read timeout bounds every call's headers, then the stream read timeout an event stream's body;
+                // the SDK's own per-call read timeout never fires first, see OpenAIClientGenerator
+                .addNetworkInterceptor(StreamCallTimeouts.forEventStreams(readTimeout(config),
+                        Duration.ofMillis(config.getStreamReadTimeout().toMilliseconds())))
                 .build());
+    }
+
+    /** The configured read timeout, none when unset. */
+    static Duration readTimeout(LlmProviderClientConfig config) {
+        return Optional.ofNullable(config.getReadTimeout())
+                .map(timeout -> Duration.ofMillis(timeout.toMilliseconds()))
+                .orElse(Duration.ZERO);
     }
 
     @Provides

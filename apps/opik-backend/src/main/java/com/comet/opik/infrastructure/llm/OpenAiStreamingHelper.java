@@ -1,11 +1,14 @@
 package com.comet.opik.infrastructure.llm;
 
+import com.comet.opik.utils.ClientDisconnectedException;
 import com.comet.opik.utils.JsonUtils;
 import dev.langchain4j.http.client.sse.ServerSentEvent;
+import dev.langchain4j.model.chat.response.StreamingHandle;
 import dev.langchain4j.model.openai.internal.OpenAiClient;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionResponse;
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 
 import java.io.UncheckedIOException;
 import java.util.Optional;
@@ -16,6 +19,7 @@ import java.util.function.Consumer;
  * Shared helper for OpenAI-compatible streaming requests with logging.
  * Eliminates code duplication between OpenAI and CustomLlm providers.
  */
+@Slf4j
 public class OpenAiStreamingHelper {
 
     /**
@@ -43,6 +47,7 @@ public class OpenAiStreamingHelper {
         StreamingResponseLogger logger = new StreamingResponseLogger(requestSummary, request.model());
 
         var inStreamErrorReported = new AtomicBoolean();
+        var clientDisconnected = new AtomicBoolean();
 
         openAiClient.chatCompletion(request)
                 .onRawPartialResponse(rawResponse -> {
@@ -68,18 +73,36 @@ public class OpenAiStreamingHelper {
                     if (response.usage() != null) {
                         logger.logComplete(response);
                     }
-                    handleMessage.accept(response);
+                    try {
+                        handleMessage.accept(response);
+                    } catch (ClientDisconnectedException exception) {
+                        // nobody reads the rest, so the provider call is cancelled rather than read to its end
+                        clientDisconnected.set(true);
+                        cancel(rawResponse.streamingHandle());
+                    }
                 })
                 .onComplete(() -> {
-                    if (!inStreamErrorReported.get()) {
+                    if (!inStreamErrorReported.get() && !clientDisconnected.get()) {
                         handleClose.run();
                     }
                 })
                 .onError(throwable -> {
+                    if (clientDisconnected.get()) {
+                        return;
+                    }
                     logger.logError(throwable);
                     handleError.accept(throwable);
                 })
                 .execute();
+    }
+
+    /** Cancels the stream; a client that can't cancel one leaves it to end on its own. */
+    public static void cancel(@NonNull StreamingHandle streamingHandle) {
+        try {
+            streamingHandle.cancel();
+        } catch (UnsupportedOperationException exception) {
+            log.debug("The stream can't be cancelled; it is read to its end");
+        }
     }
 
     // Once the stream has started, OpenRouter reports a failure as a plain data chunk with a top-level "error" object.

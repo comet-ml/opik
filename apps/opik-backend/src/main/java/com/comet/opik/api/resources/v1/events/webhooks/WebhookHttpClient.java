@@ -2,10 +2,13 @@ package com.comet.opik.api.resources.v1.events.webhooks;
 
 import com.comet.opik.api.events.webhooks.WebhookEvent;
 import com.comet.opik.domain.evaluators.UserLog;
+import com.comet.opik.domain.llm.ProviderFailures;
 import com.comet.opik.infrastructure.WebhookConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.comet.opik.infrastructure.net.DestinationGuard;
+import com.comet.opik.infrastructure.net.DestinationGuardDnsResolver;
+import com.comet.opik.infrastructure.net.LoggableUrl;
 import com.comet.opik.utils.RetryUtils;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -24,6 +27,9 @@ import org.slf4j.Logger;
 import reactor.core.publisher.Mono;
 import reactor.util.retry.Retry;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -41,14 +47,11 @@ public class WebhookHttpClient {
     private static final String USER_AGENT_VALUE = "Opik-Webhook/1.0";
     public static final String BEARER_PREFIX = "Bearer ";
 
-    // A webhook destination is caller-supplied, so its response body is arbitrary content we should
-    // not let flood the logs. Same cap as the other diagnostic body reads in this service.
-    private static final int MAX_LOGGED_BODY_LENGTH = 512;
-
     private final @NonNull Client httpClient;
     private final @NonNull WebhookConfig webhookConfig;
     private final Logger userFacingLog;
     private final DestinationGuard destinationGuard;
+    private final int responseBodyMaxSize;
 
     @Inject
     public WebhookHttpClient(@NonNull Client httpClient, @NonNull WebhookConfig webhookConfig) {
@@ -59,8 +62,9 @@ public class WebhookHttpClient {
         // operator's call; this guard is here for the destination, not the transport
         this.destinationGuard = DestinationGuard.builder()
                 .mode(webhookConfig.getDestinationGuard())
-                .scheme(DestinationGuard.Scheme.PLAINTEXT_OR_TLS)
+                .scheme(webhookConfig.getDestinationScheme())
                 .build();
+        this.responseBodyMaxSize = Math.toIntExact(webhookConfig.getResponseBodyMaxSize().toBytes());
     }
 
     /**
@@ -71,7 +75,7 @@ public class WebhookHttpClient {
      */
     public Mono<String> sendWebhook(@NonNull WebhookEvent<?> event) {
         log.info("Sending webhook event '{}' to URL: '{}', max retries: '{}'",
-                event.getId(), event.getUrl(), event.getMaxRetries());
+                event.getId(), LoggableUrl.of(event.getUrl()), event.getMaxRetries());
 
         // Serialize payload asynchronously (non-blocking JSON serialization)
         return Mono.deferContextual(
@@ -103,7 +107,8 @@ public class WebhookHttpClient {
 
     private void logError(WebhookEvent<?> event, String workspaceId, String message, Throwable throwable) {
         try (var logContext = wrapWithMdc(buildMdcMap(event, workspaceId))) {
-            userFacingLog.error(message, throwable);
+            // the type only: a connection failure's message can carry the destination URL
+            userFacingLog.error("{}, error type '{}'", message, ProviderFailures.rootType(throwable));
         }
     }
 
@@ -131,6 +136,8 @@ public class WebhookHttpClient {
 
                 // a redirect would carry the secret and headers to a destination the guard never checked
                 requestBuilder.property(ClientProperties.FOLLOW_REDIRECTS, false);
+                // checks each address connected to, not only the one validated above
+                requestBuilder.property(DestinationGuardDnsResolver.PROPERTY, destinationGuard);
 
                 // Set timeout properties
                 requestBuilder.property("jersey.config.client.connectTimeout",
@@ -152,12 +159,10 @@ public class WebhookHttpClient {
                                 // Return body if present, otherwise return "ok"
                                 sink.success(responseBody.orElse("ok"));
                             } else {
-                                // the target's body stays server-side: this message is returned to
-                                // the caller, and the destination is caller-supplied
-                                readResponseBody(response).ifPresent(body -> log.debug(
-                                        "Webhook delivery failed, id '{}', status '{}', body '{}'",
-                                        event.getId(), response.getStatus(),
-                                        StringUtils.abbreviate(body, MAX_LOGGED_BODY_LENGTH)));
+                                // the target's body is neither returned nor logged: the destination is
+                                // caller-supplied
+                                log.debug("Webhook delivery failed, id '{}', status '{}'", event.getId(),
+                                        response.getStatus());
                                 sink.error(new RetryUtils.RetryableHttpException(
                                         "Webhook failed with status %d".formatted(response.getStatus()),
                                         response.getStatus()));
@@ -184,17 +189,15 @@ public class WebhookHttpClient {
         return Response.Status.Family.SUCCESSFUL.equals(response.getStatusInfo().getFamily());
     }
 
+    /** At most the first {@link WebhookConfig#getResponseBodyMaxSize()} bytes of the body: it is only logged. */
     private Optional<String> readResponseBody(Response response) {
-        try {
-            // Only read if entity exists and has content
-            if (!response.hasEntity()) {
-                return Optional.empty();
-            }
-
-            response.bufferEntity();
-            String body = response.readEntity(String.class);
-            return StringUtils.isNotBlank(body) ? Optional.of(body) : Optional.empty();
-        } catch (Exception exception) {
+        if (!response.hasEntity()) {
+            return Optional.empty();
+        }
+        try (var body = response.readEntity(InputStream.class)) {
+            String text = new String(body.readNBytes(responseBodyMaxSize), StandardCharsets.UTF_8);
+            return StringUtils.isNotBlank(text) ? Optional.of(text) : Optional.empty();
+        } catch (IOException | RuntimeException exception) {
             log.debug("Failed to read response body for webhook", exception);
             return Optional.empty();
         }
@@ -209,8 +212,8 @@ public class WebhookHttpClient {
                     int attemptNumber = (int) retrySignal.totalRetries() + 1;
                     Throwable error = retrySignal.failure();
 
-                    log.warn("Retrying webhook '{}' - Attempt: {}/{}, Error: '{}'",
-                            eventId, attemptNumber, maxRetries, error.getMessage());
+                    log.warn("Retrying webhook '{}' - Attempt: {}/{}, error type '{}'",
+                            eventId, attemptNumber, maxRetries, ProviderFailures.rootType(error));
                 });
     }
 }

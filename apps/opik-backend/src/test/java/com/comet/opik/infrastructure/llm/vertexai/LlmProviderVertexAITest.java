@@ -47,7 +47,8 @@ class LlmProviderVertexAITest {
         var configuration = TestConfigUtils.loadConfigTest();
         var generator = new VertexAIClientGenerator(configuration.getLlmProviderClient(),
                 new LlmModelRegistryService(configuration, mock(jakarta.ws.rs.client.Client.class)),
-                LlmTestClients.REMOTE_MEDIA_INLINER);
+                LlmTestClients.REMOTE_MEDIA_INLINER,
+                LlmTestClients.VIDEO_MIME_TYPE_UTILS);
         // A malformed key makes the streaming client throw at build time, before the stream starts.
         var apiConfig = LlmProviderClientApiConfig.builder().apiKey("not-a-service-account").configuration(Map.of())
                 .build();

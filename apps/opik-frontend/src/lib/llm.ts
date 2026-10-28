@@ -311,6 +311,20 @@ export const parsePromptVersionContent = (promptVersion?: {
   return template;
 };
 
+export const parsePromptVersionRole = (promptVersion?: {
+  template?: string;
+  metadata?: object;
+}): LLM_MESSAGE_ROLE | undefined => {
+  if (!isMessagesJsonFormat(promptVersion?.metadata)) return undefined;
+
+  try {
+    const role = JSON.parse(promptVersion?.template ?? "")?.[0]?.role;
+    return Object.values(LLM_MESSAGE_ROLE).includes(role) ? role : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
 export const extractDisplayMessages = (
   messages?: Array<{ role: string; content: string }>,
 ): Array<{ role: string; content: string }> | undefined => {

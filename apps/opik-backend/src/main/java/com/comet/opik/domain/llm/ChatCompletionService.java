@@ -2,14 +2,18 @@ package com.comet.opik.domain.llm;
 
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
+import com.comet.opik.infrastructure.llm.customllm.AuthTokenException;
 import com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterDecisionModel;
+import com.comet.opik.infrastructure.llm.vertexai.LlmProviderVertexAI.CutOffBeforeAnsweringException;
 import com.comet.opik.utils.ChunkedOutputHandlers;
 import com.comet.opik.utils.HttpStatusRetryability;
 import com.google.api.gax.rpc.ApiException;
 import com.google.api.gax.rpc.StatusCode;
 import com.google.common.base.Throwables;
 import com.openai.errors.OpenAIServiceException;
+import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import dev.langchain4j.exception.AuthenticationException;
 import dev.langchain4j.exception.HttpException;
 import dev.langchain4j.exception.InternalServerException;
@@ -32,9 +36,11 @@ import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.ServerErrorException;
+import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
@@ -53,23 +59,25 @@ import static jakarta.ws.rs.core.Response.Status.Family.familyOf;
 @Slf4j
 public class ChatCompletionService {
     public static final String UNEXPECTED_ERROR_CALLING_LLM_PROVIDER = "Unexpected error calling LLM provider";
-    private static final String UPSTREAM_STATUS_ONLY = "provider responded with HTTP %s";
     public static final String UNSUPPORTED_FEATURE_CALLING_LLM_PROVIDER = "Unsupported feature for the selected LLM provider";
     public static final String ERROR_EMPTY_MESSAGES = "messages cannot be empty";
 
     private final LlmProviderClientConfig llmProviderClientConfig;
     private final LlmProviderFactory llmProviderFactory;
     private final ParamResolver paramResolver;
+    private final ProviderErrorMessageValidator providerErrorMessageValidator;
     private final RetryUtils.RetryPolicy retryPolicy;
 
     @Inject
     public ChatCompletionService(
             @NonNull @Config LlmProviderClientConfig llmProviderClientConfig,
             @NonNull LlmProviderFactory llmProviderFactory,
-            @NonNull ParamResolver paramResolver) {
+            @NonNull ParamResolver paramResolver,
+            @NonNull ProviderErrorMessageValidator providerErrorMessageValidator) {
         this.llmProviderClientConfig = llmProviderClientConfig;
         this.llmProviderFactory = llmProviderFactory;
         this.paramResolver = paramResolver;
+        this.providerErrorMessageValidator = providerErrorMessageValidator;
         this.retryPolicy = newRetryPolicy();
     }
 
@@ -91,17 +99,13 @@ public class ChatCompletionService {
             failIfUnsupportedFeature(runtimeException);
             failIfRequestRefused(runtimeException);
 
-            Optional<ErrorMessage> providerError = llmProviderClient.getLlmProviderError(runtimeException);
-
-            providerError
+            getLlmProviderError(llmProviderClient, runtimeException)
                     .ifPresent(llmProviderError -> failHandlingLLMProviderError(runtimeException, llmProviderError));
 
-            var hideUpstreamText = hidesUpstreamText(workspaceId, request.model());
-            failIfProviderReportedHttpStatus(runtimeException, hideUpstreamText);
+            failIfProviderReportedHttpStatus(runtimeException);
 
-            log.warn(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
-            throw new InternalServerErrorException(buildDetailedErrorMessage(runtimeException, hideUpstreamText),
-                    runtimeException);
+            logProviderFailure(runtimeException);
+            throw new InternalServerErrorException(buildDetailedErrorMessage(runtimeException), runtimeException);
         }
 
         log.info("Created chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
@@ -120,7 +124,7 @@ public class ChatCompletionService {
 
         var llmProviderClient = llmProviderFactory.getService(workspaceId, normalized.model());
         var request = resolve(normalized, llmProviderClient);
-        var errorHandler = getErrorHandler(handlers, llmProviderClient, workspaceId, request.model());
+        var errorHandler = getErrorHandler(handlers, llmProviderClient);
 
         try {
             llmProviderClient.generateStream(
@@ -151,7 +155,7 @@ public class ChatCompletionService {
             @NonNull String workspaceId) {
         var resolved = paramResolver.resolve(modelParameters);
         logChanges(resolved.request().name(), resolved.changes());
-        var languageModelClient = getLanguageModel(workspaceId, resolved.request());
+        var languageModelClient = getLanguageModel(workspaceId, resolved.request(), chatRequest);
 
         ChatResponse chatResponse;
         try {
@@ -178,10 +182,9 @@ public class ChatCompletionService {
             var status = findProviderHttpStatus(runtimeException)
                     .orElse(Response.Status.INTERNAL_SERVER_ERROR.getStatusCode());
 
-            log.warn(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
+            logProviderFailure(runtimeException);
 
-            var detail = buildDetailedErrorMessage(runtimeException,
-                    hidesUpstreamText(workspaceId, resolved.request().name()));
+            var detail = buildDetailedErrorMessage(runtimeException);
             // findProviderHttpStatus only yields error statuses, so these two families are exhaustive. The
             // cause is carried through, unlike failHandlingLLMProviderError, because this exception is logged
             // rather than serialized to an HTTP caller and the provider stack is the diagnostic.
@@ -199,6 +202,14 @@ public class ChatCompletionService {
                 }
             }
         }
+    }
+
+    // The wrap-up call of a tool loop sends no tool specs but replays the tool calls, so it has to reach the model the
+    // way the rounds before it did.
+    private static boolean usesTools(ChatRequest chatRequest) {
+        return CollectionUtils.isNotEmpty(chatRequest.toolSpecifications())
+                || chatRequest.messages().stream().anyMatch(message -> message instanceof ToolExecutionResultMessage
+                        || message instanceof AiMessage aiMessage && aiMessage.hasToolExecutionRequests());
     }
 
     /**
@@ -356,9 +367,12 @@ public class ChatCompletionService {
      * Building the client can already refuse the request (a Vertex AI location or token_uri), before scoreTrace's
      * try, so that refusal is mapped here; anything else propagates as before.
      */
-    private ChatModel getLanguageModel(String workspaceId, LlmAsJudgeModelParameters modelParameters) {
+    private ChatModel getLanguageModel(String workspaceId, LlmAsJudgeModelParameters modelParameters,
+            ChatRequest chatRequest) {
         try {
-            return llmProviderFactory.getLanguageModel(workspaceId, modelParameters);
+            return usesTools(chatRequest)
+                    ? llmProviderFactory.getToolCallingLanguageModel(workspaceId, modelParameters)
+                    : llmProviderFactory.getLanguageModel(workspaceId, modelParameters);
         } catch (RuntimeException runtimeException) {
             failIfRequestRefused(runtimeException);
             throw runtimeException;
@@ -401,10 +415,10 @@ public class ChatCompletionService {
      * reaches the caller as a 4xx. Failures that never reached HTTP (connection refused, closed channel) carry no
      * status and keep falling through to the 500 below.
      */
-    private void failIfProviderReportedHttpStatus(RuntimeException runtimeException, boolean hideUpstreamText) {
+    private void failIfProviderReportedHttpStatus(RuntimeException runtimeException) {
         findProviderHttpStatus(runtimeException)
                 .ifPresent(status -> failHandlingLLMProviderError(runtimeException,
-                        new ErrorMessage(status, buildDetailedErrorMessage(runtimeException, hideUpstreamText))));
+                        new ErrorMessage(status, buildDetailedErrorMessage(runtimeException))));
     }
 
     /**
@@ -498,7 +512,7 @@ public class ChatCompletionService {
     }
 
     private void failHandlingLLMProviderError(RuntimeException runtimeException, ErrorMessage llmProviderError) {
-        log.warn(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
+        logProviderFailure(runtimeException);
 
         if (familyOf(llmProviderError.getCode()) == Response.Status.Family.CLIENT_ERROR) {
             throw new ClientErrorException(llmProviderError.getMessage(), llmProviderError.getCode());
@@ -515,8 +529,7 @@ public class ChatCompletionService {
         return retryPolicyBuilder.delayMillis(llmProviderClientConfig.getDelayMillis()).build();
     }
 
-    private Consumer<Throwable> getErrorHandler(ChunkedOutputHandlers handlers, LlmProviderService llmProviderClient,
-            String workspaceId, String model) {
+    private Consumer<Throwable> getErrorHandler(ChunkedOutputHandlers handlers, LlmProviderService llmProviderClient) {
         return throwable -> {
             // Checked before the provider-error mapper so the classification matches create() and scoreTrace(): if a
             // provider envelope and an unsupported feature ever collide, the deterministic capability failure wins.
@@ -535,15 +548,15 @@ public class ChatCompletionService {
                 return;
             }
 
-            Optional<ErrorMessage> providerError = llmProviderClient.getLlmProviderError(throwable);
+            Optional<ErrorMessage> providerError = getLlmProviderError(llmProviderClient, throwable);
 
             if (providerError.isPresent()) {
-                log.warn(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, throwable);
+                logProviderFailure(throwable);
                 handlers.handleError(providerError.get());
             } else {
 
                 if (throwable instanceof BadRequestException userMessage) {
-                    log.warn(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, userMessage);
+                    logProviderFailure(userMessage);
                     handlers.handleError(
                             new ErrorMessage(userMessage.getResponse().getStatus(), userMessage.getMessage()));
                     return;
@@ -553,92 +566,73 @@ public class ChatCompletionService {
                 // the 500 that a bare ErrorMessage(String) defaults to.
                 var providerStatus = findProviderHttpStatus(throwable);
                 if (providerStatus.isPresent()) {
-                    log.warn(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, throwable);
+                    logProviderFailure(throwable);
                     handlers.handleError(new ErrorMessage(providerStatus.get(),
-                            buildDetailedErrorMessage(throwable, hidesUpstreamText(workspaceId, model))));
+                            buildDetailedErrorMessage(throwable)));
                     return;
                 }
 
-                log.error(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, throwable);
+                logUnexpectedProviderFailure(throwable);
 
-                var errorMessage = new ErrorMessage(
-                        buildDetailedErrorMessage(throwable, hidesUpstreamText(workspaceId, model)));
-                handlers.handleError(errorMessage);
+                handlers.handleError(new ErrorMessage(buildDetailedErrorMessage(throwable)));
             }
         };
     }
 
-    // decided only once a call has failed; an unanswerable lookup takes the restrictive path
-    private boolean hidesUpstreamText(String workspaceId, String model) {
-        try {
-            return llmProviderFactory.hasUserConfiguredDestination(workspaceId, model);
-        } catch (RuntimeException exception) {
-            log.warn("Could not tell whether model '{}' has a user-configured destination, workspaceId '{}'", model,
-                    workspaceId, exception);
-            return true;
-        }
+    /** A failure the provider's status or envelope explains, so its type is enough: see {@link ProviderFailures}. */
+    private static void logProviderFailure(Throwable throwable) {
+        log.warn("{}, error type '{}'", UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, ProviderFailures.rootType(throwable));
     }
 
     /**
-     * Builds a detailed error message by combining the base error message with exception details.
-     * Extracts meaningful error information from the exception chain.
-     *
-     * @param throwable the exception to extract details from
-     * @return a detailed error message combining the base message with exception details
+     * A failure no provider status or envelope explains, with its stack and without any text the provider sent: see
+     * {@link ProviderFailures}.
      */
-    private String buildDetailedErrorMessage(Throwable throwable, boolean hideUpstreamText) {
-        String exceptionDetails = extractErrorDetails(throwable, hideUpstreamText);
-        if (StringUtils.isNotBlank(exceptionDetails)) {
-            return UNEXPECTED_ERROR_CALLING_LLM_PROVIDER + ": " + exceptionDetails;
-        }
-        return UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
+    private static void logUnexpectedProviderFailure(Throwable throwable) {
+        log.error("{}, error type '{}'", UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, ProviderFailures.rootType(throwable),
+                ProviderFailures.redacted(throwable));
+    }
+
+    private Optional<ErrorMessage> getLlmProviderError(LlmProviderService llmProviderClient, Throwable throwable) {
+        return llmProviderClient.getLlmProviderError(throwable).map(providerErrorMessageValidator::validate);
     }
 
     /**
-     * Extracts meaningful error details from an exception chain.
-     * Walks through the exception chain to find the most informative error message,
-     * preferring root causes over wrapper exceptions.
-     * Provides user-friendly messages for common exception types.
-     *
-     * @param throwable the exception to extract details from
-     * @return the extracted error details, or null if no meaningful details found
+     * Only text from a failure Opik raised is added to the generic message: what a provider answered reaches a caller
+     * solely through a documented error envelope, see {@link ProviderErrorMessageValidator}.
      */
-    private String extractErrorDetails(Throwable throwable, boolean hideUpstreamText) {
-        if (throwable == null) {
-            return null;
+    private static final String SERVICE_UNREACHABLE = "Service is unreachable. Please check the provider URL.";
+
+    private String buildDetailedErrorMessage(Throwable throwable) {
+        return extractErrorDetails(throwable)
+                .filter(StringUtils::isNotBlank)
+                .map(details -> "%s: %s".formatted(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, details))
+                .orElse(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
+    }
+
+    /**
+     * Opik's own validation and failures, which no provider client raises. Only the message Opik composed is used,
+     * never that of a cause below it: a network or provider cause can describe the destination or echo its reply.
+     */
+    private static Optional<Throwable> findRaisedByOpik(Throwable throwable) {
+        return ExceptionUtils.getThrowableList(throwable).stream()
+                .filter(cause -> cause instanceof WebApplicationException
+                        || cause instanceof AuthTokenException
+                        || cause instanceof CutOffBeforeAnsweringException)
+                .findFirst();
+    }
+
+    /** The message of a failure Opik raised, which wins over its cause; a blank one adds nothing. */
+    private Optional<String> extractErrorDetails(Throwable throwable) {
+        var raisedByOpik = findRaisedByOpik(throwable);
+        if (raisedByOpik.isPresent()) {
+            return raisedByOpik.map(Throwable::getMessage);
         }
-
-        Throwable rootCause = Throwables.getRootCause(throwable);
-
-        // Use the most specific exception (root cause if available)
-        Throwable exceptionToHandle = (rootCause != throwable) ? rootCause : throwable;
-
-        // Provide user-friendly messages based on exception type
-        return switch (exceptionToHandle) {
-            case ConnectException connectException -> {
-                // Extract host/URL from the exception message if available
-                String message = connectException.getMessage();
-                if (message != null && message.contains("Connection refused")) {
-                    yield "Service is unreachable. Please check the provider URL.";
-                }
-                yield "Service is unreachable: " + message;
-            }
-            case ClosedChannelException closedChannelException ->
-                "Service is unreachable. Please check the provider URL.";
-            // their message is what the destination answered: only echoed when Opik chose the destination
-            case HttpException httpException when hideUpstreamText ->
-                UPSTREAM_STATUS_ONLY.formatted(httpException.statusCode());
-            case OpenAIServiceException serviceException when hideUpstreamText ->
-                UPSTREAM_STATUS_ONLY.formatted(serviceException.statusCode());
-            default -> {
-                // For other exceptions, use the exception message
-                String message = exceptionToHandle.getMessage();
-                if (StringUtils.isNotBlank(message)) {
-                    yield message;
-                }
-                // Fallback to exception class name if no message
-                yield exceptionToHandle.getClass().getSimpleName();
-            }
+        return switch (Throwables.getRootCause(throwable)) {
+            // the connection error names the resolved address, which stays server-side
+            case ConnectException connectException -> Optional.of(SERVICE_UNREACHABLE);
+            case ClosedChannelException closedChannelException -> Optional.of(SERVICE_UNREACHABLE);
+            default -> Optional.empty();
         };
     }
 }

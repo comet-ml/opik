@@ -9,6 +9,7 @@ import com.comet.opik.domain.llm.ParamResolver;
 import com.comet.opik.domain.llm.structuredoutput.ToolCallingStrategy;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
+import com.comet.opik.infrastructure.llm.LlmTestClients;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.github.tomakehurst.wiremock.WireMockServer;
@@ -55,7 +56,7 @@ class AnthropicClientGeneratorTest {
     private static final int THINKING_MAX_TOKENS = AnthropicClientGenerator.THINKING_JUDGE_MAX_TOKENS;
 
     private final AnthropicClientGenerator generator = new AnthropicClientGenerator(new LlmProviderClientConfig(),
-            bundledRegistry());
+            bundledRegistry(), LlmTestClients.LLM_HTTP_CLIENT_BUILDERS);
 
     private AnthropicChatRequestParameters generateChatParameters(LlmAsJudgeModelParameters modelParameters) {
         var config = LlmProviderClientApiConfig.builder().apiKey("test-key").build();
