@@ -64,7 +64,7 @@ const MEDIA_DROPPED_TOAST =
   "Only user messages support images, video and audio, so only the prompt's text was loaded.";
 
 /** `PROMPT_SAVE_TO_LIBRARY_TOOLTIP` — the message still matches its version. */
-const SAVE_TOOLTIP = 'Save to prompt library';
+const SAVE_TOOLTIP = 'Save as text prompt';
 /** `PROMPT_UNSAVED_TOOLTIP` — the message has diverged from its version. */
 const UNSAVED_TOOLTIP = "This prompt version hasn't been saved";
 

@@ -250,12 +250,13 @@ def project_name(opik_client: opik.Opik) -> Iterator[str]:
 
 @pytest.fixture()
 def seeded_sentiment_classification_dataset(
-    opik_client: opik.Opik,
+    opik_client: opik.Opik, project_name: str
 ) -> Iterator[opik.Dataset]:
     """A small sentiment-classification dataset the optimizer can iterate on.
 
     Items expose `text` (referenced by the prompt as `{{text}}`) and `label`
-    (the `equals` metric reference key).
+    (the `equals` metric reference key). Created in the optimization's project,
+    as the backend does for a Studio optimization's dataset.
     """
     name = f"optstudio-e2e-ds-{uuid.uuid4().hex[:8]}"
     items = [
@@ -264,11 +265,11 @@ def seeded_sentiment_classification_dataset(
         {"text": "Gorgeously shot and genuinely thrilling throughout.", "label": "positive"},
         {"text": "Wooden dialogue and a plot full of holes.", "label": "negative"},
     ]
-    dataset = opik_client.get_or_create_dataset(name=name)
+    dataset = opik_client.get_or_create_dataset(name=name, project_name=project_name)
     dataset.insert(items)
     yield dataset
     try:
-        opik_client.delete_dataset(name=name)
+        opik_client.delete_dataset(name=name, project_name=project_name)
     except Exception:
         pass
 
