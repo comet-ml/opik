@@ -54,6 +54,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.net.ConnectException;
+import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.nio.channels.ClosedChannelException;
 import java.util.List;
@@ -489,8 +490,8 @@ class ChatCompletionServiceTest {
         }
 
         @Test
-        @DisplayName("transient failures must still be retried")
-        void create__whenTransientException__thenStillRetried() {
+        @DisplayName("transport failures must still be retried")
+        void create__whenTransportFailure__thenStillRetried() {
             // Given
             var request = podamFactory.manufacturePojo(ChatCompletionRequest.class);
             var workspaceId = "test-workspace-id";
@@ -500,7 +501,8 @@ class ChatCompletionServiceTest {
                     new ParamResolver(llmProviderFactory, bundledRegistry()), providerErrorMessageValidator);
 
             when(llmProviderFactory.getService(anyString(), anyString())).thenReturn(llmProviderService);
-            when(llmProviderService.generate(any(), anyString())).thenThrow(new RuntimeException("transient"));
+            when(llmProviderService.generate(any(), anyString()))
+                    .thenThrow(new RuntimeException(new SocketException("Connection reset")));
             when(llmProviderService.getLlmProviderError(any())).thenReturn(Optional.empty());
 
             // When & Then

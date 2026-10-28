@@ -6,11 +6,14 @@ import com.comet.opik.infrastructure.llm.customllm.AuthTokenException;
 import com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterDecisionModel;
 import com.comet.opik.infrastructure.llm.vertexai.LlmProviderVertexAI.CutOffBeforeAnsweringException;
+import com.comet.opik.infrastructure.net.DestinationGuardDns;
 import com.comet.opik.utils.ChunkedOutputHandlers;
 import com.comet.opik.utils.HttpStatusRetryability;
+import com.fasterxml.jackson.core.JacksonException;
 import com.google.api.gax.rpc.ApiException;
 import com.google.api.gax.rpc.StatusCode;
 import com.google.common.base.Throwables;
+import com.openai.errors.OpenAIRetryableException;
 import com.openai.errors.OpenAIServiceException;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
@@ -21,6 +24,7 @@ import dev.langchain4j.exception.InvalidRequestException;
 import dev.langchain4j.exception.ModelNotFoundException;
 import dev.langchain4j.exception.NonRetriableException;
 import dev.langchain4j.exception.RateLimitException;
+import dev.langchain4j.exception.RetriableException;
 import dev.langchain4j.exception.TimeoutException;
 import dev.langchain4j.exception.UnsupportedFeatureException;
 import dev.langchain4j.internal.RetryUtils;
@@ -45,6 +49,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.io.IOException;
 import java.net.ConnectException;
 import java.nio.channels.ClosedChannelException;
 import java.util.List;
@@ -234,22 +239,42 @@ public class ChatCompletionService {
     }
 
     /**
-     * Whether another attempt could succeed. Not for a failure langchain4j already classified as non-retriable, a
-     * feature the provider can't serve, a request Opik refused to send, or a status the provider sent that can never
-     * succeed.
+     * Whether another attempt could succeed, matched explicitly, as an attempt can repeat a call the provider already
+     * acted on: a transient status the provider sent, see {@link HttpStatusRetryability#isTransient}, a transport
+     * failure, or a failure the provider's client marks as retriable. Anything else, an unrecognised failure included,
+     * fails on its first attempt. Never for a failure langchain4j classified as non-retriable, a feature the provider
+     * can't serve, or a request Opik refused to send.
      *
-     * <p>Permanence is deliberately narrow, and broadening it silently loses evaluations.
-     * {@link HttpStatusRetryability} carves 408, 425 and 429 out of the client-error family because they mean "not
-     * now" rather than "not ever", and a failure that never reached the wire yields no status at all, so it stays
-     * retryable. Both carve-outs matter beyond this method: the status scoreTrace throws is also what
-     * {@code BaseRedisSubscriber} classifies by, so anything treated as permanent is acked and dropped on its first
-     * delivery instead of being redelivered.
+     * <p>The status wins over the rest of the chain: a status that can never succeed isn't retried, whatever wraps it.
+     * Whether an exhausted failure is redelivered is decided apart from this, by {@code BaseRedisSubscriber} from the
+     * status scoreTrace throws.
      */
     private boolean isRetriable(RuntimeException failure) {
-        return !(failure instanceof NonRetriableException)
-                && !isUnsupportedFeature(failure)
-                && !isRequestRefused(failure)
-                && !isPermanentProviderFailure(failure);
+        if (failure instanceof NonRetriableException || isUnsupportedFeature(failure) || isRequestRefused(failure)) {
+            return false;
+        }
+        return findProviderHttpStatus(failure)
+                .map(HttpStatusRetryability::isTransient)
+                .orElseGet(() -> isTransportFailure(failure) || isMarkedRetriable(failure));
+    }
+
+    /**
+     * A failure to reach the provider or to read its reply, such as a socket timeout, a refused connection or a reset
+     * one. Not a destination the guard refused, which no attempt can reach, nor a reply that couldn't be parsed:
+     * Jackson's parse failures are {@link IOException}s too.
+     */
+    private static boolean isTransportFailure(Throwable throwable) {
+        return !DestinationGuardDns.isRefused(throwable) && ExceptionUtils.getThrowableList(throwable).stream()
+                .anyMatch(cause -> cause instanceof IOException && !(cause instanceof JacksonException));
+    }
+
+    /** A failure the provider's client itself marks as worth another attempt. */
+    private static boolean isMarkedRetriable(Throwable throwable) {
+        return ExceptionUtils.getThrowableList(throwable).stream()
+                .anyMatch(cause -> cause instanceof RetriableException
+                        || cause instanceof OpenAIRetryableException
+                        || cause instanceof AuthTokenException tokenFailure && tokenFailure.isRetriable()
+                        || cause instanceof ApiException apiException && apiException.isRetryable());
     }
 
     /** A feature the selected provider cannot serve, so no number of attempts will change the answer. */
@@ -260,13 +285,6 @@ public class ChatCompletionService {
     /** A request Opik refused to send, so no attempt can reach the provider. */
     private boolean isRequestRefused(RuntimeException runtimeException) {
         return findRequestRefused(runtimeException).isPresent();
-    }
-
-    /** A status the provider actually sent that {@link HttpStatusRetryability} classifies as never succeeding. */
-    private boolean isPermanentProviderFailure(RuntimeException runtimeException) {
-        return findProviderHttpStatus(runtimeException)
-                .filter(HttpStatusRetryability::isPermanent)
-                .isPresent();
     }
 
     // After the key lookup, because the key decides the route, and a route can refuse what the model takes.

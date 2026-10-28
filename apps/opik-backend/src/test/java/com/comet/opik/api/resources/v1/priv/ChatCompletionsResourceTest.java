@@ -33,9 +33,13 @@ import com.comet.opik.infrastructure.llm.vertexai.VertexAIModelName;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder;
+import com.github.tomakehurst.wiremock.http.Fault;
+import com.github.tomakehurst.wiremock.stubbing.Scenario;
 import com.github.tomakehurst.wiremock.verification.LoggedRequest;
 import com.redis.testcontainers.RedisContainer;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
+import dev.langchain4j.model.openai.internal.chat.ChatCompletionResponse;
 import dev.langchain4j.model.openai.internal.chat.Content;
 import dev.langchain4j.model.openai.internal.chat.ContentType;
 import dev.langchain4j.model.openai.internal.chat.ImageUrl;
@@ -606,6 +610,76 @@ class ChatCompletionsResourceTest {
             assertThat(actualErrors).isEqualTo(List.of(expectedError, expectedStreamedError));
             assertThat(actualProviderCalls).isEqualTo(expectedProviderCalls);
             assertThat(actualEvents).isNotEmpty().noneMatch(event -> event.contains(marker));
+        }
+
+        private Stream<Arguments> aTransientFailureIsRetried() {
+            return Stream.of(
+                    arguments(named("an upstream 500", aResponse()
+                            .withStatus(HttpStatus.SC_INTERNAL_SERVER_ERROR)
+                            .withHeader("Content-Type", "text/plain")
+                            .withBody(RandomStringUtils.secure().nextAlphanumeric(20)))),
+                    arguments(named("a connection reset", aResponse().withFault(Fault.CONNECTION_RESET_BY_PEER))));
+        }
+
+        /** A failure another attempt can fix is retried, and the attempt after it succeeds. */
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("a transient provider failure is retried")
+        void aTransientFailureIsRetried(ResponseDefinitionBuilder failure) {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            mockTargetWorkspace(workspaceName, UUID.randomUUID().toString());
+            createCustomProvider(workspaceName);
+            var scenario = UUID.randomUUID().toString();
+            var failedOnce = "failed once";
+            var successBody = """
+                    {"id":"chatcmpl-%s","object":"chat.completion","created":%d,"model":"gpt-4o",\
+                    "choices":[{"index":0,"message":{"role":"assistant","content":"%s"},"finish_reason":"stop"}]}"""
+                    .formatted(RandomStringUtils.secure().nextAlphanumeric(10), System.currentTimeMillis() / 1000,
+                            RandomStringUtils.secure().nextAlphanumeric(20));
+            WIRE_MOCK.server().stubFor(post(urlPathMatching(CHAT_COMPLETIONS_REGEX))
+                    .inScenario(scenario)
+                    .whenScenarioStateIs(Scenario.STARTED)
+                    .willReturn(failure)
+                    .willSetStateTo(failedOnce));
+            WIRE_MOCK.server().stubFor(post(urlPathMatching(CHAT_COMPLETIONS_REGEX))
+                    .inScenario(scenario)
+                    .whenScenarioStateIs(failedOnce)
+                    .willReturn(okJson(successBody)));
+            var request = ChatCompletionRequest.builder().stream(false).model(MODEL).addUserMessage("ping").build();
+            var expectedResponse = JsonUtils.readValue(successBody, ChatCompletionResponse.class);
+            var expectedProviderCalls = 2;
+
+            var actualResponse = chatCompletionsClient.create(API_KEY, workspaceName, request);
+
+            assertThat(actualResponse).isEqualTo(expectedResponse);
+            assertThat(providerCalls()).isEqualTo(expectedProviderCalls);
+        }
+
+        /**
+         * A failure that isn't recognised as transient fails on its first attempt, as another one could repeat a call
+         * the provider already acted on: here a reply that can't be parsed.
+         */
+        @Test
+        @DisplayName("a failure that isn't transient is not retried")
+        void aFailureThatIsNotTransientIsNotRetried() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            mockTargetWorkspace(workspaceName, UUID.randomUUID().toString());
+            createCustomProvider(workspaceName);
+            WIRE_MOCK.server().stubFor(post(urlPathMatching(CHAT_COMPLETIONS_REGEX))
+                    .willReturn(aResponse()
+                            .withStatus(HttpStatus.SC_OK)
+                            .withHeader("Content-Type", "application/json")
+                            .withBody("{\"choices\": %s".formatted(RandomStringUtils.secure().nextAlphanumeric(20)))));
+            var request = ChatCompletionRequest.builder().stream(false).model(MODEL).addUserMessage("ping").build();
+            var expectedError = new ErrorMessage(HttpStatus.SC_INTERNAL_SERVER_ERROR,
+                    UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
+            var expectedProviderCalls = 1;
+
+            var actualError = chatCompletionsClient.create(API_KEY, workspaceName, request,
+                    HttpStatus.SC_INTERNAL_SERVER_ERROR);
+
+            assertThat(actualError).isEqualTo(expectedError);
+            assertThat(providerCalls()).isEqualTo(expectedProviderCalls);
         }
 
         /**
