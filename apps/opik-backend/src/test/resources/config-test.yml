@@ -9,6 +9,10 @@ logging:
   loggers:
     com.comet: DEBUG
     com.comet.opik.infrastructure.llm: INFO
+    # Default: ERROR
+    # Description: langchain4j logs each retry of a model's own retry loop with the provider's response; Opik logs its
+    #   own retries without it
+    dev.langchain4j.internal.RetryUtils: ERROR
 
 # Description: state database configuration
 # https://www.dropwizard.io/en/stable/manual/configuration.html#database
@@ -783,6 +787,9 @@ llmProviderTokenAuth:
 
 # LLM providers client configuration
 llmProviderClient:
+  # Default: 3
+  # Description: Max amount of attempts to reach the LLM provider before giving up
+  maxAttempts: 2
   # Default: 60s
   # Description: Call timeout for LLM providers
   callTimeout: 60s

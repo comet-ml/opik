@@ -26,7 +26,7 @@ import java.util.concurrent.TimeUnit;
 @Data
 public class LlmProviderClientConfig {
 
-    @Min(1) private Integer maxAttempts;
+    @NotNull @Min(1) private Integer maxAttempts;
 
     @Min(1) private int delayMillis = 500;
 

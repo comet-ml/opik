@@ -1,10 +1,5 @@
 package com.comet.opik.api.resources.v1.priv;
 
-import ch.qos.logback.classic.Level;
-import ch.qos.logback.classic.Logger;
-import ch.qos.logback.classic.spi.ILoggingEvent;
-import ch.qos.logback.classic.spi.ThrowableProxyUtil;
-import ch.qos.logback.core.read.ListAppender;
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.api.ProviderApiKeyUpdate;
@@ -66,7 +61,6 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.slf4j.LoggerFactory;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -431,12 +425,6 @@ class ChatCompletionsResourceTest {
         private static final String MODEL = "custom-llm/" + CUSTOM_PROVIDER_NAME + "/" + DEPLOYMENT;
         private static final String CHAT_COMPLETIONS_REGEX = ".*/chat/completions.*";
         private static final String CHAT_COMPLETIONS_PATH = "/v1/private/chat/completions";
-        /**
-         * The provider calls made, counted after the plain request and again after the stream: the plain request is
-         * attempted three times under ChatCompletionService's retry policy, and the stream once.
-         */
-        private static final List<Integer> EXPECTED_PROVIDER_CALLS = List.of(3, 4);
-
         @BeforeEach
         void resetUpstreamStubs() {
             // WireMock matches most-recently-registered first; reset between tests so
@@ -557,50 +545,42 @@ class ChatCompletionsResourceTest {
             return WIRE_MOCK.server().findAll(postRequestedFor(urlPathMatching(CHAT_COMPLETIONS_REGEX))).size();
         }
 
-        /** Every Opik log event while {@code call} runs, debug included, with its throwable rendered. */
-        private List<String> opikLogEventsOf(Runnable call) {
-            var logger = (Logger) LoggerFactory.getLogger("com.comet.opik");
-            var appender = new ListAppender<ILoggingEvent>();
-            var previousLevel = logger.getLevel();
-            appender.start();
-            logger.addAppender(appender);
-            logger.setLevel(Level.DEBUG);
-            try {
-                call.run();
-            } finally {
-                logger.detachAppender(appender);
-                logger.setLevel(previousLevel);
-            }
-            return appender.list.stream()
-                    .map(event -> event.getThrowableProxy() == null
-                            ? event.getFormattedMessage()
-                            : "%s%n%s".formatted(event.getFormattedMessage(),
-                                    ThrowableProxyUtil.asString(event.getThrowableProxy())))
-                    .toList();
-        }
-
+        /**
+         * The provider calls made are counted after the plain request and again after the stream: the plain request
+         * is attempted three times under ChatCompletionService's retry policy when its status is transient, and once
+         * when it is not; the stream once.
+         */
         private Stream<Arguments> providerTextIsNeverLogged() {
             var marker = "upstream-marker-%s".formatted(RandomStringUtils.secure().nextAlphanumeric(16));
             var generic = new ErrorMessage(HttpStatus.SC_BAD_GATEWAY, UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
             return Stream.of(
                     // not a provider error: neither returned nor logged
                     arguments(HttpStatus.SC_BAD_GATEWAY, "text/html", "<html><body>%s</body></html>".formatted(marker),
-                            marker, generic, generic),
+                            marker, generic, generic, List.of(3, 4)),
                     // a documented provider error: its validated message is returned, but never logged
                     arguments(HttpStatus.SC_BAD_REQUEST, "application/json",
                             JsonUtils.writeValueAsString(Map.of("error", Map.of("message", marker, "type",
                                     "invalid_request_error"))),
                             marker,
                             new ErrorMessage(HttpStatus.SC_BAD_REQUEST, marker),
-                            new ErrorMessage(HttpStatus.SC_BAD_REQUEST, marker, "Custom Provider error")));
+                            new ErrorMessage(HttpStatus.SC_BAD_REQUEST, marker, "Custom Provider error"),
+                            List.of(1, 2)),
+                    // a status no retry can change, with a body that isn't a provider error
+                    arguments(HttpStatus.SC_NOT_FOUND, "text/html", "<html><body>%s</body></html>".formatted(marker),
+                            marker, new ErrorMessage(HttpStatus.SC_NOT_FOUND, UNEXPECTED_ERROR_CALLING_LLM_PROVIDER),
+                            new ErrorMessage(HttpStatus.SC_NOT_FOUND, UNEXPECTED_ERROR_CALLING_LLM_PROVIDER),
+                            List.of(1, 2)));
         }
 
-        /** The provider's reply reaches the server logs neither as a message nor through a logged throwable. */
+        /**
+         * The provider's reply reaches the server logs neither as a message nor through a logged throwable, from any
+         * logger, the libraries' included.
+         */
         @ParameterizedTest
         @MethodSource
         @DisplayName("what a provider answers is never written to the server logs, streamed or not")
         void providerTextIsNeverLogged(int upstreamStatus, String contentType, String upstreamBody, String marker,
-                ErrorMessage expectedError, ErrorMessage expectedStreamedError) {
+                ErrorMessage expectedError, ErrorMessage expectedStreamedError, List<Integer> expectedProviderCalls) {
             var workspaceName = RandomStringUtils.randomAlphanumeric(20);
             mockTargetWorkspace(workspaceName, UUID.randomUUID().toString());
             createCustomProvider(workspaceName);
@@ -614,7 +594,7 @@ class ChatCompletionsResourceTest {
             var actualErrors = new ArrayList<ErrorMessage>();
             var actualProviderCalls = new ArrayList<Integer>();
 
-            var actualEvents = opikLogEventsOf(() -> {
+            var actualEvents = LogCaptureUtils.logEventsOf(() -> {
                 actualErrors.add(chatCompletionsClient.create(API_KEY, workspaceName, request,
                         expectedError.getCode()));
                 actualProviderCalls.add(providerCalls());
@@ -624,7 +604,7 @@ class ChatCompletionsResourceTest {
             });
 
             assertThat(actualErrors).isEqualTo(List.of(expectedError, expectedStreamedError));
-            assertThat(actualProviderCalls).isEqualTo(EXPECTED_PROVIDER_CALLS);
+            assertThat(actualProviderCalls).isEqualTo(expectedProviderCalls);
             assertThat(actualEvents).isNotEmpty().noneMatch(event -> event.contains(marker));
         }
 
@@ -1411,8 +1391,10 @@ class ChatCompletionsResourceTest {
             WIRE_MOCK.server().resetAll();
         }
 
+        /** What every provider answers in this class, which must reach the caller only, never the server logs. */
+        private final String message = "provider says %s".formatted(RandomStringUtils.secure().nextAlphanumeric(16));
+
         private Stream<Arguments> openAiErrors() {
-            var message = "provider says " + UUID.randomUUID();
             return Stream.of(
                     arguments(named("documented code", HttpStatus.SC_UNAUTHORIZED), "application/json",
                             openAiError(message, "invalid_request_error", "invalid_api_key"),
@@ -1445,7 +1427,6 @@ class ChatCompletionsResourceTest {
         }
 
         private Stream<Arguments> anthropicErrors() {
-            var message = "provider says " + UUID.randomUUID();
             return Stream.of(
                     arguments(named("documented type", HttpStatus.SC_NOT_FOUND), "application/json",
                             anthropicError("not_found_error", message),
@@ -1454,7 +1435,10 @@ class ChatCompletionsResourceTest {
                             anthropicError("proxy_error", message),
                             new ErrorMessage(HttpStatus.SC_BAD_REQUEST, UNEXPECTED_ERROR_CALLING_LLM_PROVIDER)),
                     arguments(named("unparseable body", HttpStatus.SC_BAD_REQUEST), "text/plain", message,
-                            new ErrorMessage(HttpStatus.SC_BAD_REQUEST, UNEXPECTED_ERROR_CALLING_LLM_PROVIDER)));
+                            new ErrorMessage(HttpStatus.SC_BAD_REQUEST, UNEXPECTED_ERROR_CALLING_LLM_PROVIDER)),
+                    arguments(named("documented server error", HttpStatus.SC_INTERNAL_SERVER_ERROR),
+                            "application/json", anthropicError("api_error", message),
+                            new ErrorMessage(HttpStatus.SC_INTERNAL_SERVER_ERROR, message)));
         }
 
         @ParameterizedTest(name = "Anthropic {0}")
@@ -1502,17 +1486,23 @@ class ChatCompletionsResourceTest {
             assertThat(actualStreamedErrors).containsExactly(expectedError);
         }
 
+        /** The caller gets the expected error, streamed or not, and nothing the provider answered is logged. */
         private void assertErrors(String workspaceName, String model, ErrorMessage expectedError) {
             var request = ChatCompletionRequest.builder().stream(false).model(model).maxCompletionTokens(100)
                     .addUserMessage("ping").build();
-            var actualError = chatCompletionsClient.create(API_KEY, workspaceName, request, expectedError.getCode());
-            assertThat(actualError).isEqualTo(expectedError);
-
             var streamed = ChatCompletionRequest.builder().stream(true).model(model).maxCompletionTokens(100)
                     .addUserMessage("ping").build();
-            var actualStreamedErrors = chatCompletionsClient.createAndGetStreamedError(API_KEY, workspaceName,
-                    streamed);
-            assertThat(actualStreamedErrors).containsExactly(expectedError);
+            var actualErrors = new ArrayList<ErrorMessage>();
+
+            var actualEvents = LogCaptureUtils.logEventsOf(() -> {
+                actualErrors.add(chatCompletionsClient.create(API_KEY, workspaceName, request,
+                        expectedError.getCode()));
+                actualErrors.addAll(chatCompletionsClient.createAndGetStreamedError(API_KEY, workspaceName,
+                        streamed));
+            });
+
+            assertThat(actualErrors).isEqualTo(List.of(expectedError, expectedError));
+            assertThat(actualEvents).isNotEmpty().noneMatch(event -> event.contains(message));
         }
 
         private String prepareWorkspace(LlmProvider provider, String baseUrl) {
