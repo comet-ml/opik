@@ -17,6 +17,8 @@ import dev.langchain4j.data.message.TextContent;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.data.message.VideoContent;
 import io.dropwizard.util.DataSize;
+import io.dropwizard.util.Duration;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.DisplayName;
@@ -34,6 +36,7 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Stream;
@@ -250,8 +253,8 @@ class RemoteMediaInlinerTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"file:///etc/hosts", "ftp://example.com/image.png", "GS://bucket/image.png",
-            "jar:file:///app.jar!/image.png"})
-    @DisplayName("a media URL with any other scheme is refused before anything is read")
+            "jar:file:///app.jar!/image.png", "example.com/image.png", "//example.com/image.png"})
+    @DisplayName("a media URL with any other scheme, or none, is refused before anything is read")
     void otherSchemesAreRefused(String url) {
         List<ChatMessage> messages = List.of(UserMessage.from(ImageContent.from(url)));
         var expectedMessage = MEDIA_URL_REFUSED;
@@ -276,9 +279,35 @@ class RemoteMediaInlinerTest {
                 .hasMessage(expectedMessage);
     }
 
+    /** A read timeout bounds each wait for bytes; the download time bounds the body as a whole. */
+    @Test
+    @DisplayName("a media body that trickles in is refused at the download time limit")
+    void tricklingMediaIsRefusedAtTheDownloadTimeLimit() {
+        var config = TestConfigUtils.loadConfigTest().getLlmProviderClient();
+        config.setVideoUrlDestinationGuard(DestinationGuard.Mode.RELAXED);
+        config.setMediaDownloadTimeout(Duration.seconds(1));
+        var shortTimeInliner = new RemoteMediaInliner(TestHttpClientUtils.client(), config);
+        var mediaPath = "/trickle-%s.png".formatted(UUID.randomUUID());
+        // 100 chunks over 20 seconds: each wait for bytes is well within the 1 second read timeout
+        wireMock.server().stubFor(get(urlPathEqualTo(mediaPath)).willReturn(aResponse()
+                .withBody(RandomStringUtils.secure().nextAlphanumeric(100))
+                .withChunkedDribbleDelay(100, 20_000)));
+        List<ChatMessage> messages = List.of(
+                UserMessage.from(ImageContent.from(wireMock.runtimeInfo().getHttpBaseUrl() + mediaPath)));
+        long expectedMaxElapsedMillis = 5_000;
+        long startNanos = System.nanoTime();
+
+        assertThatThrownBy(() -> shortTimeInliner.inline(messages))
+                .isExactlyInstanceOf(ProviderRequestRefusedException.class)
+                .hasMessage(MEDIA_URL_DOWNLOAD_REFUSED);
+        long actualElapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNanos);
+        assertThat(actualElapsedMillis).isLessThan(expectedMaxElapsedMillis);
+    }
+
     private Stream<Arguments> failedDownloadIsRefused() {
         return Stream.of(
                 arguments("/missing-" + UUID.randomUUID(), aResponse().withStatus(404)),
+                arguments("/empty-" + UUID.randomUUID(), aResponse().withStatus(200)),
                 arguments("/oversized-" + UUID.randomUUID(),
                         aResponse().withBody(new byte[maxBytes + 1])),
                 arguments("/redirect-" + UUID.randomUUID(),
@@ -287,7 +316,7 @@ class RemoteMediaInlinerTest {
 
     @ParameterizedTest
     @MethodSource
-    @DisplayName("a media URL that isn't found, is too large or redirects fails the request")
+    @DisplayName("a media URL that isn't found, is empty, is too large or redirects fails the request")
     void failedDownloadIsRefused(String mediaPath, ResponseDefinitionBuilder response) {
         wireMock.server().stubFor(get(urlPathEqualTo(mediaPath)).willReturn(response));
         List<ChatMessage> messages = List.of(

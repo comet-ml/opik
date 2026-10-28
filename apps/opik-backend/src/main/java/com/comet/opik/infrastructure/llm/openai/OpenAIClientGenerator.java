@@ -7,10 +7,12 @@ import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
 import com.comet.opik.infrastructure.llm.OpenAiClientConfig;
 import com.comet.opik.infrastructure.llm.customllm.LlmHttpClientBuilders;
+import com.comet.opik.infrastructure.llm.customllm.StreamCallTimeouts;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.openai.client.OpenAIClient;
+import com.openai.core.Timeout;
 import com.openai.core.http.HttpClient;
 import com.openai.models.ReasoningEffort;
 import dev.langchain4j.http.client.HttpClientBuilder;
@@ -207,7 +209,7 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
             LlmProviderClientApiConfig config, LlmAsJudgeModelParameters modelParameters, boolean strictJsonSchema,
             @Nullable Map<String, Object> extraBody) {
         var builder = OpenAiOfficialResponsesChatModel.builder()
-                .client(newResponsesApiClient(config, modelParameters.name(), extraBody))
+                .client(newResponsesApiClient(config, modelParameters.name(), extraBody, false))
                 .modelName(modelParameters.name())
                 .strictJsonSchema(strictJsonSchema);
 
@@ -226,7 +228,7 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
     StreamingChatModel newResponsesApiStreamingChatModel(@NonNull LlmProviderClientApiConfig config,
             boolean strictJsonSchema, @Nullable Map<String, Object> extraBody) {
         return OpenAiOfficialResponsesStreamingChatModel.builder()
-                .client(newResponsesApiClient(config, PROXY_MODEL_NAME_PLACEHOLDER, extraBody))
+                .client(newResponsesApiClient(config, PROXY_MODEL_NAME_PLACEHOLDER, extraBody, true))
                 .modelName(PROXY_MODEL_NAME_PLACEHOLDER)
                 .strictJsonSchema(strictJsonSchema)
                 .build();
@@ -235,15 +237,38 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
     // Built here, with the settings the langchain4j builder would pass to this same setup call, so that the extra
     // body can wrap the client; a builder given its own client ignores the connection settings.
     private OpenAIClient newResponsesApiClient(LlmProviderClientApiConfig config, String modelName,
-            @Nullable Map<String, Object> extraBody) {
+            @Nullable Map<String, Object> extraBody, boolean streaming) {
         var baseUrl = customBaseUrl(config).orElse(null);
         var timeout = Optional.ofNullable(llmProviderClientConfig.getConnectTimeout())
                 .map(Duration::toJavaDuration)
                 .orElse(null);
         var client = OpenAiOfficialSetup.setupSyncClient(baseUrl, config.apiKey(), null, null, null, null, false,
                 false, modelName, timeout, null, null, config.headers())
-                .withOptions(options -> options.httpClient(responsesApiHttpClient));
+                .withOptions(options -> {
+                    options.httpClient(responsesApiHttpClient);
+                    if (streaming) {
+                        options.timeout(streamingTimeout());
+                    }
+                });
         return OpenAiResponsesExtraBody.withExtraBody(client, extraBody);
+    }
+
+    /**
+     * The SDK's timeout is a whole-call timeout, which would end a stream after that long however lively it is, and it
+     * is the read timeout too. A stream has no whole-call timeout; the read timeout bounds its headers and the stream
+     * read timeout each read of its body, see {@link StreamCallTimeouts}, so the SDK's read timeout is set to fire
+     * before neither. All of it is the call's own, set on no connection another call shares.
+     */
+    private Timeout streamingTimeout() {
+        var connectTimeout = Optional.ofNullable(llmProviderClientConfig.getConnectTimeout());
+        return Timeout.builder()
+                .connect(connectTimeout.map(Duration::toJavaDuration).orElse(null))
+                .read(StreamCallTimeouts.clientReadTimeout(OpenAIModule.readTimeout(llmProviderClientConfig),
+                        llmProviderClientConfig.getStreamReadTimeout().toJavaDuration()))
+                .write(Optional.ofNullable(llmProviderClientConfig.getWriteTimeout()).or(() -> connectTimeout)
+                        .map(Duration::toJavaDuration).orElse(null))
+                .request(Duration.seconds(0).toJavaDuration())
+                .build();
     }
 
     boolean hasCustomBaseUrl(@NonNull LlmProviderClientApiConfig config) {

@@ -3,6 +3,7 @@ package com.comet.opik.domain.llm;
 import com.comet.opik.api.ModelParams;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
+import com.comet.opik.infrastructure.llm.customllm.AuthTokenException;
 import com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterDecisionModel;
 import com.comet.opik.infrastructure.llm.vertexai.LlmProviderVertexAI.CutOffBeforeAnsweringException;
@@ -53,6 +54,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.net.ConnectException;
+import java.net.SocketTimeoutException;
 import java.nio.channels.ClosedChannelException;
 import java.util.List;
 import java.util.Optional;
@@ -100,6 +102,7 @@ class ChatCompletionServiceTest {
     private ChatModel chatModel;
 
     private static final int PROVIDER_ERROR_MESSAGE_MAX_LENGTH = 300;
+    private static final String OPIK_FAILURE = "token fetch failed: %s".formatted(UUID.randomUUID());
     private static final String VERTEX_AI_CUT_OFF = """
             Vertex AI used up the max output tokens limit (1024) before writing any answer. Thinking tokens count \
             toward this limit, so raise Max output tokens and run again""";
@@ -688,6 +691,22 @@ class ChatCompletionServiceTest {
                             500,
                             "%s: Service is unreachable. Please check the provider URL."
                                     .formatted(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER)),
+                    Arguments.of(
+                            "Opik failure over a network cause, whose message stays server-side",
+                            new AuthTokenException(OPIK_FAILURE,
+                                    new SocketTimeoutException("Read timed out from 10.0.0.1")),
+                            500,
+                            "%s: %s".formatted(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, OPIK_FAILURE)),
+                    Arguments.of(
+                            "Opik failure over a refused connection keeps the message Opik wrote",
+                            new AuthTokenException(OPIK_FAILURE, new ConnectException("Connection refused")),
+                            500,
+                            "%s: %s".formatted(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, OPIK_FAILURE)),
+                    Arguments.of(
+                            "Opik failure with a blank message adds nothing to the generic one",
+                            new AuthTokenException(" ", new ConnectException("Connection refused")),
+                            500,
+                            UNEXPECTED_ERROR_CALLING_LLM_PROVIDER),
                     Arguments.of(
                             "status outside the error families",
                             new RuntimeException(new HttpException(302, "moved")),
