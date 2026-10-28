@@ -6,7 +6,7 @@ import GuardrailConfig from "./GuardrailConfig";
 import { Separator } from "@/ui/separator";
 import DocsLinkCard from "@/v2/pages-shared/onboarding/DocsLinkCard/DocsLinkCard";
 import GuardrailConfigCode from "./GuardrailConfigCode";
-import { guardrailsMap } from "./guardrailsConfig";
+import { buildGuardrailCode, guardrailsMap } from "./guardrailsConfig";
 import { useGuardrailConfigState } from "./useGuardrailConfigState";
 import { GuardrailTypes } from "@/types/guardrails";
 import { buildDocsUrl } from "@/v2/lib/utils";
@@ -35,17 +35,9 @@ const SetGuardrailDialog: React.FC<SetGuardrailDialogProps> = ({
     getEnabledGuardrailTypes,
   } = useGuardrailConfigState();
 
-  const enabledGuardrailsKeys = getEnabledGuardrailTypes();
-  const importCodeNames = enabledGuardrailsKeys.map(
-    (key) => guardrailsMap[key].codeImportName,
-  );
-  const codeList = enabledGuardrailsKeys.map((key) =>
-    guardrailsMap[key].codeBuilder({
-      ...guardrailsState[key],
-      entities: guardrailsState[key].entities
-        .map((v) => v.trim())
-        .filter((v) => v),
-    }),
+  const { importNames: importCodeNames, codeList } = buildGuardrailCode(
+    guardrailsState,
+    getEnabledGuardrailTypes(),
   );
 
   const TOPIC_CONFIG = guardrailsMap[GuardrailTypes.TOPIC];

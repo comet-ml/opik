@@ -122,3 +122,36 @@ export const guardrailsDefaultState: GuardrailsState = (
   };
   return acc;
 }, {} as GuardrailsState);
+
+// Topic and PII with nothing to check would raise a ValueError in the SDK, so they stay out of the
+// code until the user enters something.
+const hasRequiredInput: Partial<
+  Record<GuardrailTypes, (fields: GuardrailFields) => boolean>
+> = {
+  [GuardrailTypes.TOPIC]: ({ entities }) => entities.length > 0,
+  [GuardrailTypes.PII]: ({ entities }) => entities.length > 0,
+};
+
+export const buildGuardrailCode = (
+  state: GuardrailsState,
+  enabledTypes: GuardrailTypes[],
+) => {
+  const rules = enabledTypes
+    .map((type) => ({
+      type,
+      fields: {
+        ...state[type],
+        entities: state[type].entities
+          .map((value) => value.trim())
+          .filter(Boolean),
+      },
+    }))
+    .filter(({ type, fields }) => hasRequiredInput[type]?.(fields) ?? true);
+
+  return {
+    importNames: rules.map(({ type }) => guardrailsMap[type].codeImportName),
+    codeList: rules.map(({ type, fields }) =>
+      guardrailsMap[type].codeBuilder(fields),
+    ),
+  };
+};
