@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.llm.gemini;
 
 import com.comet.opik.infrastructure.llm.GeminiMaxOutputTokens;
+import dev.langchain4j.http.client.HttpClientBuilder;
 import dev.langchain4j.model.googleai.GoogleAiGeminiChatModel;
 import dev.langchain4j.model.googleai.GoogleAiGeminiStreamingChatModel;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
@@ -31,7 +32,7 @@ interface GeminiChatModelMapper {
     @Mapping(expression = "java(GeminiThinkingConfigMapper.fromCustomParameters(request.model(), request.customParameters()))", target = "thinkingConfig")
     GoogleAiGeminiChatModel toGeminiChatModel(
             @NonNull String apiKey, @NonNull ChatCompletionRequest request, @NonNull Duration timeout, int maxRetries,
-            boolean logRequests, boolean logResponses);
+            boolean logRequests, boolean logResponses, HttpClientBuilder httpClientBuilder);
 
     @Mapping(expression = "java(request.model())", target = "modelName")
     @Mapping(expression = "java(GeminiMaxOutputTokens.firstPositive(request).orElse(null))", target = "maxOutputTokens")
@@ -42,6 +43,6 @@ interface GeminiChatModelMapper {
     @Mapping(expression = "java(GeminiThinkingConfigMapper.fromCustomParameters(request.model(), request.customParameters()))", target = "thinkingConfig")
     GoogleAiGeminiStreamingChatModel toGeminiStreamingChatModel(
             @NonNull String apiKey, @NonNull ChatCompletionRequest request, @NonNull Duration timeout, int maxRetries,
-            boolean logRequests, boolean logResponses);
+            boolean logRequests, boolean logResponses, HttpClientBuilder httpClientBuilder);
 
 }

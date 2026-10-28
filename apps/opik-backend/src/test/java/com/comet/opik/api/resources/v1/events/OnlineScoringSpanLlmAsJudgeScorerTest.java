@@ -23,6 +23,7 @@ import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.structuredoutput.ToolCallingStrategy;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
+import com.comet.opik.infrastructure.llm.LlmModelRegistryTestUtils;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsQuestion;
 import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsRequest;
@@ -185,7 +186,8 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
         ToolRegistry toolRegistry = new ToolRegistry(Set.of(
                 stubTool(ReadTool.NAME, "{}"),
                 stubTool(GetAttachmentTool.NAME, "{}")));
-        agenticScoringService = new AgenticScoringServiceImpl(onlineScoringConfig, toolRegistry);
+        agenticScoringService = new AgenticScoringServiceImpl(onlineScoringConfig, toolRegistry,
+                LlmModelRegistryTestUtils.bundledRegistry());
 
         scorer = new OnlineScoringSpanLlmAsJudgeScorer(
                 onlineScoringConfig,

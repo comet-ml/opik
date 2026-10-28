@@ -17,13 +17,6 @@ import java.util.List;
 @RequiredArgsConstructor
 public class DestinationGuardDns implements Dns {
 
-    /** Thrown for a refused host, so callers can tell a refusal from a host that doesn't resolve. */
-    public static class RefusedHostException extends UnknownHostException {
-        RefusedHostException(String message) {
-            super(message);
-        }
-    }
-
     private final @NonNull DestinationGuard destinationGuard;
 
     /** A client builder whose every connection goes through the guard. */
@@ -43,7 +36,7 @@ public class DestinationGuardDns implements Dns {
             if (exception.getCause() instanceof UnknownHostException unresolved) {
                 throw unresolved;
             }
-            throw new RefusedHostException(exception.getMessage());
+            throw new RefusedHostException(exception.getMessage(), exception);
         }
     }
 }

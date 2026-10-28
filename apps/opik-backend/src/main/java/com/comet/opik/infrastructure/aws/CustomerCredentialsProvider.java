@@ -1,8 +1,12 @@
 package com.comet.opik.infrastructure.aws;
 
-import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
+import jakarta.ws.rs.ProcessingException;
+import jakarta.ws.rs.client.Client;
+import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
+import org.glassfish.jersey.client.ClientProperties;
 import software.amazon.awssdk.auth.credentials.AwsCredentials;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.AwsSessionCredentials;
@@ -12,11 +16,7 @@ import software.amazon.awssdk.utils.cache.CachedSupplier;
 import software.amazon.awssdk.utils.cache.RefreshResult;
 
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
@@ -32,14 +32,17 @@ class CustomerCredentialsProvider implements AwsCredentialsProvider, SdkAutoClos
     private static final Duration PREFETCH_BEFORE_EXPIRY = Duration.ofMinutes(5);
 
     private final URI endpoint;
-    private final Duration timeout;
-    private final HttpClient httpClient;
+
+    /** Bounds connecting and then each read of the response, in milliseconds. */
+    private final int timeoutMillis;
+
+    private final Client client;
     private final CachedSupplier<AwsCredentials> cache;
 
-    CustomerCredentialsProvider(@NonNull String endpoint, @NonNull Duration timeout) {
+    CustomerCredentialsProvider(@NonNull String endpoint, @NonNull Duration timeout, @NonNull Client client) {
         this.endpoint = URI.create(endpoint.trim());
-        this.timeout = timeout;
-        this.httpClient = HttpClient.newBuilder().connectTimeout(timeout).build();
+        this.timeoutMillis = Math.toIntExact(timeout.toMillis());
+        this.client = client;
         this.cache = CachedSupplier.builder(this::fetch).cachedValueName("CustomerCredentialsProvider").build();
     }
 
@@ -54,26 +57,26 @@ class CustomerCredentialsProvider implements AwsCredentialsProvider, SdkAutoClos
     }
 
     private RefreshResult<AwsCredentials> fetch() {
-        HttpResponse<String> response;
-        try {
-            response = httpClient.send(HttpRequest.newBuilder(endpoint).timeout(timeout).GET().build(),
-                    HttpResponse.BodyHandlers.ofString());
-        } catch (IOException exception) {
+        JsonNode json;
+        try (Response response = client.target(endpoint).request()
+                .property(ClientProperties.FOLLOW_REDIRECTS, false)
+                .property(ClientProperties.CONNECT_TIMEOUT, timeoutMillis)
+                .property(ClientProperties.READ_TIMEOUT, timeoutMillis)
+                .get()) {
+            if (response.getStatus() != 200) {
+                // Per AWS, the endpoint answers 5xx while the customer credentials aren't available yet and 4xx on a
+                // token problem, both to be retried with backoff. The IOException cause makes the publisher retry
+                // them like any other transient I/O failure.
+                var message = "Customer credentials endpoint returned HTTP '%s'".formatted(response.getStatus());
+                throw SdkClientException.create(message, new IOException(message));
+            }
+            json = readJson(response);
+        } catch (ProcessingException exception) {
+            // its I/O cause, a timeout included, makes the publisher retry it
             throw SdkClientException.create("Failed to call the customer credentials endpoint", exception);
-        } catch (InterruptedException exception) {
-            Thread.currentThread().interrupt();
-            throw SdkClientException.create("Interrupted while calling the customer credentials endpoint", exception);
-        }
-        if (response.statusCode() != 200) {
-            // Per AWS, the endpoint answers 5xx while the customer credentials aren't available yet and 4xx on a
-            // token problem, both to be retried with backoff. The IOException cause makes the publisher retry them
-            // like any other transient I/O failure.
-            var message = "Customer credentials endpoint returned HTTP '%s'".formatted(response.statusCode());
-            throw SdkClientException.create(message, new IOException(message));
         }
 
         try {
-            JsonNode json = JsonUtils.getJsonNodeFromString(response.body());
             Instant expiration = Instant.parse(required(json, "Expiration"));
             AwsCredentials credentials = AwsSessionCredentials.builder()
                     .accessKeyId(required(json, "AccessKeyId"))
@@ -85,9 +88,22 @@ class CustomerCredentialsProvider implements AwsCredentialsProvider, SdkAutoClos
                     .staleTime(expiration.minus(STALE_BEFORE_EXPIRY))
                     .prefetchTime(expiration.minus(PREFETCH_BEFORE_EXPIRY))
                     .build();
-        } catch (UncheckedIOException | DateTimeParseException exception) {
+        } catch (DateTimeParseException exception) {
             throw SdkClientException.create("Customer credentials endpoint returned an unreadable response",
                     exception);
+        }
+    }
+
+    /** The response parsed as it is read; a body that isn't JSON is an unreadable response, not an I/O failure. */
+    private static JsonNode readJson(Response response) {
+        try {
+            return response.readEntity(JsonNode.class);
+        } catch (ProcessingException exception) {
+            if (exception.getCause() instanceof JsonProcessingException) {
+                throw SdkClientException.create("Customer credentials endpoint returned an unreadable response",
+                        exception);
+            }
+            throw exception;
         }
     }
 

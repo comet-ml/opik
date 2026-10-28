@@ -11,6 +11,7 @@ import com.comet.opik.domain.llm.MessageContentNormalizer;
 import com.comet.opik.domain.llm.ParamResolver;
 import com.comet.opik.domain.llm.ParamResolver.ParamChange;
 import com.comet.opik.domain.llm.ParamResolver.ParamChange.Reason;
+import com.comet.opik.domain.llm.ProviderErrorMessageValidator;
 import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.FreeModelConfig;
 import com.comet.opik.infrastructure.LlmModelRegistryConfig;
@@ -97,7 +98,7 @@ class GeminiCatalogRefusalsTest {
 
         paramResolver = new ParamResolver(llmProviderFactory, registryService);
         chatCompletionService = new ChatCompletionService(config.getLlmProviderClient(), llmProviderFactory,
-                paramResolver);
+                paramResolver, new ProviderErrorMessageValidator(config.getLlmProviderClient()));
     }
 
     @BeforeEach

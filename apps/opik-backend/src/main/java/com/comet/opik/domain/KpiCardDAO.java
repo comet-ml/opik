@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.InstantToUUIDMapper;
 import com.comet.opik.api.filter.Filter;
+import com.comet.opik.api.filter.TraceField;
 import com.comet.opik.api.filter.TraceThreadField;
 import com.comet.opik.api.metrics.KpiCardRequest.EntityType;
 import com.comet.opik.api.metrics.KpiCardResponse;
@@ -28,8 +29,10 @@ import reactor.core.publisher.Mono;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
@@ -55,11 +58,22 @@ class KpiCardDAOImpl implements KpiCardDAO {
     private final @NonNull InstantToUUIDMapper instantToUUIDMapper;
     private final @NonNull OpikConfiguration configuration;
 
+    /** Trace filter fields that read a payload column; see GET_TRACE_KPI_CARDS. */
+    private static final Set<TraceField> PAYLOAD_FIELDS = EnumSet.of(
+            TraceField.INPUT, TraceField.OUTPUT, TraceField.INPUT_JSON, TraceField.OUTPUT_JSON, TraceField.METADATA);
+
     /**
      * trace_costs buckets the TOTAL_COST KPI into current/previous periods keyed on trace_id (a
      * UUIDv7 matching the trace id used for the count/error/duration split) and is CROSS JOINed as a
      * single row, avoiding the per-trace LEFT JOIN whose hash build dominated peak memory on large
      * projects. Identical results; the trace_id IN (traces_filtered) semijoin is retained. OPIK-7319.
+     * <p>
+     * ClickHouse inlines a plain CTE at each reference, so traces_filtered is re-run by the final SELECT and by each
+     * trace_id IN. With a filter on a payload column ({@link #PAYLOAD_FIELDS}) every re-run repeats a full scan of
+     * that column, so {@code traces_summary} reads traces_filtered once instead: one scalar subquery, evaluated once
+     * per query, carries the count/error/duration aggregates and the matched ids that every IN reads. Without such a
+     * filter the re-runs read only id/time/error columns, and materializing every matched id costs more: on a
+     * ~556k-trace, 60-day window it doubled peak memory (454 MiB to 840 MiB) and ran slower. OPIK-8922.
      */
     private static final String GET_TRACE_KPI_CARDS = """
             WITH feedback_scores_deduped AS (
@@ -193,7 +207,21 @@ class KpiCardDAOImpl implements KpiCardDAO {
                     AND fsc.feedback_scores_count = 0
                     <endif>
                 ) AS t
-            ), trace_costs AS (
+            ),
+            <if(traces_summary)>
+            (
+                SELECT tuple(
+                    COUNTIf(id >= :id_current_start<if(uuid_to_time)> AND id \\<= :id_end<endif>),
+                    COUNTIf(id >= :id_prior_start AND id \\< :id_current_start),
+                    COUNTIf(length(error_info) > 0 AND id >= :id_current_start<if(uuid_to_time)> AND id \\<= :id_end<endif>),
+                    COUNTIf(length(error_info) > 0 AND id >= :id_prior_start AND id \\< :id_current_start),
+                    AVGIf(duration, id >= :id_current_start<if(uuid_to_time)> AND id \\<= :id_end<endif>),
+                    AVGIf(duration, id >= :id_prior_start AND id \\< :id_current_start),
+                    groupArray(id))
+                FROM traces_filtered
+            ) AS traces_summary,
+            <endif>
+            trace_costs AS (
                 SELECT
                     SUMIf(cost, trace_id >= :id_current_start<if(uuid_to_time)> AND trace_id \\<= :id_end<endif>) AS current_total_cost,
                     SUMIf(cost, trace_id >= :id_prior_start AND trace_id \\< :id_current_start) AS previous_total_cost
@@ -206,33 +234,53 @@ class KpiCardDAOImpl implements KpiCardDAO {
                           >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))
                       <if(uuid_to_time)>AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                           \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))<endif>
-                      AND trace_id IN (SELECT id FROM traces_filtered)
+                      AND trace_id IN (<if(traces_summary)>SELECT arrayJoin(traces_summary.7)<else>SELECT id FROM traces_filtered<endif>)
                       <if(spans_partitioned)>
                       AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                          <if(span_weeks_bound)>
+                          SELECT id_week FROM span_weeks
+                          WHERE workspace_id = :workspace_id AND project_id = :project_id
+                          AND trace_id >= :uuid_from_time <if(uuid_to_time)>AND trace_id \\<= :uuid_to_time<endif>
+                          AND id_week >= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))) <if(uuid_to_time)>AND id_week \\<= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))))<endif>)
+                          <else>
                           SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) FROM spans
-                          WHERE workspace_id = :workspace_id AND project_id = :project_id AND trace_id IN (SELECT id FROM traces_filtered)
+                          WHERE workspace_id = :workspace_id AND project_id = :project_id AND trace_id IN (<if(traces_summary)>SELECT arrayJoin(traces_summary.7)<else>SELECT id FROM traces_filtered<endif>)
                           AND toYYYYMMDD((toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))) >= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))) <if(uuid_to_time)>AND toYYYYMMDD((toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))) \\<= toYYYYMMDD((toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))))<endif>)
+                          <endif>
                       <endif>
                     GROUP BY trace_id
                 )
             )
+            <if(traces_summary)>
             SELECT
-                COUNTIf(tf.id >= :id_current_start<if(uuid_to_time)> AND tf.id \\<= :id_end<endif>) AS current_count,
-                COUNTIf(tf.id >= :id_prior_start AND tf.id \\< :id_current_start) AS previous_count,
-                if(COUNTIf(tf.id >= :id_current_start<if(uuid_to_time)> AND tf.id \\<= :id_end<endif>) = 0,
+                traces_summary.1 AS current_count,
+                traces_summary.2 AS previous_count,
+                if(traces_summary.1 = 0, 0, traces_summary.3 * 100.0 / traces_summary.1) AS current_error_rate,
+                if(traces_summary.2 = 0, 0, traces_summary.4 * 100.0 / traces_summary.2) AS previous_error_rate,
+                traces_summary.5 AS current_avg_duration,
+                traces_summary.6 AS previous_avg_duration,
+                tc.current_total_cost AS current_total_cost,
+                tc.previous_total_cost AS previous_total_cost
+            FROM trace_costs tc
+            <else>
+            SELECT
+                COUNTIf(traces_filtered.id >= :id_current_start<if(uuid_to_time)> AND traces_filtered.id \\<= :id_end<endif>) AS current_count,
+                COUNTIf(traces_filtered.id >= :id_prior_start AND traces_filtered.id \\< :id_current_start) AS previous_count,
+                if(COUNTIf(traces_filtered.id >= :id_current_start<if(uuid_to_time)> AND traces_filtered.id \\<= :id_end<endif>) = 0,
                     0,
-                    COUNTIf(length(tf.error_info) > 0 AND tf.id >= :id_current_start<if(uuid_to_time)> AND tf.id \\<= :id_end<endif>) * 100.0
-                    / COUNTIf(tf.id >= :id_current_start<if(uuid_to_time)> AND tf.id \\<= :id_end<endif>)) AS current_error_rate,
-                if(COUNTIf(tf.id >= :id_prior_start AND tf.id \\< :id_current_start) = 0,
+                    COUNTIf(length(traces_filtered.error_info) > 0 AND traces_filtered.id >= :id_current_start<if(uuid_to_time)> AND traces_filtered.id \\<= :id_end<endif>) * 100.0
+                    / COUNTIf(traces_filtered.id >= :id_current_start<if(uuid_to_time)> AND traces_filtered.id \\<= :id_end<endif>)) AS current_error_rate,
+                if(COUNTIf(traces_filtered.id >= :id_prior_start AND traces_filtered.id \\< :id_current_start) = 0,
                     0,
-                    COUNTIf(length(tf.error_info) > 0 AND tf.id >= :id_prior_start AND tf.id \\< :id_current_start) * 100.0
-                    / COUNTIf(tf.id >= :id_prior_start AND tf.id \\< :id_current_start)) AS previous_error_rate,
-                AVGIf(tf.duration, tf.id >= :id_current_start<if(uuid_to_time)> AND tf.id \\<= :id_end<endif>) AS current_avg_duration,
-                AVGIf(tf.duration, tf.id >= :id_prior_start AND tf.id \\< :id_current_start) AS previous_avg_duration,
+                    COUNTIf(length(traces_filtered.error_info) > 0 AND traces_filtered.id >= :id_prior_start AND traces_filtered.id \\< :id_current_start) * 100.0
+                    / COUNTIf(traces_filtered.id >= :id_prior_start AND traces_filtered.id \\< :id_current_start)) AS previous_error_rate,
+                AVGIf(traces_filtered.duration, traces_filtered.id >= :id_current_start<if(uuid_to_time)> AND traces_filtered.id \\<= :id_end<endif>) AS current_avg_duration,
+                AVGIf(traces_filtered.duration, traces_filtered.id >= :id_prior_start AND traces_filtered.id \\< :id_current_start) AS previous_avg_duration,
                 any(tc.current_total_cost) AS current_total_cost,
                 any(tc.previous_total_cost) AS previous_total_cost
-            FROM traces_filtered tf
+            FROM traces_filtered
             CROSS JOIN trace_costs tc
+            <endif>
             SETTINGS log_comment = '<log_comment>';
             """;
 
@@ -598,6 +646,9 @@ class KpiCardDAOImpl implements KpiCardDAO {
             var st = buildTemplate(GET_TRACE_KPI_CARDS, criteria, workspaceId, "getTraceKpiCards");
 
             addTraceFilters(st, criteria.filters());
+            if (hasPayloadFilter(criteria.filters())) {
+                st.add("traces_summary", true);
+            }
 
             var statement = bindPeriodBounds(buildStatement(connection, st, criteria, workspaceId), criteria);
             bindTraceFilters(statement, criteria.filters());
@@ -655,6 +706,11 @@ class KpiCardDAOImpl implements KpiCardDAO {
         if (spanColumnsNonNullable()) {
             template.add("spans_partitioned", true);
         }
+        // The trace query takes those weeks from the span_weeks index instead of a key scan of spans filtered by the
+        // matched traces, which also spares it one more evaluation of traces_filtered.
+        if (configuration.getDatabaseAnalyticsDataModel().spanWeeksReadBounded()) {
+            template.add("span_weeks_bound", true);
+        }
         // Without a requested end the upper bounds are omitted, so far-future ids count, as they do in the list.
         if (criteria.intervalEnd() != null) {
             template.add("uuid_to_time", true);
@@ -701,6 +757,10 @@ class KpiCardDAOImpl implements KpiCardDAO {
             FilterQueryBuilder.hasGuardrailsFilter(f)
                     .ifPresent(hasGuardrails -> template.add("guardrails_filters", true));
         });
+    }
+
+    private static boolean hasPayloadFilter(List<? extends Filter> filters) {
+        return filters != null && filters.stream().anyMatch(filter -> PAYLOAD_FIELDS.contains(filter.field()));
     }
 
     private boolean traceColumnsNonNullable() {

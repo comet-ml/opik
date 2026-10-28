@@ -9,6 +9,7 @@ import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmServiceProvider;
 import com.comet.opik.infrastructure.llm.OpenAiClientConfig;
+import com.comet.opik.infrastructure.llm.customllm.LlmHttpClientBuilders;
 import com.comet.opik.infrastructure.llm.openai.OpenAIClientGenerator;
 import com.comet.opik.infrastructure.llm.openai.QuotaAwareHttpClient;
 import dev.langchain4j.model.chat.ChatModel;
@@ -29,13 +30,16 @@ public class FreeModelServiceProvider implements LlmServiceProvider {
     private final OpenAIClientGenerator clientGenerator;
     private final FreeModelConfig freeModelConfig;
     private final LlmProviderClientConfig llmProviderClientConfig;
+    private final LlmHttpClientBuilders httpClientBuilders;
 
     public FreeModelServiceProvider(
             @NonNull OpenAIClientGenerator clientGenerator,
             @NonNull LlmProviderFactory factory,
             @NonNull FreeModelConfig freeModelConfig,
-            @NonNull LlmProviderClientConfig llmProviderClientConfig) {
+            @NonNull LlmProviderClientConfig llmProviderClientConfig,
+            @NonNull LlmHttpClientBuilders httpClientBuilders) {
         this.clientGenerator = clientGenerator;
+        this.httpClientBuilders = httpClientBuilders;
         this.freeModelConfig = freeModelConfig;
         this.llmProviderClientConfig = llmProviderClientConfig;
 
@@ -48,7 +52,8 @@ public class FreeModelServiceProvider implements LlmServiceProvider {
     @Override
     public LlmProviderService getService(@NonNull LlmProviderClientApiConfig config) {
         return new FreeModelLlmProvider(
-                clientGenerator.newOpenAiClient(config),
+                // the free model's URL is the operator's, which may be internal
+                clientGenerator.newOpenAiClient(config, httpClientBuilders.builder()),
                 freeModelConfig.getActualModel(),
                 freeModelConfig.isReasoningModel());
     }
@@ -77,7 +82,7 @@ public class FreeModelServiceProvider implements LlmServiceProvider {
                 .apiKey(config.apiKey())
                 // Treat insufficient_quota (429, out-of-credits) as non-retryable so the model's
                 // internal retry does not keep hitting an exhausted key.
-                .httpClientBuilder(QuotaAwareHttpClient.builder())
+                .httpClientBuilder(QuotaAwareHttpClient.builder(httpClientBuilders.builder()))
                 .logRequests(llmProviderClientConfig.getLogRequests())
                 .logResponses(llmProviderClientConfig.getLogResponses());
 
@@ -99,6 +104,10 @@ public class FreeModelServiceProvider implements LlmServiceProvider {
 
         Optional.ofNullable(transformedParameters.temperature()).ifPresent(builder::temperature);
         Optional.ofNullable(transformedParameters.seed()).ifPresent(builder::seed);
+        // Same reason as FreeModelLlmProvider: gpt-5-nano defaults to medium effort, which makes a judge slow.
+        if (freeModelConfig.isReasoningModel()) {
+            builder.reasoningEffort(FreeModelConfig.OPENAI_REASONING_MODEL_EFFORT);
+        }
 
         return builder.build();
     }

@@ -8,7 +8,9 @@ import com.comet.opik.infrastructure.llm.GeminiThinkingParams;
 import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
+import com.comet.opik.infrastructure.llm.LlmProviderLangChainMapper;
 import com.comet.opik.infrastructure.llm.RemoteMediaInliner;
+import com.comet.opik.infrastructure.llm.VideoMimeTypeUtils;
 import com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -17,6 +19,7 @@ import com.google.auth.oauth2.ServiceAccountCredentials;
 import com.google.common.base.Preconditions;
 import com.google.genai.Client;
 import com.google.genai.types.HttpOptions;
+import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.google.genai.GoogleGenAiChatModel;
 import dev.langchain4j.model.google.genai.GoogleGenAiStreamingChatModel;
@@ -30,6 +33,7 @@ import org.apache.commons.lang3.StringUtils;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -46,6 +50,11 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
     private final @NonNull LlmProviderClientConfig clientConfig;
     private final @NonNull LlmModelRegistryService registryService;
     private final @NonNull RemoteMediaInliner remoteMediaInliner;
+    private final @NonNull VideoMimeTypeUtils videoMimeTypeUtils;
+
+    List<ChatMessage> mapMessages(@NonNull ChatCompletionRequest request) {
+        return LlmProviderLangChainMapper.INSTANCE.mapMessages(request, videoMimeTypeUtils);
+    }
 
     CloseableVertexAiChatModel newVertexAIClient(LlmProviderClientApiConfig apiKey, ChatCompletionRequest request) {
         return buildOwnedClient(apiKey, request, (client, model) -> {

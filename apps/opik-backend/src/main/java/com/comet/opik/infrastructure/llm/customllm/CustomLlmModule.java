@@ -3,12 +3,20 @@ package com.comet.opik.infrastructure.llm.customllm;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmServiceProvider;
+import com.comet.opik.infrastructure.net.DestinationGuardDns;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.google.inject.AbstractModule;
 import com.google.inject.Provides;
 import com.google.inject.Singleton;
 import jakarta.inject.Named;
 import lombok.NonNull;
+import okhttp3.Dispatcher;
+import okhttp3.OkHttpClient;
+import okhttp3.Protocol;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
+
+import java.util.List;
+import java.util.concurrent.Executors;
 
 public class CustomLlmModule extends AbstractModule {
 
@@ -22,14 +30,57 @@ public class CustomLlmModule extends AbstractModule {
                 .build();
     }
 
+    /**
+     * Shared by every langchain4j model, each connection going only to addresses the destination guard approves.
+     * HTTP/1.1 only, as vLLM and other FastAPI servers speak only that.
+     */
+    @Provides
+    @Singleton
+    @Named("llmHttpClient")
+    public OkHttpClient llmHttpClient(@NonNull ProviderBaseUrlGuard providerBaseUrlGuard) {
+        return newLlmHttpClient(DestinationGuardDns.clientBuilder(providerBaseUrlGuard.destinationGuard())
+                .protocols(List.of(Protocol.HTTP_1_1)));
+    }
+
+    /** The HTTP client builder every langchain4j model is given, over the shared client. */
+    @Provides
+    @Singleton
+    public LlmHttpClientBuilders llmHttpClientBuilders(
+            @NonNull @Config("llmProviderClient") LlmProviderClientConfig config,
+            @NonNull @Named("llmHttpClient") OkHttpClient client) {
+        return new LlmHttpClientBuilders(client,
+                Math.toIntExact(config.getProviderErrorBodyMaxSize().toBytes()));
+    }
+
     @Provides
     @Singleton
     @Named("customLlmGenerator")
     public CustomLlmClientGenerator clientGenerator(
             @NonNull @Config("llmProviderClient") LlmProviderClientConfig config,
             @NonNull ProviderBaseUrlGuard providerBaseUrlGuard,
-            @NonNull AuthTokenProvider authTokenProvider) {
-        return new CustomLlmClientGenerator(config, providerBaseUrlGuard, authTokenProvider);
+            @NonNull AuthTokenProvider authTokenProvider,
+            @NonNull LlmHttpClientBuilders httpClientBuilders) {
+        return new CustomLlmClientGenerator(config, providerBaseUrlGuard, authTokenProvider, httpClientBuilders);
+    }
+
+    /**
+     * The rest keeps what the JDK client did: no redirects, no retry of a request on a broken connection, which could
+     * send a model call twice, no cap on concurrent calls, which streams would otherwise queue behind, and daemon
+     * threads. Each model's client derives from this one, so all of them share its connection pool and dispatcher.
+     */
+    private static OkHttpClient newLlmHttpClient(OkHttpClient.Builder builder) {
+        var dispatcher = new Dispatcher(Executors.newCachedThreadPool(new ThreadFactoryBuilder()
+                .setNameFormat("llm-http-%d")
+                .setDaemon(true)
+                .build()));
+        dispatcher.setMaxRequests(Integer.MAX_VALUE);
+        dispatcher.setMaxRequestsPerHost(Integer.MAX_VALUE);
+        return builder
+                .followRedirects(false)
+                .followSslRedirects(false)
+                .retryOnConnectionFailure(false)
+                .dispatcher(dispatcher)
+                .build();
     }
 
     @Provides

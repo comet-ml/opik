@@ -389,7 +389,8 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
         // handleToolCalls so the model can decide when to stop investigating. Providers that reject
         // a forced choice outright get AUTO here too — see firstRoundToolChoice.
         scoreRequest = agenticScoringService.addToolSpecs(scoreRequest,
-                agenticScoringService.firstRoundToolChoice(llmProviderFactory.getLlmProvider(modelName)));
+                agenticScoringService.firstRoundToolChoice(llmProviderFactory.getLlmProvider(modelName),
+                        message.llmAsJudgeCode().model()));
         return LlmRequests.builder().score(scoreRequest).structured(structuredRequest).build();
     }
 

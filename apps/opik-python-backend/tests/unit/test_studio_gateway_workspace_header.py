@@ -149,3 +149,27 @@ class TestRouteLitellmCallsThroughGateway:
         # ...but it now injects the updated workspace.
         fake_litellm.completion(messages=[])
         assert fake_litellm.calls[-1]["extra_headers"] == {"Comet-Workspace": "workspace-b"}
+
+    @pytest.mark.parametrize(
+        "overrides",
+        [
+            {"api_base": "http://169.254.169.254/latest"},
+            {"base_url": "http://10.0.0.1/v1"},
+            {"custom_llm_provider": "ollama", "api_base": "http://127.0.0.1:11434"},
+            {"api_key": "someone-elses-key", "api_version": "2024-01-01", "organization": "org"},
+        ],
+    )
+    def test_pins_every_call_to_the_gateway(self, fake_litellm, gateway_env, overrides):
+        route_litellm_calls_through_gateway("my-workspace")
+
+        fake_litellm.completion(model="openai/gpt-4o-mini", messages=[], **overrides)
+        asyncio.run(fake_litellm.acompletion(model="openai/gpt-4o-mini", messages=[], **overrides))
+
+        assert len(fake_litellm.calls) == 2
+        for call in fake_litellm.calls:
+            assert call == {
+                "model": "openai/gpt-4o-mini",
+                "messages": [],
+                "api_base": "http://gateway/v1/private",
+                "extra_headers": {"Comet-Workspace": "my-workspace"},
+            }

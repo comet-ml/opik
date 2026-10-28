@@ -60,8 +60,15 @@ def initialize_opik_client(context: OptimizationJobContext) -> opik.Opik:
         os.environ["OPIK_URL_OVERRIDE"] = OPIK_URL
         logger.debug(f"Set OPIK_URL_OVERRIDE: {OPIK_URL}")
 
+    # The optimization's project is every client's default, so nothing this job logs or looks up falls back
+    # to the SDK's default project, including the optimizer's own clients, which read the environment.
+    if context.project_name:
+        os.environ["OPIK_PROJECT_NAME"] = context.project_name
+    else:
+        os.environ.pop("OPIK_PROJECT_NAME", None)
+
     # Create client - it will read from the environment variables we just set
-    client = opik.Opik()
+    client = opik.Opik(project_name=context.project_name)
     logger.debug("Opik SDK initialized from environment variables")
 
     return client
@@ -82,12 +89,14 @@ def count_optimizable_items(dataset_items: list) -> int:
     )
 
 
-def load_and_validate_dataset(client: opik.Opik, dataset_name: str):
+def load_and_validate_dataset(client: opik.Opik, dataset_name: str, project_name: Optional[str] = None):
     """Load dataset and validate it has items.
 
     Args:
         client: Opik client
         dataset_name: Name of the dataset to load
+        project_name: The optimization's project. Evaluation logs traces to the dataset's project, so the
+            lookup names it rather than relying on the SDK's default project.
 
     Returns:
         Tuple of (dataset, item_count). The count is returned so callers can
@@ -102,7 +111,7 @@ def load_and_validate_dataset(client: opik.Opik, dataset_name: str):
             can train on
     """
     try:
-        dataset = client.get_dataset(dataset_name)
+        dataset = client.get_dataset(dataset_name, project_name=project_name)
         logger.debug(f"Loaded dataset: {dataset_name}")
         # Bounded fetch, inside the same translation: access/transport failures
         # here are just as much "dataset unusable" as a failed lookup, and the

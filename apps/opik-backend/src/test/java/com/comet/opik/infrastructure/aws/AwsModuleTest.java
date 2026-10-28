@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.aws;
 
+import com.comet.opik.api.resources.utils.TestHttpClientUtils;
 import com.comet.opik.infrastructure.AlertsEventBridgeConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.github.tomakehurst.wiremock.WireMockServer;
@@ -67,7 +68,9 @@ class AwsModuleTest {
         var toggles = new ServiceTogglesConfig();
         toggles.setEventBridgeAlertsEnabled(false);
 
-        assertThat(new AwsModule().eventBridgeClient(toggles, new AlertsEventBridgeConfig())).isEmpty();
+        assertThat(
+                new AwsModule().eventBridgeClient(toggles, new AlertsEventBridgeConfig(), TestHttpClientUtils.client()))
+                .isEmpty();
     }
 
     @Test
@@ -77,7 +80,7 @@ class AwsModuleTest {
         var config = new AlertsEventBridgeConfig();
         config.setEventBus(ARN_BUS);
 
-        var client = new AwsModule().eventBridgeClient(toggles, config);
+        var client = new AwsModule().eventBridgeClient(toggles, config, TestHttpClientUtils.client());
 
         assertThat(client).isPresent();
         try (var eventBridgeClient = client.get()) {
@@ -155,7 +158,9 @@ class AwsModuleTest {
             withSystemProperties(Map.of(
                     "aws.webIdentityTokenFile", "/var/run/secrets/eks.amazonaws.com/serviceaccount/token",
                     "aws.roleArn", "arn:aws:iam::222222222222:role/partner"), () -> {
-                        var credentials = AwsModule.eventBridgeCredentialsProvider(config()).resolveCredentials();
+                        var credentials = AwsModule
+                                .eventBridgeCredentialsProvider(config(), TestHttpClientUtils.client())
+                                .resolveCredentials();
 
                         assertThat(credentials).isInstanceOfSatisfying(AwsSessionCredentials.class, session -> {
                             assertThat(session.accessKeyId()).isEqualTo("CUSTOMER1");
@@ -169,7 +174,7 @@ class AwsModuleTest {
         void cachesCredentialsUntilCloseToExpiry() {
             stubCredentials(Scenario.STARTED, "second", "CUSTOMER1", Instant.now().plus(1, ChronoUnit.HOURS));
             stubCredentials("second", "second", "CUSTOMER2", Instant.now().plus(1, ChronoUnit.HOURS));
-            var provider = AwsModule.eventBridgeCredentialsProvider(config());
+            var provider = AwsModule.eventBridgeCredentialsProvider(config(), TestHttpClientUtils.client());
 
             assertThat(provider.resolveCredentials().accessKeyId()).isEqualTo("CUSTOMER1");
             assertThat(provider.resolveCredentials().accessKeyId()).isEqualTo("CUSTOMER1");
@@ -180,7 +185,7 @@ class AwsModuleTest {
         void fetchesNewCredentialsOnceTheFirstHaveExpired() {
             stubCredentials(Scenario.STARTED, "second", "CUSTOMER1", Instant.now().minus(1, ChronoUnit.SECONDS));
             stubCredentials("second", "second", "CUSTOMER2", Instant.now().plus(1, ChronoUnit.HOURS));
-            var provider = AwsModule.eventBridgeCredentialsProvider(config());
+            var provider = AwsModule.eventBridgeCredentialsProvider(config(), TestHttpClientUtils.client());
 
             assertThat(provider.resolveCredentials())
                     .extracting(AwsCredentials::accessKeyId, AwsCredentials::secretAccessKey)
@@ -197,7 +202,7 @@ class AwsModuleTest {
             endpoint.stubFor(get(PATH).willReturn(aResponse().withStatus(status)));
 
             withSystemProperties(Map.of("aws.accessKeyId", "PARTNER", "aws.secretAccessKey", "partner-secret"), () -> {
-                var provider = AwsModule.eventBridgeCredentialsProvider(config());
+                var provider = AwsModule.eventBridgeCredentialsProvider(config(), TestHttpClientUtils.client());
 
                 // The I/O cause is what makes the alert publisher retry it
                 assertThatThrownBy(provider::resolveCredentials)
@@ -214,7 +219,8 @@ class AwsModuleTest {
                     {"AccessKeyId": "CUSTOMER1", "SecretAccessKey": "secret-CUSTOMER1", %s, "Expiration": "%s"}
                     """.formatted(tokenFields, Instant.now().plus(1, ChronoUnit.HOURS)))));
 
-            assertThatThrownBy(AwsModule.eventBridgeCredentialsProvider(config())::resolveCredentials)
+            assertThatThrownBy(AwsModule.eventBridgeCredentialsProvider(config(),
+                    TestHttpClientUtils.client())::resolveCredentials)
                     .isInstanceOf(SdkClientException.class)
                     .hasMessageContaining("'SessionToken'");
         }
@@ -224,7 +230,7 @@ class AwsModuleTest {
             var config = new AlertsEventBridgeConfig();
             config.setEventBus(ARN_BUS);
 
-            assertThat(AwsModule.eventBridgeCredentialsProvider(config))
+            assertThat(AwsModule.eventBridgeCredentialsProvider(config, TestHttpClientUtils.client()))
                     .isInstanceOf(AwsCredentialsProviderChain.class)
                     .asString()
                     .contains("WebIdentityTokenFileCredentialsProvider", "ContainerCredentialsProvider",

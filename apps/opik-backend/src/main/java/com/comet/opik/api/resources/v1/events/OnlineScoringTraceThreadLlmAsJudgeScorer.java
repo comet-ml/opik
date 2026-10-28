@@ -462,7 +462,8 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
                 // Providers that reject a forced choice outright get AUTO here too — see
                 // firstRoundToolChoice.
                 scoreRequest = agenticScoringService.addToolSpecs(scoreRequest,
-                        agenticScoringService.firstRoundToolChoice(llmProviderFactory.getLlmProvider(modelName)));
+                        agenticScoringService.firstRoundToolChoice(llmProviderFactory.getLlmProvider(modelName),
+                                message.code().model()));
             }
 
             // summarizeRequest is cheap (no per-message toString streaming). At INFO to mirror

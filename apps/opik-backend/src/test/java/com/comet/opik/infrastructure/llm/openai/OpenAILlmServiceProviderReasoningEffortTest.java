@@ -83,7 +83,8 @@ class OpenAILlmServiceProviderReasoningEffortTest {
         stubChatCompletions();
         stubResponses();
         serviceProvider = new OpenAILlmServiceProvider(
-                new OpenAIClientGenerator(new LlmProviderClientConfig(), LlmTestClients.RESPONSES_API_HTTP_CLIENT),
+                new OpenAIClientGenerator(new LlmProviderClientConfig(), LlmTestClients.RESPONSES_API_HTTP_CLIENT,
+                        LlmTestClients.LLM_HTTP_CLIENT_BUILDERS),
                 Mockito.mock(LlmProviderFactory.class));
     }
 
