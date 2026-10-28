@@ -321,9 +321,9 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
         // custom headers can carry credentials too, so they must be resent (or cleared with an empty map)
         boolean storedHeadersKept = update.headers() == null && MapUtils.isNotEmpty(stored.headers());
         if (storedApiKeyKept || storedAuthConfigKept || storedHeadersKept) {
-            throw new BadRequestException(
-                    "changing base_url requires resubmitting the provider credentials (api_key or auth_config) and"
-                            + " headers");
+            throw new BadRequestException("""
+                    changing base_url requires resubmitting the provider credentials (api_key or auth_config) and \
+                    headers""");
         }
     }
 

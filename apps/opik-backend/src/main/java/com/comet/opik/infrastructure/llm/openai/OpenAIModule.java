@@ -3,6 +3,7 @@ package com.comet.opik.infrastructure.llm.openai;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmServiceProvider;
+import com.comet.opik.infrastructure.llm.customllm.LlmHttpClientBuilders;
 import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.comet.opik.infrastructure.net.DestinationGuardDns;
 import com.google.inject.AbstractModule;
@@ -19,8 +20,8 @@ public class OpenAIModule extends AbstractModule {
     @Singleton
     @Named("openaiGenerator")
     public OpenAIClientGenerator clientGenerator(@NonNull @Config("llmProviderClient") LlmProviderClientConfig config,
-            @NonNull HttpClient responsesApiHttpClient) {
-        return new OpenAIClientGenerator(config, responsesApiHttpClient);
+            @NonNull HttpClient responsesApiHttpClient, @NonNull LlmHttpClientBuilders httpClientBuilders) {
+        return new OpenAIClientGenerator(config, responsesApiHttpClient, httpClientBuilders);
     }
 
     /**

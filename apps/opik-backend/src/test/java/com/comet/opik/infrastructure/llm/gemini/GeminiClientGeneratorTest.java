@@ -7,11 +7,14 @@ import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmTestClients;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import dev.langchain4j.data.message.UserMessage;
+import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import io.dropwizard.util.Duration;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -22,6 +25,8 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -60,7 +65,8 @@ class GeminiClientGeneratorTest {
         clientConfig.setCallTimeout(Duration.seconds(10));
         clientConfig.setLogRequests(false);
         clientConfig.setLogResponses(false);
-        generator = new GeminiClientGenerator(clientConfig, LlmTestClients.REMOTE_MEDIA_INLINER);
+        generator = new GeminiClientGenerator(clientConfig, LlmTestClients.REMOTE_MEDIA_INLINER,
+                LlmTestClients.VIDEO_MIME_TYPE_UTILS, LlmTestClients.LLM_HTTP_CLIENT_BUILDERS);
     }
 
     @AfterAll
@@ -175,6 +181,40 @@ class GeminiClientGeneratorTest {
         assertThat(only(sentGenerationConfig(GENERATE_CONTENT_PATH), "temperature", "seed", "thinkingConfig"))
                 .isEqualTo(JsonUtils.getJsonNodeFromString(
                         "{\"temperature\": 0.2, \"seed\": 7, \"thinkingConfig\": {\"thinkingLevel\": \"high\"}}"));
+    }
+
+    @Test
+    @DisplayName("judge: a tool loop's next round sends back the thought signature of each function call")
+    void judgeSendsBackTheThoughtSignature() {
+        var signature = Base64.getEncoder()
+                .encodeToString(RandomStringUtils.secure().nextAlphanumeric(12).getBytes(StandardCharsets.UTF_8));
+        wireMock.server().stubFor(post(urlPathMatching(GENERATE_CONTENT_PATH))
+                .willReturn(aResponse()
+                        .withHeader("Content-Type", "application/json")
+                        .withBody(
+                                """
+                                        {"candidates": [{"content": {"role": "model", "parts": [\
+                                        {"functionCall": {"name": "read", "args": {"id": "t1"}}, "thoughtSignature": "%s"}]}, \
+                                        "finishReason": "STOP"}], \
+                                        "usageMetadata": {"promptTokenCount": 3, "candidatesTokenCount": 4, "totalTokenCount": 7}}"""
+                                        .formatted(signature))));
+        var judge = GeminiTestClients.pointedAt(
+                generator.generateChat(LlmProviderClientApiConfig.builder().apiKey("test-key").build(),
+                        new LlmAsJudgeModelParameters(GEMINI_3_MODEL, null, null, null)),
+                stubBaseUrl());
+        var question = UserMessage.from("Read trace t1");
+
+        var call = judge.chat(ChatRequest.builder().messages(question).build()).aiMessage();
+        judge.chat(ChatRequest.builder()
+                .messages(question, call,
+                        ToolExecutionResultMessage.from(call.toolExecutionRequests().getFirst(), "banana"))
+                .build());
+
+        var requests = wireMock.server().findAll(postRequestedFor(urlPathMatching(GENERATE_CONTENT_PATH)));
+        assertThat(requests).hasSize(2);
+        var sentCalls = JsonUtils.getJsonNodeFromString(requests.get(1).getBodyAsString()).findParents("functionCall");
+        assertThat(sentCalls).hasSize(1);
+        assertThat(sentCalls.getFirst().path("thoughtSignature").asText()).isEqualTo(signature);
     }
 
     private static ChatCompletionRequest samplingRequest(Double temperature, Double topP) {

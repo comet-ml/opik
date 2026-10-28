@@ -12,6 +12,7 @@ import io.dropwizard.validation.MaxDuration;
 import io.dropwizard.validation.MinDataSize;
 import io.dropwizard.validation.MinDuration;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -77,16 +78,41 @@ public class LlmProviderClientConfig {
     @NotNull private DestinationGuard.Mode videoUrlDestinationGuard;
 
     /**
-     * Time allowed for downloading one media URL that Gemini or Vertex AI receives as inline data, connecting
-     * included.
+     * Schemes allowed for the media URLs downloaded for Gemini and Vertex AI: {@code plaintext_or_tls} also accepts
+     * http; {@code https_only} refuses it. Checked in strict mode only; in every mode, a URL that isn't http or https
+     * is refused.
      */
-    // the client takes the timeout in milliseconds as an int
+    @NotNull private DestinationGuard.Scheme mediaUrlDestinationScheme;
+
+    /**
+     * Time allowed for downloading one media URL that Gemini or Vertex AI receives as inline data, connecting
+     * included. At most 5 minutes: every download completes before the provider is called, so a slow or stalled media
+     * server must fail the request fast, and 5 minutes still fits the largest size cap (100 MB) at about 350 KB/s.
+     */
     @NotNull @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS)
-    @MaxDuration(value = Integer.MAX_VALUE, unit = TimeUnit.MILLISECONDS)
+    @MaxDuration(value = 5, unit = TimeUnit.MINUTES)
     private Duration mediaDownloadTimeout;
 
-    /** Largest media file downloaded for Gemini or Vertex AI; it is held in memory while it is sent inline. */
+    /**
+     * Most bytes downloaded for all the media of one Gemini or Vertex AI request; they are held in memory, base64
+     * encoded, while they are sent inline. Gemini refuses a request with more than about 20 MB of inline data, so
+     * downloading more would only be refused.
+     */
     @NotNull @MinDataSize(1)
-    @MaxDataSize(value = 1, unit = DataSizeUnit.GIBIBYTES)
+    @MaxDataSize(value = 100, unit = DataSizeUnit.MEGABYTES)
     private DataSize mediaDownloadMaxSize;
+
+    /**
+     * Most bytes read from a custom provider's non-2xx response body; the rest is discarded. Only a short message
+     * parsed from it reaches callers, so a larger body is never needed.
+     */
+    @NotNull @MinDataSize(1)
+    @MaxDataSize(value = 1, unit = DataSizeUnit.MEBIBYTES)
+    private DataSize providerErrorBodyMaxSize;
+
+    /**
+     * Longest provider error message passed on to a caller; a longer one is replaced by the generic one. At most 1000
+     * characters: provider error messages are one or two sentences.
+     */
+    @NotNull @Positive @Max(1000) private Integer providerErrorMessageMaxLength;
 }
