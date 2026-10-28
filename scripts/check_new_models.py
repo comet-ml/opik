@@ -252,9 +252,12 @@ def find_models_to_check(
             model = _merged_row(row, curated_row)
             before = base_rows.get(model_id)
             # Gaining onlyRoute only takes routes away and changes no request the backend sends, so it alone is no
-            # reason to call a model again. Losing or changing it opens a route the check hasn't called.
+            # reason to call a model again. Losing or changing it opens a route the check hasn't called, and a value
+            # that names no route has to reach plan_probes, which rejects it.
             gained_only_route = (
-                before is not None and _only_route(*before) is None and _only_route(row, curated_row) is not None
+                before is not None
+                and _only_route(*before) is None
+                and _only_route(row, curated_row) in route_names(provider)
             )
             if before is None:
                 reason = "new"
@@ -360,13 +363,17 @@ def is_retired(model: ModelToCheck, retired: dict[str, set[str]]) -> bool:
     return model.model_id in retired.get(model.provider, set())
 
 
+def route_names(provider: str) -> list[str]:
+    return [route or CHAT_COMPLETIONS_ROUTE for route in ROUTES.get(provider, (None,))]
+
+
 def plan_probes(model: ModelToCheck, params: dict | None) -> list[Probe]:
     if not params:
         return [Probe(model, None, "plain", {"max_completion_tokens": MAX_COMPLETION_TOKENS}, ())]
     probes = []
     routes = ROUTES.get(model.provider, (None,))
     only_route = params.get("only_route")
-    if only_route is not None and only_route not in [route or CHAT_COMPLETIONS_ROUTE for route in routes]:
+    if only_route is not None and only_route not in route_names(model.provider):
         raise ValueError(
             f"{model.provider}/{model.model_id} has only_route {only_route!r}, which names none of its routes"
         )
@@ -852,10 +859,10 @@ def run(args: argparse.Namespace) -> int:
     for model in sorted(to_check, key=lambda m: REASON_PRIORITY.get(m.reason, len(REASON_PRIORITY))):
         served = catalog.get(model.provider, {}).get(model.model_id)
         probes = plan_probes(model, (served or {}).get("params"))
-        if served is None:
-            results += [CheckResult(p, "not checked", None, "the backend doesn't list this model") for p in probes]
-        elif mode != "asked" and is_retired(model, retired):
+        if mode != "asked" and is_retired(model, retired):
             results += [CheckResult(p, "not checked", None, RETIRED_NOTE) for p in probes]
+        elif served is None:
+            results += [CheckResult(p, "not checked", None, "the backend doesn't list this model") for p in probes]
         elif mode == "changes" and not served.get("label"):
             results += [CheckResult(p, "not checked", None, NOT_IN_PICKER_NOTE) for p in probes]
         elif not keys.get(model.provider):
