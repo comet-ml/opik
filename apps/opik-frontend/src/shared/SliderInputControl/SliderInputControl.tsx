@@ -3,11 +3,14 @@ import { Button } from "@/ui/button";
 import { Info, RotateCcw } from "lucide-react";
 import { Input } from "@/ui/input";
 import toNumber from "lodash/toNumber";
-import { Slider } from "@/ui/slider";
+import { Slider, SliderSize } from "@/ui/slider";
+import { cn } from "@/lib/utils";
 import React, { useEffect, useState } from "react";
 import TooltipWrapper, {
   TooltipWrapperProps,
 } from "@/shared/TooltipWrapper/TooltipWrapper";
+
+const COMMIT_KEYS = ["Enter", "Tab", "Escape"];
 
 interface SliderInputControlProps {
   min: number;
@@ -21,7 +24,13 @@ interface SliderInputControlProps {
   tooltip?: TooltipWrapperProps["content"];
   resetDisabled?: boolean;
   suffix?: string;
+  integer?: boolean;
+  hint?: string;
+  size?: SliderSize;
 }
+
+const toShownValue = (value: number, integer?: boolean) =>
+  (integer ? Math.floor(value) : value).toString();
 
 const SliderInputControl = ({
   min,
@@ -35,20 +44,24 @@ const SliderInputControl = ({
   tooltip,
   resetDisabled,
   suffix,
+  integer,
+  hint,
+  size = "default",
 }: SliderInputControlProps) => {
+  const isSmall = size === "sm";
   const sliderId = `${id}-slider`;
   const inputId = `${id}-input`;
 
   const [localValue, setLocalValue] = useState(
-    (value ?? defaultValue).toString(),
+    toShownValue(value ?? defaultValue, integer),
   );
 
   useEffect(() => {
-    setLocalValue((value ?? defaultValue).toString());
-  }, [value, defaultValue]);
+    setLocalValue(toShownValue(value ?? defaultValue, integer));
+  }, [value, defaultValue, integer]);
 
   const validateAndHandleChange = (value: string) => {
-    const numVal = toNumber(value);
+    const numVal = integer ? Math.floor(toNumber(value)) : toNumber(value);
 
     if (value === "") {
       onChange(defaultValue);
@@ -75,7 +88,7 @@ const SliderInputControl = ({
     }
 
     onChange(numVal);
-    setLocalValue(value);
+    setLocalValue(integer ? numVal.toString() : value);
   };
 
   const handleResetValue = () => {
@@ -84,10 +97,22 @@ const SliderInputControl = ({
   };
 
   return (
-    <div className="min-w-60">
-      <div className="mb-2 flex w-full items-center justify-between">
+    <div className={isSmall ? "w-full pt-0.5" : "min-w-60"}>
+      <div
+        className={cn(
+          "flex w-full items-center justify-between",
+          isSmall ? "mb-1 px-px" : "mb-2",
+        )}
+      >
         <div className="flex items-center">
-          <Label htmlFor={sliderId} className="text-foreground">
+          <Label
+            htmlFor={sliderId}
+            className={
+              isSmall
+                ? "comet-body-xs-accented text-muted-slate"
+                : "text-foreground"
+            }
+          >
             {label}
           </Label>
           {tooltip && (
@@ -98,8 +123,16 @@ const SliderInputControl = ({
         </div>
 
         <div className="flex items-center">
-          {!resetDisabled && (value ?? defaultValue) !== defaultValue && (
-            <Button variant="minimal" size="icon-sm" onClick={handleResetValue}>
+          {!resetDisabled && (
+            <Button
+              type="button"
+              variant="minimal"
+              size="icon-sm"
+              onClick={handleResetValue}
+              className={cn({
+                invisible: (value ?? defaultValue) === defaultValue,
+              })}
+            >
               <RotateCcw />
             </Button>
           )}
@@ -114,6 +147,13 @@ const SliderInputControl = ({
             }
             onChange={(event) => setLocalValue(event.target.value)}
             onBlur={(event) => validateAndHandleChange(event.target.value)}
+            onKeyDown={(event) => {
+              // Inside a Radix menu, Tab does not move focus and Escape unmounts the
+              // menu without a blur, so onBlur alone would drop the typed value.
+              if (COMMIT_KEYS.includes(event.key)) {
+                validateAndHandleChange(event.currentTarget.value);
+              }
+            }}
             value={localValue || ""}
             dimension="xs"
             variant="ghost"
@@ -122,7 +162,10 @@ const SliderInputControl = ({
           {suffix && (
             <label
               htmlFor={inputId}
-              className="cursor-text text-sm text-muted-foreground"
+              className={cn(
+                "cursor-text text-muted-foreground",
+                isSmall ? "text-xs" : "text-sm",
+              )}
             >
               {suffix}
             </label>
@@ -147,7 +190,9 @@ const SliderInputControl = ({
         min={min}
         max={max}
         step={step}
+        size={size}
       />
+      {hint && <p className="comet-body-xs mt-2 text-light-slate">{hint}</p>}
     </div>
   );
 };

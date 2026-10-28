@@ -5,6 +5,8 @@ import com.comet.opik.api.retention.RetentionPeriod;
 import com.comet.opik.api.retention.RetentionRule;
 import com.comet.opik.domain.SpanDAO;
 import com.comet.opik.domain.TraceDAO;
+import com.comet.opik.domain.ailabels.AiLabelStatusDAO;
+import com.comet.opik.domain.ailabels.AiLabelsDAO;
 import com.comet.opik.infrastructure.RetentionConfig;
 import com.comet.opik.infrastructure.RetentionConfig.CatchUpConfig;
 import io.opentelemetry.api.GlobalOpenTelemetry;
@@ -57,6 +59,8 @@ public class RetentionCatchUpService {
     private final TransactionTemplate template;
     private final TraceDAO traceDAO;
     private final SpanDAO spanDAO;
+    private final AiLabelsDAO aiLabelsDAO;
+    private final AiLabelStatusDAO aiLabelStatusDAO;
     private final InstantToUUIDMapper uuidMapper;
     private final RetentionConfig config;
 
@@ -69,11 +73,15 @@ public class RetentionCatchUpService {
             @NonNull TransactionTemplate template,
             @NonNull TraceDAO traceDAO,
             @NonNull SpanDAO spanDAO,
+            @NonNull AiLabelsDAO aiLabelsDAO,
+            @NonNull AiLabelStatusDAO aiLabelStatusDAO,
             @NonNull InstantToUUIDMapper uuidMapper,
             @NonNull @Config("retention") RetentionConfig config) {
         this.template = template;
         this.traceDAO = traceDAO;
         this.spanDAO = spanDAO;
+        this.aiLabelsDAO = aiLabelsDAO;
+        this.aiLabelStatusDAO = aiLabelStatusDAO;
         this.uuidMapper = uuidMapper;
         this.config = config;
 
@@ -230,6 +238,10 @@ public class RetentionCatchUpService {
                                         rowsToDelete.add(c, Attributes.of(
                                                 stringKey("table"), "spans"));
                                     }).then(Mono.empty()),
+                            skipOnError("ai_labels", aiLabelsDAO.deleteForRetentionBounded(workspaceMinIds,
+                                    cutoffId, finalGlobalLowerBound)),
+                            skipOnError("ai_label_status", aiLabelStatusDAO.deleteForRetentionBounded(
+                                    workspaceMinIds, cutoffId, finalGlobalLowerBound)),
                             spanDAO.deleteForRetentionBounded(workspaceMinIds, cutoffId, finalGlobalLowerBound),
                             traceDAO.deleteForRetentionBounded(workspaceMinIds, cutoffId, finalGlobalLowerBound));
                 })
@@ -293,6 +305,8 @@ public class RetentionCatchUpService {
                         .doOnNext(c -> rowsToDelete.add(c, Attributes.of(
                                 stringKey("table"), "spans")))
                         .then(Mono.empty()),
+                skipOnError("ai_labels", aiLabelsDAO.deleteForRetention(workspaceIds, chunkEnd, cursor)),
+                skipOnError("ai_label_status", aiLabelStatusDAO.deleteForRetention(workspaceIds, chunkEnd, cursor)),
                 spanDAO.deleteForRetention(workspaceIds, chunkEnd, cursor),
                 traceDAO.deleteForRetention(workspaceIds, chunkEnd, cursor))
                 .reduce(0L, Long::sum)
@@ -346,5 +360,16 @@ public class RetentionCatchUpService {
             handle.attach(RetentionRuleDAO.class).updateCatchUpCursor(ruleId, newCursor);
             return null;
         })).subscribeOn(Schedulers.boundedElastic()).then();
+    }
+
+    /**
+     * The ai-labels tables are deleted alongside traces but must never hold back their spans, traces or the cursor:
+     * a failure is logged and the rows wait for the next run.
+     */
+    private Mono<Long> skipOnError(String table, Mono<Long> delete) {
+        return delete.onErrorResume(error -> {
+            log.error("Retention catch-up failed to delete from '{}'; skipping until the next run", table, error);
+            return Mono.just(0L);
+        });
     }
 }

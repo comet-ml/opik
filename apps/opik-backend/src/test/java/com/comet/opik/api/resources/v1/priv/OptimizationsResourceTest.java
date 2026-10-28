@@ -49,6 +49,8 @@ import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.google.common.eventbus.EventBus;
 import com.redis.testcontainers.RedisContainer;
+import io.dropwizard.jersey.errors.ErrorMessage;
+import org.apache.commons.collections4.SetUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.http.HttpStatus;
 import org.junit.jupiter.api.AfterAll;
@@ -103,6 +105,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
 import static org.awaitility.Awaitility.await;
+import static org.junit.jupiter.api.Named.named;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -1418,10 +1421,265 @@ class OptimizationsResourceTest {
         }
 
         /**
+         * The list is paged before its per-run aggregates, but the tagged-cost project bound must not be: run X's
+         * tagged trace is stored in run Y's project, so X's spend is found only when Y's project is in the bound.
+         * Bounding on the page instead would charge X on a page that also holds Y and read it as free on a page
+         * that does not. With a trial on Y the list takes {@code FIND}, without one {@code FIND_WITHOUT_EXPERIMENTS}.
+         */
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        @DisplayName("Tagged cost in another run's project does not depend on the page")
+        void find__whenTaggedTraceIsInAnotherRunsProject__costDoesNotDependOnThePage(boolean withTrial) {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var datasetName = "paged-tag-scope-test-" + UUID.randomUUID();
+            var datasetId = datasetResourceClient.createDataset(
+                    Dataset.builder().name(datasetName).build(), apiKey, workspaceName);
+
+            Project projectY = podamFactory.manufacturePojo(Project.class);
+            var projectYId = projectResourceClient.createProject(projectY, apiKey, workspaceName);
+            Project projectX = podamFactory.manufacturePojo(Project.class);
+            var projectXId = projectResourceClient.createProject(projectX, apiKey, workspaceName);
+
+            var optimizationY = optimizationResourceClient.createPartialOptimization()
+                    .datasetId(datasetId)
+                    .datasetName(datasetName)
+                    .projectName(projectY.name())
+                    .build();
+            var optimizationYId = optimizationResourceClient.create(optimizationY, apiKey, workspaceName);
+            if (withTrial) {
+                createTrialWithUnfinishedTraceItem(optimizationYId, true, apiKey, workspaceName);
+            }
+
+            // Created last, so X alone fills a page of size 1.
+            var optimizationX = optimizationResourceClient.createPartialOptimization()
+                    .datasetId(datasetId)
+                    .datasetName(datasetName)
+                    .projectName(projectX.name())
+                    .build();
+            var optimizationXId = optimizationResourceClient.create(optimizationX, apiKey, workspaceName);
+
+            var expectedX = optimizationX.toBuilder()
+                    .id(optimizationXId)
+                    .projectId(projectXId)
+                    .build();
+            var expectedY = optimizationY.toBuilder()
+                    .id(optimizationYId)
+                    .projectId(projectYId)
+                    .numTrials(withTrial ? 1L : 0L)
+                    .build();
+
+            Trace taggedTrace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(projectYId)
+                    .projectName(projectY.name())
+                    .startTime(Instant.now().minusSeconds(2))
+                    .endTime(Instant.now().minusSeconds(1))
+                    .tags(Set.of(optimizationXId.toString()))
+                    .guardrailsValidations(null)
+                    .threadId(null)
+                    .feedbackScores(null)
+                    .usage(null)
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(taggedTrace), apiKey, workspaceName);
+
+            var expectedCost = BigDecimal.valueOf(0.07);
+            Span span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectId(projectYId)
+                    .projectName(projectY.name())
+                    .traceId(taggedTrace.id())
+                    .parentSpanId(null)
+                    .startTime(Instant.now().minusSeconds(2))
+                    .endTime(Instant.now().minusSeconds(1))
+                    .totalEstimatedCost(expectedCost)
+                    .feedbackScores(null)
+                    .build();
+            spanResourceClient.batchCreateSpans(List.of(span), apiKey, workspaceName);
+
+            await().atMost(10, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var pageWithBoth = optimizationResourceClient.find(
+                                apiKey, workspaceName, 1, 10, datasetId, null, null, 200);
+                        var pageWithXOnly = optimizationResourceClient.find(
+                                apiKey, workspaceName, 1, 1, datasetId, null, null, 200);
+
+                        assertThat(pageWithBoth.content())
+                                .usingRecursiveComparison()
+                                .ignoringFields(OPTIMIZATION_IGNORED_FIELDS)
+                                .isEqualTo(List.of(expectedX, expectedY));
+                        assertThat(pageWithBoth.content().getFirst().totalOptimizationCost())
+                                .isEqualByComparingTo(expectedCost);
+
+                        assertThat(pageWithXOnly.content())
+                                .usingRecursiveComparison()
+                                .ignoringFields(OPTIMIZATION_IGNORED_FIELDS)
+                                .isEqualTo(List.of(expectedX));
+                        assertThat(pageWithXOnly.content().getFirst().totalOptimizationCost())
+                                .isEqualByComparingTo(expectedCost);
+                    });
+        }
+
+        /**
+         * Tagged attribution is scoped to the projects of the runs in scope, on the traces read and on the spans read
+         * alike. A run created with neither {@code project_id} nor {@code project_name} resolves to no project at
+         * all, so that set is empty for it and there is no tagged spend to find - its cost stays trial-only, which
+         * for a run with no trials is zero.
+         * <p>
+         * The fixture is otherwise the one
+         * {@link #findAndGetById__whenOptimizationHasNoExperiments__taggedCostAgreesAndFollowsTheTag} charges in
+         * full, which is what makes the zero here the project's doing rather than a fixture that never landed.
+         */
+        @Test
+        void getByIdWhenRunHasNoProjectExcludesTaggedCost() {
+            var apiKey = "apiKey-%s".formatted(RandomStringUtils.secure().nextAlphanumeric(32));
+            var workspaceName = "workspace-%s".formatted(RandomStringUtils.secure().nextAlphanumeric(32));
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var datasetName = "dataset-%s".formatted(RandomStringUtils.secure().nextAlphanumeric(32));
+            var datasetId = datasetResourceClient.createDataset(
+                    Dataset.builder().name(datasetName).build(), apiKey, workspaceName);
+
+            var project = podamFactory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            // createPartialOptimization leaves both project fields unset, which is what resolves to no project.
+            var requestedOptimization = optimizationResourceClient.createPartialOptimization()
+                    .datasetId(datasetId)
+                    .datasetName(datasetName)
+                    .build();
+            var optimizationId = optimizationResourceClient.create(requestedOptimization, apiKey, workspaceName);
+
+            var generatedTrace = podamFactory.manufacturePojo(Trace.class);
+            var taggedTrace = generatedTrace.toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .tags(SetUtils.union(generatedTrace.tags(), Set.of(optimizationId.toString())))
+                    .guardrailsValidations(null)
+                    .threadId(null)
+                    .feedbackScores(null)
+                    .usage(null)
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(taggedTrace), apiKey, workspaceName);
+
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .traceId(taggedTrace.id())
+                    .parentSpanId(null)
+                    .feedbackScores(null)
+                    .build();
+            spanResourceClient.batchCreateSpans(List.of(span), apiKey, workspaceName);
+
+            var expectedOptimization = requestedOptimization.toBuilder()
+                    .id(optimizationId)
+                    .numTrials(0L)
+                    .build();
+
+            await().atMost(30, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var actualOptimization = optimizationResourceClient.get(
+                                optimizationId, apiKey, workspaceName, 200);
+
+                        assertThat(actualOptimization)
+                                .usingRecursiveComparison()
+                                .ignoringFields(OPTIMIZATION_IGNORED_FIELDS)
+                                .isEqualTo(expectedOptimization);
+                        assertThat(actualOptimization.totalOptimizationCost())
+                                .isEqualByComparingTo(BigDecimal.ZERO);
+                    });
+        }
+
+        /**
+         * The week floor the tagged scan carries is emitted only where {@code traces} is the weekly-partitioned
+         * successor. This suite runs on the estate the migrations produce, where it is not, and there a tagged trace
+         * whose week is below that floor must still be counted: the legacy {@code id_at} is a 32-bit
+         * {@code DateTime}, so a far-future id is filed under a wrapped past week that a floor would exclude, and
+         * those rows are legitimate. {@code OptimizationsTaggedCostWeekBoundTest} covers the bounded side.
+         * <p>
+         * The run's id is minted weeks ahead rather than the trace's weeks behind because ingestion validates a trace
+         * id against a window around now, while an optimization id is only checked for being a UUIDv7. Either way
+         * what it produces is the shape a floor would reject - a tagged trace older than the run's own week.
+         */
+        @Test
+        void getByIdWhenTracesAreUnpartitionedIncludesTaggedTraceOlderThanTheRun() {
+            var apiKey = "apiKey-%s".formatted(RandomStringUtils.secure().nextAlphanumeric(32));
+            var workspaceName = "workspace-%s".formatted(RandomStringUtils.secure().nextAlphanumeric(32));
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var datasetName = "dataset-%s".formatted(RandomStringUtils.secure().nextAlphanumeric(32));
+            var datasetId = datasetResourceClient.createDataset(
+                    Dataset.builder().name(datasetName).build(), apiKey, workspaceName);
+
+            var project = podamFactory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            var optimizationId = ID_GENERATOR.construct(Instant.now().plus(21, ChronoUnit.DAYS).toEpochMilli());
+            var requestedOptimization = optimizationResourceClient.createPartialOptimization()
+                    .id(optimizationId)
+                    .datasetId(datasetId)
+                    .datasetName(datasetName)
+                    .projectName(project.name())
+                    .build();
+            optimizationResourceClient.create(requestedOptimization, apiKey, workspaceName);
+
+            var generatedTrace = podamFactory.manufacturePojo(Trace.class);
+            var taggedTrace = generatedTrace.toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .tags(SetUtils.union(generatedTrace.tags(), Set.of(optimizationId.toString())))
+                    .guardrailsValidations(null)
+                    .threadId(null)
+                    .feedbackScores(null)
+                    .usage(null)
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(taggedTrace), apiKey, workspaceName);
+
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .traceId(taggedTrace.id())
+                    .parentSpanId(null)
+                    .feedbackScores(null)
+                    .build();
+            spanResourceClient.batchCreateSpans(List.of(span), apiKey, workspaceName);
+
+            // The run page's view of a run with no experiments: its own row as written, plus the project its name
+            // resolved to. The cost is asserted apart from it because OPTIMIZATION_IGNORED_FIELDS excludes it - it is
+            // a Decimal whose scale the round-trip changes, so it needs comparison by value.
+            var expectedOptimization = requestedOptimization.toBuilder()
+                    .projectId(projectId)
+                    .numTrials(0L)
+                    .build();
+
+            await().atMost(30, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var actualOptimization = optimizationResourceClient.get(
+                                optimizationId, apiKey, workspaceName, 200);
+
+                        assertThat(actualOptimization)
+                                .usingRecursiveComparison()
+                                .ignoringFields(OPTIMIZATION_IGNORED_FIELDS)
+                                .isEqualTo(expectedOptimization);
+                        assertThat(actualOptimization.totalOptimizationCost())
+                                .isEqualByComparingTo(span.totalEstimatedCost());
+                    });
+        }
+
+        /**
          * The tagged-cost branch must charge one span once, from its newest version, no matter how many
          * physical rows it has. A span re-ingested under a different parent is the case that used to break
-         * both halves of that: {@code /v1/private/spans/batch} goes through {@code SpanDAO.BULK_INSERT},
-         * which binds {@code parent_span_id} straight from the request with no old-row merge, so the rewrite
+         * both halves of that: {@code /v1/private/spans/batch} goes through {@code SpanDAO.batchInsert},
+         * which writes {@code parent_span_id} straight from the request with no old-row merge, so the rewrite
          * lands as a second row carrying a <em>different</em> parent. A dedup grouping that still contained
          * that column then kept both rows and summed the cost twice, and a sort tuple that still contained it
          * picked the winner by largest parent instead of newest write (OPIK-7750).
@@ -2281,6 +2539,38 @@ class OptimizationsResourceTest {
         }
 
         @Test
+        @DisplayName("Find optimizations with pagination when runs have trials")
+        void findWithPaginationWhenRunsHaveTrials() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var optimizations = new ArrayList<Optimization>();
+
+            for (int i = 0; i < 5; i++) {
+                var optimization = optimizationResourceClient.createPartialOptimization().build();
+                var id = optimizationResourceClient.create(optimization, apiKey, workspaceName);
+                for (int t = 0; t <= i; t++) {
+                    createTrialWithUnfinishedTraceItem(id, true, apiKey, workspaceName);
+                }
+                optimizations.add(optimization.toBuilder().id(id).numTrials((long) i + 1).build());
+            }
+
+            var page1 = optimizationResourceClient.find(
+                    apiKey, workspaceName, 1, 2, null, null, null, null, 200);
+            var page2 = optimizationResourceClient.find(
+                    apiKey, workspaceName, 2, 2, null, null, null, null, 200);
+            var page3 = optimizationResourceClient.find(
+                    apiKey, workspaceName, 3, 2, null, null, null, null, 200);
+
+            assertOptimizationPage(page1, 1, 2, 2, optimizations.reversed().subList(0, 2));
+            assertOptimizationPage(page2, 2, 2, 2, optimizations.reversed().subList(2, 4));
+            assertOptimizationPage(page3, 3, 1, 1, optimizations.reversed().subList(4, 5));
+        }
+
+        @Test
         @DisplayName("Find optimizations with empty result")
         void findWithEmptyResult() {
             // Mock target workspace
@@ -2433,10 +2723,96 @@ class OptimizationsResourceTest {
     class OptimizationStudioTests {
 
         private OptimizationStudioConfig createStudioConfig() {
-            // opikApiKey is @JsonIgnore and populated server-side, so we don't include it
-            return podamFactory.manufacturePojo(OptimizationStudioConfig.class).toBuilder()
-                    .opikApiKey(null)
+            return optimizationResourceClient.createStudioConfig();
+        }
+
+        Stream<Arguments> studioModelParametersOutsideTheRunnersAreRejected() {
+            var value = "value-%s".formatted(RandomStringUtils.secure().nextAlphanumeric(16));
+            return Stream.of(
+                    arguments(named("a model parameter the runner drops", """
+                            {"temperature": 0.2, "api_base": "%s"}""".formatted(value)), null,
+                            "llm_model.parameters has keys the Studio runner doesn't pass on, keys '[api_base]'"),
+                    arguments(named("an optimizer model parameter the runner drops", null), """
+                            {"base_url": "%s", "model_list": []}""".formatted(value), """
+                            optimizer.parameters.model_parameters has keys the Studio runner doesn't pass on, \
+                            keys '[base_url, model_list]'"""),
+                    arguments(named("a body key picking a destination or a credential", """
+                            {"custom_parameters": {"api_key": "%s", "OPENAI_BASE_URL": "%s", "top_k": 5}}"""
+                            .formatted(value, value)), null, """
+                                    llm_model.parameters.custom_parameters can't pick a destination or a credential, \
+                                    keys '[OPENAI_BASE_URL, api_key]'"""),
+                    arguments(named("parameters that aren't an object", """
+                            ["%s"]""".formatted(value)), null, "llm_model.parameters must be an object"));
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource
+        @DisplayName("Create Studio optimization - model parameters the runner wouldn't pass on are rejected")
+        void studioModelParametersOutsideTheRunnersAreRejected(String llmModelParameters,
+                String optimizerModelParameters, String expectedMessage) {
+            var optimization = studioOptimization(llmModelParameters, optimizerModelParameters);
+            var expectedError = new ErrorMessage(HttpStatus.SC_BAD_REQUEST,
+                    expectedMessage);
+
+            try (var response = optimizationResourceClient.callCreate(optimization, API_KEY, TEST_WORKSPACE_NAME)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                assertThat(response.readEntity(ErrorMessage.class))
+                        .isEqualTo(expectedError);
+            }
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("studioModelParametersOutsideTheRunnersAreRejected")
+        @DisplayName("Upsert Studio optimization - model parameters the runner wouldn't pass on are rejected")
+        void studioModelParametersOutsideTheRunnersAreRejectedOnUpsert(String llmModelParameters,
+                String optimizerModelParameters, String expectedMessage) {
+            var optimization = studioOptimization(llmModelParameters, optimizerModelParameters);
+            var expectedError = new ErrorMessage(HttpStatus.SC_BAD_REQUEST,
+                    expectedMessage);
+
+            try (var response = optimizationResourceClient.callUpsert(optimization, API_KEY, TEST_WORKSPACE_NAME)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                assertThat(response.readEntity(ErrorMessage.class))
+                        .isEqualTo(expectedError);
+            }
+        }
+
+        private Optimization studioOptimization(String llmModelParameters, String optimizerModelParameters) {
+            var studioConfig = createStudioConfig();
+            if (llmModelParameters != null) {
+                studioConfig = studioConfig.toBuilder().llmModel(studioConfig.llmModel().toBuilder()
+                        .parameters(JsonUtils.getJsonNodeFromString(llmModelParameters)).build()).build();
+            }
+            if (optimizerModelParameters != null) {
+                studioConfig = studioConfig.toBuilder().optimizer(studioConfig.optimizer().toBuilder()
+                        .parameters(JsonUtils.getJsonNodeFromString("{\"model_parameters\": %s}"
+                                .formatted(optimizerModelParameters)))
+                        .build()).build();
+            }
+            return optimizationResourceClient.createPartialOptimization()
+                    .studioConfig(studioConfig)
                     .build();
+        }
+
+        @Test
+        @DisplayName("Create Studio optimization - the parameters the Studio UI saves are accepted")
+        void studioModelParametersTheUiSavesAreAccepted() {
+            var studioConfig = createStudioConfig();
+            var optimizerParameters = JsonUtils.getJsonNodeFromString("""
+                    {"model": "openrouter/some-model", "model_parameters": {"temperature": 0.7, "max_tokens": 512,
+                     "seed": 3, "reasoning_effort": "low", "custom_parameters": {"top_k": 40, "min_p": 0.1,
+                     "reasoning": {"effort": "low"}, "output_config": {"effort": "high"}}}}""");
+            studioConfig = studioConfig.toBuilder()
+                    .optimizer(studioConfig.optimizer().toBuilder().parameters(optimizerParameters).build())
+                    .build();
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .studioConfig(studioConfig)
+                    .build();
+
+            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
+            var actualOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+
+            assertThat(actualOptimization.studioConfig()).isEqualTo(studioConfig);
         }
 
         @Test

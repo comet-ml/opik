@@ -49,6 +49,9 @@ from .alert_write import AlertWrite
 from .alert_write_alert_type import AlertWriteAlertType
 from .analytics_query_response import AnalyticsQueryResponse
 from .annotation_queue import AnnotationQueue
+from .annotation_queue_annotator_view import AnnotationQueueAnnotatorView
+from .annotation_queue_annotator_view_public import AnnotationQueueAnnotatorViewPublic
+from .annotation_queue_annotator_view_write import AnnotationQueueAnnotatorViewWrite
 from .annotation_queue_automation import AnnotationQueueAutomation
 from .annotation_queue_automation_public import AnnotationQueueAutomationPublic
 from .annotation_queue_automation_write import AnnotationQueueAutomationWrite
@@ -60,6 +63,8 @@ from .annotation_queue_items_public import AnnotationQueueItemsPublic
 from .annotation_queue_page_public import AnnotationQueuePagePublic
 from .annotation_queue_public import AnnotationQueuePublic
 from .annotation_queue_public_scope import AnnotationQueuePublicScope
+from .annotation_queue_reference import AnnotationQueueReference
+from .annotation_queue_reference_public import AnnotationQueueReferencePublic
 from .annotation_queue_reviewer import AnnotationQueueReviewer
 from .annotation_queue_reviewer_public import AnnotationQueueReviewerPublic
 from .annotation_queue_scope import AnnotationQueueScope
@@ -263,8 +268,10 @@ from .dashboard_page_public import DashboardPagePublic
 from .dashboard_public import DashboardPublic
 from .dashboard_public_scope import DashboardPublicScope
 from .dashboard_public_type import DashboardPublicType
+from .dashboard_saved_query import DashboardSavedQuery
 from .dashboard_update_public import DashboardUpdatePublic
 from .dashboard_update_public_type import DashboardUpdatePublicType
+from .dashboard_widget_query_request import DashboardWidgetQueryRequest
 from .dashboard_write import DashboardWrite
 from .dashboard_write_type import DashboardWriteType
 from .data_point_double import DataPointDouble
@@ -308,6 +315,7 @@ from .delete_attachments_request_entity_type import DeleteAttachmentsRequestEnti
 from .delete_feedback_score import DeleteFeedbackScore
 from .delete_ids_holder import DeleteIdsHolder
 from .delta import Delta
+from .effort_param import EffortParam
 from .environment import Environment
 from .environment_page_public import EnvironmentPagePublic
 from .environment_public import EnvironmentPublic
@@ -421,6 +429,7 @@ from .feedback_update import (
     FeedbackUpdate_Categorical,
     FeedbackUpdate_Numerical,
 )
+from .flag_param import FlagParam
 from .function import Function
 from .function_call import FunctionCall
 from .generate_report_response import GenerateReportResponse
@@ -437,7 +446,6 @@ from .guardrail_write_name import GuardrailWriteName
 from .guardrail_write_result import GuardrailWriteResult
 from .guardrails_validation import GuardrailsValidation
 from .guardrails_validation_public import GuardrailsValidationPublic
-from .ids_holder import IdsHolder
 from .image_url import ImageUrl
 from .image_url_public import ImageUrlPublic
 from .image_url_write import ImageUrlWrite
@@ -498,7 +506,9 @@ from .manual_evaluation_request import ManualEvaluationRequest
 from .manual_evaluation_request_entity_type import ManualEvaluationRequestEntityType
 from .manual_evaluation_response import ManualEvaluationResponse
 from .message import Message
+from .model_params import ModelParams
 from .multipart_upload_part import MultipartUploadPart
+from .number_param import NumberParam
 from .numerical_feedback_definition import NumericalFeedbackDefinition
 from .numerical_feedback_definition_create import NumericalFeedbackDefinitionCreate
 from .numerical_feedback_definition_public import NumericalFeedbackDefinitionPublic
@@ -555,6 +565,7 @@ from .project_stats_summary import ProjectStatsSummary
 from .project_stats_summary_item import ProjectStatsSummaryItem
 from .project_visibility import ProjectVisibility
 from .prompt import Prompt
+from .prompt_cache_options import PromptCacheOptions
 from .prompt_detail import PromptDetail
 from .prompt_detail_template_structure import PromptDetailTemplateStructure
 from .prompt_page_public import PromptPagePublic
@@ -601,6 +612,7 @@ from .report_failure_type import ReportFailureType
 from .report_preference import ReportPreference
 from .reported_issue import ReportedIssue
 from .reported_issue_severity import ReportedIssueSeverity
+from .response import Response
 from .response_format import ResponseFormat
 from .response_format_type import ResponseFormatType
 from .result import Result
@@ -675,6 +687,8 @@ from .tool import Tool
 from .tool_call import ToolCall
 from .tool_call_type import ToolCallType
 from .tool_type import ToolType
+from .tools_param import ToolsParam
+from .tools_param_chat_completions import ToolsParamChatCompletions
 from .trace import Trace
 from .trace_batch import TraceBatch
 from .trace_count_response import TraceCountResponse
@@ -716,6 +730,7 @@ from .trace_write import TraceWrite
 from .trace_write_source import TraceWriteSource
 from .usage import Usage
 from .usage_by_workspace_project_user_response import UsageByWorkspaceProjectUserResponse
+from .usage_projects_response import UsageProjectsResponse
 from .user_defined_metric_python_code import UserDefinedMetricPythonCode
 from .user_defined_metric_python_code_public import UserDefinedMetricPythonCodePublic
 from .user_defined_metric_python_code_write import UserDefinedMetricPythonCodeWrite
@@ -745,6 +760,7 @@ from .workspace_metric_response import WorkspaceMetricResponse
 from .workspace_metrics_summary_request import WorkspaceMetricsSummaryRequest
 from .workspace_metrics_summary_response import WorkspaceMetricsSummaryResponse
 from .workspace_name_holder import WorkspaceNameHolder
+from .workspace_project_name import WorkspaceProjectName
 from .workspace_project_user_count import WorkspaceProjectUserCount
 from .workspace_spans_count import WorkspaceSpansCount
 from .workspace_trace_count import WorkspaceTraceCount
@@ -798,6 +814,9 @@ __all__ = [
     "AlertWriteAlertType",
     "AnalyticsQueryResponse",
     "AnnotationQueue",
+    "AnnotationQueueAnnotatorView",
+    "AnnotationQueueAnnotatorViewPublic",
+    "AnnotationQueueAnnotatorViewWrite",
     "AnnotationQueueAutomation",
     "AnnotationQueueAutomationPublic",
     "AnnotationQueueAutomationWrite",
@@ -809,6 +828,8 @@ __all__ = [
     "AnnotationQueuePagePublic",
     "AnnotationQueuePublic",
     "AnnotationQueuePublicScope",
+    "AnnotationQueueReference",
+    "AnnotationQueueReferencePublic",
     "AnnotationQueueReviewer",
     "AnnotationQueueReviewerPublic",
     "AnnotationQueueScope",
@@ -974,8 +995,10 @@ __all__ = [
     "DashboardPublic",
     "DashboardPublicScope",
     "DashboardPublicType",
+    "DashboardSavedQuery",
     "DashboardUpdatePublic",
     "DashboardUpdatePublicType",
+    "DashboardWidgetQueryRequest",
     "DashboardWrite",
     "DashboardWriteType",
     "DataPointDouble",
@@ -1019,6 +1042,7 @@ __all__ = [
     "DeleteFeedbackScore",
     "DeleteIdsHolder",
     "Delta",
+    "EffortParam",
     "Environment",
     "EnvironmentPagePublic",
     "EnvironmentPublic",
@@ -1125,6 +1149,7 @@ __all__ = [
     "Feedback_Boolean",
     "Feedback_Categorical",
     "Feedback_Numerical",
+    "FlagParam",
     "Function",
     "FunctionCall",
     "GenerateReportResponse",
@@ -1141,7 +1166,6 @@ __all__ = [
     "GuardrailWriteResult",
     "GuardrailsValidation",
     "GuardrailsValidationPublic",
-    "IdsHolder",
     "ImageUrl",
     "ImageUrlPublic",
     "ImageUrlWrite",
@@ -1202,7 +1226,9 @@ __all__ = [
     "ManualEvaluationRequestEntityType",
     "ManualEvaluationResponse",
     "Message",
+    "ModelParams",
     "MultipartUploadPart",
+    "NumberParam",
     "NumericalFeedbackDefinition",
     "NumericalFeedbackDefinitionCreate",
     "NumericalFeedbackDefinitionPublic",
@@ -1257,6 +1283,7 @@ __all__ = [
     "ProjectStatsSummaryItem",
     "ProjectVisibility",
     "Prompt",
+    "PromptCacheOptions",
     "PromptDetail",
     "PromptDetailTemplateStructure",
     "PromptPagePublic",
@@ -1303,6 +1330,7 @@ __all__ = [
     "ReportPreference",
     "ReportedIssue",
     "ReportedIssueSeverity",
+    "Response",
     "ResponseFormat",
     "ResponseFormatType",
     "Result",
@@ -1377,6 +1405,8 @@ __all__ = [
     "ToolCall",
     "ToolCallType",
     "ToolType",
+    "ToolsParam",
+    "ToolsParamChatCompletions",
     "Trace",
     "TraceBatch",
     "TraceCountResponse",
@@ -1418,6 +1448,7 @@ __all__ = [
     "TraceWriteSource",
     "Usage",
     "UsageByWorkspaceProjectUserResponse",
+    "UsageProjectsResponse",
     "UserDefinedMetricPythonCode",
     "UserDefinedMetricPythonCodePublic",
     "UserDefinedMetricPythonCodeWrite",
@@ -1447,6 +1478,7 @@ __all__ = [
     "WorkspaceMetricsSummaryRequest",
     "WorkspaceMetricsSummaryResponse",
     "WorkspaceNameHolder",
+    "WorkspaceProjectName",
     "WorkspaceProjectUserCount",
     "WorkspaceSpansCount",
     "WorkspaceTraceCount",

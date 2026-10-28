@@ -2563,6 +2563,194 @@ export class DatasetsClient {
     }
 
     /**
+     * Get a specific version by its version hash
+     *
+     * @param {string} id
+     * @param {string} versionHash
+     * @param {OpikApi.GetDatasetVersionByHashRequest} request
+     * @param {DatasetsClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link OpikApi.NotFoundError}
+     *
+     * @example
+     *     await client.datasets.getDatasetVersionByHash("id", "versionHash")
+     */
+    public getDatasetVersionByHash(
+        id: string,
+        versionHash: string,
+        request: OpikApi.GetDatasetVersionByHashRequest = {},
+        requestOptions?: DatasetsClient.RequestOptions,
+    ): core.HttpResponsePromise<OpikApi.DatasetVersionPublic> {
+        return core.HttpResponsePromise.fromPromise(
+            this.__getDatasetVersionByHash(id, versionHash, request, requestOptions),
+        );
+    }
+
+    private async __getDatasetVersionByHash(
+        id: string,
+        versionHash: string,
+        _request: OpikApi.GetDatasetVersionByHashRequest = {},
+        requestOptions?: DatasetsClient.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.DatasetVersionPublic>> {
+        const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
+            this._options?.headers,
+            mergeOnlyDefinedHeaders({
+                "Comet-Workspace": requestOptions?.workspaceName ?? this._options?.workspaceName,
+            }),
+            requestOptions?.headers,
+        );
+        const _response = await core.fetcher({
+            url: core.url.join(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                `v1/private/datasets/${core.url.encodePathParam(id)}/versions/hash/${core.url.encodePathParam(versionHash)}`,
+            ),
+            method: "GET",
+            headers: _headers,
+            queryParameters: requestOptions?.queryParams,
+            timeoutMs: (requestOptions?.timeoutInSeconds ?? this._options?.timeoutInSeconds ?? 60) * 1000,
+            maxRetries: requestOptions?.maxRetries ?? this._options?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+            fetchFn: this._options?.fetch,
+            logging: this._options.logging,
+        });
+        if (_response.ok) {
+            return {
+                data: serializers.DatasetVersionPublic.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    skipValidation: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
+        }
+
+        if (_response.error.reason === "status-code") {
+            switch (_response.error.statusCode) {
+                case 404:
+                    throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                        rawResponse: _response.rawResponse,
+                    });
+            }
+        }
+
+        return handleNonStatusCodeError(
+            _response.error,
+            _response.rawResponse,
+            "GET",
+            "/v1/private/datasets/{id}/versions/hash/{versionHash}",
+        );
+    }
+
+    /**
+     * Update a dataset version's change_description and/or add new tags
+     *
+     * @param {string} id
+     * @param {string} versionHash
+     * @param {OpikApi.DatasetVersionUpdatePublic} request
+     * @param {DatasetsClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link OpikApi.BadRequestError}
+     * @throws {@link OpikApi.NotFoundError}
+     * @throws {@link OpikApi.ConflictError}
+     *
+     * @example
+     *     await client.datasets.updateDatasetVersion("id", "versionHash")
+     */
+    public updateDatasetVersion(
+        id: string,
+        versionHash: string,
+        request: OpikApi.DatasetVersionUpdatePublic = {},
+        requestOptions?: DatasetsClient.RequestOptions,
+    ): core.HttpResponsePromise<OpikApi.DatasetVersionPublic> {
+        return core.HttpResponsePromise.fromPromise(
+            this.__updateDatasetVersion(id, versionHash, request, requestOptions),
+        );
+    }
+
+    private async __updateDatasetVersion(
+        id: string,
+        versionHash: string,
+        request: OpikApi.DatasetVersionUpdatePublic = {},
+        requestOptions?: DatasetsClient.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.DatasetVersionPublic>> {
+        const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
+            this._options?.headers,
+            mergeOnlyDefinedHeaders({
+                "Comet-Workspace": requestOptions?.workspaceName ?? this._options?.workspaceName,
+            }),
+            requestOptions?.headers,
+        );
+        const _response = await core.fetcher({
+            url: core.url.join(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                `v1/private/datasets/${core.url.encodePathParam(id)}/versions/hash/${core.url.encodePathParam(versionHash)}`,
+            ),
+            method: "PATCH",
+            headers: _headers,
+            contentType: "application/json",
+            queryParameters: requestOptions?.queryParams,
+            requestType: "json",
+            body: serializers.DatasetVersionUpdatePublic.jsonOrThrow(request, {
+                unrecognizedObjectKeys: "strip",
+                omitUndefined: true,
+            }),
+            timeoutMs: (requestOptions?.timeoutInSeconds ?? this._options?.timeoutInSeconds ?? 60) * 1000,
+            maxRetries: requestOptions?.maxRetries ?? this._options?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+            fetchFn: this._options?.fetch,
+            logging: this._options.logging,
+        });
+        if (_response.ok) {
+            return {
+                data: serializers.DatasetVersionPublic.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    skipValidation: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
+        }
+
+        if (_response.error.reason === "status-code") {
+            switch (_response.error.statusCode) {
+                case 400:
+                    throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
+                case 404:
+                    throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
+                case 409:
+                    throw new OpikApi.ConflictError(_response.error.body, _response.rawResponse);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                        rawResponse: _response.rawResponse,
+                    });
+            }
+        }
+
+        return handleNonStatusCodeError(
+            _response.error,
+            _response.rawResponse,
+            "PATCH",
+            "/v1/private/datasets/{id}/versions/hash/{versionHash}",
+        );
+    }
+
+    /**
      * Get paginated list of versions for a dataset, ordered by creation time (newest first)
      *
      * @param {string} id
@@ -2835,106 +3023,6 @@ export class DatasetsClient {
             _response.rawResponse,
             "POST",
             "/v1/private/datasets/{id}/versions/retrieve",
-        );
-    }
-
-    /**
-     * Update a dataset version's change_description and/or add new tags
-     *
-     * @param {string} id
-     * @param {string} versionHash
-     * @param {OpikApi.DatasetVersionUpdatePublic} request
-     * @param {DatasetsClient.RequestOptions} requestOptions - Request-specific configuration.
-     *
-     * @throws {@link OpikApi.BadRequestError}
-     * @throws {@link OpikApi.NotFoundError}
-     * @throws {@link OpikApi.ConflictError}
-     *
-     * @example
-     *     await client.datasets.updateDatasetVersion("id", "versionHash")
-     */
-    public updateDatasetVersion(
-        id: string,
-        versionHash: string,
-        request: OpikApi.DatasetVersionUpdatePublic = {},
-        requestOptions?: DatasetsClient.RequestOptions,
-    ): core.HttpResponsePromise<OpikApi.DatasetVersionPublic> {
-        return core.HttpResponsePromise.fromPromise(
-            this.__updateDatasetVersion(id, versionHash, request, requestOptions),
-        );
-    }
-
-    private async __updateDatasetVersion(
-        id: string,
-        versionHash: string,
-        request: OpikApi.DatasetVersionUpdatePublic = {},
-        requestOptions?: DatasetsClient.RequestOptions,
-    ): Promise<core.WithRawResponse<OpikApi.DatasetVersionPublic>> {
-        const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
-            this._options?.headers,
-            mergeOnlyDefinedHeaders({
-                "Comet-Workspace": requestOptions?.workspaceName ?? this._options?.workspaceName,
-            }),
-            requestOptions?.headers,
-        );
-        const _response = await core.fetcher({
-            url: core.url.join(
-                (await core.Supplier.get(this._options.baseUrl)) ??
-                    (await core.Supplier.get(this._options.environment)) ??
-                    environments.OpikApiEnvironment.Default,
-                `v1/private/datasets/${core.url.encodePathParam(id)}/versions/hash/${core.url.encodePathParam(versionHash)}`,
-            ),
-            method: "PATCH",
-            headers: _headers,
-            contentType: "application/json",
-            queryParameters: requestOptions?.queryParams,
-            requestType: "json",
-            body: serializers.DatasetVersionUpdatePublic.jsonOrThrow(request, {
-                unrecognizedObjectKeys: "strip",
-                omitUndefined: true,
-            }),
-            timeoutMs: (requestOptions?.timeoutInSeconds ?? this._options?.timeoutInSeconds ?? 60) * 1000,
-            maxRetries: requestOptions?.maxRetries ?? this._options?.maxRetries,
-            withCredentials: true,
-            abortSignal: requestOptions?.abortSignal,
-            fetchFn: this._options?.fetch,
-            logging: this._options.logging,
-        });
-        if (_response.ok) {
-            return {
-                data: serializers.DatasetVersionPublic.parseOrThrow(_response.body, {
-                    unrecognizedObjectKeys: "passthrough",
-                    allowUnrecognizedUnionMembers: true,
-                    allowUnrecognizedEnumValues: true,
-                    skipValidation: true,
-                    breadcrumbsPrefix: ["response"],
-                }),
-                rawResponse: _response.rawResponse,
-            };
-        }
-
-        if (_response.error.reason === "status-code") {
-            switch (_response.error.statusCode) {
-                case 400:
-                    throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
-                case 404:
-                    throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
-                case 409:
-                    throw new OpikApi.ConflictError(_response.error.body, _response.rawResponse);
-                default:
-                    throw new errors.OpikApiError({
-                        statusCode: _response.error.statusCode,
-                        body: _response.error.body,
-                        rawResponse: _response.rawResponse,
-                    });
-            }
-        }
-
-        return handleNonStatusCodeError(
-            _response.error,
-            _response.rawResponse,
-            "PATCH",
-            "/v1/private/datasets/{id}/versions/hash/{versionHash}",
         );
     }
 }

@@ -178,8 +178,10 @@ def verify_hosted_endpoint(
     return VerificationResult(
         succeeded=True,
         detail=(
-            f"hosted server reachable at {mcp_url}; your AI client will prompt you "
-            "to sign in through the browser on first connect"
+            # Reachability only. Whether a sign-in is still owed depends on the
+            # client — some are signed in during the install — and the closing
+            # block says so once, rather than this promising it per run.
+            f"hosted server reachable at {mcp_url}"
         ),
     )
 

@@ -42,6 +42,8 @@ interface MultiSelectFeedbackDefinitionsProps
   onChange: (value: string[]) => void;
   multiselect: true;
   showSelectAll?: boolean;
+  /** Renders the closed field's content — used to show the selection as removable chips. */
+  renderTitle?: (options: DropdownOption<string>[]) => React.ReactElement;
 }
 
 type FeedbackDefinitionsSelectBoxProps =
@@ -119,6 +121,7 @@ const FeedbackDefinitionsSelectBox: React.FC<
         onChange: props.onChange,
         multiselect: true as const,
         showSelectAll: props.showSelectAll,
+        renderTitle: props.renderTitle,
       }
     : {
         options,

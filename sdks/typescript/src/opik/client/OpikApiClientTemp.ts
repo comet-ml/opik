@@ -1,6 +1,7 @@
 import { OpikApiClient } from "@/rest_api";
 import { RequestOptions } from "@/types/request";
 import { Supplier } from "@/rest_api/core";
+import { CLIENT_ID_HEADER, clientIdentifier } from "@/utils/clientId";
 
 export interface OpikApiClientTempOptions extends OpikApiClient.Options {
   requestOptions?: RequestOptions;
@@ -12,6 +13,7 @@ export class OpikApiClientTemp extends OpikApiClient {
   constructor(options?: OpikApiClientTempOptions) {
     // Merge headers from options and requestOptions
     const mergedHeaders: Record<string, string | Supplier<string | null | undefined> | null | undefined> = {
+      [CLIENT_ID_HEADER]: clientIdentifier(),
       ...options?.headers,
       ...options?.requestOptions?.headers,
     };

@@ -52,12 +52,16 @@ class DatasetItemVersionQueryShapeTest {
         countSql = (String) countField.get(null);
 
         allQueries = new LinkedHashMap<>();
+        allConstants = new LinkedHashMap<>();
         for (Field f : dao.getDeclaredFields()) {
             if (f.getType() == String.class) {
                 f.setAccessible(true);
                 Object value = f.get(null);
-                if (value instanceof String text && text.contains("dataset_item_versions")) {
-                    allQueries.put(f.getName(), text);
+                if (value instanceof String text) {
+                    allConstants.put(f.getName(), text);
+                    if (text.contains("dataset_item_versions")) {
+                        allQueries.put(f.getName(), text);
+                    }
                 }
             }
         }
@@ -199,8 +203,11 @@ class DatasetItemVersionQueryShapeTest {
             "div_dedup\\.(created_at|last_updated_at|created_by|last_updated_by)\\s+[Aa][Ss]\\s+"
                     + "(item_)?(created_at|last_updated_at|created_by|last_updated_by)\\b");
 
-    /** Every SQL constant on the DAO, by field name. */
+    /** Every SQL constant on the DAO that reads {@code dataset_item_versions}, by field name. */
     private static Map<String, String> allQueries;
+
+    /** Every String constant on the DAO, by field name. */
+    private static Map<String, String> allConstants;
 
     @Test
     @DisplayName("no query aliases a snapshot-row column to an item-level or filter-visible name")
@@ -247,6 +254,20 @@ class DatasetItemVersionQueryShapeTest {
                 .contains("item_last_updated_at AS last_updated_at")
                 .contains("item_created_by AS created_by")
                 .contains("item_last_updated_by AS last_updated_by");
+    }
+
+    @Test
+    @DisplayName("every query that joins the legacy aliases also defines them")
+    void legacyAliasesCte__isDefinedWhereverItIsJoined() {
+        var offenders = allConstants.entrySet().stream()
+                .filter(entry -> entry.getValue().contains("legacy_dataset_item_aliases AS lookup_div"))
+                .filter(entry -> !entry.getValue().contains("legacy_dataset_item_aliases AS ("))
+                .map(Map.Entry::getKey)
+                .toList();
+
+        assertThat(offenders)
+                .as("each of these joins the aliases CTE without defining it, so the query cannot resolve it")
+                .isEmpty();
     }
 
     private static String orderByOf(String phase) {

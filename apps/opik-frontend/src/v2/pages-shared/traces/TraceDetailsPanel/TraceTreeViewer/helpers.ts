@@ -195,7 +195,11 @@ const getFieldValue = (
   if (key && !isUndefined(fieldValue)) {
     try {
       // Ensure the path starts with $ for JSONPath
-      const jsonPath = key.startsWith("$") ? key : `$.${key}`;
+      const jsonPath = key.startsWith("$")
+        ? key
+        : key.startsWith("[")
+          ? `$${key}`
+          : `$.${key}`;
       const result = JSONPath({ path: jsonPath, json: fieldValue });
 
       if (result.length === 0) return undefined;

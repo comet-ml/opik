@@ -1,6 +1,7 @@
 package com.comet.opik.utils;
 
 import com.comet.opik.domain.llm.langchain4j.OpikUserMessage;
+import com.comet.opik.infrastructure.net.LoggableUrl;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.DeserializationContext;
 import com.fasterxml.jackson.databind.JsonDeserializer;
@@ -99,7 +100,9 @@ public class OpenAiMessageJsonDeserializer extends JsonDeserializer<Message> {
             var detail = ImageDetail.valueOf(detailText.toUpperCase());
             builder.addImageUrl(url, detail);
         } catch (IllegalArgumentException exception) {
-            log.warn("Error adding image with url '{}', detail: '{}'", url, detailText, exception);
+            // the type only: the exception's message can repeat the URL
+            log.warn("Error adding image with url '{}', detail: '{}', error type '{}'", LoggableUrl.of(url),
+                    detailText, exception.getClass().getSimpleName());
             builder.addImageUrl(url);
         }
     }

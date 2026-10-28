@@ -1,13 +1,22 @@
 import ast
+import ctypes
+import errno
+import gc
+import json
+import os
+import platform
 import signal
 import sys
+import tempfile
 import traceback
 import inspect
 import uuid
 import logging
+from multiprocessing.connection import Connection
 from types import ModuleType
-from typing import Type, Union, List, Optional
+from typing import Any, Type, Union, List, Optional, Tuple
 
+from flask.json.provider import DefaultJSONProvider
 from opik.evaluation.metrics import BaseMetric
 from opik.evaluation.metrics.score_result import ScoreResult
 from .payload_types import PayloadType
@@ -22,6 +31,45 @@ handler.setFormatter(formatter)
 if not logger.hasHandlers():
     logger.addHandler(handler)
 logger.setLevel(logging.INFO)
+
+# Key of the request id in a command, echoed by its reply.
+REQUEST_ID_KEY = "request_id"
+# Key of the result in a reply to a command.
+RESULT_KEY = "result"
+# Key of the READY reply from a worker that could not be isolated, holding the reason.
+ISOLATION_ERROR_KEY = "isolation_error"
+# The account an isolated worker runs as: it owns no files and has no capabilities.
+UNPRIVILEGED_ID = 65534
+_PR_SET_PDEATHSIG = 1
+_PR_SET_DUMPABLE = 4
+_PR_SET_SECCOMP = 22
+_PR_SET_NO_NEW_PRIVS = 38
+_SECCOMP_MODE_FILTER = 2
+_SECCOMP_RET_KILL_PROCESS = 0x80000000
+_SECCOMP_RET_ERRNO_EPERM = 0x00050000 | errno.EPERM
+_SECCOMP_RET_ALLOW = 0x7FFF0000
+_BPF_LD_W_ABS = 0x20
+_BPF_JEQ_K = 0x15
+_BPF_JGE_K = 0x35
+_BPF_RET_K = 0x06
+_X32_SYSCALL_BIT = 0x40000000
+# Per machine: audit arch and the syscalls refused with EPERM, i.e. socket, socketpair,
+# io_uring_setup (it can open sockets too), ptrace, process_vm_readv, process_vm_writev.
+_SECCOMP_ARCHES = {
+    "x86_64": (0xC000003E, (41, 53, 425, 101, 310, 311)),
+    "aarch64": (0xC00000B7, (198, 199, 425, 117, 270, 271)),
+}
+# Everything else in the inherited environment may carry credentials user code has no use for.
+ISOLATED_ENV_KEYS = (
+    "PATH",
+    "LANG",
+    "LC_ALL",
+    "LC_CTYPE",
+    "TZ",
+    "LITELLM_MODE",
+    "PYTHONNODEBUGRANGES",
+    "PYTHONDONTWRITEBYTECODE",
+)
 
 
 def get_metric_class(module: ModuleType) -> Optional[Type[BaseMetric]]:
@@ -267,6 +315,28 @@ def to_scores(score_result: Union[ScoreResult, List[ScoreResult]]) -> List[Score
     return scores
 
 
+def user_facing_stacktrace(skip_frames: int = 1) -> str:
+    """Format the current exception with this module's own frames dropped.
+
+    Walks frames rather than slicing a fixed number of leading lines, so the
+    exception line survives however short the traceback is. A failure raised while
+    binding the call arguments has no user frame at all, so a fixed slice could
+    remove the message itself and report a cause of "".
+    """
+    exc_type, exc, tb = sys.exc_info()
+    for _ in range(skip_frames):
+        if tb is None:
+            break
+        tb = tb.tb_next
+    # The exception leads because the caller truncates this message to its first 500
+    # characters, so frames are what gets lost on a deep traceback, not the cause.
+    # format_exception_only rather than slicing the formatted list: for a SyntaxError
+    # the first entry is the offending location, not a header.
+    cause = "".join(traceback.format_exception_only(exc_type, exc)).rstrip()
+    frames = "".join(traceback.format_tb(tb)).rstrip()
+    return f"{cause}\n{frames}" if frames else cause
+
+
 def run_user_code(code: str, data: dict, payload_type: Optional[str] = None) -> dict:
     """
     Run the scoring logic with the provided code and data.
@@ -277,7 +347,7 @@ def run_user_code(code: str, data: dict, payload_type: Optional[str] = None) -> 
     try:
         exec(code, module.__dict__)
     except Exception as e:
-        stacktrace = "\n".join(traceback.format_exc().splitlines()[3:])
+        stacktrace = user_facing_stacktrace()
         return {
             "code": 400,
             "error": f"Field 'code' contains invalid Python code: {stacktrace}",
@@ -301,7 +371,7 @@ def run_user_code(code: str, data: dict, payload_type: Optional[str] = None) -> 
             # Regular scoring - unpack data as keyword arguments
             score_result = metric.score(**data)
     except Exception as e:
-        stacktrace = "\n".join(traceback.format_exc().splitlines()[3:])
+        stacktrace = user_facing_stacktrace()
         return {
             "code": 400,
             "error": f"The provided 'code' and 'data' fields can't be evaluated: {stacktrace}",
@@ -385,32 +455,243 @@ def validate_user_code(code: str) -> dict:
     }
 
 
-def worker_process_main(connection):
+def required_score_params(code: str) -> List[str]:
+    """``score()`` parameters with no default that can be passed by keyword.
+
+    Static because this runs before any user code does, and outside the sandbox:
+    the metric object is never constructed here. Returns nothing whenever the class
+    this reads cannot be shown to be the one :func:`get_metric_class` will
+    instantiate -- filling from a different class injects a keyword the real metric
+    rejects, which is worse than not filling at all. The sandbox runner's selection
+    lacks the ``__module__`` filter, so there an imported metric can still be the one
+    instantiated; the opik SDK's metrics take ``**ignored_kwargs``, which absorbs it.
+
+    That covers three ways of being unsure. No class resolves statically, so there
+    is nothing to read; one resolves but another class sorts ahead of it and could
+    be a metric through a base this cannot see, in which case runtime picks that
+    one; or the resolved class inherits ``score()`` rather than declaring it, which
+    would mean reproducing the MRO from source.
+
+    The receiver is dropped by position rather than by the name ``self``, which is
+    only a convention: filling it would make the call pass two values for the same
+    parameter. Positional-only parameters are excluded because ``score(**data)``
+    cannot supply them at all.
+    """
+    try:
+        tree = ast.parse(code)
+    except Exception:
+        # Anything unparseable yields no names, so the call dispatches exactly as it
+        # would have. Deliberately broad: this runs in the request thread, ahead of
+        # the executor, and `code` is untyped JSON.
+        return []
+    metric_class = _find_basemetric_classdef(tree)
+    if metric_class is None:
+        return []
+    # Any earlier-sorting class with a base may be a metric through it, and would be
+    # the one runtime instantiates. One with no bases at all cannot be a metric.
+    for node in _top_level_classdefs(tree):
+        if node.name < metric_class.name and node.bases:
+            return []
+    score = _score_funcdef(metric_class)
+    if score is None:
+        return []
+    # posonlyargs precede args; the receiver is the first of the two combined.
+    positional = score.args.posonlyargs + score.args.args
+    fillable = positional[max(len(score.args.posonlyargs), 1):]
+    # Defaults align to the tail and may cover the receiver too, so this can go
+    # negative -- which as a slice bound would keep the wrong prefix.
+    required = fillable[: max(0, len(fillable) - len(score.args.defaults))]
+    names = [a.arg for a in required]
+    names += [
+        a.arg
+        for a, default in zip(score.args.kwonlyargs, score.args.kw_defaults)
+        if default is None
+    ]
+    return names
+
+
+class _SockFilter(ctypes.Structure):
+    _fields_ = [("code", ctypes.c_ushort), ("jt", ctypes.c_ubyte), ("jf", ctypes.c_ubyte), ("k", ctypes.c_uint)]
+
+
+class _SockFprog(ctypes.Structure):
+    _fields_ = [("len", ctypes.c_ushort), ("filter", ctypes.POINTER(_SockFilter))]
+
+
+def _prctl(option: int, arg2: int, arg3: int = 0) -> None:
+    prctl = ctypes.CDLL(None, use_errno=True).prctl
+    # The kernel reads unsigned longs and rejects non-zero unused arguments.
+    prctl.argtypes = [ctypes.c_int] + [ctypes.c_ulong] * 4
+    if prctl(option, arg2, arg3, 0, 0) != 0:
+        err = ctypes.get_errno()
+        raise OSError(err, os.strerror(err))
+
+
+def seccomp_program(machine: str) -> List[Tuple[int, int, int, int]]:
+    """BPF program refusing socket creation and process inspection; other ABIs are killed."""
+    if machine not in _SECCOMP_ARCHES:
+        raise OSError(f"no seccomp filter for machine {machine!r}")
+    audit_arch, denied = _SECCOMP_ARCHES[machine]
+    checks = [(_BPF_JEQ_K, nr) for nr in denied]
+    if machine == "x86_64":
+        checks.append((_BPF_JGE_K, _X32_SYSCALL_BIT))
+    # Each check jumps over the remaining checks and ALLOW to land on the final EPERM.
+    return [
+        (_BPF_LD_W_ABS, 0, 0, 4),  # seccomp_data.arch
+        (_BPF_JEQ_K, 1, 0, audit_arch),
+        (_BPF_RET_K, 0, 0, _SECCOMP_RET_KILL_PROCESS),
+        (_BPF_LD_W_ABS, 0, 0, 0),  # seccomp_data.nr
+        *((op, len(checks) - i, 0, k) for i, (op, k) in enumerate(checks)),
+        (_BPF_RET_K, 0, 0, _SECCOMP_RET_ALLOW),
+        (_BPF_RET_K, 0, 0, _SECCOMP_RET_ERRNO_EPERM),
+    ]
+
+
+def _install_seccomp_filter() -> None:
+    program = seccomp_program(platform.machine())
+    filters = (_SockFilter * len(program))(*program)
+    fprog = _SockFprog(len(program), filters)
+    _prctl(_PR_SET_SECCOMP, _SECCOMP_MODE_FILTER, ctypes.addressof(fprog))
+
+
+def _check_platform() -> None:
+    if sys.platform != "linux":
+        raise OSError(f"needs Linux, not {sys.platform}")
+
+
+def _replace_inherited_descriptors(keep_fd: int) -> None:
+    """Point every descriptor inherited from the parent at /dev/null, except the pipe and stderr.
+
+    The seccomp filter only stops new sockets, and open files, pipes and sockets of the parent
+    would otherwise stay readable. stderr stays because worker logs go there; stdin and stdout
+    are replaced too, since a Studio job's stdout carries its result. dup2 rather than close
+    keeps the numbers taken, so objects that still hold them can't later close a descriptor
+    user code opened.
+    """
+    devnull = os.open(os.devnull, os.O_RDWR)
+    try:
+        # The listing includes its own directory descriptor, closed by then; dup2 just reopens it on /dev/null.
+        for fd in map(int, os.listdir("/proc/self/fd")):
+            if fd not in (2, keep_fd, devnull):
+                os.dup2(devnull, fd)
+    finally:
+        os.close(devnull)
+
+
+def _drop_privileges() -> None:
+    os.setgroups([])
+    os.setgid(UNPRIVILEGED_ID)
+    os.setuid(UNPRIVILEGED_ID)
+
+
+def _strip_environment() -> None:
+    # Imported here: posix exists only on POSIX systems, and this runs after the platform check.
+    import posix
+
+    kept = {key: os.environ[key] for key in ISOLATED_ENV_KEYS if key in os.environ}
+    os.environ.clear()
+    # os.environ is a copy; the posix module keeps the original mapping too.
+    posix.environ.clear()
+    os.environ.update(kept, HOME=tempfile.gettempdir())
+
+
+def isolate_worker(keep_fd: int) -> None:
+    """Cut this worker off from the network, the pod's credentials and other processes.
+
+    Needs Linux and root with CAP_SETUID/CAP_SETGID, which root has by default; no other
+    capability. Non-dumpable keeps sibling workers, which share the unprivileged account,
+    from reading this one, and no_new_privs is what lets an unprivileged process install
+    the seccomp filter. Raises naming the failed step, so a worker asked to be isolated
+    never runs user code without it.
+    """
+    steps = (
+        ("check platform", _check_platform),
+        ("replace inherited descriptors", lambda: _replace_inherited_descriptors(keep_fd)),
+        ("strip environment", _strip_environment),
+        (f"switch to uid {UNPRIVILEGED_ID}", _drop_privileges),
+        ("set no_new_privs", lambda: _prctl(_PR_SET_NO_NEW_PRIVS, 1)),
+        ("set non-dumpable", lambda: _prctl(_PR_SET_DUMPABLE, 0)),
+        # The uid change clears it, so it comes after: a worker never outlives the thread that started it.
+        ("set parent-death signal", lambda: _prctl(_PR_SET_PDEATHSIG, signal.SIGKILL)),
+        ("install seccomp filter", _install_seccomp_filter),
+    )
+    for name, step in steps:
+        try:
+            step()
+        except Exception as e:
+            raise OSError(f"{name} failed: {e}") from e
+
+
+def _json_value(value: Any) -> Any:
+    """A JSON value for what json can't encode itself, as the evaluator endpoint encoded it when replies were pickled.
+
+    Flask's encoder first (dates, Decimal, UUID, dataclasses), so the endpoint's response is unchanged;
+    then array-likes and their scalars (numpy, tensors) via tolist(), which Studio read as numbers in-process.
+    Anything else still raises TypeError.
+    """
+    try:
+        return DefaultJSONProvider.default(value)
+    except TypeError:
+        tolist = getattr(value, "tolist", None)
+        if callable(tolist):
+            return tolist()
+        raise
+
+
+def send_reply(connection: Connection, reply: Any) -> None:
+    """Replies go out as JSON, so the parent reads them as data, not objects."""
+    connection.send_bytes(json.dumps(reply, default=_json_value).encode())
+
+
+def worker_process_main(connection: Connection, isolate: bool = False) -> None:
+    # Objects inherited from the parent are never collected here, so a full collection doesn't write
+    # to, and so copy, every page this worker shares with the parent.
+    gc.freeze()
     # Workers should ignore SIGINT; parent ProcessExecutor will manage shutdown.
     signal.signal(signal.SIGINT, signal.SIG_IGN)
+    # A forked worker inherits the parent's SIGTERM handler, which would run the parent's
+    # cleanup here; terminate_worker expects SIGTERM to simply end the worker.
+    signal.signal(signal.SIGTERM, signal.SIG_DFL)
+
+    if isolate:
+        try:
+            isolate_worker(connection.fileno())
+        except OSError as e:
+            # isolate_worker raises only OSError, naming the step; the parent logs the cause once for the whole pool.
+            try:
+                send_reply(connection, {"code": 500, "error": f"Worker isolation failed: {e}", ISOLATION_ERROR_KEY: str(e)})
+            except OSError as send_e:
+                logger.warning(f"Could not report the isolation failure to the parent: {type(send_e).__name__}")
+            # A forked worker must not run the parent's exit handlers.
+            os._exit(1)
 
     try:
         # Signal READY to the parent process via the pipe
-        connection.send("READY")
+        send_reply(connection, "READY")
 
         # Keep reading commands until told to exit or pipe closes
         while True:
+            # Every reply to a command carries the command's request id, so the parent never takes
+            # bytes written to the pipe by user code, in this request or an earlier one, as the reply.
+            request_id: Optional[str] = None
             try:
                 # Read a command from the pipe - this will block until we get a command
                 command_data = connection.recv()
                 if command_data is None or command_data.get("command") == "EXIT":
                     break
 
-                # Parse the command (code, data, and payload_type)
+                # Only code and data reach user code, never the command itself.
+                request_id = command_data.get(REQUEST_ID_KEY)
                 code = command_data.get("code", "")
                 input_data = command_data.get("data", {})
                 payload_type = command_data.get("payload_type")
+                del command_data
 
                 # Execute the code
                 result = run_user_code(code, input_data, payload_type)
 
                 # Return the result via the pipe
-                connection.send(result)
+                send_reply(connection, {REQUEST_ID_KEY: request_id, RESULT_KEY: result})
             except EOFError as e:
                 # This occurs when the parent closes the pipe, e.g., during shutdown.
                 # The worker will break from its loop and be terminated by SIGTERM from the parent.
@@ -426,9 +707,9 @@ def worker_process_main(connection):
                     "traceback": traceback.format_exc(),
                 }
                 try:
-                    connection.send(error_msg)
-                except Exception as send_e:
-                    logger.error(f"Failed to send error to parent: {send_e}")
+                    send_reply(connection, {REQUEST_ID_KEY: request_id, RESULT_KEY: error_msg})
+                except OSError as send_e:
+                    logger.error(f"Failed to send error to parent: {type(send_e).__name__}")
                 logger.error(f"Encountered error: {e}")
                 logger.error(traceback.format_exc())
 
@@ -441,8 +722,9 @@ def worker_process_main(connection):
             "traceback": traceback.format_exc(),
         }
         try:
-            connection.send(error_payload)
-        except Exception:
-            pass  # Pipe might not be usable
+            send_reply(connection, error_payload)
+        except OSError as send_e:
+            # The pipe might not be usable; the error itself is logged below.
+            logger.warning(f"Could not report the initialization error to the parent: {type(send_e).__name__}")
         logger.error(f"Worker initialization error: {str(e)}\n{traceback.format_exc()}")
         sys.exit(1)

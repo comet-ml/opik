@@ -193,9 +193,21 @@ export const extractAllHttpUrls = (input: string): string[] => {
 const TRUNCATED_MEDIA_REGEX =
   /\[image(?:_\d+)?]|^"?data:(image|video|audio)\//i;
 
+// A list is cut the same way, into a string that no longer parses: a real list of videos, audio or URLs
+// (only base64 images get the [image] placeholder), or a list stored as JSON text, as CSV uploads store it.
+const isCutList = (value: string): boolean => {
+  if (!/^"?\s*\[(?:\s|\\[nrt])*\\?"/.test(value)) return false;
+  try {
+    JSON.parse(value);
+    return false;
+  } catch {
+    return true;
+  }
+};
+
 export const containsTruncatedMedia = (value: unknown): boolean => {
   if (typeof value === "string") {
-    return TRUNCATED_MEDIA_REGEX.test(value);
+    return TRUNCATED_MEDIA_REGEX.test(value) || isCutList(value);
   }
 
   if (Array.isArray(value)) {

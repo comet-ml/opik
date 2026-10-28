@@ -132,7 +132,7 @@ There are two tag surfaces, depending on what you want to scope the tag to:
 - **Dataset-level tags** apply to the dataset as a whole and persist across versions. Use `update_dataset` — this **replaces** the existing tag list.
 - **Version-level tags** apply to a specific dataset version. Use `update_dataset_version` — this is **additive** (it adds to the version's existing tags).
 
-```python {pytest_codeblocks_skip=true}
+```python {pytest_codeblocks_skip=true} wordWrap
 import opik
 
 client = opik.Opik()
@@ -160,7 +160,7 @@ client.rest_client.datasets.update_dataset_version(
   `client.rest_client` is a thin wrapper around the public REST API. The underlying endpoints are stable, but the Python wrapper itself is not guaranteed to be backward-compatible across SDK versions. A first-class `Dataset.set_tags()` / `Dataset.add_version_tags()` helper is on the roadmap — this snippet is the supported interim path.
 </Note>
 
-You can then filter dataset items by these tags via [`get_items(filter_string=...)`](#querying-dataset-items) using the `tags contains` operator.
+You can then filter dataset items by these tags via [`get_items(filter_string=...)`](#filtering-datasets-programmatically) using the `tags contains` operator.
 
 ## Adding traces to a dataset
 
@@ -220,7 +220,7 @@ This rich structure allows you to:
 You can create a dataset and log items to it using the `get_or_create_dataset` method:
 
 <CodeBlocks>
-```typescript title="TypeScript SDK" language="typescript"
+```typescript title="TypeScript SDK" language="typescript" wordWrap
 import { Opik } from "opik";
 
 // Create a dataset
@@ -228,7 +228,7 @@ const client = new Opik();
 const dataset = await client.getOrCreateDataset("My dataset", "Evaluation dataset", "my-project");
 ```
 
-```python title="Python SDK" language="python"
+```python title="Python SDK" language="python" wordWrap
 from opik import Opik
 
 # Create a dataset
@@ -247,7 +247,7 @@ If a dataset with the given name already exists, the existing dataset will be re
 You can insert items to a dataset using the `insert` method:
 
 <CodeBlocks>
-```typescript title="TypeScript" language="typescript"
+```typescript title="TypeScript" language="typescript" wordWrap
 import { Opik } from "opik";
 const client = new Opik();
 const dataset = await client.getOrCreateDataset("My dataset", "Evaluation dataset", "my-project");
@@ -258,7 +258,7 @@ dataset.insert([
 ]);
 ```
 
-```python title="Python" language="python"
+```python title="Python" language="python" wordWrap
 import opik
 
 # Get or create a dataset
@@ -289,7 +289,7 @@ already know your items are unique — for example when populating a fresh datas
 yourself — pass `deduplication=False` to skip that work entirely: nothing is downloaded, no hashes are computed,
 and every item you pass is sent as-is.
 
-```python title="Python" language="python"
+```python title="Python" language="python" wordWrap
 dataset.insert(items, deduplication=False)
 ```
 
@@ -316,7 +316,7 @@ Once the items have been inserted, you can view them in the Opik UI:
 You can also insert items from a JSONL file:
 
 <CodeBlocks>
-  ```python title="Python" language="python"
+  ```python title="Python" language="python" wordWrap
   import opik
 
   client = opik.Opik()
@@ -332,7 +332,7 @@ dataset.read_jsonl_from_file("path/to/file.jsonl")
 You can also insert items from a Pandas DataFrame:
 
 <CodeBlocks>
-```python title="Python" language="python"
+```python title="Python" language="python" wordWrap
 import opik
 
 client = opik.Opik()
@@ -351,7 +351,7 @@ dataset.insert_from_pandas(dataframe=df, keys_mapping={"Expected output": "expec
 You can delete items in a dataset by using the `delete` method:
 
 <CodeBlocks>
-  ```typescript title="TypeScript" language="typescript"
+  ```typescript title="TypeScript" language="typescript" wordWrap
   import { Opik } from "opik";
 
   // Get or create a dataset
@@ -364,7 +364,7 @@ You can delete items in a dataset by using the `delete` method:
   await dataset.clear()
   ```
 
-  ```python title="Python" language="python"
+  ```python title="Python" language="python" wordWrap
   from opik import Opik
 
   # Get or create a dataset
@@ -388,7 +388,7 @@ You can delete items in a dataset by using the `delete` method:
 You can download a dataset from Opik using the `get_dataset` method:
 
 <CodeBlocks>
-  ```typescript title="TypeScript" language="typescript"
+  ```typescript title="TypeScript" language="typescript" wordWrap
   import { Opik } from "opik";
 
   const client = new Opik();
@@ -398,7 +398,7 @@ You can download a dataset from Opik using the `get_dataset` method:
   console.log(items);
   ```
 
-  ```python title="Python" language="python"
+  ```python title="Python" language="python" wordWrap
   from opik import Opik
 
   client = Opik()
@@ -420,7 +420,7 @@ You can download a dataset from Opik using the `get_dataset` method:
 Dataset items are fetched a page at a time, and those pages are downloaded concurrently. The default is
 8 threads; pass `num_threads` to read with more or fewer (see [Tuning SDK throughput](#tuning-sdk-throughput)):
 
-```python title="Python" language="python"
+```python title="Python" language="python" wordWrap
 from opik import Opik
 
 client = Opik()
@@ -438,7 +438,7 @@ items in chunks instead, yielding each chunk as soon as it arrives. Use it when 
 processing before the download finishes, or when the dataset is too large to hold in memory all at
 once:
 
-```python title="Python" language="python"
+```python title="Python" language="python" wordWrap
 from opik import Opik
 
 client = Opik()
@@ -452,7 +452,7 @@ for chunk in dataset.stream_items(chunk_size=5000):
 Chunks arrive in dataset order; only the last one may be shorter than `chunk_size`. Both methods
 accept the same `filter_string`, and `nb_samples` to read only the first N items:
 
-```python title="Python" language="python"
+```python title="Python" language="python" wordWrap
 for chunk in dataset.stream_items(
     filter_string='data.category = "geography"',
     nb_samples=10_000,
@@ -485,7 +485,7 @@ customer-scale datasets — you should not need to pass `num_threads` at all:
 
 Each of those takes a `num_threads` argument if you do want to change it:
 
-```python title="Python" language="python"
+```python title="Python" language="python" wordWrap
 items = dataset.get_items(num_threads=4)       # read more gently
 dataset.insert(items, num_threads=16)          # more concurrency, if the client has CPU headroom
 experiment.batch_upload_items(records, num_threads=1)  # upload sequentially
@@ -548,7 +548,7 @@ running evaluations with `evaluate_prompt()`. This allows you to work with speci
 ### Basic filtering
 
 <CodeBlocks>
-  ```python title="Python" language="python"
+  ```python title="Python" language="python" wordWrap
   from opik import Opik
 
   client = Opik()
@@ -580,7 +580,7 @@ The filter string uses Opik Query Language (OQL) syntax. Supported columns inclu
 ### Filter examples
 
 <CodeBlocks>
-  ```python title="Python" language="python"
+  ```python title="Python" language="python" wordWrap
   from opik import Opik
 
   client = Opik()
@@ -642,7 +642,7 @@ When running experiments from the Playground:
 When running experiments programmatically, you can specify which dataset version to use by passing a `DatasetVersion` object to `evaluate()`:
 
 <CodeBlocks>
-```python title="Python" language="python"
+```python title="Python" language="python" wordWrap
 from opik import Opik
 from opik.evaluation import evaluate
 
@@ -655,7 +655,6 @@ result = evaluate(
     dataset=dataset,
     task=my_task_function,
     scoring_metrics=[my_metric],
-    project_name="my-project",
 )
 
 # Run experiment on a specific version
@@ -665,11 +664,10 @@ result = evaluate(
     dataset=v1_view,  # Pass the DatasetVersion object
     task=my_task_function,
     scoring_metrics=[my_metric],
-    project_name="my-project",
 )
 ```
 
-```typescript title="TypeScript" language="typescript"
+```typescript title="TypeScript" language="typescript" wordWrap
 import { Opik, evaluate } from "opik";
 
 const client = new Opik();
@@ -701,7 +699,7 @@ const pinnedResult = await evaluate({
 The SDK provides methods for inspecting and working with dataset versions:
 
 <CodeBlocks>
-```python title="Python" language="python"
+```python title="Python" language="python" wordWrap
 from opik import Opik
 
 client = Opik()
@@ -736,7 +734,7 @@ v1_df = v1_view.to_pandas()
 v1_json = v1_view.to_json()
 ```
 
-```typescript title="TypeScript" language="typescript"
+```typescript title="TypeScript" language="typescript" wordWrap
 import { Opik } from "opik";
 
 const client = new Opik();

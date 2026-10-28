@@ -195,31 +195,3 @@ class TestLinking:
 
         assert linked == ["opik"]
         assert failure is None
-
-
-class TestPluginOverlapDetection:
-    def test_claude_code_with_plugin_skill__is_flagged(self, fake_home):
-        (fake_home / ".claude/plugins/marketplaces/opik/skills/opik").mkdir(
-            parents=True
-        )
-
-        assert install._claude_code_plugin_ships_its_own_skill(["claude-code"]) is True
-
-    def test_no_plugin__is_not_flagged(self, fake_home):
-        assert install._claude_code_plugin_ships_its_own_skill(["claude-code"]) is False
-
-    def test_claude_code_not_targeted__is_not_flagged(self, fake_home):
-        (fake_home / ".claude/plugins/marketplaces/opik/skills/opik").mkdir(
-            parents=True
-        )
-
-        assert install._claude_code_plugin_ships_its_own_skill(["codex"]) is False
-
-    def test_setup_skills__surfaces_the_overlap_on_the_result(
-        self, fake_home, fake_pack
-    ):
-        (fake_home / ".claude/plugins/marketplaces/opik/skills/opik").mkdir(
-            parents=True
-        )
-
-        assert install.setup_skills(["claude-code"]).plugin_overlap is True

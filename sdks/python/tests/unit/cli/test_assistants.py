@@ -18,7 +18,6 @@ from opik.configurator.mcp import install as mcp_install
 
 PROCEED = consent.Verdict(consent.Decision.PROCEED, consent.Reason.REQUESTED)
 DECLINE = consent.Verdict(consent.Decision.SKIP, consent.Reason.DECLINED)
-ASK = consent.Verdict(consent.Decision.ASK, consent.Reason.ASKING)
 
 
 def _params():
@@ -79,6 +78,8 @@ def rich_view(monkeypatch):
     view = mock.MagicMock()
     view.step.return_value.__enter__ = mock.Mock(return_value=None)
     view.step.return_value.__exit__ = mock.Mock(return_value=False)
+    # Reports what the install did, as the real view does.
+    view.skill_pack.side_effect = lambda result: result.succeeded
     monkeypatch.setattr(assistants.install_view, "RichInstallView", lambda: view)
     return view
 
@@ -86,7 +87,10 @@ def rich_view(monkeypatch):
 @pytest.fixture
 def confirm(monkeypatch):
     spy = mock.Mock(return_value=True)
-    monkeypatch.setattr(assistants.click, "confirm", spy)
+    # `click.confirm` itself rather than an attribute of `assistants`: the module
+    # no longer imports click at all, having nothing left to ask, and the thing
+    # worth asserting is that nothing anywhere put a question to the user.
+    monkeypatch.setattr("click.confirm", spy)
     return spy
 
 
@@ -162,14 +166,7 @@ class TestPackTargets:
     def test_client_not_listed__the_pack_follows_no_client(
         self, mcp_spy, skills_spy, rich_view
     ):
-        """ "None of these is mine" is not an invitation to write to all of them.
-
-        The fallback above is right for "not now" — the clients are still the
-        user's, the server step was just declined. It is wrong for the user who
-        has just said the detected list is not about them: it put the pack in
-        every one of the clients they disowned. Naming none installs the shared
-        copy and links nowhere.
-        """
+        """ "Not listed" disowns the detected clients, so the pack goes to none of them."""
         mcp_spy.return_value = mcp_install.InstallReport(
             registered=(), declined=True, manual=True
         )
@@ -178,22 +175,108 @@ class TestPackTargets:
 
         assert skills_spy.call_args.args[0] == []
 
-
-class TestAsking:
-    def test_verdict_ask__prompts(self, mcp_spy, skills_spy, rich_view, confirm):
-        assistants.setup(_params(), install_mcp=True, skills=ASK)
-
-        confirm.assert_called_once()
-        skills_spy.assert_called_once()
-
-    def test_verdict_ask__declining_installs_only_the_server(
-        self, mcp_spy, skills_spy, rich_view, confirm
+    def test_server_skipped_at_the_picker__a_default_pack_does_not_follow(
+        self, mcp_spy, skills_spy, rich_view
     ):
-        confirm.return_value = False
+        """ "Skip" refused writing into AI clients, so a default pack does not follow."""
+        mcp_spy.return_value = mcp_install.InstallReport(registered=(), declined=True)
 
-        assistants.setup(_params(), install_mcp=True, skills=ASK)
+        outcome = assistants.setup(
+            _params(),
+            install_mcp=True,
+            skills=consent.resolve_installed_by_default(None),
+        )
 
         skills_spy.assert_not_called()
+        assert outcome.skills_decision == "declined"
+
+    def test_server_failed_to_land__a_default_pack_does_not_go_elsewhere(
+        self, mcp_spy, skills_spy, rich_view
+    ):
+        """`--ai-client cursor` whose write failed must not put the pack into the
+        other clients on the machine: nobody chose them."""
+        mcp_spy.return_value = _mcp_report([], failed=["cursor"])
+
+        outcome = assistants.setup(
+            _params(),
+            install_mcp=True,
+            skills=consent.resolve_installed_by_default(None),
+            host_keys=["cursor"],
+        )
+
+        skills_spy.assert_not_called()
+        assert outcome.skills_decision == "no_server", "a failure is not a refusal"
+
+    def test_no_client_reached_at_all__a_default_pack_installs_nowhere(
+        self, mcp_spy, skills_spy, rich_view
+    ):
+        mcp_spy.return_value = mcp_install.NOTHING_INSTALLED
+
+        outcome = assistants.setup(
+            _params(),
+            install_mcp=True,
+            skills=consent.resolve_installed_by_default(None),
+        )
+
+        skills_spy.assert_not_called()
+        assert outcome.skills_decision == "no_server"
+
+    def test_server_failed_to_land__an_explicit_pack_goes_to_the_named_client(
+        self, mcp_spy, skills_spy, rich_view
+    ):
+        """`--skills` was asked for, and `--ai-client` said where."""
+        mcp_spy.return_value = _mcp_report([], failed=["cursor"])
+
+        assistants.setup(
+            _params(), install_mcp=True, skills=PROCEED, host_keys=["cursor"]
+        )
+
+        assert skills_spy.call_args.args[0] == ["cursor"]
+
+    def test_no_client_named_at_all__an_explicit_pack_does_not_go_to_every_client(
+        self, mcp_spy, skills_spy, rich_view
+    ):
+        """An empty list names no client; it is not "none given"."""
+        mcp_spy.return_value = mcp_install.NOTHING_INSTALLED
+
+        assistants.setup(_params(), install_mcp=True, skills=PROCEED, host_keys=[])
+
+        assert skills_spy.call_args.args[0] == []
+
+    def test_server_skipped_at_the_picker__an_explicit_pack_request_still_installs(
+        self, mcp_spy, skills_spy, rich_view
+    ):
+        """`--skills` is a request of its own, so it survives refusing the server."""
+        mcp_spy.return_value = mcp_install.InstallReport(registered=(), declined=True)
+
+        assistants.setup(_params(), install_mcp=True, skills=PROCEED)
+
+        assert skills_spy.call_args.args[0] == ["vscode"]
+
+
+class TestThePackIsNotOffered:
+    """The pack is part of the setup, not a question; only a flag skips it."""
+
+    def test_no_flag__installs_without_asking(
+        self, mcp_spy, skills_spy, rich_view, confirm
+    ):
+        verdict = consent.resolve_installed_by_default(None)
+
+        assistants.setup(_params(), install_mcp=True, skills=verdict)
+
+        skills_spy.assert_called_once()
+        confirm.assert_not_called()
+
+    def test_refused_by_flag__is_still_honoured(
+        self, mcp_spy, skills_spy, rich_view, confirm
+    ):
+        """A script saying no is a decision, unlike a question nobody put."""
+        verdict = consent.resolve_installed_by_default(False)
+
+        assistants.setup(_params(), install_mcp=True, skills=verdict)
+
+        skills_spy.assert_not_called()
+        confirm.assert_not_called()
 
     def test_decided_verdicts__never_prompt(
         self, mcp_spy, skills_spy, rich_view, confirm
@@ -203,56 +286,39 @@ class TestAsking:
 
         confirm.assert_not_called()
 
-    def test_the_pack_defaults_to_yes(self, mcp_spy, skills_spy, rich_view, confirm):
-        assistants.setup(_params(), install_mcp=True, skills=ASK)
-
-        assert confirm.call_args.kwargs["default"] is True
-
-    def test_the_pack_is_recommended_on_its_headline(
-        self, mcp_spy, skills_spy, rich_view, confirm, capsys
-    ):
-        """Same shape as the MCP question: the recommendation rides the headline."""
-        assistants.setup(_params(), install_mcp=True, skills=ASK)
-
-        out = capsys.readouterr().out
-        assert "Download the Opik skill pack for your AI client?" in out
-        assert "(Recommended)" in out
-
-    def test_the_prompt_does_not_relist_the_clients(
-        self, mcp_spy, skills_spy, rich_view, confirm
-    ):
-        """The results table directly above it just named them."""
-        assistants.setup(_params(), install_mcp=True, skills=ASK)
-
-        assert "cursor" not in confirm.call_args.args[0].lower()
-
 
 class TestClosingBlock:
     def test_one_closing_block_for_the_whole_step(self, mcp_spy, skills_spy, rich_view):
         assistants.setup(_params(), install_mcp=True, skills=PROCEED)
 
         assert rich_view.done.call_count == 1
-        assert mcp_spy.call_args.kwargs["announce_next_steps"] is False
 
-    def test_lists_both_components(self, mcp_spy, skills_spy, rich_view):
-        assistants.setup(_params(), install_mcp=True, skills=PROCEED)
-
-        assert rich_view.done.call_args.args[0] == ["MCP server", "skill pack"]
-
-    def test_omits_a_pack_that_failed(self, mcp_spy, skills_spy, rich_view):
+    def test_a_pack_that_failed__still_closes_on_the_server(
+        self, mcp_spy, skills_spy, rich_view
+    ):
         skills_spy.return_value = _install_result(succeeded=False)
 
         outcome = assistants.setup(_params(), install_mcp=True, skills=PROCEED)
 
-        assert rich_view.done.call_args.args[0] == ["MCP server"]
+        rich_view.done.assert_called_once_with()
         assert outcome.skills is False
 
-    def test_omits_a_server_that_reached_nothing(self, mcp_spy, skills_spy, rich_view):
+    def test_a_server_that_reached_nothing__still_closes_on_the_pack(
+        self, mcp_spy, skills_spy, rich_view
+    ):
         mcp_spy.return_value = _mcp_report([])
 
-        assistants.setup(_params(), install_mcp=True, skills=PROCEED)
+        outcome = assistants.setup(_params(), install_mcp=True, skills=PROCEED)
 
-        assert rich_view.done.call_args.args[0] == ["skill pack"]
+        rich_view.done.assert_called_once_with()
+        assert outcome.skills is True
+
+    def test_nothing_landed__no_closing_block(self, mcp_spy, skills_spy, rich_view):
+        mcp_spy.return_value = _mcp_report([])
+
+        assistants.setup(_params(), install_mcp=True, skills=DECLINE)
+
+        rich_view.done.assert_not_called()
 
 
 class TestPassThrough:
@@ -283,28 +349,22 @@ class TestPassThrough:
 
 
 class TestSkillsDecisionIsRecorded:
-    """The pack's answer is only known here, so only this can report it.
+    """Only `setup` can tell a refused pack from a failed download, so it reports it."""
 
-    `skills_installed=False` covered three different things — declined, never
-    asked, and asked-for-but-failed-to-download — which made the pack's own
-    accept rate unmeasurable.
-    """
-
-    def test_asked_and_accepted__requested(
-        self, mcp_spy, skills_spy, rich_view, confirm
+    def test_installed_by_default__says_so_rather_than_claiming_a_request(
+        self, mcp_spy, skills_spy, rich_view
     ):
-        confirm.return_value = True
+        """Its own value, so the accept rate's history is not blended."""
+        verdict = consent.resolve_installed_by_default(None)
 
-        outcome = assistants.setup(_params(), install_mcp=True, skills=ASK)
+        outcome = assistants.setup(_params(), install_mcp=True, skills=verdict)
 
-        assert outcome.skills_decision == "requested"
+        assert outcome.skills_decision == "installed_by_default"
 
-    def test_asked_and_declined__declined(
-        self, mcp_spy, skills_spy, rich_view, confirm
-    ):
-        confirm.return_value = False
+    def test_refused_by_flag__declined(self, mcp_spy, skills_spy, rich_view):
+        verdict = consent.resolve_installed_by_default(False)
 
-        outcome = assistants.setup(_params(), install_mcp=True, skills=ASK)
+        outcome = assistants.setup(_params(), install_mcp=True, skills=verdict)
 
         assert outcome.skills_decision == "declined"
 

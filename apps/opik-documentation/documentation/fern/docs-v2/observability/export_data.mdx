@@ -17,7 +17,7 @@ The Python and TypeScript SDKs let you search and export traces, spans, and thre
 
 <Tabs>
   <Tab title="Python">
-    ```python
+    ```python wordWrap
     import opik
 
     client = opik.Opik()
@@ -36,7 +36,7 @@ The Python and TypeScript SDKs let you search and export traces, spans, and thre
     ```
   </Tab>
   <Tab title="TypeScript">
-    ```typescript
+    ```typescript wordWrap
     import { Opik } from "opik";
 
     const client = new Opik();
@@ -58,7 +58,7 @@ The Python and TypeScript SDKs let you search and export traces, spans, and thre
 
 ### Spans
 
-```python
+```python wordWrap
 import opik
 
 client = opik.Opik()
@@ -78,7 +78,7 @@ spans = client.search_spans(
 
 ### Threads
 
-```python
+```python wordWrap
 import opik
 
 client = opik.Opik()
@@ -108,7 +108,7 @@ All search methods accept a `filter_string` / `filterString` using the Opik Quer
 
 Common filter examples:
 
-```python
+```python wordWrap
 client.search_traces(filter_string='start_time >= "2024-01-01T00:00:00Z"')
 client.search_traces(filter_string='usage.total_tokens > 1000')
 client.search_traces(filter_string='metadata.model = "gpt-4o"')
@@ -128,7 +128,7 @@ That budget is small, so how you fetch matters:
 - **Filter on the server** with `filter_string` (e.g. a time window) so you only transfer the data you need.
 - **Go easy on concurrency.** Limits are shared per workspace, so parallel requests compete for the same budget and hit `429` sooner without finishing faster.
 
-```python title="✅ Do: fetch in bulk, join on the client"
+```python title="✅ Do: fetch in bulk, join on the client" wordWrap
 from collections import defaultdict
 
 traces = client.search_traces(project_name="Default project", max_results=1000000)
@@ -140,7 +140,7 @@ for span in spans:
     spans_by_trace[str(span.trace_id)].append(span)
 ```
 
-```python title="❌ Don't: one request per trace"
+```python title="❌ Don't: one request per trace" wordWrap
 traces = client.search_traces(project_name="Default project", max_results=1000000)
 
 # A request per trace: slow, and quickly hits the read rate limit.
@@ -182,13 +182,13 @@ On disk, folders and files are keyed by **ID**: data lands under `<path>/<worksp
 
 ### Export
 
-```bash
+```bash wordWrap
 opik export WORKSPACE PROJECT ITEM [NAME] [OPTIONS]
 ```
 
 `ITEM` is one of: `all`, `dataset`, `traces`, `experiment`, `prompt`
 
-```bash
+```bash wordWrap
 # Export everything in a project
 opik export my-workspace my-project all
 
@@ -208,13 +208,13 @@ opik export my-workspace my-project traces --format csv --path ./csv_data
 
 ### Import
 
-```bash
+```bash wordWrap
 opik import WORKSPACE PROJECT ITEM [NAME] [OPTIONS]
 ```
 
 `WORKSPACE` is the source workspace — used to locate the exported files under `<path>/WORKSPACE/projects/`. Use `--to-workspace` to write into a different destination workspace.
 
-```bash
+```bash wordWrap
 # Import a dataset
 opik import my-workspace my-project dataset "my-dataset"
 
@@ -238,9 +238,36 @@ The project name is matched against the `name` recorded in each exported `projec
 
 Imports are automatically resumable — if interrupted, re-run the same command and it picks up where it left off using a local `migration_manifest.db`.
 
+#### Imported trace and span IDs
+
+Imported traces and spans are created under **new IDs**. The same export can therefore be imported repeatedly, and into any project or workspace, without colliding with the originals — IDs are expected to be unique across an Opik deployment, and much of Opik's behaviour, aggregation included, relies on that.
+
+Nothing else about the trace changes. `start_time` and `end_time` keep their original values, span hierarchies and feedback scores are remapped onto the new IDs, and each imported trace records the ID it came from in its metadata as `_import_id`, so you can map an imported trace back to the source one. Traces are imported in the order the source project listed them, so the destination trace list and thread view keep that order.
+
+A new ID also carries the current time in its UUIDv7 prefix. That matters because Opik validates that an ingested ID's embedded timestamp falls inside an **ingestion window** around now — 24 hours by default on Opik Cloud — which is what keeps its storage layer partitioned correctly. Minting IDs at import time is what lets you import exported data of any age.
+
+One consequence is worth knowing before a large import: the time-bucketed project metrics key off the ID timestamp, so imported traces are counted at the time of the import rather than when they originally ran. The traces themselves are unaffected — `start_time` still holds the original time, and filtering or sorting on it behaves as you would expect.
+
+<Warning>
+If an import fails with an error like this one:
+
+```
+status_code: 400, body: {'code': 400, 'message': 'Invalid UUID for id',
+ 'details': "id with timestamp '2026-01-15T09:30:00.000Z' must be in the allowed
+ ingestion window of 'PT24H' around now, reason 'too_old'"}
+```
+
+you are running an older SDK, which derived the new trace ID from the exported trace's original timestamp. Check your version and upgrade:
+
+```bash wordWrap
+opik --version
+pip install --upgrade opik
+```
+</Warning>
+
 ### Migrating between environments
 
-```bash
+```bash wordWrap
 # Step 1: Export from source (use source credentials)
 # Writes to ./migration_data/my-workspace/projects/<project_id>/
 OPIK_API_KEY=<source_key> OPIK_URL_OVERRIDE=https://source.opik.example.com \

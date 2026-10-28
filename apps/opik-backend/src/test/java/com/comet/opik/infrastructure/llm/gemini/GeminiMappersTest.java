@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.llm.gemini;
 
 import com.comet.opik.infrastructure.llm.LlmProviderLangChainMapper;
+import com.comet.opik.infrastructure.llm.LlmTestClients;
 import com.comet.opik.podam.PodamFactoryUtils;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
@@ -60,7 +61,8 @@ public class GeminiMappersTest {
         @ParameterizedTest
         @MethodSource
         void testToChatMessage(Message message, ChatMessage expected) {
-            ChatMessage actual = LlmProviderLangChainMapper.INSTANCE.toChatMessage(message);
+            ChatMessage actual = LlmProviderLangChainMapper.INSTANCE.toChatMessage(message,
+                    LlmTestClients.VIDEO_MIME_TYPE_UTILS);
             assertThat(actual).isEqualTo(expected);
         }
 

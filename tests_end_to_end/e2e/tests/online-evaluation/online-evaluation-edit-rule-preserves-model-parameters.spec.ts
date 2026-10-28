@@ -7,13 +7,12 @@ import { OnlineEvaluationPage } from '@e2e/pom/online-evaluation.page';
  * — the only free-form slot the request shape captures, and where the frontend
  * nests a model's `thinking` block. Nothing else on the rule carries it.
  *
- * The failure this pins down is a save that changes nothing. Opening a rule's
- * edit dialog and pressing "Update rule" is the most ordinary gesture on this
- * page, and it is exactly where a serializer that rebuilds the model block from
- * the form's own fields drops everything the form never rendered a control for.
- * The result is silent: the dialog closes, the row looks identical, the list
- * shows the same name and rate, and the rule has quietly stopped asking the
- * provider to think.
+ * The failure this pins down is a save that never touched the model. Opening a
+ * rule, flipping an unrelated setting and pressing "Save changes" is the most
+ * ordinary gesture on this page, and it is exactly where a serializer that
+ * rebuilds the model block from the form's own fields drops everything the form
+ * never rendered a control for. The result is silent: the editor closes, the row
+ * looks the same, and the rule has quietly stopped asking the provider to think.
  *
  * So the assertions are on the payload and the persisted blob, not on the
  * screen — there is nothing on screen to see.
@@ -21,13 +20,13 @@ import { OnlineEvaluationPage } from '@e2e/pom/online-evaluation.page';
  * Two keys are seeded, and both are asserted:
  *   - `thinking`, the block the product actually cares about, nested so a
  *     partial strip (keeping the key, emptying the block) fails too;
- *   - `unrelated_marker`, a key no dialog control has ever heard of. It is the
+ *   - `unrelated_marker`, a key no editor control has ever heard of. It is the
  *     control: `thinking` surviving on its own would also be satisfied by a
  *     serializer that special-cases `thinking` while still discarding the rest
  *     of the block, and this map is documented as free-form.
  *
- * Deterministic and LLM-free by construction — the rule never has to execute,
- * only round-trip. It is seeded over REST rather than through the create dialog
+ * Deterministic and LLM-free by construction: the rule never has to execute,
+ * only round-trip. It is seeded over REST rather than through the create flow
  * so that a create-path regression cannot be mistaken for an edit-path one.
  */
 
@@ -73,10 +72,10 @@ function isRuleUpdate(url: string, ruleId: string): boolean {
 
 test.describe(
   'Online Evaluation — edit rule',
-  { tag: ['@t2-cuj', '@area:online-evaluation'] },
+  { tag: ['@t2-cuj', '@llm-daily', '@area:online-evaluation'] },
   () => {
     test(
-      'Saving an LLM-judge rule with no edits preserves its model custom_parameters',
+      'Saving an LLM-judge rule without touching the model preserves its custom_parameters',
       { tag: ['@cap:online-evaluation.edit-rule'] },
       async ({ project, backendClient, testNamespace, automationRulesCleanup, page }) => {
         const ruleName = `${testNamespace}-thinking`;
@@ -95,7 +94,7 @@ test.describe(
           }));
 
         await test.step('The seed really persisted both keys', async () => {
-          // Asserted before the browser opens: an edit-dialog round-trip over a
+          // Asserted before the browser opens: an editor round-trip over a
           // rule that never held the block would pass without proving anything,
           // and would read as coverage forever.
           const model = await backendClient.getLlmJudgeModel(ruleId);
@@ -108,37 +107,33 @@ test.describe(
 
         const onlineEval = new OnlineEvaluationPage(page);
 
-        await test.step('Open the rule in the edit dialog', async () => {
+        await test.step('Open the rule in the editor', async () => {
           await onlineEval.goto(project.id);
           await onlineEval.waitForReady();
           await expect(onlineEval.ruleRow(ruleName)).toHaveCount(1);
-          await onlineEval.openEditRuleDialogByName(ruleName);
+          await onlineEval.openEditRulePanelByName(ruleName);
+          await expect(onlineEval.submitButton, 'nothing to save before an edit').toBeDisabled();
         });
 
-        const update = await test.step('Press "Update rule" without editing anything', async () => {
+        const update = await test.step('Disable the rule and save, leaving the model alone', async () => {
           // Armed before the click: the request is in flight the moment the
-          // dialog submits, so subscribing afterwards would race it.
+          // editor submits, so subscribing afterwards would race it.
           const patched = page.waitForRequest(
             (request) =>
               request.method() === 'PATCH' && isRuleUpdate(request.url(), ruleId),
           );
-          // The response, not just the dispatch. AddEditRuleDialog calls
-          // setOpen(false) outside the mutation's callbacks, so the dialog
-          // hides the moment the PATCH is sent — waiting for it to close is no
-          // barrier, and the persisted read below would otherwise be free to
-          // observe the pre-save blob and pass on a backend that dropped
-          // custom_parameters.
           const answered = page.waitForResponse(
             (response) =>
               response.request().method() === 'PATCH' &&
               isRuleUpdate(response.url(), ruleId),
           );
-          await onlineEval.submitRuleDialog();
+          await onlineEval.toggleEnabled();
+          await onlineEval.submitPanel();
           const request = await patched;
           const response = await answered;
           expect(
             response.ok(),
-            `the unedited save was accepted (got ${response.status()})`,
+            `the save was accepted (got ${response.status()})`,
           ).toBe(true);
           return request;
         });
@@ -153,23 +148,23 @@ test.describe(
           };
           const sent = body.code?.model?.custom_parameters;
           expect(sent, 'the update payload carries a model custom_parameters block').toBeDefined();
-          expect(sent, 'an unedited save sends the block back unchanged').toEqual(
+          expect(sent, 'a save that never touched the model sends the block back unchanged').toEqual(
             SEEDED_CUSTOM_PARAMETERS,
           );
         });
 
         await test.step('And the rule persists them unchanged', async () => {
           const model = await backendClient.getLlmJudgeModel(ruleId);
-          expect(model.name, 'the unedited save did not change the model').toBe(JUDGE_MODEL);
+          expect(model.name, 'the save did not change the model').toBe(JUDGE_MODEL);
           expect(
             model.customParameters,
-            'custom_parameters survive the round-trip through the edit dialog',
+            'custom_parameters survive the round-trip through the editor',
           ).toEqual(SEEDED_CUSTOM_PARAMETERS);
         });
 
-        await test.step('The rule is still listed, with the state it started in', async () => {
+        await test.step('The rule is still listed, now disabled and at the same rate', async () => {
           await expect(onlineEval.ruleRow(ruleName)).toHaveCount(1);
-          await expect(onlineEval.ruleStatusCell(ruleName, 'Enabled')).toBeVisible();
+          await expect(onlineEval.ruleStatusCell(ruleName, 'Disabled')).toBeVisible();
           await expect(onlineEval.ruleSamplingRateCell(ruleName, '100%')).toBeVisible();
         });
       },

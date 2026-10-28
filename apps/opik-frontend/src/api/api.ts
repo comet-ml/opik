@@ -1,5 +1,6 @@
 import { UseQueryOptions } from "@tanstack/react-query";
 import axios from "axios";
+import { v4 as uuidv4 } from "uuid";
 
 export const BASE_API_URL = import.meta.env.VITE_BASE_API_URL || "/api";
 export const BASE_OPIK_AI_URL = import.meta.env.VITE_BASE_OPIK_AI_URL || "";
@@ -8,6 +9,33 @@ const axiosInstance = axios.create({
 });
 
 axiosInstance.defaults.withCredentials = true;
+
+// Lets an installation count the distinct browsers using it. Random, so it identifies no one.
+const BROWSER_ID_KEY = "opik-browser-id";
+const getBrowserId = () => {
+  try {
+    const stored = localStorage.getItem(BROWSER_ID_KEY);
+    if (stored) return stored;
+    const id = uuidv4();
+    localStorage.setItem(BROWSER_ID_KEY, id);
+    return id;
+  } catch {
+    // Storage blocked (private mode, disabled site data): count this page load on its own.
+    return uuidv4();
+  }
+};
+const browserId = getBrowserId();
+// Opik backend only: other services reached through this instance (BASE_OPIK_AI_URL)
+// may be cross-origin, and an unknown header would fail their CORS preflight.
+axiosInstance.interceptors.request.use((config) => {
+  const isOpikBackend =
+    (config.baseURL ?? BASE_API_URL) === BASE_API_URL &&
+    !/^https?:\/\//.test(config.url ?? "");
+  if (isOpikBackend) {
+    config.headers.set("X-Opik-Browser-Id", browserId);
+  }
+  return config;
+});
 
 export const CODE_EXECUTOR_SERVICE_URL = import.meta.env
   .VITE_GET_STARTED_API_URL;
@@ -43,6 +71,8 @@ export const INSIGHTS_VIEWS_REST_ENDPOINT = "/v1/private/insights-views/";
 export const AGENT_CONFIGS_REST_ENDPOINT = "/v1/private/agent-configs/";
 export const LOCAL_RUNNERS_REST_ENDPOINT = "/v1/private/local-runners/";
 export const LLM_MODELS_REST_ENDPOINT = "/v1/private/llm/models";
+export const LLM_MODEL_PROFILES_REST_ENDPOINT =
+  "/v1/private/llm/models/profiles";
 export const ENVIRONMENTS_REST_ENDPOINT = "/v1/private/environments/";
 export const AI_SPEND_REST_ENDPOINT = "/v1/private/ai-spend/";
 export const AGENT_INSIGHTS_REST_ENDPOINT = "/v1/private/agent-insights/";
@@ -75,11 +105,13 @@ export const INSIGHTS_VIEW_KEY = "insights-view";
 export const AGENT_CONFIGS_KEY = "agent-configs";
 export const AGENT_SANDBOX_KEY = "agent-sandbox";
 export const LLM_MODELS_KEY = "llm-models";
+export const LLM_MODEL_PROFILES_KEY = "llm-model-profiles";
 export const ENVIRONMENTS_KEY = "environments";
 export const ENVIRONMENT_KEY = "environment";
 export const AGENT_INSIGHTS_ISSUES_KEY = "agent-insights-issues";
 export const AGENT_INSIGHTS_ISSUE_KEY = "agent-insights-issue";
 export const AGENT_INSIGHTS_JOB_KEY = "agent-insights-job";
+export const OLLIE_CREDITS_KEY = "ollie-credits";
 
 // stats for feedback
 export const STATS_COMET_ENDPOINT = "https://stats.comet.com/notify/event/";

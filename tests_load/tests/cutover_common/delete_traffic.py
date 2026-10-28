@@ -41,6 +41,13 @@ _stop = False
 # the mask several beats to propagate before stopping.
 EMPTY_REFILL_LIMIT = 5
 
+# Consecutive delete failures tolerated BEFORE the first success. A restart always has successes behind it, so this
+# separates "the backend is bouncing" — which the guard in _delete_batch must survive — from "this run can never
+# delete anything", which is a credential, workspace or URL mistake and must stop rather than quietly produce no
+# deletes at all. Failures AFTER a success are counted and reported in the summary instead of aborting: by then the
+# run holds coverage worth keeping, and the operator needs to judge the holes rather than lose the evidence.
+FIRST_DELETE_ATTEMPTS = 5
+
 # Newest-page size to pull per refill. Larger reaches past the just-deleted (still-visible) top ids to undeleted ones
 # during mask lag, so the run keeps finding work instead of stopping early.
 REFILL_FETCH = 2000
@@ -137,6 +144,33 @@ def _resurrect_one(client, project, trace_id, spans, mode):
     return len(spans)
 
 
+def _delete_batch(client, ids):
+    """Issue the delete, surviving a transient backend outage.
+
+    The rehearsal guides REQUIRE a backend restart mid-run (the spanColumnsNonNullable rollout, and the wrap's
+    spansDistributedWrapEnabled rollout) while also requiring this generator to keep running across it. An unguarded
+    call cannot do both: the restart returns 502 from nginx and the raised ApiError kills the loop, silently ending
+    delete coverage for the rest of the rehearsal — across the final delta, the swap and the reconciliation, which is
+    exactly the window the deletion bridge and both replays exist for. The write generator survives the same outage
+    because the SDK batches its writes, so the failure is asymmetric and easy to miss.
+
+    Guarded like the two read helpers above, and for the same reason: a transient failure should cost a tick, not the
+    run. The catch stays broad deliberately — a bouncing backend surfaces as an ApiError, a connection error or a
+    read timeout depending on how far through the restart it is, and narrowing to the one shape observed would let
+    the others end the run again. What a broad catch must not do is leave the resulting coverage loss invisible, so
+    the caller stops outright when no delete has EVER succeeded (FIRST_DELETE_ATTEMPTS), and counts the rest for the
+    summary — a path that breaks after the restart otherwise reads exactly like a clean run.
+
+    Returns True when the delete was accepted.
+    """
+    try:
+        client.rest_client.traces.delete_traces(ids=ids)
+        return True
+    except Exception as exc:  # noqa: BLE001 — a restart/5xx must not end the run
+        LOGGER.warning("delete_traces failed for %d id(s) (continuing): %s", len(ids), exc)
+        return False
+
+
 def _run(project, tps, duration, batch, resurrect_ratio, mode, unit):
     signal.signal(signal.SIGINT, _handle_sigint)
     client = make_opik_client()
@@ -150,6 +184,8 @@ def _run(project, tps, duration, batch, resurrect_ratio, mode, unit):
     deleted = 0
     resurrected = 0
     empty_refills = 0
+    delete_failures = 0
+    last_delete_failed = False
     started = time.time()
 
     def flush_resurrections(force=False):
@@ -161,7 +197,12 @@ def _run(project, tps, duration, batch, resurrect_ratio, mode, unit):
         due_ids = {tid for tid, _ in due}
         pending_resurrect[:] = [(r, t, s) for r, t, s in pending_resurrect if t not in due_ids]
         for trace_id, spans in due:
-            resurrected += _resurrect_one(client, project, trace_id, spans, mode)
+            # Guarded for the same reason as the delete itself: a resurrection landing mid-restart must not end the
+            # run, and losing one costs a sample of the guard rather than the coverage of it.
+            try:
+                resurrected += _resurrect_one(client, project, trace_id, spans, mode)
+            except Exception as exc:  # noqa: BLE001
+                LOGGER.warning("resurrection of trace %s failed (continuing): %s", trace_id, exc)
 
     LOGGER.info("delete traffic: project='%s' tps=%.2f batch=%d duration=%ss resurrect-ratio=%.3f resurrects=%s "
                 "(Ctrl-C to stop)", project, tps, batch, duration or "∞", resurrect_ratio, unit)
@@ -197,12 +238,30 @@ def _run(project, tps, duration, batch, resurrect_ratio, mode, unit):
                 spans = _span_ids_of(client, project, trace_id) if mode == _RESURRECT_SPANS else []
                 if mode == _RESURRECT_TRACE or spans:
                     to_resurrect.append((trace_id, spans))
-        client.rest_client.traces.delete_traces(ids=ids)
-        deleted += len(ids)
-        # Queue them for re-creation once the delete's mutation has settled. Their traces stay in `seen`, so a later
-        # refill never queues them for deletion again.
-        for trace_id, spans in to_resurrect:
-            pending_resurrect.append((time.time() + RESURRECT_SETTLE_SECONDS, trace_id, spans))
+        # A failed delete removed nothing, so it must not be counted and its ids must not be queued for resurrection —
+        # re-creating a span that was never deleted would plant a false positive for the replay's guard to trip over.
+        # The ids stay in `seen` either way: retrying them would skew the rate and this is a traffic generator, not a
+        # drain (see the module docstring).
+        if _delete_batch(client, ids):
+            deleted += len(ids)
+            last_delete_failed = False
+            # Queue them for re-creation once the delete's mutation has settled. Their traces stay in `seen`, so a
+            # later refill never queues them for deletion again.
+            for trace_id, spans in to_resurrect:
+                pending_resurrect.append((time.time() + RESURRECT_SETTLE_SECONDS, trace_id, spans))
+        else:
+            # Counted rather than only logged, because a warning scrolls past and the summary is what gets read. The
+            # two failure shapes need different responses and only the summary can tell them apart.
+            delete_failures += 1
+            last_delete_failed = True
+            # Nothing has ever been deleted, so this cannot be the restart the guard exists for. Left alone, the loop
+            # would work through the project via `seen`, stop on empty refills and report traces_deleted=0 — which
+            # reads as "nothing to delete" rather than "every delete failed", and the rehearsal would be called
+            # complete having exercised neither the deletion bridge nor either replay.
+            if deleted == 0 and delete_failures >= FIRST_DELETE_ATTEMPTS:
+                raise SystemExit(
+                    f"no delete has succeeded in {delete_failures} attempts — check OPIK_URL_OVERRIDE, the API key "
+                    f"and the workspace before re-running. The warnings above carry the backend's reason.")
         flush_resurrections()
         if deleted % 50 == 0:
             LOGGER.info("deleted %d traces (resurrected %d %s)", deleted, resurrected, unit)
@@ -218,6 +277,19 @@ def _run(project, tps, duration, batch, resurrect_ratio, mode, unit):
     elapsed = time.time() - started
     LOGGER.info("done: traces_deleted=%d %s_resurrected=%d in %.1fs (%.2f trace-deletes/s effective)",
                 deleted, unit, resurrected, elapsed, deleted / elapsed if elapsed else 0)
+    # Failures AFTER the first success cannot abort the run — a rehearsal that loses some deletes should finish and be
+    # judged, not die. But they must not be invisible either: without these lines a delete path broken from the
+    # mid-run restart onward looks exactly like a clean run, since the loop keeps ticking, the summary reports whatever
+    # landed before the break, and the process exits 0. The bridge and both replays then go unexercised across the
+    # final delta, the swap and the reconciliation — the same coverage loss the guard above exists to prevent, reached
+    # from the other side.
+    if delete_failures:
+        LOGGER.warning("%d delete batch(es) FAILED and were not retried, so this run's delete coverage has holes. A "
+                       "few around the backend restart the rehearsal mandates are expected.", delete_failures)
+        if last_delete_failed:
+            LOGGER.warning("The LAST attempt was one of them, so the delete path was still broken when the run "
+                           "ended. Treat the deletion bridge and both replays as unexercised from the break onward, "
+                           "and re-run before reading any reconciliation result as evidence.")
     if resurrect_ratio > 0 and resurrected == 0:
         LOGGER.warning("resurrect-ratio was set but nothing was resurrected — the replay's resurrection guard is "
                        "UNEXERCISED by this run. Raise --resurrect-ratio or --duration.%s", _UNEXERCISED_HINT[mode])

@@ -34,8 +34,11 @@ from .utils import (
     clean_usage_for_import,
     debug_print,
     sort_spans_topologically,
+    sort_trace_files_chronologically,
+    as_metadata_object,
     build_import_metadata,
     _EXPERIMENT_IMPORT_FIELDS,
+    _TRACE_SOURCE_ID_FIELD,
 )
 from .prompt import import_prompts_from_directory
 from .dataset import import_datasets_from_directory
@@ -464,8 +467,11 @@ def recreate_experiment(
             debug,
         )
 
-        experiment_metadata = experiment_info.get("metadata") or {}
-        experiment_metadata = experiment_metadata.copy() if experiment_metadata else {}
+        # Resolved to an object before the mutations below, which all assume a
+        # mapping: exported metadata is an arbitrary JSON value.
+        experiment_metadata = dict(
+            as_metadata_object(experiment_info.get("metadata")) or {}
+        )
 
         # Migrate path: strip prompt_versions pointers — destination prompt entity
         # isn't migrated (epic decision: avoid dangling UI links, accept loss).
@@ -885,7 +891,9 @@ def _import_traces_for_project(
     traces_imported = 0
     traces_errors = 0
 
-    trace_files = list(project_dir.glob("trace_*.json"))
+    trace_files = sort_trace_files_chronologically(
+        list(project_dir.glob("trace_*.json"))
+    )
 
     if not trace_files:
         debug_print(f"No trace files found in {project_dir}", debug)
@@ -952,7 +960,11 @@ def _import_traces_for_project(
                 ),
                 input=trace_info.get("input", {}),
                 output=trace_info.get("output", {}),
-                metadata=trace_info.get("metadata"),
+                metadata=build_import_metadata(
+                    trace_info,
+                    [_TRACE_SOURCE_ID_FIELD],
+                    trace_info.get("metadata"),
+                ),
                 tags=trace_info.get("tags"),
                 feedback_scores=feedback_scores,
                 error_info=trace_info.get("error_info"),
@@ -1015,7 +1027,7 @@ def _import_traces_for_project(
                     ),
                     input=span_info.get("input", {}),
                     output=span_info.get("output", {}),
-                    metadata=span_info.get("metadata"),
+                    metadata=as_metadata_object(span_info.get("metadata")),
                     tags=span_info.get("tags"),
                     usage=usage_data,
                     feedback_scores=span_feedback_scores,

@@ -33,6 +33,7 @@ type CodeBlockProps = {
   quickFilterSection?: QuickFilterSection;
   /** Notified when the user toggles the section. Never called on mount. */
   onOpenChange?: (open: boolean) => void;
+  testId?: string;
 };
 
 const CodeBlock: React.FC<CodeBlockProps> = ({
@@ -48,6 +49,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({
   className,
   quickFilterSection,
   onOpenChange,
+  testId,
 }) => {
   const [uncontrolledIsOpen, setUncontrolledIsOpen] = useState(defaultOpen);
   const isOpen = open ?? uncontrolledIsOpen;
@@ -61,6 +63,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({
     return {
       canFilter: (path) => api.canFilter(quickFilterSection, path),
       onFilter: (path, value) => api.filter(quickFilterSection, path, value),
+      hint: api.hint,
     };
   }, [api, quickFilterSection]);
 
@@ -86,6 +89,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({
 
   return (
     <div
+      data-testid={testId}
       className={cn(
         "overflow-hidden rounded-md border border-border bg-soft-background",
         isOpen && "pb-2",

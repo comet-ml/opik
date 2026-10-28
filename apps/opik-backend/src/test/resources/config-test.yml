@@ -9,6 +9,10 @@ logging:
   loggers:
     com.comet: DEBUG
     com.comet.opik.infrastructure.llm: INFO
+    # Default: ERROR
+    # Description: langchain4j logs each retry of a model's own retry loop with the provider's response; Opik logs its
+    #   own retries without it
+    dev.langchain4j.internal.RetryUtils: ERROR
 
 # Description: state database configuration
 # https://www.dropwizard.io/en/stable/manual/configuration.html#database
@@ -84,6 +88,20 @@ databaseAnalytics:
   #   async-insert flush; same override semantics as asyncInsertBusyTimeoutMaxMs above. Larger values yield fewer,
   #   larger parts at the cost of more buffer memory.
   asyncInsertMaxDataSize: # Empty - ClickHouse/server-side value applies
+  #  Default: 3000
+  #  Description: Cadence (ms) for http_headers_progress_interval_ms, applied to custom_http_params like the overrides
+  #   above, but only on the R2DBC connection and not on the v2 client (the read-only free-form SQL user runs under
+  #   readonly=1 and rejects per-query setting changes; its factory is built without queryParameters). That is about
+  #   this setting - a cadence written directly into custom_http_params below is still forwarded to both clients like
+  #   every other entry there. clickhouse-r2dbc turns send_progress_in_http_headers on for every HTTP statement and the
+  #   v1 Apache transport caps a response at 100 headers with no way to raise it, so at ClickHouse's 100ms default
+  #   cadence a query running past ~10s overflows the cap and its response fails to parse. Accepted range is 1 .. 10000.
+  #   The ceiling keeps a 3x margin under the driver's 30s socket_timeout, since the progress headers are what keep the
+  #   socket alive during a long query; the 100-header budget is reached at interval x 90, so 3000 covers a 270s query
+  #   against the 106.7s worst case seen during the incident. Supplying nothing leaves the primitive at 0, which is out
+  #   of range and fails startup rather than silently reinstating the bug - which is why the docker-compose passthrough
+  #   carries the literal instead of ':-'.
+  httpHeadersProgressIntervalMs: 3000
   #  Default: 1s
   #  Description: Timeout for the ClickHouse health check query (e.g. 1s, 500ms, 2 minutes)
   healthCheckTimeout: 1s
@@ -158,6 +176,62 @@ databaseAnalyticsDataModel:
   #   direction and the backend fails readiness at startup with a message naming the flag and the observed engine,
   #   rather than serving traffic whose span deletes are guaranteed to fail.
   spansDistributedWrapEnabled: false
+  #  Default: false
+  #  Description: Register each written span's weekly partition in the span_weeks index (OPIK-8706). Leave false at
+  #   deploy time; turn true before the span weeks backfill starts, so every span written after its snapshot is
+  #   indexed. Off writes nothing.
+  spanWeeksWriteEnabled: false
+  #  Default: false
+  #  Description: Schedule the span weeks backfill job (tuned under spanWeeksBackfill), which fills span_weeks from the
+  #   spans already written, one range of weeks at a time. Turn true only once spanWeeksWriteEnabled is live on every
+  #   instance: the backfill covers the spans written until its first run, live registration the rest.
+  spanWeeksBackfillEnabled: false
+  #  Default: false
+  #  Description: Bound the spans reads keyed by traces or by a project to the weeks the span_weeks index holds for
+  #   them. Effective only while spanColumnsNonNullable is also true (the legacy spans id_at wraps far-future ids). New
+  #   spans are indexed by span_weeks_mv in their insert, older ones by the span weeks backfill: turn true once the
+  #   backfill logs that it is complete, as spans it has not indexed yet would be skipped.
+  spanWeeksReadEnabled: false
+
+# Span weeks registration (OPIK-8706): retry of a failed span weeks write, with exponential backoff. Registration is
+# switched on by databaseAnalyticsDataModel.spanWeeksWriteEnabled.
+spanWeeksRegistration:
+  #  Default: 3
+  #  Description: Retries after the first attempt; a repeat registration collapses in span_weeks
+  maxRetries: 3
+  #  Default: 200ms
+  #  Description: First backoff; it doubles on each retry, with jitter, up to maxBackoff
+  minBackoff: 200ms
+  #  Default: 2s
+  #  Description: Upper bound of the exponential backoff
+  maxBackoff: 2s
+
+# Span weeks backfill (OPIK-8706) tuning; the job is switched on by databaseAnalyticsDataModel.spanWeeksBackfillEnabled.
+# It tiles the span ids into ranges of weeks, from the install week (the first project's created_at) to the plan's own
+# week, open at both ends, and backfills one range per run. Progress is kept in the span_weeks_backfill_chunks state
+# table, so it resumes across restarts.
+spanWeeksBackfill:
+  #  Default: 5m
+  #  Description: How often a run starts, and how long it holds the job lock: at most one chunk per interval across
+  #   the cluster, however many instances tick. Must exceed queryTimeout, so a run ends inside its lease
+  interval: 5m
+  #  Default: 4
+  #  Description: Weeks of span ids one run backfills, between the install week and the plan's own week
+  weeksPerChunk: 4
+  #  Default: 4
+  #  Description: ClickHouse threads one run may use (prod replicas have 48 vCPUs); memory is left to the server
+  #   profile's GROUP BY spill
+  maxThreads: 4
+  #  Default: 4m
+  #  Description: ClickHouse max_execution_time for one chunk; must stay under interval. Keep it under
+  #   ~90 x httpHeadersProgressIntervalMs (270s at the default 3s): past that the R2DBC driver runs out of progress
+  #   headers and fails the statement as a connection error. A 4-week range is estimated at 1-3 minutes on prod at
+  #   4 threads (OPIK-8706); if ranges time out, lower weeksPerChunk
+  queryTimeout: 4m
+  #  Default: 1s
+  #  Description: How long a run waits for the job lock before skipping its tick, so a brief Redis hiccup does not
+  #   cost a whole interval
+  lockWaitTime: 1s
 
 # Description: UUIDv7 ingestion validation. Rejects writes whose `id` embeds a timestamp outside the
 #   window, protecting data quality.
@@ -191,6 +265,31 @@ databaseAnalyticsReadOnlyFreeFormSql:
   password: opik
   # Plain value (no env var).
   socketTimeout: 200s
+
+# Description: credentials for the extended free-form SQL read-only user. The block is required even when
+# the feature is off: an absent block fails config validation at boot.
+databaseAnalyticsReadOnlyFreeFormExtendedSql:
+  username: comet_readonly_freeform_extended_sql_user
+  password: opik
+  socketTimeout: 200s
+
+# Description: the free-form SQL post-run check, defense in depth on top of the row policies. It verifies from each
+#   query's system.query_log entries and plan that every table it read was read under a row policy.
+freeFormSqlPostRunCheck:
+  #  Default: audit
+  #  Description: off, audit or enforce. audit: scalar subqueries reading a table are reported, not rejected, and
+  #   the check runs after the response and only reports (logs, opik.free_form_sql.post_run_check). Nothing it
+  #   finds or fails on affects the request. enforce: scalar subqueries reading a table are rejected (400) and
+  #   results are withheld unless the check passes, which adds at least logReadDelay to every response.
+  # Quoted: YAML reads a bare off as the boolean false.
+  mode: audit
+  #  Default: 10s
+  #  Description: Wait before each read of the query's log entries. Longer than ClickHouse's query_log flush
+  #   interval (7.5s by default), so every entry is written without forcing a flush. 0 to 60s.
+  logReadDelay: 10s
+  #  Default: 3
+  #  Description: Reads of the query's log entries before the check reports them missing (1 to 10)
+  maxLogReadAttempts: 3
 
 # https://www.dropwizard.io/en/stable/manual/configuration.html#health
 health:
@@ -230,6 +329,11 @@ health:
       initialState: false
       schedule: { initialDelay: 0ms, checkInterval: 100ms, downtimeInterval: 100ms, failureAttempts: 1, successAttempts: 1 }
     - name: clickhouse-readonly-freeform-sql
+      critical: false
+      type: ready
+      initialState: false
+      schedule: { initialDelay: 0ms, checkInterval: 100ms, downtimeInterval: 100ms, failureAttempts: 1, successAttempts: 1 }
+    - name: clickhouse-readonly-freeform-extended-sql
       critical: false
       type: ready
       initialState: false
@@ -281,6 +385,48 @@ redis:
   #  Default: 1s
   #  Description: Timeout for the Redis health check ping
   healthCheckTimeout: 1s
+  # Redis Sentinel configuration (optional)
+  # When enabled, singleNodeUrl is the seed sentinel, with its port (usually 26379), instead of a Redis data node: its
+  # scheme selects TLS for every sentinel, and its credentials and database number apply to the master data nodes.
+  # Redisson discovers the master through the sentinels and follows it on failover. The Python backend reads the same
+  # variables. Cannot be combined with awsIamAuth: ElastiCache and MemoryDB offer no Sentinel.
+  sentinel:
+    # Default: false
+    # Description: Enable Redis Sentinel master discovery
+    enabled: false
+    # Description: Name of the master group monitored by the sentinels. Required when enabled
+    masterName: ''
+    # Description: Comma separated extra seed sentinels, e.g. redis://sentinel-1:26379,redis://sentinel-2:26379. They
+    # must use the scheme of singleNodeUrl, include a port and carry no credentials. The seed from singleNodeUrl is
+    # always included
+    nodes: ''
+    # Description: Username for the sentinel nodes themselves, if they enforce ACLs
+    username: ''
+    # Description: Password for the sentinel nodes themselves, if they require auth
+    password: ''
+    # Default: 3
+    # Description: Times a failed command is retried, e.g. while a failover is in progress. Between 0 and 20
+    retryAttempts: 3
+    # Default: 500ms
+    # Description: Base of the full-jitter backoff between retries: each waits a random time up to
+    # min(base * 2^attempt, cap). At least 1ms
+    retryBackoffBase: 500ms
+    # Default: 2s
+    # Description: Longest wait between retries. At least retryBackoffBase and at most 5m
+    retryBackoffCap: 2s
+    # Default: true
+    # Description: Require the sentinels to report at least two of them, as a production quorum needs. Set to false to
+    # allow a single sentinel, e.g. in development setups
+    checkSentinelsList: true
+    # Default: 10s
+    # Description: Timeout for establishing connections. Between 100ms and 5m
+    connectTimeout: 10s
+    # Default: 5s
+    # Description: Timeout for command responses. Between 100ms and 5m
+    timeout: 5s
+    # Default: 2s
+    # Description: How often the sentinels are polled for topology changes. Between 100ms and 5m
+    scanInterval: 2s
 
 openTelemetry:
   # Default: 3h
@@ -349,6 +495,13 @@ mcpOAuth:
   # Default: PT0.1S
   # Description: Maximum time the scrub job waits to acquire the Redis lock before giving up for this cycle
   scrubLockWaitTime: PT0.1S
+
+# The admin server: Dropwizard's tasks (log level, gc), /healthcheck, /metrics, /threads and /ping, on the port of
+# server.adminConnectors. The probes use /health-check on the application port, which stays.
+adminServer:
+  # Default: true
+  # Description: Whether the admin server runs. When false, nothing listens on the admin port, on any interface
+  enabled: true
 
 # https://www.dropwizard.io/en/stable/manual/configuration.html#servers
 server:
@@ -634,6 +787,9 @@ llmProviderTokenAuth:
 
 # LLM providers client configuration
 llmProviderClient:
+  # Default: 3
+  # Description: Max amount of attempts to reach the LLM provider before giving up
+  maxAttempts: 2
   # Default: 60s
   # Description: Call timeout for LLM providers
   callTimeout: 60s
@@ -643,6 +799,73 @@ llmProviderClient:
   # Default: false
   # Description: Whether or not to log responses
   logResponses: false
+  # Default: strict
+  # Values: ['strict', 'relaxed']
+  #   - strict: provider base URLs must be http(s) and resolve only to public addresses
+  #   - relaxed: no destination restrictions, for deployments whose providers run on internal networks
+  # Description: Destination policy for user-configured LLM provider base URLs
+  # Tests point providers at local mock servers
+  destinationGuard: relaxed
+  # Default: plaintext_or_tls
+  # Values: ['plaintext_or_tls', 'https_only']
+  #   - plaintext_or_tls: http and https, as self-hosted model servers commonly run without TLS
+  #   - https_only: https only
+  # Description: Schemes allowed for user-configured LLM provider base URLs, checked in strict mode only
+  destinationScheme: plaintext_or_tls
+  # Default: strict
+  # Values: ['strict', 'relaxed']
+  #   - strict: media URLs must be http(s) and resolve only to public addresses
+  #   - relaxed: no destination restrictions
+  # Description: Destination policy for media URLs in a caller's message or in trace data: the HEAD request that
+  #   detects the MIME type of an extensionless video URL, and the download of the image, audio, video and PDF URLs
+  #   that Gemini and Vertex AI receive as inline data
+  videoUrlDestinationGuard: strict
+  # Default: plaintext_or_tls
+  # Values: ['plaintext_or_tls', 'https_only']
+  #   - plaintext_or_tls: http and https
+  #   - https_only: https only
+  # Description: Schemes allowed for the image, audio, video and PDF URLs that Gemini and Vertex AI receive as inline
+  #   data, checked in strict mode only; a URL that isn't http or https is refused in every mode
+  mediaUrlDestinationScheme: plaintext_or_tls
+  # Default: 30s
+  # Description: Time allowed for downloading one media URL that Gemini or Vertex AI receives as inline data,
+  #   connecting included; at most 2m
+  mediaDownloadTimeout: 30s
+  # Default: 20MB
+  # Description: Most bytes downloaded for all the media of one Gemini or Vertex AI request, which carries at most
+  #   20 MB of inline data; at most 100MB
+  mediaDownloadMaxSize: 20MB
+  # Default: 300
+  # Description: Longest provider error message passed on to a caller. Provider error messages are one or two
+  #   sentences; a longer, multi-line or markup-bearing message is replaced by "Unexpected error calling LLM provider";
+  #   at most 1000
+  providerErrorMessageMaxLength: 300
+  # Default: 64KB
+  # Description: Most bytes read from a custom provider's error response body; the rest is discarded, as only a
+  #   short message parsed from it reaches callers; at most 1MiB
+  providerErrorBodyMaxSize: 64KB
+  # Default: 120s
+  # Description: Longest a provider's stream may stay silent, before its headers or between reads of its body: a
+  #   stream waits for its headers up to the longer of this and readTimeout, a call that isn't one up to readTimeout
+  #   only. Above the 90s ingress idle timeout, as models that reason before answering can be silent for a while;
+  #   between 1s and 10m
+  streamReadTimeout: 120s
+  # Default: 1024
+  # Description: Most threads of the shared HTTP client for LLM provider calls. A call made asynchronously, a stream
+  #   included, holds one from start to end, so it must be at least httpClientMaxRequests; at most 2048
+  httpClientMaxThreads: 1024
+  # Default: 60s
+  # Description: How long an idle thread of the shared LLM HTTP client lives before it ends, so the pool shrinks
+  #   back after a burst; between 1s and 5m
+  httpClientThreadKeepAlive: 60s
+  # Default: 1024
+  # Description: Most LLM provider calls made asynchronously, streams included, that run at once on the shared
+  #   client. Further calls wait in order for one to end, and their timeouts start once they run; at most 2048
+  httpClientMaxRequests: 1024
+  # Default: 1024
+  # Description: Most of httpClientMaxRequests that run at once to a single host. Most calls go to a few hosts, such
+  #   as one provider's API, so it defaults to the overall limit and can't exceed it
+  httpClientMaxRequestsPerHost: 1024
   openAiClient:
     # See demo endpoint Langchain4j documentation: https://docs.langchain4j.dev/get-started
     # Not https but only used for testing purposes. It's fine as long as not sensitive data is sent.
@@ -658,6 +881,7 @@ llmProviderClient:
   # Default: https://openrouter.ai/api/v1
   # Description: OpenRouter API URL
   openRouterUrl: https://openrouter.ai/api/v1
+  openRouterDecisionsUrl: https://openrouter.ai/api/alpha/decisions
   # Configuration for Vertex AI client
   vertexAIClient:
     # Default: https://www.googleapis.com/auth/cloud-platform
@@ -670,6 +894,11 @@ llmProviderClient:
       global: https://aiplatform.googleapis.com
       eu: https://aiplatform.eu.rep.googleapis.com
       us: https://aiplatform.us.rep.googleapis.com
+    # Description: the only token_uri values a service-account key may carry. The credentials refresh by posting to it,
+    # and the key file is user-supplied, so any other value is refused.
+    tokenUris:
+      - https://oauth2.googleapis.com/token
+      - https://accounts.google.com/o/oauth2/token
 
 # Configuration for cache manager
 cacheManager:
@@ -683,6 +912,11 @@ cacheManager:
     # Default: {}
     # Description: Dynamically created caches with their respective time to live in seconds
     testCache: PT1S
+    # Default: PT10S
+    # Description: Cache TTL for the compare-view target projects, whose answer doesn't depend on page/size.
+    # One read of a large experiment is dozens of requests that differ only by page, so the entry only has to
+    # survive a single read.
+    experiment_compare_target_projects: PT10S
 
 # Configuration for clickhouse log appender
 clickHouseLogAppender:
@@ -898,8 +1132,26 @@ serviceToggles:
   #   the read-only ClickHouse client.
   ollieEnabled: "false"
   # Default: true
+  # Description: Kill switch for Agent Insights, effective only while ollieEnabled is on.
+  agentInsightsEnabled: "true"
+  # Default: false
+  # Description: Whether Agent Insights project guidance is enabled, effective only while Agent Insights is active.
+  agentInsightsGuidanceEnabled: "false"
+  # Default: true
   # Description: Whether the online-scoring (LLM-as-judge) evaluation loop is persisted as monitoring traces.
   onlineScoringTracingEnabled: "true"
+  # Default: true, matched here so the test application boots the feature the way a deployment does:
+  #   the score listener registered, the Redis buffer flush job scheduled and the routing consumer
+  #   started. Unlike the other scheduled jobs this configuration switches off, this one cannot be
+  #   separated from its feature — annotationQueueRouting.enabled and jobEnabled were removed in review
+  #   as a configuration smell, leaving a single switch for both.
+  # Description: Whether or not automatic annotation queue population is enabled. When false the score
+  #   listener, the Redis buffer flush job and the routing consumer all stay dormant, and the UI hides the
+  #   automation controls on annotation queues.
+  annotationQueueAutomationEnabled: "true"
+  # Default: false
+  # Description: Whether every triggered alert is also published to the deployment's AWS EventBridge bus
+  eventBridgeAlertsEnabled: "false"
   # Default: 100
   # Description: Deployment-level default rows-per-page for UI tables (experiments v1/v2).
   #              Lower this value to reduce initial render cost for high-volume workspaces.
@@ -1092,6 +1344,15 @@ webhook:
   # Default: relaxed
   # Description: Outbound destination policy for webhook URLs; tests target local mock servers
   destinationGuard: "relaxed"
+  # Default: plaintext_or_tls
+  # Values: ['plaintext_or_tls', 'https_only']
+  #   - plaintext_or_tls: http and https
+  #   - https_only: https only
+  # Description: Schemes allowed for webhook URLs, checked in strict mode only
+  destinationScheme: plaintext_or_tls
+  # Default: 512B
+  # Description: Maximum bytes read from a webhook response body, which is only logged; the rest is discarded (at most 64KiB)
+  responseBodyMaxSize: 512B
   # Default: 10
   # Description: Claim pending messages every N polling intervals
   claimIntervalRatio: 10
@@ -1142,3 +1403,74 @@ optimizationStalledReaper:
 environment:
   # Low ceiling for tests so cap-related scenarios don't need to insert many environments.
   maxPerWorkspace: 5
+
+annotationQueueRouting:
+  # Mechanics only. Whether the feature runs at all is serviceToggles.annotationQueueAutomationEnabled.
+  # Default: annotation-queue-routing
+  # Description: Redis stream name for queued annotation queue routing work
+  streamName: 'annotation-queue-routing'
+  # Default: annotation-queue-routing-consumers
+  # Description: Consumer group name for annotation queue routing
+  consumerGroupName: 'annotation-queue-routing-consumers'
+  # Default: 100
+  # Description: Messages read per tick and the number processed concurrently. A message is one (workspace,
+  #   scope) batch flushed from the buffer, and processing it is a few bulk database queries, so this bounds
+  #   concurrent database work by batch. 100 matches the other database-only consumers
+  #   (experimentDenormalization, traceThreadConfig); the 5-10 used elsewhere caps slow external calls (LLM,
+  #   webhook, export) that this consumer does not make.
+  consumerBatchSize: 100
+  # Default: 15s
+  # Description: How long an entity must go without a new feedback score before the flush may take it (100ms-1m).
+  #   Every score written to it in the meantime folds into the one buffer member and restarts the wait, so the
+  #   consumer never reads a score younger than this, which keeps it clear of ClickHouse replica lag. Latency
+  #   added to every routed item. Same semantics as the experimentDenormalization debounce.
+  debounceDelay: 15s
+  # Default: 2m
+  # Description: TTL of the Redis buffer key (10s-10m). Set when the key is created and renewed by every flush run,
+  #   so if nothing drains the buffer it expires this long after the last flush instead of growing without limit.
+  #   Matches experimentDenormalization, whose buckets expire at twice their debounce delay.
+  bufferTtl: 2m
+  # Default: 5s
+  # Description: Interval at which the flush job publishes due buffer members to the stream (1s-1m). An item is
+  #   routed between debounceDelay and debounceDelay + jobInterval after its last score. Same cadence as the
+  #   experimentDenormalization flush job.
+  jobInterval: 5s
+  # Default: 4s
+  # Description: Time the flush job holds the distributed lock (500ms-1m). Kept below jobInterval so the lock
+  #   releases before the next cycle. A lease, not a timeout: a run that outlives it may overlap the next
+  #   replica's, costing at most a duplicate message.
+  jobLockTime: 4s
+  # Default: 300ms
+  # Description: Time the flush job waits to acquire the lock before skipping the run (100ms-5s)
+  jobLockWaitTime: 300ms
+  # Default: 1000
+  # Description: Maximum number of buffer members read per page when flushing, and therefore the most entities one
+  #   stream message can carry (100-5000)
+  jobBatchSize: 1000
+  # Default: 1s
+  # Description: How often to poll Redis for new routing work. Together with consumerBatchSize and
+  #   claimIntervalRatio this sets the throughput ceiling: new messages per second per replica is about
+  #   (consumerBatchSize / poolingInterval) x (1 - 1 / claimIntervalRatio), because every
+  #   claimIntervalRatio-th tick spends its turn on autoClaim rather than reading new work. At the shipped
+  #   values that is about 90/s per replica. Raise it and the backlog grows until streamMaxLen trimming
+  #   silently discards the oldest messages; consumerBatchSize is the lever to raise alongside it.
+  poolingInterval: 1s
+  # Default: 5s
+  # Description: Timeout for blocking read operations on Redis streams (long polling)
+  longPollingDuration: 5s
+  # Default: 3
+  # Description: Maximum number of retries for a failing message before it is dropped
+  maxRetries: 3
+  # Default: 10
+  # Description: Claim pending messages every N polling intervals. Lower values recover stuck work sooner
+  #   but cost new-message throughput, since a claim tick reads nothing new - see poolingInterval above.
+  claimIntervalRatio: 10
+  # Default: 5m
+  # Description: How long a message can stay pending before it is auto-claimed by another consumer
+  pendingMessageDuration: 5m
+  # Default: 100000
+  # Description: Maximum stream length before old entries are trimmed
+  streamMaxLen: 100000
+  # Default: 1000
+  # Description: Number of entries trimmed at a time when the stream exceeds streamMaxLen
+  streamTrimLimit: 1000

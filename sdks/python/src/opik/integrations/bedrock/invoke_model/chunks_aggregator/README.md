@@ -14,6 +14,7 @@ chunks_aggregator/
 ├── llama.py                 # Meta Llama aggregator
 ├── mistral.py               # Mistral/Pixtral aggregator
 ├── nova.py                  # Amazon Nova aggregator
+├── openai.py                # OpenAI (gpt-oss, GPT-5.x, GPT-6) aggregator
 └── format_detector.py       # Format detection and registry
 ```
 
@@ -27,6 +28,8 @@ chunks_aggregator/
   - Returns: `{generation, prompt_token_count, generation_token_count, stop_reason, usage}`
 - **Mistral** (Mistral AI): Pixtral Large 2502
   - Returns: `{id, object, model, choices, usage}` (OpenAI-compatible)
+- **OpenAI** (OpenAI): gpt-oss, GPT-5.x, GPT-6
+  - Returns: `{id, object, model, choices, usage}` (chat completion; text streamed in `choices[0].delta`, stop reason in `finish_reason`)
 
 ## Adding a New Format
 

@@ -23,6 +23,7 @@ import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.TraceField;
 import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.api.metrics.KpiCardRequest;
+import com.comet.opik.api.metrics.WorkspaceMetricsSummaryRequest;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.BigDecimalCollectors;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -41,6 +42,7 @@ import com.comet.opik.api.resources.utils.resources.GuardrailsResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.api.resources.utils.resources.WorkspaceResourceClient;
 import com.comet.opik.api.resources.utils.traces.TraceDBUtils;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
@@ -122,6 +124,8 @@ import static com.comet.opik.api.Visibility.PUBLIC;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.FeedbackScoreAssertionUtils.assertFeedbackScoreNames;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KEY_MESSAGE;
+import static com.comet.opik.api.resources.utils.TestHttpClientUtils.MATRIX_PARAMETERS_RESPONSE;
+import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NOT_FOUND_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.PROJECT_NOT_FOUND_MESSAGE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
@@ -196,6 +200,7 @@ class ProjectsResourceTest {
     private SpanResourceClient spanResourceClient;
     private ProjectResourceClient projectResourceClient;
     private GuardrailsResourceClient guardrailsResourceClient;
+    private WorkspaceResourceClient workspaceResourceClient;
     private GuardrailsGenerator guardrailsGenerator;
 
     @BeforeAll
@@ -213,6 +218,7 @@ class ProjectsResourceTest {
         this.spanResourceClient = new SpanResourceClient(this.client, baseURI);
         this.projectResourceClient = new ProjectResourceClient(this.client, baseURI, factory);
         this.guardrailsResourceClient = new GuardrailsResourceClient(this.client, baseURI);
+        this.workspaceResourceClient = new WorkspaceResourceClient(this.client, baseURI, factory);
         this.guardrailsGenerator = new GuardrailsGenerator();
     }
 
@@ -411,6 +417,158 @@ class ProjectsResourceTest {
                                     .withJsonBody(JsonUtils.readTree(
                                             new ReactServiceErrorResponse(FAKE_API_KEY_MESSAGE,
                                                     401)))));
+        }
+
+        Stream<Arguments> matrixParameterRequests() {
+            var paths = List.of(
+                    "/v1;version=1/private/projects",
+                    "/v1/private;scope=all/projects",
+                    "/v1/private/projects;page=2",
+                    "/v1/private/projects/;page=2");
+            var methods = List.of("GET", "POST", "OPTIONS");
+            return credentials().flatMap(credential -> paths.stream()
+                    .flatMap(path -> methods.stream().map(method -> arguments(credential.get()[0], method, path))));
+        }
+
+        @ParameterizedTest
+        @MethodSource("matrixParameterRequests")
+        @DisplayName("any request: when the path carries matrix parameters, then not found regardless of credentials")
+        void anyRequest__whenPathCarriesMatrixParameters__thenNotFound(String apiKey, String method, String path) {
+            wireMock.server().resetRequests();
+
+            try (var actualResponse = client.target(baseURI + path)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, UUID.randomUUID().toString())
+                    .method(method)) {
+
+                assertThat(actualResponse.getStatus()).isEqualTo(404);
+                assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                        .isEqualTo(MATRIX_PARAMETERS_RESPONSE);
+            }
+            wireMock.server().verify(0, postRequestedFor(urlPathEqualTo("/opik/auth")));
+        }
+
+        Stream<Arguments> failingCredentials() {
+            return Stream.of(
+                    arguments(fakeApikey, UNAUTHORIZED_RESPONSE),
+                    arguments("", NO_API_KEY_RESPONSE));
+        }
+
+        @Test
+        @DisplayName("create project: when the query string carries a semicolon, then created")
+        void createProject__whenQueryStringCarriesSemicolon__thenCreated() {
+            var project = factory.manufacturePojo(Project.class);
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI) + "?source=a;b")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, okApikey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .post(Entity.entity(project, MediaType.APPLICATION_JSON_TYPE))) {
+
+                assertThat(actualResponse.getStatus()).isEqualTo(201);
+                assertThat(actualResponse.hasEntity()).isFalse();
+            }
+        }
+
+        @ParameterizedTest
+        @MethodSource("failingCredentials")
+        @DisplayName("create project: when the query string carries a semicolon and the credentials fail, then unauthorized")
+        void createProject__whenQueryStringCarriesSemicolonAndCredentialsFail__thenUnauthorized(String apiKey,
+                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
+            var project = factory.manufacturePojo(Project.class);
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI) + "?source=a;b")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .post(Entity.entity(project, MediaType.APPLICATION_JSON_TYPE))) {
+
+                assertThat(actualResponse.getStatus()).isEqualTo(401);
+                assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                        .isEqualTo(errorMessage);
+            }
+        }
+
+        @Test
+        @DisplayName("get project by id: when the path parameter carries an encoded semicolon, then not found")
+        void getProjectById__whenPathParameterCarriesEncodedSemicolon__thenNotFound() {
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
+
+            try (var actualResponse = client.getClient().target(URL_TEMPLATE.formatted(baseURI) + "/%3B")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, okApikey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                assertThat(actualResponse.getStatus()).isEqualTo(404);
+                assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                        .isEqualTo(NOT_FOUND_RESPONSE);
+            }
+        }
+
+        @ParameterizedTest
+        @MethodSource("failingCredentials")
+        @DisplayName("get project by id: when the path parameter carries an encoded semicolon and the credentials fail, then unauthorized")
+        void getProjectById__whenPathParameterCarriesEncodedSemicolonAndCredentialsFail__thenUnauthorized(
+                String apiKey, io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
+
+            try (var actualResponse = client.getClient().target(URL_TEMPLATE.formatted(baseURI) + "/%3B")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                assertThat(actualResponse.getStatus()).isEqualTo(401);
+                assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                        .isEqualTo(errorMessage);
+            }
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"/v1//private/projects", "/v1%2Fprivate/projects"})
+        @DisplayName("find projects: when the path carries an empty or encoded segment separator, then bad request")
+        void findProjects__whenPathCarriesEmptyOrEncodedSeparator__thenBadRequest(String path) {
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
+
+            try (var actualResponse = client.getClient().target(baseURI + path)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, okApikey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                assertThat(actualResponse.getStatus()).isEqualTo(400);
+            }
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {
+                "/v1/./private/projects",
+                "/v1/private/../private/projects",
+                "/v1/%70rivate/projects"})
+        @DisplayName("find projects: when the path carries a dot segment or an encoded letter, then not found")
+        void findProjects__whenPathCarriesDotSegmentOrEncodedLetter__thenNotFound(String path) {
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
+
+            try (var actualResponse = client.getClient().target(baseURI + path)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, okApikey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                assertThat(actualResponse.getStatus()).isEqualTo(404);
+                assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                        .isEqualTo(NOT_FOUND_RESPONSE);
+            }
         }
 
         @ParameterizedTest
@@ -3066,6 +3224,104 @@ class ProjectsResourceTest {
                     .usingRecursiveComparison()
                     .ignoringCollectionOrder()
                     .isEqualTo(notDeletedIds);
+        }
+
+        @Test
+        void deleteProject__whenProjectHasTraces__thenDeletesItsTracesAndSpans() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var deletedProjectId = createProjectWithTracedSpans(apiKey, workspaceName);
+            var keptProjectId = createProjectWithTracedSpans(apiKey, workspaceName);
+            var keptProjectCost = getProjectCost(keptProjectId, apiKey, workspaceName);
+            assertThat(getProjectCost(deletedProjectId, apiKey, workspaceName)).isPositive();
+
+            projectResourceClient.deleteProject(deletedProjectId, apiKey, workspaceName);
+
+            Awaitility.await().untilAsserted(
+                    () -> assertThat(getProjectCost(deletedProjectId, apiKey, workspaceName)).isZero());
+            assertThat(getProjectCost(keptProjectId, apiKey, workspaceName)).isEqualTo(keptProjectCost);
+        }
+
+        @Test
+        void deleteProjectsBatch__whenProjectsHaveTraces__thenDeletesTheirTracesAndSpans() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Two deleted projects, so their traces are deleted in one batch spanning both.
+            var deletedProjectIds = Set.of(createProjectWithTracedSpans(apiKey, workspaceName),
+                    createProjectWithTracedSpans(apiKey, workspaceName));
+            var keptProjectId = createProjectWithTracedSpans(apiKey, workspaceName);
+            var keptProjectCost = getProjectCost(keptProjectId, apiKey, workspaceName);
+            deletedProjectIds.forEach(projectId -> assertThat(getProjectCost(projectId, apiKey, workspaceName))
+                    .isPositive());
+
+            projectResourceClient.deleteProjectsBatch(deletedProjectIds, apiKey, workspaceName);
+
+            Awaitility.await().untilAsserted(() -> deletedProjectIds.forEach(
+                    projectId -> assertThat(getProjectCost(projectId, apiKey, workspaceName)).isZero()));
+            assertThat(getProjectCost(keptProjectId, apiKey, workspaceName)).isEqualTo(keptProjectCost);
+        }
+
+        @Test
+        void deleteProject__whenProjectHasSpansWithoutTraces__thenDeletesTheSpans() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = createProject(project, apiKey, workspaceName);
+            // Spans whose trace was never logged, so no traces row leads to them.
+            var spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
+                    .map(span -> span.toBuilder()
+                            .projectName(project.name())
+                            .traceId(idGenerator.generateId())
+                            .build())
+                    .toList();
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+            assertThat(getProjectCost(projectId, apiKey, workspaceName)).isPositive();
+
+            projectResourceClient.deleteProject(projectId, apiKey, workspaceName);
+
+            Awaitility.await().untilAsserted(
+                    () -> assertThat(getProjectCost(projectId, apiKey, workspaceName)).isZero());
+        }
+
+        private UUID createProjectWithTracedSpans(String apiKey, String workspaceName) {
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = createProject(project, apiKey, workspaceName);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                    .map(trace -> trace.toBuilder().projectName(project.name()).build())
+                    .toList();
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+            var spans = traces.stream()
+                    .flatMap(trace -> PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
+                            .map(span -> span.toBuilder()
+                                    .projectName(project.name())
+                                    .traceId(trace.id())
+                                    .build()))
+                    .toList();
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+            return projectId;
+        }
+
+        /**
+         * The project's span cost, read by project id. The trace and span endpoints 404 once the project is gone,
+         * whatever is left of its data, so they can't show it was deleted. Spans are deleted in the cascade of their
+         * traces' delete, so the cost reaching zero also shows the traces' delete ran.
+         */
+        private double getProjectCost(UUID projectId, String apiKey, String workspaceName) {
+            var now = Instant.now();
+            return workspaceResourceClient.getCostsSummary(WorkspaceMetricsSummaryRequest.builder()
+                    .projectIds(Set.of(projectId))
+                    .intervalStart(now.minus(1, ChronoUnit.DAYS))
+                    .intervalEnd(now.plus(1, ChronoUnit.DAYS))
+                    .build(), apiKey, workspaceName).current();
         }
     }
 

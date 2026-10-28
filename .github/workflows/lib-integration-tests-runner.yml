@@ -22,6 +22,9 @@ on:
           # - mistral  # disabled: Mistral API rejects the test traffic with 429
           - groq
           - cerebras
+          - ollama
+          - together
+          - cohere
           - aisuite
           - haystack
           # - guardrails  # disabled: guardrails-ai is on PyPI quarantine
@@ -157,6 +160,22 @@ jobs:
     uses: ./.github/workflows/lib-cerebras-tests.yml
     secrets: inherit
 
+  ollama_tests:
+    needs: [init_environment]
+    if: contains(fromJSON('["ollama", "all"]'), needs.init_environment.outputs.LIBS)
+    uses: ./.github/workflows/lib-ollama-tests.yml
+    secrets: inherit
+
+  together_tests:
+    needs: [init_environment]
+    if: contains(fromJSON('["together", "all"]'), needs.init_environment.outputs.LIBS)
+    uses: ./.github/workflows/lib-together-tests.yml
+
+  cohere_tests:
+    needs: [init_environment]
+    if: contains(fromJSON('["cohere", "all"]'), needs.init_environment.outputs.LIBS)
+    uses: ./.github/workflows/lib-cohere-tests.yml
+
   aisuite_tests:
     needs: [init_environment]
     if: contains(fromJSON('["aisuite", "all"]'), needs.init_environment.outputs.LIBS)
@@ -255,6 +274,9 @@ jobs:
       # - mistral_tests  # disabled: Mistral API rejects the test traffic with 429
       - groq_tests
       - cerebras_tests
+      - ollama_tests
+      - together_tests
+      - cohere_tests
       - aisuite_tests
       - haystack_tests
       # - guardrails_tests  # disabled: guardrails-ai is on PyPI quarantine
@@ -304,6 +326,9 @@ jobs:
               "Anthropic": "${{ needs.anthropic_tests.result }}",
               "Groq": "${{ needs.groq_tests.result }}",
               "Cerebras": "${{ needs.cerebras_tests.result }}",
+              "Ollama": "${{ needs.ollama_tests.result }}",
+              "Together": "${{ needs.together_tests.result }}",
+              "Cohere": "${{ needs.cohere_tests.result }}",
               "AISuite": "${{ needs.aisuite_tests.result }}",
               "Haystack": "${{ needs.haystack_tests.result }}",
               "DSPy": "${{ needs.dspy_tests.result }}",

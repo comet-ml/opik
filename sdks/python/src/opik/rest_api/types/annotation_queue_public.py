@@ -5,6 +5,7 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
+from .annotation_queue_annotator_view_public import AnnotationQueueAnnotatorViewPublic
 from .annotation_queue_automation_public import AnnotationQueueAutomationPublic
 from .annotation_queue_public_scope import AnnotationQueuePublicScope
 from .annotation_queue_reviewer_public import AnnotationQueueReviewerPublic
@@ -24,6 +25,7 @@ class AnnotationQueuePublic(UniversalBaseModel):
     annotators_per_item: typing.Optional[int] = None
     lock_timeout_seconds: typing.Optional[int] = None
     automation: typing.Optional[AnnotationQueueAutomationPublic] = None
+    annotator_view: typing.Optional[AnnotationQueueAnnotatorViewPublic] = None
     reviewers: typing.Optional[typing.List[AnnotationQueueReviewerPublic]] = None
     feedback_scores: typing.Optional[typing.List[FeedbackScoreAveragePublic]] = None
     items_count: typing.Optional[int] = None

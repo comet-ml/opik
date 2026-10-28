@@ -25,7 +25,7 @@ This integration captures:
 
 <Steps>
   <Step title="1. Install the plugin">
-    ```bash
+    ```bash wordWrap
     pip install opik-hermes
     ```
 
@@ -34,7 +34,7 @@ This integration captures:
   <Step title="2. Enable the plugin">
     Add `opik` to the enabled plugins in `~/.hermes/config.yaml`:
 
-    ```yaml
+    ```yaml wordWrap
     plugins:
       enabled: [opik]
     ```
@@ -44,14 +44,14 @@ This integration captures:
 
     For a local open-source Opik deployment:
 
-    ```bash
+    ```bash wordWrap
     OPIK_URL_OVERRIDE=http://localhost:5173/api
     OPIK_PROJECT_NAME=hermes
     ```
 
     For Comet-hosted Opik:
 
-    ```bash
+    ```bash wordWrap
     OPIK_API_KEY=your-api-key
     OPIK_WORKSPACE=your-workspace
     ```

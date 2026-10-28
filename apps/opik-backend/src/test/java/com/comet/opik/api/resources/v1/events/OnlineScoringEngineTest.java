@@ -36,6 +36,7 @@ import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.SpanType;
+import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.domain.llm.ChatCompletionService;
 import com.comet.opik.domain.llm.structuredoutput.InstructionStrategy;
 import com.comet.opik.domain.llm.structuredoutput.ToolCallingStrategy;
@@ -51,6 +52,7 @@ import com.google.common.eventbus.EventBus;
 import com.google.inject.AbstractModule;
 import com.redis.testcontainers.RedisContainer;
 import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.data.message.AudioContent;
 import dev.langchain4j.data.message.ChatMessageType;
 import dev.langchain4j.data.message.ImageContent;
 import dev.langchain4j.data.message.SystemMessage;
@@ -79,6 +81,8 @@ import org.junit.jupiter.params.provider.NullSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.Logger;
+import org.slf4j.MDC;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -95,6 +99,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -521,10 +526,12 @@ class OnlineScoringEngineTest {
 
         var captor = ArgumentCaptor.forClass(List.class);
         Mockito.doReturn(Mono.empty()).when(feedbackScoreService).scoreBatchOfTraces(Mockito.any());
-        var providerErrorMessage = "LLM provider XXXXX";
+        var providerErrorMessage = "LLM provider %s".formatted(RandomStringUtils.secure().nextAlphanumeric(16));
 
         Mockito.doThrow(
-                new InternalServerErrorException(ChatCompletionService.UNEXPECTED_ERROR_CALLING_LLM_PROVIDER,
+                // the provider's text both in the message and in the cause
+                new InternalServerErrorException("%s: %s".formatted(
+                        ChatCompletionService.UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, providerErrorMessage),
                         new RuntimeException(providerErrorMessage)))
                 .when(aiProxyService).scoreTrace(Mockito.any(), Mockito.any(), Mockito.any());
 
@@ -536,11 +543,14 @@ class OnlineScoringEngineTest {
 
         //Check user facing logs
         var logPage = evaluatorsResourceClient.getLogs(id, WORKSPACE_NAME, API_KEY);
-        var logMessage = "Unexpected error while scoring traceId '%s' with rule '%s': %n%n%s".formatted(traceId,
-                evaluator.getName(), providerErrorMessage);
+        // the root error type only, never the provider's text anywhere in the chain
+        var logMessage = "Unexpected error while scoring traceId '%s' with rule '%s', error type '%s'"
+                .formatted(traceId, evaluator.getName(), "RuntimeException");
 
         assertThat(logPage.content())
-                .anyMatch(logItem -> logItem.level().equals(LogLevel.ERROR) && logItem.message().contains(logMessage));
+                .anyMatch(
+                        logItem -> logItem.level().equals(LogLevel.ERROR) && logItem.message().startsWith(logMessage));
+        assertThat(logPage.content()).noneMatch(logItem -> logItem.message().contains(providerErrorMessage));
     }
 
     @Test
@@ -1812,6 +1822,41 @@ class OnlineScoringEngineTest {
         assertThat(((ImageContent) parts.get(1)).image().url().toString()).isEqualTo(expectedUrl);
     }
 
+    @Test
+    @DisplayName("should pass base64 data URI image and audio as inline data, not as URLs")
+    void shouldInlineMedia_whenUrlsAreBase64DataUris() {
+        var base64Data = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+        var contentParts = List.of(
+                LlmAsJudgeMessageContent.builder()
+                        .type("image_url")
+                        .imageUrl(LlmAsJudgeMessageContent.ImageUrl.builder()
+                                .url("{{image_url}}")
+                                .build())
+                        .build(),
+                LlmAsJudgeMessageContent.builder()
+                        .type("audio_url")
+                        .audioUrl(LlmAsJudgeMessageContent.AudioUrl.builder()
+                                .url("{{audio_url}}")
+                                .build())
+                        .build());
+
+        var messages = List.of(
+                LlmAsJudgeMessage.builder()
+                        .role(ChatMessageType.USER)
+                        .contentArray(contentParts)
+                        .build());
+
+        var rendered = OnlineScoringEngine.renderMessages(
+                messages,
+                Map.of("image_url", "data:image/png;base64," + base64Data,
+                        "audio_url", "data:audio/wav;base64," + base64Data),
+                Trace.builder().build());
+
+        assertThat(rendered).containsExactly(UserMessage.from(
+                ImageContent.from(base64Data, "image/png"),
+                AudioContent.from(base64Data, "audio/wav")));
+    }
+
     // ========================================
     // Array Message Format Tests
     // ========================================
@@ -2084,8 +2129,8 @@ class OnlineScoringEngineTest {
         var userMessage = (UserMessage) renderedMessages.getFirst();
         assertThat(userMessage.contents()).hasSize(2);
 
-        var videoContent = (VideoContent) userMessage.contents().get(1);
-        assertThat(videoContent.video().url().toString()).startsWith("data:video/mp4;base64,");
+        assertThat(userMessage.contents().get(1)).isEqualTo(VideoContent.from(
+                "AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAAIZnJlZQAACKBtZGF0", "video/mp4"));
     }
 
     @Test
@@ -2382,6 +2427,65 @@ class OnlineScoringEngineTest {
         assertThat(allText).contains(spanRef);
         // Sentinel literal must not leak into the rendered prompt.
         assertThat(allText).doesNotContain("{{span}}");
+    }
+
+    @Test
+    void logUnresolvedEvaluatorArgumentsSendsTheSamePayloadToBothSinks() {
+        // Asserts the backend payload too: without it the internal line could be reworded, or reduced to
+        // different arguments, with every other test still green. Restated so a change must be deliberate.
+        var expectedFormat = "None of the metric's declared arguments resolved,"
+                + " so there is no data to evaluate. Check the declared paths against the input, output and"
+                + " metadata present on the entity. {} '{}', rule '{}', unresolved arguments: {}";
+        var mdc = Map.of(
+                UserLog.MARKER, UserLog.AUTOMATION_RULE_EVALUATOR.name(),
+                UserLog.WORKSPACE_ID, UUID.randomUUID().toString(),
+                UserLog.TRACE_ID, UUID.randomUUID().toString(),
+                UserLog.RULE_ID, UUID.randomUUID().toString());
+        var userFacingLogger = Mockito.mock(Logger.class);
+        var internalLogger = Mockito.mock(Logger.class);
+        var entityId = UUID.randomUUID();
+        var ruleName = "rule-" + RandomStringUtils.secure().nextAlphanumeric(16);
+
+        OnlineScoringEngine.logUnresolvedEvaluatorArguments(userFacingLogger, internalLogger, mdc,
+                "traceId", entityId, ruleName,
+                Map.of("q", "input.question", "plan", "output.execution_plan"));
+
+        // Sorted by argument name, so the rendering is deterministic regardless of map iteration order.
+        var expectedArguments = "'plan' -> 'output.execution_plan', 'q' -> 'input.question'";
+        Mockito.verify(userFacingLogger).warn(expectedFormat, "traceId", entityId, ruleName, expectedArguments);
+        Mockito.verify(internalLogger).warn(expectedFormat, "traceId", entityId, ruleName, expectedArguments);
+    }
+
+    @Test
+    void logUnresolvedEvaluatorArgumentsScopesTheMdcToTheUserFacingSinkOnly() {
+        // The ClickHouse appender fills the user-facing row's columns from the MDC; the backend line has no
+        // such need, so only one sink is scoped. MDC is thread-local and read at append time, which is why
+        // each sink records it during its own call rather than after.
+        var mdc = Map.of(
+                UserLog.MARKER, UserLog.AUTOMATION_RULE_EVALUATOR.name(),
+                UserLog.WORKSPACE_ID, UUID.randomUUID().toString(),
+                UserLog.TRACE_ID, UUID.randomUUID().toString(),
+                UserLog.RULE_ID, UUID.randomUUID().toString());
+        var userFacingLogger = Mockito.mock(Logger.class);
+        var internalLogger = Mockito.mock(Logger.class);
+        var seenByUserFacing = new AtomicReference<Map<String, String>>();
+        var seenByInternal = new AtomicReference<Map<String, String>>();
+        Mockito.doAnswer(invocation -> {
+            seenByUserFacing.set(MDC.getCopyOfContextMap());
+            return null;
+        }).when(userFacingLogger).warn(Mockito.anyString(), Mockito.any(Object[].class));
+        Mockito.doAnswer(invocation -> {
+            seenByInternal.set(MDC.getCopyOfContextMap());
+            return null;
+        }).when(internalLogger).warn(Mockito.anyString(), Mockito.any(Object[].class));
+
+        OnlineScoringEngine.logUnresolvedEvaluatorArguments(userFacingLogger, internalLogger, mdc,
+                "traceId", UUID.randomUUID(), "a-rule", Map.of("plan", "output.execution_plan"));
+
+        assertThat(seenByUserFacing.get()).containsAllEntriesOf(mdc);
+        assertThat(seenByInternal.get()).isNullOrEmpty();
+        // And the scope is closed again, so it does not leak onto the next message on this thread.
+        assertThat(MDC.getCopyOfContextMap()).isNullOrEmpty();
     }
 
     private Span createSpan(UUID spanId, UUID projectId) {

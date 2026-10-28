@@ -2,10 +2,13 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.OllamaConnectionTestResponse;
 import com.comet.opik.api.OllamaModel;
+import com.comet.opik.infrastructure.llm.customllm.ProviderBaseUrlGuard;
+import com.comet.opik.infrastructure.net.DestinationGuardDnsResolver;
+import com.comet.opik.infrastructure.net.LoggableUrl;
 import com.comet.opik.utils.JsonUtils;
-import com.comet.opik.utils.ValidationUtils;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.core.type.TypeReference;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.client.Client;
@@ -15,9 +18,11 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.glassfish.jersey.client.ClientProperties;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
+import java.io.InputStream;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
@@ -34,7 +39,16 @@ import java.util.List;
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class OllamaService {
 
+    /** The body of {@code /api/version}. */
+    private static final TypeReference<OllamaVersionResponse> VERSION_RESPONSE = new TypeReference<>() {
+    };
+    /** The body of {@code /api/tags}. */
+    private static final TypeReference<OllamaModelsResponse> MODELS_RESPONSE = new TypeReference<>() {
+    };
+    private static final String CONNECTION_FAILED = "Failed to connect to Ollama: HTTP %d";
+
     private final @NonNull Client httpClient;
+    private final @NonNull ProviderBaseUrlGuard providerBaseUrlGuard;
 
     /**
      * Tests connection to an Ollama instance and retrieves a server version.
@@ -46,25 +60,24 @@ public class OllamaService {
     public Mono<OllamaConnectionTestResponse> testConnection(@NonNull String baseUrl, String apiKey) {
         String normalizedUrl = normalizeUrl(baseUrl);
         String versionUrl = normalizedUrl + "/api/version";
-        log.debug("Testing Ollama connection at: '{}'", ValidationUtils.redactCredentialsFromUrl(versionUrl));
+        log.debug("Testing Ollama connection at: '{}'", LoggableUrl.of(versionUrl));
 
         return performAsyncGet(versionUrl, apiKey)
                 .subscribeOn(Schedulers.boundedElastic())
                 .map(response -> {
-                    if (response.getStatus() == 200 && response.hasEntity()) {
-                        String responseBody = response.readEntity(String.class);
-                        OllamaVersionResponse versionResponse = JsonUtils.readValue(responseBody,
-                                OllamaVersionResponse.class);
-                        String version = versionResponse.version();
-                        log.info("Successfully connected to Ollama instance, version: '{}'", version);
+                    try (response) {
+                        if (response.getStatus() == 200 && response.hasEntity()) {
+                            OllamaVersionResponse versionResponse = readBody(response, VERSION_RESPONSE);
+                            String version = versionResponse.version();
+                            log.info("Successfully connected to Ollama instance, version: '{}'", version);
 
-                        return createSuccessResponse(version);
-                    } else {
-                        String redactedUrl = ValidationUtils.redactCredentialsFromUrl(normalizedUrl);
-                        String errorMsg = "Failed to connect to Ollama at " + redactedUrl + ": HTTP "
-                                + response.getStatus();
-                        log.warn("Failed to connect to Ollama at '{}': HTTP '{}'", redactedUrl, response.getStatus());
-                        return createErrorResponse(errorMsg);
+                            return createSuccessResponse(version);
+                        } else {
+                            log.warn("Failed to connect to Ollama at '{}': HTTP '{}'",
+                                    LoggableUrl.of(normalizedUrl), response.getStatus());
+                            // the caller gave the URL, so it is not echoed back
+                            return createErrorResponse(CONNECTION_FAILED.formatted(response.getStatus()));
+                        }
                     }
                 })
                 .onErrorResume(e -> {
@@ -84,42 +97,47 @@ public class OllamaService {
     public Mono<List<OllamaModel>> listModels(@NonNull String baseUrl, String apiKey) {
         String normalizedUrl = normalizeUrl(baseUrl);
         String tagsUrl = normalizedUrl + "/api/tags";
-        log.debug("Fetching models from Ollama instance at: '{}'", ValidationUtils.redactCredentialsFromUrl(tagsUrl));
+        log.debug("Fetching models from Ollama instance at: '{}'", LoggableUrl.of(tagsUrl));
 
         return performAsyncGet(tagsUrl, apiKey)
                 .subscribeOn(Schedulers.boundedElastic())
                 .map(response -> {
-                    if (response.getStatus() == 200 && response.hasEntity()) {
-                        String responseBody = response.readEntity(String.class);
-                        OllamaModelsResponse modelsResponse = JsonUtils.readValue(responseBody,
-                                OllamaModelsResponse.class);
+                    try (response) {
+                        if (response.getStatus() == 200 && response.hasEntity()) {
+                            OllamaModelsResponse modelsResponse = readBody(response, MODELS_RESPONSE);
 
-                        List<OllamaModelResponse> modelResponses = modelsResponse.models() != null
-                                ? modelsResponse.models()
-                                : Collections.emptyList();
+                            List<OllamaModelResponse> modelResponses = modelsResponse.models() != null
+                                    ? modelsResponse.models()
+                                    : Collections.emptyList();
 
-                        List<OllamaModel> models = modelResponses.stream()
-                                .map(model -> OllamaModel.builder()
-                                        .name(model.name())
-                                        .size(model.size())
-                                        .digest(model.digest())
-                                        .modifiedAt(model.modifiedAt())
-                                        .build())
-                                .toList();
+                            List<OllamaModel> models = modelResponses.stream()
+                                    .map(model -> OllamaModel.builder()
+                                            .name(model.name())
+                                            .size(model.size())
+                                            .digest(model.digest())
+                                            .modifiedAt(model.modifiedAt())
+                                            .build())
+                                    .toList();
 
-                        log.info("Found '{}' models on Ollama instance", models.size());
-                        return models;
-                    } else {
-                        String redactedUrl = ValidationUtils.redactCredentialsFromUrl(normalizedUrl);
-                        log.warn("Failed to fetch models from Ollama at '{}': HTTP '{}'", redactedUrl,
-                                response.getStatus());
-                        return Collections.<OllamaModel>emptyList();
+                            log.info("Found '{}' models on Ollama instance", models.size());
+                            return models;
+                        } else {
+                            log.warn("Failed to fetch models from Ollama at '{}': HTTP '{}'",
+                                    LoggableUrl.of(normalizedUrl),
+                                    response.getStatus());
+                            return Collections.<OllamaModel>emptyList();
+                        }
                     }
                 })
                 .onErrorResume(e -> {
                     log.error("Failed to fetch models from Ollama", e);
                     return Mono.just(Collections.emptyList());
                 });
+    }
+
+    /** The body parsed as it is read, with no copy of it as a string. */
+    private static <T> T readBody(Response response, TypeReference<T> type) {
+        return JsonUtils.readValue(response.readEntity(InputStream.class), type);
     }
 
     /**
@@ -132,6 +150,9 @@ public class OllamaService {
     private Mono<Response> performAsyncGet(String url, String apiKey) {
         return Mono.create(sink -> {
             var requestBuilder = httpClient.target(url)
+                    .property(ClientProperties.FOLLOW_REDIRECTS, false)
+                    // the caller validated the base URL; this checks each address connected to
+                    .property(DestinationGuardDnsResolver.PROPERTY, providerBaseUrlGuard.destinationGuard())
                     .request(MediaType.APPLICATION_JSON);
 
             if (apiKey != null && !apiKey.isBlank()) {

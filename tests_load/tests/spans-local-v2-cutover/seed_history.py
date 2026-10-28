@@ -48,7 +48,7 @@ from datetime import datetime, timedelta
 
 import click
 
-from _common import (BAD_ID_INSTANT, DEFAULT_PROJECT, LOGGER, discover_workspace_and_project, json_payload,
+from _common import (BAD_ID_INSTANT, CEILING_ID_INSTANT, DEFAULT_PROJECT, LOGGER, discover_workspace_and_project, json_payload,
                      make_ch_client, make_opik_client, mint_uuid7, ns_ticks, random_text, us_ticks, utcnow)
 
 # Every base column the backfill copies (MATERIALIZED columns like id_at, duration and the *_length counters are
@@ -173,6 +173,11 @@ def _row(
 @click.option("--bad-ids", default=0,
               help="Extra spans with a far-future (year ~2201) UUIDv7 id but a real created_at. Spreads the "
                    "destination's weekly partitions, which is what max_partitions_per_insert_block must permit.")
+@click.option("--ceiling-ids", default=0,
+              help="Extra spans whose UUIDv7 id is PAST the 2300-01-01 DateTime64 ceiling, where id_at saturates. The "
+                   "cutover's partition-scope derivation refuses to derive a partition for those, so a replay whose "
+                   "bridge window contains one falls back to a single UNBOUNDED statement (OPIK-8607) — the statement "
+                   "that cannot run at a large partition count. estimate.sh audit 3 counts them.")
 @click.option("--non-v7-ids", default=0,
               help="Extra spans whose id is a UUIDv4. UUIDv7ToDateTime returns 1970-01-01 for those, so they land in "
                    "the EPOCH week — the far-PAST end of the partition spread.")
@@ -185,7 +190,7 @@ def _row(
 @click.option("--batch", default=5000, help="Rows per ClickHouse INSERT.")
 @click.option("--workspace-id", default=None, help="Override workspace_id (default: auto-discovered via the SDK).")
 @click.option("--project-id", default=None, help="Override project_id (default: auto-discovered via the SDK).")
-def main(project, weeks, traces_per_week, spans_per_trace, bad_ids, non_v7_ids, parent_poison, split_parents, batch,
+def main(project, weeks, traces_per_week, spans_per_trace, bad_ids, ceiling_ids, non_v7_ids, parent_poison, split_parents, batch,
          workspace_id, project_id):
     ch = make_ch_client()
 
@@ -227,6 +232,11 @@ def main(project, weeks, traces_per_week, spans_per_trace, bad_ids, non_v7_ids, 
         created_at = now - timedelta(weeks=random.uniform(0, max(weeks - 1, 1)))
         rows.append(_row(created_at, mint_uuid7(BAD_ID_INSTANT), trace_id, workspace_id, project_id, ""))
 
+    for _ in range(ceiling_ids):
+        trace_id, trace_at = _pick_trace()
+        created_at = now - timedelta(weeks=random.uniform(0, max(weeks - 1, 1)))
+        rows.append(_row(created_at, mint_uuid7(CEILING_ID_INSTANT), trace_id, workspace_id, project_id, ""))
+
     for _ in range(non_v7_ids):
         trace_id, trace_at = _pick_trace()
         created_at = now - timedelta(weeks=random.uniform(0, max(weeks - 1, 1)))
@@ -252,10 +262,10 @@ def main(project, weeks, traces_per_week, spans_per_trace, bad_ids, non_v7_ids, 
 
     random.shuffle(rows)  # interleave weeks so inserts look like real ingestion, not one week at a time
     LOGGER.info(
-        "Inserting %d spans (%d weeks x %d traces x %d spans) + %d bad-id + %d non-v7 + %d parent-poison + %d "
-        "split-parent into project_id=%s",
-        len(rows), weeks, traces_per_week, spans_per_trace, bad_ids, non_v7_ids, parent_poison, split_parents * 2,
-        project_id)
+        "Inserting %d spans (%d weeks x %d traces x %d spans) + %d bad-id + %d past-ceiling + %d non-v7 + %d "
+        "parent-poison + %d split-parent into project_id=%s",
+        len(rows), weeks, traces_per_week, spans_per_trace, bad_ids, ceiling_ids, non_v7_ids, parent_poison,
+        split_parents * 2, project_id)
     for start in range(0, len(rows), batch):
         chunk = rows[start:start + batch]
         ch.insert("spans", chunk, column_names=COLUMNS)
@@ -267,11 +277,19 @@ def main(project, weeks, traces_per_week, spans_per_trace, bad_ids, non_v7_ids, 
     LOGGER.info("Done. project '%s' now has %s live spans in ClickHouse.", project, total)
     LOGGER.info("Per-week seeded (created_at week -> span count): %s",
                 {k: per_week_counts[k] for k in sorted(per_week_counts)})
+    if ceiling_ids:
+        LOGGER.info(
+            "Plus %d past-ceiling-id spans (UUIDv7 ~2400). id_at saturates past 2300-01-01, so they all share the "
+            "table's FINAL weekly partition and the partition-scope derivation refuses to derive one for them. "
+            "estimate.sh audit 3 should now report them; and if one is ever cascade-deleted during a cutover window, "
+            "that window's replay falls back to a single unbounded statement.", ceiling_ids)
+
     if bad_ids:
         LOGGER.info(
             "Plus %d far-future-id spans (litellm UUIDv7 ~2201). The successor's DateTime64 id_at partitions by the "
-            "honest Date32 weekly Monday, so look for them in their own ~2201 weekly partition — and expect the "
-            "backfill's OUTLIER pass to be the one that copies them.", bad_ids)
+            "honest Date32 weekly Monday, so look for them in their own ~2201 weekly partition. They are copied by "
+            "the same single statement as every other row in their created_at window — what they need is the raised "
+            "--max-partitions-per-insert-block, not a pass of their own.", bad_ids)
     if non_v7_ids:
         LOGGER.info(
             "Plus %d non-v7-id spans. UUIDv7ToDateTime returns 1970-01-01 for those, so they land in the EPOCH week — "
@@ -280,13 +298,15 @@ def main(project, weeks, traces_per_week, spans_per_trace, bad_ids, non_v7_ids, 
     if parent_poison:
         LOGGER.info(
             "Plus %d spans carrying the 40-character parent_span_id poison value. The copy maps anything that is not "
-            "exactly 36 bytes to the root sentinel; estimate.sh audit 4 should now report %d, and verify.sh should "
+            "exactly 36 bytes to the root sentinel; estimate.sh audit 2 should now report %d, and verify.sh should "
             "still PASS (the fingerprint applies the same normalization to the source side).", parent_poison,
             parent_poison)
     if split_parents:
         LOGGER.info(
-            "Plus %d span ids written twice under different parents at one last_updated_at. verify.sh should report "
-            "those windows INCONCLUSIVE with version_ties=src:N/dst:0 — NOT a mismatch, and NOT a pass.", split_parents)
+            "Plus %d span ids written twice under different parents at one last_updated_at. verify.sh should flag "
+            "those windows with version_ties=src:N/dst:0 — usually as a MISMATCH (the two sides' arbitrary picks "
+            "differ, so the key counts as genuinely differing), sometimes as INCONCLUSIVE (the picks coincided). "
+            "Either way it is the tie, not a copy fault, and re-copying does not resolve it.", split_parents)
     LOGGER.info(
         "NOTE: these spans hang off %d seeded trace_ids, but no `traces` rows were created for them. delete_traffic.py "
         "deletes traces it finds through the API, so run live_traffic.py (which creates real traces AND spans) if you "

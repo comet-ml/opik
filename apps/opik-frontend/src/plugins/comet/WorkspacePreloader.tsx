@@ -19,7 +19,7 @@ import Logo from "@/shared/Logo/Logo";
 import { identifyReoUser } from "./analytics/reo";
 import useSegment from "./analytics/useSegment";
 import { ORGANIZATION_ROLE_TYPE, Organization, Workspace } from "./types";
-import { isHiddenSpendWorkspace } from "./lib/aiSpend";
+import { isAiSpendWorkspace, isHiddenSpendWorkspace } from "./lib/aiSpend";
 import useOrganizations from "./useOrganizations";
 import useUser from "./useUser";
 import { buildUrl } from "./utils";
@@ -66,13 +66,15 @@ const WorkspacePreloader: React.FunctionComponent<WorkspacePreloaderProps> = ({
 }) => {
   const setAppUser = useSetAppUser();
   const { data: user, isLoading } = useUser();
+  // Comet refuses these until the email is verified
+  const canLoadWorkspaces = !!user?.loggedIn && !user.emailVerificationRequired;
 
   const { data: allWorkspaces } = useAllWorkspaces({
-    enabled: !!user?.loggedIn,
+    enabled: canLoadWorkspaces,
   });
 
   const { data: organizations } = useOrganizations({
-    enabled: !!user?.loggedIn,
+    enabled: canLoadWorkspaces,
   });
 
   const matchRoute = useMatchRoute();
@@ -155,6 +157,13 @@ const WorkspacePreloader: React.FunctionComponent<WorkspacePreloaderProps> = ({
     return null;
   }
 
+  // Comet refuses everything but sign-in until the email is verified; its own page takes over
+  if (user.emailVerificationRequired) {
+    persistMcpOAuthReturn();
+    window.location.href = buildUrl("email-verification");
+    return null;
+  }
+
   if (
     isLandingRoute(pathname) &&
     workspaceNameFromURL &&
@@ -186,9 +195,13 @@ const WorkspacePreloader: React.FunctionComponent<WorkspacePreloaderProps> = ({
 
     useAppStore.getState().setActiveWorkspaceName(workspace.workspaceName);
   } else {
+    // Org admins see the AI Spend workspace in the list; it is never a landing target.
+    const landingWorkspaces = allWorkspaces.filter(
+      (workspace) => !isAiSpendWorkspace(workspace),
+    );
     const defaultWorkspace =
-      allWorkspaces.find((workspace) => workspace.default) ??
-      allWorkspaces?.[0];
+      landingWorkspaces.find((workspace) => workspace.default) ??
+      landingWorkspaces[0];
 
     if (defaultWorkspace) {
       if (

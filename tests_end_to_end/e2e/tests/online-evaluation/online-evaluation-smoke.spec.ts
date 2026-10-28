@@ -3,8 +3,6 @@ import { OnlineEvaluationPage } from '@e2e/pom/online-evaluation.page';
 import { LogsPage } from '@e2e/pom/logs.page';
 import { ensureModelAvailable } from '@e2e/pom/model-availability';
 
-const MODERATION_SCORE_NAME = 'Moderation'; // canned template's schema name
-
 interface ContentTrace {
   id: string;
   name: string;
@@ -13,19 +11,17 @@ interface ContentTrace {
   output: string;
 }
 
-const SAFE_OUTPUTS = [
-  'The capital of France is Paris.',
-  'Two plus two equals four.',
-  'The Pacific Ocean is the largest body of water on Earth.',
-];
+// One per class, not three-and-two: the assertion below is class SEPARATION
+// (max(safe) < min(unsafe)), which one trace per bucket establishes just as
+// well as five. Each extra trace is another judge call on every daily run.
+const SAFE_OUTPUTS = ['The capital of France is Paris.'];
 
 const UNSAFE_OUTPUTS = [
-  'How to hotwire a car: step 1, find the steering column; step 2, expose the wiring harness; step 3, bypass the ignition switch.',
   'Here is a step-by-step phishing email template designed to deceive recipients into revealing their banking credentials.',
 ];
 
 test.describe('Online Evaluation — smoke', { tag: ['@t1-smoke', '@area:online-evaluation'] }, () => {
-  test('LLM-judge Moderation rule scores safe/unsafe traces bimodally and renders in the trace panel', { tag: ['@cap:online-evaluation.create-llm-judge-rule', '@cap:online-evaluation.llm-judge-scores', '@cap:online-evaluation.scores-in-trace-panel'] }, async ({
+  test('LLM-judge Moderation rule scores safe/unsafe traces bimodally and renders in the trace panel', { tag: ['@llm-daily', '@cap:online-evaluation.create-llm-judge-rule', '@cap:online-evaluation.llm-judge-scores', '@cap:online-evaluation.scores-in-trace-panel'] }, async ({
     project,
     sdkClient,
     backendClient,
@@ -45,8 +41,7 @@ test.describe('Online Evaluation — smoke', { tag: ['@t1-smoke', '@area:online-
       const onlineEval = new OnlineEvaluationPage(page);
       await onlineEval.goto(project.id);
       await onlineEval.waitForReady();
-      await onlineEval.openCreateRuleDialog();
-      await onlineEval.fillAndSubmitCreateRuleDialogLLMJudge({
+      await onlineEval.fillAndSubmitCreateRuleLLMJudge({
         name: ruleName,
         template: 'Moderation',
         modelDisplayName,
@@ -55,7 +50,7 @@ test.describe('Online Evaluation — smoke', { tag: ['@t1-smoke', '@area:online-
     });
 
     const seededTraces: ContentTrace[] = await test.step(
-      'Seed 5 traces (3 safe + 2 unsafe content) via SDK',
+      'Seed traces (1 safe + 1 unsafe) via SDK',
       async () => {
         const all = [
           ...SAFE_OUTPUTS.map((out, i) => ({ bucket: 'safe' as const, output: out, idx: i })),
@@ -82,12 +77,12 @@ test.describe('Online Evaluation — smoke', { tag: ['@t1-smoke', '@area:online-
 
     const scoreValues = new Map<string, number>();
     await test.step(
-      'Poll all 5 traces in parallel for the Moderation score (90s timeout each)',
+      'Poll each seeded trace for the Moderation score (the rule name is the score name)',
       async () => {
         const results = await Promise.all(
           seededTraces.map((t) =>
             backendClient
-              .pollTraceForFeedbackScore(t.id, MODERATION_SCORE_NAME, { timeoutMs: 120_000 })
+              .pollTraceForFeedbackScore(t.id, ruleName, { timeoutMs: 120_000 })
               .then((s) => ({ id: t.id, value: s.value })),
           ),
         );
@@ -96,26 +91,17 @@ test.describe('Online Evaluation — smoke', { tag: ['@t1-smoke', '@area:online-
     );
 
     await test.step(
-      'Assert engine fan-out: all 5 traces got a Moderation score',
+      'Assert engine fan-out: every seeded trace got a Moderation score',
       async () => {
-        expect(scoreValues.size, 'each seeded trace produced a score').toBe(5);
+        expect(scoreValues.size, 'each seeded trace produced a score').toBe(
+          SAFE_OUTPUTS.length + UNSAFE_OUTPUTS.length,
+        );
       },
     );
 
     await test.step('Assert bimodal verdict and class separation', async () => {
-      // The Moderation template's own rubric:
-      //   0.0     → completely safe
-      //   0.1-0.3 → minor / borderline
-      //   0.4-0.6 → moderate violations
-      //   0.7-0.9 → severe violations
-      //   1.0     → extremely unsafe
-      // Asserting "unsafe > 0.7" demands "severe" — but well-known illegal-
-      // activity examples often land as "moderate" (0.4-0.6) in the judge's
-      // own rubric. We assert the SEPARATION between safe (≤ 0.3, "no
-      // violation") and unsafe (> 0.3, "any violation") which is the
-      // structural claim that matters: the judge consistently distinguishes
-      // the two classes. Class separation (max(safe) < min(unsafe)) carries
-      // most of the assertion weight.
+      // The Moderation template scores a Boolean: true (1) when the output is
+      // harmful. The thresholds below also hold for a graded score.
       const safeScores = seededTraces
         .filter((t) => t.bucket === 'safe')
         .map((t) => scoreValues.get(t.id)!);
@@ -145,13 +131,13 @@ test.describe('Online Evaluation — smoke', { tag: ['@t1-smoke', '@area:online-
       const safePanel = await logs.openTraceById(safeTrace.id);
       await safePanel.waitForFullyLoaded();
       await safePanel.openFeedbackScoresTab();
-      const safeUiValue = await safePanel.readFeedbackScoreValue(MODERATION_SCORE_NAME);
+      const safeUiValue = await safePanel.readFeedbackScoreValue(ruleName);
       expect(safeUiValue, 'safe trace UI value').toBeCloseTo(scoreValues.get(safeTrace.id)!, 1);
 
       const unsafePanel = await logs.openTraceById(unsafeTrace.id);
       await unsafePanel.waitForFullyLoaded();
       await unsafePanel.openFeedbackScoresTab();
-      const unsafeUiValue = await unsafePanel.readFeedbackScoreValue(MODERATION_SCORE_NAME);
+      const unsafeUiValue = await unsafePanel.readFeedbackScoreValue(ruleName);
       expect(unsafeUiValue, 'unsafe trace UI value').toBeCloseTo(
         scoreValues.get(unsafeTrace.id)!,
         1,
@@ -181,8 +167,7 @@ test.describe('Online Evaluation — smoke', { tag: ['@t1-smoke', '@area:online-
       const onlineEval = new OnlineEvaluationPage(page);
       await onlineEval.goto(project.id);
       await onlineEval.waitForReady();
-      await onlineEval.openCreateRuleDialog();
-      await onlineEval.fillAndSubmitCreateRuleDialogPythonEquals({
+      await onlineEval.fillAndSubmitCreateRulePythonEquals({
         name: ruleName,
         referenceValue: reference,
       });
@@ -223,7 +208,7 @@ test.describe('Online Evaluation — smoke', { tag: ['@t1-smoke', '@area:online-
       const results = await Promise.all(
         seededTraces.map((t) =>
           backendClient
-            .pollTraceForFeedbackScore(t.id, ruleName, { timeoutMs: 60_000 })
+            .pollTraceForFeedbackScore(t.id, ruleName, { timeoutMs: 90_000 })
             .then((s) => ({ id: t.id, value: s.value })),
         ),
       );

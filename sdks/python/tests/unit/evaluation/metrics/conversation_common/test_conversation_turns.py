@@ -48,3 +48,54 @@ def test_build_conversation_turns__last_user_message_included():
     assert turns[1].output == conversation[3]
     assert turns[2].input == conversation[4]
     assert turns[2].output is None
+
+
+def test_build_conversation_turns__unanswered_user_message_mid_conversation_kept():
+    conversation = [
+        {"role": "user", "content": "What is the overdraft fee?"},
+        {"role": "user", "content": "Tool output: the policy says 5%."},
+        {"role": "assistant", "content": "It is 5%."},
+    ]
+    turns = conversation_turns.build_conversation_turns(conversation)
+
+    assert [m["content"] for turn in turns for m in turn.as_list()] == [
+        "What is the overdraft fee?",
+        "Tool output: the policy says 5%.",
+        "It is 5%.",
+    ]
+    assert turns[0].output is None
+    assert turns[1].input == conversation[1]
+    assert turns[1].output == conversation[2]
+
+
+def test_build_conversation_turns__unanswered_message_between_turns_keeps_its_turn():
+    conversation = [
+        {"role": "user", "content": "U1"},
+        {"role": "assistant", "content": "A1"},
+        {"role": "user", "content": "U2"},
+        {"role": "user", "content": "U3"},
+        {"role": "assistant", "content": "A3"},
+    ]
+    turns = conversation_turns.build_conversation_turns(conversation)
+
+    # U2 never got an answer, so it is a turn of its own - like the tail case -
+    # rather than something the following question replaces.
+    assert [(t.input["content"], (t.output or {}).get("content")) for t in turns] == [
+        ("U1", "A1"),
+        ("U2", None),
+        ("U3", "A3"),
+    ]
+
+
+def test_build_conversation_turns__alternating_conversation_unchanged():
+    conversation = [
+        {"role": "user", "content": "U1"},
+        {"role": "assistant", "content": "A1"},
+        {"role": "user", "content": "U2"},
+        {"role": "assistant", "content": "A2"},
+    ]
+    turns = conversation_turns.build_conversation_turns(conversation)
+    assert [(t.input["content"], t.output["content"]) for t in turns] == [
+        ("U1", "A1"),
+        ("U2", "A2"),
+    ]

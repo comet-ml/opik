@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pause, Play, RotateCcw } from "lucide-react";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { Loader2, Pause, Play, RotateCcw } from "lucide-react";
 
 import { Separator } from "@/ui/separator";
 import { Button } from "@/ui/button";
@@ -8,13 +8,13 @@ import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
 import RunExperimentControl from "@/v2/pages/PlaygroundPage/RunExperimentControl";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import { generateDefaultPrompt } from "@/lib/playground";
+import { canRunMessages, hasUnsupportedMedia } from "@/lib/playground";
+import { isMac } from "@/lib/utils";
 import { LOGS_SOURCE } from "@/types/traces";
 import { useActiveProjectId } from "@/store/AppStore";
 import TraceLogsSidebarButton from "@/v2/pages-shared/traces/TraceLogsSidebar/TraceLogsSidebarButton";
-import { COMPOSED_PROVIDER_TYPE } from "@/types/providers";
 import { DATASET_TYPE } from "@/types/datasets";
-import { PLAYGROUND_LAST_PICKED_MODEL } from "@/constants/llm";
+import PlaygroundColumnsButton from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputTable/PlaygroundColumnsButton";
 import useDatasetItemsList from "@/api/datasets/useDatasetItemsList";
 import useDatasetVersionsList from "@/api/datasets/useDatasetVersionsList";
 import {
@@ -22,12 +22,13 @@ import {
   transformDataColumnFilters,
 } from "@/lib/filters";
 import { parseDatasetVersionKey } from "@/utils/datasetVersionStorage";
-import {
+import usePlaygroundRunHotkey from "@/v2/pages/PlaygroundPage/usePlaygroundRunHotkey";
+import usePlaygroundStore, {
   usePromptMap,
-  useSetPromptMap,
   useClearCreatedExperiments,
   useCreatedExperiments,
   useIsRunning,
+  useIsResumingRun,
   useSetSelectedRuleIds,
   useResetDatasetFilters,
   useResetOutputMap,
@@ -36,44 +37,39 @@ import {
   useDatasetType,
   useDatasetFilters,
   useSetDatasetFilters,
+  useDatasetItemsTotal,
+  useIsStoppingAll,
 } from "@/store/PlaygroundStore";
-import useLastPickedModel from "@/hooks/useLastPickedModel";
-import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import { usePermissions } from "@/contexts/PermissionsContext";
-import {
-  supportsImageInput,
-  supportsVideoInput,
-} from "@/lib/modelCapabilities";
-import { hasImagesInContent, hasVideosInContent } from "@/lib/llm";
 
 interface PlaygroundHeaderProps {
   workspaceName: string;
-  providerKeys: COMPOSED_PROVIDER_TYPE[];
   datasetId: string | null;
   datasetName: string | null;
   versionName?: string;
+  versionItemsTotal?: number;
   onChangeDatasetId: (id: string | null) => void;
   onReset: () => void;
   onRunAll: () => void;
-
+  onRunSingle: (promptId: string) => void;
   onStopAll: () => void;
   maxWidth?: string;
 }
 
 const PlaygroundHeader = ({
   workspaceName,
-  providerKeys,
   datasetId,
   datasetName,
   versionName,
+  versionItemsTotal,
   onChangeDatasetId,
   onReset,
   onRunAll,
+  onRunSingle,
   onStopAll,
   maxWidth,
 }: PlaygroundHeaderProps) => {
   const promptMap = usePromptMap();
-  const setPromptMap = useSetPromptMap();
   const clearCreatedExperiments = useClearCreatedExperiments();
   const createdExperiments = useCreatedExperiments();
   const setSelectedRuleIds = useSetSelectedRuleIds();
@@ -81,6 +77,8 @@ const PlaygroundHeader = ({
   const resetOutputMap = useResetOutputMap();
   const setExperimentName = useSetExperimentName();
   const isRunning = useIsRunning();
+  const isStoppingAll = useIsStoppingAll();
+  const isResumingRun = useIsResumingRun();
   const setDatasetType = useSetDatasetType();
   const currentDatasetType = useDatasetType();
   const filters = useDatasetFilters();
@@ -92,12 +90,6 @@ const PlaygroundHeader = ({
   const {
     permissions: { canViewExperiments, canCreateExperiments, canViewDatasets },
   } = usePermissions();
-
-  const [lastPickedModel] = useLastPickedModel({
-    key: PLAYGROUND_LAST_PICKED_MODEL,
-  });
-  const { calculateModelProvider, calculateDefaultModel } =
-    useLLMProviderModelsData();
 
   const isExperimentMode = !!datasetId;
   const activeProjectId = useActiveProjectId();
@@ -144,96 +136,98 @@ const PlaygroundHeader = ({
     [datasetItemsForColumns?.columns],
   );
 
-  const hasMediaCompatibilityIssues = useMemo(() => {
-    return Object.values(promptMap).some((prompt) => {
-      if (!prompt.model) return false;
-      const modelSupportsImages = supportsImageInput(prompt.model);
-      const modelSupportsVideos = supportsVideoInput(prompt.model);
-      const hasImages = prompt.messages.some((message) =>
-        hasImagesInContent(message.content),
-      );
-      const hasVideos = prompt.messages.some((message) =>
-        hasVideosInContent(message.content),
-      );
-      return (
-        (hasImages && !modelSupportsImages) ||
-        (hasVideos && !modelSupportsVideos)
-      );
-    });
-  }, [promptMap]);
+  const hasMediaCompatibilityIssues = useMemo(
+    () =>
+      Object.values(promptMap).some((prompt) => hasUnsupportedMedia(prompt)),
+    [promptMap],
+  );
 
   const allPromptsHaveModels = useMemo(
     () => Object.values(promptMap).every((p) => !!p.model),
     [promptMap],
   );
 
-  const allMessagesNotEmpty = useMemo(
-    () =>
-      Object.values(promptMap).every((p) =>
-        p.messages.every((m) => m.content?.length > 0),
-      ),
+  const datasetItemsTotal = useDatasetItemsTotal();
+
+  const allMessagesRunnable = useMemo(
+    () => Object.values(promptMap).every((p) => canRunMessages(p.messages)),
     [promptMap],
   );
 
+  const isDatasetEmpty = isExperimentMode && versionItemsTotal === 0;
+  const experimentTarget =
+    currentDatasetType === DATASET_TYPE.TEST_SUITE ? "test suite" : "dataset";
+  // Zero rows is a real state, not a loading one: a filter can exclude everything
+  const hasNoDatasetItems = isExperimentMode && datasetItemsTotal === 0;
+
   const isRunDisabled =
+    isResumingRun ||
     !allPromptsHaveModels ||
-    !allMessagesNotEmpty ||
+    !allMessagesRunnable ||
     hasMediaCompatibilityIssues ||
-    (isExperimentMode && !datasetName);
+    (isExperimentMode && !datasetName) ||
+    isDatasetEmpty ||
+    hasNoDatasetItems;
 
   const runDisabledReason = useMemo(() => {
     if (!allPromptsHaveModels)
       return "Please select an LLM model for your prompts";
-    if (!allMessagesNotEmpty)
+    if (!allMessagesRunnable)
       return "Some messages are empty. Please add some text to proceed";
     if (hasMediaCompatibilityIssues)
       return "Some prompts contain media but the selected model doesn't support media input";
     if (isExperimentMode && !datasetName)
       return "Your dataset has been removed. Select another one";
+    if (isDatasetEmpty)
+      return `This ${experimentTarget} version has no items. Add items or select another version to run an experiment`;
+    if (hasNoDatasetItems) return "No dataset items match the current filters";
     return null;
   }, [
     allPromptsHaveModels,
-    allMessagesNotEmpty,
+    allMessagesRunnable,
     hasMediaCompatibilityIssues,
+    hasNoDatasetItems,
     isExperimentMode,
     datasetName,
+    isDatasetEmpty,
+    experimentTarget,
   ]);
 
-  // Keyboard shortcut: Shift+Enter to run all
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (
-        event.shiftKey &&
-        event.key === "Enter" &&
-        !isRunDisabled &&
-        !isRunning
-      ) {
-        event.preventDefault();
-        event.stopPropagation();
-        onRunAll();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown, true);
-    return () => window.removeEventListener("keydown", handleKeyDown, true);
-  }, [onRunAll, isRunDisabled, isRunning]);
+  const canRunPrompt = useCallback(
+    (promptId: string) => {
+      const prompt = promptMap[promptId];
+      const { isRunningMap, stopsAwaitingRun, cancelsInFlight } =
+        usePlaygroundStore.getState();
+      return (
+        !!prompt?.model &&
+        canRunMessages(prompt.messages) &&
+        !hasUnsupportedMedia(prompt) &&
+        !(isExperimentMode && !datasetName) &&
+        !isDatasetEmpty &&
+        !hasNoDatasetItems &&
+        !isResumingRun &&
+        !isRunningMap[promptId] &&
+        !stopsAwaitingRun.has(promptId) &&
+        !cancelsInFlight.has(promptId)
+      );
+    },
+    [
+      promptMap,
+      isExperimentMode,
+      datasetName,
+      isDatasetEmpty,
+      hasNoDatasetItems,
+      isResumingRun,
+    ],
+  );
 
-  const resetPlayground = useCallback(() => {
-    onReset();
-    const newPrompt = generateDefaultPrompt({
-      setupProviders: providerKeys,
-      lastPickedModel,
-      providerResolver: calculateModelProvider,
-      modelResolver: calculateDefaultModel,
-    });
-    setPromptMap([newPrompt.id], { [newPrompt.id]: newPrompt });
-  }, [
-    onReset,
-    providerKeys,
-    lastPickedModel,
-    calculateModelProvider,
-    calculateDefaultModel,
-    setPromptMap,
-  ]);
+  usePlaygroundRunHotkey({
+    promptCount: Object.keys(promptMap).length,
+    canRunAll: !isRunDisabled && !isRunning && !isStoppingAll,
+    canRunPrompt,
+    onRunAll,
+    onRunPrompt: onRunSingle,
+  });
 
   const handleLeaveExperimentMode = useCallback(() => {
     clearCreatedExperiments();
@@ -278,11 +272,23 @@ const PlaygroundHeader = ({
             deferOnChange
           />
         )}
+        {plainDatasetId && (
+          <PlaygroundColumnsButton datasetId={plainDatasetId} />
+        )}
       </>
     );
   };
 
   const renderRunButton = () => {
+    if (isStoppingAll) {
+      return (
+        <Button size="2xs" variant="outline" disabled>
+          <Loader2 className="mr-1 size-3.5 animate-spin" />
+          Stopping...
+        </Button>
+      );
+    }
+
     if (isRunning) {
       return (
         <TooltipWrapper content="Stop running prompts">
@@ -296,8 +302,6 @@ const PlaygroundHeader = ({
 
     const hasRunExperiment = isExperimentMode && createdExperiments.length > 0;
     const label = hasRunExperiment ? "Re-run" : "Run";
-    const experimentTarget =
-      currentDatasetType === DATASET_TYPE.TEST_SUITE ? "test suite" : "dataset";
     const tooltip =
       runDisabledReason ??
       (isExperimentMode
@@ -316,7 +320,11 @@ const PlaygroundHeader = ({
         >
           <Play className="mr-1 size-3" />
           {label}
-          <HotkeyDisplay hotkey="⇧" size="2xs" className="ml-1.5" />
+          <HotkeyDisplay
+            hotkey={isMac ? "⌘" : "Ctrl"}
+            size="2xs"
+            className="ml-1.5"
+          />
           <HotkeyDisplay hotkey="⏎" size="2xs" className="ml-1" />
         </Button>
       </TooltipWrapper>
@@ -363,7 +371,7 @@ const PlaygroundHeader = ({
         key={`reset-${resetKeyRef.current}`}
         open={resetDialogOpen}
         setOpen={setResetDialogOpen}
-        onConfirm={resetPlayground}
+        onConfirm={onReset}
         title="Reset playground"
         description="Resetting the Playground will discard all unsaved prompts. This action can't be undone. Are you sure you want to continue?"
         confirmText="Reset playground"

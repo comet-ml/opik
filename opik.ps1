@@ -425,10 +425,16 @@ function Start-MissingContainers {
 
     docker @dockerArgs | Where-Object { $_.Trim() -ne '' }
 
+    # Anchor every container's startup time to the moment compose returns. The loop below is
+    # sequential while the containers start in parallel, so timing from when the loop reaches a
+    # container would under-report everything after the first one.
+    $waitStartedAt = [System.Diagnostics.Stopwatch]::StartNew()
+
     Write-Host '[INFO] Waiting for all containers to be running and healthy...'
-    $maxRetries = 60
+    $maxRetries = 90
     $interval = 1
     $allRunning = $true
+    $timings = [ordered]@{}
 
     foreach ($container in $containers) {
         $retries = 0
@@ -445,28 +451,56 @@ function Start-MissingContainers {
             if ($status -ne 'running') {
                 Write-Host "[ERROR] $container failed to start (status: $status)"
                 $allRunning = $false
+                $timings[$container] = 'failed to start'
                 break
             }
 
             if ($health -eq 'healthy') {
                 Write-DebugLog "[OK] $container is now running and healthy!"
+                # Only the healthy duration is write-once, so the moment the loop reaches a
+                # container can't overwrite the earlier moment it went healthy. The terminal
+                # branches below assign unconditionally and win, so a container that goes healthy
+                # and then dies shows the failure rather than a reassuring duration.
+                if (-not $timings.Contains($container)) {
+                    $timings[$container] = "$([int]$waitStartedAt.Elapsed.TotalSeconds)s"
+                }
                 break
             } elseif ($health -eq 'starting') {
+                # Before blocking, bank the elapsed time for anything already healthy. Without this
+                # a container polled after a slow one just echoes that one's wait, because the loop
+                # only reaches it once the slow container finishes.
+                foreach ($c in $containers) {
+                    if ($timings.Contains($c)) { continue }
+                    if ((docker inspect -f '{{.State.Health.Status}}' $c 2>$null) -eq 'healthy') {
+                        $timings[$c] = "$([int]$waitStartedAt.Elapsed.TotalSeconds)s"
+                    }
+                }
                 Write-DebugLog "[INFO] $container is starting... retrying (${retries}s)"
                 Start-Sleep -Seconds $interval
                 $retries++
                 if ($retries -ge $maxRetries) {
                     Write-Host "[WARN] $container is still not healthy after ${maxRetries}s"
                     $allRunning = $false
+                    $timings[$container] = "TIMED OUT after ${maxRetries}s"
                     break
                 }
             } else {
                 Write-Host "[INFO] $container health state is '$health'"
                 $allRunning = $false
+                $timings[$container] = "unhealthy: $health"
                 break
             }
         }
     }
+
+    # Each value is the elapsed time from when `compose up -d` returned to when that container was
+    # first observed healthy. It is a lower bound on true startup: without `--wait`, compose can
+    # return while a service is still starting, and the poll only catches it on the next pass.
+    Write-Host '[INFO] Container startup times (since compose up returned):'
+    foreach ($entry in $timings.GetEnumerator()) {
+        Write-Host ('     {0,-26} {1}' -f $entry.Key, $entry.Value)
+    }
+    Write-Host "   Total wall clock: $([int]$waitStartedAt.Elapsed.TotalSeconds)s"
 
     if ($allRunning) {
         Send-InstallReport -Uuid $uuid -EventCompleted "true" -StartTime $startTime

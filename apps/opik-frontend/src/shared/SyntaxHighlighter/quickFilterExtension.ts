@@ -26,6 +26,7 @@ import {
 export type QuickFilterCodeConfig = {
   canFilter: (path: string) => boolean;
   onFilter: (path: string, value: string) => void;
+  hint?: string;
 };
 
 const FILTER_ICON = renderToStaticMarkup(
@@ -85,7 +86,6 @@ class QuickFilterTooltip {
     });
 
     this.text = document.createElement("span");
-    this.text.textContent = TOOLTIP_TEXT;
 
     this.el.append(this.icon, this.text);
     document.body.appendChild(this.el);
@@ -109,10 +109,10 @@ class QuickFilterTooltip {
     this.el.style.left = `${left}px`;
   }
 
-  showHint(anchor: HTMLElement) {
+  showHint(anchor: HTMLElement, text: string) {
     this.clearTimer();
     this.icon.style.display = "none";
-    this.text.textContent = TOOLTIP_TEXT;
+    this.text.textContent = text;
     this.el.style.display = "flex";
     this.position(anchor);
   }
@@ -132,7 +132,6 @@ class QuickFilterTooltip {
     this.clearTimer();
     this.el.style.display = "none";
     this.icon.style.display = "none";
-    this.text.textContent = TOOLTIP_TEXT;
   }
 
   destroy() {
@@ -189,6 +188,7 @@ class QuickFilterWidget extends WidgetType {
     readonly path: string,
     readonly value: string,
     readonly onFilter: QuickFilterCodeConfig["onFilter"],
+    readonly label: string,
   ) {
     super();
   }
@@ -198,7 +198,8 @@ class QuickFilterWidget extends WidgetType {
       other.path === this.path &&
       other.value === this.value &&
       other.from === this.from &&
-      other.to === this.to
+      other.to === this.to &&
+      other.label === this.label
     );
   }
 
@@ -207,7 +208,7 @@ class QuickFilterWidget extends WidgetType {
     button.className = "cm-quick-filter-add";
     button.setAttribute("role", "button");
     button.setAttribute("tabindex", "0");
-    button.setAttribute("aria-label", "Filter by this attribute");
+    button.setAttribute("aria-label", this.label);
     button.innerHTML = FILTER_ICON;
 
     const activate = (event: Event) => {
@@ -233,7 +234,7 @@ class QuickFilterWidget extends WidgetType {
         // View already torn down; the highlight is moot.
       }
       const tooltip = quickFilterTooltips.get(view);
-      if (active) tooltip?.showHint(button);
+      if (active) tooltip?.showHint(button, this.label);
       else tooltip?.hide();
     };
     button.onmouseenter = () => setActive(true);
@@ -285,6 +286,8 @@ export const createQuickFilterExtension = (
   mode: QuickFilterMode,
   config: QuickFilterCodeConfig,
 ): Extension => {
+  const hintText = config.hint ?? TOOLTIP_TEXT;
+
   const build = (view: EditorView): DecorationSet => {
     const doc = view.state.doc.toString();
     const tree = syntaxTree(view.state);
@@ -307,6 +310,7 @@ export const createQuickFilterExtension = (
               target.path,
               target.value,
               config.onFilter,
+              hintText,
             ),
             // Negative side keeps the filter icon directly after the value and
             // before the fold control, so the order stays consistent whether

@@ -8,7 +8,6 @@ import React, {
 import useLocalStorageState from "use-local-storage-state";
 import { Save, Sparkles, Wand2 } from "lucide-react";
 import isUndefined from "lodash/isUndefined";
-import isEqual from "fast-deep-equal";
 import { AxiosError } from "axios";
 
 import { OnChangeFn } from "@/types/shared";
@@ -17,27 +16,25 @@ import { PromptVersion, PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import { PLAYGROUND_SELECTED_DATASET_VERSION_KEY } from "@/constants/llm";
 import { Button } from "@/ui/button";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import usePromptById from "@/api/prompts/usePromptById";
-import usePromptVersionById from "@/api/prompts/usePromptVersionById";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { useActiveProjectId } from "@/store/AppStore";
 import PromptsSelectBox from "@/v2/pages-shared/llm/PromptsSelectBox/PromptsSelectBox";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import AddNewPromptVersionDialog from "@/v2/pages-shared/llm/LLMPromptMessages/AddNewPromptVersionDialog";
+import useMessageTextPrompt from "@/v2/pages-shared/llm/LLMPromptMessages/useMessageTextPrompt";
 import PromptImprovementDialog from "@/v2/pages-shared/llm/PromptImprovementDialog/PromptImprovementDialog";
-import {
-  LLMPromptConfigsType,
-  COMPOSED_PROVIDER_TYPE,
-} from "@/types/providers";
+import { COMPOSED_PROVIDER_TYPE } from "@/types/providers";
 import { useToast } from "@/ui/use-toast";
 import {
   getTextFromMessageContent,
   convertMessageToMessagesJson,
   parsePromptVersionContent,
   parseChatTemplateToLLMMessages,
+  toContentForRole,
 } from "@/lib/llm";
 import {
-  PROMPT_SAVE_TO_LIBRARY_TOOLTIP,
+  PROMPT_MEDIA_NOT_LOADED_TOAST,
+  PROMPT_SAVE_AS_TEXT_TOOLTIP,
   PROMPT_UNSAVED_EXPERIMENT_TOOLTIP,
   PROMPT_UNSAVED_TOOLTIP,
 } from "@/constants/prompts";
@@ -47,7 +44,6 @@ type ConfirmType = "load" | "save";
 export interface ImprovePromptConfig {
   model: string;
   provider: COMPOSED_PROVIDER_TYPE | "";
-  configs: LLMPromptConfigsType;
   workspaceName: string;
   onAccept: (messageId: string, improvedContent: MessageContent) => void;
 }
@@ -99,21 +95,13 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
     },
   );
 
-  const { promptId, promptVersionId, content } = message;
-  const { data: promptData, error: promptError } = usePromptById(
-    { promptId: promptId! },
-    {
-      enabled: !!promptId,
-      // Don't retry a definitively-missing prompt; the 404 needs to surface
-      // promptly so we can detach it from the message below.
-      retry: (failureCount, error) => {
-        if (error instanceof AxiosError && error.response?.status === 404) {
-          return false;
-        }
-        return failureCount < 3;
-      },
-    },
-  );
+  const { promptId, promptVersionId, content, role } = message;
+  const {
+    promptData,
+    promptError,
+    loadedVersionData,
+    hasUnsavedChanges: hasUnsavedPromptChanges,
+  } = useMessageTextPrompt(message);
 
   // If the linked prompt was deleted from the library, clear the message's
   // prompt references so the UI stops showing it as if it still exists.
@@ -126,13 +114,6 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
       onChangeMessage({ promptId: undefined, promptVersionId: undefined });
     }
   }, [promptId, promptError, onChangeMessage]);
-  // When a specific version is loaded, the dirty check needs that version's
-  // content — not `latest_version`, which would flag everything as unsaved
-  // whenever the user picked an older version.
-  const { data: loadedVersionData } = usePromptVersionById(
-    { versionId: promptVersionId! },
-    { enabled: !!promptVersionId },
-  );
 
   // Check if content has meaningful text
   const hasContent = useMemo(() => {
@@ -227,23 +208,12 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
   const saveDisabled =
     !hasContent ||
     (promptId ? !canEditPrompts && !canCreatePrompts : !canCreatePrompts);
-  // Compare against the actually-loaded version when available; fall back to
-  // `latest_version` only when no specific version is referenced.
-  const baselineVersion =
-    promptVersionId && loadedVersionData?.id === promptVersionId
-      ? loadedVersionData
-      : promptData?.latest_version;
-  const saveWarning = Boolean(
-    !saveDisabled &&
-      promptId &&
-      promptData?.id === promptId &&
-      !isEqual(message.content, parsePromptVersionContent(baselineVersion)),
-  );
+  const saveWarning = !saveDisabled && hasUnsavedPromptChanges;
   const saveTooltip = saveWarning
     ? !datasetId
       ? PROMPT_UNSAVED_TOOLTIP
       : PROMPT_UNSAVED_EXPERIMENT_TOOLTIP
-    : PROMPT_SAVE_TO_LIBRARY_TOOLTIP;
+    : PROMPT_SAVE_AS_TEXT_TOOLTIP;
 
   const onPromptSelectBoxOpenChange = useCallback(
     (open: boolean) => {
@@ -314,15 +284,25 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
       if (onClearOtherPromptLinks) {
         onClearOtherPromptLinks();
       }
+      const { content: loadedContent, mediaDropped } = toContentForRole(
+        parsePromptVersionContent(sourceVersion),
+        role,
+      );
       onChangeMessage({
-        content: parsePromptVersionContent(sourceVersion),
+        content: loadedContent,
         promptVersionId: versionId,
         promptId: promptData.id,
       });
       setIsLoading(false);
+
+      if (mediaDropped) {
+        toast(PROMPT_MEDIA_NOT_LOADED_TOAST);
+      }
     }
   }, [
     onChangeMessage,
+    role,
+    toast,
     promptData,
     promptId,
     loadedVersionData,
@@ -439,7 +419,6 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
           originalPrompt={content}
           model={improvePromptConfig.model}
           provider={improvePromptConfig.provider}
-          configs={improvePromptConfig.configs}
           workspaceName={improvePromptConfig.workspaceName}
           onAccept={improvePromptConfig.onAccept}
         />

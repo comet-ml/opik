@@ -4,6 +4,10 @@ import com.comet.opik.api.BiInformationResponse;
 import com.comet.opik.api.SpansCountResponse;
 import com.comet.opik.api.TraceCountResponse;
 import com.comet.opik.api.UsageByWorkspaceProjectUserResponse;
+import com.comet.opik.api.UsageProjectsRequest;
+import com.comet.opik.api.UsageProjectsResponse;
+import jakarta.ws.rs.client.Entity;
+import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.apache.hc.core5.http.HttpStatus;
@@ -33,6 +37,20 @@ public class UsageResourceClient {
 
     public UsageByWorkspaceProjectUserResponse getWorkspaceSpanCountsBreakdown() {
         return get("workspace-span-counts-breakdown", UsageByWorkspaceProjectUserResponse.class);
+    }
+
+    public UsageProjectsResponse findProjects(@NonNull UsageProjectsRequest request) {
+        try (var response = callFindProjects(request)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            return response.readEntity(UsageProjectsResponse.class);
+        }
+    }
+
+    public Response callFindProjects(@NonNull UsageProjectsRequest request) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("projects")
+                .request()
+                .post(Entity.json(request));
     }
 
     /**

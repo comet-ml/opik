@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.llm.vertexai;
 
+import com.comet.opik.infrastructure.llm.RemoteMediaInliner;
 import com.google.genai.Client;
 import dev.langchain4j.model.ModelProvider;
 import dev.langchain4j.model.chat.Capability;
@@ -15,7 +16,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.Set;
 
-// Owns the genai Client and closes it; the langchain4j model can't (it keeps the client private and is not closeable).
+// Holds the genai Client the langchain4j model is built on, and closes the model; see close().
 @Slf4j
 @RequiredArgsConstructor
 @Accessors(fluent = true)
@@ -24,10 +25,13 @@ class CloseableVertexAiChatModel implements ChatModel, AutoCloseable {
     private final @NonNull ChatModel delegate;
     @Getter
     private final @NonNull Client client;
+    private final @NonNull RemoteMediaInliner remoteMediaInliner;
 
     @Override
     public ChatResponse chat(ChatRequest chatRequest) {
-        return delegate.chat(chatRequest);
+        return delegate.chat(chatRequest.toBuilder()
+                .messages(remoteMediaInliner.inline(chatRequest.messages()))
+                .build());
     }
 
     @Override
@@ -45,14 +49,14 @@ class CloseableVertexAiChatModel implements ChatModel, AutoCloseable {
         return delegate.supportedCapabilities();
     }
 
-    // Best-effort: a close failure must never surface on an otherwise-successful call.
+    /**
+     * Closes the delegate only. The client is left open: closing it would shut the dispatcher and empty the connection
+     * pool that every Vertex AI call shares, see {@link VertexAIClientGenerator}, and it holds nothing else. The
+     * per-request close of OPIK-7847 targeted the old {@code VertexAI} client's GAX executor, which google-genai on the
+     * shared HTTP client doesn't have.
+     */
     @Override
     public void close() {
-        try {
-            client.close();
-        } catch (Exception e) {
-            log.warn("Failed to close Vertex AI client", e);
-        }
         // A no-op with today's delegate, but only it can release anything it owns.
         try {
             if (delegate instanceof AutoCloseable closeable) {
