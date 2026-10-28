@@ -19,6 +19,12 @@ import threading
 import traceback
 import warnings
 
+# The backend runs this file as a script, so its source root isn't on sys.path by itself and opik_backend would
+# only import if something else happened to add it. Appended, so an installed opik_backend still comes first.
+_SOURCE_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if _SOURCE_ROOT not in sys.path:
+    sys.path.append(_SOURCE_ROOT)
+
 # =============================================================================
 # IMPORTANT: Deferred imports pattern
 # =============================================================================
