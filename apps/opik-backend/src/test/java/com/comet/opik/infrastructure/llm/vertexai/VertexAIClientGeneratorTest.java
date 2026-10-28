@@ -12,6 +12,7 @@ import com.comet.opik.infrastructure.llm.LlmTestClients;
 import com.comet.opik.utils.ClientDisconnectedException;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.github.tomakehurst.wiremock.http.Fault;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.exception.InvalidRequestException;
@@ -23,6 +24,7 @@ import io.dropwizard.jersey.errors.ErrorMessage;
 import io.dropwizard.util.Duration;
 import jakarta.ws.rs.client.Client;
 import lombok.Builder;
+import lombok.RequiredArgsConstructor;
 import okhttp3.ConnectionPool;
 import okhttp3.Dispatcher;
 import okhttp3.OkHttpClient;
@@ -45,7 +47,11 @@ import org.junit.jupiter.params.provider.ValueSource;
 import java.io.IOException;
 import java.lang.reflect.Method;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.Proxy;
+import java.net.ProxySelector;
 import java.net.ServerSocket;
+import java.net.SocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -61,6 +67,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -1077,6 +1084,140 @@ class VertexAIClientGeneratorTest {
             }
             assertThat(generationConfig.has("maxOutputTokens")).isTrue();
             assertThat(generationConfig.get("maxOutputTokens").asInt()).isEqualTo(expected);
+        }
+    }
+
+    @Nested
+    @DisplayName("Resending")
+    class Resending {
+
+        private static final String STREAM_GENERATE_CONTENT_PATH = ".*:streamGenerateContent";
+
+        /**
+         * The SDK's own {@code RetryInterceptor} tries a call up to 5 times when it fails with an IOException, as Opik
+         * leaves its retry options unset, waiting up to 30 seconds in all, within the 60 second call timeout. Each of
+         * those tries reaches the provider once: OkHttp sends none of them again, as it would the first, on the
+         * connection the warm-up call pooled. The streamed call is used as the chat one also retries in LangChain4j.
+         */
+        private static final int EXPECTED_SDK_ATTEMPTS = 5;
+
+        private LlmProviderClientApiConfig apiConfig() {
+            return LlmProviderClientApiConfig.builder()
+                    .apiKey(serviceAccountJson)
+                    .configuration(Map.of("location", "global"))
+                    .build();
+        }
+
+        private ChatCompletionRequest request() {
+            return ChatCompletionRequest.builder().model(MODEL).build();
+        }
+
+        /**
+         * A provider that closes the connection after taking the request may have acted on it, so OkHttp reports the
+         * failure to the SDK rather than sending the request again, even on a pooled connection, which it would
+         * otherwise take for a stale one.
+         */
+        @ParameterizedTest
+        @ValueSource(strings = {"CONNECTION_RESET_BY_PEER", "EMPTY_RESPONSE"})
+        @DisplayName("a request whose sending started is never sent again by OkHttp")
+        void aRequestWhoseSendingStartedIsNeverSentAgain(Fault fault) throws Exception {
+            wireMock.server().stubFor(post(urlPathMatching(STREAM_GENERATE_CONTENT_PATH))
+                    .willReturn(aResponse().withFault(fault)));
+            var generator = new VertexAIClientGenerator(clientConfig(), registry,
+                    LlmTestClients.REMOTE_MEDIA_INLINER, LlmTestClients.VIDEO_MIME_TYPE_UTILS);
+            try (var warmUp = (CloseableVertexAiChatModel) generator.generate(apiConfig(), request())) {
+                warmUp.chat(UserMessage.from("hello"));
+            }
+            var failed = new CompletableFuture<Throwable>();
+
+            try (var client = generator.newVertexAIStreamingClient(apiConfig(), request())) {
+                client.chat(List.of(UserMessage.from("hello")), new StreamingChatResponseHandler() {
+                    @Override
+                    public void onCompleteResponse(ChatResponse response) {
+                        failed.complete(null);
+                    }
+
+                    @Override
+                    public void onError(Throwable error) {
+                        failed.complete(error);
+                    }
+                });
+                assertThat(failed.get(45, TimeUnit.SECONDS)).isNotNull();
+            }
+
+            wireMock.server().verify(EXPECTED_SDK_ATTEMPTS, postRequestedFor(urlPathMatching(
+                    STREAM_GENERATE_CONTENT_PATH)));
+        }
+
+        /**
+         * Connecting to the provider through the proxy, its first route, is refused, and OkHttp fails over to the next
+         * one, the direct route, within the SDK's first try: the routes are selected once per try, so once in all.
+         */
+        @Test
+        @DisplayName("a connect failure fails over to the next route")
+        void aConnectFailureFailsOverToTheNextRoute() throws IOException {
+            var expectedText = RandomStringUtils.secure().nextAlphanumeric(20);
+            wireMock.server().stubFor(post(urlPathMatching(GENERATE_CONTENT_PATH))
+                    .willReturn(aResponse()
+                            .withHeader("Content-Type", "application/json")
+                            .withBody(GENERATE_CONTENT_RESPONSE.replace("hello from the mock", expectedText))));
+            var routes = new RefusingProxyFirst(wireMock.server().port(), refusingProxy());
+            var generator = generatorBehind(routes);
+
+            String actualText;
+            try (var client = (CloseableVertexAiChatModel) generator.generate(apiConfig(), request())) {
+                actualText = client.chat("hello");
+            }
+
+            assertThat(actualText).isEqualTo(expectedText);
+            assertThat(routes.selections).hasValue(1);
+            wireMock.server().verify(1, postRequestedFor(urlPathMatching(GENERATE_CONTENT_PATH)));
+        }
+
+        /** An HTTP proxy on a loopback port nothing listens on, so connecting to it is refused at once. */
+        private static Proxy refusingProxy() throws IOException {
+            try (var socket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
+                return new Proxy(Proxy.Type.HTTP,
+                        new InetSocketAddress(InetAddress.getLoopbackAddress(), socket.getLocalPort()));
+            }
+        }
+
+        /**
+         * A generator whose clients route through {@code proxySelector}. OkHttp takes the system default at client
+         * construction, which the generator does once, so the default is swapped back right after.
+         */
+        private VertexAIClientGenerator generatorBehind(ProxySelector proxySelector) {
+            var systemDefault = ProxySelector.getDefault();
+            ProxySelector.setDefault(proxySelector);
+            try {
+                return new VertexAIClientGenerator(clientConfig(), registry, LlmTestClients.REMOTE_MEDIA_INLINER,
+                        LlmTestClients.VIDEO_MIME_TYPE_UTILS);
+            } finally {
+                ProxySelector.setDefault(systemDefault);
+            }
+        }
+    }
+
+    /** Routes calls to the provider on {@code port} through {@code proxy} first, then directly, counting selections. */
+    @RequiredArgsConstructor
+    private static final class RefusingProxyFirst extends ProxySelector {
+
+        private final int port;
+        private final Proxy proxy;
+        private final AtomicInteger selections = new AtomicInteger();
+
+        @Override
+        public List<Proxy> select(URI uri) {
+            if (uri.getPort() != port) {
+                return List.of(Proxy.NO_PROXY);
+            }
+            selections.incrementAndGet();
+            return List.of(proxy, Proxy.NO_PROXY);
+        }
+
+        @Override
+        public void connectFailed(URI uri, SocketAddress address, IOException exception) {
+            // OkHttp tracks failed routes itself
         }
     }
 
