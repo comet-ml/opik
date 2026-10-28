@@ -34,6 +34,19 @@ public final class GuardrailQuestions {
     public static final String NONE_OF_THESE = "none of these";
 
     /**
+     * Topics that are the same ignoring case would be options of one choice question that split its probability,
+     * so they are compared by this key. It is equal exactly when equalsIgnoreCase matches the topics: that compares
+     * each character upper-cased, then lower-cased, which a whole-string toLowerCase does not reproduce ('ı' and
+     * 'I', 'İ' and 'i').
+     */
+    public static String topicKey(String topic) {
+        return topic.codePoints()
+                .map(codePoint -> Character.toLowerCase(Character.toUpperCase(codePoint)))
+                .collect(StringBuilder::new, StringBuilder::appendCodePoint, StringBuilder::append)
+                .toString();
+    }
+
+    /**
      * The PII classes a policy may select, keyed as the policy UI stores them, with the noun phrase the question
      * uses. In Presidio {@code NRP} means nationality, religious or political group; the policy UI reuses the key
      * for vehicle registration plates, and the question wording is what the model reads.
