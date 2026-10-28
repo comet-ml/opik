@@ -7,11 +7,11 @@ import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.structuredoutput.ToolCallingStrategy;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
+import com.comet.opik.infrastructure.llm.LlmTestClients;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.github.tomakehurst.wiremock.WireMockServer;
-import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.request.ChatRequest;
@@ -52,13 +52,15 @@ class OpenAILlmServiceProviderJudgeCustomParametersTest {
 
     @BeforeAll
     void setUpAll() {
-        wireMock = new WireMockServer(WireMockConfiguration.options().dynamicPort());
+        wireMock = LlmTestClients.newLoopbackWireMock();
         wireMock.start();
 
         var clientConfig = new LlmProviderClientConfig();
         clientConfig.setLogRequests(false);
         clientConfig.setLogResponses(false);
-        serviceProvider = new OpenAILlmServiceProvider(new OpenAIClientGenerator(clientConfig),
+        serviceProvider = new OpenAILlmServiceProvider(
+                new OpenAIClientGenerator(clientConfig, LlmTestClients.RESPONSES_API_HTTP_CLIENT,
+                        LlmTestClients.LLM_HTTP_CLIENT_BUILDERS),
                 mock(LlmProviderFactory.class));
     }
 
@@ -143,7 +145,7 @@ class OpenAILlmServiceProviderJudgeCustomParametersTest {
     private LlmProviderClientApiConfig config() {
         return LlmProviderClientApiConfig.builder()
                 .apiKey("test-key")
-                .baseUrl(wireMock.baseUrl())
+                .baseUrl(LlmTestClients.baseUrlOf(wireMock))
                 .build();
     }
 

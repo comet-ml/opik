@@ -6,8 +6,11 @@ import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 
 
-class IdsHolder(UniversalBaseModel):
-    ids: typing.List[str]
+class NumberParam(UniversalBaseModel):
+    accepted: typing.Optional[bool] = None
+    min: typing.Optional[float] = None
+    max: typing.Optional[float] = None
+    default: typing.Optional[float] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

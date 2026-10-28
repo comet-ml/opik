@@ -275,14 +275,28 @@ def _run_code_metric(code: str, data: dict) -> dict:
             logger.info(
                 "Created DockerExecutor for code metrics (multi-tenant isolation)"
             )
-        return _code_metric_executor.run_scoring(code, data)
+        # Studio treats an empty or unusable score list as a normal result. The
+        # evaluator endpoint owns that policy, so this caller only opts out of the
+        # reasons Studio tolerates; malformed payloads, error payloads and crashes
+        # are still counted as rejections.
+        return _code_metric_executor.run_scoring(
+            code, data, apply_rejection_policy=False
+        )
 
     else:
         # Local/self-hosted (process strategy): Use run_user_code directly
         # This is the same core logic used by ProcessExecutor, but without creating
         # a worker pool (which would fail in the nested subprocess context)
+        from opik_backend.executor_process import (
+            isolation_enabled,
+            run_user_code_in_isolated_worker,
+        )
         from opik_backend.process_worker import run_user_code
 
+        # The job subprocess needs the network, so with process network isolation on the
+        # metric runs in a short-lived isolated worker instead.
+        if isolation_enabled():
+            return run_user_code_in_isolated_worker(code, data)
         return run_user_code(code, data)
 
 
@@ -325,6 +339,7 @@ class MetricFactory:
         metric_params: Dict[str, Any],
         model: str,
         dataset_items_provider: Callable[[], List[Dict[str, Any]]] = None,
+        project_name: Optional[str] = None,
     ) -> Callable:
         """Build a metric function from config.
 
@@ -340,6 +355,7 @@ class MetricFactory:
                 against the dataset. When None, that validation is skipped.
                 Not invoked by metrics that ignore the dataset at build time
                 (e.g. geval, json_schema_validator, code).
+            project_name: The optimization's project, for the spans the metrics log.
 
         Returns:
             A callable metric function(dataset_item, llm_output) -> ScoreResult
@@ -359,6 +375,7 @@ class MetricFactory:
                 metric_params,
                 model,
                 dataset_items_provider=dataset_items_provider,
+                project_name=project_name,
             )
         except InvalidMetricError:
             raise
@@ -432,7 +449,7 @@ def _build_equals_metric(params: Dict[str, Any], model: str, **kwargs) -> Callab
     case_sensitive = params.get("case_sensitive", DEFAULT_CASE_SENSITIVE)
     return _build_reference_metric(
         "equals",
-        Equals(case_sensitive=case_sensitive),
+        Equals(case_sensitive=case_sensitive, project_name=kwargs.get("project_name")),
         lambda value: (
             "Exact match: output equals reference"
             if value == 1.0
@@ -461,7 +478,7 @@ def _build_levenshtein_metric(params: Dict[str, Any], model: str, **kwargs) -> C
     case_sensitive = params.get("case_sensitive", DEFAULT_CASE_SENSITIVE)
     return _build_reference_metric(
         "levenshtein_ratio",
-        LevenshteinRatio(case_sensitive=case_sensitive),
+        LevenshteinRatio(case_sensitive=case_sensitive, project_name=kwargs.get("project_name")),
         lambda value: f"Similarity: {value * 100:.0f}%",
         params,
         **kwargs,
@@ -548,6 +565,7 @@ def _build_geval_metric(params: Dict[str, Any], model: str, **kwargs) -> Callabl
             task_introduction=task_intro_template,
             evaluation_criteria=eval_criteria_template,
             model=llm_model,
+            project_name=kwargs.get("project_name"),
         )
 
         def metric_fn(dataset_item, llm_output):
@@ -577,6 +595,7 @@ def _build_geval_metric(params: Dict[str, Any], model: str, **kwargs) -> Callabl
             task_introduction=task_intro,
             evaluation_criteria=eval_criteria,
             model=llm_model,
+            project_name=kwargs.get("project_name"),
         )
 
         # Note: GEval.score() only accepts 'output' - dataset_item context is already
@@ -608,7 +627,7 @@ def _build_json_schema_validator_metric(
 
     llm_model = LiteLLMChatModel(model_name=model, stream=False)
     structured_metric = StructuredOutputCompliance(
-        model=llm_model, name="json_schema_validator"
+        model=llm_model, name="json_schema_validator", project_name=kwargs.get("project_name")
     )
 
     def metric_fn(dataset_item, llm_output):

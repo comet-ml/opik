@@ -4,6 +4,7 @@ export interface User {
   apiKeys: string[];
   defaultWorkspace: string;
   email: string;
+  emailVerificationRequired?: boolean;
   gitHub: boolean;
   loggedIn: boolean;
   orgReachedTraceLimit?: boolean;

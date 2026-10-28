@@ -4,13 +4,13 @@ import type * as OpikApi from "../../api/index.js";
 import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
 
-export const IdsHolder: core.serialization.ObjectSchema<serializers.IdsHolder.Raw, OpikApi.IdsHolder> =
+export const FlagParam: core.serialization.ObjectSchema<serializers.FlagParam.Raw, OpikApi.FlagParam> =
     core.serialization.object({
-        ids: core.serialization.list(core.serialization.string()),
+        accepted: core.serialization.boolean().optional(),
     });
 
-export declare namespace IdsHolder {
+export declare namespace FlagParam {
     export interface Raw {
-        ids: string[];
+        accepted?: boolean | null;
     }
 }

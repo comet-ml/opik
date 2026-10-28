@@ -1,0 +1,129 @@
+package com.comet.opik.domain.llm;
+
+import com.comet.opik.infrastructure.LlmProviderClientConfig;
+import com.google.common.base.CharMatcher;
+import io.dropwizard.jersey.errors.ErrorMessage;
+import jakarta.annotation.Nullable;
+import jakarta.inject.Inject;
+import jakarta.inject.Singleton;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
+import org.apache.commons.lang3.StringUtils;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
+
+import java.util.Set;
+import java.util.regex.Pattern;
+
+import static com.comet.opik.domain.llm.ChatCompletionService.UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
+
+/**
+ * The one place that decides which provider error text reaches a caller: a parsed provider error message is kept
+ * only when its envelope names an error the provider documents and it reads as a short plain message. Anything else
+ * becomes {@link ChatCompletionService#UNEXPECTED_ERROR_CALLING_LLM_PROVIDER}.
+ */
+@Singleton
+public class ProviderErrorMessageValidator {
+
+    /** The error identifiers each provider documents for its error envelope. */
+    @RequiredArgsConstructor
+    public enum DocumentedErrors {
+        /**
+         * https://developers.openai.com/api/docs/guides/error-codes, .../guides/agents-api/errors; error.type or code.
+         * {@code unsupported_value} and {@code invalid_value} aren't listed there; they are the codes OpenAI returns,
+         * with type {@code invalid_request_error}, for a parameter value a model doesn't accept.
+         */
+        OPENAI(Set.of(
+                "invalid_request_error", "authentication_error", "not_found_error", "conflict_error",
+                "rate_limit_error", "insufficient_quota", "service_unavailable_error", "server_error",
+                "internal_error", "invalid_request", "invalid_api_key", "unauthorized", "forbidden",
+                "model_not_found", "context_length_exceeded", "unsupported_parameter", "unsupported_value",
+                "invalid_value", "rate_limit_exceeded", "slow_down", "credit_balance_exhausted",
+                "usage_limit_exceeded", "organization_spend_limit_exceeded", "project_spend_limit_exceeded",
+                "organization_usage_limit_exceeded", "server_is_overloaded", "server_overloaded",
+                "request_timeout", "previous_response_not_found", "websocket_connection_limit_reached",
+                "invalid_beta", "agent_not_persisted", "invalid_otlp_endpoint", "invalid_otlp_header",
+                "executor_version_incompatible", "mcp_server_startup_failed", "files_api_rate_limit_exceeded",
+                "session_budget_exceeded", "flex_unavailable", "connection_failed", "resource_not_found",
+                "sandbox_error", "active_turn_not_steerable", "cyber_policy", "misalignment_policy_violation",
+                "environment_connection_failed", "environment_connection_timeout", "idle_timeout")),
+        /**
+         * https://learn.microsoft.com/azure/ai-foundry/openai/concepts/content-filter; error.code of an
+         * OpenAI-compatible envelope. Azure OpenAI otherwise answers with OpenAI's identifiers. InvalidAPIVersion isn't
+         * in Azure's reference, but it is kept: its message names only the API version the caller sent. Codes that
+         * describe the deployment behind a gateway, such as DeploymentNotFound, are not.
+         */
+        AZURE_OPENAI(Set.of("content_filter", "InvalidAPIVersion")),
+        /** https://platform.claude.com/docs/en/api/errors; error.type */
+        ANTHROPIC(Set.of(
+                "invalid_request_error", "authentication_error", "billing_error", "permission_error",
+                "not_found_error", "conflict_error", "request_too_large", "rate_limit_error", "api_error",
+                "timeout_error", "overloaded_error")),
+        /**
+         * https://docs.cloud.google.com/vertex-ai/generative-ai/docs/model-reference/api-errors; error.status
+         */
+        GOOGLE(Set.of(
+                "INVALID_ARGUMENT", "FAILED_PRECONDITION", "UNAUTHENTICATED", "PERMISSION_DENIED", "NOT_FOUND",
+                "RESOURCE_EXHAUSTED", "CANCELLED", "UNKNOWN", "INTERNAL", "UNAVAILABLE", "DEADLINE_EXCEEDED")),
+        /** https://openrouter.ai/docs/api-reference/errors; error.code */
+        OPENROUTER(Set.of(
+                "400", "401", "402", "403", "404", "408", "412", "413", "422", "429", "500", "502", "503", "504"));
+
+        private final Set<String> identifiers;
+
+        public boolean documents(Object identifier) {
+            return identifier != null && identifiers.contains(identifier.toString());
+        }
+    }
+
+    /**
+     * ISO control characters (C0, DEL and C1) and the Unicode line and paragraph separators. All of them are in the
+     * Basic Multilingual Plane, so matching UTF-16 chars matches the same code points.
+     */
+    private static final CharMatcher CONTROL_CHARACTERS = CharMatcher.javaIsoControl()
+            .or(CharMatcher.anyOf("\u2028\u2029"));
+
+    /**
+     * The start of a tag, comment, declaration or processing instruction. A bare {@code <} or {@code >} is a comparison, as in a parameter
+     * range ({@code >= 1}), so it is kept.
+     */
+    private static final Pattern MARKUP = Pattern.compile("<[\\p{L}/!?]");
+
+    private static final Pattern LINE_BREAK = Pattern.compile("\\R");
+
+    private final int maxLength;
+
+    @Inject
+    public ProviderErrorMessageValidator(@NonNull @Config("llmProviderClient") LlmProviderClientConfig config) {
+        this.maxLength = config.getProviderErrorMessageMaxLength();
+    }
+
+    /**
+     * The first line of a message, stripped. Google APIs put a one-line summary first and the specifics, such as the
+     * quota that was exceeded, on the lines after it.
+     */
+    public static @Nullable String firstLine(@Nullable String text) {
+        return text == null ? null : LINE_BREAK.split(text, 2)[0].strip();
+    }
+
+    /** The provider's status with none of its text, for an envelope that names no documented error. */
+    public static ErrorMessage withoutProviderText(@NonNull ErrorMessage providerError) {
+        return new ErrorMessage(providerError.getCode(), UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
+    }
+
+    public ErrorMessage validate(@NonNull ErrorMessage providerError) {
+        var message = isPlainMessage(providerError.getMessage())
+                ? providerError.getMessage()
+                : UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
+        var details = isPlainMessage(providerError.getDetails()) ? providerError.getDetails() : null;
+        return new ErrorMessage(providerError.getCode(), message, details);
+    }
+
+    private boolean isPlainMessage(String text) {
+        return isPlainText(text) && text.length() <= maxLength;
+    }
+
+    /** A single line of plain text: no markup, control characters or line breaks; length is not checked. */
+    public static boolean isPlainText(String text) {
+        return StringUtils.isNotBlank(text) && CONTROL_CHARACTERS.matchesNoneOf(text) && !MARKUP.matcher(text).find();
+    }
+}
