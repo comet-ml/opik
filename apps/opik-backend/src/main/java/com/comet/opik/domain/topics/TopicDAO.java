@@ -12,6 +12,7 @@ import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -71,16 +72,23 @@ public interface TopicDAO {
             """)
     int updateState(@BindMethods TopicProjectState state, @Bind("expectedRunId") UUID expectedRunId);
 
-    @SqlUpdate("DELETE FROM topics WHERE project_id IN (<projectIds>)")
-    int deleteTopicsByProjects(@BindList("projectIds") Collection<UUID> projectIds);
+    @SqlUpdate("DELETE FROM topics WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>)")
+    int deleteTopicsByProjects(@Bind("workspaceId") String workspaceId,
+            @BindList("projectIds") Collection<UUID> projectIds);
 
-    @SqlUpdate("DELETE FROM topic_prototypes WHERE project_id IN (<projectIds>)")
-    int deletePrototypesByProjects(@BindList("projectIds") Collection<UUID> projectIds);
+    @SqlUpdate("DELETE FROM topic_prototypes WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>)")
+    int deletePrototypesByProjects(@Bind("workspaceId") String workspaceId,
+            @BindList("projectIds") Collection<UUID> projectIds);
 
-    @SqlUpdate("DELETE FROM topic_project_states WHERE project_id IN (<projectIds>)")
-    int deleteStatesByProjects(@BindList("projectIds") Collection<UUID> projectIds);
+    @SqlUpdate("DELETE FROM topic_project_states WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>)")
+    int deleteStatesByProjects(@Bind("workspaceId") String workspaceId,
+            @BindList("projectIds") Collection<UUID> projectIds);
 
     @SqlQuery("SELECT * FROM topic_project_states WHERE project_id IN (<projectIds>)")
     List<TopicProjectState> findStates(
             @BindList(value = "projectIds", onEmpty = BindList.EmptyHandling.NULL_STRING) Collection<UUID> projectIds);
+
+    @SqlQuery("SELECT id FROM projects WHERE workspace_id = :workspaceId AND id IN (<projectIds>)")
+    Set<UUID> findExistingProjectIds(@Bind("workspaceId") String workspaceId,
+            @BindList("projectIds") Collection<UUID> projectIds);
 }

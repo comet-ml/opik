@@ -49,7 +49,7 @@ public class TraceTopicsDAO {
             FROM trace_topics
             WHERE workspace_id = :workspace_id
             AND project_id = :project_id
-            ORDER BY workspace_id, project_id, trace_id, updated_at DESC
+            ORDER BY workspace_id, project_id, trace_id, updated_at DESC, run_id DESC
             LIMIT 1 BY workspace_id, project_id, trace_id
             SETTINGS log_comment = '<log_comment>'
             """;
@@ -64,7 +64,7 @@ public class TraceTopicsDAO {
                 AND project_id = :project_id
                 AND trace_created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
                 AND trace_created_at \\< fromUnixTimestamp64Micro(:to_micros, 'UTC')
-                ORDER BY workspace_id, project_id, trace_id, updated_at DESC
+                ORDER BY workspace_id, project_id, trace_id, updated_at DESC, run_id DESC
                 LIMIT 1 BY workspace_id, project_id, trace_id
             )
             GROUP BY topic_id

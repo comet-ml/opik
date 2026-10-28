@@ -14,7 +14,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
 /**
- * Deletes the MySQL side of the deleted projects' topics: the topic lists, prototypes, states and runs. Names,
+ * Deletes the MySQL side of the deleted projects' topics, within the event's workspace: the topic lists, prototypes, states and runs. Names,
  * definitions and prototypes come from the projects' traces, so they go with the project. The trace_topics rows follow
  * through the TracesDeleted cascade of each trace delete.
  */
@@ -30,10 +30,10 @@ public class TopicsProjectDeletedListener {
         try {
             template.inTransaction(WRITE, handle -> {
                 var topicDAO = handle.attach(TopicDAO.class);
-                int topics = topicDAO.deleteTopicsByProjects(event.projectIds());
-                int prototypes = topicDAO.deletePrototypesByProjects(event.projectIds());
-                int states = topicDAO.deleteStatesByProjects(event.projectIds());
-                int runs = handle.attach(TopicRunDAO.class).deleteByProjects(event.projectIds());
+                int topics = topicDAO.deleteTopicsByProjects(event.workspaceId(), event.projectIds());
+                int prototypes = topicDAO.deletePrototypesByProjects(event.workspaceId(), event.projectIds());
+                int states = topicDAO.deleteStatesByProjects(event.workspaceId(), event.projectIds());
+                int runs = handle.attach(TopicRunDAO.class).deleteByProjects(event.workspaceId(), event.projectIds());
                 if (topics + prototypes + states + runs > 0) {
                     log.info("Deleted the topics of deleted projects, workspace '{}', project count '{}', topics "
                             + "'{}', prototypes '{}', states '{}', runs '{}'", event.workspaceId(),

@@ -21,6 +21,7 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -396,8 +397,15 @@ public class TopicsNightlyService {
                 ? Set.of()
                 : template.inTransaction(READ_ONLY, handle -> handle.attach(TopicDAO.class).findStates(projectIds))
                         .stream().map(TopicProjectState::projectId).collect(Collectors.toSet());
+        // A deleted project keeps its window vectors until ClickHouse drops them: build only projects that exist.
+        Set<UUID> existing = new HashSet<>();
+        found.stream().collect(Collectors.groupingBy(Candidate::workspaceId,
+                Collectors.mapping(Candidate::projectId, Collectors.toSet())))
+                .forEach((workspaceId, ids) -> existing.addAll(template.inTransaction(READ_ONLY,
+                        handle -> handle.attach(TopicDAO.class).findExistingProjectIds(workspaceId, ids))));
         found.stream()
                 .filter(candidate -> !built.contains(candidate.projectId()))
+                .filter(candidate -> existing.contains(candidate.projectId()))
                 .sorted(Comparator.comparingLong(Candidate::vectors).thenComparing(Candidate::projectId))
                 .forEach(candidates::add);
         int skipped = small + (found.size() - candidates.size());

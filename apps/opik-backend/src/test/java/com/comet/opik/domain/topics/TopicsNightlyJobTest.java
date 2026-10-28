@@ -185,15 +185,19 @@ class TopicsNightlyJobTest {
     }
 
     @Test
-    @DisplayName("builds only the enabled project with minVectors, saves the run, and skips it the next night")
+    @DisplayName("builds only the enabled, existing project with minVectors, saves the run, and skips it the next night")
     void firstBuild() {
         var workspaceId = enabledWorkspace();
         var built = UUID.randomUUID();
         var small = UUID.randomUUID();
         var disabled = UUID.randomUUID();
+        var deleted = UUID.randomUUID();
         seed(workspaceId, built, 0, BUILT);
         seed(workspaceId, small, BUILT, SMALL);
         seed(UUID.randomUUID().toString(), disabled, 0, BUILT);
+        seed(workspaceId, deleted, 0, BUILT);
+        template.inTransaction(WRITE,
+                handle -> handle.execute("DELETE FROM projects WHERE id = ?", deleted.toString()));
         stubAnswer(FIXTURE.answer);
 
         var result = nightlyService.runNight(start());
@@ -202,6 +206,7 @@ class TopicsNightlyJobTest {
         assertThat(result.failed()).isZero();
         assertThat(runs(small)).isEmpty();
         assertThat(runs(disabled)).isEmpty();
+        assertThat(runs(deleted)).isEmpty();
 
         var run = runs(built);
         assertThat(run).singleElement().satisfies(saved -> {
@@ -640,6 +645,9 @@ class TopicsNightlyJobTest {
     private void seed(String workspaceId, UUID projectId, int from, int count, Instant fixtureNight,
             Instant night) {
         var shift = Duration.between(fixtureNight, night);
+        template.inTransaction(WRITE, handle -> handle.execute(
+                "INSERT INTO projects (id, name, workspace_id) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE id = id",
+                projectId.toString(), "topics-" + projectId, workspaceId));
         var rows = new ArrayList<TopicVector>(count);
         for (int i = from; i < from + count; i++) {
             var vector = new ArrayList<Float>(TopicsFixture.DIMENSIONS);

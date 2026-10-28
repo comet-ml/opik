@@ -221,9 +221,12 @@ public class TopicsRebuildService {
             stats.put("prototypes", prototypes.size());
             stats.set("seconds", seconds);
             log.info("Topics run '{}' built, project '{}', window ['{}', '{}'), vectors '{}', unique texts '{}', "
-                    + "k '{}', seed '{}', topics '{}', Other share '{}', seconds '{}'", runId, projectId, from, to, n,
-                    unique, k, seed, topics.stream().map(topic -> topic.name() + " (" + topic.size() + ")").toList(),
+                    + "k '{}', seed '{}', topic sizes '{}', Other share '{}', seconds '{}'", runId, projectId, from, to,
+                    n, unique, k, seed, topics.stream().map(Topic::size).toList(),
                     TopicText.fixed((double) other / n, 3), seconds);
+            // Topic names come from trace text: DEBUG only.
+            log.debug("Topics run '{}' topics, project '{}': '{}'", runId, projectId,
+                    topics.stream().map(topic -> topic.name() + " (" + topic.size() + ")").toList());
 
             timed("save", () -> {
                 save(rows, assigned.labels(), topics, prototypes);
@@ -411,7 +414,7 @@ public class TopicsRebuildService {
 
         /**
          * Deletes the trace_topics rows of a run whose MySQL save did not commit. Best effort: a row left behind
-         * belongs to a run that never saved, and readers keep only rows of saved runs. It runs after any insert
+         * belongs to a run that never saved, and the next saved run replaces it. It runs after any insert
          * attempt, as a failed insert may have reached ClickHouse, and clears the interrupt of a timed-out run while it
          * deletes: {@code block()} on an interrupted thread throws at once.
          */

@@ -33,6 +33,11 @@ public class KMeans {
         Preconditions.checkArgument(points.length == n * dimensions,
                 "points must hold one row per weight, weights '%s', values '%s'", n, points.length);
         Preconditions.checkArgument(k >= 1 && k <= n, "k must be in [1, n], k '%s', n '%s'", k, n);
+        Preconditions.checkArgument(dimensions > 0, "dimensions must be positive, dimensions '%s'", dimensions);
+        for (double weight : weights) {
+            Preconditions.checkArgument(Double.isFinite(weight) && weight > 0,
+                    "weights must be finite and positive, weight '%s'", weight);
+        }
         var random = new SplittableRandom(seed);
         Fit best = null;
         for (int restart = 0; restart < RESTARTS; restart++) {

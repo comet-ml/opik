@@ -251,12 +251,14 @@ class TopicsAlgorithmRulesTest {
     class KMeansEdges {
 
         @Test
-        @DisplayName("k equal to the number of points, and duplicate points, leave no group empty")
+        @DisplayName("k equal to the number of points: duplicate points share a group, every other point has its own")
         void kEqualsN() {
             var points = new float[]{1, 0, 0, 1, 1, 0, 0.6f, 0.8f};
             var result = KMeans.fit(points, new double[]{1, 1, 1, 1}, 2, 4, 0);
-            assertThat(result.labels()).hasSize(4);
-            assertThat(IntStream.of(result.labels()).distinct().count()).isGreaterThanOrEqualTo(3);
+            var labels = result.labels();
+            assertThat(labels).hasSize(4);
+            assertThat(labels[0]).isEqualTo(labels[2]);
+            assertThat(IntStream.of(labels[0], labels[1], labels[3]).distinct().count()).isEqualTo(3);
         }
 
         @Test
