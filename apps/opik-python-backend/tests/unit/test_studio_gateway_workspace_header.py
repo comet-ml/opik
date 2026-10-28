@@ -26,6 +26,7 @@ def reset_gateway_state(monkeypatch):
     monkeypatch.setattr(optimizer_runner, "_gateway_workspace", {"name": None})
     monkeypatch.setattr(optimizer_runner, "_dropped_params_logged", set())
     monkeypatch.setattr(optimizer_runner, "_dropped_headers_logged", set())
+    monkeypatch.setattr(optimizer_runner, "_gateway_seed", {"value": None})
 
 
 @pytest.fixture

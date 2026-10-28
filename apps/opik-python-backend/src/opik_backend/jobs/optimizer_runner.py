@@ -131,6 +131,9 @@ def reconfigure_rich_console():
 # a mutable container so the (single) set of wrappers always reflects the latest
 # workspace without needing to be torn down and rebuilt.
 _gateway_workspace = {"name": None}
+# The run's model seed, for gateway calls that carry none: opik_optimizer sends the task model's calls with seed=None,
+# so a seed in the model parameters would otherwise not reach them (see build_optimizer_and_prompt).
+_gateway_seed = {"value": None}
 
 # The only LiteLLM parameters a gateway call keeps; api_base is then set to the gateway. Model parameters come from
 # the caller's optimization config and reach LiteLLM as they are, and LiteLLM reads many of them as a destination,
@@ -223,6 +226,8 @@ def route_litellm_calls_through_gateway(workspace_name):
             del kwargs[name]
         _log_dropped_once("Dropped model parameters not passed to the gateway", dropped, _dropped_params_logged)
         kwargs["api_base"] = OPENAI_API_BASE
+        if kwargs.get("seed") is None and _gateway_seed["value"] is not None:
+            kwargs["seed"] = _gateway_seed["value"]
         extra_headers = {}
         dropped_headers = set()
         for name, value in dict(kwargs.get("extra_headers") or {}).items():
@@ -271,6 +276,13 @@ def _with_stream(params):
     return params
 
 
+def _pop_seed(params):
+    """``(params without seed, seed)``. opik_optimizer passes its own ``seed`` argument on every LLM call, next to
+    the model parameters, so a seed left among them fails the call with "multiple values for 'seed'"."""
+    params = dict(params)
+    return params, params.pop("seed", None)
+
+
 def build_optimizer_and_prompt(config):
     """Build the optimizer and the prompt for a parsed ``OptimizationConfig``.
 
@@ -291,11 +303,12 @@ def build_optimizer_and_prompt(config):
     )
 
     task_model = _gateway_model(config.model)
-    task_params = _with_stream(config.model_params)
+    task_params, task_seed = _pop_seed(_with_stream(config.model_params))
+    optimizer_seed = None
 
     if config.optimizer_model:
         optimizer_model = _gateway_model(config.optimizer_model)
-        optimizer_model_params = _with_stream(config.optimizer_model_params)
+        optimizer_model_params, optimizer_seed = _pop_seed(_with_stream(config.optimizer_model_params))
     else:
         # No separate algorithm model — default to the prompt model. Still honor
         # optimizer model_parameters if the config set them without a model
@@ -305,25 +318,36 @@ def build_optimizer_and_prompt(config):
         # whole prompts and JSON analyses, so it gets at least the factory default,
         # under the prompt's field name: the same model's gateway route reads that
         # name, while some routes ignore the factory's max_tokens.
-        optimizer_model_params = (
-            _with_stream(config.optimizer_model_params)
+        optimizer_model_params, optimizer_seed = (
+            _pop_seed(_with_stream(config.optimizer_model_params))
             if config.optimizer_model_params is not None
-            else {
+            else ({
                 key: (
                     max(value or 0, LLM_MAX_TOKENS)
                     if key in ("max_tokens", "max_completion_tokens")
                     else value
                 )
                 for key, value in task_params.items()
-            }
+            }, None)
         )
+
+    # opik_optimizer sends the optimizer's seed on its own LLM calls and seed=None on the task model's, so the run's
+    # model seed (the prompt model's first) becomes the optimizer's seed, unless the optimizer parameters set one,
+    # and the gateway wrapper fills it into the calls that carry none.
+    optimizer_params = dict(config.optimizer_params or {})
+    seed = task_seed if task_seed is not None else optimizer_seed
+    _gateway_seed["value"] = seed
+    if seed is not None:
+        optimizer_params.setdefault("seed", seed)
+        if optimizer_params["seed"] != seed:
+            logger.info("The model parameters' seed is not used: the optimizer's own seed is sent on its LLM calls")
 
     # The factory injects defaults (e.g. max_tokens) into the optimizer params.
     optimizer = OptimizerFactory.build(
         config.optimizer_type,
         optimizer_model,
         optimizer_model_params,
-        config.optimizer_params or {},
+        optimizer_params,
     )
     # Set the model on the prompt itself — the optimizer uses its own model for
     # reasoning, while baseline/per-trial task calls run through the prompt's
