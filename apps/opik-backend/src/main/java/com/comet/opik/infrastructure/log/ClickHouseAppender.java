@@ -7,6 +7,7 @@ import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.infrastructure.log.tables.UserLogTableFactory;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import reactor.core.publisher.Mono;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -65,6 +66,9 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
             int batchSize) {
         this.userLogTableFactory = userLogTableFactory;
         this.flushIntervalDuration = flushIntervalDuration;
+        if (batchSize < 1) {
+            throw new IllegalArgumentException("clickHouseLogAppender.batchSize must be at least 1, got " + batchSize);
+        }
         this.batchSize = batchSize;
         this.logQueue = new LinkedBlockingQueue<>(batchSize * MAX_QUEUED_BATCHES);
     }
@@ -94,25 +98,32 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
         Map<String, List<ILoggingEvent>> eventsPerTable = batch.stream()
                 .collect(groupingBy(event -> event.getMDCPropertyMap().getOrDefault(UserLog.MARKER, "")));
 
-        eventsPerTable
-                .forEach((userLog, events) -> {
+        var inserts = eventsPerTable.entrySet().stream()
+                .map(entry -> save(entry.getKey(), entry.getValue()))
+                .toList();
 
-                    if (userLog.isBlank()) {
-                        log.error("UserLog marker is not set for events: {}", events.stream()
-                                .map(ILoggingEvent::getFormattedMessage)
-                                .collect(Collectors.joining(", ")));
-                    } else {
-                        UserLogTableFactory.UserLogTableDAO tableDAO = userLogTableFactory
-                                .getDAO(UserLog.valueOf(userLog));
+        // Wait for the inserts on this dedicated thread, so a slow ClickHouse backs up into the bounded queue
+        // instead of piling up in-flight inserts. Tables are inserted concurrently, not one after another.
+        // Never throw: an exception would cancel the periodic flush.
+        try {
+            Mono.when(inserts).block();
+        } catch (RuntimeException e) {
+            log.error("Failed to insert logs", e);
+        }
+    }
 
-                        // Wait for the insert on this dedicated thread, so a slow ClickHouse backs up into the
-                        // bounded queue instead of piling up in-flight inserts.
-                        try {
-                            tableDAO.saveAll(events).block();
-                        } catch (RuntimeException e) {
-                            log.error("Failed to insert logs", e);
-                        }
-                    }
+    private Mono<Void> save(String userLog, List<ILoggingEvent> events) {
+        if (userLog.isBlank()) {
+            log.error("UserLog marker is not set for events: {}", events.stream()
+                    .map(ILoggingEvent::getFormattedMessage)
+                    .collect(Collectors.joining(", ")));
+            return Mono.empty();
+        }
+
+        return Mono.defer(() -> userLogTableFactory.getDAO(UserLog.valueOf(userLog)).saveAll(events))
+                .onErrorResume(e -> {
+                    log.error("Failed to insert logs", e);
+                    return Mono.empty();
                 });
     }
 
