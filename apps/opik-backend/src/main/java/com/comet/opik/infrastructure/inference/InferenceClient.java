@@ -161,9 +161,10 @@ public class InferenceClient {
 
     /**
      * One completion, answered in the call. Retried like a submit: a retry sends the same bytes, so the same
-     * {@code request_id}, and a {@code quota_exceeded} answer fails at once. The request's {@code deadline_ms} is the
-     * caller's, if set, cut to the time left before {@code deadline} and to the lane's maximum; the read timeout is
-     * that deadline, as the service holds the connection until the model answers.
+     * {@code request_id}, and a {@code quota_exceeded} answer fails at once. So does {@code schema_violation}: the
+     * service checks the answer against the schema, and the same bytes at temperature 0 give the same answer. The
+     * request's {@code deadline_ms} is the caller's, if set, cut to the time left before {@code deadline} and to the
+     * lane's maximum; the read timeout is that deadline, as the service holds the connection until the model answers.
      */
     public Mono<GenerateResponse> generate(@NonNull GenerateRequest request, @NonNull Instant deadline) {
         Preconditions.checkArgument(!request.messages().isEmpty(), "a generate call takes at least one message");
@@ -197,6 +198,7 @@ public class InferenceClient {
                     .deadline(deadline)
                     .type(GenerateResponse.class)
                     .failFastOnQuotaExceeded(true)
+                    .failFastOnSchemaViolation(true)
                     .build());
         });
     }
@@ -236,7 +238,8 @@ public class InferenceClient {
             return left.toMillis() >= 1 ? send(call, left) : Mono.<T>error(InferenceException.outOfTime());
         }).onErrorResume(InferenceException.class, exception -> {
             if (attempt >= MAX_RETRIES || !exception.isRetryable()
-                    || (call.failFastOnQuotaExceeded() && exception.isQuotaExceeded())) {
+                    || (call.failFastOnQuotaExceeded() && exception.isQuotaExceeded())
+                    || (call.failFastOnSchemaViolation() && exception.isSchemaViolation())) {
                 return Mono.error(exception);
             }
             var backoff = exception.getRetryAfter() != null
@@ -333,6 +336,7 @@ public class InferenceClient {
             @NonNull Duration readTimeout,
             @NonNull Instant deadline,
             @NonNull Class<T> type,
-            boolean failFastOnQuotaExceeded) {
+            boolean failFastOnQuotaExceeded,
+            boolean failFastOnSchemaViolation) {
     }
 }

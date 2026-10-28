@@ -19,10 +19,12 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
+import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.net.SocketTimeoutException;
+import java.sql.SQLIntegrityConstraintViolationException;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -30,12 +32,14 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Supplier;
 
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
 /**
@@ -138,6 +142,8 @@ public class TopicsRebuildService {
         private final Instant to;
         private final ObjectNode stats = JsonUtils.createObjectNode();
         private final ObjectNode seconds = JsonUtils.createObjectNode();
+        /** The project's state when the run started: the save checks that no other run saved since. */
+        private Optional<TopicProjectState> readState = Optional.empty();
 
         Run(UUID runId, String workspaceId, UUID projectId, LocalDate night) {
             this.runId = runId;
@@ -151,6 +157,8 @@ public class TopicsRebuildService {
         }
 
         void build() {
+            readState = template.inTransaction(READ_ONLY, handle -> handle.attach(TopicDAO.class)
+                    .findStates(List.of(projectId)).stream().findFirst());
             var rows = timed("window", this::readWindow);
             int n = rows.size();
             var texts = new String[n];
@@ -199,7 +207,7 @@ public class TopicsRebuildService {
 
             var assigned = timed("assign", () -> assign(applied, fit.centres(), vectors, n));
             var topics = topics(applied, assigned.labels());
-            var prototypes = prototypes(assigned.assigner(), topics);
+            var prototypes = prototypes(assigned, topics);
             checkInvariants(topics, prototypes, assigned.labels(), n);
 
             int other = 0;
@@ -269,6 +277,13 @@ public class TopicsRebuildService {
                 response = client.generate(request,
                         Instant.now().plus(config.getNightly().getQwenDeadline().toJavaDuration())).block();
             } catch (InferenceException exception) {
+                if (exception.isSchemaViolation()) {
+                    // The service checks the answer against the schema: a cut or off-schema answer comes back so.
+                    metrics.qwen("bad_answer");
+                    throw new TopicsRunException(Code.QWEN_BAD_ANSWER,
+                            "the Qwen answer breaks the schema, status '%s'".formatted(exception.getHttpStatus()),
+                            exception);
+                }
                 boolean timeout = isTimeout(exception);
                 metrics.qwen(timeout ? "timeout" : "error");
                 throw new TopicsRunException(timeout ? Code.QWEN_TIMEOUT : Code.QWEN_ERROR,
@@ -306,7 +321,7 @@ public class TopicsRebuildService {
             }
             var otherPrototypes = applied.other().stream().map(group -> centre(centres, group)).toList();
             var assigner = new PrototypeAssigner(topicPrototypes, owners, otherPrototypes, DIMENSIONS);
-            return new Assigned(assigner, assigner.assign(vectors));
+            return new Assigned(assigner, assigner.assign(vectors), topicPrototypes, owners, otherPrototypes);
         }
 
         private List<Topic> topics(AuthorApplier.Applied applied, int[] labels) {
@@ -332,20 +347,32 @@ public class TopicsRebuildService {
             return topics;
         }
 
-        private List<TopicPrototype> prototypes(PrototypeAssigner assigner, List<Topic> topics) {
-            var prototypes = new ArrayList<TopicPrototype>(assigner.prototypeCount());
-            for (int p = 0; p < assigner.prototypeCount(); p++) {
-                int owner = assigner.owner(p);
-                prototypes.add(TopicPrototype.builder()
-                        .id(idGenerator.generateId())
-                        .workspaceId(workspaceId)
-                        .projectId(projectId)
-                        .position(p)
-                        .topicId(owner == PrototypeAssigner.OTHER ? null : topics.get(owner).id())
-                        .vector(TopicPrototype.encode(assigner.prototype(p)))
-                        .build());
+        /**
+         * The topic prototypes, then every known-Other one. The 0.95 gate drops an Other prototype near a topic from
+         * tonight's assignment only: it is saved, as on the stand, and the next night's update assigns with it.
+         */
+        private List<TopicPrototype> prototypes(Assigned assigned, List<Topic> topics) {
+            var prototypes = new ArrayList<TopicPrototype>(
+                    assigned.topicPrototypes().size() + assigned.otherPrototypes().size());
+            for (int p = 0; p < assigned.topicPrototypes().size(); p++) {
+                prototypes.add(prototype(prototypes.size(), topics.get(assigned.owners().get(p)).id(),
+                        assigned.topicPrototypes().get(p)));
+            }
+            for (var vector : assigned.otherPrototypes()) {
+                prototypes.add(prototype(prototypes.size(), null, vector));
             }
             return prototypes;
+        }
+
+        private TopicPrototype prototype(int position, UUID topicId, float[] vector) {
+            return TopicPrototype.builder()
+                    .id(idGenerator.generateId())
+                    .workspaceId(workspaceId)
+                    .projectId(projectId)
+                    .position(position)
+                    .topicId(topicId)
+                    .vector(TopicPrototype.encode(vector))
+                    .build();
         }
 
         /** D5: what must hold before anything is written. */
@@ -355,10 +382,10 @@ public class TopicsRebuildService {
             }
             for (var topic : topics) {
                 if (StringUtils.isBlank(topic.name()) || AuthorApplier.isCatchAll(topic.name())) {
-                    throw invariant("topic name '%s' is blank or a catch-all".formatted(topic.name()));
+                    throw invariant("topic '%s' has a blank or catch-all name".formatted(topics.indexOf(topic)));
                 }
                 if (!topic.born().equals(night)) {
-                    throw invariant("topic '%s' born '%s', not tonight".formatted(topic.name(), topic.born()));
+                    throw invariant("topic '%s' born '%s', not tonight".formatted(topics.indexOf(topic), topic.born()));
                 }
             }
             for (var prototype : prototypes) {
@@ -384,18 +411,48 @@ public class TopicsRebuildService {
 
         /**
          * Deletes the trace_topics rows of a run whose MySQL save did not commit. Best effort: a row left behind
-         * belongs to a run that never saved, and readers keep only rows of saved runs.
+         * belongs to a run that never saved, and readers keep only rows of saved runs. It runs after any insert
+         * attempt, as a failed insert may have reached ClickHouse, and clears the interrupt of a timed-out run while it
+         * deletes: {@code block()} on an interrupted thread throws at once.
          */
-        private void takeBack(boolean inserted) {
-            if (!inserted) {
+        private void takeBack(boolean attempted) {
+            if (!attempted) {
                 return;
             }
+            boolean interrupted = Thread.interrupted();
             try {
                 traceTopicsDAO.deleteByRunId(workspaceId, projectId, runId).block();
             } catch (RuntimeException exception) {
                 log.warn("Topics run '{}' could not delete its trace_topics rows after a failed save, project '{}'",
                         runId, projectId, exception);
+            } finally {
+                if (interrupted) {
+                    Thread.currentThread().interrupt();
+                }
             }
+        }
+
+        /**
+         * Writes the project's state only if no other run saved the project since this run read it. The Redis project
+         * lock keeps two runs apart, but a Redis failover or a timed-out run that outlives its lock can break that.
+         */
+        private void writeState(TopicDAO topicDAO, TopicProjectState state) {
+            if (readState.isEmpty()) {
+                try {
+                    topicDAO.insertState(state);
+                } catch (UnableToExecuteStatementException exception) {
+                    if (exception.getCause() instanceof SQLIntegrityConstraintViolationException) {
+                        throw conflict(exception);
+                    }
+                    throw exception;
+                }
+            } else if (topicDAO.updateState(state, readState.get().lastRunId()) != 1) {
+                throw conflict(null);
+            }
+        }
+
+        private TopicsRunException conflict(Exception cause) {
+            return new TopicsRunException(Code.SAVE, "another run saved this project meanwhile", cause);
         }
 
         private void save(List<TopicWindowRow> rows, int[] labels, List<Topic> topics,
@@ -413,21 +470,15 @@ public class TopicsRebuildService {
                         .build());
             }
             var statsJson = stats.toString();
-            boolean inserted = false;
+            boolean attempted = false;
             try {
+                attempted = true;
                 traceTopicsDAO.insert(traceTopics).block();
-                inserted = true;
                 var now = Instant.now();
                 template.inTransaction(WRITE, handle -> {
                     var topicDAO = handle.attach(TopicDAO.class);
-                    if (!topics.isEmpty()) {
-                        topicDAO.insertTopics(topics);
-                    }
-                    topicDAO.deletePrototypes(projectId);
-                    if (!prototypes.isEmpty()) {
-                        topicDAO.insertPrototypes(prototypes);
-                    }
-                    topicDAO.upsertState(TopicProjectState.builder()
+                    // First, so a run that saved this project meanwhile fails the save before anything else.
+                    writeState(topicDAO, TopicProjectState.builder()
                             .projectId(projectId)
                             .workspaceId(workspaceId)
                             .rebuilds(1)
@@ -436,6 +487,13 @@ public class TopicsRebuildService {
                             .lastSuccessAt(now)
                             .windowUntil(to)
                             .build());
+                    if (!topics.isEmpty()) {
+                        topicDAO.insertTopics(topics);
+                    }
+                    topicDAO.deletePrototypes(projectId);
+                    if (!prototypes.isEmpty()) {
+                        topicDAO.insertPrototypes(prototypes);
+                    }
                     if (handle.attach(TopicRunDAO.class).markSaved(runId, now, statsJson) != 1) {
                         // Failed meanwhile, by its timeout: roll the save back.
                         throw new TopicsRunException(Code.TIMEOUT, "the run ended before its save committed");
@@ -443,10 +501,10 @@ public class TopicsRebuildService {
                     return null;
                 });
             } catch (TopicsRunException exception) {
-                takeBack(inserted);
+                takeBack(attempted);
                 throw exception;
             } catch (RuntimeException exception) {
-                takeBack(inserted);
+                takeBack(attempted);
                 throw new TopicsRunException(Code.SAVE, "the save failed", exception);
             }
             metrics.run(TopicRun.Status.SAVED, null);
@@ -486,7 +544,9 @@ public class TopicsRebuildService {
         }
     }
 
-    private record Assigned(PrototypeAssigner assigner, int[] labels) {
+    /** The assignment, and the prototypes it was built from: the gated known-Other ones are saved too. */
+    private record Assigned(PrototypeAssigner assigner, int[] labels, List<float[]> topicPrototypes,
+            List<Integer> owners, List<float[]> otherPrototypes) {
     }
 
     private static float[] centre(float[] centres, int group) {

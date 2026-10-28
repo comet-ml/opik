@@ -29,10 +29,12 @@ public class TopicWindowDAO {
             SELECT project_id, uniqExact(trace_id) AS traces
             FROM topic_vectors
             WHERE workspace_id = :workspace_id
+            <if(project_id)> AND project_id = :project_id <endif>
             AND trace_created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
             AND trace_created_at \\< fromUnixTimestamp64Micro(:to_micros, 'UTC')
             GROUP BY project_id
-            SETTINGS max_execution_time = <max_execution_time>, log_comment = '<log_comment>'
+            SETTINGS max_execution_time = <max_execution_time>, max_memory_usage = <max_memory_usage>,
+                log_comment = '<log_comment>'
             """;
 
     /**
@@ -68,18 +70,30 @@ public class TopicWindowDAO {
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull @Config("topics") TopicsConfig config;
 
-    /** Per project of the workspace, the traces with a vector created in {@code [from, to)}. */
-    public Flux<ProjectCount> countByProject(@NonNull String workspaceId, @NonNull Instant from, @NonNull Instant to,
-            long maxExecutionSeconds) {
+    /**
+     * Per project of the workspace, or only for {@code projectId} when set, the traces with a vector created in
+     * {@code [from, to)}. Under the window read's memory guard.
+     */
+    public Flux<ProjectCount> countByProject(@NonNull String workspaceId, UUID projectId, @NonNull Instant from,
+            @NonNull Instant to, long maxExecutionSeconds) {
         var template = getSTWithLogComment(COUNT_BY_PROJECT, "topics:count_window", workspaceId, null,
-                "from=%s, to=%s".formatted(from, to))
+                "project_id=%s, from=%s, to=%s".formatted(projectId, from, to))
+                .add("max_memory_usage", config.getVectors().getFind().getMaxMemoryUsage())
                 .add("max_execution_time", maxExecutionSeconds);
+        if (projectId != null) {
+            template.add("project_id", true);
+        }
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> connection.createStatement(template.render())
-                        .bind("workspace_id", workspaceId)
-                        .bind("from_micros", toEpochMicros(from))
-                        .bind("to_micros", toEpochMicros(to))
-                        .execute())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(template.render())
+                            .bind("workspace_id", workspaceId)
+                            .bind("from_micros", toEpochMicros(from))
+                            .bind("to_micros", toEpochMicros(to));
+                    if (projectId != null) {
+                        statement.bind("project_id", projectId.toString());
+                    }
+                    return statement.execute();
+                })
                 .flatMap(result -> result.map((row, metadata) -> new ProjectCount(
                         UUID.fromString(row.get("project_id", String.class)),
                         ((Number) row.get("traces", Object.class)).longValue())));
