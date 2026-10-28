@@ -17,6 +17,7 @@ import jakarta.inject.Named;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.function.UnaryOperator;
 import java.util.stream.Stream;
 
 import static com.comet.opik.infrastructure.llm.openai.OpenAIClientGenerator.ApiPipelineMode.RESPONSES_API;
@@ -60,12 +61,13 @@ class OpenAILlmServiceProvider implements LlmServiceProvider {
 
     @Override
     public ChatModel getToolCallingLanguageModel(@NonNull LlmProviderClientApiConfig config,
-            @NonNull LlmAsJudgeModelParameters modelParameters, @Nullable ModelParams.ToolsParam tools) {
+            @NonNull LlmAsJudgeModelParameters modelParameters, @Nullable ModelParams.ToolsParam tools,
+            @NonNull UnaryOperator<LlmAsJudgeModelParameters> resolve) {
         return switch (toolRoute(config, modelParameters, tools)) {
-            case AS_CONFIGURED -> clientGenerator.newOpenAiChatLanguageModel(config, modelParameters);
-            case RESPONSES_API -> clientGenerator.newResponsesApiChatModel(config, modelParameters);
+            case AS_CONFIGURED -> clientGenerator.newOpenAiChatLanguageModel(config, resolve.apply(modelParameters));
+            case RESPONSES_API -> clientGenerator.newResponsesApiChatModel(config, resolve.apply(modelParameters));
             case CHAT_COMPLETIONS_WITHOUT_REASONING ->
-                clientGenerator.newCompletionsApiChatModel(config, withoutReasoning(modelParameters));
+                clientGenerator.newCompletionsApiChatModel(config, resolve.apply(withoutReasoning(modelParameters)));
         };
     }
 

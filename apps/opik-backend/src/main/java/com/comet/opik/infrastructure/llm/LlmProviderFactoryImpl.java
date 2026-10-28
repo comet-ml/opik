@@ -38,6 +38,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.infrastructure.EncryptionUtils.decrypt;
@@ -129,10 +130,11 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
     }
 
     public ChatModel getToolCallingLanguageModel(@NonNull String workspaceId,
-            @NonNull LlmAsJudgeModelParameters modelParameters) {
+            @NonNull LlmAsJudgeModelParameters modelParameters,
+            @NonNull UnaryOperator<LlmAsJudgeModelParameters> resolve) {
         return judgeModel(workspaceId, modelParameters,
                 (provider, config) -> provider.getToolCallingLanguageModel(config, modelParameters,
-                        toolsOf(modelParameters.name())));
+                        toolsOf(modelParameters.name()), resolve));
     }
 
     private ChatModel judgeModel(String workspaceId, LlmAsJudgeModelParameters modelParameters,

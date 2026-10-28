@@ -4,6 +4,7 @@ import com.comet.opik.api.ModelParams;
 import com.comet.opik.api.ModelParams.ChatCompletionsTools;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.domain.llm.LlmProviderFactory;
+import com.comet.opik.domain.llm.ParamResolver;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmTestClients;
@@ -27,7 +28,10 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
 import java.util.Map;
+import java.util.Optional;
+import java.util.function.UnaryOperator;
 
+import static com.comet.opik.infrastructure.llm.LlmModelRegistryTestUtils.bundledRegistry;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
@@ -36,6 +40,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * Which endpoint a tool-calling judge reaches on an OpenAI key in Chat Completions mode, and with which reasoning
@@ -183,6 +188,28 @@ class OpenAIJudgeToolCallRouteTest {
         assertThat(requestsTo(COMPLETIONS_PATH)).isZero();
     }
 
+    @Test
+    void aRuleThatGivesUpReasoningOnTheRouteKeepsTheTemperatureTheModelTakesAtNone() {
+        callTools(withoutServerWideUrl, keyInChatCompletionsMode(wireMock.baseUrl()),
+                judge(0.0, "{\"reasoning_effort\": \"high\"}"), tools(ChatCompletionsTools.EFFORT_NONE_ONLY),
+                shippedResolver());
+
+        var body = sentBody(COMPLETIONS_PATH);
+        assertThat(body.at("/reasoning_effort").asText()).isEqualTo("none");
+        assertThat(body.has("temperature")).isTrue();
+        assertThat(body.at("/temperature").asDouble()).isZero();
+    }
+
+    @Test
+    void aRuleThatReasonsOnTheResponsesApiLeavesItsTemperatureOut() {
+        callTools(onOpenAi, keyInChatCompletionsMode(null), judge(0.0, "{\"reasoning_effort\": \"high\"}"),
+                tools(ChatCompletionsTools.EFFORT_NONE_ONLY), shippedResolver());
+
+        var body = sentBody(RESPONSES_PATH);
+        assertThat(body.at("/reasoning/effort").asText()).isEqualTo("high");
+        assertThat(body.has("temperature")).isFalse();
+    }
+
     private void assertToolsOnChatCompletionsWithoutReasoning() {
         var rawBody = sentRawBody(COMPLETIONS_PATH);
         var body = JsonUtils.getJsonNodeFromString(rawBody);
@@ -210,10 +237,23 @@ class OpenAIJudgeToolCallRouteTest {
     }
 
     private static LlmAsJudgeModelParameters judge(String customParameters) {
+        return judge(null, customParameters);
+    }
+
+    private static LlmAsJudgeModelParameters judge(Double temperature, String customParameters) {
         return LlmAsJudgeModelParameters.builder()
                 .name("gpt-6-luna")
+                .temperature(temperature)
                 .customParameters(customParameters == null ? null : JsonUtils.getJsonNodeFromString(customParameters))
                 .build();
+    }
+
+    private static UnaryOperator<LlmAsJudgeModelParameters> shippedResolver() {
+        var factory = mock(LlmProviderFactory.class);
+        when(factory.catalogParams("gpt-6-luna"))
+                .thenReturn(Optional.of(bundledRegistry().paramsOf("openai", "gpt-6-luna")));
+        var resolver = new ParamResolver(factory, bundledRegistry());
+        return parameters -> resolver.resolve(parameters).request();
     }
 
     private static ModelParams.ToolsParam tools(ChatCompletionsTools chatCompletions) {
@@ -222,7 +262,13 @@ class OpenAIJudgeToolCallRouteTest {
 
     private void callTools(OpenAILlmServiceProvider serviceProvider, LlmProviderClientApiConfig key,
             LlmAsJudgeModelParameters judge, ModelParams.ToolsParam tools) {
-        var model = serviceProvider.getToolCallingLanguageModel(key, judge, tools);
+        callTools(serviceProvider, key, judge, tools, UnaryOperator.identity());
+    }
+
+    private void callTools(OpenAILlmServiceProvider serviceProvider, LlmProviderClientApiConfig key,
+            LlmAsJudgeModelParameters judge, ModelParams.ToolsParam tools,
+            UnaryOperator<LlmAsJudgeModelParameters> resolve) {
+        var model = serviceProvider.getToolCallingLanguageModel(key, judge, tools, resolve);
         catchThrowable(() -> model.chat(TOOL_REQUEST));
     }
 

@@ -63,7 +63,7 @@ public class AutomationRuleEvaluatorTestUtils {
     public static void answerEveryJudgeCall(LlmProviderFactory llmProviderFactory, Answer<ChatResponse> answer) {
         when(llmProviderFactory.getLanguageModel(anyString(), any()).chat(any(ChatRequest.class)))
                 .thenAnswer(answer);
-        when(llmProviderFactory.getToolCallingLanguageModel(anyString(), any()).chat(any(ChatRequest.class)))
+        when(llmProviderFactory.getToolCallingLanguageModel(anyString(), any(), any()).chat(any(ChatRequest.class)))
                 .thenAnswer(answer);
     }
 }

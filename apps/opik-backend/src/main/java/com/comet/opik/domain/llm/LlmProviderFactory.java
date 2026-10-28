@@ -9,6 +9,7 @@ import com.comet.opik.infrastructure.llm.LlmServiceProvider;
 import dev.langchain4j.model.chat.ChatModel;
 
 import java.util.Optional;
+import java.util.function.UnaryOperator;
 
 public interface LlmProviderFactory {
 
@@ -23,9 +24,11 @@ public interface LlmProviderFactory {
     /**
      * For a judge call that carries function tools, or replays a conversation that used them: some models take
      * tools only on another endpoint or setting than the key's default, and every round of one evaluation must
-     * reach the model the same way.
+     * reach the model the same way. {@code resolve} runs on the parameters as that route sends them, because a route
+     * can change the reasoning effort, and the effort decides whether the model takes a temperature.
      */
-    ChatModel getToolCallingLanguageModel(String workspaceId, LlmAsJudgeModelParameters modelParameters);
+    ChatModel getToolCallingLanguageModel(String workspaceId, LlmAsJudgeModelParameters modelParameters,
+            UnaryOperator<LlmAsJudgeModelParameters> resolve);
 
     /**
      * Resolves the workspace's provider configuration (decrypted API key, headers, base URL) for the model.
