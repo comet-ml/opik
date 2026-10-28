@@ -87,7 +87,11 @@ class PriceFileTest {
                             + "bill at the text rates"),
             Format.BEDROCK_CONVERSE, Map.of(
                     Pattern.compile("(input|output)_cost_per_audio_token"),
-                    "Bedrock's usage has no audio count, so Nova's audio tokens bill at the text rates"));
+                    "Bedrock's usage has no audio count, so Nova's audio tokens bill at the text rates"),
+            Format.OPENAI, Map.of(
+                    Pattern.compile("cache_creation_input_token_cost_above_12hr(_above_\\d+k?_tokens)?"),
+                    "OpenAI's 12-hour cache writes: no usage format reads OpenAI's split of cache writes by retention "
+                            + "yet, so they bill like its other cache writes"));
 
     private static final List<PricedEntry> ENTRIES = pricedEntries();
 
