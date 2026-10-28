@@ -39,7 +39,7 @@ public final class GuardrailQuestions {
      * each character upper-cased, then lower-cased, which a whole-string toLowerCase does not reproduce ('ı' and
      * 'I', 'İ' and 'i').
      */
-    public static String topicKey(String topic) {
+    public static String topicKey(@NonNull String topic) {
         return topic.codePoints()
                 .map(codePoint -> Character.toLowerCase(Character.toUpperCase(codePoint)))
                 .collect(StringBuilder::new, StringBuilder::appendCodePoint, StringBuilder::append)
