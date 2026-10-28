@@ -41,7 +41,8 @@ class UserDestinationHttpClient extends CloseableHttpClient {
                             try {
                                 super.close();
                             } catch (IOException ignored) {
-                                // the connection was just cancelled
+                                // expected, as the connection was just cancelled: not logged, since it would fire on
+                                // every capped read and its message can name the destination
                             }
                         }
                     };

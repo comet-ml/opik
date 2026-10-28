@@ -365,7 +365,9 @@ class InterceptingHttpClient extends DelegatingHttpClient {
      * its size.
      */
     private static Optional<String> topLevelModel(String body) throws IOException {
-        try (JsonParser parser = JsonUtils.getMapper().getFactory().createParser(body)) {
+        // every token read moves forward through a finite string, so the loop ends: at the end of the input
+        // nextToken() is null, and truncated, malformed or too deeply nested input throws
+        try (JsonParser parser = JsonUtils.createParser(body)) {
             if (parser.nextToken() != JsonToken.START_OBJECT) {
                 return Optional.empty();
             }
@@ -477,7 +479,9 @@ class InterceptingHttpClient extends DelegatingHttpClient {
             }
             return builder.build().toString();
         } catch (URISyntaxException exception) {
-            log.warn("Failed to parse custom provider URL as URI; forwarding unchanged", exception);
+            // the type only: the exception's message is the custom base URL
+            log.warn("Failed to parse custom provider URL as URI; forwarding unchanged, error type '{}'",
+                    exception.getClass().getSimpleName());
             return url;
         }
     }

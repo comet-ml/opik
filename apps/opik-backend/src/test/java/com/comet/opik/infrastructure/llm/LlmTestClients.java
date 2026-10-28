@@ -32,7 +32,7 @@ public class LlmTestClients {
 
     private static LlmHttpClientBuilders llmHttpClientBuilders() {
         var module = new CustomLlmModule();
-        return module.llmHttpClientBuilders(CONFIG, module.llmHttpClient(module.providerBaseUrlGuard(CONFIG)));
+        return module.llmHttpClientBuilders(CONFIG, module.llmHttpClient(CONFIG, module.providerBaseUrlGuard(CONFIG)));
     }
 
     /** For tests serving media from a local mock server, which the strict mode of config-test.yml refuses. */

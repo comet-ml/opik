@@ -4,6 +4,7 @@ import com.comet.opik.api.EncryptedAuthConfig;
 import com.comet.opik.api.ProviderAuthConfig;
 import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.LlmProviderTokenAuthConfig;
+import com.comet.opik.infrastructure.http.BodyDeadline;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.comet.opik.infrastructure.net.DestinationGuardDnsResolver;
@@ -273,13 +274,26 @@ public class AuthTokenProvider {
         Invocation request = buildRequest(authConfig);
         int status;
         byte[] bodyBytes;
-        // bounded read: at most cap+1 bytes ever reach the heap; closing the response cancels whatever the
-        // endpoint is still sending
+        // bounded read: at most cap+1 bytes ever reach the heap, within what remains of the fetch timeout, as the
+        // read timeout bounds each wait for bytes only; closing the response cancels whatever the endpoint is still
+        // sending
+        BodyDeadline deadline = null;
         try (Response response = request.invoke();
-                InputStream bodyStream = response.readEntity(InputStream.class)) {
+                InputStream bodyStream = response.readEntity(InputStream.class);
+                var bodyDeadline = BodyDeadline.closing(bodyStream,
+                        Duration.ofMillis(fetchTimeoutMillis).minusNanos(System.nanoTime() - startNanos))) {
+            deadline = bodyDeadline;
             status = response.getStatus();
             bodyBytes = bodyStream.readNBytes(config.getMaxResponseChars() + 1);
+            if (bodyDeadline.expired()) {
+                throw new IOException("the deadline closed the body");
+            }
         } catch (IOException | ProcessingException exception) {
+            if (deadline != null && deadline.expired()) {
+                recordFetchMetric(startNanos, "slow_reply", origin);
+                throw new AuthTokenException("token reply from '%s' took longer than the fetch timeout"
+                        .formatted(authConfig.tokenUrl()));
+            }
             // the guard checks each address connected to as well, refusing a host that no longer resolves as above
             var refused = ExceptionUtils.throwableOfType(exception, RefusedHostException.class);
             if (refused != null) {

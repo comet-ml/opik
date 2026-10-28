@@ -3,6 +3,7 @@ package com.comet.opik.infrastructure.llm.vertexai;
 import com.comet.opik.TestConfigUtils;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.domain.llm.ProviderErrorMessageValidator;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
@@ -17,6 +18,7 @@ import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
+import io.dropwizard.jersey.errors.ErrorMessage;
 import io.dropwizard.util.Duration;
 import jakarta.ws.rs.client.Client;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -53,6 +55,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
 
+import static com.comet.opik.domain.llm.ChatCompletionService.UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
@@ -60,6 +63,8 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlPathMatching;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockingDetails;
 
@@ -189,6 +194,49 @@ class VertexAIClientGeneratorTest {
         try (var client = (CloseableVertexAiChatModel) generator.generate(config, request)) {
             client.chat(UserMessage.from("hello"));
         }
+    }
+
+    /**
+     * 400s, which the SDK doesn't retry, where a 429 would be retried with backoff for over a minute; the mapping
+     * doesn't depend on the code.
+     */
+    private static Stream<Arguments> providerErrorIsPassedOnAsGoogleDocumentsIt() {
+        var summary = "Request contains an invalid argument. %s".formatted(RandomStringUtils.secure()
+                .nextAlphanumeric(8));
+        var message = "%s\n* contents[0].parts: must not be empty".formatted(summary);
+        return Stream.of(
+                arguments("INVALID_ARGUMENT", message, new ErrorMessage(400, summary, "INVALID_ARGUMENT")),
+                arguments("MALFORMED_PROXY_REPLY", message,
+                        new ErrorMessage(400, UNEXPECTED_ERROR_CALLING_LLM_PROVIDER)));
+    }
+
+    /** The SDK raises its own exception, not the JSON envelope; ChatCompletionService validates what is parsed. */
+    @ParameterizedTest
+    @MethodSource
+    @DisplayName("a Vertex AI error keeps its summary line only when Google documents its status")
+    void providerErrorIsPassedOnAsGoogleDocumentsIt(String status, String message, ErrorMessage expectedError) {
+        wireMock.server().stubFor(post(urlPathMatching(GENERATE_CONTENT_PATH))
+                .willReturn(aResponse().withStatus(400).withHeader("Content-Type", "application/json")
+                        .withBody(JsonUtils.writeValueAsString(Map.of("error",
+                                Map.of("code", 400, "message", message, "status", status))))));
+        var generator = new VertexAIClientGenerator(clientConfig(), registry, LlmTestClients.REMOTE_MEDIA_INLINER,
+                LlmTestClients.VIDEO_MIME_TYPE_UTILS);
+        var apiConfig = LlmProviderClientApiConfig.builder()
+                .apiKey(serviceAccountJson)
+                .configuration(Map.of("location", "global"))
+                .build();
+        var validator = new ProviderErrorMessageValidator(clientConfig());
+
+        var failure = catchThrowable(() -> {
+            try (var client = (CloseableVertexAiChatModel) generator.generate(apiConfig,
+                    ChatCompletionRequest.builder().model(MODEL).build())) {
+                client.chat(UserMessage.from("hello"));
+            }
+        });
+
+        var actualError = new LlmProviderVertexAI(generator, apiConfig).getLlmProviderError(failure)
+                .map(validator::validate);
+        assertThat(actualError).contains(expectedError);
     }
 
     private void completeWithCustomParameters(Map<String, Object> customParameters) {

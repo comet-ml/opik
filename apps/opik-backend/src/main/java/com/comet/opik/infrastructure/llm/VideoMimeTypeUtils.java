@@ -5,6 +5,7 @@ import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.comet.opik.infrastructure.net.DestinationGuardDns;
 import com.comet.opik.infrastructure.net.DestinationGuardDnsResolver;
 import com.comet.opik.infrastructure.net.DestinationGuardException;
+import com.comet.opik.infrastructure.net.LoggableUrl;
 import com.google.common.io.Files;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -18,8 +19,6 @@ import org.glassfish.jersey.client.ClientProperties;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.net.URI;
-import java.net.URISyntaxException;
-import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -52,21 +51,6 @@ public class VideoMimeTypeUtils {
     }
 
     /**
-     * The URL without userinfo, query or fragment, which can carry credentials such as signed-URL tokens, capped at
-     * 50 characters.
-     */
-    public static String loggable(String url) {
-        try {
-            var uri = new URI(url);
-            var path = Objects.toString(uri.getRawPath(), "");
-            var safe = "%s://%s%s".formatted(uri.getScheme(), uri.getHost(), path);
-            return safe.substring(0, Math.min(50, safe.length()));
-        } catch (URISyntaxException e) {
-            return "<invalid URL>";
-        }
-    }
-
-    /**
      * Check if the URL has a recognizable video file extension.
      * If it does, LangChain4j will detect the MIME type automatically.
      *
@@ -82,7 +66,7 @@ public class VideoMimeTypeUtils {
             String extension = Files.getFileExtension(path).toLowerCase();
             return VIDEO_EXTENSIONS.contains(extension);
         } catch (IllegalArgumentException e) {
-            log.debug("Invalid URL format: '{}'", loggable(url));
+            log.debug("Invalid URL format: '{}'", LoggableUrl.of(url));
             return false;
         }
     }
@@ -100,7 +84,7 @@ public class VideoMimeTypeUtils {
             destinationGuard.validate(url);
 
             log.debug("Making HEAD request to detect MIME type for URL without extension: '{}'",
-                    loggable(url));
+                    LoggableUrl.of(url));
 
             String contentType;
             try (var response = client.target(uri)
@@ -124,18 +108,18 @@ public class VideoMimeTypeUtils {
                     contentType = contentType.substring(0, semicolonIndex).trim();
                 }
                 log.debug("Detected MIME type '{}' from HTTP HEAD: '{}'", contentType,
-                        loggable(url));
+                        LoggableUrl.of(url));
                 return contentType;
             }
         } catch (DestinationGuardException e) {
-            log.warn("Skipped MIME type detection for a refused URL: '{}'", loggable(url));
+            log.warn("Skipped MIME type detection for a refused URL: '{}'", LoggableUrl.of(url));
         } catch (Exception e) {
             if (DestinationGuardDns.isRefused(e)) {
-                log.warn("Skipped MIME type detection for a refused URL: '{}'", loggable(url));
+                log.warn("Skipped MIME type detection for a refused URL: '{}'", LoggableUrl.of(url));
                 return null;
             }
             // the message can echo the full URL, credentials included (URI.create does), so only the type is logged
-            log.error("Failed to detect MIME type for URL: '{}', error type '{}'", loggable(url),
+            log.error("Failed to detect MIME type for URL: '{}', error type '{}'", LoggableUrl.of(url),
                     e.getClass().getSimpleName());
         }
         return null;
