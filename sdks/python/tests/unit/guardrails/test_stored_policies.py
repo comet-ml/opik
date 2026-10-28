@@ -129,8 +129,13 @@ def test_build_rules__unknown_rule_type__error_raised():
         )
     ]
 
-    with pytest.raises(exceptions.GuardrailPolicyError):
+    with pytest.raises(exceptions.GuardrailPolicyError) as exception_info:
         stored_policies.build_rules(policies)
+
+    message = str(exception_info.value)
+    assert "policy_a" in message
+    assert "SOMETHING_NEW" in message
+    assert "Upgrade the SDK" in message
 
 
 def test_from_stored_policies__happyflow(fake_backend, monkeypatch):
