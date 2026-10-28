@@ -20,6 +20,9 @@ class CustomLlmHttpClientBuilder implements HttpClientBuilder {
     /** Most bytes read from a non-2xx response body. */
     private final int errorBodyMaxSize;
 
+    /** Longest a stream may stay silent once its headers arrived. */
+    private final @NonNull Duration streamReadTimeout;
+
     private Duration connectTimeout;
     private Duration readTimeout;
 
@@ -53,6 +56,6 @@ class CustomLlmHttpClientBuilder implements HttpClientBuilder {
                 .connectTimeout(Objects.requireNonNullElse(connectTimeout, Duration.ZERO))
                 .readTimeout(requestTimeout)
                 .writeTimeout(requestTimeout)
-                .build(), errorBodyMaxSize);
+                .build(), errorBodyMaxSize, streamReadTimeout);
     }
 }

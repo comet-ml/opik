@@ -7,6 +7,8 @@ import com.comet.opik.infrastructure.llm.customllm.CustomLlmModule;
 import com.comet.opik.infrastructure.llm.customllm.LlmHttpClientBuilders;
 import com.comet.opik.infrastructure.llm.openai.OpenAIModule;
 import com.comet.opik.infrastructure.net.DestinationGuard;
+import com.github.tomakehurst.wiremock.WireMockServer;
+import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import com.openai.core.http.HttpClient;
 import jakarta.ws.rs.client.Client;
 import lombok.experimental.UtilityClass;
@@ -17,6 +19,8 @@ import lombok.experimental.UtilityClass;
  */
 @UtilityClass
 public class LlmTestClients {
+
+    private static final String LOOPBACK = "127.0.0.1";
 
     private static final LlmProviderClientConfig CONFIG = TestConfigUtils.loadConfigTest().getLlmProviderClient();
 
@@ -30,9 +34,23 @@ public class LlmTestClients {
 
     public static final LlmHttpClientBuilders LLM_HTTP_CLIENT_BUILDERS = llmHttpClientBuilders();
 
+    /**
+     * A mock provider on 127.0.0.1 only. A server on every interface can share its port with another local process
+     * bound to 127.0.0.1 alone, a language server say, which then gets the calls made to localhost; and localhost can
+     * also resolve to ::1 first, where another process may listen on the same port.
+     */
+    public static WireMockServer newLoopbackWireMock() {
+        return new WireMockServer(WireMockConfiguration.options().dynamicPort().bindAddress(LOOPBACK));
+    }
+
+    /** The base URL of a {@link #newLoopbackWireMock()} server, by address rather than localhost. */
+    public static String baseUrlOf(WireMockServer server) {
+        return "http://%s:%d".formatted(LOOPBACK, server.port());
+    }
+
     private static LlmHttpClientBuilders llmHttpClientBuilders() {
         var module = new CustomLlmModule();
-        return module.llmHttpClientBuilders(CONFIG, module.llmHttpClient(module.providerBaseUrlGuard(CONFIG)));
+        return module.llmHttpClientBuilders(CONFIG, module.llmHttpClient(CONFIG, module.providerBaseUrlGuard(CONFIG)));
     }
 
     /** For tests serving media from a local mock server, which the strict mode of config-test.yml refuses. */

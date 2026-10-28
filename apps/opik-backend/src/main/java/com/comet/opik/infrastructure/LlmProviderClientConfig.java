@@ -4,6 +4,7 @@ import com.comet.opik.infrastructure.llm.AnthropicClientConfig;
 import com.comet.opik.infrastructure.llm.OpenAiClientConfig;
 import com.comet.opik.infrastructure.llm.VertexAIClientConfig;
 import com.comet.opik.infrastructure.net.DestinationGuard;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import io.dropwizard.util.DataSize;
 import io.dropwizard.util.DataSizeUnit;
 import io.dropwizard.util.Duration;
@@ -12,6 +13,7 @@ import io.dropwizard.validation.MaxDuration;
 import io.dropwizard.validation.MinDataSize;
 import io.dropwizard.validation.MinDuration;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -24,7 +26,7 @@ import java.util.concurrent.TimeUnit;
 @Data
 public class LlmProviderClientConfig {
 
-    @Min(1) private Integer maxAttempts;
+    @NotNull @Min(1) private Integer maxAttempts;
 
     @Min(1) private int delayMillis = 500;
 
@@ -86,11 +88,11 @@ public class LlmProviderClientConfig {
 
     /**
      * Time allowed for downloading one media URL that Gemini or Vertex AI receives as inline data, connecting
-     * included. At most 5 minutes: every download completes before the provider is called, so a slow or stalled media
-     * server must fail the request fast, and 5 minutes still fits the largest size cap (100 MB) at about 350 KB/s.
+     * included. At most 2 minutes: every download completes before the provider is called, so a slow or stalled media
+     * server must fail the request fast, and 2 minutes still fits the largest size cap (100 MB) at about 850 KB/s.
      */
     @NotNull @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS)
-    @MaxDuration(value = 5, unit = TimeUnit.MINUTES)
+    @MaxDuration(value = 2, unit = TimeUnit.MINUTES)
     private Duration mediaDownloadTimeout;
 
     /**
@@ -115,4 +117,53 @@ public class LlmProviderClientConfig {
      * characters: provider error messages are one or two sentences.
      */
     @NotNull @Positive @Max(1000) private Integer providerErrorMessageMaxLength;
+
+    /**
+     * Longest a provider's stream may stay silent, before its headers or between reads of its body: a stream waits for
+     * its headers up to the longer of this and the read timeout, a call that isn't one up to the read timeout only.
+     * Models that reason before answering can be silent for a while, so it is above the ingress idle timeout, beyond
+     * which the caller is gone anyway. At most 10 minutes: a stream silent for longer has stalled.
+     */
+    @NotNull @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+    @MaxDuration(value = 10, unit = TimeUnit.MINUTES)
+    private Duration streamReadTimeout;
+
+    /**
+     * Most threads of the shared LLM HTTP client. A call made asynchronously, a stream included, holds one from start
+     * to end, so there are at least as many as {@link #httpClientMaxRequests}. At most 2048, twice Jetty's default
+     * thread count, which bounds how many callers can wait on these calls at once.
+     */
+    @NotNull @Min(1) @Max(2048) private Integer httpClientMaxThreads;
+
+    /**
+     * How long a thread of the shared LLM HTTP client stays idle before it ends, so the pool shrinks back after a
+     * burst. At most 5 minutes, so the threads of a burst don't outlive it for long.
+     */
+    @NotNull @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+    @MaxDuration(value = 5, unit = TimeUnit.MINUTES)
+    private Duration httpClientThreadKeepAlive;
+
+    /**
+     * Most LLM provider calls made asynchronously, streams included, that run at once on the shared client. Further
+     * calls wait in order for one to end; their timeouts start once they run. At most 2048, as the threads.
+     */
+    @NotNull @Min(1) @Max(2048) private Integer httpClientMaxRequests;
+
+    /**
+     * Most of {@link #httpClientMaxRequests} that run at once to a single host. Most calls go to a few hosts, such as
+     * one provider's API, so it is at most, and by default equal to, the overall limit.
+     */
+    @NotNull @Min(1) @Max(2048) private Integer httpClientMaxRequestsPerHost;
+
+    @JsonIgnore
+    @AssertTrue(message = "llmProviderClient.httpClientMaxThreads must be at least llmProviderClient.httpClientMaxRequests") public boolean isHttpClientMaxThreadsAtLeastMaxRequests() {
+        return httpClientMaxThreads == null || httpClientMaxRequests == null
+                || httpClientMaxThreads >= httpClientMaxRequests;
+    }
+
+    @JsonIgnore
+    @AssertTrue(message = "llmProviderClient.httpClientMaxRequestsPerHost must be at most llmProviderClient.httpClientMaxRequests") public boolean isHttpClientMaxRequestsPerHostWithinMaxRequests() {
+        return httpClientMaxRequestsPerHost == null || httpClientMaxRequests == null
+                || httpClientMaxRequestsPerHost <= httpClientMaxRequests;
+    }
 }

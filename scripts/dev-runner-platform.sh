@@ -601,6 +601,11 @@ generate_platform_proxy_conf() {
         # /opik/api/v1/private/ai-spend/X -> cost-api /cost-api/v1/private/ai-spend/X
         cost_api_location="        location /opik/api/v1/private/ai-spend/ { proxy_pass http://em_cost_api/cost-api/v1/private/ai-spend/; }"
     fi
+    local ollie_location=""
+    if [ -n "${OLLIE_REPO_PATH:-}" ]; then
+        ollie_location="        location /assistant/     { proxy_pass http://em_opik_fe; }
+        location /assistant-api/ { proxy_pass http://em_opik_fe; }"
+    fi
     cat > "$PLATFORM_PROXY_CONF" <<EOF
 worker_processes 1;
 events { worker_connections 4096; }
@@ -632,6 +637,7 @@ ${cost_api_upstream}
         proxy_send_timeout 3600s;
 
 ${cost_api_location}
+${ollie_location}
         # Opik backend API (strip /opik/api -> /)
         location /opik/api/ { proxy_pass http://em_opik_be/; }
         # Opik UI — Vite dev server (comet mode, base /opik) + HMR websocket

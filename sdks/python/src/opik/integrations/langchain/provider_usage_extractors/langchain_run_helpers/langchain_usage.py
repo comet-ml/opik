@@ -101,16 +101,26 @@ class LangChainUsage(pydantic.BaseModel):
         if not cache_creation:
             # langchain-anthropic and langchain-aws zero `cache_creation` when the
             # response breaks cache writes down by TTL, and report them here.
-            ttl_tokens = [
-                getattr(self.input_token_details, key, None)
-                for key in ("ephemeral_5m_input_tokens", "ephemeral_1h_input_tokens")
-            ]
-            if any(isinstance(tokens, int) and tokens > 0 for tokens in ttl_tokens):
-                cache_creation = sum(
-                    tokens for tokens in ttl_tokens if isinstance(tokens, int)
-                )
+            writes_by_ttl = self._cache_writes_by_ttl()
+            if any(tokens > 0 for tokens in writes_by_ttl.values()):
+                cache_creation = sum(writes_by_ttl.values())
 
         return cache_read, cache_creation
+
+    def _cache_writes_by_ttl(self) -> Dict[str, int]:
+        """Return the cache writes keyed by TTL ("5m", "1h"), as LangChain reports them."""
+        if self.input_token_details is None:
+            return {}
+
+        writes_by_ttl = {}
+        for ttl in ("5m", "1h"):
+            tokens = getattr(
+                self.input_token_details, f"ephemeral_{ttl}_input_tokens", None
+            )
+            # bool is an int subclass; neither it nor a negative count is a token count.
+            if isinstance(tokens, int) and not isinstance(tokens, bool) and tokens >= 0:
+                writes_by_ttl[ttl] = tokens
+        return writes_by_ttl
 
     def _uncached_input_tokens(self) -> int:
         # langchain-anthropic and the Converse path of langchain-aws add cache reads
@@ -134,6 +144,13 @@ class LangChainUsage(pydantic.BaseModel):
         if cache_read is not None:
             anthropic_usage["cache_read_input_tokens"] = cache_read
         anthropic_usage["input_tokens"] = self._uncached_input_tokens()
+        # Kept in Anthropic's own shape, so 1-hour writes can be billed at their rate.
+        writes_by_ttl = self._cache_writes_by_ttl()
+        if writes_by_ttl:
+            anthropic_usage["cache_creation"] = {
+                f"ephemeral_{ttl}_input_tokens": tokens
+                for ttl, tokens in writes_by_ttl.items()
+            }
 
         return anthropic_usage
 
@@ -158,6 +175,14 @@ class LangChainUsage(pydantic.BaseModel):
             bedrock_usage["cacheWriteInputTokens"] = cache_creation
             if input_tokens_include_cache:
                 bedrock_usage["inputTokens"] = self._uncached_input_tokens()
+            # Keyed by TTL like the Bedrock integration's cacheDetails, so 1-hour
+            # writes can be billed at their rate.
+            writes_by_ttl = self._cache_writes_by_ttl()
+            if writes_by_ttl:
+                bedrock_usage["cacheDetails"] = {
+                    ttl: {"inputTokens": tokens}
+                    for ttl, tokens in writes_by_ttl.items()
+                }
 
         return bedrock_usage
 

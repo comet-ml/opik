@@ -5,6 +5,7 @@ import com.comet.opik.domain.llm.langchain4j.OpikUserMessage;
 import com.comet.opik.infrastructure.llm.LlmProviderLangChainMapper;
 import com.comet.opik.infrastructure.llm.MediaContentUtils;
 import com.comet.opik.infrastructure.llm.VideoMimeTypeUtils;
+import com.comet.opik.infrastructure.net.LoggableUrl;
 import dev.langchain4j.data.image.Image;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.Content;
@@ -117,7 +118,7 @@ public interface GeminiLangChainMapper {
                     if (mimeType != null) {
                         imageBuilder.mimeType(mimeType);
                         log.debug("Set mimeType '{}' for video URL: '{}'", mimeType,
-                                VideoMimeTypeUtils.loggable(videoUrl));
+                                LoggableUrl.of(videoUrl));
                     }
                     yield ImageContent.from(imageBuilder.build());
                 }

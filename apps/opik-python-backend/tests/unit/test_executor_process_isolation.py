@@ -8,11 +8,14 @@ import builtins
 import importlib.util
 import json
 import logging
+import math
 import os
 import signal
 import socket
+import struct
 import subprocess
 import sys
+import threading
 import time
 from typing import Iterator, List
 
@@ -379,6 +382,25 @@ def probe_env(monkeypatch):
     monkeypatch.setattr(executor_process, "_one_shot_isolation_failures", executor_process._IsolationFailureLog())
 
 
+@pytest.fixture
+def pipe() -> Iterator[tuple]:
+    """A connection pair whose ends are closed after the test, whatever it asserted."""
+    parent, child = executor_process._mp_context.Pipe()
+    try:
+        yield parent, child
+    finally:
+        parent.close()
+        child.close()
+
+
+@pytest.fixture(autouse=True)
+def one_shot_settings() -> Iterator[None]:
+    # Read once per process, as in a Studio job; each test reads the environment it sets.
+    executor_process._one_shot_settings.cache_clear()
+    yield
+    executor_process._one_shot_settings.cache_clear()
+
+
 @pytest.fixture(autouse=True)
 def workers(monkeypatch) -> Iterator[List]:
     """Records every worker process a test starts and reaps it afterwards, whatever the test did."""
@@ -467,7 +489,7 @@ def test_pool_worker_reply_is_read_as_data(monkeypatch, isolation):
 
 
 def test_oversized_reply_is_an_error(monkeypatch, listener):
-    monkeypatch.setattr(executor_process, "MAX_REPLY_BYTES", 16)
+    monkeypatch.setenv(executor_process.MAX_REPLY_BYTES_ENV_VAR, "16")
 
     result = _score_in_pool({"port": listener})
 
@@ -708,18 +730,18 @@ def test_reply_with_another_request_id_is_rejected(monkeypatch, isolation):
     {"request_id": "a" * 32, "result": "READY"},
     {"scores": []},
 ])
-def test_reply_without_its_request_id_is_not_a_result(reply):
-    parent, child = executor_process._mp_context.Pipe()
+def test_reply_without_its_request_id_is_not_a_result(pipe, reply):
+    parent, child = pipe
     child.send_bytes(json.dumps(reply).encode())
 
-    assert executor_process._read_result(parent, "a" * 32) is None
+    assert executor_process._read_result(parent, "a" * 32, time.monotonic() + 5, 1024) is None
 
 
-def test_reply_with_its_request_id_is_the_result():
-    parent, child = executor_process._mp_context.Pipe()
+def test_reply_with_its_request_id_is_the_result(pipe):
+    parent, child = pipe
     child.send_bytes(json.dumps({"request_id": "a" * 32, "result": {"scores": []}}).encode())
 
-    assert executor_process._read_result(parent, "a" * 32) == {"scores": []}
+    assert executor_process._read_result(parent, "a" * 32, time.monotonic() + 5, 1024) == {"scores": []}
 
 
 def test_every_command_has_its_own_request_id():
@@ -754,7 +776,7 @@ def _never_ready(connection, isolate: bool) -> None:
 
 @pytest.mark.skipif(sys.platform != "linux", reason="forked workers inherit the patched target")
 def test_isolated_worker_that_never_gets_ready_is_an_error(monkeypatch, workers):
-    monkeypatch.setattr(executor_process, "READY_TIMEOUT_SECONDS", 0.5)
+    monkeypatch.setenv(executor_process.READY_TIMEOUT_ENV_VAR, "0.5")
     monkeypatch.setattr(process_worker, "worker_process_main", _never_ready)
 
     result = run_user_code_in_isolated_worker(PROBE_METRIC, {"port": 1})
@@ -771,16 +793,41 @@ def test_invalid_max_reply_bytes_fails_startup(monkeypatch, value):
         executor_process.max_reply_bytes()
 
 
-@pytest.mark.parametrize("value", ["0", "-1", "abc"])
-def test_invalid_max_reply_bytes_fails_the_module_import(value):
-    # no colour, which CI forces and which 3.14 applies to tracebacks
-    env = {**os.environ, executor_process.MAX_REPLY_BYTES_ENV_VAR: value, "PYTHON_COLORS": "0"}
+INVALID_SETTINGS = [
+    (executor_process.MAX_REPLY_BYTES_ENV_VAR, value, "must be a positive integer") for value in ("0", "-1", "abc")
+] + [
+    (executor_process.READY_TIMEOUT_ENV_VAR, value, "must be a positive number of seconds") for value in ("0", "abc")
+]
+
+
+@pytest.mark.parametrize("name, value, rule", INVALID_SETTINGS)
+def test_invalid_setting_fails_process_executor_startup(monkeypatch, name, value, rule):
+    monkeypatch.setenv(name, value)
+
+    with pytest.raises(ValueError) as actual:
+        ProcessExecutor()
+
+    assert str(actual.value) == f"{name} {rule}, not {value!r}"
+
+
+@pytest.mark.parametrize("name, value, rule", INVALID_SETTINGS)
+def test_invalid_setting_fails_one_shot_workers_closed(monkeypatch, workers, name, value, rule):
+    monkeypatch.setenv(name, value)
+
+    results = [run_user_code_in_isolated_worker(PROBE_METRIC, {"port": 1}) for _ in range(2)]
+
+    assert results == [{"code": 500, "error": f"Invalid configuration: {name} {rule}, not {value!r}"}] * 2
+    assert workers == []
+
+
+@pytest.mark.parametrize("name, value, rule", INVALID_SETTINGS)
+def test_invalid_setting_does_not_fail_the_module_import(name, value, rule):
+    # Imported by every Studio job, whatever the strategy. No colour, which CI forces and 3.14 applies to tracebacks.
+    env = {**os.environ, name: value, "PYTHON_COLORS": "0"}
     actual = subprocess.run([sys.executable, "-c", "import opik_backend.executor_process"],
                             env=env, capture_output=True, text=True, timeout=60)
 
-    assert actual.returncode != 0
-    assert (f"ValueError: {executor_process.MAX_REPLY_BYTES_ENV_VAR} must be a positive integer, not {value!r}"
-            in actual.stderr), actual.stderr
+    assert actual.returncode == 0, actual.stderr
 
 
 def test_invalid_max_reply_bytes_names_only_an_excerpt(monkeypatch):
@@ -1012,3 +1059,537 @@ def test_runner_starts_the_template_before_reading_the_job(tmp_path, outcome):
         assert len(errors) == 1 and "cannot be isolated (start worker template failed: template unavailable)" in errors[0], errors
         # Logged with the failure's own traceback, and the job still went on to read its input.
         assert "OSError: template unavailable" in run.stderr
+
+
+@pytest.mark.parametrize("value", ["0", "-1", "abc", "nan", "inf", "10s"])
+def test_invalid_ready_timeout_fails_startup(monkeypatch, value):
+    monkeypatch.setenv(executor_process.READY_TIMEOUT_ENV_VAR, value)
+
+    with pytest.raises(ValueError) as actual:
+        executor_process.ready_timeout_seconds()
+
+    assert str(actual.value) == f"{executor_process.READY_TIMEOUT_ENV_VAR} must be a positive number of seconds, not {value!r}"
+
+
+def test_invalid_ready_timeout_names_only_an_excerpt(monkeypatch):
+    monkeypatch.setenv(executor_process.READY_TIMEOUT_ENV_VAR, "x" * 100)
+
+    with pytest.raises(ValueError) as actual:
+        executor_process.ready_timeout_seconds()
+
+    assert str(actual.value) == f"{executor_process.READY_TIMEOUT_ENV_VAR} must be a positive number of seconds, not {'x' * 32!r}"
+
+
+@pytest.mark.parametrize("value, expected", [(None, 10.0), ("", 10.0), ("2.5", 2.5), ("30", 30.0)])
+def test_ready_timeout_defaults_when_unset(monkeypatch, value, expected):
+    if value is None:
+        monkeypatch.delenv(executor_process.READY_TIMEOUT_ENV_VAR, raising=False)
+    else:
+        monkeypatch.setenv(executor_process.READY_TIMEOUT_ENV_VAR, value)
+
+    assert executor_process.ready_timeout_seconds() == expected
+
+
+# Ignores SIGTERM and outlives the exec timeout, and a lingering thread keeps it alive past the pipe closing.
+IGNORES_SIGTERM_METRIC = """
+import signal
+import threading
+import time
+
+from opik.evaluation.metrics import base_metric, score_result
+
+
+class IgnoresSigterm(base_metric.BaseMetric):
+    def __init__(self):
+        super().__init__(name="ignores_sigterm", track=False)
+
+    def score(self, sleep=0, **ignored_kwargs):
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        threading.Thread(target=time.sleep, args=(60,)).start()
+        time.sleep(sleep)
+        return score_result.ScoreResult(name=self.name, value=1.0)
+"""
+
+# SIGTERM grace, SIGKILL grace and some slack.
+STOP_BOUND_SECONDS = executor_process._TERMINATE_GRACE_SECONDS + executor_process._KILL_GRACE_SECONDS + 2
+
+
+@pytest.mark.parametrize("isolation", ISOLATION_SETTINGS)
+def test_pool_worker_that_ignores_sigterm_is_reaped_within_a_bound(monkeypatch, isolation, workers):
+    monkeypatch.setenv(PROCESS_NETWORK_ISOLATION_ENV_VAR, isolation)
+    monkeypatch.setenv("PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS", "1")
+    executor = ProcessExecutor()
+    executor.create_worker_process()
+
+    # No releaser pool here, so the timed-out worker is stopped on this thread and the call includes the stop.
+    start = time.monotonic()
+    result = executor.run_scoring(IGNORES_SIGTERM_METRIC, {"sleep": 30})
+    elapsed = time.monotonic() - start
+
+    assert result == {"code": 504, "error": executor_process.EXEC_TIMEOUT_ERROR}
+    assert elapsed < 1 + STOP_BOUND_SECONDS, elapsed
+    assert not workers[0].is_alive()
+
+
+@needs_isolation
+def test_idle_isolated_worker_that_ignores_sigterm_is_stopped_within_a_bound(workers):
+    assert run_user_code_in_isolated_worker(IGNORES_SIGTERM_METRIC, {}) == _only_score("ignores_sigterm", 1.0)
+
+    start = time.monotonic()
+    executor_process._stop_idle_isolated_workers()
+    elapsed = time.monotonic() - start
+
+    assert elapsed < STOP_BOUND_SECONDS, elapsed
+    assert not workers[0].is_alive()
+    assert executor_process._idle_isolated_workers.qsize() == 0
+
+
+def _closes_its_sentinel_and_ignores_sigterm() -> None:
+    # Closing every inherited descriptor closes the worker's end of the sentinel pipe, so the parent's
+    # sentinel reports an exit while the worker still runs.
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
+    os.closerange(3, 65536)
+    time.sleep(60)
+
+
+def test_worker_that_closed_its_sentinel_is_reaped_within_a_bound(workers):
+    process = executor_process._mp_context.Process(target=_closes_its_sentinel_and_ignores_sigterm)
+    process.start()
+    time.sleep(1)
+
+    start = time.monotonic()
+    executor_process.terminate_worker({"id": "sentinel", "process": process})
+    elapsed = time.monotonic() - start
+
+    assert elapsed < STOP_BOUND_SECONDS, elapsed
+    assert not process.is_alive()
+
+
+def test_wait_for_exit_returns_when_the_process_exits(workers):
+    process = executor_process._mp_context.Process(target=time.sleep, args=(0.3,))
+    process.start()
+
+    start = time.monotonic()
+    exited = executor_process._wait_for_exit(process, 30)
+
+    assert (exited, time.monotonic() - start < 10) == (True, True)
+
+
+def test_wait_for_exit_returns_at_the_deadline(workers):
+    process = executor_process._mp_context.Process(target=time.sleep, args=(60,))
+    process.start()
+
+    start = time.monotonic()
+    exited = executor_process._wait_for_exit(process, 0.5)
+
+    assert (exited, 0.5 <= time.monotonic() - start < 5) == (False, True)
+
+
+def test_one_shot_worker_that_dies_after_ready_is_not_restarted(monkeypatch, workers):
+    starts = []
+
+    def start_dead_worker(*settings):
+        # READY was read, then the worker exited: the start succeeded and the worker is gone.
+        starts.append(1)
+        parent_conn, child_conn = executor_process._mp_context.Pipe()
+        process = executor_process._mp_context.Process(target=os._exit, args=(0,))
+        process.start()
+        child_conn.close()
+        executor_process._wait_for_exit(process, 30)
+        return process, parent_conn
+
+    monkeypatch.setattr(executor_process, "_start_isolated_worker", start_dead_worker)
+    # An idle worker that died meanwhile is discarded, not reused.
+    executor_process._idle_isolated_workers.put(start_dead_worker())
+    starts.clear()
+    results = []
+    call = threading.Thread(target=lambda: results.append(run_user_code_in_isolated_worker(PROBE_METRIC, {})),
+                            daemon=True)
+
+    call.start()
+    call.join(30)
+
+    assert not call.is_alive(), "the call kept replacing a worker that dies"
+    assert results == [{"code": 500, "error": "Isolated worker exited before returning a result"}]
+    assert starts == [1]
+    assert executor_process._idle_isolated_workers.qsize() == 0
+
+
+# A length prefix and half the body it announces, written on the worker's pipe. Mid-request (`pending` false) the
+# worker then waits for the parent to close the pipe, so it ends when the code under test stops it; with `pending`
+# the frame follows this request's own reply, so the next request finds it on the pipe.
+PARTIAL_REPLY_METRIC = """
+import os
+import struct
+import sys
+
+from opik.evaluation.metrics import base_metric, score_result
+from opik_backend import process_worker
+
+PARTIAL = struct.pack("!i", 100) + b"x" * 50
+
+
+class PartialReply(base_metric.BaseMetric):
+    def __init__(self):
+        super().__init__(name="partial_reply", track=False)
+
+    def score(self, pending=False, **ignored_kwargs):
+        frame = sys._getframe()
+        while "connection" not in frame.f_locals:
+            frame = frame.f_back
+        connection = frame.f_locals["connection"]
+        if pending:
+            send_reply = process_worker.send_reply
+
+            def send_then_partial(conn, reply):
+                process_worker.send_reply = send_reply
+                send_reply(conn, reply)
+                os.write(conn.fileno(), PARTIAL)
+
+            process_worker.send_reply = send_then_partial
+            return score_result.ScoreResult(name=self.name, value=1.0)
+        os.write(connection.fileno(), PARTIAL)
+        try:
+            connection.recv_bytes()
+        except (EOFError, OSError):
+            pass
+        os._exit(0)
+"""
+
+
+@pytest.mark.parametrize("isolation", ISOLATION_SETTINGS)
+def test_partial_reply_is_an_exec_timeout_within_the_bound(monkeypatch, isolation, workers):
+    monkeypatch.setenv(PROCESS_NETWORK_ISOLATION_ENV_VAR, isolation)
+    monkeypatch.setenv("PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS", "1")
+    executor = ProcessExecutor()
+    executor.create_worker_process()
+
+    start = time.monotonic()
+    result = executor.run_scoring(PARTIAL_REPLY_METRIC, {})
+    elapsed = time.monotonic() - start
+
+    assert result == {"code": 504, "error": executor_process.EXEC_TIMEOUT_ERROR}
+    # The exec timeout bounds the read, plus the stop of the worker, which is not returned to the pool.
+    assert elapsed < 1 + STOP_BOUND_SECONDS, elapsed
+    assert executor.process_pool.qsize() == 0
+    assert not workers[0].is_alive()
+
+
+@pytest.mark.parametrize("isolation", ISOLATION_SETTINGS)
+def test_partial_pending_reply_is_not_drained_past_the_bound(monkeypatch, isolation, workers):
+    monkeypatch.setenv(PROCESS_NETWORK_ISOLATION_ENV_VAR, isolation)
+    executor = ProcessExecutor()
+    executor.create_worker_process()
+    assert executor.run_scoring(PARTIAL_REPLY_METRIC, {"pending": True}) == _only_score("partial_reply", 1.0)
+    assert executor.process_pool.queue[0]["connection"].poll(5)
+
+    start = time.monotonic()
+    result = executor.run_scoring(PROBE_METRIC, {"port": 1})
+    elapsed = time.monotonic() - start
+
+    assert result == {"code": 503, "error": executor_process.SATURATED_ERROR}
+    assert elapsed < executor_process._REPLY_GRACE_SECONDS + STOP_BOUND_SECONDS, elapsed
+    assert executor.process_pool.qsize() == 0
+    assert not workers[0].is_alive()
+
+
+@needs_isolation
+def test_partial_reply_from_one_shot_worker_is_an_exec_timeout(workers):
+    start = time.monotonic()
+    result = run_user_code_in_isolated_worker(PARTIAL_REPLY_METRIC, {})
+    elapsed = time.monotonic() - start
+
+    assert result == {"code": 504, "error": executor_process.EXEC_TIMEOUT_ERROR}
+    assert elapsed < executor_process._REPLY_GRACE_SECONDS + STOP_BOUND_SECONDS, elapsed
+    assert not workers[0].is_alive()
+
+
+@needs_isolation
+def test_one_shot_worker_with_partial_pending_reply_is_replaced(workers):
+    assert run_user_code_in_isolated_worker(PARTIAL_REPLY_METRIC, {"pending": True}) == _only_score("partial_reply", 1.0)
+    assert executor_process._idle_isolated_workers.queue[0][1].poll(5)
+
+    result = run_user_code_in_isolated_worker(PROBE_METRIC, {"port": 1})
+
+    assert [(score["name"], score["value"]) for score in result["scores"]] == [("probe", 1.0)]
+    assert (len(workers), workers[0].is_alive()) == (2, False)
+
+
+# Pauses between chunks of a large reply, each shorter than the grace and together longer than it.
+SLOW_CHUNK_PAUSE_SECONDS = 0.4
+SLOW_CHUNKS = 5
+SLOW_REPLY_SIZE = 4 * 1024 * 1024
+
+
+def _write_slowly(fd: int, request_id: str, chunks: int) -> dict:
+    """Writes a reply in `chunks` pieces with pauses between them and returns its result; with fewer chunks than
+    SLOW_CHUNKS the reply stops part way."""
+    result = {"scores": [{"name": "slow", "value": 1.0, "reason": "x" * SLOW_REPLY_SIZE}]}
+    body = json.dumps({"request_id": request_id, "result": result}).encode()
+    frame = struct.pack("!i", len(body)) + body
+    step = len(frame) // SLOW_CHUNKS + 1
+    for i in range(chunks):
+        if i:
+            time.sleep(SLOW_CHUNK_PAUSE_SECONDS)
+        os.write(fd, frame[i * step:(i + 1) * step])
+    return result
+
+
+@pytest.fixture
+def slow_writer(pipe):
+    """Starts _write_slowly on the child end; joined, bounded, after the test."""
+    threads = []
+    written = []
+
+    def start(chunks: int) -> None:
+        thread = threading.Thread(target=lambda: written.append(_write_slowly(pipe[1].fileno(), "a" * 32, chunks)),
+                                  daemon=True)
+        thread.start()
+        threads.append(thread)
+
+    yield start, written
+    for thread in threads:
+        thread.join(30)
+
+
+def _read_slow_reply(parent):
+    return executor_process._read_result(parent, "a" * 32, time.monotonic() + 30, 64 * 1024 * 1024,
+                                         idle=executor_process._REPLY_GRACE_SECONDS)
+
+
+def test_large_reply_that_keeps_arriving_completes(pipe, slow_writer):
+    start_writing, written = slow_writer
+    start_writing(SLOW_CHUNKS)
+
+    start = time.monotonic()
+    actual = _read_slow_reply(pipe[0])
+    elapsed = time.monotonic() - start
+
+    assert actual == written[0]
+    # Longer than one grace in all, so only a bound on each pause lets it through.
+    assert elapsed > executor_process._REPLY_GRACE_SECONDS, elapsed
+
+
+def test_large_reply_that_stops_part_way_fails_within_the_grace(pipe, slow_writer):
+    start_writing, _ = slow_writer
+    start_writing(SLOW_CHUNKS - 2)
+
+    start = time.monotonic()
+    with pytest.raises(executor_process._StalledReply):
+        _read_slow_reply(pipe[0])
+    elapsed = time.monotonic() - start
+
+    # The chunks that arrived, then one grace of silence.
+    expected = (SLOW_CHUNKS - 3) * SLOW_CHUNK_PAUSE_SECONDS + executor_process._REPLY_GRACE_SECONDS
+    assert expected <= elapsed < expected + 2, elapsed
+
+
+# Writes its own result for the request slowly, ahead of the worker's reply, which the next request discards.
+SLOW_REPLY_METRIC = f"""
+import json
+import os
+import struct
+import sys
+import time
+
+from opik.evaluation.metrics import base_metric, score_result
+
+
+class SlowReply(base_metric.BaseMetric):
+    def __init__(self):
+        super().__init__(name="slow_reply", track=False)
+
+    def score(self, **ignored_kwargs):
+        frame = sys._getframe()
+        while "connection" not in frame.f_locals:
+            frame = frame.f_back
+        fd, request_id = frame.f_locals["connection"].fileno(), frame.f_locals["request_id"]
+        result = {{"scores": [{{"name": "slow", "value": 1.0, "reason": "x" * {SLOW_REPLY_SIZE}}}]}}
+        body = json.dumps({{"request_id": request_id, "result": result}}).encode()
+        reply = struct.pack("!i", len(body)) + body
+        step = len(reply) // {SLOW_CHUNKS} + 1
+        for i in range({SLOW_CHUNKS}):
+            if i:
+                time.sleep({SLOW_CHUNK_PAUSE_SECONDS})
+            os.write(fd, reply[i * step:(i + 1) * step])
+        return score_result.ScoreResult(name=self.name, value=1.0)
+"""
+
+
+@needs_isolation
+def test_large_one_shot_reply_that_keeps_arriving_completes(workers):
+    result = run_user_code_in_isolated_worker(SLOW_REPLY_METRIC, {})
+
+    assert result == {"scores": [{"name": "slow", "value": 1.0, "reason": "x" * SLOW_REPLY_SIZE}]}
+    assert len(workers) == 1
+
+
+def _wait_for_parent(connection) -> None:
+    # Blocks until the parent closes its end, so the worker ends when the code under test stops it.
+    try:
+        connection.recv_bytes()
+    except (EOFError, OSError):
+        pass
+
+
+def _truncated_ready(connection, isolate: bool) -> None:
+    os.write(connection.fileno(), struct.pack("!i", 100) + b'"REA')
+    _wait_for_parent(connection)
+
+
+def _oversized_ready(connection, isolate: bool) -> None:
+    connection.send_bytes(json.dumps("READY" + "x" * 64).encode())
+    _wait_for_parent(connection)
+
+
+READY_TIMEOUT_FOR_TESTS = 3
+# A forked worker writes at once; a spawned one (macOS) re-imports first and can outlast the READY timeout,
+# so there only the timeout itself is what the test reaches.
+forked_workers = pytest.mark.skipif(sys.platform != "linux", reason="spawned workers can start after the READY timeout")
+
+
+@pytest.mark.parametrize("worker_main, max_bytes, logged", [
+    pytest.param(_truncated_ready, None, "the worker sent part of a reply and stalled", marks=forked_workers),
+    pytest.param(_oversized_ready, "16", "Discarded a worker reply longer than 16 bytes", marks=forked_workers),
+    (_never_ready, None, "timed out waiting for READY signal"),
+])
+def test_worker_with_a_bad_ready_reply_is_not_pooled(monkeypatch, caplog, workers, worker_main, max_bytes, logged):
+    monkeypatch.setenv(PROCESS_NETWORK_ISOLATION_ENV_VAR, "false")
+    monkeypatch.setenv(executor_process.READY_TIMEOUT_ENV_VAR, str(READY_TIMEOUT_FOR_TESTS))
+    if max_bytes:
+        monkeypatch.setenv(executor_process.MAX_REPLY_BYTES_ENV_VAR, max_bytes)
+    # Passed as the Process target, so it is what the worker runs, forked or spawned.
+    monkeypatch.setattr(process_worker, "worker_process_main", worker_main)
+    executor = ProcessExecutor()
+
+    start = time.monotonic()
+    with caplog.at_level(logging.WARNING, logger=executor_process.__name__):
+        executor.create_worker_process()
+    elapsed = time.monotonic() - start
+
+    assert elapsed < READY_TIMEOUT_FOR_TESTS + STOP_BOUND_SECONDS, elapsed
+    assert executor.process_pool.qsize() == 0
+    assert not workers[0].is_alive()
+    assert any(logged in r.getMessage() for r in caplog.records), [r.getMessage() for r in caplog.records]
+
+
+def test_docker_strategy_job_runs_with_invalid_process_settings(tmp_path):
+    script = tmp_path / "run_main.py"
+    script.write_text(RUNNER_MAIN_SCRIPT)
+    src = os.path.dirname(os.path.dirname(executor_process.__file__))
+    env = {**os.environ, "PYTHON_CODE_EXECUTOR_STRATEGY": "docker", "PYTHON_COLORS": "0",
+           executor_process.READY_TIMEOUT_ENV_VAR: "abc", executor_process.MAX_REPLY_BYTES_ENV_VAR: "0",
+           "PYTHONPATH": os.pathsep.join(filter(None, [src, os.environ.get("PYTHONPATH")]))}
+    env.pop(PROCESS_NETWORK_ISOLATION_ENV_VAR, None)
+
+    run = subprocess.run([sys.executable, str(script), "start"], capture_output=True, text=True, timeout=120, env=env)
+
+    # The job read its input, so the settings it never uses did not stop it; the empty job is the only failure.
+    assert 'EVENTS ["read job"]' in run.stderr, run.stderr[-3000:]
+    actual_reply = json.loads(run.stdout.strip().splitlines()[-1])
+    assert (run.returncode, actual_reply["success"], actual_reply["error"]) == (
+        1, False, "No input data received from stdin"), run.stderr[-3000:]
+
+
+def test_reply_read_error_is_logged_as_a_connection_error(pipe, caplog):
+    parent, child = pipe
+    read_end, write_end = os.pipe()
+    try:
+        # Not a socket any more, so the read fails in the pipe itself rather than on the reply's content.
+        os.dup2(read_end, parent.fileno())
+        os.write(write_end, b"x")
+
+        with caplog.at_level(logging.WARNING, logger=executor_process.__name__):
+            actual = executor_process._read_reply(parent, time.monotonic() + 5, 1024)
+    finally:
+        os.close(read_end)
+        os.close(write_end)
+
+    assert actual is None
+    assert [r.getMessage() for r in caplog.records] == [
+        "Discarded a worker reply after a connection/read error: OSError (errno ENOTSOCK)"]
+
+
+def test_oversized_reply_is_logged_as_oversized(pipe, caplog):
+    parent, child = pipe
+    child.send_bytes(b"x" * 17)
+
+    with caplog.at_level(logging.WARNING, logger=executor_process.__name__):
+        actual = executor_process._read_reply(parent, time.monotonic() + 5, 16)
+
+    assert actual is None
+    assert [r.getMessage() for r in caplog.records] == ["Discarded a worker reply longer than 16 bytes"]
+
+
+# A length prefix, then one byte at a time, each well within the reply grace, without ever finishing.
+DRIBBLE_REPLY_METRIC = """
+import os
+import struct
+import sys
+import time
+
+from opik.evaluation.metrics import base_metric, score_result
+
+
+class DribbleReply(base_metric.BaseMetric):
+    def __init__(self):
+        super().__init__(name="dribble_reply", track=False)
+
+    def score(self, **ignored_kwargs):
+        frame = sys._getframe()
+        while "connection" not in frame.f_locals:
+            frame = frame.f_back
+        fd = frame.f_locals["connection"].fileno()
+        os.write(fd, struct.pack("!i", 1 << 20))
+        while True:
+            os.write(fd, b"x")
+            time.sleep(0.2)
+"""
+
+
+@needs_isolation
+def test_one_shot_reply_that_never_finishes_ends_at_the_reply_deadline(monkeypatch, workers):
+    monkeypatch.setattr(executor_process, "_ONE_SHOT_REPLY_SECONDS", 2)
+
+    start = time.monotonic()
+    result = run_user_code_in_isolated_worker(DRIBBLE_REPLY_METRIC, {})
+    elapsed = time.monotonic() - start
+
+    assert result == {"code": 504, "error": executor_process.EXEC_TIMEOUT_ERROR}
+    assert 2 <= elapsed < 2 + STOP_BOUND_SECONDS, elapsed
+    assert not workers[0].is_alive()
+    assert executor_process._idle_isolated_workers.qsize() == 0
+
+
+def test_dribbled_reply_ends_at_the_deadline(pipe):
+    parent, child = pipe
+    child_fd = child.fileno()
+    stop = threading.Event()
+
+    def dribble():
+        os.write(child_fd, struct.pack("!i", 1 << 20))
+        while not stop.wait(0.2):
+            os.write(child_fd, b"x")
+
+    writer = threading.Thread(target=dribble, daemon=True)
+    writer.start()
+    start = time.monotonic()
+    try:
+        with pytest.raises(executor_process._StalledReply):
+            executor_process._read_reply(parent, time.monotonic() + 1.5, 64 * 1024 * 1024,
+                                         idle=executor_process._REPLY_GRACE_SECONDS)
+        elapsed = time.monotonic() - start
+    finally:
+        stop.set()
+        writer.join(5)
+
+    assert 1.5 <= elapsed < 3, elapsed
+
+
+@pytest.mark.parametrize("deadline", [math.inf, -math.inf, math.nan])
+def test_reply_read_without_a_finite_deadline_is_refused(pipe, deadline):
+    parent, child = pipe
+    child.send_bytes(b"{}")
+
+    with pytest.raises(ValueError, match="^a reply read needs a finite deadline$"):
+        executor_process._read_reply(parent, deadline, 1024)

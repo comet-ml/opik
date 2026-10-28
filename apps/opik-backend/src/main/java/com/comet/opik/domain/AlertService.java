@@ -18,9 +18,11 @@ import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.alerts.AlertEventBridgePublisher;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
+import com.comet.opik.domain.llm.ProviderFailures;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.cache.Cacheable;
+import com.comet.opik.infrastructure.net.LoggableUrl;
 import com.comet.opik.utils.RetryUtils;
 import com.fasterxml.uuid.Generators;
 import com.google.inject.ImplementedBy;
@@ -408,8 +410,9 @@ class AlertServiceImpl implements AlertService {
                 .contextWrite(ctx -> setRequestContext(ctx, userName, workspaceId))
                 .subscribeOn(Schedulers.boundedElastic())
                 .map(responseBody -> {
-                    log.info("Successfully sent webhook: id='{}', type='{}', url='{}', response='{}'",
-                            event.getId(), event.getEventType(), event.getUrl(), responseBody);
+                    // the reply is returned to the caller, never logged
+                    log.info("Successfully sent webhook: id='{}', type='{}', url='{}'",
+                            event.getId(), event.getEventType(), LoggableUrl.of(event.getUrl()));
 
                     return WebhookTestResult.builder()
                             .status(WebhookTestResult.Status.SUCCESS)
@@ -419,8 +422,9 @@ class AlertServiceImpl implements AlertService {
                             .build();
                 })
                 .onErrorResume(throwable -> {
-                    log.error("Failed to send webhook: id='{}', type='{}', url='{}', error='{}'",
-                            event.getId(), event.getEventType(), event.getUrl(), throwable.getMessage(), throwable);
+                    log.error("Failed to send webhook: id='{}', type='{}', url='{}', error type '{}'",
+                            event.getId(), event.getEventType(), LoggableUrl.of(event.getUrl()),
+                            ProviderFailures.rootType(throwable));
 
                     // Extract status code from RetryableHttpException if available
                     int statusCode = (throwable instanceof RetryUtils.RetryableHttpException rhe)

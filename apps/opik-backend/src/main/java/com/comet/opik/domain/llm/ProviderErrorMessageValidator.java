@@ -1,14 +1,18 @@
 package com.comet.opik.domain.llm;
 
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
+import com.google.common.base.CharMatcher;
 import io.dropwizard.jersey.errors.ErrorMessage;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.util.Set;
+import java.util.regex.Pattern;
 
 import static com.comet.opik.domain.llm.ChatCompletionService.UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
 
@@ -21,6 +25,7 @@ import static com.comet.opik.domain.llm.ChatCompletionService.UNEXPECTED_ERROR_C
 public class ProviderErrorMessageValidator {
 
     /** The error identifiers each provider documents for its error envelope. */
+    @RequiredArgsConstructor
     public enum DocumentedErrors {
         /**
          * https://developers.openai.com/api/docs/guides/error-codes, .../guides/agents-api/errors; error.type or code.
@@ -65,20 +70,39 @@ public class ProviderErrorMessageValidator {
 
         private final Set<String> identifiers;
 
-        DocumentedErrors(Set<String> identifiers) {
-            this.identifiers = identifiers;
-        }
-
         public boolean documents(Object identifier) {
             return identifier != null && identifiers.contains(identifier.toString());
         }
     }
+
+    /**
+     * ISO control characters (C0, DEL and C1) and the Unicode line and paragraph separators. All of them are in the
+     * Basic Multilingual Plane, so matching UTF-16 chars matches the same code points.
+     */
+    private static final CharMatcher CONTROL_CHARACTERS = CharMatcher.javaIsoControl()
+            .or(CharMatcher.anyOf("\u2028\u2029"));
+
+    /**
+     * The start of a tag, comment, declaration or processing instruction. A bare {@code <} or {@code >} is a comparison, as in a parameter
+     * range ({@code >= 1}), so it is kept.
+     */
+    private static final Pattern MARKUP = Pattern.compile("<[\\p{L}/!?]");
+
+    private static final Pattern LINE_BREAK = Pattern.compile("\\R");
 
     private final int maxLength;
 
     @Inject
     public ProviderErrorMessageValidator(@NonNull @Config("llmProviderClient") LlmProviderClientConfig config) {
         this.maxLength = config.getProviderErrorMessageMaxLength();
+    }
+
+    /**
+     * The first line of a message, stripped. Google APIs put a one-line summary first and the specifics, such as the
+     * quota that was exceeded, on the lines after it.
+     */
+    public static @Nullable String firstLine(@Nullable String text) {
+        return text == null ? null : LINE_BREAK.split(text, 2)[0].strip();
     }
 
     /** The provider's status with none of its text, for an envelope that names no documented error. */
@@ -100,14 +124,6 @@ public class ProviderErrorMessageValidator {
 
     /** A single line of plain text: no markup, control characters or line breaks; length is not checked. */
     public static boolean isPlainText(String text) {
-        return StringUtils.isNotBlank(text)
-                && text.codePoints().noneMatch(ProviderErrorMessageValidator::isDisallowed);
-    }
-
-    private static boolean isDisallowed(int codePoint) {
-        return codePoint == '<' || codePoint == '>'
-                || Character.isISOControl(codePoint)
-                || Character.getType(codePoint) == Character.LINE_SEPARATOR
-                || Character.getType(codePoint) == Character.PARAGRAPH_SEPARATOR;
+        return StringUtils.isNotBlank(text) && CONTROL_CHARACTERS.matchesNoneOf(text) && !MARKUP.matcher(text).find();
     }
 }

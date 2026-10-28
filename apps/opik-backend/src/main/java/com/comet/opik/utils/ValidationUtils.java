@@ -118,24 +118,4 @@ public class ValidationUtils {
             return false;
         }
     }
-
-    /**
-     * Redacts credentials from a URL for safe logging.
-     * Replaces user:pass@ with user:***@ to prevent credential leakage.
-     *
-     * @param url URL that may contain credentials
-     * @return URL with credentials redacted, or original URL if no credentials found
-     */
-    public static String redactCredentialsFromUrl(String url) {
-        if (StringUtils.isBlank(url)) {
-            return url;
-        }
-
-        // Pattern: scheme://user:pass@host or scheme://user@host
-        // Replace user:pass@ with user:***@
-        String redacted = url.replaceAll("://([^:@/]+):([^@/]+)@", "://$1:***@");
-        // Also handle case where only username is present (no password)
-        redacted = redacted.replaceAll("://([^:@/]+)@", "://$1:***@");
-        return redacted;
-    }
 }

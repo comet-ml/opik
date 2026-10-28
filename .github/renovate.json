@@ -23,6 +23,11 @@
   ],
   "packageRules": [
     {
+      "description": "Each npm project's .npmrc sets min-release-age=7, so npm cannot install a version younger than 7 days; wait the same before proposing it",
+      "matchManagers": ["npm"],
+      "minimumReleaseAge": "7 days"
+    },
+    {
       "description": "The e2e suite is test tooling: its own group, kept apart from the shipped frontend",
       "matchFileNames": ["tests_end_to_end/e2e/**"],
       "groupName": "e2e npm"

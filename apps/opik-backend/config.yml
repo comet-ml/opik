@@ -11,6 +11,10 @@ logging:
     # Default: INFO
     # Description: Set to DEBUG to see complete assembled LLM streaming responses (application-level logging)
     com.comet.opik.infrastructure.llm: ${LLM_PROXY_REQUEST_LOG_LEVEL:-INFO}
+    # Default: ERROR
+    # Description: langchain4j logs each retry of a model's own retry loop with the provider's response; Opik logs its
+    #   own retries without it
+    dev.langchain4j.internal.RetryUtils: ERROR
 
 # Description: state database configuration
 # https://www.dropwizard.io/en/stable/manual/configuration.html#database
@@ -618,6 +622,13 @@ cipxTokenValidation:
   # Default: http://ai-cost-backend
   # Description: Base URL of the cost-api service that validates device tokens; the validator endpoint is appended to it. The in-cluster service name, not the public front door: the validator is reached only from inside the cluster
   url: ${CIPX_TOKEN_VALIDATION_URL:-http://ai-cost-backend}
+
+# The admin server: Dropwizard's tasks (log level, gc), /healthcheck, /metrics, /threads and /ping, on the port of
+# server.adminConnectors. The probes use /health-check on the application port, which stays.
+adminServer:
+  # Default: true
+  # Description: Whether the admin server runs. When false, nothing listens on the admin port, on any interface
+  enabled: ${SERVER_ADMIN_ENABLED:-true}
 
 # https://www.dropwizard.io/en/stable/manual/configuration.html#servers
 server:
@@ -1672,7 +1683,7 @@ llmProviderClient:
   mediaUrlDestinationScheme: ${LLM_PROVIDER_MEDIA_URL_DESTINATION_SCHEME:-plaintext_or_tls}
   # Default: 30s
   # Description: Time allowed for downloading one media URL that Gemini or Vertex AI receives as inline data,
-  #   connecting included; at most 5m
+  #   connecting included; at most 2m
   mediaDownloadTimeout: ${LLM_PROVIDER_MEDIA_DOWNLOAD_TIMEOUT:-30s}
   # Default: 20MB
   # Description: Most bytes downloaded for all the media of one Gemini or Vertex AI request, which carries at most
@@ -1687,6 +1698,28 @@ llmProviderClient:
   # Description: Most bytes read from a custom provider's error response body; the rest is discarded, as only a
   #   short message parsed from it reaches callers; at most 1MiB
   providerErrorBodyMaxSize: ${LLM_PROVIDER_ERROR_BODY_MAX_SIZE:-64KB}
+  # Default: 120s
+  # Description: Longest a provider's stream may stay silent, before its headers or between reads of its body: a
+  #   stream waits for its headers up to the longer of this and readTimeout, a call that isn't one up to readTimeout
+  #   only. Above the 90s ingress idle timeout, as models that reason before answering can be silent for a while;
+  #   between 1s and 10m
+  streamReadTimeout: ${LLM_PROVIDER_STREAM_READ_TIMEOUT:-120s}
+  # Default: 1024
+  # Description: Most threads of the shared HTTP client for LLM provider calls. A call made asynchronously, a stream
+  #   included, holds one from start to end, so it must be at least httpClientMaxRequests; at most 2048
+  httpClientMaxThreads: ${LLM_PROVIDER_CLIENT_MAX_THREADS:-1024}
+  # Default: 60s
+  # Description: How long an idle thread of the shared LLM HTTP client lives before it ends, so the pool shrinks
+  #   back after a burst; between 1s and 5m
+  httpClientThreadKeepAlive: ${LLM_PROVIDER_CLIENT_THREAD_KEEP_ALIVE:-60s}
+  # Default: 1024
+  # Description: Most LLM provider calls made asynchronously, streams included, that run at once on the shared
+  #   client. Further calls wait in order for one to end, and their timeouts start once they run; at most 2048
+  httpClientMaxRequests: ${LLM_PROVIDER_CLIENT_MAX_REQUESTS:-1024}
+  # Default: 1024
+  # Description: Most of httpClientMaxRequests that run at once to a single host. Most calls go to a few hosts, such
+  #   as one provider's API, so it defaults to the overall limit and can't exceed it
+  httpClientMaxRequestsPerHost: ${LLM_PROVIDER_CLIENT_MAX_REQUESTS_PER_HOST:-1024}
   # Configuration for OpenAI client
   openAiClient:
     # Default:

@@ -31,6 +31,8 @@ class CustomerCredentialsProvider implements AwsCredentialsProvider, SdkAutoClos
     private static final Duration STALE_BEFORE_EXPIRY = Duration.ofMinutes(1);
     private static final Duration PREFETCH_BEFORE_EXPIRY = Duration.ofMinutes(5);
 
+    private static final String UNREADABLE_RESPONSE = "Customer credentials endpoint returned an unreadable response";
+
     private final URI endpoint;
 
     /** Bounds connecting and then each read of the response, in milliseconds. */
@@ -89,19 +91,23 @@ class CustomerCredentialsProvider implements AwsCredentialsProvider, SdkAutoClos
                     .prefetchTime(expiration.minus(PREFETCH_BEFORE_EXPIRY))
                     .build();
         } catch (DateTimeParseException exception) {
-            throw SdkClientException.create("Customer credentials endpoint returned an unreadable response",
-                    exception);
+            throw SdkClientException.create(UNREADABLE_RESPONSE, exception);
         }
     }
 
-    /** The response parsed as it is read; a body that isn't JSON is an unreadable response, not an I/O failure. */
+    /**
+     * The response parsed as it is read; a body that is missing or isn't JSON is an unreadable response, not an I/O
+     * failure. Jersey reads an empty body without a content type as no entity at all.
+     */
     private static JsonNode readJson(Response response) {
+        if (!response.hasEntity()) {
+            throw SdkClientException.create(UNREADABLE_RESPONSE);
+        }
         try {
             return response.readEntity(JsonNode.class);
         } catch (ProcessingException exception) {
             if (exception.getCause() instanceof JsonProcessingException) {
-                throw SdkClientException.create("Customer credentials endpoint returned an unreadable response",
-                        exception);
+                throw SdkClientException.create(UNREADABLE_RESPONSE, exception);
             }
             throw exception;
         }

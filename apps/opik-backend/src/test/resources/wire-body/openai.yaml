@@ -137,6 +137,49 @@ rows:
     request: {custom_parameters: {service_tier: flex, metadata: {run: r1}}}
     body: {service_tier: flex, metadata: {run: r1}}
 
+  # User content in array form, chat path. A vision model gets the parts as sent; any other model gets them
+  # flattened to one string, with the image as a placeholder.
+  - name: array content is sent as parts to a vision model
+    model: gpt-4.1
+    request:
+      messages:
+        - role: system
+          content: Be brief.
+        - role: user
+          content:
+            - type: text
+              text: Say hi.
+            - type: image_url
+              image_url: {url: 'https://example.com/cat.png'}
+    body:
+      messages:
+        - role: system
+          content: Be brief.
+        - role: user
+          content:
+            - type: text
+              text: Say hi.
+            - type: image_url
+              image_url: {url: 'https://example.com/cat.png'}
+  - name: array content is flattened to a string for a model without vision
+    model: gpt-3.5-turbo
+    request:
+      messages:
+        - role: system
+          content: Be brief.
+        - role: user
+          content:
+            - type: text
+              text: Say hi.
+            - type: image_url
+              image_url: {url: 'https://example.com/cat.png'}
+    body:
+      messages:
+        - role: system
+          content: Be brief.
+        - role: user
+          content: 'Say hi.<<<image>>>https://example.com/cat.png<<</image>>>'
+
   # Judge path. gpt-3.5-turbo and o3-mini have no structuredOutput in the registry, so only the row about that
   # uses them.
   - name: a judge sends temperature to a model that is not a reasoning model

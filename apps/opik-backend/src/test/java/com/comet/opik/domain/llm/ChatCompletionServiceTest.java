@@ -3,6 +3,7 @@ package com.comet.opik.domain.llm;
 import com.comet.opik.api.ModelParams;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
+import com.comet.opik.infrastructure.llm.customllm.AuthTokenException;
 import com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterDecisionModel;
 import com.comet.opik.infrastructure.llm.vertexai.LlmProviderVertexAI.CutOffBeforeAnsweringException;
@@ -53,6 +54,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.net.ConnectException;
+import java.net.SocketException;
+import java.net.SocketTimeoutException;
 import java.nio.channels.ClosedChannelException;
 import java.util.List;
 import java.util.Optional;
@@ -100,6 +103,7 @@ class ChatCompletionServiceTest {
     private ChatModel chatModel;
 
     private static final int PROVIDER_ERROR_MESSAGE_MAX_LENGTH = 300;
+    private static final String OPIK_FAILURE = "token fetch failed: %s".formatted(UUID.randomUUID());
     private static final String VERTEX_AI_CUT_OFF = """
             Vertex AI used up the max output tokens limit (1024) before writing any answer. Thinking tokens count \
             toward this limit, so raise Max output tokens and run again""";
@@ -486,8 +490,8 @@ class ChatCompletionServiceTest {
         }
 
         @Test
-        @DisplayName("transient failures must still be retried")
-        void create__whenTransientException__thenStillRetried() {
+        @DisplayName("transport failures must still be retried")
+        void create__whenTransportFailure__thenStillRetried() {
             // Given
             var request = podamFactory.manufacturePojo(ChatCompletionRequest.class);
             var workspaceId = "test-workspace-id";
@@ -497,7 +501,8 @@ class ChatCompletionServiceTest {
                     new ParamResolver(llmProviderFactory, bundledRegistry()), providerErrorMessageValidator);
 
             when(llmProviderFactory.getService(anyString(), anyString())).thenReturn(llmProviderService);
-            when(llmProviderService.generate(any(), anyString())).thenThrow(new RuntimeException("transient"));
+            when(llmProviderService.generate(any(), anyString()))
+                    .thenThrow(new RuntimeException(new SocketException("Connection reset")));
             when(llmProviderService.getLlmProviderError(any())).thenReturn(Optional.empty());
 
             // When & Then
@@ -688,6 +693,22 @@ class ChatCompletionServiceTest {
                             500,
                             "%s: Service is unreachable. Please check the provider URL."
                                     .formatted(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER)),
+                    Arguments.of(
+                            "Opik failure over a network cause, whose message stays server-side",
+                            new AuthTokenException(OPIK_FAILURE,
+                                    new SocketTimeoutException("Read timed out from 10.0.0.1")),
+                            500,
+                            "%s: %s".formatted(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, OPIK_FAILURE)),
+                    Arguments.of(
+                            "Opik failure over a refused connection keeps the message Opik wrote",
+                            new AuthTokenException(OPIK_FAILURE, new ConnectException("Connection refused")),
+                            500,
+                            "%s: %s".formatted(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, OPIK_FAILURE)),
+                    Arguments.of(
+                            "Opik failure with a blank message adds nothing to the generic one",
+                            new AuthTokenException(" ", new ConnectException("Connection refused")),
+                            500,
+                            UNEXPECTED_ERROR_CALLING_LLM_PROVIDER),
                     Arguments.of(
                             "status outside the error families",
                             new RuntimeException(new HttpException(302, "moved")),
@@ -909,9 +930,11 @@ class ChatCompletionServiceTest {
 
             assertRetryable(thrown);
             assertThat(thrown)
-                    .as("the provider body is kept as the cause, not the message")
+                    .as("the provider failure is kept as the cause, redacted, and its body is neither")
                     .hasMessage(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER)
-                    .hasCause(providerFailure);
+                    .cause()
+                    .hasMessage(NonRetriableException.class.getName())
+                    .hasNoCause();
         }
 
         /**
@@ -1022,6 +1045,27 @@ class ChatCompletionServiceTest {
             verify(chatModel, times(expectedAttempts)).chat(any(ChatRequest.class));
         }
 
+        private static Stream<Arguments> wrappedNonRetriableFailures() {
+            return Stream.of(
+                    arguments("behind a transport failure", new RuntimeException(new NonRetriableException(
+                            UUID.randomUUID().toString(), new SocketException(UUID.randomUUID().toString())))),
+                    arguments("behind a transient wire status", new RuntimeException(new NonRetriableException(
+                            UUID.randomUUID().toString(), new HttpException(503, UUID.randomUUID().toString())))));
+        }
+
+        /**
+         * No provider path wraps a {@code NonRetriableException} today, so this drives the shape directly: the
+         * classification walks the chain, so a wrapper can't hide it behind a retriable signal deeper down.
+         */
+        @ParameterizedTest(name = "a wrapped NonRetriableException {0} is attempted once")
+        @MethodSource("wrappedNonRetriableFailures")
+        @DisplayName("A wrapped NonRetriableException does not consume the in-process retry budget")
+        void scoreTrace__whenWrappedNonRetriable__thenAttemptedOnce(String label, RuntimeException providerFailure) {
+            scoreTraceWithBudget(2, providerFailure);
+
+            verify(chatModel, times(1)).chat(any(ChatRequest.class));
+        }
+
         /**
          * Drives scoreTrace against a service built with the given retry budget. Shared so the three budget
          * cases do not each repeat the construction, which is what let them drift to a single hard-coded value.
@@ -1116,8 +1160,8 @@ class ChatCompletionServiceTest {
             var thrown = scoreTraceWithBudget(2,
                     new RuntimeException(gaxException(StatusCode.Code.INVALID_ARGUMENT, false)));
 
-            // GAX ApiException is not a NonRetriableException, so without failFastOnPermanentFailure
-            // langchain4j's RetryPolicy would replay a call that can never succeed.
+            // GAX ApiException is not a NonRetriableException, so without the permanent-status check
+            // the retry loop would replay a call that can never succeed.
             assertNonRetryable(thrown, 400);
             verify(chatModel, times(1)).chat(any(ChatRequest.class));
         }

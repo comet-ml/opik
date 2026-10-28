@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.llm;
 
+import com.comet.opik.domain.llm.ProviderFailures;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionResponse;
 import lombok.extern.slf4j.Slf4j;
 
@@ -62,25 +63,26 @@ public class StreamingResponseLogger {
 
     /**
      * Log error with any accumulated partial content.
-     * Always logs at ERROR level. Includes partial content only when DEBUG is enabled.
+     * Always logs at ERROR level. Includes partial content only when DEBUG is enabled. The error is logged without its
+     * text, which can be what the provider answered: see {@link ProviderFailures}.
      */
     public void logError(Throwable throwable) {
         if (log.isDebugEnabled() && !accumulatedContent.isEmpty()) {
             // DEBUG enabled: Include partial content (may be sensitive)
             log.error(
-                    "LLM Streaming Response Error - Request: {}, Model: {}, Content: {}, Error: {}",
+                    "LLM Streaming Response Error - Request: {}, Model: {}, Content: {}, error type '{}'",
                     requestSummary,
                     model,
                     accumulatedContent,
-                    throwable.getMessage(),
-                    throwable);
+                    ProviderFailures.rootType(throwable),
+                    ProviderFailures.redacted(throwable));
         } else {
             // DEBUG disabled: No partial content (security)
-            log.error("LLM Streaming Response Error - Request: {}, Model: {}, Error: {}",
+            log.error("LLM Streaming Response Error - Request: {}, Model: {}, error type '{}'",
                     requestSummary,
                     model,
-                    throwable.getMessage(),
-                    throwable);
+                    ProviderFailures.rootType(throwable),
+                    ProviderFailures.redacted(throwable));
         }
     }
 }
