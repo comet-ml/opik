@@ -46,6 +46,7 @@ export interface ConversationStartOptions {
   sectionId?: string;
   // What the chat should produce for the host; Ollie reads `context` into hidden context and answers with `artifact:proposed`.
   artifact?: ArtifactRequest;
+  sessionId?: string;
 }
 
 export interface ArtifactRequest {
@@ -160,12 +161,15 @@ export interface ExplainButtonProps {
  * saying whether it was applied, and the `artifacts` capability.
  * 6 = widget mode: `section` and `sectionId` on `conversation:start` and
  * `duplicate` on `chart:edit`.
+ * 7 = `sessionId` on `conversation:start` (continue that chat if it still exists),
+ * `conversation:started` (shell → host) with the id of the chat a host request
+ * started, and `visibility:changed` read by the console as a request to open or collapse.
  *
  * ⚠️ MUST move in lockstep with `ollie-console/src/bridge.ts`; the console's
  * VER-4 assertions guard the event-shape contract. Bump here AND there together
  * whenever a bridge event is added/removed/reshaped.
  */
-export const BRIDGE_PROTOCOL_VERSION = 6;
+export const BRIDGE_PROTOCOL_VERSION = 7;
 
 /** Host → Sidebar events */
 export interface HostEventMap {
@@ -204,6 +208,7 @@ export interface SidebarEventMap {
   // A chart was added to this dashboard from the console; refetch so an open dashboard shows it.
   "dashboard:updated": BridgeDashboard;
   "artifact:proposed": ArtifactProposal;
+  "conversation:started": { entryId?: string; sessionId: string };
   "explain:chunk": { explainId: string; delta: string };
   "explain:done": { explainId: string };
   // `code` is an optional, machine-readable reason (e.g. "unavailable",
@@ -236,6 +241,10 @@ export interface AssistantSidebarBridge {
   canProposeArtifacts?(): boolean;
   // Calls back when the console announces its capabilities, so hosts that read them can update.
   subscribeCapabilities?(listener: () => void): () => void;
+  setOpen?(open: boolean): void;
+  subscribeConversationStarted?(
+    listener: (data: SidebarEventMap["conversation:started"]) => void,
+  ): () => void;
 }
 
 declare global {

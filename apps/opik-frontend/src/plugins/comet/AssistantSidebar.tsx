@@ -256,6 +256,9 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
   const onWidthChangeRef = useLatestRef(onWidthChange);
   const listenersRef = useRef<HostListeners>(createHostListeners());
   const lastRunnerStateRef = useRef<RunnerBridgeState | null>(null);
+  const conversationStartedListenersRef = useRef(
+    new Set<(data: SidebarEventMap["conversation:started"]) => void>(),
+  );
   const pendingChartEditRef = useRef<PendingRequest<ChartEditRequest> | null>(
     null,
   );
@@ -350,6 +353,7 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
       context: contextRef,
       listeners: listenersRef,
       lastRunnerState: lastRunnerStateRef,
+      conversationStartedListeners: conversationStartedListenersRef,
       pendingChartEdit: pendingChartEditRef,
       pendingConversation: pendingConversationRef,
     }),

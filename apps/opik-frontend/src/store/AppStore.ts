@@ -1,6 +1,11 @@
 import { create } from "zustand";
 import axiosInstance from "@/api/api";
 import { DEFAULT_USERNAME, isDefaultUser } from "@/constants/user";
+import {
+  ASSISTANT_SIDEBAR_COLLAPSED_WIDTH,
+  getStoredAssistantSidebarWidth,
+  isAssistantSidebarOpen,
+} from "@/constants/assistantSidebar";
 
 type AppUser = {
   apiKey: string;
@@ -20,6 +25,8 @@ type AppStore = {
   setPreviousWorkspaceName: (workspaceName: string | null) => void;
   opikWorkspaceOverride: string | null;
   setOpikWorkspaceOverride: (workspaceName: string | null) => void;
+  assistantSidebarWidth: number;
+  setAssistantSidebarWidth: (width: number) => void;
 };
 
 const useAppStore = create<AppStore>((set) => ({
@@ -48,10 +55,26 @@ const useAppStore = create<AppStore>((set) => ({
   opikWorkspaceOverride: null,
   setOpikWorkspaceOverride: (workspaceName: string | null) =>
     set({ opikWorkspaceOverride: workspaceName }),
+  assistantSidebarWidth: isAssistantSidebarOpen()
+    ? getStoredAssistantSidebarWidth()
+    : ASSISTANT_SIDEBAR_COLLAPSED_WIDTH,
+  setAssistantSidebarWidth: (width: number) =>
+    set({ assistantSidebarWidth: width }),
 }));
 
 export const useActiveWorkspaceName = () =>
   useAppStore((state) => state.activeWorkspaceName);
+
+export const useAssistantSidebarWidth = () =>
+  useAppStore((state) => state.assistantSidebarWidth);
+
+export const useSetAssistantSidebarWidth = () =>
+  useAppStore((state) => state.setAssistantSidebarWidth);
+
+export const useIsAssistantOpen = () =>
+  useAppStore(
+    (state) => state.assistantSidebarWidth > ASSISTANT_SIDEBAR_COLLAPSED_WIDTH,
+  );
 
 export const useActiveProjectId = () =>
   useAppStore((state) => state.activeProjectId);

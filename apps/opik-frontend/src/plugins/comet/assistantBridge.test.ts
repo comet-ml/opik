@@ -25,6 +25,7 @@ const makeRefs = (listeners: HostListeners): BridgeRefs => ({
   context: ref({} as BridgeRefs["context"]["current"]),
   listeners: ref(listeners),
   lastRunnerState: ref(null),
+  conversationStartedListeners: ref(new Set()),
 });
 
 describe("assistantBridge — single-subscriber invariant", () => {
@@ -356,5 +357,30 @@ describe("assistantBridge — artifacts", () => {
     useExplainStore
       .getState()
       .onConsoleReady({ bridgeVersion: 2, capabilities: [] });
+  });
+});
+
+describe("assistantBridge — annotator view chats", () => {
+  it("tells subscribers which chat a host request started", () => {
+    const bridge = createBridge(makeRefs(createHostListeners()));
+    const listener = vi.fn();
+    const unsubscribe = bridge.subscribeConversationStarted!(listener);
+
+    bridge.emit("conversation:started", { entryId: "e-1", sessionId: "s-1" });
+    unsubscribe();
+    bridge.emit("conversation:started", { entryId: "e-2", sessionId: "s-2" });
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledWith({ entryId: "e-1", sessionId: "s-1" });
+  });
+
+  it("asks the console to expand or collapse", () => {
+    const refs = makeRefs(createHostListeners());
+    const onRequestVisibility = vi.fn();
+    refs.onRequestVisibility = ref(onRequestVisibility);
+
+    createBridge(refs).setOpen!(false);
+
+    expect(onRequestVisibility).toHaveBeenCalledWith(false);
   });
 });

@@ -1,65 +1,102 @@
 import React from "react";
-import { Info, LayoutTemplate, Maximize2 } from "lucide-react";
+import { ArrowRight, ClipboardPen } from "lucide-react";
 import { Button } from "@/ui/button";
 import { AnnotatorViewEditor } from "./useAnnotatorViewEditor";
-import AnnotatorViewOllieAction from "./AnnotatorViewOllieAction";
-import AnnotatorViewStatusTag from "./AnnotatorViewStatusTag";
-import AnnotatorViewThumbnail from "./AnnotatorViewThumbnail";
 import {
-  getAnnotatorViewDescription,
-  getAnnotatorViewNote,
-} from "./annotatorViewCopy";
+  LogTracesButton,
+  OllieDraftingButton,
+  OllieOutOfCreditsButton,
+  OllieStartButton,
+} from "./AnnotatorViewOllieAction";
 
 type AnnotatorViewCardProps = {
   editor: AnnotatorViewEditor;
   onPreview: () => void;
   onStartOllie: () => void;
-  isVisible: boolean;
 };
 
 const AnnotatorViewCard: React.FC<AnnotatorViewCardProps> = ({
   editor,
   onPreview,
   onStartOllie,
-  isVisible,
 }) => {
-  const note = getAnnotatorViewNote(editor);
+  const hasNoSamples = !editor.isSamplesPending && !editor.samples.length;
+  const hasOllie = editor.ollieState !== "none";
+  const customizeWith = hasOllie ? "with Ollie or via MCP" : "via MCP";
+
+  const previewButton = (
+    <Button type="button" variant="outline" size="2xs" onClick={onPreview}>
+      Preview
+      <ArrowRight className="ml-1 size-3" />
+    </Button>
+  );
+
+  const renderActions = () => {
+    if (hasNoSamples) return <LogTracesButton />;
+    switch (editor.ollieState) {
+      case "none":
+        return previewButton;
+      case "credits":
+        return (
+          <>
+            {previewButton}
+            <OllieOutOfCreditsButton />
+          </>
+        );
+      case "drafting":
+        return <OllieDraftingButton />;
+      default:
+        return (
+          <OllieStartButton
+            label="Preview & edit with Ollie"
+            onClick={onStartOllie}
+          />
+        );
+    }
+  };
+
+  const renderDescription = () => {
+    if (editor.hasView) {
+      return editor.draft.summary || "Annotators see a custom view.";
+    }
+    const defaultView = (
+      <>
+        Annotators see the{" "}
+        <span className="comet-body-xs-accented">
+          {editor.scope === "thread"
+            ? "thread as a conversation of chat messages"
+            : "trace input, output and metadata as code blocks"}
+        </span>
+        .
+      </>
+    );
+    if (hasNoSamples) {
+      return (
+        <>
+          No {editor.scope}s yet. {defaultView} Log traces to customize this
+          view {customizeWith}.
+        </>
+      );
+    }
+    return (
+      <>
+        {defaultView} You can customize this view {customizeWith}.
+      </>
+    );
+  };
 
   return (
-    <div className="rounded-md border border-border">
-      <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2.5">
-        <span className="flex size-5 items-center justify-center rounded-md bg-primary-100 text-primary">
-          <LayoutTemplate className="size-3" />
-        </span>
-        <span className="comet-body-s-accented">Annotator view</span>
-        <AnnotatorViewStatusTag editor={editor} />
-      </div>
-      <div className="flex items-start gap-3.5 p-3">
-        {isVisible && <AnnotatorViewThumbnail editor={editor} />}
-        <div className="flex min-w-0 flex-1 flex-col gap-2.5 self-stretch">
-          <p className="comet-body-s text-muted-slate">
-            {getAnnotatorViewDescription(editor)}
-          </p>
-          {note && (
-            <p className="comet-body-xs flex items-start gap-1.5 text-muted-slate">
-              <Info className="mt-0.5 size-3 shrink-0" />
-              {note}
-            </p>
-          )}
-          <div className="mt-auto flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="2xs"
-              onClick={onPreview}
-            >
-              <Maximize2 className="mr-1 size-3" />
-              View preview
-            </Button>
-            <AnnotatorViewOllieAction editor={editor} onStart={onStartOllie} />
-          </div>
+    <div className="flex flex-col gap-1.5 rounded-md border border-border bg-soft-background p-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className="flex h-5 items-center justify-center rounded-md bg-[var(--rule-icon-llm-judge)] px-1">
+            <ClipboardPen className="size-3 text-black" />
+          </span>
+          <span className="comet-body-s-accented">Annotator view</span>
         </div>
+        <div className="flex items-center gap-2">{renderActions()}</div>
       </div>
+      <p className="comet-body-xs">{renderDescription()}</p>
     </div>
   );
 };
