@@ -112,15 +112,15 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
         }
     }
 
-    private Mono<Void> save(String userLog, List<ILoggingEvent> events) {
-        if (userLog.isBlank()) {
+    private Mono<Void> save(String userLogMarker, List<ILoggingEvent> events) {
+        if (userLogMarker.isBlank()) {
             log.error("UserLog marker is not set for events: {}", events.stream()
                     .map(ILoggingEvent::getFormattedMessage)
                     .collect(Collectors.joining(", ")));
             return Mono.empty();
         }
 
-        return Mono.defer(() -> userLogTableFactory.getDAO(UserLog.valueOf(userLog)).saveAll(events))
+        return Mono.defer(() -> userLogTableFactory.getDAO(UserLog.valueOf(userLogMarker)).saveAll(events))
                 .onErrorResume(e -> {
                     log.error("Failed to insert logs", e);
                     return Mono.empty();
