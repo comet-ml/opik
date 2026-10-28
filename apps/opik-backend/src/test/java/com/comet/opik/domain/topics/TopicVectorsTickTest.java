@@ -716,23 +716,26 @@ class TopicVectorsTickTest {
         }
 
         @Test
-        @DisplayName("statuses without a usable summary don't take the LIMIT: an older blank, missing or "
-                + "other-version output leaves room for a newer usable one")
+        @DisplayName("statuses without a usable summary don't take the LIMIT: an older blank, Unicode-blank, missing "
+                + "or other-version output leaves room for a newer usable one")
         void unusableSummariesBeforeLimit() {
             var workspaceId = UUID.randomUUID().toString();
             var projectId = UUID.randomUUID();
             var blank = ID_GENERATOR.generateId();
             var missing = ID_GENERATOR.generateId();
             var otherVersion = ID_GENERATOR.generateId();
+            var unicodeBlank = ID_GENERATOR.generateId();
             var usable = ID_GENERATOR.generateId();
             labelsDAO.insert(List.of(outputLabel(workspaceId, projectId, blank, 1, "   "),
+                    outputLabel(workspaceId, projectId, unicodeBlank, 1, "\u2003\u3000\u2028"),
                     outputLabel(workspaceId, projectId, otherVersion, 2),
                     outputLabel(workspaceId, projectId, usable, 1))).block();
             var oldest = Instant.now().minus(30, ChronoUnit.MINUTES);
             insertStatusAt(workspaceId, projectId, blank, 1, oldest);
             insertStatusAt(workspaceId, projectId, missing, 1, oldest.plusSeconds(1));
             insertStatusAt(workspaceId, projectId, otherVersion, 1, oldest.plusSeconds(2));
-            insertStatusAt(workspaceId, projectId, usable, 1, oldest.plusSeconds(3));
+            insertStatusAt(workspaceId, projectId, unicodeBlank, 1, oldest.plusSeconds(3));
+            insertStatusAt(workspaceId, projectId, usable, 1, oldest.plusSeconds(4));
 
             var found = vectorsDAO.findUnvectored(workspaceId, TASK, Instant.now().minus(1, ChronoUnit.HOURS),
                     Instant.now(), Instant.EPOCH, 1, 10).collectList().block();
