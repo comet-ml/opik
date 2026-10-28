@@ -452,7 +452,7 @@ services:
     #   cache_from:
     #     - alpine:latest
     #     - nginx:1.29.3-alpine-otel
-    #     - node:20.19.5-alpine3.22
+    #     - node:26.12.1-alpine3.23
     #     - type=local,src=./.cache
       # cache_to:
       #   - type=local,dest=./.cache
