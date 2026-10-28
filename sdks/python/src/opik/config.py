@@ -439,6 +439,11 @@ class OpikConfig(pydantic_settings.BaseSettings):
         """
         if value is None:
             return None
+        if not isinstance(value, str):
+            # Leave non-string values untouched so Pydantic's normal
+            # Optional[str] validation raises a clear ValidationError
+            # instead of an AttributeError from .strip().
+            return value
         stripped = value.strip()
         return stripped if stripped else None
 

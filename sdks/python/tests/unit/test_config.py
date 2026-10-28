@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import mock_open, patch
 
 import pytest
+import pydantic
 
 from opik.config import CONFIG_FILE_PATH_DEFAULT, OpikConfig
 
@@ -184,6 +185,12 @@ def test_opik_api_key_with_surrounding_whitespace_is_stripped():
     assert config.api_key == "test_api_key"
 
 
+@pytest.mark.parametrize("non_string_key", [123, True, ["key"]])
+def test_non_string_opik_api_key_raises_validation_error(non_string_key):
+    with pytest.raises(pydantic.ValidationError):
+        OpikConfig(api_key=non_string_key)
+
+
 @pytest.mark.parametrize("blank_key", ["", "   ", "\t"])
 def test_blank_opik_api_key_is_misconfigured_for_cloud(monkeypatch, blank_key):
     monkeypatch.delenv("OPIK_TRACK_DISABLE", raising=False)
@@ -191,8 +198,10 @@ def test_blank_opik_api_key_is_misconfigured_for_cloud(monkeypatch, blank_key):
 
     config = OpikConfig()
 
-    is_misconfigured, _ = config.get_misconfiguration_detection_results()
+    is_misconfigured, diagnostic = config.get_misconfiguration_detection_results()
     assert is_misconfigured is True
+    assert diagnostic is not None
+    assert "API key must be specified" in diagnostic
 
 
 def test_present_opik_api_key_is_not_misconfigured_for_cloud(monkeypatch):

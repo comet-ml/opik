@@ -297,7 +297,7 @@ class OpikConfigurator:
         """
         config_file_needs_updating = False
 
-        if self.api_key is not None:
+        if self.api_key is not None and isinstance(self.api_key, str):
             # The configure() argument does not go through OpikConfig, so
             # normalize it here too: a blank key (an empty `set
             # OPIK_API_KEY=`-style value passed explicitly) is no key at
