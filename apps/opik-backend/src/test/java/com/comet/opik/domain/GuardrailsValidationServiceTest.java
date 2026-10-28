@@ -159,15 +159,21 @@ class GuardrailsValidationServiceTest {
                 .isTrue();
     }
 
-    @Test
-    void topicConfigNeedsAListAndNoTopicInBoth() {
-        assertThatThrownBy(() -> validate(request(descriptor(GuardrailType.TOPIC, "{\"allowed_topics\":[]}"))))
+    static Stream<Arguments> rejectedTopicConfigs() {
+        return Stream.of(
+                Arguments.of("no topic in either list", "{\"allowed_topics\":[]}",
+                        "validations[0].config needs allowed_topics or restricted_topics"),
+                Arguments.of("a topic in both lists, ignoring case",
+                        "{\"allowed_topics\":[\"Billing\"],\"restricted_topics\":[\"billing\"]}",
+                        "validations[0].config has 'Billing' in both allowed_topics and restricted_topics"));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("rejectedTopicConfigs")
+    void topicConfigIsRejected(String scenario, String config, String expectedMessage) {
+        assertThatThrownBy(() -> validate(request(descriptor(GuardrailType.TOPIC, config))))
                 .isInstanceOf(BadRequestException.class)
-                .hasMessage("validations[0].config needs allowed_topics or restricted_topics");
-        assertThatThrownBy(() -> validate(request(descriptor(GuardrailType.TOPIC,
-                "{\"allowed_topics\":[\"Billing\"],\"restricted_topics\":[\"billing\"]}"))))
-                .isInstanceOf(BadRequestException.class)
-                .hasMessage("validations[0].config has 'Billing' in both allowed_topics and restricted_topics");
+                .hasMessage(expectedMessage);
         verifyNoInteractions(inference);
     }
 
@@ -251,7 +257,9 @@ class GuardrailsValidationServiceTest {
                 Arguments.of("a topic over the length limit", List.of("t".repeat(257)), "longer than 256"),
                 Arguments.of("the reserved none-of-these option", List.of("billing", "None of these"),
                         GuardrailQuestions.NONE_OF_THESE),
-                Arguments.of("a repeated topic", List.of("billing", "billing"), "more than once"));
+                Arguments.of("a repeated topic", List.of("billing", "billing"), "more than once"),
+                Arguments.of("a topic repeated in another case", List.of("Billing", "billing"),
+                        "contains 'billing' more than once, ignoring case"));
     }
 
     @ParameterizedTest(name = "{0}")
