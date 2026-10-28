@@ -286,6 +286,7 @@ Call opik api on http://localhost:5173/api
 | component.backend.env.STATE_DB_URL | string | `"opik-mysql:3306/opik?rewriteBatchedStatements=true&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true"` |  |
 | component.backend.env.STATE_DB_USER | string | `"opik"` |  |
 | component.backend.env.UI_DEFAULT_PAGE_SIZE | string | `"100"` |  |
+| component.backend.env.WEBHOOK_DESTINATION_GUARD | string | `"relaxed"` |  |
 | component.backend.envFrom[0].configMapRef.name | string | `"opik-backend"` |  |
 | component.backend.image.pullPolicy | string | `"IfNotPresent"` |  |
 | component.backend.image.registry | string | `nil` | Registry for this component only. Defaults to the chart-wide `registry`. Set it when one component is pulled from a different registry. |

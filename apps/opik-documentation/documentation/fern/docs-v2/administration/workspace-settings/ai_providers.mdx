@@ -346,11 +346,23 @@ The check applies to every LLM provider call except Vertex AI, including the bui
 
 Video URLs without a file extension get a `HEAD` request to detect their type. `LLM_PROVIDER_VIDEO_URL_DESTINATION_GUARD` applies the same destination check to that request (default `relaxed` on Docker Compose and Helm, `strict` on every other launch path); a refused URL is still sent to the model, just without the detected type. Set it to `relaxed` to detect the type of videos served from private networks.
 
-Gemini and Vertex AI receive media as inline data, so Opik downloads the image, audio, video and PDF URLs in a message itself; only `gs://` and `data:` URLs are passed through as they are. The same variable applies the destination check to each download. A media URL with another scheme, or one that is refused, redirects, or exceeds `LLM_PROVIDER_MEDIA_DOWNLOAD_TIMEOUT` (default `30s`), fails the request with a `400`, as do downloads that together exceed `LLM_PROVIDER_MEDIA_DOWNLOAD_MAX_SIZE` (default `20MB`, the limit for all media in one request). With `relaxed`, these downloads can reach any address the backend can, including your internal network, so use it only when everyone who can send messages or log traces is trusted with that access.
+Gemini and Vertex AI receive media as inline data, so Opik downloads the image, audio, video and PDF URLs in a message itself; only `gs://` and `data:` URLs are passed through as they are. The same variable applies the destination check to each download. A media URL with another scheme, or one that is refused, redirects, or exceeds `LLM_PROVIDER_MEDIA_DOWNLOAD_TIMEOUT` (default `30s`, at most `2m`), fails the request with a `400`, as do downloads that together exceed `LLM_PROVIDER_MEDIA_DOWNLOAD_MAX_SIZE` (default `20MB`, at most `100MB`, the limit for all media in one request). With `relaxed`, these downloads can reach any address the backend can, including your internal network, so use it only when everyone who can send messages or log traces is trusted with that access.
 
 `LLM_PROVIDER_MEDIA_URL_DESTINATION_SCHEME` sets which schemes `strict` mode accepts for these downloads: `plaintext_or_tls` (the default on every launch path) allows `http` and `https`, and `https_only` allows `https` only. Values are case-insensitive, and any other value stops the backend at startup. `relaxed` mode doesn't check it, but only `http` and `https` media URLs are ever downloaded.
 
 Opik reads at most `LLM_PROVIDER_ERROR_BODY_MAX_SIZE` (default `64KB`, at most `1MiB`) of a custom provider's error response and discards the rest; only a short message parsed from it is returned.
+
+Every provider call except Vertex AI runs on one shared HTTP client, whose limits are set on the backend:
+
+| Variable | Default | Range | What it bounds |
+|---|---|---|---|
+| `LLM_PROVIDER_STREAM_READ_TIMEOUT` | `120s` | `1s` to `10m` | How long a provider's stream may stay silent once its response headers arrived; `LLM_PROVIDER_CLIENT_READ_TIMEOUT` bounds the wait for the headers. Keep it above your ingress or load balancer idle timeout, as models that reason before answering can be silent for a while. |
+| `LLM_PROVIDER_CLIENT_MAX_THREADS` | `1024` | `1` to `2048`, at least `LLM_PROVIDER_CLIENT_MAX_REQUESTS` | Threads of the shared client. A streamed call holds one from start to end. |
+| `LLM_PROVIDER_CLIENT_THREAD_KEEP_ALIVE` | `60s` | `1s` to `5m` | How long an idle thread lives, so the pool shrinks back after a burst. |
+| `LLM_PROVIDER_CLIENT_MAX_REQUESTS` | `1024` | `1` to `2048` | Provider calls that run at once; further calls wait in order, and their timeouts start once they run. |
+| `LLM_PROVIDER_CLIENT_MAX_REQUESTS_PER_HOST` | `1024` | `1` to `2048`, at most `LLM_PROVIDER_CLIENT_MAX_REQUESTS` | Calls that run at once to one host, such as one provider's API. |
+
+A value outside its range, or limits that contradict each other, stops the backend at startup with a configuration error.
 
 Changing a provider's **URL** requires re-entering its API key (or OAuth2 credentials), since stored secrets are only ever sent to the endpoint they were saved for.
 

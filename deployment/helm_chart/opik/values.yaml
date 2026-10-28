@@ -185,6 +185,8 @@ component:
       LLM_PROVIDER_DESTINATION_GUARD: "relaxed"
       # And for detecting the type of videos served from internal hosts
       LLM_PROVIDER_VIDEO_URL_DESTINATION_GUARD: "relaxed"
+      # And for alert webhooks pointed at internal services; also the application default
+      WEBHOOK_DESTINATION_GUARD: "relaxed"
       ANALYTICS_DB_MIGRATIONS_PASS: opik
       ANALYTICS_DB_PASS: opik
       STATE_DB_PASS: opik
