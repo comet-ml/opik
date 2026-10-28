@@ -688,8 +688,13 @@ public class TopicsRebuildService {
         /**
          * Writes the project's state only if no other run saved the project since this run read it. The Redis project
          * lock keeps two runs apart, but a Redis failover or a timed-out run that outlives its lock can break that.
+         * It first locks the project's row: a project deleted during the run fails the save, and a delete that comes
+         * later waits for this transaction, so its cleanup removes what the run saved.
          */
         private void writeState(TopicDAO topicDAO, TopicProjectState state) {
+            if (topicDAO.lockProject(workspaceId, projectId) == 0) {
+                throw new TopicsRunException(Code.SAVE, "the project was deleted during the run");
+            }
             if (startState.isEmpty()) {
                 try {
                     topicDAO.insertState(state);

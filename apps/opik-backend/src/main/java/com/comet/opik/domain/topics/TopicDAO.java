@@ -107,6 +107,10 @@ public interface TopicDAO {
     List<TopicProjectState> findStates(
             @BindList(value = "projectIds", onEmpty = BindList.EmptyHandling.NULL_STRING) Collection<UUID> projectIds);
 
+    /** Holds a shared lock on the project's row until the transaction ends, so a project delete waits for it. */
+    @SqlQuery("SELECT COUNT(*) FROM projects WHERE workspace_id = :workspaceId AND id = :projectId FOR SHARE")
+    int lockProject(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId);
+
     @SqlQuery("SELECT id FROM projects WHERE workspace_id = :workspaceId AND id IN (<projectIds>)")
     Set<UUID> findExistingProjectIds(@Bind("workspaceId") String workspaceId,
             @BindList("projectIds") Collection<UUID> projectIds);

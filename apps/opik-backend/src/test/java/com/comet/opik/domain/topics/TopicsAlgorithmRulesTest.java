@@ -8,12 +8,15 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -249,6 +252,27 @@ class TopicsAlgorithmRulesTest {
     @Nested
     @DisplayName("k-means edge cases")
     class KMeansEdges {
+
+        @ParameterizedTest
+        @MethodSource("invalidInputCases")
+        @DisplayName("rejects a non-positive dimension count and a weight that is not finite and positive")
+        void invalidInputs(int dimensions, double weight, String message) {
+            var points = new float[]{1, 0, 0, 1};
+            assertThatThrownBy(() -> KMeans.fit(points, new double[]{1, weight}, dimensions, 1, 0))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining(message);
+        }
+
+        static Stream<Arguments> invalidInputCases() {
+            return Stream.of(
+                    Arguments.of(0, 1, "dimensions must be positive"),
+                    Arguments.of(-2, 1, "dimensions must be positive"),
+                    Arguments.of(2, 0, "weights must be finite and positive"),
+                    Arguments.of(2, -1, "weights must be finite and positive"),
+                    Arguments.of(2, Double.NaN, "weights must be finite and positive"),
+                    Arguments.of(2, Double.POSITIVE_INFINITY, "weights must be finite and positive"),
+                    Arguments.of(2, Double.NEGATIVE_INFINITY, "weights must be finite and positive"));
+        }
 
         @Test
         @DisplayName("k equal to the number of points: duplicate points share a group, every other point has its own")
