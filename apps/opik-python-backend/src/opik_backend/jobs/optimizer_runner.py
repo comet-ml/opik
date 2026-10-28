@@ -188,7 +188,7 @@ def _log_dropped_once(message, names, logged):
         logged.update(new)
     if new:
         # Names only: values can be credentials or URLs.
-        logger.warning(f"{message}: {_name_sample(names)}")
+        logger.warning(f"{message}: {_name_sample(new)}")
 
 
 def route_litellm_calls_through_gateway(workspace_name):

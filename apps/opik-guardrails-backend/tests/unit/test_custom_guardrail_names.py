@@ -17,6 +17,9 @@ INVALID_BASE_MODELS = [
     "./local-model",
     "Qwen/../other",
     "a/b/c",
+    "org/model--x",
+    "org/model.",
+    "org/model-",
     "",
 ]
 VALID_BASE_MODELS = ["Qwen/Qwen2.5-1.5B-Instruct", "gpt2", "meta-llama/Llama-3.2-1B"]

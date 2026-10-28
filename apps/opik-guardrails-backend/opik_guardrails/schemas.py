@@ -2,15 +2,11 @@ from typing import List, Optional, Dict, Any, Literal
 
 import enum
 import re
+import huggingface_hub.utils
 import pydantic
 
 # A name stored under the adapters directory: no separators, and not "." or "..", so it stays inside it.
 MODEL_NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
-# A Hugging Face Hub repo id, "name" or "namespace/name": a base model given in a request comes only from the
-# configured hub.
-_HUB_REPO_ID_PATTERN = re.compile(
-    r"^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)?$"
-)
 
 
 class ValidationType(str, enum.Enum):
@@ -101,10 +97,13 @@ class CustomGuardrailTrainingRequest(pydantic.BaseModel):
     @pydantic.field_validator("base_model")
     @classmethod
     def _hub_repo_id(cls, value: str) -> str:
-        if len(value) > 96 or ".." in value or not _HUB_REPO_ID_PATTERN.match(value):
+        # The Hub's own rules, so the base model a request gives comes only from the configured hub.
+        try:
+            huggingface_hub.utils.validate_repo_id(value)
+        except huggingface_hub.utils.HFValidationError:
             raise ValueError(
                 "base_model must be a Hugging Face Hub repo id, such as 'Qwen/Qwen2.5-1.5B-Instruct'"
-            )
+            ) from None
         return value
 
 

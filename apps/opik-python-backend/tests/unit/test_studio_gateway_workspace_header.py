@@ -270,6 +270,17 @@ class TestModelParameterAllowlist:
         assert [r.getMessage() for r in caplog.records] == [
             f"Dropped model parameters not passed to the gateway: {len(REROUTING_PARAMS)} ({expected_sample}, ...)"]
 
+    def test_a_later_call_logs_only_the_names_not_logged_before(self, fake_litellm, gateway_env, caplog):
+        route_litellm_calls_through_gateway("my-workspace")
+
+        with caplog.at_level(logging.WARNING, logger=optimizer_runner.__name__):
+            fake_litellm.completion(model="openai/m", messages=[], fallbacks=[])
+            fake_litellm.completion(model="openai/m", messages=[], fallbacks=[], model_list=[])
+
+        assert [r.getMessage() for r in caplog.records] == [
+            "Dropped model parameters not passed to the gateway: 1 ('fallbacks')",
+            "Dropped model parameters not passed to the gateway: 1 ('model_list')"]
+
     def test_escapes_line_breaks_in_dropped_names(self, fake_litellm, gateway_env, caplog):
         route_litellm_calls_through_gateway("my-workspace")
 
