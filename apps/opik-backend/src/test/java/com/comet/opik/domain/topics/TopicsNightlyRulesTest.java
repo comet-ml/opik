@@ -68,7 +68,7 @@ class TopicsNightlyRulesTest {
                      "merge": [[1, 2], [1, 1], [1]],
                      "retire": [3, 9],
                      "redefine": [{"id": 1, "definition": "  Both A and B. "}, {"id": 2, "definition": "gone"}]}
-                    """), shown(state), Set.of(0, 1), true, 10);
+                    """), List.of(prompt(1, 0, 0.1), prompt(2, 1, 0.1), small(3, 2)), Set.of(0, 1), true, 10);
 
             assertThat(map).containsExactly(Map.entry(0, 0), Map.entry(1, ReviseApplier.OTHER));
             assertThat(state.topic(0).getPrototypes()).containsExactly(EAST, NORTH);
@@ -77,6 +77,19 @@ class TopicsNightlyRulesTest {
             assertThat(state.topic(1).getRetiredReason()).isEqualTo(RetiredReason.MERGED);
             assertThat(state.topic(2).getRetiredReason()).isEqualTo(RetiredReason.REVIEW);
             assertThat(state.live()).containsExactly(0);
+        }
+
+        @Test
+        @DisplayName("a review does not retire a topic with a 2% share, overall or in the last 7 days")
+        void reviewKeepsTopicsWithTraffic() {
+            var state = state(0, topic("A"), topic("B"), topic("C"));
+            var shown = List.of(prompt(1, 0, 0.4), share(2, 1, 0.01, 0.03), small(3, 2));
+            ReviseApplier.apply(state, json("""
+                    {"retire": [1, 2, 3]}
+                    """), shown, Set.of(), true, 10);
+
+            assertThat(state.live()).containsExactly(0, 1);
+            assertThat(state.topic(2).getRetiredReason()).isEqualTo(RetiredReason.REVIEW);
         }
 
         @Test
@@ -598,6 +611,17 @@ class TopicsNightlyRulesTest {
         var out = new LinkedHashMap<Integer, TopicPrompts.PromptTopic>();
         shown(state).forEach(topic -> out.put(topic.topic(), topic));
         return out;
+    }
+
+    /** A prompt topic under the 2% bar, overall and in the last 7 days: a review may retire it. */
+    private static TopicPrompts.PromptTopic small(int id, int topic) {
+        return share(id, topic, 0.01, 0.01);
+    }
+
+    private static TopicPrompts.PromptTopic share(int id, int topic, double share, double recentShare) {
+        var base = prompt(id, topic, recentShare);
+        return new TopicPrompts.PromptTopic(id, topic, base.name(), base.definition(), share, recentShare,
+                base.examples());
     }
 
     private static TopicPrompts.PromptTopic prompt(int id, int topic, double recentShare) {

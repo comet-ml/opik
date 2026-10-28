@@ -371,7 +371,8 @@ their prototypes, the known-Other prototypes, `rebuilds`), then:
 5. Qwen is called only when there is a big candidate or it is a review night. Most nights make no call.
    - `revise` (`revise_v4.md`, or `revise_review_v4.md` on review nights): assign candidates to topics, create new
      topics (not when the list holds 10), send candidates to Other; on review nights also merge, retire and redefine
-     topics. A failed revise fails the run.
+     topics. A review never retires a topic with a 2% share or more (overall or in the last 7 days): such a topic
+     can only be merged or redefined. A failed revise fails the run.
    - `verify` (`verify_batch.md`): one call checks every candidate given to a topic. A rejected or unanswered pair is
      undone. An unreadable verify answer undoes every pair and the run goes on. A failed verify call fails the run:
      read as "no pair verified", it would turn sound assigns into forced births.

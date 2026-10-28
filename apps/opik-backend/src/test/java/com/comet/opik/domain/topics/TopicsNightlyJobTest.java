@@ -289,7 +289,7 @@ class TopicsNightlyJobTest {
     }
 
     @Test
-    @DisplayName("a review night retires a topic, a planted theme becomes a topic, and every column is saved")
+    @DisplayName("a review night merges two topics, keeps a big topic Qwen retires, births the planted theme, saves every column")
     void nightlyUpdate() {
         var workspaceId = enabledWorkspace();
         var projectId = firstBuilt(workspaceId);
@@ -297,7 +297,9 @@ class TopicsNightlyJobTest {
         forceReview(projectId);
         plant(workspaceId, projectId, PLANTED);
         var revise = InferenceJson.MAPPER.createObjectNode();
+        // Topic 1 holds far more than 2% of the window: the review keeps it. Topic 2 is merged into it.
         revise.putArray("retire").add(1);
+        revise.putArray("merge").addArray().add(1).add(2);
         var clusters = revise.putArray("new").addObject().put("name", "Tire Pressure Checks")
                 .put("definition", "Asks whether the car's tires need air.").putArray("clusters");
         for (int j = 0; j < 20; j++) {
@@ -314,20 +316,22 @@ class TopicsNightlyJobTest {
         assertThat(stats.path("review_night").asBoolean()).isTrue();
         assertThat(stats.path("review").asBoolean()).isTrue();
         assertThat(stats.path("candidates").asInt()).isPositive();
-        assertThat(stats.path("retired").path("review").asInt()).isEqualTo(1);
+        assertThat(stats.path("retired").path("review").asInt()).isZero();
+        assertThat(stats.path("retired").path("merged").asInt()).isEqualTo(1);
         assertThat(items(stats.path("born"))).extracting(JsonNode::asText).contains("Tire Pressure Checks");
         assertThat(stats.path("churn").isNumber()).isTrue();
         assertThat(stats.path("qwen").findValuesAsText("kind")).startsWith("revise", "verify");
 
-        var retiredId = before.getFirst().id();
+        var keptId = before.getFirst().id();
+        var retiredId = before.get(1).id();
         var retired = allTopics(projectId).stream().filter(topic -> topic.id().equals(retiredId)).findFirst()
                 .orElseThrow();
         assertThat(retired.retiredAt()).isEqualTo(secondNight());
-        assertThat(retired.retiredReason()).isEqualTo("review");
-        assertThat(retired.name()).isEqualTo(before.getFirst().name());
+        assertThat(retired.retiredReason()).isEqualTo("merged");
+        assertThat(retired.name()).isEqualTo(before.get(1).name());
 
         var live = topics(projectId);
-        assertThat(live).extracting(Topic::id).doesNotContain(retiredId);
+        assertThat(live).extracting(Topic::id).contains(keptId).doesNotContain(retiredId);
         assertThat(live).hasSizeLessThanOrEqualTo(TopicsRebuildService.MAX_TOPICS);
         assertThat(live).filteredOn(topic -> topic.name().equals("Tire Pressure Checks")).singleElement()
                 .satisfies(topic -> {

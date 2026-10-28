@@ -17,7 +17,8 @@ import java.util.stream.Collectors;
  * Step g of the nightly update: applies the revise answer to the night's state, as the stand's {@code apply_revise}
  * (v4), in this order: {@code assign} (the group is a candidate, the topic is live, the group not mapped yet); on review
  * nights {@code merge} (both live and distinct: the dropped topic's mapped groups and prototypes go to the kept one, the
- * dropped one is retired), {@code retire} (its mapped groups go to Other) and {@code redefine} (the definition is
+ * dropped one is retired), {@code retire} (its mapped groups go to Other; a topic with a 2% share or more, overall or
+ * in the last 7 days, is kept: not in the stand) and {@code redefine} (the definition is
  * replaced, the name kept); then {@code new} (catch-all names skipped; the groups must be candidates and unmapped;
  * skipped when the list holds {@code maxTopics}); then {@code other}. Topic ids in the answer are the prompt's ids.
  *
@@ -72,6 +73,11 @@ public class ReviseApplier {
             }
             for (var id : integers(answer.get("retire"))) {
                 var topic = id == null ? null : live(byPromptId.get(id), state);
+                // Not in the stand: a topic with a real share is never retired by a review (merge or redefine it).
+                // Qwen retired both topics of a project holding 96% of its traffic; the stand never review-retired one.
+                if (topic != null && holdsTraffic(promptTopics, id)) {
+                    continue;
+                }
                 if (topic != null) {
                     map.replaceAll((group, mapped) -> mapped.equals(topic) ? OTHER : mapped);
                     state.retire(topic, RetiredReason.REVIEW);
@@ -159,5 +165,11 @@ public class ReviseApplier {
             });
         }
         return out;
+    }
+
+    /** True when the prompt topic's share, overall or in the last 7 days, is at least the candidates' 2% bar. */
+    private static boolean holdsTraffic(List<TopicPrompts.PromptTopic> promptTopics, int id) {
+        return promptTopics.stream().filter(topic -> topic.id() == id).anyMatch(
+                topic -> Math.max(topic.share(), topic.recentShare()) >= NightlyUpdate.BIG_SHARE);
     }
 }
