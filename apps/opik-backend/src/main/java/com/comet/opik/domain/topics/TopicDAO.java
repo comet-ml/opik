@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * A project's topic list: {@code topics}, {@code topic_prototypes} and {@code topic_project_state}. A nightly run writes
+ * A project's topic list: {@code topics}, {@code topic_prototypes} and {@code topic_project_states}. A nightly run writes
  * all three in its save transaction. An empty id list matches nothing.
  */
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
@@ -52,7 +52,7 @@ public interface TopicDAO {
     List<TopicPrototype> findPrototypes(@Bind("projectId") UUID projectId);
 
     @SqlUpdate("""
-            INSERT INTO topic_project_state (project_id, workspace_id, rebuilds, first_built_at, last_run_id,
+            INSERT INTO topic_project_states (project_id, workspace_id, rebuilds, first_built_at, last_run_id,
                 last_success_at, window_until)
             VALUES (:projectId, :workspaceId, :rebuilds, :firstBuiltAt, :lastRunId, :lastSuccessAt, :windowUntil)
             ON DUPLICATE KEY UPDATE rebuilds = VALUES(rebuilds), first_built_at = VALUES(first_built_at),
@@ -61,7 +61,7 @@ public interface TopicDAO {
             """)
     void upsertState(@BindMethods TopicProjectState state);
 
-    @SqlQuery("SELECT * FROM topic_project_state WHERE project_id IN (<projectIds>)")
+    @SqlQuery("SELECT * FROM topic_project_states WHERE project_id IN (<projectIds>)")
     List<TopicProjectState> findStates(
             @BindList(value = "projectIds", onEmpty = BindList.EmptyHandling.NULL_STRING) Collection<UUID> projectIds);
 }

@@ -278,7 +278,7 @@ or to Other. It writes:
 |---|---|---|
 | `topics` | MySQL | One row per topic: name, definition, `born` (the night), `size` (window traces). |
 | `topic_prototypes` | MySQL | The vectors traces are assigned by, several per topic, and the known-Other ones (`topic_id` null). |
-| `topic_project_state` | MySQL | One row per project with a saved list: `rebuilds`, `last_run_id`, `window_until`. |
+| `topic_project_states` | MySQL | One row per project with a saved list: `rebuilds`, `last_run_id`, `window_until`. |
 | `topic_runs` | MySQL | One row per run: `running`, then `saved` or `failed` with `error_code`. Kept 90 days. |
 | `trace_topics` | ClickHouse | One row per window trace and run: its `topic_id`, the all-zeros id for Other. The latest row wins. |
 
@@ -355,23 +355,38 @@ GROUP BY topic_id
 ORDER BY traces DESC;
 ```
 
-Each run logs at INFO, by run id: the author prompt, Qwen's raw answer with its token counts, and one line with the
-window, vectors, unique texts, k, seed, the topics with their sizes, the Other share and the phase timings. Search the
-logs for `Topics run '<run_id>'`.
+Each run logs at INFO, by run id: Qwen's token counts, and one line with the window, vectors, unique texts, k, seed,
+the topics with their sizes, the Other share and the phase timings. The author prompt and Qwen's raw answer hold
+trace-derived text, so they are logged at DEBUG only (logger `com.comet.opik.domain.topics.TopicsRebuildService`).
+Search the logs for `Topics run '<run_id>'`.
 
-### Running a project by hand
+### Running by hand
 
-To build a project now instead of waiting for the night, call the internal endpoint from inside the cluster:
+Two internal endpoints start work now instead of waiting for the night. Call them from inside the cluster. Both answer
+`501` when `TOPICS_ENABLED` is off and `409` when `TOPICS_NIGHTLY_ENABLED` is off. Both take `&night=yyyy-MM-dd`
+(`?night=` for the night endpoint): the night is today (UTC) by default, so the window ends at today's start. `night`
+is at most tomorrow, whose window holds today's traces so far.
+
+**One project.** The night's rules apply: the workspace is opted in to topics, and the project's window holds at least
+`TOPICS_NIGHTLY_MIN_VECTORS` vectors. Only one run by hand goes at a time across the cluster.
 
 ```bash
-curl -X POST "http://<opik-backend>:8080/v1/internal/topics/projects/<project_id>/rebuild?workspace_id=<workspace_id>"
+curl -X POST "http://<opik-backend>:8080/v1/internal/topics/projects/<project_id>/run?workspace_id=<workspace_id>"
 ```
 
-It answers `202` with the `run_id`, and the run goes on in the background with the same timeout; read its outcome in
-`topic_runs`. The night is today (UTC), so the window ends at today's start. Add `&night=yyyy-MM-dd` for another
-night's window; `night` is at most tomorrow, whose window holds today's traces so far. It answers `409` when a run of the project
-is in progress, or the project already has a list (stage 2a builds a project once), and `501` when `TOPICS_ENABLED` is
-off. It does not check the workspace's ai-labels opt-in or `TOPICS_NIGHTLY_MIN_VECTORS`.
+It answers `202` with the `run_id`. The run goes on in the background with the same timeout; read its outcome in
+`topic_runs`. It answers `409` when the workspace is not opted in, the window is too small (or the project is not the
+workspace's), a run of the project or another run by hand is in progress, or the project already has a list.
+
+**A whole night.** It runs every eligible project, as the scheduled job does, under the same night lock. The lock is
+released when the night ends, so the scheduled job is skipped only while a night started by hand is still running.
+
+```bash
+curl -X POST "http://<opik-backend>:8080/v1/internal/topics/nights/run"
+```
+
+It answers `202` with the `night`, and `409` when a night is in progress. Each project's outcome is its `topic_runs`
+row.
 
 To build a project that already has a list again (for example after a bad first build), delete its list first. Its
 `trace_topics` rows stay until the new run replaces them:
@@ -380,7 +395,7 @@ To build a project that already has a list again (for example after a bad first 
 -- MySQL: forget a project's list, so the next night (or the endpoint) builds it again
 DELETE FROM topics WHERE project_id = '<project_id>';
 DELETE FROM topic_prototypes WHERE project_id = '<project_id>';
-DELETE FROM topic_project_state WHERE project_id = '<project_id>';
+DELETE FROM topic_project_states WHERE project_id = '<project_id>';
 ```
 
 ### What to watch

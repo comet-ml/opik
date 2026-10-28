@@ -1,5 +1,6 @@
 package com.comet.opik.domain.topics;
 
+import com.comet.opik.infrastructure.TopicsConfig;
 import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.Row;
 import jakarta.inject.Inject;
@@ -8,6 +9,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.lang.reflect.Array;
 import java.time.Instant;
@@ -34,27 +36,37 @@ public class TopicWindowDAO {
             """;
 
     /**
-     * The newest {@code :limit} traces of the window, each with its highest task version's text and vector. The caller
-     * orders them by time.
+     * The newest {@code :limit} traces of the window, each with its highest task version's text and vector. The keys
+     * are chosen first, without the vector and text columns, so a large window reads those only for the traces kept.
+     * The caller orders the rows by time.
      */
     private static final String READ_WINDOW = """
-            SELECT trace_id, trace_created_at, task_version, text, vector
-            FROM (
-                SELECT trace_id, trace_created_at, task_version, text, vector
+            WITH keys AS (
+                SELECT trace_id, max(task_version) AS task_version, max(trace_created_at) AS created_at
                 FROM topic_vectors
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 AND trace_created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
                 AND trace_created_at \\< fromUnixTimestamp64Micro(:to_micros, 'UTC')
-                ORDER BY workspace_id, project_id, trace_id, task_version DESC, updated_at DESC
-                LIMIT 1 BY workspace_id, project_id, trace_id
+                GROUP BY trace_id
+                ORDER BY created_at DESC, trace_id DESC
+                LIMIT :limit
             )
-            ORDER BY trace_created_at DESC, trace_id DESC
-            LIMIT :limit
-            SETTINGS max_threads = 2, max_execution_time = <max_execution_time>, log_comment = '<log_comment>'
+            SELECT trace_id, trace_created_at, task_version, text, vector
+            FROM topic_vectors
+            WHERE workspace_id = :workspace_id
+            AND project_id = :project_id
+            AND trace_created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
+            AND trace_created_at \\< fromUnixTimestamp64Micro(:to_micros, 'UTC')
+            AND (trace_id, task_version) IN (SELECT trace_id, task_version FROM keys)
+            ORDER BY trace_id, updated_at DESC
+            LIMIT 1 BY trace_id
+            SETTINGS max_threads = 2, max_execution_time = <max_execution_time>, max_rows_to_read = <max_rows_to_read>,
+                max_memory_usage = <max_memory_usage>, log_comment = '<log_comment>'
             """;
 
     private final @NonNull ConnectionFactory connectionFactory;
+    private final @NonNull @Config("topics") TopicsConfig config;
 
     /** Per project of the workspace, the traces with a vector created in {@code [from, to)}. */
     public Flux<ProjectCount> countByProject(@NonNull String workspaceId, @NonNull Instant from, @NonNull Instant to,
@@ -76,8 +88,12 @@ public class TopicWindowDAO {
     /** The newest {@code limit} traces of the project created in {@code [from, to)}, in no particular order. */
     public Flux<TopicWindowRow> readWindow(@NonNull String workspaceId, @NonNull UUID projectId,
             @NonNull Instant from, @NonNull Instant to, int limit, long maxExecutionSeconds) {
+        // The guards of the vectors job's window read: validated config numbers, never input.
+        var find = config.getVectors().getFind();
         var template = getSTWithLogComment(READ_WINDOW, "topics:read_window", workspaceId, null,
                 "project_id=%s, from=%s, to=%s, limit=%d".formatted(projectId, from, to, limit))
+                .add("max_rows_to_read", find.getMaxRowsToRead())
+                .add("max_memory_usage", find.getMaxMemoryUsage())
                 .add("max_execution_time", maxExecutionSeconds);
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> connection.createStatement(template.render())

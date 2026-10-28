@@ -1,6 +1,6 @@
 --liquibase formatted sql
---changeset yaroslavb:000113_create_topics_tables
---comment: Create topics, topic_prototypes, topic_project_state and topic_runs: a project's topic list and the nightly runs that build it (OPIK-8987)
+--changeset yaroslavb:000114_create_topics_tables
+--comment: Create topics, topic_prototypes, topic_project_states and topic_runs: a project's topic list and the nightly runs that build it (OPIK-8987)
 
 -- One row per topic a project's nightly run created. An id is never reused: a renamed or merged topic keeps its id, a
 -- retired one keeps its row with retired_at set. inactive_since, low_nights, lo7 and hi7 are the lifecycle streaks of
@@ -53,7 +53,7 @@ CREATE TABLE topic_prototypes
 
 -- One row per project with a saved run. rebuilds counts the saved nights and seeds the next run's k-means;
 -- window_until is the end of the last saved run's window.
-CREATE TABLE topic_project_state
+CREATE TABLE topic_project_states
 (
     project_id      CHAR(36)     NOT NULL,
     workspace_id    VARCHAR(150) NOT NULL,
@@ -94,6 +94,6 @@ CREATE TABLE topic_runs
   COLLATE = utf8mb4_unicode_ci;
 
 --rollback DROP TABLE IF EXISTS topic_runs;
---rollback DROP TABLE IF EXISTS topic_project_state;
+--rollback DROP TABLE IF EXISTS topic_project_states;
 --rollback DROP TABLE IF EXISTS topic_prototypes;
 --rollback DROP TABLE IF EXISTS topics;

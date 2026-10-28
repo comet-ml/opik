@@ -80,7 +80,7 @@ class TraceDeletedListenerTopicVectorsTest {
 
         listener.onTracesDeleted(event());
 
-        assertThat(deleted).containsExactly("trace_topics", "ai_labels", "ai_label_status", "spans");
+        assertThat(deleted).containsExactly("ai_labels", "ai_label_status", "trace_topics", "spans");
     }
 
     @Test
@@ -91,7 +91,7 @@ class TraceDeletedListenerTopicVectorsTest {
 
         listener.onTracesDeleted(event());
 
-        assertThat(deleted).containsExactly("topic_vectors", "ai_labels", "ai_label_status", "spans");
+        assertThat(deleted).containsExactly("ai_labels", "ai_label_status", "topic_vectors", "spans");
     }
 
     private Mono<Void> record(String table) {

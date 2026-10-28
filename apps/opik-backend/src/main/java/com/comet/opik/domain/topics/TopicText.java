@@ -57,6 +57,21 @@ public class TopicText {
         return text.substring(start, end);
     }
 
+    /** The most characters a topic name keeps: {@code topics.name} is {@code VARCHAR(255)}. */
+    public static final int MAX_NAME_LENGTH = 255;
+
+    /**
+     * A topic name as stored: {@link #pythonStrip(String)}, then cut to {@value #MAX_NAME_LENGTH} code points so an
+     * over-long answer can't fail the save. Names that short never differ from the stand's.
+     */
+    public static String name(@NonNull String text) {
+        var stripped = pythonStrip(text);
+        if (stripped.codePointCount(0, stripped.length()) <= MAX_NAME_LENGTH) {
+            return stripped;
+        }
+        return pythonStrip(stripped.substring(0, stripped.offsetByCodePoints(0, MAX_NAME_LENGTH)));
+    }
+
     /** {@code str.isspace()} for one code point: bidi class WS, B or S, or category Zs. */
     static boolean isPythonSpace(int cp) {
         return Character.isWhitespace(cp) || Character.getType(cp) == Character.SPACE_SEPARATOR || cp == 0x85;

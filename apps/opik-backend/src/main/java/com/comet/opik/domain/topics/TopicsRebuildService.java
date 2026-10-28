@@ -192,7 +192,8 @@ public class TopicsRebuildService {
 
             var groups = GroupSummaries.summarize(texts, vectors, groupOf, fit.centres(), recent, DIMENSIONS);
             var prompt = TopicPrompts.author(groups, MAX_TOPICS);
-            log.info("Topics run '{}' author prompt, project '{}':\n{}", runId, projectId, prompt);
+            // The prompt and the answer hold trace-derived text: DEBUG only, never in production logs by default.
+            log.debug("Topics run '{}' author prompt, project '{}':\n{}", runId, projectId, prompt);
             var answer = timed("qwen", () -> author(prompt));
             var applied = AuthorApplier.apply(answer, groups, MAX_TOPICS);
 
@@ -277,8 +278,10 @@ public class TopicsRebuildService {
             }
             var output = response.result().output();
             log.info("Topics run '{}' author answer, project '{}', input tokens '{}', output tokens '{}', cache hit "
-                    + "'{}':\n{}", runId, projectId, response.usage().inputTokens(), response.usage().outputTokens(),
-                    response.cacheHit(), output == null ? "null" : InferenceJson.canonical(output));
+                    + "'{}'", runId, projectId, response.usage().inputTokens(), response.usage().outputTokens(),
+                    response.cacheHit());
+            log.debug("Topics run '{}' author answer, project '{}':\n{}", runId, projectId,
+                    output == null ? "null" : InferenceJson.canonical(output));
             stats.put("qwen_input_tokens", response.usage().inputTokens());
             stats.put("qwen_output_tokens", response.usage().outputTokens());
             stats.put("qwen_cache_hit", response.cacheHit());
@@ -379,6 +382,22 @@ public class TopicsRebuildService {
             }
         }
 
+        /**
+         * Deletes the trace_topics rows of a run whose MySQL save did not commit. Best effort: a row left behind
+         * belongs to a run that never saved, and readers keep only rows of saved runs.
+         */
+        private void takeBack(boolean inserted) {
+            if (!inserted) {
+                return;
+            }
+            try {
+                traceTopicsDAO.deleteByRunId(workspaceId, projectId, runId).block();
+            } catch (RuntimeException exception) {
+                log.warn("Topics run '{}' could not delete its trace_topics rows after a failed save, project '{}'",
+                        runId, projectId, exception);
+            }
+        }
+
         private void save(List<TopicWindowRow> rows, int[] labels, List<Topic> topics,
                 List<TopicPrototype> prototypes) {
             var traceTopics = new ArrayList<TraceTopic>(rows.size());
@@ -394,8 +413,10 @@ public class TopicsRebuildService {
                         .build());
             }
             var statsJson = stats.toString();
+            boolean inserted = false;
             try {
                 traceTopicsDAO.insert(traceTopics).block();
+                inserted = true;
                 var now = Instant.now();
                 template.inTransaction(WRITE, handle -> {
                     var topicDAO = handle.attach(TopicDAO.class);
@@ -422,8 +443,10 @@ public class TopicsRebuildService {
                     return null;
                 });
             } catch (TopicsRunException exception) {
+                takeBack(inserted);
                 throw exception;
             } catch (RuntimeException exception) {
+                takeBack(inserted);
                 throw new TopicsRunException(Code.SAVE, "the save failed", exception);
             }
             metrics.run(TopicRun.Status.SAVED, null);
