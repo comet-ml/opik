@@ -50,4 +50,17 @@ public class FeatureFlags {
         }
     }
 
+    public boolean isGuardrailsValidationsEnabled() {
+        return config.getServiceToggles() != null && config.getServiceToggles().isGuardrailsValidationsEnabled();
+    }
+
+    /**
+     * @throws ForbiddenException if the guardrails feature is not enabled
+     */
+    public void checkGuardrailsValidationsEnabled() {
+        if (!isGuardrailsValidationsEnabled()) {
+            log.warn("Guardrails validation service is disabled, returning 403");
+            throw new ForbiddenException("Guardrails validation service is not enabled");
+        }
+    }
 }

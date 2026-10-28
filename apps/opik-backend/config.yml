@@ -1926,6 +1926,9 @@ serviceToggles:
   # Description: Whether or not Guardrails feature is enabled
   guardrailsEnabled: ${TOGGLE_GUARDRAILS_ENABLED:-"false"}
   # Default: false
+  # Description: Whether or not the backend's own guardrails are enabled, starting with the guardrail policies API
+  guardrailsValidationsEnabled: ${TOGGLE_GUARDRAILS_VALIDATIONS_ENABLED:-"false"}
+  # Default: false
   # Description: Whether or not to enable the trace thread Python evaluator
   traceThreadPythonEvaluatorEnabled: ${TOGGLE_TRACE_THREAD_PYTHON_EVALUATOR_ENABLED:-"true"}
   # Default: false

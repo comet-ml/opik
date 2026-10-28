@@ -100,7 +100,15 @@ class RequiredPermissionsCoverageArchTest {
             // already decided that by the time the handler runs, so the body only echoes the outcome. Demanding
             // a permission to ask the question would be circular — and would change a 204 into a 403 that means
             // the opposite of what the caller asked.
-            "AuthenticationResource.checkAccess");
+            "AuthenticationResource.checkAccess",
+            // Guardrail policies: any workspace member creates and edits them, as the design decided; there is no
+            // guardrails role. The gate is the backend guardrails feature (serviceToggles.guardrailsValidationsEnabled),
+            // with the organization's guardrails enablement to follow. retrieve is read-shaped: the SDK loads the
+            // policies of every check with the API key of whoever runs the agent.
+            "GuardrailPoliciesResource.createGuardrailPolicy",
+            "GuardrailPoliciesResource.updateGuardrailPolicy",
+            "GuardrailPoliciesResource.deleteGuardrailPoliciesBatch",
+            "GuardrailPoliciesResource.retrieveGuardrailPolicies");
 
     /**
      * How many unannotated mutating endpoints existed when this rule landed. A fact about history, so it only
