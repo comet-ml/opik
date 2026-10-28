@@ -526,10 +526,12 @@ class OnlineScoringEngineTest {
 
         var captor = ArgumentCaptor.forClass(List.class);
         Mockito.doReturn(Mono.empty()).when(feedbackScoreService).scoreBatchOfTraces(Mockito.any());
-        var providerErrorMessage = "LLM provider XXXXX";
+        var providerErrorMessage = "LLM provider %s".formatted(RandomStringUtils.secure().nextAlphanumeric(16));
 
         Mockito.doThrow(
-                new InternalServerErrorException(ChatCompletionService.UNEXPECTED_ERROR_CALLING_LLM_PROVIDER,
+                // the provider's text both in the message and in the cause
+                new InternalServerErrorException("%s: %s".formatted(
+                        ChatCompletionService.UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, providerErrorMessage),
                         new RuntimeException(providerErrorMessage)))
                 .when(aiProxyService).scoreTrace(Mockito.any(), Mockito.any(), Mockito.any());
 
@@ -541,11 +543,14 @@ class OnlineScoringEngineTest {
 
         //Check user facing logs
         var logPage = evaluatorsResourceClient.getLogs(id, WORKSPACE_NAME, API_KEY);
-        var logMessage = "Unexpected error while scoring traceId '%s' with rule '%s': %n%n%s".formatted(traceId,
-                evaluator.getName(), providerErrorMessage);
+        // the root error type only, never the provider's text anywhere in the chain
+        var logMessage = "Unexpected error while scoring traceId '%s' with rule '%s', error type '%s'"
+                .formatted(traceId, evaluator.getName(), "RuntimeException");
 
         assertThat(logPage.content())
-                .anyMatch(logItem -> logItem.level().equals(LogLevel.ERROR) && logItem.message().contains(logMessage));
+                .anyMatch(
+                        logItem -> logItem.level().equals(LogLevel.ERROR) && logItem.message().startsWith(logMessage));
+        assertThat(logPage.content()).noneMatch(logItem -> logItem.message().contains(providerErrorMessage));
     }
 
     @Test

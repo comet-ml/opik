@@ -785,6 +785,72 @@ llmProviderClient:
   # Default: false
   # Description: Whether or not to log responses
   logResponses: false
+  # Default: strict
+  # Values: ['strict', 'relaxed']
+  #   - strict: provider base URLs must be http(s) and resolve only to public addresses
+  #   - relaxed: no destination restrictions, for deployments whose providers run on internal networks
+  # Description: Destination policy for user-configured LLM provider base URLs
+  # Tests point providers at local mock servers
+  destinationGuard: relaxed
+  # Default: plaintext_or_tls
+  # Values: ['plaintext_or_tls', 'https_only']
+  #   - plaintext_or_tls: http and https, as self-hosted model servers commonly run without TLS
+  #   - https_only: https only
+  # Description: Schemes allowed for user-configured LLM provider base URLs, checked in strict mode only
+  destinationScheme: plaintext_or_tls
+  # Default: strict
+  # Values: ['strict', 'relaxed']
+  #   - strict: media URLs must be http(s) and resolve only to public addresses
+  #   - relaxed: no destination restrictions
+  # Description: Destination policy for media URLs in a caller's message or in trace data: the HEAD request that
+  #   detects the MIME type of an extensionless video URL, and the download of the image, audio, video and PDF URLs
+  #   that Gemini and Vertex AI receive as inline data
+  videoUrlDestinationGuard: strict
+  # Default: plaintext_or_tls
+  # Values: ['plaintext_or_tls', 'https_only']
+  #   - plaintext_or_tls: http and https
+  #   - https_only: https only
+  # Description: Schemes allowed for the image, audio, video and PDF URLs that Gemini and Vertex AI receive as inline
+  #   data, checked in strict mode only; a URL that isn't http or https is refused in every mode
+  mediaUrlDestinationScheme: plaintext_or_tls
+  # Default: 30s
+  # Description: Time allowed for downloading one media URL that Gemini or Vertex AI receives as inline data,
+  #   connecting included; at most 5m
+  mediaDownloadTimeout: 30s
+  # Default: 20MB
+  # Description: Most bytes downloaded for all the media of one Gemini or Vertex AI request, which carries at most
+  #   20 MB of inline data; at most 100MB
+  mediaDownloadMaxSize: 20MB
+  # Default: 300
+  # Description: Longest provider error message passed on to a caller. Provider error messages are one or two
+  #   sentences; a longer, multi-line or markup-bearing message is replaced by "Unexpected error calling LLM provider";
+  #   at most 1000
+  providerErrorMessageMaxLength: 300
+  # Default: 64KB
+  # Description: Most bytes read from a custom provider's error response body; the rest is discarded, as only a
+  #   short message parsed from it reaches callers; at most 1MiB
+  providerErrorBodyMaxSize: 64KB
+  # Default: 120s
+  # Description: Longest a provider's stream may stay silent once its headers arrived; readTimeout bounds only the
+  #   wait for the headers. Above the 90s ingress idle timeout, as models that reason before answering can be silent
+  #   for a while; between 1s and 1h
+  streamReadTimeout: 120s
+  # Default: 1024
+  # Description: Most threads of the shared HTTP client for LLM provider calls. A call made asynchronously, a stream
+  #   included, holds one from start to end, so it must be at least httpClientMaxRequests; at most 10000
+  httpClientMaxThreads: 1024
+  # Default: 60s
+  # Description: How long an idle thread of the shared LLM HTTP client lives before it ends, so the pool shrinks
+  #   back after a burst; between 1s and 1h
+  httpClientThreadKeepAlive: 60s
+  # Default: 1024
+  # Description: Most LLM provider calls made asynchronously, streams included, that run at once on the shared
+  #   client. Further calls wait in order for one to end, and their timeouts start once they run; at most 10000
+  httpClientMaxRequests: 1024
+  # Default: 1024
+  # Description: Most of httpClientMaxRequests that run at once to a single host. Most calls go to a few hosts, such
+  #   as one provider's API, so it defaults to the overall limit and can't exceed it
+  httpClientMaxRequestsPerHost: 1024
   openAiClient:
     # See demo endpoint Langchain4j documentation: https://docs.langchain4j.dev/get-started
     # Not https but only used for testing purposes. It's fine as long as not sensitive data is sent.
@@ -813,6 +879,11 @@ llmProviderClient:
       global: https://aiplatform.googleapis.com
       eu: https://aiplatform.eu.rep.googleapis.com
       us: https://aiplatform.us.rep.googleapis.com
+    # Description: the only token_uri values a service-account key may carry. The credentials refresh by posting to it,
+    # and the key file is user-supplied, so any other value is refused.
+    tokenUris:
+      - https://oauth2.googleapis.com/token
+      - https://accounts.google.com/o/oauth2/token
 
 # Configuration for cache manager
 cacheManager:
@@ -1258,6 +1329,15 @@ webhook:
   # Default: relaxed
   # Description: Outbound destination policy for webhook URLs; tests target local mock servers
   destinationGuard: "relaxed"
+  # Default: plaintext_or_tls
+  # Values: ['plaintext_or_tls', 'https_only']
+  #   - plaintext_or_tls: http and https
+  #   - https_only: https only
+  # Description: Schemes allowed for webhook URLs, checked in strict mode only
+  destinationScheme: plaintext_or_tls
+  # Default: 512B
+  # Description: Maximum bytes read from a webhook response body, which is only logged; the rest is discarded (at most 64KiB)
+  responseBodyMaxSize: 512B
   # Default: 10
   # Description: Claim pending messages every N polling intervals
   claimIntervalRatio: 10

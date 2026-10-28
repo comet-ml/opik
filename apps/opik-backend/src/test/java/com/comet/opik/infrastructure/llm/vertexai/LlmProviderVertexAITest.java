@@ -3,6 +3,7 @@ package com.comet.opik.infrastructure.llm.vertexai;
 import com.comet.opik.TestConfigUtils;
 import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
+import com.comet.opik.infrastructure.llm.LlmTestClients;
 import com.google.genai.Client;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.StreamingChatModel;
@@ -34,7 +35,8 @@ class LlmProviderVertexAITest {
     private LlmProviderVertexAI providerStreaming(StreamingChatModel delegate, Client client) {
         var generator = mock(VertexAIClientGenerator.class);
         when(generator.newVertexAIStreamingClient(any(), any()))
-                .thenReturn(new CloseableVertexAiStreamingChatModel(delegate, client));
+                .thenReturn(
+                        new CloseableVertexAiStreamingChatModel(delegate, client, LlmTestClients.REMOTE_MEDIA_INLINER));
         return new LlmProviderVertexAI(generator,
                 LlmProviderClientApiConfig.builder().apiKey("key").configuration(Map.of()).build());
     }
@@ -44,7 +46,9 @@ class LlmProviderVertexAITest {
     void streamingBuildFailureNotifiesTheCaller() throws Exception {
         var configuration = TestConfigUtils.loadConfigTest();
         var generator = new VertexAIClientGenerator(configuration.getLlmProviderClient(),
-                new LlmModelRegistryService(configuration, mock(jakarta.ws.rs.client.Client.class)));
+                new LlmModelRegistryService(configuration, mock(jakarta.ws.rs.client.Client.class)),
+                LlmTestClients.REMOTE_MEDIA_INLINER,
+                LlmTestClients.VIDEO_MIME_TYPE_UTILS);
         // A malformed key makes the streaming client throw at build time, before the stream starts.
         var apiConfig = LlmProviderClientApiConfig.builder().apiKey("not-a-service-account").configuration(Map.of())
                 .build();
@@ -101,7 +105,7 @@ class LlmProviderVertexAITest {
         var client = mock(Client.class);
         var delegate = mock(StreamingChatModel.class, withSettings().extraInterfaces(AutoCloseable.class));
 
-        new CloseableVertexAiStreamingChatModel(delegate, client).close();
+        new CloseableVertexAiStreamingChatModel(delegate, client, LlmTestClients.REMOTE_MEDIA_INLINER).close();
 
         verify(client).close();
         verify((AutoCloseable) delegate).close();
@@ -113,7 +117,7 @@ class LlmProviderVertexAITest {
         var client = mock(Client.class);
         var delegate = mock(ChatModel.class, withSettings().extraInterfaces(AutoCloseable.class));
 
-        new CloseableVertexAiChatModel(delegate, client).close();
+        new CloseableVertexAiChatModel(delegate, client, LlmTestClients.REMOTE_MEDIA_INLINER).close();
 
         verify(client).close();
         verify((AutoCloseable) delegate).close();

@@ -49,6 +49,9 @@ from .alert_write import AlertWrite
 from .alert_write_alert_type import AlertWriteAlertType
 from .analytics_query_response import AnalyticsQueryResponse
 from .annotation_queue import AnnotationQueue
+from .annotation_queue_annotator_view import AnnotationQueueAnnotatorView
+from .annotation_queue_annotator_view_public import AnnotationQueueAnnotatorViewPublic
+from .annotation_queue_annotator_view_write import AnnotationQueueAnnotatorViewWrite
 from .annotation_queue_automation import AnnotationQueueAutomation
 from .annotation_queue_automation_public import AnnotationQueueAutomationPublic
 from .annotation_queue_automation_write import AnnotationQueueAutomationWrite
@@ -441,7 +444,6 @@ from .guardrail_write_name import GuardrailWriteName
 from .guardrail_write_result import GuardrailWriteResult
 from .guardrails_validation import GuardrailsValidation
 from .guardrails_validation_public import GuardrailsValidationPublic
-from .ids_holder import IdsHolder
 from .image_url import ImageUrl
 from .image_url_public import ImageUrlPublic
 from .image_url_write import ImageUrlWrite
@@ -806,6 +808,9 @@ __all__ = [
     "AlertWriteAlertType",
     "AnalyticsQueryResponse",
     "AnnotationQueue",
+    "AnnotationQueueAnnotatorView",
+    "AnnotationQueueAnnotatorViewPublic",
+    "AnnotationQueueAnnotatorViewWrite",
     "AnnotationQueueAutomation",
     "AnnotationQueueAutomationPublic",
     "AnnotationQueueAutomationWrite",
@@ -1153,7 +1158,6 @@ __all__ = [
     "GuardrailWriteResult",
     "GuardrailsValidation",
     "GuardrailsValidationPublic",
-    "IdsHolder",
     "ImageUrl",
     "ImageUrlPublic",
     "ImageUrlWrite",

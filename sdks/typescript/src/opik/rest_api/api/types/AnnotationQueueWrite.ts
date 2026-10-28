@@ -17,4 +17,5 @@ export interface AnnotationQueueWrite {
     annotatorsPerItem?: number;
     lockTimeoutSeconds?: number;
     automation?: OpikApi.AnnotationQueueAutomationWrite;
+    annotatorView?: OpikApi.AnnotationQueueAnnotatorViewWrite;
 }

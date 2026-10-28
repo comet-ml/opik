@@ -89,6 +89,32 @@ class ExperimentsClient:
         )
         return _response.data
 
+    def cancel_experiments(
+        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
+        """
+        Stops the given experiments: queued items are skipped and the experiments are marked cancelled
+
+        Parameters
+        ----------
+        ids : typing.Sequence[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.experiments.cancel_experiments(ids=['ids'], )
+        """
+        _response = self._raw_client.cancel_experiments(ids=ids, request_options=request_options)
+        return _response.data
+
     def find_experiments(
         self,
         *,
@@ -357,8 +383,11 @@ class ExperimentsClient:
         dataset_id: str,
         dataset_version_id: typing.Optional[str] = OMIT,
         project_name: typing.Optional[str] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
         version_hash: typing.Optional[str] = OMIT,
         prompt_versions: typing.Optional[typing.Sequence[PromptVersionLink]] = OMIT,
+        selected_rule_ids: typing.Optional[typing.Sequence[str]] = OMIT,
+        filters: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> ExperimentExecutionResponse:
         """
@@ -376,9 +405,15 @@ class ExperimentsClient:
 
         project_name : typing.Optional[str]
 
+        project_id : typing.Optional[str]
+
         version_hash : typing.Optional[str]
 
         prompt_versions : typing.Optional[typing.Sequence[PromptVersionLink]]
+
+        selected_rule_ids : typing.Optional[typing.Sequence[str]]
+
+        filters : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -403,8 +438,11 @@ class ExperimentsClient:
             dataset_id=dataset_id,
             dataset_version_id=dataset_version_id,
             project_name=project_name,
+            project_id=project_id,
             version_hash=version_hash,
             prompt_versions=prompt_versions,
+            selected_rule_ids=selected_rule_ids,
+            filters=filters,
             request_options=request_options,
         )
         return _response.data
@@ -891,6 +929,35 @@ class AsyncExperimentsClient:
         )
         return _response.data
 
+    async def cancel_experiments(
+        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
+        """
+        Stops the given experiments: queued items are skipped and the experiments are marked cancelled
+
+        Parameters
+        ----------
+        ids : typing.Sequence[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.experiments.cancel_experiments(ids=['ids'], )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.cancel_experiments(ids=ids, request_options=request_options)
+        return _response.data
+
     async def find_experiments(
         self,
         *,
@@ -1174,8 +1241,11 @@ class AsyncExperimentsClient:
         dataset_id: str,
         dataset_version_id: typing.Optional[str] = OMIT,
         project_name: typing.Optional[str] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
         version_hash: typing.Optional[str] = OMIT,
         prompt_versions: typing.Optional[typing.Sequence[PromptVersionLink]] = OMIT,
+        selected_rule_ids: typing.Optional[typing.Sequence[str]] = OMIT,
+        filters: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> ExperimentExecutionResponse:
         """
@@ -1193,9 +1263,15 @@ class AsyncExperimentsClient:
 
         project_name : typing.Optional[str]
 
+        project_id : typing.Optional[str]
+
         version_hash : typing.Optional[str]
 
         prompt_versions : typing.Optional[typing.Sequence[PromptVersionLink]]
+
+        selected_rule_ids : typing.Optional[typing.Sequence[str]]
+
+        filters : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1223,8 +1299,11 @@ class AsyncExperimentsClient:
             dataset_id=dataset_id,
             dataset_version_id=dataset_version_id,
             project_name=project_name,
+            project_id=project_id,
             version_hash=version_hash,
             prompt_versions=prompt_versions,
+            selected_rule_ids=selected_rule_ids,
+            filters=filters,
             request_options=request_options,
         )
         return _response.data

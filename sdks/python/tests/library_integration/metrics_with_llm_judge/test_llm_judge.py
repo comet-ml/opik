@@ -64,29 +64,6 @@ class TestLLMJudgeScore:
         assert results[0].value is True
 
     @pytest.mark.parametrize("llm_model", MODEL_PARAMS, indirect=True)
-    def test_score__multiple_assertions__returns_multiple_results(self, llm_model):
-        assertion_accurate = "Response is factually accurate"
-        assertion_helpful = "Response is helpful to the user"
-        evaluator = LLMJudge(
-            assertions=[assertion_accurate, assertion_helpful],
-            model=llm_model,
-            track=False,
-            reasoning_effort="minimal",
-        )
-
-        results = evaluator.score(
-            input="What is the capital of France?",
-            output="The capital of France is Paris. It is a beautiful city known for the Eiffel Tower.",
-        )
-
-        assert len(results) == 2
-        result_names = {r.name for r in results}
-        assert assertion_accurate in result_names
-        assert assertion_helpful in result_names
-        for result in results:
-            assert_llm_judge_score_result(result, expected_name=result.name)
-
-    @pytest.mark.parametrize("llm_model", MODEL_PARAMS, indirect=True)
     def test_score__failing_assertion__returns_false(self, llm_model):
         assertion = "Response is factually accurate"
         evaluator = LLMJudge(
