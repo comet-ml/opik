@@ -1,11 +1,22 @@
 package com.comet.opik.domain.llm;
 
+import com.comet.opik.infrastructure.net.RefusedHostException;
+import dev.langchain4j.exception.HttpException;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
+
+import javax.net.ssl.SSLHandshakeException;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.net.ConnectException;
+import java.net.NoRouteToHostException;
+import java.net.SocketException;
 import java.net.SocketTimeoutException;
+import java.net.UnknownHostException;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -38,6 +49,49 @@ class ProviderFailuresTest {
         assertRedacted(actual.getCause(), inner);
         assertThat(actual.getCause().getCause()).isNull();
         assertThat(ProviderFailures.rootType(outer)).isEqualTo(IOException.class.getSimpleName());
+    }
+
+    static Stream<Throwable> aFailureToReachTheProviderKeepsItsMessage() {
+        return Stream.of(
+                new SocketException(RandomStringUtils.secure().nextAlphanumeric(20)),
+                new ConnectException(RandomStringUtils.secure().nextAlphanumeric(20)),
+                new NoRouteToHostException(RandomStringUtils.secure().nextAlphanumeric(20)),
+                new UnknownHostException(RandomStringUtils.secure().nextAlphanumeric(20)),
+                new SSLHandshakeException(RandomStringUtils.secure().nextAlphanumeric(20)));
+    }
+
+    /** What the JDK reports for a socket that can't connect is no text of the provider's, and names the cause. */
+    @ParameterizedTest
+    @MethodSource
+    void aFailureToReachTheProviderKeepsItsMessage(Throwable root) {
+        var failure = new UncheckedIOException(RandomStringUtils.secure().nextAlphanumeric(20), new IOException(root));
+        var expectedMessage = "%s: %s".formatted(root.getClass().getName(), root.getMessage());
+
+        var actual = ProviderFailures.redacted(failure);
+
+        assertRedacted(actual, failure);
+        assertThat(actual.getCause().getCause().getMessage()).isEqualTo(expectedMessage);
+        assertThat(ProviderFailures.redacted(actual).getCause().getCause().getMessage()).isEqualTo(expectedMessage);
+    }
+
+    static Stream<Throwable> anyOtherFailureDropsItsMessage() {
+        return Stream.of(
+                new HttpException(502, RandomStringUtils.secure().nextAlphanumeric(20)),
+                new RefusedHostException(RandomStringUtils.secure().nextAlphanumeric(20)),
+                new SocketTimeoutException(RandomStringUtils.secure().nextAlphanumeric(20)),
+                new IOException(RandomStringUtils.secure().nextAlphanumeric(20)));
+    }
+
+    /** A provider's reply and the destination guard's description of a host are never kept. */
+    @ParameterizedTest
+    @MethodSource
+    void anyOtherFailureDropsItsMessage(Throwable root) {
+        var failure = new IllegalStateException(RandomStringUtils.secure().nextAlphanumeric(20), root);
+
+        var actual = ProviderFailures.redacted(failure);
+
+        assertRedacted(actual, failure);
+        assertRedacted(actual.getCause(), root);
     }
 
     private static void assertRedacted(Throwable actual, Throwable expected) {

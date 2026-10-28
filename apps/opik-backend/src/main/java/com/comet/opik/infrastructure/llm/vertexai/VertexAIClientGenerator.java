@@ -3,6 +3,7 @@ package com.comet.opik.infrastructure.llm.vertexai;
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
+import com.comet.opik.infrastructure.http.OneShotRequestBodies;
 import com.comet.opik.infrastructure.llm.GeminiMaxOutputTokens;
 import com.comet.opik.infrastructure.llm.GeminiThinkingParams;
 import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
@@ -57,9 +58,11 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
 
     /**
      * The connection pool and dispatcher every Vertex AI call runs on, set up as the SDK sets up its own client: no
-     * connect, read or write timeout. Each call derives its own client from it, sharing both.
+     * connect, read or write timeout. A host's next address is tried when connecting to one fails, but OkHttp never
+     * sends a request twice, see {@link OneShotRequestBodies}. Each call derives its own client from it, sharing both.
      */
-    private final OkHttpClient baseHttpClient = new OkHttpClient.Builder()
+    private final OkHttpClient baseHttpClient = OneShotRequestBodies
+            .failOverWithoutResending(new OkHttpClient.Builder())
             .connectTimeout(Duration.ZERO)
             .readTimeout(Duration.ZERO)
             .writeTimeout(Duration.ZERO)

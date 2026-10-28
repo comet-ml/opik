@@ -2,6 +2,7 @@ package com.comet.opik.infrastructure.llm.openai;
 
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
+import com.comet.opik.infrastructure.http.OneShotRequestBodies;
 import com.comet.opik.infrastructure.llm.LlmServiceProvider;
 import com.comet.opik.infrastructure.llm.customllm.LlmHttpClientBuilders;
 import com.comet.opik.infrastructure.llm.customllm.StreamCallTimeouts;
@@ -30,16 +31,19 @@ public class OpenAIModule extends AbstractModule {
 
     /**
      * Replaces the OpenAI SDK's own transport, which follows redirects: they would take a request past the base URL
-     * check. Every connection is also resolved through the destination guard. It is shared by every Responses API
-     * client, none of which can close it, see {@link NonClosingHttpClient}.
+     * check. Every connection is also resolved through the destination guard, and a host's next address is tried when
+     * connecting to one fails, but OkHttp never sends a request twice, see {@link OneShotRequestBodies}. It is shared
+     * by every Responses API client, none of which can close it, see {@link NonClosingHttpClient}.
      */
     @Provides
     @Singleton
     public HttpClient responsesApiHttpClient(@NonNull @Config("llmProviderClient") LlmProviderClientConfig config) {
-        return new NonClosingHttpClient(new OkHttpClient(DestinationGuardDns.clientBuilder(DestinationGuard.builder()
+        var guard = DestinationGuard.builder()
                 .mode(config.getDestinationGuard())
                 .scheme(config.getDestinationScheme())
-                .build())
+                .build();
+        return new NonClosingHttpClient(new OkHttpClient(OneShotRequestBodies
+                .failOverWithoutResending(DestinationGuardDns.clientBuilder(guard))
                 .followRedirects(false)
                 .followSslRedirects(false)
                 // the read timeout bounds a call's headers, the longer of it and the stream read timeout those of a call
