@@ -276,7 +276,9 @@ class GuardrailPoliciesResourceTest {
                         "{\"restricted_topics\":[\"" + "a".repeat(257) + "\"]}")),
                         "rules[0].config.restricted_topics has a topic longer than 256 characters"),
                 Arguments.of(List.of(rule(GuardrailType.TOPIC, "{\"allowed_topics\":" + tooManyTopics + "}")),
-                        "rules[0].config.allowed_topics has more than 254 topics"));
+                        "rules[0].config.allowed_topics has more than 254 topics"),
+                Arguments.of(List.of(rule(GuardrailType.TOPIC, "{\"allowed_topics\":[\"Billing\",\"billing\"]}")),
+                        "rules[0].config.allowed_topics contains 'billing' more than once, ignoring case"));
     }
 
     @ParameterizedTest
@@ -307,6 +309,15 @@ class GuardrailPoliciesResourceTest {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
         }
         try (var response = request(workspace, "/retrieve").post(Entity.json(new GuardrailPolicyRetrieve(Set.of())))) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+        }
+        try (var response = request(workspace, "/" + randomUUID()).get()) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+        }
+        try (var response = request(workspace, "/" + randomUUID()).put(Entity.json(piiPolicy("policy")))) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+        }
+        try (var response = request(workspace, "/delete").post(Entity.json(new BatchDelete(Set.of(randomUUID()))))) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
         }
     }
@@ -408,20 +419,32 @@ class GuardrailPoliciesResourceTest {
         create(workspace, piiPolicy("deleted"));
     }
 
-    @Test
+    static Stream<Arguments> retrieveCases() {
+        return Stream.of(
+                Arguments.of("a name in another case", Set.of("SUPPORT-BOT"), List.of("support-bot", "workspace-wide")),
+                Arguments.of("the name of a global policy", Set.of("workspace-wide"), List.of("workspace-wide")),
+                Arguments.of("no names", Set.of(), List.of("workspace-wide")),
+                Arguments.of("a name stored with a trailing space", Set.of("padded-bot"),
+                        List.of("padded-bot ", "workspace-wide")),
+                Arguments.of("several names, in name order", Set.of("support-bot", "padded-bot"),
+                        List.of("padded-bot ", "support-bot", "workspace-wide")));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("retrieveCases")
     @DisplayName("retrieve returns the named policies plus every global policy")
-    void retrieve() {
+    void retrieve(String scenario, Set<String> names, List<String> expectedNames) {
         var workspace = newWorkspace();
-        var named = create(workspace, piiPolicy("support-bot"));
+        create(workspace, piiPolicy("support-bot"));
+        create(workspace, piiPolicy("padded-bot "));
         create(workspace, piiPolicy("sales-bot"));
-        var global = create(workspace, piiPolicy("workspace-wide").toBuilder()
+        create(workspace, piiPolicy("workspace-wide").toBuilder()
                 .executionScope(GuardrailExecutionScope.GLOBAL).build());
         create(newWorkspace(), piiPolicy("other-global").toBuilder()
                 .executionScope(GuardrailExecutionScope.GLOBAL).build());
 
-        assertThat(retrieve(workspace, Set.of("SUPPORT-BOT"))).containsExactly(named, global);
-        assertThat(retrieve(workspace, Set.of("workspace-wide"))).containsExactly(global);
-        assertThat(retrieve(workspace, Set.of())).containsExactly(global);
+        assertThat(retrieve(workspace, names)).extracting(GuardrailPolicy::name)
+                .containsExactlyElementsOf(expectedNames);
     }
 
     @Test

@@ -19,7 +19,12 @@ const GuardrailPolicyCodeSection: React.FC<GuardrailPolicyCodeSectionProps> = ({
   const [isExpanded, setIsExpanded] = useState(false);
 
   const name = policyName.trim() || "my-policy";
-  const escapedName = name.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  const escapedName = name
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"')
+    .replace(/\n/g, "\\n")
+    .replace(/\r/g, "\\r")
+    .replace(/\t/g, "\\t");
 
   const snippet = `from opik import exceptions
 from opik.guardrails import Guardrail

@@ -4,6 +4,7 @@ import { useToast } from "@/ui/use-toast";
 import api, {
   GUARDRAIL_POLICIES_KEY,
   GUARDRAIL_POLICIES_REST_ENDPOINT,
+  GUARDRAIL_POLICY_KEY,
 } from "@/api/api";
 
 type UseGuardrailPolicyBatchDeleteMutationParams = {
@@ -36,6 +37,14 @@ const useGuardrailPolicyBatchDeleteMutation = () => {
         description: message,
         variant: "destructive",
       });
+    },
+    onSuccess: (_, { ids }) => {
+      // A deleted policy reopened in the same session must not come back from the cache.
+      ids.forEach((policyId) =>
+        queryClient.removeQueries({
+          queryKey: [GUARDRAIL_POLICY_KEY, { policyId }],
+        }),
+      );
     },
     onSettled: () => {
       return queryClient.invalidateQueries({

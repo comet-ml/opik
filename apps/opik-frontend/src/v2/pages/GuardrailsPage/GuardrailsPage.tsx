@@ -13,6 +13,7 @@ import { Plus } from "lucide-react";
 import { Button } from "@/ui/button";
 import { Separator } from "@/ui/separator";
 import useAppStore from "@/store/AppStore";
+import NoData from "@/shared/NoData/NoData";
 import PageEmptyState from "@/shared/PageEmptyState/PageEmptyState";
 import { buildDocsUrl } from "@/v2/lib/utils";
 import emptyAlertsLightUrl from "/images/empty-alerts-light.svg";
@@ -199,7 +200,7 @@ const GuardrailsPage: React.FunctionComponent = () => {
     queryParamConfig: JsonParam,
   });
 
-  const { data, isPending, isPlaceholderData, isFetching, refetch } =
+  const { data, isPending, isPlaceholderData, isFetching, isError, refetch } =
     useGuardrailPoliciesList(
       {
         workspaceName,
@@ -310,7 +311,9 @@ const GuardrailsPage: React.FunctionComponent = () => {
 
   const isTableLoading =
     isPending || (isPlaceholderData && policies.length === 0);
-  const isEmpty = !isTableLoading && !search && policies.length === 0;
+  // Only a workspace with no policies at all is empty: a page past the end has none either.
+  const isEmpty = !isTableLoading && !isError && !search && total === 0;
+  const isLoadError = isError && !data;
 
   return (
     <div className="flex min-h-full flex-col pt-4">
@@ -323,7 +326,16 @@ const GuardrailsPage: React.FunctionComponent = () => {
           </Button>
         )}
       </div>
-      {isEmpty ? (
+      {isLoadError ? (
+        <NoData
+          title="Policies could not be loaded"
+          message="Something went wrong while loading the guardrail policies."
+        >
+          <Button className="mt-5" onClick={() => refetch()}>
+            Try again
+          </Button>
+        </NoData>
+      ) : isEmpty ? (
         <PageEmptyState
           lightImageUrl={emptyAlertsLightUrl}
           darkImageUrl={emptyAlertsDarkUrl}

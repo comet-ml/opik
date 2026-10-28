@@ -102,6 +102,12 @@ describe("validateRules", () => {
       [],
       "Each topic can appear only once in a list",
     ],
+    [["Politics", "politics"], [], "Each topic can appear only once in a list"],
+    [
+      [],
+      ["None of these"],
+      '"none of these" is reserved: the check adds it to every list itself',
+    ],
     [["Billing"], ["billing"], "A topic cannot be both restricted and allowed"],
   ])(
     "rejects restricted %j with allowed %j",
