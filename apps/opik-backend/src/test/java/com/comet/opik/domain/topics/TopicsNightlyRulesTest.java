@@ -670,6 +670,23 @@ class TopicsNightlyRulesTest {
         }
 
         @Test
+        @DisplayName("a placeholder inside trace text stays as it is: the groups are shown once")
+        void placeholderInText() {
+            var base = prompt(1, 0, 0.25);
+            var topic = new TopicPrompts.PromptTopic(1, 0, base.name(), "Asks about {candidates} and {clusters}",
+                    base.share(), base.recentShare(), base.examples());
+            var groups = List.of(group(0, 40, 0.9));
+
+            var revise = TopicPrompts.revise(List.of(topic), groups, false, 10);
+            var naming = TopicPrompts.namingGroup(List.of(topic), groups, true);
+
+            assertThat(revise).contains("Asks about {candidates} and {clusters}");
+            assertThat(revise.split("cluster 0:", -1)).hasSize(2);
+            assertThat(naming).contains("Asks about {candidates} and {clusters}");
+            assertThat(naming.split("cluster 0:", -1)).hasSize(2);
+        }
+
+        @Test
         @DisplayName("verify shows the larger of the two shares of the new cluster")
         void verify() {
             var prompt = TopicPrompts.verify(List.of(new TopicPrompts.VerifyPair(prompt(1, 0, 0.25),

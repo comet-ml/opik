@@ -12,6 +12,9 @@ import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -27,6 +30,7 @@ public class TopicPrompts {
     private static final String VERIFY = load("verify_batch.md");
     private static final String NAMING_GROUP = load("naming_group.md");
     private static final String NAMING_GROUP_NEW = load("naming_group_new.md");
+    private static final Pattern PLACEHOLDER = Pattern.compile("\\{([a-z_]+)}");
 
     /**
      * The revise answer's schema: {@code assign}, {@code new} and {@code other} required; {@code merge},
@@ -115,10 +119,10 @@ public class TopicPrompts {
                 .sorted(Comparator.comparingInt(group -> -group.size()))
                 .map(TopicPrompts::groupBlock)
                 .collect(Collectors.joining("\n"));
-        return (review ? REVISE_REVIEW : REVISE)
-                .replace("{max_topics}", String.valueOf(maxTopics))
-                .replace("{topics}", topicBlock)
-                .replace("{candidates}", candidateBlock.isEmpty() ? "  (none)" : candidateBlock);
+        return fill(review ? REVISE_REVIEW : REVISE, Map.of(
+                "max_topics", String.valueOf(maxTopics),
+                "topics", topicBlock,
+                "candidates", candidateBlock.isEmpty() ? "  (none)" : candidateBlock));
     }
 
     /** The stand's {@code verify_batch_prompt}: per pair the topic's first 3 examples and the group's first 5. */
@@ -151,9 +155,24 @@ public class TopicPrompts {
                 .sorted(Comparator.comparingInt(group -> -group.size()))
                 .map(TopicPrompts::groupBlock)
                 .collect(Collectors.joining("\n"));
-        return (allowAssign ? NAMING_GROUP : NAMING_GROUP_NEW)
-                .replace("{topics}", topicBlock.isEmpty() ? "  (none)" : topicBlock)
-                .replace("{clusters}", groupBlock);
+        return fill(allowAssign ? NAMING_GROUP : NAMING_GROUP_NEW, Map.of(
+                "topics", topicBlock.isEmpty() ? "  (none)" : topicBlock,
+                "clusters", groupBlock));
+    }
+
+    /**
+     * Puts each {@code {name}} of {@code template} in one pass over the template, so a value that holds a placeholder
+     * (trace text such as "{clusters}") stays as it is. Other braces, such as JSON examples, stay too.
+     */
+    static String fill(String template, Map<String, String> values) {
+        var matcher = PLACEHOLDER.matcher(template);
+        var out = new StringBuilder();
+        while (matcher.find()) {
+            var value = values.get(matcher.group(1));
+            matcher.appendReplacement(out, Matcher.quoteReplacement(value == null ? matcher.group() : value));
+        }
+        matcher.appendTail(out);
+        return out.toString();
     }
 
     static String topicBlock(PromptTopic topic) {

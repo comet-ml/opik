@@ -40,14 +40,14 @@ public class NightInvariants {
             var name = names.get(topic.getId());
             if (name == null) {
                 if (!topic.getBorn().equals(state.getNight())) {
-                    throw invariant("new topic '%s' born '%s', not tonight".formatted(topic.getName(),
+                    throw invariant("new topic '%s' born '%s', not tonight".formatted(topic.getId(),
                             topic.getBorn()));
                 }
                 if (StringUtils.isBlank(topic.getName()) || AuthorApplier.isCatchAll(topic.getName())) {
-                    throw invariant("topic name '%s' is blank or a catch-all".formatted(topic.getName()));
+                    throw invariant("topic '%s' has a blank or catch-all name".formatted(topic.getId()));
                 }
             } else if (!name.equals(topic.getName())) {
-                throw invariant("topic '%s' renamed '%s'".formatted(name, topic.getName()));
+                throw invariant("topic '%s' renamed".formatted(topic.getId()));
             }
             if (topic.isLive()) {
                 topic.getPrototypes().forEach(prototype -> unit(prototype, dimensions));
