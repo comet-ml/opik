@@ -845,9 +845,10 @@ llmProviderClient:
   #   short message parsed from it reaches callers; at most 1MiB
   providerErrorBodyMaxSize: 64KB
   # Default: 120s
-  # Description: Longest a provider's stream may stay silent once its headers arrived; readTimeout bounds only the
-  #   wait for the headers. Above the 90s ingress idle timeout, as models that reason before answering can be silent
-  #   for a while; between 1s and 10m
+  # Description: Longest a provider's stream may stay silent, before its headers or between reads of its body: a
+  #   stream waits for its headers up to the longer of this and readTimeout, a call that isn't one up to readTimeout
+  #   only. Above the 90s ingress idle timeout, as models that reason before answering can be silent for a while;
+  #   between 1s and 10m
   streamReadTimeout: 120s
   # Default: 1024
   # Description: Most threads of the shared HTTP client for LLM provider calls. A call made asynchronously, a stream
