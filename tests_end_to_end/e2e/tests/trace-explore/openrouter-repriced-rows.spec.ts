@@ -209,8 +209,10 @@ test.describe(
         await test.step("The trace's rolled-up cost is the sum of its priced spans alone", async () => {
           // The number a user actually reads, and the one a wrong row makes
           // plausible rather than obviously absent: the removed id contributing
-          // its old $0.30 would roll the trace up to $4.025 instead of $3.725,
-          // and both are perfectly ordinary figures.
+          // its old $0.30 would roll the trace up to $2.614 instead of $2.314,
+          // and both are perfectly ordinary figures. (The sum is taken from the
+          // fixture, not hardcoded, because the rates come from a generated
+          // file — see its header.)
           const traceCost = await backendClient.getTraceCost(openRouterRepricedSpans.traceId);
           expect(traceCost, 'the trace must report a rolled-up cost').not.toBeNull();
           expect(

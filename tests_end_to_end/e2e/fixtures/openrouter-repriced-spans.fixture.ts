@@ -58,24 +58,38 @@ const COMPLETION_TOKENS = 1_000_000;
  * is about the AMOUNTS: whether the rows this release moved are billed at the
  * rates it shipped.
  *
- *   openrouter/qwen/qwen3.8-27b                           $0.20/M in + $2.50/M out -> $2.70
+ *   openrouter/qwen/qwen3.8-27b                           $0.039/M in + $1.25/M out -> $1.289
  *   openrouter/mistralai/mistral-small-3.2-24b-instruct    $0.075/M in + $0.20/M out -> $0.275
  *   openrouter/minimax/minimax-m3.1-flash                  $0.15/M in + $0.60/M out -> $0.75
  *   openrouter/minimax/minimax-m3.1-flash:free             removed by 9180        -> nothing
  *
+ * **These amounts track a GENERATED artifact and are expected to need updating.**
+ * `model_prices_openrouter.json` is regenerated from OpenRouter's own model list
+ * by `scripts/update_openrouter_model_prices.py`, so a row's rates can move in
+ * any release — and they have: `qwen3.8-27b` was $0.20/M + $2.50/M when this
+ * fixture was written for 2.2.120 and is $0.039/M + $1.25/M as 2.2.130 ships
+ * it, which is what the 2.2.130 release pass found on staging. That is not a
+ * defect and it is not flake; it is the cost of pinning absolute amounts, which
+ * is also the only thing that pins the lookup to the shipped table rather than
+ * to itself. When this fails, read the row out of
+ * `apps/opik-backend/src/main/resources/model_prices_openrouter.json` and check
+ * the published rates against it BEFORE treating a changed amount as a finding.
+ *
  * Why these three and not any three:
  *
- *  - **qwen3.8-27b's input rate moved 5x** (4e-08 -> 2e-07) and its output rate
- *    nearly doubled, so a build still reading the previous file prices it
- *    at $1.55 rather than $2.70 — a perfectly ordinary-looking figure.
- *  - **mistral-small-3.2-24b-instruct went DOWN.** Three rows that all rose
- *    could be satisfied by an across-the-board multiplier; one that fell cannot.
+ *  - **qwen3.8-27b's rates have moved twice**, once in 9180 and again before
+ *    2.2.130, and its output rate is 32x its input rate — so a build reading
+ *    any other copy of the file prices it at a perfectly ordinary-looking
+ *    figure rather than at nothing.
+ *  - **mistral-small-3.2-24b-instruct went DOWN in 9180.** Three rows that all
+ *    rose could be satisfied by an across-the-board multiplier; one that fell
+ *    cannot.
  *  - **minimax-m3.1-flash is the row the rename created.** It is the paid id
  *    that replaced a `:free` one, so it and the control are the same vendor and
  *    the same model differing only by the `:free` suffix.
  *  - **The three amounts are distinct and render as three distinct strings**
- *    ($2.7, $0.27, $0.75), so no single constant satisfies them and the panel
- *    half is discriminating per span.
+ *    ($1.28, $0.27, $0.75 — `displayedCost` floors to cents), so no single
+ *    constant satisfies them and the panel half is discriminating per span.
  *
  * The `:free` id is the control, and a stronger one than a nonsense name:
  * `openrouter/minimax/minimax-m3.1-flash:free` was a real, priced row until
@@ -88,8 +102,10 @@ const SPAN_SEEDS: Array<Omit<OpenRouterRepricedSpanSeed, 'name'>> = [
   {
     key: 'qwen-repriced',
     model: 'openrouter/qwen/qwen3.8-27b',
-    expectedCost: 2.7,
-    workings: '1.0M x $0.20/M in + 1.0M x $2.50/M out (input rate moved 5x in 9180)',
+    expectedCost: 1.289,
+    workings:
+      '1.0M x $0.039/M in + 1.0M x $1.25/M out (re-priced again between 2.2.120 and 2.2.130; ' +
+      'check model_prices_openrouter.json before calling a changed amount a defect)',
   },
   {
     key: 'mistral-repriced',
