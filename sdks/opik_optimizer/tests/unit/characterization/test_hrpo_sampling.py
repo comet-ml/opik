@@ -48,7 +48,7 @@ def test_each_iteration_analyses_new_items_while_ranking_stays_fixed(
         max_trials=12,
     )
 
-    ranking_items = evaluated[0]
-    analysis_samples = {items for items in evaluated if items != ranking_items}
-    assert evaluated.count(ranking_items) > len(analysis_samples)
-    assert len(analysis_samples) >= 2
+    ranking_items = evaluated[0]  # the baseline's
+    analysis_samples = [items for items in evaluated if items != ranking_items]
+    assert evaluated.count(ranking_items) >= 2  # candidates ranked on the same items
+    assert len(set(analysis_samples)) == len(analysis_samples) >= 2

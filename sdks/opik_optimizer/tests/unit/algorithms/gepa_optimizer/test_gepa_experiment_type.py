@@ -25,10 +25,12 @@ def _make_batch(items: list[dict[str, Any]]) -> list[OpikDataInst]:
 def _make_adapter(gepa_val_item_ids: set[str] | None) -> OpikGEPAAdapter:
     context = MagicMock()
     context.extra_params = {}
+    optimizer = MagicMock()
+    optimizer._evaluation_on_items.return_value = None  # nothing scored yet
     return OpikGEPAAdapter(
         base_prompts={},
         agent=MagicMock(),
-        optimizer=MagicMock(),
+        optimizer=optimizer,
         context=context,
         metric=make_simple_metric(),
         dataset=make_mock_dataset(

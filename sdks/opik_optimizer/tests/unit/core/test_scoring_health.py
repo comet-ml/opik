@@ -17,6 +17,7 @@ import pytest
 from opik.evaluation.evaluation_result import EvaluationResult
 from opik.evaluation.metrics.score_result import ScoreResult
 
+from opik_optimizer import ChatPrompt
 from opik_optimizer.core.exceptions import ScoringFailedError
 from opik_optimizer.core.results import OptimizationResult
 from opik_optimizer.core.runtime import build_final_result
@@ -282,7 +283,10 @@ class TestEvaluateSetsContextScoringHealth:
         monkeypatch.setattr(
             optimizer, "_score_from_evaluation_result", fake_score_from_result_2
         )
-        optimizer.evaluate(context, {"main": simple_chat_prompt})
+        better_prompt = ChatPrompt(
+            name="test-prompt", system="Answer briefly.", user="{question}"
+        )
+        optimizer.evaluate(context, {"main": better_prompt})
 
         # Health should now reflect second eval (2 failures)
         assert context.scoring_health is not None

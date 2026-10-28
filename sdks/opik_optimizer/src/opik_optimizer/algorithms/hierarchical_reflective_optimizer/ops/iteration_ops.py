@@ -10,6 +10,7 @@ from ....api_objects import chat_prompt
 from ....api_objects.types import MetricFunction
 from ....constants import normalize_eval_threads
 from ....core import evaluation, runtime
+from ....core.lineage import prompt_fingerprint
 from ....core.state import OptimizationContext
 from ....utils.logging import debug_log
 from ....utils.reporting import convert_tqdm_to_rich
@@ -20,6 +21,28 @@ if TYPE_CHECKING:  # pragma: no cover
 from ..types import HierarchicalRootCauseAnalysis
 
 logger = logging.getLogger(__name__)
+
+
+def record_traces(recording_stack: ExitStack, metric: MetricFunction) -> Any | None:
+    """Record an evaluation's trace trees so analysis sees the agent's steps.
+
+    Opik refuses nested recordings, and task-span metrics open their own inside
+    evaluate(); either way the evaluation runs unrecorded (final outputs only).
+    """
+    if evaluation._metric_requires_task_span(metric):
+        return None
+    try:
+        return recording_stack.enter_context(opik.record_traces_locally())
+    except Exception as exc:
+        logger.debug("Agent traces unavailable for analysis: %s", exc, exc_info=True)
+        return None
+
+
+def _requested_items(sample: Any) -> frozenset[str] | None | bool:
+    """Items a sampling plan selects: None for all, False when only a count is known."""
+    if sample.dataset_item_ids is not None:
+        return frozenset(str(item_id) for item_id in sample.dataset_item_ids)
+    return None if sample.nb_samples is None else False
 
 
 def run_root_cause_analysis(
@@ -41,64 +64,31 @@ def run_root_cause_analysis(
         phase=f"root_cause:{round_index}",
         strategy=context.n_samples_strategy,
     )
+    key = (prompt_fingerprint(best_prompts), str(dataset.id))
     with reporting.display_root_cause_analysis(
         verbose=optimizer.verbose
     ) as rca_reporter:
         optimizer._set_reporter(rca_reporter)
         try:
-            optimizer.pre_trial(context, best_prompts)
-            suppress_progress = bool(
-                (context.extra_params or {}).get("suppress_evaluation_progress", False)
-            )
-            progress_ctx = (
-                nullcontext()
-                if suppress_progress
-                else convert_tqdm_to_rich("  Evaluation", verbose=optimizer.verbose)
-            )
-            with progress_ctx, ExitStack() as recording_stack:
-                # Record the evaluation's trace trees so the analysis sees the agent's
-                # steps, not only its final output. Opik refuses nested recordings, and
-                # task-span metrics open their own inside evaluate().
-                recording = None
-                if not evaluation._metric_requires_task_span(metric):
-                    try:
-                        recording = recording_stack.enter_context(
-                            opik.record_traces_locally()
-                        )
-                    except Exception as exc:
-                        # Recording is optional; evaluation failures below still propagate.
-                        logger.debug(
-                            "Agent traces unavailable for analysis: %s",
-                            exc,
-                            exc_info=True,
-                        )
-                train_dataset_experiment_result = optimizer.evaluate_prompt(
-                    prompt=best_prompts,
+            scored = optimizer._scored.get(key)
+            if scored is None or scored.item_ids != _requested_items(sample):
+                # The best prompt was scored on other items (a validation set or
+                # another sample), so evaluate it on this training sample.
+                _evaluate_for_analysis(
+                    optimizer=optimizer,
+                    context=context,
+                    best_prompts=best_prompts,
                     dataset=dataset,
                     metric=metric,
                     agent=agent,
-                    n_samples=(
-                        None
-                        if sample.dataset_item_ids is not None
-                        else sample.nb_samples
-                    ),
-                    dataset_item_ids=sample.dataset_item_ids,
-                    n_samples_strategy=context.n_samples_strategy,
-                    n_threads=normalize_eval_threads(
-                        getattr(optimizer, "n_threads", None)
-                    ),
-                    experiment_config=context.experiment_config,
-                    return_evaluation_result=True,
-                    allow_tool_use=context.allow_tool_use,
+                    sample=sample,
                 )
-                # Read before the recording closes: closing resets the local store.
-                traces = (
-                    {trace.id: trace for trace in recording.trace_trees}
-                    if recording is not None
-                    else None
-                )
+                scored = optimizer._scored[key]
+            # Only the best prompt's evaluation can be analysed again; later
+            # bests are evaluated after this point.
+            optimizer._scored = {key: scored}
             hierarchical_analysis = optimizer._hierarchical_root_cause_analysis(
-                train_dataset_experiment_result, traces
+                scored.result, scored.traces
             )
             rca_reporter.set_completed(
                 hierarchical_analysis.total_test_cases,
@@ -108,6 +98,43 @@ def run_root_cause_analysis(
             optimizer._clear_reporter()
 
     return hierarchical_analysis
+
+
+def _evaluate_for_analysis(
+    *,
+    optimizer: HierarchicalReflectiveOptimizer,
+    context: OptimizationContext,
+    best_prompts: dict[str, chat_prompt.ChatPrompt],
+    dataset: opik.Dataset,
+    metric: MetricFunction,
+    agent: Any,
+    sample: Any,
+) -> None:
+    optimizer.pre_trial(context, best_prompts)
+    suppress_progress = bool(
+        (context.extra_params or {}).get("suppress_evaluation_progress", False)
+    )
+    progress_ctx = (
+        nullcontext()
+        if suppress_progress
+        else convert_tqdm_to_rich("  Evaluation", verbose=optimizer.verbose)
+    )
+    with progress_ctx:
+        optimizer.evaluate_prompt(
+            prompt=best_prompts,
+            dataset=dataset,
+            metric=metric,
+            agent=agent,
+            n_samples=None
+            if sample.dataset_item_ids is not None
+            else sample.nb_samples,
+            dataset_item_ids=sample.dataset_item_ids,
+            n_samples_strategy=context.n_samples_strategy,
+            n_threads=normalize_eval_threads(getattr(optimizer, "n_threads", None)),
+            experiment_config=context.experiment_config,
+            return_evaluation_result=True,
+            allow_tool_use=context.allow_tool_use,
+        )
 
 
 def improve_over_failure_modes(

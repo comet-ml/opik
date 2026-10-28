@@ -27,7 +27,7 @@ from .core import evaluation as task_evaluator
 from .core import llm_calls
 from .core import runtime
 from .core.evaluation import compute_scoring_health
-from .core.lineage import CandidateLineage
+from .core.lineage import CandidateLineage, prompt_fingerprint
 from .utils.display.run import OptimizationRunDisplay, RunDisplay
 from .utils.reporting import convert_tqdm_to_rich
 from .api_objects import chat_prompt
@@ -172,6 +172,8 @@ class BaseOptimizer(ABC):
         self._opik_client = None  # Lazy initialization
         self.current_optimization_id: str | None = None  # Track current optimization
         self._lineage = CandidateLineage()
+        # Evaluations of this run, so a prompt proposed again isn't re-scored.
+        self._evaluations: dict[tuple[str, ...], Any] = {}
         self.project_name: str = resolve_project_name()
         self.n_threads: int = normalize_eval_threads(None)  # Safe default thread count
         self._rng = rng_utils.make_rng(seed)
@@ -498,6 +500,7 @@ class BaseOptimizer(ABC):
         self._reset_counters()
         self._rng = rng_utils.make_rng(self.seed)
         self._lineage.reset()
+        self._evaluations = {}
 
         opik_optimization = self._get_or_create_optimization(
             dataset, metric, optimization_id
@@ -773,6 +776,7 @@ class BaseOptimizer(ABC):
                 metric=context.metric,
                 agent=context.agent,
                 n_samples=context.n_samples,
+                n_samples_strategy=context.n_samples_strategy,
                 n_threads=getattr(self, "n_threads", None),
                 verbose=self.verbose,
                 allow_tool_use=context.allow_tool_use,
@@ -790,6 +794,16 @@ class BaseOptimizer(ABC):
                     validation_dataset=context.validation_dataset,
                     build_optimizer_version=_OPTIMIZER_VERSION,
                 ),
+            )
+            self._remember_evaluation(
+                self._evaluation_key(
+                    context.prompts,
+                    context.evaluation_dataset,
+                    context.n_samples,
+                    context.n_samples_strategy,
+                ),
+                baseline_eval,
+                context.metric,
             )
             # Seed scoring health from the baseline evaluation so the OPIK-7029
             # "all items failed to score" guard is armed for EVERY optimizer.
@@ -896,6 +910,53 @@ class BaseOptimizer(ABC):
         assert isinstance(result, (EvaluationResult, EvaluationResultOnDictItems))
         return score, result
 
+    @staticmethod
+    def _evaluation_key(
+        prompts: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
+        dataset: Dataset,
+        n_samples: int | float | str | None,
+        n_samples_strategy: str | None,
+    ) -> tuple[str, ...]:
+        # Sampling is seeded per run and phase, so these fix the scored items.
+        return (
+            prompt_fingerprint(prompts),
+            str(dataset.id),
+            repr(n_samples),
+            str(n_samples_strategy),
+        )
+
+    def _evaluation_on_items(
+        self,
+        prompts: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
+        dataset: Dataset,
+        item_ids: list[str],
+    ) -> EvaluationResult | EvaluationResultOnDictItems | None:
+        """This run's evaluation of ``prompts`` on exactly ``item_ids``, if any."""
+        fingerprint, dataset_id = prompt_fingerprint(prompts), str(dataset.id)
+        wanted = frozenset(item_ids)
+        for key, result in self._evaluations.items():
+            if key[:2] != (fingerprint, dataset_id):
+                continue
+            scored = frozenset(
+                str(r.test_case.dataset_item_id) for r in result.test_results
+            )
+            if scored == wanted:
+                return result
+        return None
+
+    def _remember_evaluation(
+        self, key: tuple[str, ...], result: Any, metric: MetricFunction
+    ) -> None:
+        # Items that failed to score (a judge outage, a rate limit) are worth a
+        # retry when the same prompt comes up again, so keep only clean results.
+        if not isinstance(result, (EvaluationResult, EvaluationResultOnDictItems)):
+            return
+        health = _compute_scoring_health_from_result(
+            result, metric_name=metric.__name__
+        )
+        if health["failed_count"] == 0:
+            self._evaluations[key] = result
+
     def _evaluate_candidate(
         self,
         context: OptimizationContext,
@@ -919,20 +980,33 @@ class BaseOptimizer(ABC):
                 if suppress_progress
                 else convert_tqdm_to_rich("  Evaluation", verbose=self.verbose)
             )
-            with progress_ctx:
-                raw_result = self.evaluate_prompt(
-                    prompt=prompts,
-                    dataset=context.evaluation_dataset,
-                    metric=context.metric,
-                    agent=context.agent,
-                    experiment_config=experiment_config,
-                    n_samples=context.n_samples if n_samples is None else n_samples,
-                    n_samples_strategy=n_samples_strategy or context.n_samples_strategy,
-                    n_threads=normalize_eval_threads(getattr(self, "n_threads", None)),
-                    verbose=self.verbose,
-                    allow_tool_use=context.allow_tool_use,
-                    return_evaluation_result=True,
-                )
+            resolved_n_samples = context.n_samples if n_samples is None else n_samples
+            resolved_strategy = n_samples_strategy or context.n_samples_strategy
+            key = self._evaluation_key(
+                prompts,
+                context.evaluation_dataset,
+                resolved_n_samples,
+                resolved_strategy,
+            )
+            raw_result = self._evaluations.get(key)
+            if raw_result is None:
+                with progress_ctx:
+                    raw_result = self.evaluate_prompt(
+                        prompt=prompts,
+                        dataset=context.evaluation_dataset,
+                        metric=context.metric,
+                        agent=context.agent,
+                        experiment_config=experiment_config,
+                        n_samples=resolved_n_samples,
+                        n_samples_strategy=resolved_strategy,
+                        n_threads=normalize_eval_threads(
+                            getattr(self, "n_threads", None)
+                        ),
+                        verbose=self.verbose,
+                        allow_tool_use=context.allow_tool_use,
+                        return_evaluation_result=True,
+                    )
+                self._remember_evaluation(key, raw_result, context.metric)
         except Exception:
             context.finish_reason = "error"
             context.should_stop = True

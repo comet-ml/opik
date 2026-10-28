@@ -4,14 +4,21 @@ from ...utils.prompt_editing import apply_text_edits
 from ...core.reasoning import ReasoningEvidence
 
 import logging
+from contextlib import ExitStack
+from dataclasses import dataclass
 
 import opik
-from opik.evaluation.evaluation_result import EvaluationResult
+from opik import Dataset
+from opik.evaluation.evaluation_result import (
+    EvaluationResult,
+    EvaluationResultOnDictItems,
+)
 
 from typing import Any
 from ...core import llm_calls as _llm_calls
 from ...core import runtime
 from ...base_optimizer import BaseOptimizer
+from ...core.lineage import prompt_fingerprint
 from ...core.state import OptimizationContext, AlgorithmResult
 from ... import constants
 from ...api_objects import chat_prompt
@@ -36,6 +43,15 @@ from .ops import iteration_ops
 logger = logging.getLogger(__name__)  # Gets logger configured by setup_logging
 
 
+@dataclass(frozen=True)
+class ScoredEvaluation:
+    """A prompt's evaluation kept so root-cause analysis can reuse it."""
+
+    item_ids: frozenset[str] | None  # None: the whole dataset
+    result: EvaluationResult | EvaluationResultOnDictItems
+    traces: dict[str, Any] | None
+
+
 class HierarchicalReflectiveOptimizer(BaseOptimizer):
     supports_tool_optimization: bool = True
     supports_prompt_optimization: bool = True
@@ -48,8 +64,9 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
     synthesizing findings to identify unified failure modes. It's best suited when you have a
     complex prompt that you want to systematically refine based on understanding why it fails.
 
-    The root-cause evaluation records its traces locally (``opik.record_traces_locally``) so
-    the analysis sees each agent's steps. Opik refuses nested recordings, so a custom agent or
+    Evaluations record their traces locally (``opik.record_traces_locally``) so the
+    root-cause analysis sees each agent's steps, and the analysis reuses the best prompt's
+    evaluation when it covers the same items instead of running it again. Opik refuses nested recordings, so a custom agent or
     metric that itself calls ``record_traces_locally`` during evaluation is not supported.
     Recording is skipped automatically (final outputs only) when the metric needs
     ``task_span`` or another recording is already active around ``optimize_prompt``.
@@ -111,6 +128,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         self.batch_size = batch_size
         self.convergence_threshold = convergence_threshold
         self._iterations_completed = 0
+        # Latest evaluation per (prompt, dataset), for root-cause analysis to reuse.
+        self._scored: dict[tuple[str, str], ScoredEvaluation] = {}
 
         # Initialize hierarchical analyzer
         self._hierarchical_analyzer = HierarchicalRootCauseAnalyzer(
@@ -163,6 +182,68 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         return self._hierarchical_analyzer.analyze(
             evaluation_result, project_name=self.project_name, traces=traces
         )
+
+    def pre_baseline(self, context: OptimizationContext) -> None:
+        # A reused optimizer must not analyse an earlier run's evaluations.
+        self._scored = {}
+        super().pre_baseline(context)
+
+    def evaluate_prompt(  # type: ignore[override]
+        self,
+        prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
+        dataset: Dataset,
+        metric: MetricFunction,
+        agent: OptimizableAgent | None = None,
+        n_threads: int | None = None,
+        verbose: int = 1,
+        dataset_item_ids: list[str] | None = None,
+        experiment_config: dict | None = None,
+        n_samples: int | float | str | None = None,
+        n_samples_strategy: str | None = None,
+        seed: int | None = None,
+        return_evaluation_result: bool = False,
+        allow_tool_use: bool | None = None,
+        use_evaluate_on_dict_items: bool | None = None,
+    ) -> float | EvaluationResult | EvaluationResultOnDictItems:
+        """Evaluate as usual, keeping the result and traces of in-run evaluations."""
+        keep = return_evaluation_result
+        with ExitStack() as recording_stack:
+            recording = (
+                iteration_ops.record_traces(recording_stack, metric) if keep else None
+            )
+            result = super().evaluate_prompt(  # type: ignore[call-overload,misc]
+                prompt=prompt,
+                dataset=dataset,
+                metric=metric,
+                agent=agent,
+                n_threads=n_threads,
+                verbose=verbose,
+                dataset_item_ids=dataset_item_ids,
+                experiment_config=experiment_config,
+                n_samples=n_samples,
+                n_samples_strategy=n_samples_strategy,
+                seed=seed,
+                return_evaluation_result=return_evaluation_result,
+                allow_tool_use=allow_tool_use,
+                use_evaluate_on_dict_items=use_evaluate_on_dict_items,
+            )
+            # Read before the recording closes: closing resets the local store.
+            traces = (
+                {trace.id: trace for trace in recording.trace_trees}
+                if recording is not None
+                else None
+            )
+        if keep and isinstance(result, (EvaluationResult, EvaluationResultOnDictItems)):
+            if dataset_item_ids is None and n_samples is None:
+                item_ids = None
+            else:
+                item_ids = frozenset(
+                    str(r.test_case.dataset_item_id) for r in result.test_results
+                )
+            self._scored[(prompt_fingerprint(prompt), str(dataset.id))] = (
+                ScoredEvaluation(item_ids, result, traces)
+            )
+        return result
 
     def _record_trial_score(
         self,

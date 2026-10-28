@@ -158,6 +158,32 @@ def test_candidates_that_never_beat_the_baseline_all_derive_from_it(
 
 
 @pytest.mark.parametrize("optimizer_name", harness.OPTIMIZERS)
+def test_never_scores_a_prompt_twice_on_the_same_items(
+    optimizer_name: str, install_fakes: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    scenario = harness.build_scenario("S1_single")
+    install_fakes(scenario)
+    evaluations: list[tuple[str, frozenset[str]]] = []
+
+    def _recording_trial(**kwargs: Any) -> Any:
+        result = fake_opik.fake_evaluate(**kwargs)
+        if kwargs.get("experiment_type", "trial") == "trial":
+            items = frozenset(r.test_case.dataset_item_id for r in result.test_results)
+            evaluations.append((kwargs["experiment_config"]["candidate_id"], items))
+        return result
+
+    monkeypatch.setattr(
+        "opik_optimizer.core.evaluation.opik_evaluator.evaluate_optimization_trial",
+        _recording_trial,
+    )
+
+    harness.run_optimizer(optimizer_name, scenario)
+
+    repeated = [e[0] for e in evaluations if evaluations.count(e) > 1]
+    assert not repeated
+
+
+@pytest.mark.parametrize("optimizer_name", harness.OPTIMIZERS)
 def test_perfect_baseline_returns_it_without_searching(
     optimizer_name: str, install_fakes: Any
 ) -> None:

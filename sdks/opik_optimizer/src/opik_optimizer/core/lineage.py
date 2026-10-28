@@ -33,7 +33,7 @@ class _Candidate:
     parent_ids: tuple[str, ...]
 
 
-def _fingerprint(prompt: _PromptLike) -> str:
+def prompt_fingerprint(prompt: _PromptLike) -> str:
     prompts = prompt if isinstance(prompt, dict) else {prompt.name: prompt}
     payload = {
         name: {
@@ -63,7 +63,7 @@ class CandidateLineage:
 
     def derive_from(self, source: _PromptLike) -> None:
         """Declare the prompt the next new candidates are generated from."""
-        fingerprint = _fingerprint(source)
+        fingerprint = prompt_fingerprint(source)
         with self._lock:
             self._source = fingerprint
 
@@ -81,7 +81,7 @@ class CandidateLineage:
         return config
 
     def _candidate_for(self, prompt: _PromptLike) -> _Candidate:
-        fingerprint = _fingerprint(prompt)
+        fingerprint = prompt_fingerprint(prompt)
         with self._lock:
             existing = self._by_fingerprint.get(fingerprint)
             if existing is not None:

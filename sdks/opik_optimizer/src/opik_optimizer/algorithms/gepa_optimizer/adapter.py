@@ -416,22 +416,33 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
             )
             return {"llm_output": selection.output}
 
-        try:
-            _, eval_result = task_evaluator.evaluate_with_result(
-                dataset=target_dataset,
-                evaluated_task=llm_task,
-                metric=self._metric,
-                num_threads=self._optimizer.n_threads,
-                optimization_id=getattr(
-                    self._optimizer, "current_optimization_id", None
-                ),
-                dataset_item_ids=dataset_item_ids,
-                project_name=project_name,
-                n_samples=None,
-                experiment_config=experiment_config,
-                verbose=0,
-                experiment_type=experiment_type,
+        # The seed prompt's validation pass repeats the baseline evaluation.
+        cached = (
+            None
+            if capture_traces
+            else self._optimizer._evaluation_on_items(
+                prompt_variants, target_dataset, dataset_item_ids
             )
+        )
+        try:
+            if cached is not None:
+                eval_result = cached
+            else:
+                _, eval_result = task_evaluator.evaluate_with_result(
+                    dataset=target_dataset,
+                    evaluated_task=llm_task,
+                    metric=self._metric,
+                    num_threads=self._optimizer.n_threads,
+                    optimization_id=getattr(
+                        self._optimizer, "current_optimization_id", None
+                    ),
+                    dataset_item_ids=dataset_item_ids,
+                    project_name=project_name,
+                    n_samples=None,
+                    experiment_config=experiment_config,
+                    verbose=0,
+                    experiment_type=experiment_type,
+                )
         except Exception:
             logger.exception(
                 "Evaluating GEPA candidate via task_evaluator failed; reverting to local evaluation"
