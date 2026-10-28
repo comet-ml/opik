@@ -10,6 +10,7 @@ import com.comet.opik.infrastructure.inference.InferenceJson;
 import com.comet.opik.infrastructure.inference.ItemResponse.GenerateResponse;
 import com.comet.opik.infrastructure.inference.Message;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -251,19 +252,49 @@ public class TopicsRebuildService {
             return kept;
         }
 
+        /**
+         * Asks Qwen for the topics. An answer that lists a cluster id twice is broken (the prompt asks for each id
+         * exactly once): the job asks once more, uncached, and fails the run with {@code qwen_bad_answer} if the
+         * second answer is broken too. Not in the stand.
+         */
         private AuthorAnswer author(String prompt) {
+            var answer = parse(generate(prompt, runId.toString(), true));
+            if (answer.repeatsCluster()) {
+                log.warn("Topics run '{}' author answer lists a cluster twice, asking again, project '{}'", runId,
+                        projectId);
+                metrics.qwen("repeated_cluster");
+                answer = parse(generate(prompt, runId + ":retry", false));
+                if (answer.repeatsCluster()) {
+                    metrics.qwen("repeated_cluster");
+                    throw new TopicsRunException(Code.QWEN_BAD_ANSWER, "the author answer lists a cluster twice");
+                }
+            }
+            metrics.qwen("ok");
+            return answer;
+        }
+
+        private AuthorAnswer parse(JsonNode output) {
+            try {
+                return AuthorAnswer.parse(output);
+            } catch (TopicsRunException exception) {
+                metrics.qwen("bad_answer");
+                throw exception;
+            }
+        }
+
+        private JsonNode generate(String prompt, String requestId, boolean cache) {
             var request = GenerateRequest.builder()
                     .orgId(workspaceId)
                     .workspaceId(workspaceId)
-                    .requestId(runId.toString())
-                    .cache(true)
+                    .requestId(requestId)
+                    .cache(cache)
                     .lane(GenerateRequest.Lane.BATCH)
                     .messages(List.of(Message.builder().role(Message.Role.USER).content(prompt).build()))
                     .schema(TopicPrompts.AUTHOR_SCHEMA)
                     .maxTokens(QWEN_MAX_TOKENS)
                     .temperature(0)
                     .build();
-            stats.put("qwen_calls", 1);
+            stats.put("qwen_calls", stats.path("qwen_calls").asInt() + 1);
             GenerateResponse response;
             try {
                 response = client.generate(request,
@@ -282,17 +313,11 @@ public class TopicsRebuildService {
                     response.cacheHit());
             log.debug("Topics run '{}' author answer, project '{}':\n{}", runId, projectId,
                     output == null ? "null" : InferenceJson.canonical(output));
-            stats.put("qwen_input_tokens", response.usage().inputTokens());
-            stats.put("qwen_output_tokens", response.usage().outputTokens());
+            stats.put("qwen_input_tokens", stats.path("qwen_input_tokens").asLong() + response.usage().inputTokens());
+            stats.put("qwen_output_tokens",
+                    stats.path("qwen_output_tokens").asLong() + response.usage().outputTokens());
             stats.put("qwen_cache_hit", response.cacheHit());
-            try {
-                var answer = AuthorAnswer.parse(output);
-                metrics.qwen("ok");
-                return answer;
-            } catch (TopicsRunException exception) {
-                metrics.qwen("bad_answer");
-                throw exception;
-            }
+            return output;
         }
 
         private Assigned assign(AuthorApplier.Applied applied, float[] centres, float[] vectors, int n) {
