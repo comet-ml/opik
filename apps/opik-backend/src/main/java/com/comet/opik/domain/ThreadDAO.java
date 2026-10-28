@@ -149,43 +149,48 @@ class ThreadDAOImpl implements ThreadDAO {
                           <if(uuid_to_time)> AND id \\<= :uuid_to_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                               \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                           <if(filters)> AND <filters> <endif>
-                          <if(search_text)> AND id IN (
+                          <if(search_text)>
+                          AND id IN (
                               SELECT id
                               FROM traces
                               WHERE workspace_id = :workspace_id
-                              AND project_id = :project_id
-                              <if(uuid_from_time)> AND id >= :uuid_from_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                                  >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
-                              <if(uuid_to_time)> AND id \\<= :uuid_to_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                                  \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
-                              <if(traces_partitioned)>
-                              AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
-                                  SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                                  FROM traces
-                                  WHERE workspace_id = :workspace_id AND project_id = :project_id
-                                  <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
-                                  <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>)
-                              <endif>
-                              AND (id, last_updated_at) IN (
-                                  SELECT id, max(last_updated_at)
-                                  FROM traces
-                                  WHERE workspace_id = :workspace_id
-                                  AND project_id = :project_id
-                                  <if(uuid_from_time)> AND id >= :uuid_from_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                                      >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
-                                  <if(uuid_to_time)> AND id \\<= :uuid_to_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                                      \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
-                                  <if(traces_partitioned)>
-                                  AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
-                                      SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                                      FROM traces
-                                      WHERE workspace_id = :workspace_id AND project_id = :project_id
-                                      <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
-                                      <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>)
-                                  <endif>
-                                  GROUP BY id
-                              )
-                              AND <search_text>) <endif>
+                                AND project_id = :project_id
+                                <if(uuid_from_time)> AND id >= :uuid_from_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                                    >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
+                                <if(uuid_to_time)> AND id \\<= :uuid_to_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                                    \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
+                                <if(traces_partitioned)>
+                                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                                    SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                                    FROM traces
+                                    WHERE workspace_id = :workspace_id AND project_id = :project_id
+                                    <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                                    <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
+                                )
+                                <endif>
+                                AND (id, last_updated_at) IN (
+                                    SELECT id, max(last_updated_at)
+                                    FROM traces
+                                    WHERE workspace_id = :workspace_id
+                                      AND project_id = :project_id
+                                      <if(uuid_from_time)> AND id >= :uuid_from_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                                          >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
+                                      <if(uuid_to_time)> AND id \\<= :uuid_to_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                                          \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
+                                      <if(traces_partitioned)>
+                                      AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                                          SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                                          FROM traces
+                                          WHERE workspace_id = :workspace_id AND project_id = :project_id
+                                          <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                                          <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
+                                      )
+                                      <endif>
+                                    GROUP BY id
+                                )
+                                AND <search_text>
+                          )
+                          <endif>
                           <if(traces_partitioned && search_text)>
                           AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
                               SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
@@ -276,43 +281,48 @@ class ThreadDAOImpl implements ThreadDAO {
                     <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>)
                 <endif>
                 <if(filters)> AND <filters> <endif>
-                <if(search_text)> AND id IN (
+                <if(search_text)>
+                AND id IN (
                     SELECT id
                     FROM traces
                     WHERE workspace_id = :workspace_id
-                    AND project_id = :project_id
-                    <if(uuid_from_time)> AND id >= :uuid_from_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                        >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
-                    <if(uuid_to_time)> AND id \\<= :uuid_to_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                        \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
-                    <if(traces_partitioned)>
-                    AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
-                        SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                        FROM traces
-                        WHERE workspace_id = :workspace_id AND project_id = :project_id
-                        <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
-                        <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>)
-                    <endif>
-                    AND (id, last_updated_at) IN (
-                        SELECT id, max(last_updated_at)
-                        FROM traces
-                        WHERE workspace_id = :workspace_id
-                        AND project_id = :project_id
-                        <if(uuid_from_time)> AND id >= :uuid_from_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                            >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
-                        <if(uuid_to_time)> AND id \\<= :uuid_to_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                            \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
-                        <if(traces_partitioned)>
-                        AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
-                            SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                            FROM traces
-                            WHERE workspace_id = :workspace_id AND project_id = :project_id
-                            <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
-                            <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>)
-                        <endif>
-                        GROUP BY id
-                    )
-                    AND <search_text>) <endif>
+                      AND project_id = :project_id
+                      <if(uuid_from_time)> AND id >= :uuid_from_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                          >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
+                      <if(uuid_to_time)> AND id \\<= :uuid_to_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                          \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
+                      <if(traces_partitioned)>
+                      AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                          SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                          FROM traces
+                          WHERE workspace_id = :workspace_id AND project_id = :project_id
+                          <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                          <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
+                      )
+                      <endif>
+                      AND (id, last_updated_at) IN (
+                          SELECT id, max(last_updated_at)
+                          FROM traces
+                          WHERE workspace_id = :workspace_id
+                            AND project_id = :project_id
+                            <if(uuid_from_time)> AND id >= :uuid_from_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                                >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
+                            <if(uuid_to_time)> AND id \\<= :uuid_to_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                                \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
+                            <if(traces_partitioned)>
+                            AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                                SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                                FROM traces
+                                WHERE workspace_id = :workspace_id AND project_id = :project_id
+                                <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                                <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
+                            )
+                            <endif>
+                          GROUP BY id
+                      )
+                      AND <search_text>
+                )
+                <endif>
             ), <endif><if(page_pushdown)>page_trace_ids AS (
                 SELECT id FROM traces
                 WHERE workspace_id = :workspace_id
@@ -779,43 +789,48 @@ class ThreadDAOImpl implements ThreadDAO {
                     <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>)
                 <endif>
                 <if(filters)> AND <filters> <endif>
-                <if(search_text)> AND id IN (
+                <if(search_text)>
+                AND id IN (
                     SELECT id
                     FROM traces
                     WHERE workspace_id = :workspace_id
-                    AND project_id = :project_id
-                    <if(uuid_from_time)> AND id >= :uuid_from_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                        >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
-                    <if(uuid_to_time)> AND id \\<= :uuid_to_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                        \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
-                    <if(traces_partitioned)>
-                    AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
-                        SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                        FROM traces
-                        WHERE workspace_id = :workspace_id AND project_id = :project_id
-                        <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
-                        <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>)
-                    <endif>
-                    AND (id, last_updated_at) IN (
-                        SELECT id, max(last_updated_at)
-                        FROM traces
-                        WHERE workspace_id = :workspace_id
-                        AND project_id = :project_id
-                        <if(uuid_from_time)> AND id >= :uuid_from_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                            >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
-                        <if(uuid_to_time)> AND id \\<= :uuid_to_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                            \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
-                        <if(traces_partitioned)>
-                        AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
-                            SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                            FROM traces
-                            WHERE workspace_id = :workspace_id AND project_id = :project_id
-                            <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
-                            <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>)
-                        <endif>
-                        GROUP BY id
-                    )
-                    AND <search_text>) <endif>
+                      AND project_id = :project_id
+                      <if(uuid_from_time)> AND id >= :uuid_from_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                          >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
+                      <if(uuid_to_time)> AND id \\<= :uuid_to_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                          \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
+                      <if(traces_partitioned)>
+                      AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                          SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                          FROM traces
+                          WHERE workspace_id = :workspace_id AND project_id = :project_id
+                          <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                          <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
+                      )
+                      <endif>
+                      AND (id, last_updated_at) IN (
+                          SELECT id, max(last_updated_at)
+                          FROM traces
+                          WHERE workspace_id = :workspace_id
+                            AND project_id = :project_id
+                            <if(uuid_from_time)> AND id >= :uuid_from_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                                >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
+                            <if(uuid_to_time)> AND id \\<= :uuid_to_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                                \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
+                            <if(traces_partitioned)>
+                            AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                                SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                                FROM traces
+                                WHERE workspace_id = :workspace_id AND project_id = :project_id
+                                <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                                <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
+                            )
+                            <endif>
+                          GROUP BY id
+                      )
+                      AND <search_text>
+                )
+                <endif>
             ), <endif>traces_final AS (
                 SELECT
                     id,
@@ -1482,43 +1497,48 @@ class ThreadDAOImpl implements ThreadDAO {
                         <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>)
                     <endif>
                     <if(filters)> AND <filters> <endif>
-                    <if(search_text)> AND id IN (
+                    <if(search_text)>
+                    AND id IN (
                         SELECT id
                         FROM traces
                         WHERE workspace_id = :workspace_id
-                        AND project_id = :project_id
-                        <if(uuid_from_time)> AND id >= :uuid_from_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                            >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
-                        <if(uuid_to_time)> AND id \\<= :uuid_to_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                            \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
-                        <if(traces_partitioned)>
-                        AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
-                            SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                            FROM traces
-                            WHERE workspace_id = :workspace_id AND project_id = :project_id
-                            <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
-                            <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>)
-                        <endif>
-                        AND (id, last_updated_at) IN (
-                            SELECT id, max(last_updated_at)
-                            FROM traces
-                            WHERE workspace_id = :workspace_id
-                            AND project_id = :project_id
-                            <if(uuid_from_time)> AND id >= :uuid_from_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                                >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
-                            <if(uuid_to_time)> AND id \\<= :uuid_to_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                                \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
-                            <if(traces_partitioned)>
-                            AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
-                                SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                                FROM traces
-                                WHERE workspace_id = :workspace_id AND project_id = :project_id
-                                <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
-                                <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>)
-                            <endif>
-                            GROUP BY id
-                        )
-                        AND <search_text>) <endif>
+                          AND project_id = :project_id
+                          <if(uuid_from_time)> AND id >= :uuid_from_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                              >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
+                          <if(uuid_to_time)> AND id \\<= :uuid_to_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                              \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
+                          <if(traces_partitioned)>
+                          AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                              SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                              FROM traces
+                              WHERE workspace_id = :workspace_id AND project_id = :project_id
+                              <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                              <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
+                          )
+                          <endif>
+                          AND (id, last_updated_at) IN (
+                              SELECT id, max(last_updated_at)
+                              FROM traces
+                              WHERE workspace_id = :workspace_id
+                                AND project_id = :project_id
+                                <if(uuid_from_time)> AND id >= :uuid_from_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                                    >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
+                                <if(uuid_to_time)> AND id \\<= :uuid_to_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                                    \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
+                                <if(traces_partitioned)>
+                                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                                    SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                                    FROM traces
+                                    WHERE workspace_id = :workspace_id AND project_id = :project_id
+                                    <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                                    <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
+                                )
+                                <endif>
+                              GROUP BY id
+                          )
+                          AND <search_text>
+                    )
+                    <endif>
                 ), <endif>traces_final AS (
                     SELECT
                         id,
