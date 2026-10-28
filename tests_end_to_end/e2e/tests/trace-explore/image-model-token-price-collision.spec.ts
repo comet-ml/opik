@@ -65,7 +65,13 @@ async function readSeededSpans(
     .poll(
       async () =>
         (await backendClient.listSpanCosts({ projectId, traceId: seed.traceId })).length,
-      { timeout: 60_000, intervals: [500, 1_000, 2_000] },
+      {
+        timeout: 60_000,
+        intervals: [500, 1_000, 2_000],
+        message:
+          `all ${seed.spans.length} seeded spans of trace ${seed.traceId} to become queryable — a ` +
+          'count stuck below that is span ingestion still catching up, not a pricing answer',
+      },
     )
     .toBe(seed.spans.length);
 

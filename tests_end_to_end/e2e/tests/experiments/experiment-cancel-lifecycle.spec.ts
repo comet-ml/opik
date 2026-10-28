@@ -180,7 +180,14 @@ test.describe(
                   const now = await backendClient.getExperimentLifecycle(stopped);
                   return { status: now.status, hasFinishedAt: now.finishedAt !== null };
                 },
-                { timeout: 120_000, intervals: [500, 1_000, 2_000, 5_000] },
+                {
+                  timeout: 120_000,
+                  intervals: [500, 1_000, 2_000, 5_000],
+                  message:
+                    `the stopped run ${stopped} to settle as cancelled AND record a finished_at — ` +
+                    'a status that never moves means the cancel never reached the service, and a ' +
+                    'cancelled run still missing finished_at means the queue never drained',
+                },
               )
               .toEqual({ status: 'cancelled', hasFinishedAt: true });
 
@@ -245,7 +252,14 @@ test.describe(
           await expect
             .poll(
               async () => (await backendClient.getExperimentLifecycle(sibling)).traceCount,
-              { timeout: 180_000, intervals: [1_000, 2_000, 5_000] },
+              {
+                timeout: 180_000,
+                intervals: [1_000, 2_000, 5_000],
+                message:
+                  `the sibling run ${sibling} to run all ${perExperimentItems} of its items — a ` +
+                  'count that stalls short of the total is the stop having reached the experiment ' +
+                  'it was not given',
+              },
             )
             .toBe(perExperimentItems);
 
@@ -341,15 +355,31 @@ test.describe(
           // Why this is worth a test rather than a comment: the response is
           // indistinguishable from the one a real stop gets, so anything that
           // reads a 204 as "stopped" — a script, a UI, a future spec — is
-          // reading a value that carries no such claim. Asserted after a
-          // settling window, so a stop that applied late still fails this.
+          // reading a value that carries no such claim.
+          //
+          // NOT a settling window, and the distinction matters to whoever reads
+          // a failure here: `expect.poll` succeeds on the first read that
+          // matches, so the 20s is headroom for a lifecycle that has not been
+          // written yet, not a period this holds the state over. What is
+          // asserted is that the 204 did not take the run with it at the moment
+          // it was observed, twice — here and through the SDK below. A stop that
+          // applied several seconds late would still pass this; catching that
+          // needs a hold primitive Playwright does not have, and is not what a
+          // 204-means-nothing claim rests on.
           await expect
             .poll(
               async () => {
                 const now = await backendClient.getExperimentLifecycle(id);
                 return { status: now.status, hasFinishedAt: now.finishedAt !== null };
               },
-              { timeout: 20_000, intervals: [1_000, 2_000, 5_000] },
+              {
+                timeout: 20_000,
+                intervals: [1_000, 2_000, 5_000],
+                message:
+                  `the untracked run ${id} to still read as running with no finished_at after a ` +
+                  '204 — a cancelled status here is the endpoint having stopped a run it reported ' +
+                  'it was not tracking',
+              },
             )
             .toEqual({ status: 'running', hasFinishedAt: false });
 
