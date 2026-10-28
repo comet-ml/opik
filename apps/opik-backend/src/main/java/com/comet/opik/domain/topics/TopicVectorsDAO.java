@@ -57,6 +57,11 @@ public class TopicVectorsDAO {
      * both sides alike and the anti-join stays exact. It lets the {@code idx_trace_created_at} minmax indexes skip the
      * workspace's older history, which the {@code updated_at} filter alone cannot. The guards are
      * {@code AiLabelSweepDAO}'s.
+     *
+     * <p>A key is kept only when its latest {@code ai_labels} output row has the status's task version and a summary
+     * that isn't blank, and this is checked before the {@code LIMIT}: otherwise unusable rows, which stay in the window
+     * until they age out, could fill every tick's batch and hold back newer traces. The output read takes only the
+     * traces of {@code done}, so it reads the window's traces and not the workspace's history.
      */
     private static final String FIND_UNVECTORED = """
             WITH done AS (
@@ -73,10 +78,25 @@ public class TopicVectorsDAO {
                 )
                 WHERE status = 'done'
                 AND updated_at \\<= fromUnixTimestamp64Micro(:upper_bound_micros, 'UTC')
+            ),
+            usable AS (
+                SELECT project_id, trace_id, task_version
+                FROM (
+                    SELECT project_id, trace_id, task_version, JSONExtractString(output, 'summary') AS summary
+                    FROM ai_labels
+                    WHERE workspace_id = :workspace_id
+                    AND task = :task
+                    AND key = 'output'
+                    AND trace_id IN (SELECT trace_id FROM done)
+                    ORDER BY workspace_id, project_id, task, trace_id, key, updated_at DESC
+                    LIMIT 1 BY workspace_id, project_id, task, trace_id, key
+                )
+                WHERE match(summary, '[^[:space:]]')
             )
             SELECT workspace_id, project_id, trace_id, trace_created_at, task_version, updated_at
             FROM done
-            WHERE (project_id, trace_id, task_version) NOT IN (
+            WHERE (project_id, trace_id, task_version) IN (SELECT project_id, trace_id, task_version FROM usable)
+            AND (project_id, trace_id, task_version) NOT IN (
                 SELECT project_id, trace_id, task_version
                 FROM topic_vectors
                 WHERE workspace_id = :workspace_id

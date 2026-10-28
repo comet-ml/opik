@@ -686,7 +686,8 @@ class TopicVectorsTickServiceTest {
 
             assertThat(result.written()).isEqualTo(2);
             verify(meter.counter("topics.vectors.embed.failures"))
-                    .add(1, Attributes.of(longKey("http_status"), 400L, stringKey("code"), "invalid_request"));
+                    .add(1, Attributes.of(longKey("http_status"), 400L, stringKey("code"), "invalid_request",
+                            stringKey("error_type"), "InferenceException"));
             verify(meter.counter("topics.vectors.long_window.missed")).add(1L);
             verify(meter.counter("topics.vectors.long_window.missed"), never()).add(2L);
         }

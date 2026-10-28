@@ -238,15 +238,16 @@ FROM (
 |---|---|
 | `topics.vectors.oldest_unvectored_seconds` by `workspace_id` | Age of the oldest done label without a vector that the last tick found in its window. The headline. It grows when the job falls behind or stops. Only the pod that ticked within the last two tick intervals publishes it, so read it with `max` across pods. A workspace whose window read failed, or was not reached, has no value for that tick: watch `topics.vectors.read.failures` with it. It sees only the window: after an outage longer than the short window it stays near the window's length until the long-window pass runs. |
 | `topics.vectors.written` | Vectors stored. |
-| `topics.vectors.skipped` by `reason` | `missing_summary` (no output row, or an empty or whitespace-only summary, for that task version; a WARN per workspace per tick names the count and the oldest trace), `embed_failed` (the call failed, or the workspace backed off: the next tick retries), `invalid_vector` (a missing, null, zero or wrong-dimension vector), `over_budget` (not enough of the tick left to start a call: the next tick continues), `insert_failed` (the ClickHouse insert failed: the next tick embeds them again), `read_failed` (the summary read failed: the next tick reads them again). |
+| `topics.vectors.skipped` by `reason` | `missing_summary` (the output row the window read saw was gone or of another task version by the summary read, which usually clears on the next tick; a WARN per workspace per tick names the count and the oldest trace), `embed_failed` (the call failed, or the workspace backed off: the next tick retries), `invalid_vector` (a missing, null, zero or wrong-dimension vector), `over_budget` (not enough of the tick left to start a call: the next tick continues), `insert_failed` (the ClickHouse insert failed: the next tick embeds them again), `read_failed` (the summary read failed: the next tick reads them again). |
 | `topics.vectors.read.failures` by `phase`, `workspace_id`, `error_type` | Failed ClickHouse reads: `find` (one workspace's window read, for example a guard trip) or `summaries` (one workspace's summary read). `error_type` is the root cause's class name. |
-| `topics.vectors.embed.failures` by `http_status`, `code` | Failed embed calls. 429 `quota_exceeded` means the embed pool is full. |
+| `topics.vectors.embed.failures` by `http_status`, `code`, `error_type` | Failed embed calls. 429 `quota_exceeded` means the embed pool is full. |
 | `topics.vectors.embed.duration_seconds` by `outcome` | Wall time per embed call: `ok`, or the error code. |
 | `topics.vectors.tick.phase_seconds` by `phase` | Time in `find` (ClickHouse window reads) and `embed` (summary reads, embed calls and inserts). |
 | `topics.vectors.long_window.missed` | Vectors the long-window pass wrote for statuses older than the short window: rows normal ticks missed, for example after an outage longer than the window. Above zero outside a backfill or an outage means normal ticks miss rows. |
 
-A done status whose summary is empty or only whitespace (the model's output, not a bug) is `missing_summary` on every
-tick while it is in the window. It does not block other traces: the cap is per workspace, and the WARN names it.
+The window read leaves out a done status whose latest output is missing, of another task version, or empty or only
+whitespace. Such a status gets no vector and is not counted, and it does not take a place in the per-workspace cap, so
+it never holds back newer traces.
 
 ClickHouse queries of the job have a `log_comment` that starts with `topics:`.
 

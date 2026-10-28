@@ -8,7 +8,7 @@ import java.util.List;
 
 /**
  * The topics opt-in. Topics read the ai-labels trace_summary, so a workspace runs topics only when it is enabled both
- * here and in {@code ai_label_workspaces}.
+ * here and in {@code ai_label_workspaces}: the reads are named for that, eligible rather than enabled.
  */
 public interface TopicWorkspaceDAO {
 
@@ -19,7 +19,7 @@ public interface TopicWorkspaceDAO {
             WHERE t.enabled = TRUE AND a.enabled = TRUE
             ORDER BY t.workspace_id
             """)
-    List<String> enabledWorkspaceIds();
+    List<String> eligibleWorkspaceIds();
 
     @SqlQuery("""
             SELECT COUNT(*) > 0
@@ -27,7 +27,7 @@ public interface TopicWorkspaceDAO {
             JOIN ai_label_workspaces a ON a.workspace_id = t.workspace_id
             WHERE t.workspace_id = :workspaceId AND t.enabled = TRUE AND a.enabled = TRUE
             """)
-    boolean isEnabled(@Bind("workspaceId") String workspaceId);
+    boolean isEligible(@Bind("workspaceId") String workspaceId);
 
     @SqlUpdate("""
             INSERT INTO topic_workspaces (workspace_id, enabled, added_by)
