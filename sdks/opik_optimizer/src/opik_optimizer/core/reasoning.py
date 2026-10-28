@@ -32,13 +32,26 @@ def cases_from_evaluation(
             observations=trace_observations(
                 (traces or {}).get(result.test_case.trace_id)
             ),
-            scores=[
-                score.model_dump() if hasattr(score, "model_dump") else score
-                for score in result.score_results
-            ],
+            scores=[_score_payload(score) for score in result.score_results],
         )
         for result in results
     ]
+
+
+def _score_payload(score: Any) -> Any:
+    """What the reasoning model needs from a score: its value and the reason."""
+    if hasattr(score, "model_dump"):
+        return score.model_dump()
+    if not hasattr(score, "value"):
+        return score
+    payload = {
+        "name": getattr(score, "name", None),
+        "value": score.value,
+        "reason": getattr(score, "reason", None),
+    }
+    if getattr(score, "scoring_failed", False):
+        payload["scoring_failed"] = True
+    return payload
 
 
 def trace_observations(trace: Any) -> dict[str, Any] | None:

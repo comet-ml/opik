@@ -102,7 +102,9 @@ def test_meta_prompt_reasons_over_how_the_prompt_scored(
     assert requests
     for cases in requests:
         assert all(case.output is not None and case.scores for case in cases)
-        values = [case.scores[0].value for case in cases]
+        # Plain values the model can read, with the metric's reason.
+        assert all({"value", "reason"} <= set(case.scores[0]) for case in cases)
+        values = [case.scores[0]["value"] for case in cases]
         assert values == sorted(values)  # the failures come first
 
 
