@@ -928,9 +928,11 @@ class ChatCompletionServiceTest {
 
             assertRetryable(thrown);
             assertThat(thrown)
-                    .as("the provider body is kept as the cause, not the message")
+                    .as("the provider failure is kept as the cause, redacted, and its body is neither")
                     .hasMessage(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER)
-                    .hasCause(providerFailure);
+                    .cause()
+                    .hasMessage(NonRetriableException.class.getName())
+                    .hasNoCause();
         }
 
         /**
@@ -1135,8 +1137,8 @@ class ChatCompletionServiceTest {
             var thrown = scoreTraceWithBudget(2,
                     new RuntimeException(gaxException(StatusCode.Code.INVALID_ARGUMENT, false)));
 
-            // GAX ApiException is not a NonRetriableException, so without failFastOnPermanentFailure
-            // langchain4j's RetryPolicy would replay a call that can never succeed.
+            // GAX ApiException is not a NonRetriableException, so without the permanent-status check
+            // the retry loop would replay a call that can never succeed.
             assertNonRetryable(thrown, 400);
             verify(chatModel, times(1)).chat(any(ChatRequest.class));
         }
