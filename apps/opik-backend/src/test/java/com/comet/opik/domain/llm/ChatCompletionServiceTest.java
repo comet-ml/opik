@@ -1045,6 +1045,27 @@ class ChatCompletionServiceTest {
             verify(chatModel, times(expectedAttempts)).chat(any(ChatRequest.class));
         }
 
+        private static Stream<Arguments> wrappedNonRetriableFailures() {
+            return Stream.of(
+                    arguments("behind a transport failure", new RuntimeException(new NonRetriableException(
+                            UUID.randomUUID().toString(), new SocketException(UUID.randomUUID().toString())))),
+                    arguments("behind a transient wire status", new RuntimeException(new NonRetriableException(
+                            UUID.randomUUID().toString(), new HttpException(503, UUID.randomUUID().toString())))));
+        }
+
+        /**
+         * No provider path wraps a {@code NonRetriableException} today, so this drives the shape directly: the
+         * classification walks the chain, so a wrapper can't hide it behind a retriable signal deeper down.
+         */
+        @ParameterizedTest(name = "a wrapped NonRetriableException {0} is attempted once")
+        @MethodSource("wrappedNonRetriableFailures")
+        @DisplayName("A wrapped NonRetriableException does not consume the in-process retry budget")
+        void scoreTrace__whenWrappedNonRetriable__thenAttemptedOnce(String label, RuntimeException providerFailure) {
+            scoreTraceWithBudget(2, providerFailure);
+
+            verify(chatModel, times(1)).chat(any(ChatRequest.class));
+        }
+
         /**
          * Drives scoreTrace against a service built with the given retry budget. Shared so the three budget
          * cases do not each repeat the construction, which is what let them drift to a single hard-coded value.

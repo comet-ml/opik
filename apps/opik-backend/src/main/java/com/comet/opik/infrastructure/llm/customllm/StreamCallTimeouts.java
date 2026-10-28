@@ -2,20 +2,23 @@ package com.comet.opik.infrastructure.llm.customllm;
 
 import com.comet.opik.infrastructure.http.BodyDeadline;
 import jakarta.ws.rs.core.HttpHeaders;
-import jakarta.ws.rs.core.MediaType;
 import lombok.AccessLevel;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import okhttp3.Interceptor;
+import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
-import org.apache.commons.lang3.Strings;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.math.NumberUtils;
 
 import java.io.IOException;
 import java.net.SocketTimeoutException;
 import java.time.Duration;
+import java.util.Arrays;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
@@ -36,6 +39,10 @@ import java.util.function.Predicate;
  */
 @RequiredArgsConstructor(access = AccessLevel.PRIVATE)
 public final class StreamCallTimeouts implements Interceptor {
+
+    private static final String EVENT_STREAM_TYPE = "text";
+    private static final String EVENT_STREAM_SUBTYPE = "event-stream";
+    private static final String QUALITY = "q";
 
     private final Duration readTimeout;
     private final Duration streamReadTimeout;
@@ -110,13 +117,25 @@ public final class StreamCallTimeouts implements Interceptor {
         }
     }
 
+    /** A media type that doesn't parse is skipped, so a malformed Accept takes the shorter deadline. */
     private static boolean acceptsEventStream(Request request) {
         return request.headers(HttpHeaders.ACCEPT).stream()
-                .anyMatch(accept -> Strings.CI.contains(accept, MediaType.SERVER_SENT_EVENTS));
+                .flatMap(accept -> Arrays.stream(StringUtils.split(accept, ',')))
+                .map(mediaType -> MediaType.parse(mediaType.trim()))
+                .filter(Objects::nonNull)
+                .anyMatch(StreamCallTimeouts::isAcceptedEventStream);
+    }
+
+    // OkHttp lowercases the type and subtype; an absent quality is 1, and one that isn't a number counts as 0
+    private static boolean isAcceptedEventStream(MediaType mediaType) {
+        var quality = mediaType.parameter(QUALITY);
+        return EVENT_STREAM_TYPE.equals(mediaType.type())
+                && EVENT_STREAM_SUBTYPE.equals(mediaType.subtype())
+                && (quality == null || NumberUtils.toDouble(quality) > 0);
     }
 
     private static boolean isEventStream(Response response) {
         var contentType = Optional.ofNullable(response.body()).map(ResponseBody::contentType);
-        return contentType.filter(type -> "event-stream".equalsIgnoreCase(type.subtype())).isPresent();
+        return contentType.filter(type -> EVENT_STREAM_SUBTYPE.equals(type.subtype())).isPresent();
     }
 }

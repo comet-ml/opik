@@ -242,15 +242,17 @@ public class ChatCompletionService {
      * Whether another attempt could succeed, matched explicitly, as an attempt can repeat a call the provider already
      * acted on: a transient status the provider sent, see {@link HttpStatusRetryability#isTransient}, a transport
      * failure, or a failure the provider's client marks as retriable. Anything else, an unrecognised failure included,
-     * fails on its first attempt. Never for a failure langchain4j classified as non-retriable, a feature the provider
-     * can't serve, or a request Opik refused to send.
+     * fails on its first attempt. Never for a failure langchain4j classified as non-retriable anywhere in the chain, a
+     * request Opik refused to send among them, or a feature the provider can't serve, whatever retriable signal the
+     * rest of the chain carries.
      *
-     * <p>The status wins over the rest of the chain: a status that can never succeed isn't retried, whatever wraps it.
+     * <p>Otherwise the status wins over the rest of the chain: a status that can never succeed isn't retried, whatever
+     * wraps it.
      * Whether an exhausted failure is redelivered is decided apart from this, by {@code BaseRedisSubscriber} from the
      * status scoreTrace throws.
      */
     private boolean isRetriable(RuntimeException failure) {
-        if (failure instanceof NonRetriableException || isUnsupportedFeature(failure) || isRequestRefused(failure)) {
+        if (isMarkedNonRetriable(failure) || isUnsupportedFeature(failure)) {
             return false;
         }
         return findProviderHttpStatus(failure)
@@ -277,14 +279,17 @@ public class ChatCompletionService {
                         || cause instanceof ApiException apiException && apiException.isRetryable());
     }
 
+    /**
+     * A failure langchain4j or Opik classified as non-retriable, bare or wrapped. {@code ExceptionUtils} stops at the
+     * first already-visited throwable, so a self-referencing cause chain terminates rather than looping.
+     */
+    private static boolean isMarkedNonRetriable(Throwable throwable) {
+        return ExceptionUtils.getThrowableList(throwable).stream().anyMatch(NonRetriableException.class::isInstance);
+    }
+
     /** A feature the selected provider cannot serve, so no number of attempts will change the answer. */
     private boolean isUnsupportedFeature(RuntimeException runtimeException) {
         return findUnsupportedFeature(runtimeException).isPresent();
-    }
-
-    /** A request Opik refused to send, so no attempt can reach the provider. */
-    private boolean isRequestRefused(RuntimeException runtimeException) {
-        return findRequestRefused(runtimeException).isPresent();
     }
 
     // After the key lookup, because the key decides the route, and a route can refuse what the model takes.

@@ -15,6 +15,7 @@ import com.comet.opik.api.resources.utils.resources.ChatCompletionsClient;
 import com.comet.opik.api.resources.utils.resources.LlmProviderApiKeyResourceClient;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.redis.testcontainers.RedisContainer;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
@@ -35,6 +36,7 @@ import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
+import uk.co.jemos.podam.api.PodamFactory;
 
 import java.time.Duration;
 import java.util.List;
@@ -77,6 +79,8 @@ class ChatCompletionsHeaderTimeoutResourceTest {
     private final TestDropwizardAppExtension APP;
 
     private final WireMockUtils.WireMockRuntime wireMock;
+
+    private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
 
     {
         Startables.deepStart(REDIS, CLICKHOUSE_CONTAINER, MYSQL, ZOOKEEPER_CONTAINER).join();
@@ -123,10 +127,11 @@ class ChatCompletionsHeaderTimeoutResourceTest {
         workspaceName = UUID.randomUUID().toString();
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, UUID.randomUUID().toString(),
                 USER);
-        llmProviderApiKeyResourceClient.createProviderApiKey(ProviderApiKey.builder()
+        llmProviderApiKeyResourceClient.createProviderApiKey(factory.manufacturePojo(ProviderApiKey.class).toBuilder()
                 .provider(LlmProvider.CUSTOM_LLM)
                 .providerName(CUSTOM_PROVIDER_NAME)
-                .apiKey(UUID.randomUUID().toString())
+                .createdBy(USER)
+                .lastUpdatedBy(USER)
                 .baseUrl(wireMock.runtimeInfo().getHttpBaseUrl())
                 .configuration(Map.of("provider_name", CUSTOM_PROVIDER_NAME, "models", MODEL))
                 .build(), apiKey, workspaceName, HttpStatus.SC_CREATED);
