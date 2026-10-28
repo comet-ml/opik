@@ -16,7 +16,8 @@ import java.util.function.Supplier;
  * A project's topic list during one nightly update: read at the start, changed by steps a to l, written at the end.
  * {@link #topics()} holds the topics live at the start in list order (born, then creation), then the ones born tonight in
  * birth order; a topic retired tonight stays in it, marked. Labels in a night are indices into this list, so a topic
- * keeps its index all night. The live topics in this order are the stand's {@code tax.topics}.
+ * keeps its index all night. The live topics in this order are the stand's {@code tax.topics}. Dormant topics (retired
+ * before tonight, see {@link #dormant()}) come after the live ones read at the start, before the ones born tonight.
  */
 @Getter
 public class NightState {
@@ -50,6 +51,21 @@ public class NightState {
         return out;
     }
 
+    /**
+     * The topics retired before tonight that may come back: their prototypes are kept, and {@link Revival} makes one
+     * live again when its traffic returns. Read only when {@code topics.nightly.reviveDays} is on.
+     */
+    public List<Integer> dormant() {
+        var out = new ArrayList<Integer>();
+        for (int t = 0; t < topics.size(); t++) {
+            var topic = topics.get(t);
+            if (!topic.isLive() && topic.getRetiredAt().isBefore(night) && topic.getRetiredReason().isRevivable()) {
+                out.add(t);
+            }
+        }
+        return out;
+    }
+
     public int liveCount() {
         return (int) topics.stream().filter(Topic::isLive).count();
     }
@@ -72,6 +88,18 @@ public class NightState {
         topic.setRetiredReason(reason);
     }
 
+    /** Makes a dormant topic live again tonight, with fresh lifecycle streaks; it keeps its id, name and born. */
+    public void revive(int index) {
+        var topic = topics.get(index);
+        topic.setRetiredAt(null);
+        topic.setRetiredReason(null);
+        topic.setRevivedAt(night);
+        topic.setLowNights(0);
+        topic.setLo7(0);
+        topic.setHi7(0);
+        topic.setInactiveSince(null);
+    }
+
     public void setOtherPrototypes(@NonNull List<float[]> prototypes) {
         this.otherPrototypes = new ArrayList<>(prototypes);
     }
@@ -92,12 +120,21 @@ public class NightState {
         public String value() {
             return name().toLowerCase(Locale.ROOT);
         }
+
+        /** Retired for its traffic, not by Qwen's judgement: it may come back. */
+        public boolean isRevivable() {
+            return this == LOW_SHARE || this == CAP || this == REPLACED;
+        }
+
+        public static RetiredReason of(@NonNull String value) {
+            return valueOf(value.toUpperCase(Locale.ROOT));
+        }
     }
 
     /**
      * A topic of the night. {@code prototypes} are unit vectors in assignment order; {@code lowNights}, {@code lo7},
      * {@code hi7} and {@code inactiveSince} are the lifecycle streaks; {@code size} its count in the window after the
-     * night.
+     * night; {@code revivedAt} the night a dormant topic came back.
      */
     @Getter
     @Setter
@@ -113,12 +150,13 @@ public class NightState {
         private LocalDate inactiveSince;
         private LocalDate retiredAt;
         private RetiredReason retiredReason;
+        private LocalDate revivedAt;
         private int size;
 
         @Builder(toBuilder = true)
         private Topic(@NonNull UUID id, @NonNull String name, @NonNull String definition, @NonNull LocalDate born,
                 @NonNull List<float[]> prototypes, int lowNights, int lo7, int hi7, LocalDate inactiveSince,
-                int size) {
+                LocalDate retiredAt, RetiredReason retiredReason, LocalDate revivedAt, int size) {
             this.id = id;
             this.name = name;
             this.definition = definition;
@@ -128,6 +166,9 @@ public class NightState {
             this.lo7 = lo7;
             this.hi7 = hi7;
             this.inactiveSince = inactiveSince;
+            this.retiredAt = retiredAt;
+            this.retiredReason = retiredReason;
+            this.revivedAt = revivedAt;
             this.size = size;
         }
 

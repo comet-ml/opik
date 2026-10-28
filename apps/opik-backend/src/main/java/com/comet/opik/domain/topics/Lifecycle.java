@@ -12,7 +12,8 @@ import java.util.Map;
  * Step l of the nightly update, after the final assignment, as the stand's lifecycle variant v7f:
  * <ul>
  * <li>share = the topic's window count over the window's traces; a topic born after the first build whose
- * {@code born - 7 days} is later than the window's start is measured from then on (newborn protection);</li>
+ * {@code born - 7 days} is later than the window's start is measured from then on (newborn protection); a revived
+ * topic has its history in the window and is measured on all of it;</li>
  * <li>{@code lowNights} + 1 when the share is below {@value #RETIRE_SHARE}, else 0; {@value #RETIRE_NIGHTS} retires;</li>
  * <li>while more than {@code maxTopics} are live, the one with the smallest count is retired;</li>
  * <li>inactive (display): an active topic counts {@code lo7} nights with a 7-day share below {@value #RETIRE_SHARE}

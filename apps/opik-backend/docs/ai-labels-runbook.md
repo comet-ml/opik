@@ -277,7 +277,7 @@ or to Other. It writes:
 
 | Table | Database | What |
 |---|---|---|
-| `topics` | MySQL | One row per topic: name, definition, `born` (the night), `size` (window traces), and the nightly update's lifecycle columns: `low_nights`, `lo7`, `hi7`, `inactive_since`, `retired_at`, `retired_reason`. A retired topic keeps its row; its id is never reused. |
+| `topics` | MySQL | One row per topic: name, definition, `born` (the night), `size` (window traces), and the nightly update's lifecycle columns: `low_nights`, `lo7`, `hi7`, `inactive_since`, `retired_at`, `retired_reason`, `revived_at` (the last night a retired topic came back). A retired topic keeps its row; its id is never reused. |
 | `topic_prototypes` | MySQL | The vectors traces are assigned by, several per topic, and the known-Other ones (`topic_id` null). |
 | `topic_project_states` | MySQL | One row per project with a saved list: `rebuilds` (saved nights), `last_run_id`, `window_until`. |
 | `topic_runs` | MySQL | One row per run: `running`, then `saved` or `failed` with `error_code`. Kept 90 days. |
@@ -338,15 +338,22 @@ night does not count: the lifecycle counters and `rebuilds` change only on a sav
 ### Nightly update
 
 A project with live topics keeps its list and updates it. The run reads the window and the saved list (live topics,
-their prototypes, the known-Other prototypes, `rebuilds`), then:
+their prototypes, the dormant topics and their prototypes, the known-Other prototypes, `rebuilds`), then:
 
 1. On a review night the known-Other prototypes are dropped: the Other memory expires weekly.
-2. Every window trace goes to its nearest prototype at cosine 0.75: a topic, known Other, or unassigned.
-3. Each topic's prototypes move to its members of tonight (k-means, 1 to 10 prototypes by member count); so do the
+2. Revival. A dormant topic is one retired for its traffic (`low_share`, `cap` or `replaced`) in the last
+   `topics.nightly.reviveDays` (default 30; `TOPICS_NIGHTLY_REVIVE_DAYS`, 0 turns revival off). Every window trace goes
+   to its nearest prototype among the live topics, the dormant ones and known Other, at cosine 0.75. A dormant topic
+   whose traces reach 2% of the window or of the last 7 days (the size of a big candidate, below) is live again:
+   same id, name and `born`, `revived_at` set to the night, fresh lifecycle streaks. The largest comes back first, none
+   while the list holds 10. Without this, a theme whose traffic paused for a few days comes back as a new topic with
+   a new name. A topic Qwen retired (`merged`, `review`) never comes back.
+3. Every window trace goes to its nearest prototype at cosine 0.75: a topic, known Other, or unassigned.
+4. Each topic's prototypes move to its members of tonight (k-means, 1 to 10 prototypes by member count); so do the
    known-Other ones.
-4. When 20 or more traces are unassigned, they are grouped by k-means. A group of 20 or more traces is a candidate. A
+5. When 20 or more traces are unassigned, they are grouped by k-means. A group of 20 or more traces is a candidate. A
    candidate is big when its share of the window, or of the last 7 days, is 2% or more.
-5. Qwen is called only when there is a big candidate or it is a review night. Most nights make no call.
+6. Qwen is called only when there is a big candidate or it is a review night. Most nights make no call.
    - `revise` (`revise_v4.md`, or `revise_review_v4.md` on review nights): assign candidates to topics, create new
      topics (not when the list holds 10), send candidates to Other; on review nights also merge, retire and redefine
      topics. A review never retires a topic with a 2% share or more (overall or in the last 7 days): such a topic
@@ -363,10 +370,10 @@ their prototypes, the known-Other prototypes, `rebuilds`), then:
      share, if that share is below the sum of its candidates' 7-day shares. A loose candidate, a full list with no
      such topic, a catch-all or blank name, or a candidate the answers leave out goes to known Other, and the run goes
      on. A failed naming call fails the run.
-6. The centre of each candidate given to a topic becomes one more prototype of that topic; one given to Other becomes
+7. The centre of each candidate given to a topic becomes one more prototype of that topic; one given to Other becomes
    a known-Other prototype.
-7. Every window trace is assigned again, as in the first build (cosine 0.75, the 0.95 gate on known Other).
-8. Lifecycle, then a reassignment when a topic was retired:
+8. Every window trace is assigned again, as in the first build (cosine 0.75, the 0.95 gate on known Other).
+9. Lifecycle, then a reassignment when a topic was retired:
    - `low_nights` counts saved nights in a row under 0.5% of the window; at 3 the topic is retired (`low_share`). A
      topic born after the first build is measured from 7 days before its birth (newborn protection).
    - More than 10 live topics: the smallest is retired (`cap`).
@@ -379,7 +386,9 @@ their prototypes, the known-Other prototypes, `rebuilds`), then:
 review night's answer) or `replaced` (replaced by a forced new topic on a full list).
 
 The save writes tonight's `trace_topics` rows, then in one MySQL transaction: tonight's new topics, the changed
-columns of the topics it read, the project's prototypes (replaced), and `rebuilds` + 1.
+columns of the topics it read, the project's prototypes (replaced: the live topics', the dormant topics' and known
+Other), and `rebuilds` + 1. `topic_prototypes` therefore holds prototypes of retired topics too: a reader that assigns
+traces must take only the prototypes of live topics (`topics.retired_at IS NULL`).
 
 #### Review nights
 
@@ -444,7 +453,7 @@ A nightly update's `stats` holds, besides `vectors`, `topics`, `other_share`, `s
 | `unassigned`, `candidates`, `big` | Traces no prototype took at 0.75; candidate groups; big ones. `big` 0 and `review` false mean no Qwen call. |
 | `verify_pairs`, `verify_failed` | Pairs sent to verify; true when the answer was unreadable and every pair was undone. |
 | `forced` | Big candidates left without a topic, by outcome: `born`, `assigned` (given to a live topic and verified), `same_name` (a new name equal to a live topic's), `other_loose`, `other_full`, `other_name`. |
-| `born`, `retired` | Names of tonight's new topics; tonight's retirements by reason. |
+| `born`, `revived`, `retired` | Names of tonight's new topics; names of the dormant topics that came back tonight; tonight's retirements by reason. |
 | `other_prototypes` | Known-Other prototypes after the night. |
 | `churn`, `churn_any` | See [Churn](#churn). |
 | `qwen_calls`, `qwen` | The number of calls, and per call its `kind` (`revise`, `verify`, `naming`), `outcome` and tokens. |

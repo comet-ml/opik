@@ -10,6 +10,7 @@ import org.jdbi.v3.sqlobject.statement.SqlBatch;
 import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 
+import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
 import java.util.Set;
@@ -27,9 +28,9 @@ public interface TopicDAO {
 
     @SqlBatch("""
             INSERT INTO topics (id, workspace_id, project_id, name, definition, born, retired_at, retired_reason,
-                inactive_since, low_nights, lo7, hi7, size)
+                revived_at, inactive_since, low_nights, lo7, hi7, size)
             VALUES (:id, :workspaceId, :projectId, :name, :definition, :born, :retiredAt, :retiredReason,
-                :inactiveSince, :lowNights, :lo7, :hi7, :size)
+                :revivedAt, :inactiveSince, :lowNights, :lo7, :hi7, :size)
             """)
     void insertTopics(@BindMethods List<Topic> topics);
 
@@ -40,10 +41,19 @@ public interface TopicDAO {
             """)
     List<Topic> findLive(@Bind("projectId") UUID projectId);
 
+    /** The topics a nightly update may revive: retired on or after {@code since} by one of {@code reasons}. */
+    @SqlQuery("""
+            SELECT * FROM topics
+            WHERE project_id = :projectId AND retired_at >= :since AND retired_reason IN (<reasons>)
+            ORDER BY born, id
+            """)
+    List<Topic> findDormant(@Bind("projectId") UUID projectId, @Bind("since") LocalDate since,
+            @BindList("reasons") Collection<String> reasons);
+
     /** The nightly update's save of a topic it read: everything but the id, name and born can change. */
     @SqlBatch("""
             UPDATE topics SET definition = :definition, retired_at = :retiredAt, retired_reason = :retiredReason,
-                inactive_since = :inactiveSince, low_nights = :lowNights, lo7 = :lo7, hi7 = :hi7, size = :size
+                revived_at = :revivedAt, inactive_since = :inactiveSince, low_nights = :lowNights, lo7 = :lo7, hi7 = :hi7, size = :size
             WHERE id = :id AND project_id = :projectId
             """)
     int[] updateTopics(@BindMethods List<Topic> topics);

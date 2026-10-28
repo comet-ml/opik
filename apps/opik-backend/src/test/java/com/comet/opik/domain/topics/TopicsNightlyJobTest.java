@@ -58,6 +58,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -434,6 +435,41 @@ class TopicsNightlyJobTest {
         assertThat(result.failed()).isZero();
         assertThat(result.skipped()).isEqualTo(1);
         assertThat(runs(projectId)).hasSize(2);
+    }
+
+    @Test
+    @DisplayName("a topic retired for low share comes back with its id and name when its traffic does")
+    void revival() {
+        var workspaceId = enabledWorkspace();
+        var projectId = UUID.randomUUID();
+        seed(workspaceId, projectId, 0, BUILT, FIXTURE.night, FIXTURE.night.plus(Duration.ofDays(5)));
+        stubAnswer(FIXTURE.answer);
+        assertThat(nightlyService.runNight(start()).saved()).isEqualTo(1);
+        // The largest topic was retired for low share yesterday; its prototypes stay, and its traces are all there.
+        var largest = topics(projectId).stream().max(Comparator.comparingInt(Topic::size)).orElseThrow();
+        template.inTransaction(WRITE, handle -> handle.execute("UPDATE topics SET retired_at = ?, retired_reason = "
+                + "'low_share', low_nights = 3 WHERE id = ?", secondNight().minusDays(1), largest.id().toString()));
+        wireMock.resetAll();
+        stubNightly(emptyRevise(), sameAnswers(), NAMED);
+
+        assertThat(nightlyService.runNight(secondStart()).saved()).isEqualTo(1);
+
+        var back = topics(projectId).stream().filter(topic -> topic.id().equals(largest.id())).findFirst();
+        assertThat(back).hasValueSatisfying(topic -> {
+            assertThat(topic.name()).isEqualTo(largest.name());
+            assertThat(topic.born()).isEqualTo(night());
+            assertThat(topic.retiredAt()).isNull();
+            assertThat(topic.retiredReason()).isNull();
+            assertThat(topic.revivedAt()).isEqualTo(secondNight());
+            assertThat(topic.lowNights()).isZero();
+            assertThat(topic.size()).isPositive();
+        });
+        assertThat(prototypes(projectId)).anyMatch(prototype -> largest.id().equals(prototype.topicId()));
+        var update = runs(projectId).stream().filter(run -> run.mode() == TopicRun.Mode.NIGHTLY_UPDATE)
+                .findFirst().orElseThrow();
+        var stats = json(update.stats());
+        assertThat(stats.path("revived")).extracting(JsonNode::asText).containsExactly(largest.name());
+        assertThat(stats.path("born")).isEmpty();
     }
 
     @Test

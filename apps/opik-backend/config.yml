@@ -2683,6 +2683,10 @@ topics:
     #  Default: 30
     #  Description: The window: this many whole UTC days before the night
     windowDays: ${TOPICS_NIGHTLY_WINDOW_DAYS:-30}
+    #  Default: 30
+    #  Description: A topic retired for low traffic, the cap or a replacement keeps its prototypes this many days and
+    #  comes back (same id and name) when its traffic does. 0 turns revival off
+    reviveDays: ${TOPICS_NIGHTLY_REVIVE_DAYS:-30}
     #  Default: 30000
     #  Description: A larger window keeps its newest traces
     maxVectors: ${TOPICS_NIGHTLY_MAX_VECTORS:-30000}

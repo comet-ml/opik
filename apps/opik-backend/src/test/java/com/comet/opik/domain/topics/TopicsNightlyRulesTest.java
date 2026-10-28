@@ -376,6 +376,98 @@ class TopicsNightlyRulesTest {
     }
 
     @Nested
+    @DisplayName("revival")
+    class Revivals {
+
+        @Test
+        @DisplayName("a dormant topic whose traces reach the big share comes back with its id, name and born")
+        void comesBack() {
+            var state = state(0, topic("East", EAST), dormant("North", RetiredReason.LOW_SHARE, NORTH));
+            var id = state.topic(1).getId();
+
+            var revived = Revival.apply(state, window(directions(90, 10)), 10);
+
+            assertThat(revived).containsExactly(1);
+            var topic = state.topic(1);
+            assertThat(topic.isLive()).isTrue();
+            assertThat(topic.getId()).isEqualTo(id);
+            assertThat(topic.getName()).isEqualTo("North");
+            assertThat(topic.getBorn()).isEqualTo(FIRST_BUILD);
+            assertThat(topic.getRevivedAt()).isEqualTo(NIGHT);
+            assertThat(topic.getRetiredReason()).isNull();
+            assertThat(topic.getLowNights()).isZero();
+            assertThat(topic.getInactiveSince()).isNull();
+        }
+
+        @Test
+        @DisplayName("a small comeback, a full list, a topic Qwen retired or one retired tonight stays retired")
+        void staysRetired() {
+            var small = state(0, topic("East", EAST), dormant("North", RetiredReason.CAP, NORTH));
+            assertThat(Revival.apply(small, window(directions(99, 1)), 10)).isEmpty();
+            assertThat(small.topic(1).isLive()).isFalse();
+
+            var full = state(0, topic("East", EAST), dormant("North", RetiredReason.REPLACED, NORTH));
+            assertThat(Revival.apply(full, window(directions(50, 50)), 1)).isEmpty();
+
+            for (var reason : List.of(RetiredReason.MERGED, RetiredReason.REVIEW)) {
+                var judged = state(0, topic("East", EAST), dormant("North", reason, NORTH));
+                assertThat(judged.dormant()).isEmpty();
+                assertThat(Revival.apply(judged, window(directions(50, 50)), 10)).isEmpty();
+            }
+
+            var tonight = state(0, topic("East", EAST), topic("North", NORTH));
+            tonight.retire(1, RetiredReason.LOW_SHARE);
+            assertThat(tonight.dormant()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("traces nearer a live topic or known Other do not count for the dormant one")
+        void nearestOwnerOnly() {
+            var close = new float[]{0.8f, 0.6f};
+            var state = state(0, topic("East", EAST), dormant("Near", RetiredReason.LOW_SHARE, close));
+            state.setOtherPrototypes(List.of(NORTH));
+            var vectors = new ArrayList<float[]>();
+            for (int i = 0; i < 100; i++) {
+                vectors.add(i < 50 ? EAST : NORTH);
+            }
+
+            assertThat(Revival.apply(state, window(vectors), 10)).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a revived topic is measured on the whole window, and passes the invariants")
+        void revivedWholeWindow() {
+            var state = state(0, topic("Old", EAST), topic("Back", NORTH).toBuilder()
+                    .revivedAt(LocalDate.parse("2026-10-18")).build());
+            var createdAt = new Instant[10];
+            Arrays.fill(createdAt, 0, 5, Instant.parse("2026-10-01T00:00:00Z"));
+            Arrays.fill(createdAt, 5, 10, Instant.parse("2026-10-15T00:00:00Z"));
+            int[] labels = {1, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+
+            assertThat(Lifecycle.retire(state, window(createdAt), labels, 10))
+                    .containsExactly(Map.entry(0, 0.9), Map.entry(1, 0.1));
+
+            var revived = state(0, topic("A", EAST), dormant("B", RetiredReason.LOW_SHARE, NORTH));
+            revived.revive(1);
+            var names = Map.of(revived.topic(0).getId(), "A", revived.topic(1).getId(), "B");
+            NightInvariants.check(revived, names, List.of(revived.topic(1).getId()), new int[]{0, 1}, 2, 10, 2);
+        }
+
+        private static NightState.Topic dormant(String name, RetiredReason reason, float[]... prototypes) {
+            return topic(name, prototypes).toBuilder().retiredAt(NIGHT.minusDays(5)).retiredReason(reason)
+                    .lowNights(3).build();
+        }
+
+        private static List<float[]> directions(int east, int north) {
+            var vectors = new ArrayList<float[]>();
+            for (int i = 0; i < east + north; i++) {
+                vectors.add(i < east ? EAST : NORTH);
+            }
+            return vectors;
+        }
+    }
+
+    @Nested
     @DisplayName("lifecycle")
     class Lifecycles {
 

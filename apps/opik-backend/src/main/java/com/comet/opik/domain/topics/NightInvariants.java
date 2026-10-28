@@ -34,7 +34,7 @@ public class NightInvariants {
             if (!ids.add(topic.getId())) {
                 throw invariant("topic id '%s' twice".formatted(topic.getId()));
             }
-            if (topic.isLive() && retired.contains(topic.getId())) {
+            if (topic.isLive() && retired.contains(topic.getId()) && !state.getNight().equals(topic.getRevivedAt())) {
                 throw invariant("retired topic '%s' is live".formatted(topic.getId()));
             }
             var name = names.get(topic.getId());

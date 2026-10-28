@@ -33,6 +33,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -70,6 +71,8 @@ public class TopicsRebuildService {
 
     static final int DIMENSIONS = TopicVectorsTickService.EMBED_DIMENSIONS;
     static final int MAX_TOPICS = 10;
+    private static final List<String> REVIVABLE = Arrays.stream(NightState.RetiredReason.values())
+            .filter(NightState.RetiredReason::isRevivable).map(NightState.RetiredReason::value).toList();
     static final int MIN_GROUPS = 15;
     static final int MAX_GROUPS = 50;
     static final int TEXTS_PER_GROUP = 60;
@@ -334,12 +337,14 @@ public class TopicsRebuildService {
                         forced.path(outcome.result().name().toLowerCase(Locale.ROOT)).asInt() + 1));
             }
             var born = stats.putArray("born");
+            var revived = stats.putArray("revived");
+            result.revived().forEach(t -> revived.add(state.topic(t).getName()));
             var retired = stats.putObject("retired");
             for (var topic : state.getTopics()) {
                 if (!saved.names().containsKey(topic.getId())) {
                     born.add(topic.getName());
                 }
-                if (!topic.isLive()) {
+                if (night.equals(topic.getRetiredAt())) {
                     var reason = topic.getRetiredReason().value();
                     retired.put(reason, retired.path(reason).asInt() + 1);
                 }
@@ -351,12 +356,14 @@ public class TopicsRebuildService {
             stats.put("churn_any", churn == null ? null : churn.churnAny());
             stats.set("seconds", seconds);
             log.info("Topics run '{}' updated, project '{}', window ['{}', '{}'), vectors '{}', review '{}', "
-                    + "unassigned '{}', candidates '{}', big '{}', born '{}', retired '{}', topics '{}', Other share "
+                    + "unassigned '{}', candidates '{}', big '{}', born '{}', revived '{}', retired '{}', topics '{}', "
+                    + "Other share "
                     + "'{}', churn '{}', seconds '{}'", runId, projectId, from, to, n, result.review(),
-                    result.unassigned(), result.candidates().size(), result.big().size(), born.size(), retired,
+                    result.unassigned(), result.candidates().size(), result.big().size(), born.size(),
+                    revived.size(), retired,
                     state.liveCount(), TopicText.fixed((double) other / n, 3), churn, seconds);
             // Topic names come from trace text: DEBUG only.
-            log.debug("Topics run '{}' born, project '{}': '{}'", runId, projectId, born);
+            log.debug("Topics run '{}' born, project '{}': '{}', revived '{}'", runId, projectId, born, revived);
 
             timed("save", () -> {
                 saveUpdate(rows, labels, state, saved, born.size());
@@ -367,7 +374,10 @@ public class TopicsRebuildService {
             }
         }
 
-        /** The saved list as the night reads it: live topics ordered by born, then id (creation). */
+        /**
+         * The saved list as the night reads it: live topics ordered by born, then id (creation), then the dormant ones
+         * that kept their prototypes, in the same order.
+         */
         private SavedList readState() {
             return template.inTransaction(READ_ONLY, handle -> {
                 var dao = handle.attach(TopicDAO.class);
@@ -376,8 +386,13 @@ public class TopicsRebuildService {
                 if (states.isEmpty() || live.isEmpty()) {
                     throw new TopicsRunException(Code.INTERNAL, "the project has no saved topic list");
                 }
+                int reviveDays = config.getNightly().getReviveDays();
+                var dormant = reviveDays == 0
+                        ? List.<Topic>of()
+                        : dao.findDormant(projectId, night.minusDays(reviveDays), REVIVABLE);
                 var byTopic = new LinkedHashMap<UUID, List<float[]>>();
                 live.forEach(topic -> byTopic.put(topic.id(), new ArrayList<>()));
+                dormant.forEach(topic -> byTopic.put(topic.id(), new ArrayList<>()));
                 var other = new ArrayList<float[]>();
                 for (var prototype : dao.findPrototypes(projectId)) {
                     if (prototype.topicId() == null) {
@@ -390,18 +405,13 @@ public class TopicsRebuildService {
                 var names = new HashMap<UUID, String>();
                 for (var topic : live) {
                     names.put(topic.id(), topic.name());
-                    topics.add(NightState.Topic.builder()
-                            .id(topic.id())
-                            .name(topic.name())
-                            .definition(topic.definition())
-                            .born(topic.born())
-                            .prototypes(byTopic.get(topic.id()))
-                            .lowNights(topic.lowNights())
-                            .lo7(topic.lo7())
-                            .hi7(topic.hi7())
-                            .inactiveSince(topic.inactiveSince())
-                            .size(topic.size())
-                            .build());
+                    topics.add(nightTopic(topic, byTopic.get(topic.id())));
+                }
+                for (var topic : dormant) {
+                    if (!byTopic.get(topic.id()).isEmpty()) {
+                        names.put(topic.id(), topic.name());
+                        topics.add(nightTopic(topic, byTopic.get(topic.id())));
+                    }
                 }
                 var state = NightState.builder()
                         .topics(topics)
@@ -413,6 +423,36 @@ public class TopicsRebuildService {
                         .build();
                 return new SavedList(state, states.getFirst(), names, dao.findRetiredIds(projectId));
             });
+        }
+
+        private NightState.Topic nightTopic(Topic topic, List<float[]> prototypes) {
+            return NightState.Topic.builder()
+                    .id(topic.id())
+                    .name(topic.name())
+                    .definition(topic.definition())
+                    .born(topic.born())
+                    .prototypes(prototypes)
+                    .lowNights(topic.lowNights())
+                    .lo7(topic.lo7())
+                    .hi7(topic.hi7())
+                    .inactiveSince(topic.inactiveSince())
+                    .retiredAt(topic.retiredAt())
+                    .retiredReason(topic.retiredReason() == null
+                            ? null
+                            : NightState.RetiredReason.of(topic.retiredReason()))
+                    .revivedAt(topic.revivedAt())
+                    .size(topic.size())
+                    .build();
+        }
+
+        /**
+         * Whether a topic's prototypes are saved for a later {@link Revival}: retired for its traffic, at most
+         * {@code reviveDays} ago.
+         */
+        private boolean dormantTomorrow(NightState.Topic topic) {
+            int reviveDays = config.getNightly().getReviveDays();
+            return reviveDays > 0 && !topic.isLive() && topic.getRetiredReason().isRevivable()
+                    && !topic.getRetiredAt().isBefore(night.plusDays(1).minusDays(reviveDays));
         }
 
         /** D6: last saved night's label of each window trace, before tonight's are written. */
@@ -806,6 +846,7 @@ public class TopicsRebuildService {
                         .born(topic.getBorn())
                         .retiredAt(topic.getRetiredAt())
                         .retiredReason(topic.getRetiredReason() == null ? null : topic.getRetiredReason().value())
+                        .revivedAt(topic.getRevivedAt())
                         .inactiveSince(topic.getInactiveSince())
                         .lowNights(topic.getLowNights())
                         .lo7(topic.getLo7())
@@ -818,6 +859,13 @@ public class TopicsRebuildService {
             for (int t : state.live()) {
                 for (var vector : state.topic(t).getPrototypes()) {
                     prototypes.add(prototype(prototypes.size(), state.topic(t).getId(), vector));
+                }
+            }
+            for (var topic : state.getTopics()) {
+                if (dormantTomorrow(topic)) {
+                    for (var vector : topic.getPrototypes()) {
+                        prototypes.add(prototype(prototypes.size(), topic.getId(), vector));
+                    }
                 }
             }
             for (var vector : state.getOtherPrototypes()) {
@@ -865,7 +913,7 @@ public class TopicsRebuildService {
             metrics.saved("topics", inserted.size() + updated.size());
             metrics.saved("topic_prototypes", prototypes.size());
             metrics.topics(TopicRun.Mode.NIGHTLY_UPDATE, state.liveCount(), bornTonight);
-            state.getTopics().stream().filter(topic -> !topic.isLive())
+            state.getTopics().stream().filter(topic -> night.equals(topic.getRetiredAt()))
                     .forEach(topic -> metrics.retired(topic.getRetiredReason().value()));
             log.info("Topics run '{}' saved, project '{}', trace topics '{}', topics inserted '{}', updated '{}', "
                     + "prototypes '{}'", runId, projectId, traceTopics.size(), inserted.size(), updated.size(),

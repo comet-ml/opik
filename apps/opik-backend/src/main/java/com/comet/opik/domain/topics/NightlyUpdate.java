@@ -22,6 +22,7 @@ import java.util.stream.Collectors;
  * <ol type="a">
  * <li>review night ({@code rebuilds > 0} and a multiple of {@value #REVIEW_EVERY}): the known-Other prototypes are
  * dropped;</li>
+ * <li>a2. {@link Revival}: a dormant topic whose traffic came back is live again;</li>
  * <li>every trace to its nearest prototype, topic or known Other, at cosine 0.75 (no Other gate here);</li>
  * <li>{@link Recentre} of every topic with members, then of the known-Other pool;</li>
  * <li>{@link CandidateGrouper} on the traces no prototype took;</li>
@@ -56,6 +57,8 @@ public class NightlyUpdate {
         if (reviewNight) {
             state.setOtherPrototypes(List.of());
         }
+        // a2. dormant topics whose traffic came back
+        var revived = Revival.apply(state, window, maxTopics);
         // b. yesterday's prototypes on tonight's window
         var before = assignBefore(state, window);
         var recent = window.recent();
@@ -84,6 +87,7 @@ public class NightlyUpdate {
         var result = Result.builder()
                 .reviewNight(reviewNight)
                 .review(review)
+                .revived(revived)
                 .unassigned(grouping.unassigned().length)
                 .candidates(candidates.stream().map(GroupSummary::group).toList())
                 .big(big.stream().sorted().toList());
@@ -247,7 +251,8 @@ public class NightlyUpdate {
      * lifecycle judged.
      */
     @Builder
-    public record Result(@NonNull int[] labels, boolean reviewNight, boolean review, int unassigned,
+    public record Result(@NonNull int[] labels, boolean reviewNight, boolean review, @NonNull List<Integer> revived,
+            int unassigned,
             @NonNull List<Integer> candidates, @NonNull List<Integer> big, Map<Integer, Integer> afterRevise,
             Verifier.Verified verified, List<ForcedBirth.Outcome> forced, @NonNull Map<Integer, Integer> groupMap,
             @NonNull Map<Integer, Double> lifecycleShares) {
