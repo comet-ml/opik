@@ -446,7 +446,7 @@ public class TopicsRebuildService {
         }
 
         /**
-         * Whether a topic's prototypes are saved for a later {@link Revival}: retired for its traffic, at most
+         * Whether a topic's prototypes are saved for a later {@link Rebirth}: retired for its traffic, at most
          * {@code reviveDays} ago.
          */
         private boolean dormantTomorrow(NightState.Topic topic) {

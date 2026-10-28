@@ -237,7 +237,7 @@ public class ForcedBirth {
     }
 
     /** What happened to one big candidate left without a topic; {@code topic} is the index of the topic it got. */
-    @Builder
+    @Builder(toBuilder = true)
     public record Outcome(int group, @NonNull Result result, Integer topic) {
     }
 }

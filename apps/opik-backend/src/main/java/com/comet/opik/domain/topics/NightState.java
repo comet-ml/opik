@@ -52,8 +52,8 @@ public class NightState {
     }
 
     /**
-     * The topics retired before tonight that may come back: their prototypes are kept, and {@link Revival} makes one
-     * live again when its traffic returns. Read only when {@code topics.nightly.reviveDays} is on.
+     * The topics retired before tonight that may come back: their prototypes are kept, and {@link Rebirth} gives a
+     * topic born tonight on their traces their identity. Read only when {@code topics.nightly.reviveDays} is on.
      */
     public List<Integer> dormant() {
         var out = new ArrayList<Integer>();
@@ -88,9 +88,15 @@ public class NightState {
         topic.setRetiredReason(reason);
     }
 
-    /** Makes a dormant topic live again tonight, with fresh lifecycle streaks; it keeps its id, name and born. */
-    public void revive(int index) {
-        var topic = topics.get(index);
+    /**
+     * A topic born tonight takes a dormant topic's identity: the dormant one is live again tonight with the newborn's
+     * prototypes and fresh lifecycle streaks, keeps its id, name, definition and born, and the newborn leaves the list.
+     * Indices after {@code child} move down by one.
+     */
+    public void inherit(int child, int parent) {
+        var born = topics.get(child);
+        var topic = topics.get(parent);
+        topic.setPrototypes(born.getPrototypes());
         topic.setRetiredAt(null);
         topic.setRetiredReason(null);
         topic.setRevivedAt(night);
@@ -98,6 +104,7 @@ public class NightState {
         topic.setLo7(0);
         topic.setHi7(0);
         topic.setInactiveSince(null);
+        topics.remove(child);
     }
 
     public void setOtherPrototypes(@NonNull List<float[]> prototypes) {

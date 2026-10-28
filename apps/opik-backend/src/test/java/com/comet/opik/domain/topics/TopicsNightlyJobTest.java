@@ -58,7 +58,6 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -438,37 +437,62 @@ class TopicsNightlyJobTest {
     }
 
     @Test
-    @DisplayName("a topic retired for low share comes back with its id and name when its traffic does")
-    void revival() {
+    @DisplayName("a topic born on the traces of one retired for low share is that topic again, with its id and name")
+    void rebirth() {
         var workspaceId = enabledWorkspace();
-        var projectId = UUID.randomUUID();
-        seed(workspaceId, projectId, 0, BUILT, FIXTURE.night, FIXTURE.night.plus(Duration.ofDays(5)));
-        stubAnswer(FIXTURE.answer);
-        assertThat(nightlyService.runNight(start()).saved()).isEqualTo(1);
-        // The largest topic was retired for low share yesterday; its prototypes stay, and its traces are all there.
-        var largest = topics(projectId).stream().max(Comparator.comparingInt(Topic::size)).orElseThrow();
-        template.inTransaction(WRITE, handle -> handle.execute("UPDATE topics SET retired_at = ?, retired_reason = "
-                + "'low_share', low_nights = 3 WHERE id = ?", secondNight().minusDays(1), largest.id().toString()));
-        wireMock.resetAll();
-        stubNightly(emptyRevise(), sameAnswers(), NAMED);
+        var projectId = firstBuilt(workspaceId);
+        // A tire topic was retired for low share yesterday; its prototype stays, and the tire traffic comes back.
+        var dormant = Topic.builder()
+                .id(ID_GENERATOR.generateId())
+                .workspaceId(workspaceId)
+                .projectId(projectId)
+                .name("Tire Questions")
+                .definition("Questions about the car's tires.")
+                .born(night())
+                .retiredAt(secondNight().minusDays(1))
+                .retiredReason("low_share")
+                .lowNights(3)
+                .build();
+        int position = prototypes(projectId).size();
+        template.inTransaction(WRITE, handle -> {
+            var dao = handle.attach(TopicDAO.class);
+            dao.insertTopics(List.of(dormant));
+            dao.insertPrototypes(List.of(TopicPrototype.builder()
+                    .id(ID_GENERATOR.generateId())
+                    .workspaceId(workspaceId)
+                    .projectId(projectId)
+                    .position(position)
+                    .topicId(dormant.id())
+                    .vector(TopicPrototype.encode(tireCentre()))
+                    .build()));
+            return null;
+        });
+        plant(workspaceId, projectId, PLANTED);
+        var revise = InferenceJson.MAPPER.createObjectNode();
+        revise.putArray("assign");
+        var clusters = revise.putArray("new").addObject().put("name", "Tire Pressure Checks")
+                .put("definition", "Asks whether the car's tires need air.").putArray("clusters");
+        for (int j = 0; j < 20; j++) {
+            clusters.add(j);
+        }
+        revise.putArray("other");
+        stubNightly(revise, sameAnswers(), NAMED);
 
         assertThat(nightlyService.runNight(secondStart()).saved()).isEqualTo(1);
 
-        var back = topics(projectId).stream().filter(topic -> topic.id().equals(largest.id())).findFirst();
-        assertThat(back).hasValueSatisfying(topic -> {
-            assertThat(topic.name()).isEqualTo(largest.name());
+        var live = topics(projectId);
+        assertThat(live).extracting(Topic::name).doesNotContain("Tire Pressure Checks");
+        assertThat(live).filteredOn(topic -> topic.id().equals(dormant.id())).singleElement().satisfies(topic -> {
+            assertThat(topic.name()).isEqualTo("Tire Questions");
+            assertThat(topic.definition()).isEqualTo("Questions about the car's tires.");
             assertThat(topic.born()).isEqualTo(night());
-            assertThat(topic.retiredAt()).isNull();
             assertThat(topic.retiredReason()).isNull();
             assertThat(topic.revivedAt()).isEqualTo(secondNight());
             assertThat(topic.lowNights()).isZero();
             assertThat(topic.size()).isPositive();
         });
-        assertThat(prototypes(projectId)).anyMatch(prototype -> largest.id().equals(prototype.topicId()));
-        var update = runs(projectId).stream().filter(run -> run.mode() == TopicRun.Mode.NIGHTLY_UPDATE)
-                .findFirst().orElseThrow();
-        var stats = json(update.stats());
-        assertThat(stats.path("revived")).extracting(JsonNode::asText).containsExactly(largest.name());
+        var stats = json(nightlyRun(projectId).stats());
+        assertThat(stats.path("revived")).extracting(JsonNode::asText).containsExactly("Tire Questions");
         assertThat(stats.path("born")).isEmpty();
     }
 
@@ -879,6 +903,27 @@ class TopicsNightlyJobTest {
         }
         assertThat(rows).hasSize(count);
         vectorsDAO.insert(rows).block();
+    }
+
+    /** The unit mean of the first {@value #PLANTED} tire vectors of the nightly fixture. */
+    private static float[] tireCentre() {
+        int d = TopicsNightlyFixture.DIMENSIONS;
+        var sum = new double[d];
+        int count = 0;
+        for (int i = 0; i < NIGHTLY.intents.length && count < PLANTED; i++) {
+            if (NIGHTLY.intents[i].toLowerCase().contains("tire")) {
+                for (int t = 0; t < d; t++) {
+                    sum[t] += NIGHTLY.vectors[i * d + t];
+                }
+                count++;
+            }
+        }
+        double norm = Math.sqrt(java.util.Arrays.stream(sum).map(value -> value * value).sum());
+        var out = new float[d];
+        for (int t = 0; t < d; t++) {
+            out[t] = (float) (sum[t] / norm);
+        }
+        return out;
     }
 
     /**

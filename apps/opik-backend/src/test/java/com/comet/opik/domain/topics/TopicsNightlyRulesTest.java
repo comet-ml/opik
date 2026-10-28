@@ -376,23 +376,29 @@ class TopicsNightlyRulesTest {
     }
 
     @Nested
-    @DisplayName("revival")
-    class Revivals {
+    @DisplayName("rebirth")
+    class Rebirths {
 
         @Test
-        @DisplayName("a dormant topic whose traces reach the big share comes back with its id, name and born")
-        void comesBack() {
+        @DisplayName("a topic born on a dormant topic's traces takes its id, name and born, with the new prototypes")
+        void takesIdentity() {
             var state = state(0, topic("East", EAST), dormant("North", RetiredReason.LOW_SHARE, NORTH));
             var id = state.topic(1).getId();
+            var close = new float[]{0.6f, 0.8f};
+            int child = state.born("Northern Again", "new def");
+            state.topic(child).setPrototypes(List.of(close));
 
-            var revived = Revival.apply(state, window(directions(90, 10)), 10);
+            var moves = Rebirth.apply(state, window(directions(90, 10)));
 
-            assertThat(revived).containsExactly(1);
+            assertThat(moves).singleElement().isEqualTo(new int[]{2, 1});
+            assertThat(state.getTopics()).hasSize(2);
             var topic = state.topic(1);
             assertThat(topic.isLive()).isTrue();
             assertThat(topic.getId()).isEqualTo(id);
             assertThat(topic.getName()).isEqualTo("North");
+            assertThat(topic.getDefinition()).isEqualTo("North def");
             assertThat(topic.getBorn()).isEqualTo(FIRST_BUILD);
+            assertThat(topic.getPrototypes()).containsExactly(close);
             assertThat(topic.getRevivedAt()).isEqualTo(NIGHT);
             assertThat(topic.getRetiredReason()).isNull();
             assertThat(topic.getLowNights()).isZero();
@@ -400,19 +406,22 @@ class TopicsNightlyRulesTest {
         }
 
         @Test
-        @DisplayName("a small comeback, a full list, a topic Qwen retired or one retired tonight stays retired")
-        void staysRetired() {
-            var small = state(0, topic("East", EAST), dormant("North", RetiredReason.CAP, NORTH));
-            assertThat(Revival.apply(small, window(directions(99, 1)), 10)).isEmpty();
-            assertThat(small.topic(1).isLive()).isFalse();
+        @DisplayName("a newborn stays new when its traces are not the dormant topic's, too few, or Qwen retired it")
+        void staysNew() {
+            var far = state(0, topic("East", EAST), dormant("Near", RetiredReason.CAP, new float[]{0.8f, 0.6f}));
+            far.topic(far.born("North", "def")).setPrototypes(List.of(NORTH));
+            assertThat(Rebirth.apply(far, window(directions(50, 50)))).isEmpty();
+            assertThat(far.getTopics()).hasSize(3);
 
-            var full = state(0, topic("East", EAST), dormant("North", RetiredReason.REPLACED, NORTH));
-            assertThat(Revival.apply(full, window(directions(50, 50)), 1)).isEmpty();
+            var few = state(0, topic("East", EAST), dormant("North", RetiredReason.REPLACED, NORTH));
+            few.topic(few.born("North Again", "def")).setPrototypes(List.of(NORTH));
+            assertThat(Rebirth.apply(few, window(directions(96, 4)))).isEmpty();
 
             for (var reason : List.of(RetiredReason.MERGED, RetiredReason.REVIEW)) {
                 var judged = state(0, topic("East", EAST), dormant("North", reason, NORTH));
+                judged.topic(judged.born("North Again", "def")).setPrototypes(List.of(NORTH));
                 assertThat(judged.dormant()).isEmpty();
-                assertThat(Revival.apply(judged, window(directions(50, 50)), 10)).isEmpty();
+                assertThat(Rebirth.apply(judged, window(directions(50, 50)))).isEmpty();
             }
 
             var tonight = state(0, topic("East", EAST), topic("North", NORTH));
@@ -421,22 +430,42 @@ class TopicsNightlyRulesTest {
         }
 
         @Test
-        @DisplayName("traces nearer a live topic or known Other do not count for the dormant one")
-        void nearestOwnerOnly() {
-            var close = new float[]{0.8f, 0.6f};
-            var state = state(0, topic("East", EAST), dormant("Near", RetiredReason.LOW_SHARE, close));
-            state.setOtherPrototypes(List.of(NORTH));
+        @DisplayName("half of the newborn's traces must be the dormant topic's, and each dormant topic comes back once")
+        void halfAndOnce() {
+            var west = new float[]{-0.8f, 0.6f};
+            var half = state(0, topic("East", EAST), dormant("North", RetiredReason.LOW_SHARE, NORTH));
+            half.topic(half.born("Wide", "def")).setPrototypes(List.of(new float[]{-0.28f, 0.96f}));
             var vectors = new ArrayList<float[]>();
-            for (int i = 0; i < 100; i++) {
-                vectors.add(i < 50 ? EAST : NORTH);
+            for (int i = 0; i < 30; i++) {
+                vectors.add(i < 10 ? EAST : i < 19 ? NORTH : west);
             }
+            assertThat(Rebirth.apply(half, window(vectors))).isEmpty();
 
-            assertThat(Revival.apply(state, window(vectors), 10)).isEmpty();
+            var twice = state(0, topic("East", EAST), dormant("North", RetiredReason.LOW_SHARE, NORTH));
+            twice.topic(twice.born("North A", "def")).setPrototypes(List.of(NORTH));
+            twice.topic(twice.born("North B", "def")).setPrototypes(List.of(new float[]{0.6f, 0.8f}));
+            var between = new float[]{0.6f, 0.8f};
+            var mixed = new ArrayList<>(directions(40, 30));
+            for (int i = 0; i < 30; i++) {
+                mixed.add(between);
+            }
+            var moves = Rebirth.apply(twice, window(mixed));
+            assertThat(moves).singleElement().isEqualTo(new int[]{2, 1});
+            assertThat(twice.getTopics()).extracting(NightState.Topic::getName)
+                    .containsExactly("East", "North", "North B");
         }
 
         @Test
-        @DisplayName("a revived topic is measured on the whole window, and passes the invariants")
-        void revivedWholeWindow() {
+        @DisplayName("indices are remapped: the child's to its parent's, later ones down by one")
+        void remap() {
+            var moves = List.of(new int[]{5, 1}, new int[]{3, 2});
+            assertThat(List.of(0, 1, 2, 3, 4, 5, 6).stream().map(i -> Rebirth.remap(i, moves)).toList())
+                    .containsExactly(0, 1, 2, 2, 3, 1, 4);
+        }
+
+        @Test
+        @DisplayName("a reborn topic is measured on the whole window, and passes the invariants")
+        void rebornWholeWindow() {
             var state = state(0, topic("Old", EAST), topic("Back", NORTH).toBuilder()
                     .revivedAt(LocalDate.parse("2026-10-18")).build());
             var createdAt = new Instant[10];
@@ -447,10 +476,11 @@ class TopicsNightlyRulesTest {
             assertThat(Lifecycle.retire(state, window(createdAt), labels, 10))
                     .containsExactly(Map.entry(0, 0.9), Map.entry(1, 0.1));
 
-            var revived = state(0, topic("A", EAST), dormant("B", RetiredReason.LOW_SHARE, NORTH));
-            revived.revive(1);
-            var names = Map.of(revived.topic(0).getId(), "A", revived.topic(1).getId(), "B");
-            NightInvariants.check(revived, names, List.of(revived.topic(1).getId()), new int[]{0, 1}, 2, 10, 2);
+            var reborn = state(0, topic("A", EAST), dormant("B", RetiredReason.LOW_SHARE, NORTH));
+            reborn.topic(reborn.born("B Again", "def")).setPrototypes(List.of(NORTH));
+            reborn.inherit(2, 1);
+            var names = Map.of(reborn.topic(0).getId(), "A", reborn.topic(1).getId(), "B");
+            NightInvariants.check(reborn, names, List.of(reborn.topic(1).getId()), new int[]{0, 1}, 2, 10, 2);
         }
 
         private static NightState.Topic dormant(String name, RetiredReason reason, float[]... prototypes) {

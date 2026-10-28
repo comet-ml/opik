@@ -22,7 +22,6 @@ import java.util.stream.Collectors;
  * <ol type="a">
  * <li>review night ({@code rebuilds > 0} and a multiple of {@value #REVIEW_EVERY}): the known-Other prototypes are
  * dropped;</li>
- * <li>a2. {@link Revival}: a dormant topic whose traffic came back is live again;</li>
  * <li>every trace to its nearest prototype, topic or known Other, at cosine 0.75 (no Other gate here);</li>
  * <li>{@link Recentre} of every topic with members, then of the known-Other pool;</li>
  * <li>{@link CandidateGrouper} on the traces no prototype took;</li>
@@ -34,6 +33,7 @@ import java.util.stream.Collectors;
  * <li>{@link ForcedBirth};</li>
  * <li>the centre of every group mapped to a live topic is appended to its prototypes, Other ones to known Other, in the
  * group map's order;</li>
+ * <li>j2. {@link Rebirth}: a topic born tonight on a dormant topic's traces takes its identity;</li>
  * <li>the final assignment, as 2a's ({@link PrototypeAssigner}, with the 0.95 Other gate);</li>
  * <li>{@link Lifecycle}: retirements, then a reassignment when one happened, then the inactive switch and sizes.</li>
  * </ol>
@@ -57,8 +57,6 @@ public class NightlyUpdate {
         if (reviewNight) {
             state.setOtherPrototypes(List.of());
         }
-        // a2. dormant topics whose traffic came back
-        var revived = Revival.apply(state, window, maxTopics);
         // b. yesterday's prototypes on tonight's window
         var before = assignBefore(state, window);
         var recent = window.recent();
@@ -87,7 +85,7 @@ public class NightlyUpdate {
         var result = Result.builder()
                 .reviewNight(reviewNight)
                 .review(review)
-                .revived(revived)
+                .revived(List.of())
                 .unassigned(grouping.unassigned().length)
                 .candidates(candidates.stream().map(GroupSummary::group).toList())
                 .big(big.stream().sorted().toList());
@@ -108,8 +106,9 @@ public class NightlyUpdate {
             var verified = Verifier.verify(ordered, verifyTopics, map, llm);
             result.verified(verified);
             // i. forced new topics
-            result.forced(ForcedBirth.apply(state, ordered, big, verifyTopics, verified, map,
-                    () -> promptTopics(state, window, before, recent), maxTopics, llm));
+            var forced = ForcedBirth.apply(state, ordered, big, verifyTopics, verified, map,
+                    () -> promptTopics(state, window, before, recent), maxTopics, llm);
+            result.forced(forced);
             // j. decisions become prototypes
             for (int t : state.live()) {
                 var added = new ArrayList<float[]>();
@@ -131,6 +130,19 @@ public class NightlyUpdate {
                 }
             });
             state.setOtherPrototypes(other);
+            // j2. a newborn on a dormant topic's traces is that topic again
+            var moves = Rebirth.apply(state, window);
+            if (!moves.isEmpty()) {
+                var remapped = new LinkedHashMap<Integer, Integer>();
+                map.forEach((group, topic) -> remapped.put(group, topic < 0 ? topic : Rebirth.remap(topic, moves)));
+                map = remapped;
+                result.forced(forced.stream()
+                        .map(outcome -> outcome.topic() == null
+                                ? outcome
+                                : outcome.toBuilder().topic(Rebirth.remap(outcome.topic(), moves)).build())
+                        .toList());
+                result.revived(moves.stream().map(move -> Rebirth.remap(move[1], moves)).sorted().toList());
+            }
         }
         result.groupMap(Map.copyOf(map));
         // k. final assignment
