@@ -1,7 +1,6 @@
 import json
 import logging
 import os
-import re
 import subprocess
 import sys
 import threading
@@ -19,7 +18,7 @@ guardrails_blueprint = flask.Blueprint(
     "guardrails", __name__, url_prefix="/api/v1/guardrails"
 )
 
-_NAME_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
+_NAME_PATTERN = schemas.MODEL_NAME_PATTERN
 
 # Serializes the check-and-launch of training jobs. The server runs as a single
 # gunicorn worker, so an in-process lock is enough to make claiming a name atomic.
@@ -34,8 +33,10 @@ def _adapters_dir() -> str:
 def handle_validation_error(
     error: pydantic.ValidationError,
 ) -> tuple[flask.Response, int]:
-    LOGGER.warning(f"Validation error: {error.errors()}")
-    return flask.jsonify({"error": "Invalid input", "details": error.errors()}), 400
+    # Serialised by pydantic: a validator's own error sits in the details as an exception, which jsonify can't encode.
+    details = json.loads(error.json(include_url=False))
+    LOGGER.warning(f"Validation error: {details}")
+    return flask.jsonify({"error": "Invalid input", "details": details}), 400
 
 
 @guardrails_blueprint.errorhandler(Exception)

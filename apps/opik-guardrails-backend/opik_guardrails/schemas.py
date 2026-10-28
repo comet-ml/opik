@@ -1,7 +1,14 @@
 from typing import List, Optional, Dict, Any, Literal
 
 import enum
+import re
 import pydantic
+
+# A name stored under the adapters directory: no separators, and not "." or "..", so it stays inside it.
+MODEL_NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+# A Hugging Face Hub repo id, "name" or "namespace/name": a base model given in a request comes only from the
+# configured hub.
+_HUB_REPO_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)?$")
 
 
 class ValidationType(str, enum.Enum):
@@ -60,6 +67,13 @@ class CustomClassifierValidationConfig(ValidationConfig):
         0.5, description="Score threshold above which validation fails"
     )
 
+    @pydantic.field_validator("model_name")
+    @classmethod
+    def _stored_model_name(cls, value: str) -> str:
+        if not MODEL_NAME_PATTERN.match(value):
+            raise ValueError("model_name must use letters, digits, '.', '_' or '-' and start with a letter or digit")
+        return value
+
 
 class CustomGuardrailExample(pydantic.BaseModel):
     text: str
@@ -79,6 +93,13 @@ class CustomGuardrailTrainingRequest(pydantic.BaseModel):
     base_model: str = "Qwen/Qwen2.5-1.5B-Instruct"
     epochs: float = 3.0
     overwrite: bool = False
+
+    @pydantic.field_validator("base_model")
+    @classmethod
+    def _hub_repo_id(cls, value: str) -> str:
+        if len(value) > 96 or ".." in value or not _HUB_REPO_ID_PATTERN.match(value):
+            raise ValueError("base_model must be a Hugging Face Hub repo id, such as 'Qwen/Qwen2.5-1.5B-Instruct'")
+        return value
 
 
 class ValidationDescriptor(pydantic.BaseModel):
