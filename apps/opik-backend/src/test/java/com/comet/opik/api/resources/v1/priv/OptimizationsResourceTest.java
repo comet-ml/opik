@@ -1439,32 +1439,40 @@ class OptimizationsResourceTest {
                     Dataset.builder().name(datasetName).build(), apiKey, workspaceName);
 
             Project projectY = podamFactory.manufacturePojo(Project.class);
-            projectResourceClient.createProject(projectY, apiKey, workspaceName);
+            var projectYId = projectResourceClient.createProject(projectY, apiKey, workspaceName);
             Project projectX = podamFactory.manufacturePojo(Project.class);
-            projectResourceClient.createProject(projectX, apiKey, workspaceName);
+            var projectXId = projectResourceClient.createProject(projectX, apiKey, workspaceName);
 
-            var optimizationYId = optimizationResourceClient.create(
-                    optimizationResourceClient.createPartialOptimization()
-                            .datasetId(datasetId)
-                            .datasetName(datasetName)
-                            .projectName(projectY.name())
-                            .build(),
-                    apiKey, workspaceName);
+            var optimizationY = optimizationResourceClient.createPartialOptimization()
+                    .datasetId(datasetId)
+                    .datasetName(datasetName)
+                    .projectName(projectY.name())
+                    .build();
+            var optimizationYId = optimizationResourceClient.create(optimizationY, apiKey, workspaceName);
             if (withTrial) {
                 createTrialWithUnfinishedTraceItem(optimizationYId, true, apiKey, workspaceName);
             }
 
             // Created last, so X alone fills a page of size 1.
-            var optimizationXId = optimizationResourceClient.create(
-                    optimizationResourceClient.createPartialOptimization()
-                            .datasetId(datasetId)
-                            .datasetName(datasetName)
-                            .projectName(projectX.name())
-                            .build(),
-                    apiKey, workspaceName);
+            var optimizationX = optimizationResourceClient.createPartialOptimization()
+                    .datasetId(datasetId)
+                    .datasetName(datasetName)
+                    .projectName(projectX.name())
+                    .build();
+            var optimizationXId = optimizationResourceClient.create(optimizationX, apiKey, workspaceName);
+
+            var expectedX = optimizationX.toBuilder()
+                    .id(optimizationXId)
+                    .projectId(projectXId)
+                    .build();
+            var expectedY = optimizationY.toBuilder()
+                    .id(optimizationYId)
+                    .projectId(projectYId)
+                    .numTrials(withTrial ? 1L : 0L)
+                    .build();
 
             Trace taggedTrace = podamFactory.manufacturePojo(Trace.class).toBuilder()
-                    .projectId(projectY.id())
+                    .projectId(projectYId)
                     .projectName(projectY.name())
                     .startTime(Instant.now().minusSeconds(2))
                     .endTime(Instant.now().minusSeconds(1))
@@ -1478,7 +1486,7 @@ class OptimizationsResourceTest {
 
             var expectedCost = BigDecimal.valueOf(0.07);
             Span span = podamFactory.manufacturePojo(Span.class).toBuilder()
-                    .projectId(projectY.id())
+                    .projectId(projectYId)
                     .projectName(projectY.name())
                     .traceId(taggedTrace.id())
                     .parentSpanId(null)
@@ -1497,16 +1505,19 @@ class OptimizationsResourceTest {
                         var pageWithXOnly = optimizationResourceClient.find(
                                 apiKey, workspaceName, 1, 1, datasetId, null, null, 200);
 
-                        var actualXWithBoth = pageWithBoth.content().stream()
-                                .filter(optimization -> optimization.id().equals(optimizationXId))
-                                .findFirst()
-                                .orElseThrow();
-                        assertThat(actualXWithBoth.totalOptimizationCost()).isEqualByComparingTo(expectedCost);
+                        assertThat(pageWithBoth.content())
+                                .usingRecursiveComparison()
+                                .ignoringFields(OPTIMIZATION_IGNORED_FIELDS)
+                                .isEqualTo(List.of(expectedX, expectedY));
+                        assertThat(pageWithBoth.content().getFirst().totalOptimizationCost())
+                                .isEqualByComparingTo(expectedCost);
 
-                        assertThat(pageWithXOnly.content()).hasSize(1);
-                        var actualXOnly = pageWithXOnly.content().getFirst();
-                        assertThat(actualXOnly.id()).isEqualTo(optimizationXId);
-                        assertThat(actualXOnly.totalOptimizationCost()).isEqualByComparingTo(expectedCost);
+                        assertThat(pageWithXOnly.content())
+                                .usingRecursiveComparison()
+                                .ignoringFields(OPTIMIZATION_IGNORED_FIELDS)
+                                .isEqualTo(List.of(expectedX));
+                        assertThat(pageWithXOnly.content().getFirst().totalOptimizationCost())
+                                .isEqualByComparingTo(expectedCost);
                     });
         }
 
