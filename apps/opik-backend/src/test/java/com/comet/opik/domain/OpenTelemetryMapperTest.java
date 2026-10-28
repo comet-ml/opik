@@ -2133,7 +2133,7 @@ class OpenTelemetryMapperTest {
         }
 
         @Test
-        void cacheWritesArePricedAsOneHourWrites() {
+        void cacheWritesArePricedAsFiveMinuteWrites() {
             var span = enrich(List.of(
                     str("model", "claude-sonnet-4-5"),
                     intVal("input_tokens", 1234),
@@ -2142,11 +2142,14 @@ class OpenTelemetryMapperTest {
                     intVal("cache_creation_tokens", 50)),
                     null, "claude_code.llm_request");
 
-            assertThat(span.usage().get("cache_creation.ephemeral_1h_input_tokens")).isEqualTo(50);
-            // 1234 input at $3/MTok, 100 cache reads at $0.30/MTok, 50 one-hour writes at $6/MTok (not the
-            // five-minute $3.75/MTok) and 26 output at $15/MTok.
+            // Claude Code reports no TTL, and its 1-hour writes are a subscription default: on an API key, Bedrock or
+            // Vertex it writes with a 5-minute one, and those users pay per token. So nothing marks the writes as
+            // 1-hour, and they bill at the 5-minute rate.
+            assertThat(span.usage()).doesNotContainKey("cache_creation.ephemeral_1h_input_tokens");
+            // 1234 input at $3/MTok, 100 cache reads at $0.30/MTok, 50 five-minute writes at $3.75/MTok and 26 output
+            // at $15/MTok.
             assertThat(CostService.calculateCost(span.model(), span.provider(), span.usage(), span.metadata()))
-                    .isEqualByComparingTo("0.004422");
+                    .isEqualByComparingTo("0.0043095");
         }
 
         @Test
