@@ -16,7 +16,7 @@ import java.util.Map;
  * Step h of the nightly update: every candidate group the revise apply mapped to a live topic (topics born tonight
  * included) goes into one batched Qwen call, candidates largest first. An answer entry counts when its {@code pair} is
  * an integer in range; its {@code same} is read with Python's truth rules (missing = true). A pair without a valid
- * answer is not verified. A failed call leaves every pair not verified and the night goes on.
+ * answer is not verified. A failed call fails the run.
  */
 @Slf4j
 @UtilityClass
@@ -47,26 +47,37 @@ public class Verifier {
         if (pairs.isEmpty()) {
             return Verified.builder().pairs(List.of()).verdicts(verdicts).called(false).failed(false).build();
         }
-        boolean failed = false;
+        var answers = ask(TAG, prompts, llm);
+        if (answers != null) {
+            answers.forEach((pair, same) -> verdicts.put(pairs.get(pair)[0], same));
+        }
+        return Verified.builder().pairs(List.copyOf(pairs)).verdicts(verdicts).called(true).failed(answers == null)
+                .build();
+    }
+
+    /**
+     * One batched verify call: the verdict per pair index that got a valid answer, or null for an unreadable answer. A
+     * failed call (timeout or error) throws, and the run fails: read as "no pair verified", it would turn sound assigns
+     * into new topics.
+     */
+    static Map<Integer, Boolean> ask(String tag, List<TopicPrompts.VerifyPair> prompts, NightLlm llm) {
+        var answers = new HashMap<Integer, Boolean>();
         try {
-            var answer = llm.generate(TAG, TopicPrompts.verify(prompts), TopicPrompts.VERIFY_SCHEMA,
-                    BASE_TOKENS + TOKENS_PER_PAIR * pairs.size());
+            var answer = llm.generate(tag, TopicPrompts.verify(prompts), TopicPrompts.VERIFY_SCHEMA,
+                    BASE_TOKENS + TOKENS_PER_PAIR * prompts.size());
             for (var entry : ReviseApplier.objects(answer == null ? null : answer.get("answers"))) {
                 var pair = ReviseApplier.integer(entry.get("pair"));
-                if (pair != null && pair >= 0 && pair < pairs.size()) {
-                    verdicts.put(pairs.get(pair)[0], truthy(entry.get("same")));
+                if (pair != null && pair >= 0 && pair < prompts.size()) {
+                    answers.put(pair, truthy(entry.get("same")));
                 }
             }
         } catch (TopicsRunException exception) {
-            // The call failed (timeout or error): the run fails and the project keeps yesterday's list. Read as "no
-            // pair verified", it would turn revise's sound assigns into forced births.
             throw exception;
         } catch (RuntimeException exception) {
-            log.warn("topics verify answer unreadable, no pair is verified", exception);
-            verdicts.clear();
-            failed = true;
+            log.warn("topics {} answer unreadable, no pair is verified", tag, exception);
+            return null;
         }
-        return Verified.builder().pairs(List.copyOf(pairs)).verdicts(verdicts).called(true).failed(failed).build();
+        return answers;
     }
 
     /** Python's {@code bool(value)} of a JSON value, true when it is missing. */

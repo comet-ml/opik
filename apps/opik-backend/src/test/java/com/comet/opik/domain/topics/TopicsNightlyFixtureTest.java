@@ -80,6 +80,8 @@ class TopicsNightlyFixtureTest {
             var forced = new ArrayList<String>();
             result.forced().forEach(outcome -> forced.add(outcome.group() + ":" + switch (outcome.result()) {
                 case BORN -> "born:" + TopicsNightlyFixture.counter(state.topic(outcome.topic()).getId());
+                case ASSIGNED -> "assigned:" + TopicsNightlyFixture.counter(state.topic(outcome.topic()).getId());
+                case SAME_NAME -> "same_name:" + TopicsNightlyFixture.counter(state.topic(outcome.topic()).getId());
                 case OTHER_LOOSE -> "other_loose";
                 case OTHER_FULL -> "other_full";
                 case OTHER_NAME -> "other_name";

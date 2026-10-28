@@ -1,0 +1,17 @@
+{
+ "prompt_sha256": "c50ab29cd092cce9fcc08d0e5b63f39f31928b38759b288f13e30ad3b2c532e6",
+ "max_tokens": 2500,
+ "output": {
+  "assign": [],
+  "new": [
+   {
+    "name": "Recipe Search",
+    "definition": "Find and retrieve cooking recipes for specific dishes or ingredients.",
+    "clusters": [
+     1
+    ]
+   }
+  ],
+  "other": []
+ }
+}

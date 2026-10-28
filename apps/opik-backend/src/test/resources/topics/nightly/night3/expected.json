@@ -705,18 +705,18 @@
  },
  "forced": [
   {
+   "cluster": 0,
+   "result": "other_loose"
+  },
+  {
    "cluster": 1,
    "result": "born",
    "topic": 11
-  },
-  {
-   "cluster": 0,
-   "result": "other_loose"
   }
  ],
  "cluster_map": {
-  "1": 11,
-  "0": -1
+  "0": -1,
+  "1": 11
  },
  "lifecycle_share": {
   "1": 0.3096646942800789,
@@ -869,7 +869,7 @@
   {
    "id": 11,
    "name": "Recipe Search",
-   "definition": "Users request specific food recipes for various dishes.",
+   "definition": "Find and retrieve cooking recipes for specific dishes or ingredients.",
    "born": "2026-10-15",
    "retired_at": null,
    "retired_reason": null,
@@ -1434,7 +1434,7 @@
    "max_tokens": 85
   },
   {
-   "name": "naming_c1",
+   "name": "naming",
    "max_tokens": 2500
   }
  ],

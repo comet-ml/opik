@@ -25,7 +25,8 @@ public class TopicPrompts {
     private static final String REVISE = load("revise_v4.md");
     private static final String REVISE_REVIEW = load("revise_review_v4.md");
     private static final String VERIFY = load("verify_batch.md");
-    private static final String NAMING = load("naming.md");
+    private static final String NAMING_GROUP = load("naming_group.md");
+    private static final String NAMING_GROUP_NEW = load("naming_group_new.md");
 
     /**
      * The revise answer's schema: {@code assign}, {@code new} and {@code other} required; {@code merge},
@@ -55,13 +56,31 @@ public class TopicPrompts {
              "required": ["answers"]}
             """);
 
-    /** The naming answer's schema: {@code {topics: [{cluster, name, definition}]}}. */
-    public static final JsonNode NAMING_SCHEMA = parse("""
+    /**
+     * The grouped naming answer's schema: {@code {assign: [{cluster, topic}], new: [{name, definition, clusters}],
+     * other: [int]}}, keys in the stand's order.
+     */
+    public static final JsonNode NAMING_GROUP_SCHEMA = parse("""
             {"type": "object", "properties": {
-              "topics": {"type": "array", "items": {"type": "object", "properties": {
-                "cluster": {"type": "integer"}, "name": {"type": "string"}, "definition": {"type": "string"}},
-                "required": ["cluster", "name", "definition"]}}},
-             "required": ["topics"]}
+              "assign": {"type": "array", "items": {"type": "object", "properties": {
+                "cluster": {"type": "integer"}, "topic": {"type": "integer"}}, "required": ["cluster", "topic"]}},
+              "new": {"type": "array", "items": {"type": "object", "properties": {
+                "name": {"type": "string"}, "definition": {"type": "string"},
+                "clusters": {"type": "array", "items": {"type": "integer"}}},
+                "required": ["name", "definition", "clusters"]}},
+              "other": {"type": "array", "items": {"type": "integer"}}},
+             "required": ["assign", "new", "other"]}
+            """);
+
+    /** The second naming call's schema: {@link #NAMING_GROUP_SCHEMA} without {@code assign}. */
+    public static final JsonNode NAMING_GROUP_NEW_SCHEMA = parse("""
+            {"type": "object", "properties": {
+              "new": {"type": "array", "items": {"type": "object", "properties": {
+                "name": {"type": "string"}, "definition": {"type": "string"},
+                "clusters": {"type": "array", "items": {"type": "integer"}}},
+                "required": ["name", "definition", "clusters"]}},
+              "other": {"type": "array", "items": {"type": "integer"}}},
+             "required": ["new", "other"]}
             """);
 
     /** The author answer's schema: {@code {topics: [{name, definition, clusters: [int]}], other: [int]}}. */
@@ -120,9 +139,21 @@ public class TopicPrompts {
         return VERIFY.replace("{pairs}", body.toString());
     }
 
-    /** The stand's {@code naming_prompt} for one group. */
-    public static String naming(@NonNull GroupSummary group) {
-        return NAMING.replace("{clusters}", groupBlock(group));
+    /**
+     * The stand's {@code naming_group_prompt}: the live topics in list order ({@code "  (none)"} when there are none),
+     * the groups largest first. With {@code allowAssign} false, the second call's prompt, which offers new and other
+     * only.
+     */
+    public static String namingGroup(@NonNull List<PromptTopic> topics, @NonNull List<GroupSummary> groups,
+            boolean allowAssign) {
+        var topicBlock = topics.stream().map(TopicPrompts::topicBlock).collect(Collectors.joining("\n"));
+        var groupBlock = groups.stream()
+                .sorted(Comparator.comparingInt(group -> -group.size()))
+                .map(TopicPrompts::groupBlock)
+                .collect(Collectors.joining("\n"));
+        return (allowAssign ? NAMING_GROUP : NAMING_GROUP_NEW)
+                .replace("{topics}", topicBlock.isEmpty() ? "  (none)" : topicBlock)
+                .replace("{clusters}", groupBlock);
     }
 
     static String topicBlock(PromptTopic topic) {

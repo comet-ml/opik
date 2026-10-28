@@ -218,30 +218,30 @@ class TopicsNightlyRulesTest {
             var state = state(0, topic("A"));
             var map = new LinkedHashMap<Integer, Integer>(Map.of(0, 0, 1, 0, 2, 0));
             var verified = verified(Map.of(0, false, 1, false, 2, false));
-            var outcomes = ForcedBirth.apply(state,
-                    List.of(group(0, 60, 0.95), group(1, 50, 0.79), group(2, 10, 0.95)), Set.of(0, 1),
-                    topics(state), verified, map, 10,
-                    naming("{\"topics\": [{\"name\": \"Weather\", \"definition\": \"F.\"}]}"));
+            var outcomes = force(state, List.of(group(0, 60, 0.95), group(1, 50, 0.79), group(2, 10, 0.95)),
+                    Set.of(0, 1), topics(state), verified, map, 10,
+                    named(Map.of("naming",
+                            newTopics("{\"name\": \"Weather\", \"definition\": \"F.\", \"clusters\": [0]}"))));
 
-            assertThat(outcomes).containsExactly(new ForcedBirth.Outcome(0, ForcedBirth.Result.BORN, 1),
-                    new ForcedBirth.Outcome(1, ForcedBirth.Result.OTHER_LOOSE, null));
+            assertThat(outcomes).containsExactly(new ForcedBirth.Outcome(1, ForcedBirth.Result.OTHER_LOOSE, null),
+                    new ForcedBirth.Outcome(0, ForcedBirth.Result.BORN, 1));
             assertThat(map).containsOnly(Map.entry(0, 1), Map.entry(1, ReviseApplier.OTHER));
             assertThat(state.topic(1).getName()).isEqualTo("Weather");
         }
 
         @ParameterizedTest(name = "{0}")
         @CsvSource(delimiter = '|', value = {
-                "a catch-all name|{\"topics\": [{\"name\": \"General Help\", \"definition\": \"x\"}]}",
-                "an empty name|{\"topics\": [{\"name\": \"\", \"definition\": \"x\"}]}",
-                "a blank name|{\"topics\": [{\"name\": \" \\u00A0 \", \"definition\": \"x\"}]}",
-                "no topics|{\"topics\": []}",
-                "an unreadable answer|"})
-        @DisplayName("a naming answer without a usable name sends the candidate to known Other")
-        void noName(String label, String answer) {
+                "a catch-all name|{\"name\": \"General Help\", \"definition\": \"x\", \"clusters\": [0]}",
+                "an empty name|{\"name\": \"\", \"definition\": \"x\", \"clusters\": [0]}",
+                "a blank name|{\"name\": \" \\u00A0 \", \"definition\": \"x\", \"clusters\": [0]}",
+                "an unknown cluster|{\"name\": \"Weather\", \"definition\": \"x\", \"clusters\": [7]}",
+                "no new topic|"})
+        @DisplayName("an answer that gives a forced group no usable topic sends it to known Other")
+        void noName(String label, String entry) {
             var state = state(0, topic("A"));
             var map = new LinkedHashMap<Integer, Integer>();
-            var outcomes = ForcedBirth.apply(state, List.of(group(0, 60, 0.95)), Set.of(0), topics(state),
-                    verified(Map.of()), map, 10, naming(answer));
+            var outcomes = force(state, List.of(group(0, 60, 0.95)), Set.of(0), topics(state), verified(Map.of()),
+                    map, 10, named(Map.of("naming", newTopics(entry == null ? "" : entry))));
 
             assertThat(outcomes).containsExactly(new ForcedBirth.Outcome(0, ForcedBirth.Result.OTHER_NAME, null));
             assertThat(map).containsOnly(Map.entry(0, ReviseApplier.OTHER));
@@ -249,23 +249,129 @@ class TopicsNightlyRulesTest {
         }
 
         @Test
-        @DisplayName("on a full list the oldest-born lowest 7-day share is replaced if below the candidate, never one born tonight")
+        @DisplayName("an answer that is not an object leaves every forced group in known Other")
+        void unreadable() {
+            var state = state(0, topic("A"));
+            var map = new LinkedHashMap<Integer, Integer>();
+            var outcomes = force(state, List.of(group(0, 60, 0.95)), Set.of(0), topics(state), verified(Map.of()),
+                    map, 10, named(Map.of("naming", "\"Sorry\"")));
+
+            assertThat(outcomes).containsExactly(new ForcedBirth.Outcome(0, ForcedBirth.Result.OTHER_NAME, null));
+        }
+
+        @Test
+        @DisplayName("same-kind groups form one topic, a repeated group counts once, equal new names merge")
+        void grouped() {
+            var state = state(0, topic("A"));
+            var map = new LinkedHashMap<Integer, Integer>();
+            var outcomes = force(state, List.of(group(0, 60, 0.95), group(1, 50, 0.95), group(2, 40, 0.95)),
+                    Set.of(0, 1, 2), topics(state), verified(Map.of()), map, 10,
+                    named(Map.of("naming", newTopics(
+                            "{\"name\": \"Tire Search\", \"definition\": \"F.\", \"clusters\": [1, 0, 1]}, "
+                                    + "{\"name\": \"tire  search\", \"definition\": \"G.\", \"clusters\": [0, 2]}"))));
+
+            assertThat(outcomes).containsExactly(new ForcedBirth.Outcome(1, ForcedBirth.Result.BORN, 1),
+                    new ForcedBirth.Outcome(0, ForcedBirth.Result.BORN, 1),
+                    new ForcedBirth.Outcome(2, ForcedBirth.Result.BORN, 1));
+            assertThat(state.liveCount()).isEqualTo(2);
+            assertThat(state.topic(1).getName()).isEqualTo("Tire Search");
+            assertThat(state.topic(1).getDefinition()).isEqualTo("F.");
+        }
+
+        @Test
+        @DisplayName("a new name equal to a live topic's joins that topic")
+        void sameName() {
+            var state = state(0, topic("Tire Search"));
+            var map = new LinkedHashMap<Integer, Integer>();
+            var outcomes = force(state, List.of(group(0, 60, 0.95)), Set.of(0), topics(state), verified(Map.of()),
+                    map, 10, named(Map.of("naming",
+                            newTopics("{\"name\": \" TIRE search\", \"definition\": \"F.\", \"clusters\": [0]}"))));
+
+            assertThat(outcomes).containsExactly(new ForcedBirth.Outcome(0, ForcedBirth.Result.SAME_NAME, 0));
+            assertThat(map).containsOnly(Map.entry(0, 0));
+            assertThat(state.liveCount()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("a verified assign joins the topic; a rejected one goes to the second, new-only call")
+        void assigns() {
+            var state = state(0, topic("A"), topic("B"));
+            var map = new LinkedHashMap<Integer, Integer>();
+            var tags = new ArrayList<String>();
+            var llm = named(Map.of(
+                    "naming", "{\"assign\": [{\"cluster\": 0, \"topic\": 2}, {\"cluster\": 1, \"topic\": 1},"
+                            + " {\"cluster\": 1, \"topic\": 2}, {\"cluster\": 2, \"topic\": 9}], \"new\": [], \"other\": []}",
+                    "verify_naming", "{\"answers\": [{\"pair\": 0, \"same\": true}, {\"pair\": 1, \"same\": false}]}",
+                    "naming_new", newTopics("{\"name\": \"Weather\", \"definition\": \"F.\", \"clusters\": [1]}")),
+                    tags);
+            var outcomes = force(state, List.of(group(0, 60, 0.95), group(1, 50, 0.95), group(2, 40, 0.95)),
+                    Set.of(0, 1, 2), topics(state), verified(Map.of()), map, 10, llm);
+
+            assertThat(tags).containsExactly("naming", "verify_naming", "naming_new");
+            assertThat(outcomes).containsExactly(new ForcedBirth.Outcome(0, ForcedBirth.Result.ASSIGNED, 1),
+                    new ForcedBirth.Outcome(1, ForcedBirth.Result.BORN, 2),
+                    new ForcedBirth.Outcome(2, ForcedBirth.Result.OTHER_NAME, null));
+            assertThat(map).containsOnly(Map.entry(0, 1), Map.entry(1, 2), Map.entry(2, ReviseApplier.OTHER));
+        }
+
+        @Test
+        @DisplayName("on a full list the oldest-born lowest 7-day share is replaced if below the new topic, never one born tonight")
         void fullList() {
             var state = state(0, topic("A"), topic("B"));
             var topics = new LinkedHashMap<Integer, TopicPrompts.PromptTopic>();
             topics.put(0, prompt(1, 0, 0.30));
             topics.put(1, prompt(2, 1, 0.10));
             var map = new LinkedHashMap<Integer, Integer>();
-            var outcomes = ForcedBirth.apply(state,
+            var outcomes = force(state,
                     List.of(group(0, 60, 0.95, 0.20), group(1, 50, 0.95, 0.40), group(2, 40, 0.95, 0.05)),
                     Set.of(0, 1, 2), topics, verified(Map.of()), map, 2,
-                    naming("{\"topics\": [{\"name\": \"Weather\", \"definition\": \"F.\"}]}"));
+                    named(Map.of("naming",
+                            newTopics("{\"name\": \"Weather\", \"definition\": \"F.\", \"clusters\": [2]}, "
+                                    + "{\"name\": \"Rain\", \"definition\": \"F.\", \"clusters\": [1]}, "
+                                    + "{\"name\": \"Snow\", \"definition\": \"F.\", \"clusters\": [0]}"))));
 
-            assertThat(outcomes).extracting(ForcedBirth.Outcome::result).containsExactly(ForcedBirth.Result.BORN,
-                    ForcedBirth.Result.BORN, ForcedBirth.Result.OTHER_FULL);
+            assertThat(outcomes).containsExactly(new ForcedBirth.Outcome(0, ForcedBirth.Result.BORN, 2),
+                    new ForcedBirth.Outcome(1, ForcedBirth.Result.BORN, 3),
+                    new ForcedBirth.Outcome(2, ForcedBirth.Result.OTHER_FULL, null));
             assertThat(state.topic(1).getRetiredReason()).isEqualTo(RetiredReason.REPLACED);
             assertThat(state.topic(0).getRetiredReason()).isEqualTo(RetiredReason.REPLACED);
             assertThat(state.live()).containsExactly(2, 3);
+        }
+
+        @Test
+        @DisplayName("a new topic's 7-day share is summed as Python does: 0.1 + 0.2 + 0.3 is above 0.6")
+        void pythonSum() {
+            var state = state(0, topic("A"));
+            var topics = new LinkedHashMap<Integer, TopicPrompts.PromptTopic>();
+            topics.put(0, prompt(1, 0, 0.6));
+            var map = new LinkedHashMap<Integer, Integer>();
+            var outcomes = force(state,
+                    List.of(group(0, 60, 0.95, 0.1), group(1, 50, 0.95, 0.2), group(2, 40, 0.95, 0.3)),
+                    Set.of(0, 1, 2), topics, verified(Map.of()), map, 1,
+                    named(Map.of("naming", newTopics(
+                            "{\"name\": \"Weather\", \"definition\": \"F.\", \"clusters\": [0, 1, 2]}"))));
+
+            assertThat(outcomes).extracting(ForcedBirth.Outcome::result).containsOnly(ForcedBirth.Result.BORN);
+            assertThat(state.topic(0).getRetiredReason()).isEqualTo(RetiredReason.REPLACED);
+        }
+
+        @Test
+        @DisplayName("the prompt shows the live topics and the forced groups largest first")
+        void namingPrompt() {
+            var state = state(0, topic("A"));
+            var prompts = new ArrayList<String>();
+            force(state, List.of(group(0, 60, 0.95), group(1, 70, 0.95)), Set.of(0, 1), topics(state),
+                    verified(Map.of()), new LinkedHashMap<>(), 10, (tag, prompt, schema, maxTokens) -> {
+                        prompts.add(prompt);
+                        assertThat(schema).isEqualTo(TopicPrompts.NAMING_GROUP_SCHEMA);
+                        assertThat(maxTokens).isEqualTo(2500);
+                        return json("{}");
+                    });
+
+            assertThat(prompts).singleElement().satisfies(prompt -> {
+                assertThat(prompt).contains("CURRENT TOPICS").contains("  topic 1: T0 — D0");
+                assertThat(prompt.indexOf("  cluster 1:")).isLessThan(prompt.indexOf("  cluster 0:"));
+            });
         }
     }
 
@@ -425,13 +531,14 @@ class TopicsNightlyRulesTest {
                         tags.add(tag);
                         return tag.equals("revise")
                                 ? json("{}")
-                                : json("{\"topics\": [{\"name\": \"Weather\", \"definition\": \"F.\"}]}");
+                                : json(newTopics("{\"name\": \"Weather\", \"definition\": \"F.\", \"clusters\": [0]}, "
+                                        + "{\"name\": \"Rain\", \"definition\": \"F.\", \"clusters\": [1]}"));
                     });
 
             assertThat(result.review()).isTrue();
             assertThat(result.big()).containsExactly(0, 1);
             assertThat(tags).hasSize(2).first().isEqualTo("revise");
-            assertThat(tags.get(1)).startsWith("naming_c");
+            assertThat(tags.get(1)).isEqualTo("naming");
             assertThat(result.forced()).extracting(ForcedBirth.Outcome::result)
                     .containsExactly(ForcedBirth.Result.BORN, ForcedBirth.Result.OTHER_FULL);
             assertThat(state.topic(0).getRetiredReason()).isEqualTo(RetiredReason.REPLACED);
@@ -662,7 +769,7 @@ class TopicsNightlyRulesTest {
             };
 
             assertThatThrownBy(
-                    () -> ForcedBirth.apply(state, List.of(group(0, 60, 0.95, 0.9)), Set.of(0), topics(state),
+                    () -> force(state, List.of(group(0, 60, 0.95, 0.9)), Set.of(0), topics(state),
                             verified(Map.of()), map, 10, failing))
                     .isInstanceOfSatisfying(TopicsRunException.class,
                             exception -> assertThat(exception.getCode()).isEqualTo(Code.QWEN_ERROR));
@@ -673,15 +780,28 @@ class TopicsNightlyRulesTest {
         return Verifier.Verified.builder().pairs(List.of()).verdicts(verdicts).called(true).failed(false).build();
     }
 
-    /** A naming stub: the answer's JSON, or a failed call when it is null. */
-    private static NightLlm naming(String answer) {
+    private static List<ForcedBirth.Outcome> force(NightState state, List<GroupSummary> ordered, Set<Integer> big,
+            Map<Integer, TopicPrompts.PromptTopic> topics, Verifier.Verified verified, Map<Integer, Integer> map,
+            int maxTopics, NightLlm llm) {
+        return ForcedBirth.apply(state, ordered, big, topics, verified, map, () -> List.copyOf(topics.values()),
+                maxTopics, llm);
+    }
+
+    /** A grouped naming answer with these {@code new} entries and no assign. */
+    private static String newTopics(String entries) {
+        return "{\"assign\": [], \"new\": [" + entries + "], \"other\": []}";
+    }
+
+    /** A Qwen stub that answers each tag with its JSON. */
+    private static NightLlm named(Map<String, String> answers) {
+        return named(answers, new ArrayList<>());
+    }
+
+    private static NightLlm named(Map<String, String> answers, List<String> tags) {
         return (tag, prompt, schema, maxTokens) -> {
-            assertThat(tag).startsWith("naming_c");
-            assertThat(maxTokens).isEqualTo(2500);
-            if (answer == null) {
-                throw new IllegalStateException("unreadable");
-            }
-            return json(answer);
+            tags.add(tag);
+            assertThat(answers).containsKey(tag);
+            return json(answers.get(tag));
         };
     }
 

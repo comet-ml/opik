@@ -104,7 +104,8 @@ public class NightlyUpdate {
             var verified = Verifier.verify(ordered, verifyTopics, map, llm);
             result.verified(verified);
             // i. forced new topics
-            result.forced(ForcedBirth.apply(state, ordered, big, verifyTopics, verified, map, maxTopics, llm));
+            result.forced(ForcedBirth.apply(state, ordered, big, verifyTopics, verified, map,
+                    () -> promptTopics(state, window, before, recent), maxTopics, llm));
             // j. decisions become prototypes
             for (int t : state.live()) {
                 var added = new ArrayList<float[]>();

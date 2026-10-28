@@ -420,7 +420,11 @@ public class TopicsRebuildService {
          * list.
          */
         private JsonNode generate(String tag, String prompt, JsonNode schema, int maxTokens) {
-            var kind = tag.startsWith(ForcedBirth.TAG_PREFIX) ? "naming" : tag;
+            var kind = switch (tag) {
+                case ForcedBirth.NAMING_TAG, ForcedBirth.NAMING_NEW_TAG -> "naming";
+                case ForcedBirth.VERIFY_TAG -> "verify";
+                default -> tag;
+            };
             var deadline = switch (kind) {
                 case "verify" -> VERIFY_DEADLINE;
                 case "naming" -> NAMING_DEADLINE;

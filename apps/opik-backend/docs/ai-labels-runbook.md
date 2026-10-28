@@ -377,10 +377,15 @@ their prototypes, the known-Other prototypes, `rebuilds`), then:
    - `verify` (`verify_batch.md`): one call checks every candidate given to a topic. A rejected or unanswered pair is
      undone. An unreadable verify answer undoes every pair and the run goes on. A failed verify call fails the run:
      read as "no pair verified", it would turn sound assigns into forced births.
-   - `naming` (`naming.md`), one call per big candidate left without a topic and tight enough (0.80): it becomes a
-     new topic. On a full list it replaces the topic (not born tonight) with the lowest 7-day share, if that share is
-     below the candidate's. A loose candidate, a full list with no such topic, a catch-all or blank name, or an
-     unreadable naming answer send it to known Other, and the run goes on. A failed naming call fails the run.
+   - `naming` (`naming_group.md`), one call per night for every big candidate left without a topic and tight enough
+     (0.80). Qwen sees the live topics and may give a candidate to one of them, put same-kind candidates into one new
+     topic, or send a candidate to Other. A candidate given to a topic is checked by one more verify call
+     (`verify_naming`); a rejected one goes to a second call (`naming_new`, `naming_group_new.md`) that offers a new
+     topic or Other only. A new name equal to a live topic's (case and spaces ignored) joins that topic, and equal new
+     names are one topic. On a full list a new topic replaces the topic (not born tonight) with the lowest 7-day
+     share, if that share is below the sum of its candidates' 7-day shares. A loose candidate, a full list with no
+     such topic, a catch-all or blank name, or a candidate the answers leave out goes to known Other, and the run goes
+     on. A failed naming call fails the run.
 6. The centre of each candidate given to a topic becomes one more prototype of that topic; one given to Other becomes
    a known-Other prototype.
 7. Every window trace is assigned again, as in the first build (cosine 0.75, the 0.95 gate on known Other).
@@ -461,7 +466,7 @@ A nightly update's `stats` holds, besides `vectors`, `topics`, `other_share`, `s
 | `review_night`, `review` | A review night by `rebuilds`; a review at all (also forced by a full list). |
 | `unassigned`, `candidates`, `big` | Traces no prototype took at 0.75; candidate groups; big ones. `big` 0 and `review` false mean no Qwen call. |
 | `verify_pairs`, `verify_failed` | Pairs sent to verify; true when the answer was unreadable and every pair was undone. |
-| `forced` | Big candidates left without a topic, by outcome: `born`, `other_loose`, `other_full`, `other_name`. |
+| `forced` | Big candidates left without a topic, by outcome: `born`, `assigned` (given to a live topic and verified), `same_name` (a new name equal to a live topic's), `other_loose`, `other_full`, `other_name`. |
 | `born`, `retired` | Names of tonight's new topics; tonight's retirements by reason. |
 | `other_prototypes` | Known-Other prototypes after the night. |
 | `churn`, `churn_any` | See [Churn](#churn). |

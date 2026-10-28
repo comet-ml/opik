@@ -92,6 +92,8 @@ class TopicsNightlyJobTest {
     private static final int REVIEW_REBUILDS = 7;
     private static final JsonNode EMPTY = InferenceJson.MAPPER.createObjectNode();
     private static final JsonNode NAMED = named();
+    /** Text only the first naming prompt has. */
+    private static final String NAMING_PROMPT = "Decide what topic each one gets.";
 
     private final RedisContainer redis = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer mysql = MySQLContainerUtils.newMySQLContainer(false);
@@ -712,7 +714,7 @@ class TopicsNightlyJobTest {
 
     /**
      * Stubs the nightly update's calls by prompt: revise (both prompts), verify (a 500 when {@code verify} is null) and
-     * naming (a 500 when {@code naming} is null).
+     * the first naming call (a 500 when {@code naming} is null).
      */
     private void stubNightly(JsonNode revise, JsonNode verify, JsonNode naming) {
         stubAnswer(revise, "You maintain the topic list");
@@ -722,11 +724,12 @@ class TopicsNightlyJobTest {
         } else {
             stubAnswer(verify, "You check decisions");
         }
+        // After the revise stub: the naming prompt also starts like the revise prompt, and the newest stub wins.
         if (naming == null) {
-            wireMock.stubFor(post(urlEqualTo(GENERATE_PATH)).withRequestBody(containing("You name topics"))
+            wireMock.stubFor(post(urlEqualTo(GENERATE_PATH)).withRequestBody(containing(NAMING_PROMPT))
                     .willReturn(aResponse().withStatus(500)));
         } else {
-            stubAnswer(naming, "You name topics");
+            stubAnswer(naming, NAMING_PROMPT);
         }
     }
 
@@ -909,8 +912,14 @@ class TopicsNightlyJobTest {
 
     private static JsonNode named() {
         var answer = InferenceJson.MAPPER.createObjectNode();
-        answer.putArray("topics").addObject().put("cluster", 0).put("name", "Tire Pressure Checks")
-                .put("definition", "Asks whether the car's tires need air.");
+        answer.putArray("assign");
+        // Every group id the night can have: the answer keeps only the forced ones, as one new topic.
+        var clusters = answer.putArray("new").addObject().put("name", "Tire Pressure Checks")
+                .put("definition", "Asks whether the car's tires need air.").putArray("clusters");
+        for (int j = 0; j < 100; j++) {
+            clusters.add(j);
+        }
+        answer.putArray("other");
         return answer;
     }
 
