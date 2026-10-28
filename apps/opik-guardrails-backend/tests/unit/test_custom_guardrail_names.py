@@ -1,4 +1,5 @@
 """A training request's base model is a Hub repo id, and stored model names are plain names."""
+
 import json
 import sys
 import types
@@ -29,8 +30,11 @@ def _examples():
 @pytest.fixture
 def client(monkeypatch, tmp_path):
     """The Flask app with its validation engine stubbed: importing the real one loads the models."""
-    monkeypatch.setitem(sys.modules, "opik_guardrails.services.validation_engine",
-                        types.ModuleType("opik_guardrails.services.validation_engine"))
+    monkeypatch.setitem(
+        sys.modules,
+        "opik_guardrails.services.validation_engine",
+        types.ModuleType("opik_guardrails.services.validation_engine"),
+    )
     monkeypatch.delitem(sys.modules, "opik_guardrails.api.routes", raising=False)
     monkeypatch.setenv("OPIK_GUARDRAILS_ADAPTERS_DIR", str(tmp_path))
     from opik_guardrails import create_app
@@ -45,9 +49,15 @@ def client(monkeypatch, tmp_path):
 def test_training_refuses_a_base_model_that_is_not_a_hub_repo_id(client, base_model):
     test_client, launched, adapters_dir = client
 
-    response = test_client.post("/api/v1/guardrails/custom/train", json={
-        "name": "toxic", "description": "contains toxic language", "examples": _examples(),
-        "base_model": base_model})
+    response = test_client.post(
+        "/api/v1/guardrails/custom/train",
+        json={
+            "name": "toxic",
+            "description": "contains toxic language",
+            "examples": _examples(),
+            "base_model": base_model,
+        },
+    )
 
     assert response.status_code == 400
     assert launched == []
@@ -58,11 +68,20 @@ def test_training_refuses_a_base_model_that_is_not_a_hub_repo_id(client, base_mo
 def test_training_launches_with_a_hub_repo_id(client, base_model):
     test_client, launched, adapters_dir = client
 
-    response = test_client.post("/api/v1/guardrails/custom/train", json={
-        "name": "toxic", "description": "contains toxic language", "examples": _examples(),
-        "base_model": base_model})
+    response = test_client.post(
+        "/api/v1/guardrails/custom/train",
+        json={
+            "name": "toxic",
+            "description": "contains toxic language",
+            "examples": _examples(),
+            "base_model": base_model,
+        },
+    )
 
-    assert (response.status_code, response.get_json()) == (202, {"name": "toxic", "status": "training"})
+    assert (response.status_code, response.get_json()) == (
+        202,
+        {"name": "toxic", "status": "training"},
+    )
     assert len(launched) == 1
     job = json.loads((adapters_dir / "toxic" / "_job.json").read_text())
     assert job["base_model"] == base_model
@@ -72,8 +91,14 @@ def test_training_launches_with_a_hub_repo_id(client, base_model):
 def test_training_refuses_a_name_outside_the_adapters_directory(client, name):
     test_client, launched, adapters_dir = client
 
-    response = test_client.post("/api/v1/guardrails/custom/train", json={
-        "name": name, "description": "contains toxic language", "examples": _examples()})
+    response = test_client.post(
+        "/api/v1/guardrails/custom/train",
+        json={
+            "name": name,
+            "description": "contains toxic language",
+            "examples": _examples(),
+        },
+    )
 
     assert response.status_code == 400
     assert launched == []
@@ -87,4 +112,7 @@ def test_custom_classifier_refuses_a_model_name_outside_the_adapters_directory(n
 
 
 def test_custom_classifier_accepts_a_stored_model_name():
-    assert schemas.CustomClassifierValidationConfig(model_name="toxic-v2.1").model_name == "toxic-v2.1"
+    assert (
+        schemas.CustomClassifierValidationConfig(model_name="toxic-v2.1").model_name
+        == "toxic-v2.1"
+    )

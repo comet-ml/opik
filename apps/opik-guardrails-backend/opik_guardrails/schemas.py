@@ -8,7 +8,9 @@ import pydantic
 MODEL_NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 # A Hugging Face Hub repo id, "name" or "namespace/name": a base model given in a request comes only from the
 # configured hub.
-_HUB_REPO_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)?$")
+_HUB_REPO_ID_PATTERN = re.compile(
+    r"^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)?$"
+)
 
 
 class ValidationType(str, enum.Enum):
@@ -71,7 +73,9 @@ class CustomClassifierValidationConfig(ValidationConfig):
     @classmethod
     def _stored_model_name(cls, value: str) -> str:
         if not MODEL_NAME_PATTERN.match(value):
-            raise ValueError("model_name must use letters, digits, '.', '_' or '-' and start with a letter or digit")
+            raise ValueError(
+                "model_name must use letters, digits, '.', '_' or '-' and start with a letter or digit"
+            )
         return value
 
 
@@ -98,7 +102,9 @@ class CustomGuardrailTrainingRequest(pydantic.BaseModel):
     @classmethod
     def _hub_repo_id(cls, value: str) -> str:
         if len(value) > 96 or ".." in value or not _HUB_REPO_ID_PATTERN.match(value):
-            raise ValueError("base_model must be a Hugging Face Hub repo id, such as 'Qwen/Qwen2.5-1.5B-Instruct'")
+            raise ValueError(
+                "base_model must be a Hugging Face Hub repo id, such as 'Qwen/Qwen2.5-1.5B-Instruct'"
+            )
         return value
 
 
