@@ -244,7 +244,7 @@ const useAnnotatorViewEditor = ({
       html: currentHtml,
       details,
     });
-    hasStartedOllie.current = true;
+    if (!isOllieOpen) hasStartedOllie.current = true;
     trackEvent(OpikEvent.ANNOTATION_QUEUE_VIEW_OLLIE_CLICKED, {
       entry_id: entryId,
       project_id: projectId,
