@@ -54,6 +54,33 @@ public class KMeans {
                 .build();
     }
 
+    /**
+     * One weighted Lloyd run from the given centres, no restart: the warm start of a recentre whose prototype count is
+     * unchanged (the stand's {@code KMeans(init=old, n_init=1)}).
+     *
+     * @param init {@code k * dimensions} values
+     */
+    public static Result fitFrom(@NonNull float[] points, @NonNull double[] weights, int dimensions,
+            @NonNull float[] init) {
+        int n = weights.length;
+        int k = init.length / dimensions;
+        Preconditions.checkArgument(points.length == n * dimensions,
+                "points must hold one row per weight, weights '%s', values '%s'", n, points.length);
+        Preconditions.checkArgument(init.length == k * dimensions && k >= 1 && k <= n,
+                "init must hold k whole rows with k in [1, n], values '%s', n '%s'", init.length, n);
+        var centres = new double[init.length];
+        for (int i = 0; i < init.length; i++) {
+            centres[i] = init[i];
+        }
+        var fit = lloyd(points, weights, n, dimensions, k, centres);
+        return Result.builder()
+                .labels(fit.labels())
+                .centres(normalized(fit.centres(), k, dimensions))
+                .inertia(fit.inertia())
+                .iterations(fit.iterations())
+                .build();
+    }
+
     private static double[] plusPlus(float[] x, double[] w, int n, int d, int k, SplittableRandom random) {
         var centres = new double[k * d];
         var minDistance = new double[n];

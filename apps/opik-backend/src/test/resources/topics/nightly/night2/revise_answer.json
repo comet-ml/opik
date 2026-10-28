@@ -1,0 +1,12 @@
+{
+ "prompt_sha256": "5f2db03af2cd28a0edbbf39389a8e6e064ee4640ab5b88909878b0aebd59cefd",
+ "max_tokens": 2500,
+ "output": {
+  "assign": [],
+  "new": [],
+  "other": [],
+  "merge": [],
+  "retire": [],
+  "redefine": []
+ }
+}

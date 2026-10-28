@@ -1,0 +1,84 @@
+{
+ "prompt_sha256": "b9b270d1c065d92ba9ae3b1ae305c6e8cc8d7139abd4d5ef1d876a886fbc46de",
+ "max_tokens": 2500,
+ "output": {
+  "topics": [
+   {
+    "name": "Daily Briefing Reports",
+    "definition": "Generate daily summary reports for specific projects or workspaces.",
+    "clusters": [
+     9,
+     13,
+     1,
+     6,
+     0
+    ]
+   },
+   {
+    "name": "Project Details Lookup",
+    "definition": "Read or retrieve specific details and information about a project.",
+    "clusters": [
+     3
+    ]
+   },
+   {
+    "name": "Trace and Span Analysis",
+    "definition": "Analyze traces, spans, and threads to identify errors, latency, and patterns.",
+    "clusters": [
+     4,
+     11
+    ]
+   },
+   {
+    "name": "Trace Debugging and Fixes",
+    "definition": "Debug agent traces, analyze errors, and suggest code fixes or improvements.",
+    "clusters": [
+     8
+    ]
+   },
+   {
+    "name": "Visualization and Charts",
+    "definition": "Generate charts, graphs, or visualizations to compare costs or show metrics.",
+    "clusters": [
+     14
+    ]
+   },
+   {
+    "name": "Opik Configuration and Setup",
+    "definition": "Add tracing, prompts, or feedback scores to codebases and learn Opik features.",
+    "clusters": [
+     10
+    ]
+   },
+   {
+    "name": "Capability and Resource Listing",
+    "definition": "List automation rules, capabilities, annotation queues, or other workspace resources.",
+    "clusters": [
+     5
+    ]
+   },
+   {
+    "name": "Trace Explanation",
+    "definition": "Explain trace durations, span breakdowns, or technical concepts to engineers.",
+    "clusters": [
+     12
+    ]
+   },
+   {
+    "name": "General Knowledge and Utilities",
+    "definition": "Answer general questions, translate text, check weather, or perform unrelated tasks.",
+    "clusters": [
+     7
+    ]
+   },
+   {
+    "name": "System Retries",
+    "definition": "Request a retry of the previous response or attempt.",
+    "clusters": [
+     2
+    ]
+   }
+  ],
+  "other": []
+ }
+}

@@ -22,6 +22,7 @@ public record Topic(
         @NonNull LocalDate born,
         @Nullable LocalDate retiredAt,
         @Nullable String retiredReason,
+        @Nullable LocalDate revivedAt,
         @Nullable LocalDate inactiveSince,
         int lowNights,
         int lo7,

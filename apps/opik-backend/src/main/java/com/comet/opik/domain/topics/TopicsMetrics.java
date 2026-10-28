@@ -19,6 +19,7 @@ public class TopicsMetrics {
 
     static final String DECISION_SKIP = "skip";
     static final String DECISION_FIRST_BUILD = "first_build";
+    static final String DECISION_NIGHTLY_UPDATE = "nightly_update";
     static final String DECISION_NOT_REACHED = "not_reached";
 
     private final LongCounter projects;
@@ -27,6 +28,11 @@ public class TopicsMetrics {
     private final LongCounter qwenCalls;
     private final LongCounter saveRows;
     private final DoubleHistogram budgetUsed;
+    private final DoubleHistogram liveTopics;
+    private final LongCounter retired;
+    private final LongCounter born;
+    private final DoubleHistogram churn;
+    private final DoubleHistogram churnAny;
 
     @Inject
     public TopicsMetrics() {
@@ -45,13 +51,32 @@ public class TopicsMetrics {
                 .setDescription("Duration of each phase of a run: window, kmeans, qwen, assign, save")
                 .build();
         this.qwenCalls = meter.counterBuilder("topics.qwen.calls")
-                .setDescription("Qwen calls, by outcome: ok, timeout, error, bad_answer")
+                .setDescription("Qwen calls, by kind (author, revise, verify, naming) and outcome: ok, timeout, "
+                        + "error, bad_answer")
                 .build();
         this.saveRows = meter.counterBuilder("topics.save.rows")
                 .setDescription("Rows a saved run wrote, by table")
                 .build();
         this.budgetUsed = meter.histogramBuilder("topics.nightly.budget_used_seconds").setUnit("s")
                 .setDescription("Wall time of the night, from its start to its last run's end")
+                .build();
+        this.liveTopics = meter.histogramBuilder("topics.topics.live")
+                .setDescription("Live topics of a project after each saved run")
+                .build();
+        this.retired = meter.counterBuilder("topics.topics.retired")
+                .setDescription("Topics retired by saved nightly updates, by reason: low_share, cap, merged, review, "
+                        + "replaced")
+                .build();
+        this.born = meter.counterBuilder("topics.topics.born")
+                .setDescription("Topics born by saved runs, by mode: first_build, nightly_update")
+                .build();
+        this.churn = meter.histogramBuilder("topics.run.churn")
+                .setDescription("Of the window traces in a topic on both the last and this saved night, the share "
+                        + "whose topic changed")
+                .build();
+        this.churnAny = meter.histogramBuilder("topics.run.churn_any")
+                .setDescription("Of the window traces labelled on both the last and this saved night, the share "
+                        + "whose label changed, Other included")
                 .build();
     }
 
@@ -71,8 +96,24 @@ public class TopicsMetrics {
         runDuration.record(duration.toNanos() / 1e9, Attributes.of(stringKey("phase"), phase));
     }
 
-    void qwen(String outcome) {
-        qwenCalls.add(1, Attributes.of(stringKey("outcome"), outcome));
+    void qwen(String kind, String outcome) {
+        qwenCalls.add(1, Attributes.of(stringKey("kind"), kind, stringKey("outcome"), outcome));
+    }
+
+    void topics(TopicRun.Mode mode, int live, int bornTonight) {
+        liveTopics.record(live);
+        if (bornTonight > 0) {
+            born.add(bornTonight, Attributes.of(stringKey("mode"), mode.getValue()));
+        }
+    }
+
+    void retired(String reason) {
+        retired.add(1, Attributes.of(stringKey("reason"), reason));
+    }
+
+    void churn(TopicChurn.Churn value) {
+        churn.record(value.churn());
+        churnAny.record(value.churnAny());
     }
 
     void saved(String table, long rows) {

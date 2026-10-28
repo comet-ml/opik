@@ -1,0 +1,17 @@
+{
+ "prompt_sha256": "996f70ca482af14332a72b4ff6a719f8ed79a77e2bbf93f5d6a149905bf151ad",
+ "max_tokens": 2500,
+ "output": {
+  "assign": [],
+  "new": [
+   {
+    "name": "Vehicle Tire Pressure Check",
+    "definition": "Check or query the air pressure status of vehicle tires.",
+    "clusters": [
+     0
+    ]
+   }
+  ],
+  "other": []
+ }
+}
