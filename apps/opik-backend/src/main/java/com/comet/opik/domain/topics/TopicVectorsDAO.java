@@ -62,7 +62,7 @@ public class TopicVectorsDAO {
      * that isn't blank, and this is checked before the {@code LIMIT}: otherwise unusable rows, which stay in the window
      * until they age out, could fill every tick's batch and hold back newer traces. The output read takes only the
      * (project, trace) pairs of {@code done}, so it reads the window's traces and not the workspace's history. A tie on
-     * {@code updated_at} takes the higher task version, so the pick doesn't change between runs.
+     * {@code updated_at} takes the higher task version, then the greater output, so the pick doesn't change between runs.
      */
     private static final String FIND_UNVECTORED = """
             WITH done AS (
@@ -89,7 +89,7 @@ public class TopicVectorsDAO {
                     AND task = :task
                     AND key = 'output'
                     AND (project_id, trace_id) IN (SELECT project_id, trace_id FROM done)
-                    ORDER BY workspace_id, project_id, task, trace_id, key, updated_at DESC, task_version DESC
+                    ORDER BY workspace_id, project_id, task, trace_id, key, updated_at DESC, task_version DESC, output DESC
                     LIMIT 1 BY workspace_id, project_id, task, trace_id, key
                 )
                 WHERE match(summary, :non_blank)
@@ -126,7 +126,7 @@ public class TopicVectorsDAO {
             AND key = 'output'
             AND id_at >= toDateTime(:min_id_at_seconds, 'UTC')
             AND trace_id IN :trace_ids
-            ORDER BY workspace_id, project_id, task, trace_id, key, updated_at DESC, task_version DESC
+            ORDER BY workspace_id, project_id, task, trace_id, key, updated_at DESC, task_version DESC, output DESC
             LIMIT 1 BY workspace_id, project_id, task, trace_id, key
             SETTINGS log_comment = '<log_comment>', max_execution_time = <max_execution_time>,
                 max_rows_to_read = <max_rows_to_read>, max_memory_usage = <max_memory_usage>
