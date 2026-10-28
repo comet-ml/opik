@@ -247,3 +247,31 @@ def test_entry_point__nested_call_below_it__still_dropped(recording_worker):
     run_configure()
 
     assert recording_worker.names == ["opik_python_sdk__configuration__mcp_configure"]
+
+
+def test_litellm_track_completion__called_by_the_user__reported(recording_worker):
+    from opik.integrations.litellm import track_completion
+
+    def user_code():
+        track_completion()
+
+    user_code()
+
+    assert recording_worker.names == ["opik_python_sdk__integration__litellm"]
+
+
+def test_litellm_track_completion__called_by_litellm_chat_model__not_reported(
+    recording_worker,
+):
+    """
+    `LiteLLMChatModel` wraps `litellm.completion` with `track_completion` itself, so
+    counting that call would report every LLM-judge user as a LiteLLM user.
+    """
+    from opik.evaluation.models.litellm import litellm_chat_model
+
+    def user_code():
+        litellm_chat_model.LiteLLMChatModel(model_name="gpt-4o", track=True)
+
+    user_code()
+
+    assert "opik_python_sdk__integration__litellm" not in recording_worker.names

@@ -5,6 +5,7 @@ import ollama
 from opik.types import LLMProvider
 
 from . import chat_chunks_aggregator, ollama_chat_decorator
+from ... import analytics
 
 OllamaClient = TypeVar("OllamaClient", ollama.Client, ollama.AsyncClient)
 
@@ -32,6 +33,7 @@ def track_ollama(
     Returns:
         The Ollama client with integrated Opik tracking.
     """
+    analytics.track_event("integration", "ollama")
     if hasattr(ollama_client, "opik_tracked"):
         return ollama_client
 

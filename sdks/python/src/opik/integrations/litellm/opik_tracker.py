@@ -2,6 +2,7 @@ from typing import Callable, Optional, TypeVar
 
 from . import litellm_completion_decorator
 from . import completion_chunks_aggregator
+from ... import analytics
 from opik.types import TraceSource
 
 F = TypeVar("F", bound=Callable)
@@ -35,7 +36,7 @@ def track_completion(
     Returns:
         Decorator function that wraps the completion function with Opik tracking.
     """
-
+    analytics.track_event("integration", "litellm")
     decorator_factory = litellm_completion_decorator.LiteLLMCompletionTrackDecorator()
 
     return decorator_factory.track(  # type: ignore
