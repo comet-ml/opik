@@ -42,7 +42,6 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
-import java.lang.management.ManagementFactory;
 import java.lang.reflect.Method;
 import java.net.InetAddress;
 import java.net.ServerSocket;
@@ -62,6 +61,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static com.comet.opik.domain.llm.ChatCompletionService.UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
@@ -1112,13 +1112,23 @@ class VertexAIClientGeneratorTest {
     /** Calls made per kind, chat and streamed, by {@link #callsLeaveNoThreadsBehind}. */
     private static final int CALLS = 50;
 
-    /** Threads the JVM may start or end for its own reasons while the calls run, the shared pools' included. */
-    private static final int THREAD_SLACK = 10;
+    /**
+     * The shared, bounded pools a round of calls may grow: the virtual-thread and common fork-join pools, Reactor's
+     * bounded elastic scheduler the stream starts on, OkHttp's one task runner and the shared dispatcher, and
+     * WireMock's own Jetty pool. Anything else started by the calls is theirs alone, and must end with them.
+     */
+    private static final List<String> SHARED_POOL_PREFIXES = List.of(
+            "ForkJoinPool", "boundedElastic", "OkHttp TaskRunner", "OkHttp Dispatcher", "qtp");
+
+    private static Set<Long> liveThreadIds() {
+        return Thread.getAllStackTraces().keySet().stream().map(Thread::threadId).collect(Collectors.toSet());
+    }
 
     /**
-     * Calls, streamed or not, leave no thread behind: a client per call runs on the shared transport, and the SDK
-     * starts no executor of its own on these paths. Counted against a baseline taken after a first round of calls, so
-     * the shared pools' threads are already up, and given time to settle, as idle threads of those pools may end.
+     * Calls, streamed or not, leave no thread of their own behind: a client per call runs on the shared transport,
+     * and the SDK starts no executor on these paths. The threads alive after a first round, which brings the shared
+     * pools up, are left out; of those a second round starts, only the shared pools' may still be alive once it
+     * settled.
      */
     @Test
     @DisplayName("Vertex AI calls, streamed or not, leave no thread behind")
@@ -1144,15 +1154,19 @@ class VertexAIClientGeneratorTest {
             }
         };
         round.run();
-        var threads = ManagementFactory.getThreadMXBean();
-        var baseline = threads.getThreadCount();
+        var threadsBefore = liveThreadIds();
 
         round.run();
 
         Awaitility.await()
                 .atMost(30, TimeUnit.SECONDS)
                 .pollInterval(500, TimeUnit.MILLISECONDS)
-                .untilAsserted(() -> assertThat(threads.getThreadCount()).isLessThanOrEqualTo(baseline + THREAD_SLACK));
+                // polled on this thread, so that the wait starts none of its own
+                .pollInSameThread()
+                .untilAsserted(() -> assertThat(Thread.getAllStackTraces().keySet())
+                        .filteredOn(thread -> !threadsBefore.contains(thread.threadId()))
+                        .extracting(Thread::getName)
+                        .allMatch(name -> SHARED_POOL_PREFIXES.stream().anyMatch(name::startsWith)));
     }
 
     /**
