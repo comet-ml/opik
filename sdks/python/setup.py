@@ -14,6 +14,17 @@ if version is None:
     else:
         version = "0.0.1"
 
+# Shared by a package's requirement and its dependency cap in install_requires; the
+# comments on the requirements explain them.
+ORJSON_MARKER = (
+    "platform_python_implementation == 'CPython'"
+    " and platform_machine in 'x86_64 AMD64 aarch64 arm64 ARM64 i686 x86'"
+    " and (sys_platform != 'win32'"
+    " or platform_machine != 'ARM64'"
+    " or python_version >= '3.11')"
+)
+TREE_SITTER_MARKER = "platform_machine != 'aarch64' or sys_platform != 'linux'"
+
 setup(
     author="Comet ML Inc.",
     author_email="mail@comet.com",
@@ -85,14 +96,7 @@ setup(
         # these architectures only, and a denylist would let a future architecture
         # through to a source build. armv7l is left out entirely because a marker
         # cannot tell glibc (wheel exists) from musl (none).
-        (
-            "orjson>=3.9.10;"
-            " platform_python_implementation == 'CPython'"
-            " and platform_machine in 'x86_64 AMD64 aarch64 arm64 ARM64 i686 x86'"
-            " and (sys_platform != 'win32'"
-            " or platform_machine != 'ARM64'"
-            " or python_version >= '3.11')"
-        ),
+        f"orjson>=3.9.10; {ORJSON_MARKER}",
         "jinja2",
         "watchfiles>=1.0.0,<2.0.0",
         # tree-sitter is used for JS/TS syntax checking in bridge handlers.
@@ -102,21 +106,36 @@ setup(
         # Affected glibc aarch64 users can manually:
         #   pip install tree-sitter tree-sitter-javascript \
         #     tree-sitter-typescript
-        (
-            "tree-sitter>=0.23,<1.0;"
-            " platform_machine != 'aarch64'"
-            " or sys_platform != 'linux'"
-        ),
-        (
-            "tree-sitter-javascript>=0.23,<1.0;"
-            " platform_machine != 'aarch64'"
-            " or sys_platform != 'linux'"
-        ),
-        (
-            "tree-sitter-typescript>=0.23,<1.0;"
-            " platform_machine != 'aarch64'"
-            " or sys_platform != 'linux'"
-        ),
+        f"tree-sitter>=0.23,<1.0; {TREE_SITTER_MARKER}",
+        f"tree-sitter-javascript>=0.23,<1.0; {TREE_SITTER_MARKER}",
+        f"tree-sitter-typescript>=0.23,<1.0; {TREE_SITTER_MARKER}",
+        # Dependency caps: each admits only releases that have been on PyPI for at
+        # least 3 days, so a hijacked release has time to be caught and yanked
+        # before installs pick it up. scripts/update_python_sdk_dependency_caps.py
+        # raises them every weekday through a PR and never lowers them, so a cap
+        # raised by hand to ship an urgent fix sooner stays.
+        # BEGIN dependency caps
+        "boto3-stubs<=1.43.118",
+        "click<=8.5.0",
+        "httpx<=0.28.1",
+        "rapidfuzz<=3.14.6",
+        "litellm<=1.106.4",
+        "openai<=3.37.0",
+        "pydantic-settings<=2.16.1",
+        "pydantic<=2.14.1",
+        "pytest<=9.1.1",
+        "rich<=15.0.0",
+        "sentry-sdk<=2.73.0",
+        "tenacity<=9.2.1",
+        "tqdm<=4.70.1",
+        "uuid6<=2025.0.1",
+        f"orjson<=3.13.0; {ORJSON_MARKER}",
+        "jinja2<=3.1.6",
+        "watchfiles<=1.3.0",
+        f"tree-sitter<=0.26.0; {TREE_SITTER_MARKER}",
+        f"tree-sitter-javascript<=0.25.0; {TREE_SITTER_MARKER}",
+        f"tree-sitter-typescript<=0.23.2; {TREE_SITTER_MARKER}",
+        # END dependency caps
     ],
     extras_require={
         "proxy": [

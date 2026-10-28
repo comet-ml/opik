@@ -1,0 +1,59 @@
+name: Update Python SDK Dependency Caps
+
+on:
+  schedule:
+    - cron: '0 1 * * 1-5' # Runs at 01:00 UTC, Monday to Friday
+  workflow_dispatch: # Allows manual trigger
+
+permissions:
+  contents: read
+
+jobs:
+  update-dependency-caps:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10.3.0
+
+      - name: Raise the caps to releases at least 3 days old
+        env:
+          # The job's own tooling waits out the same cooldown it enforces.
+          UV_EXCLUDE_NEWER: 3 days
+        run: uv run --no-project --python 3.12 --with packaging python scripts/update_python_sdk_dependency_caps.py
+
+      # A fixed branch, so each run updates the open PR instead of opening another.
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ secrets.COMET_ACTION_CREATE_PR }}
+          branch: github-actions/NA-update-python-sdk-dependency-caps
+          commit-message: "[NA] [SDK] chore: raise Python SDK dependency caps"
+          title: "[NA] [SDK] chore: raise Python SDK dependency caps"
+          body: |
+            ## Details
+            Automated update of the dependency caps in `sdks/python/setup.py` (between `BEGIN dependency caps` and `END dependency caps`).
+
+            - Each cap is raised to the newest release of its package that has been on PyPI for at least 3 days.
+            - `pip install opik` picks up the new caps with the next SDK release.
+
+            ## Change checklist
+            - [X] User facing change
+            - [ ] Documentation update
+
+            ## Issues
+            N/A
+
+            ## Testing
+            - The Python SDK workflows run against the new caps on this PR.
+            - A failing run means a newly admitted release breaks the SDK. Exclude that version in the package's own requirement in `setup.py` (e.g. `!=1.2.3`) on main; the next run rebases this PR onto it.
+
+            ## Documentation
+            N/A
+          base: main
