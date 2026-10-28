@@ -52,7 +52,7 @@ public class LoggingChunkedResponseHandler
     }
 
     @Override
-    public void onPartialResponse(PartialResponse partialResponse, PartialResponseContext context) {
+    public void onPartialResponse(@NonNull PartialResponse partialResponse, @NonNull PartialResponseContext context) {
         logger.appendContent(partialResponse.text());
         delegate.onPartialResponse(partialResponse, context);
     }

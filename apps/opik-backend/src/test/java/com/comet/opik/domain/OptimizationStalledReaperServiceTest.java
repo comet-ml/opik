@@ -988,10 +988,7 @@ class OptimizationStalledReaperServiceTest {
     }
 
     private OptimizationStudioConfig studioConfig() {
-        // opikApiKey is @JsonIgnore and populated server-side, so we omit it.
-        return podamFactory.manufacturePojo(OptimizationStudioConfig.class).toBuilder()
-                .opikApiKey(null)
-                .build();
+        return optimizationResourceClient.createStudioConfig();
     }
 
     private OptimizationStatus statusOf(UUID id) {

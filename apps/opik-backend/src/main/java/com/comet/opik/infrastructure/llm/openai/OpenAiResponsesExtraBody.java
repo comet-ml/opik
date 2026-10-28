@@ -128,13 +128,13 @@ class OpenAiResponsesExtraBody {
     }
 
     @SuppressWarnings("unchecked")
-    private <T> T newProxy(Class<T> type, InvocationHandler handler) {
+    <T> T newProxy(Class<T> type, InvocationHandler handler) {
         return (T) Proxy.newProxyInstance(type.getClassLoader(), new Class<?>[]{type}, handler);
     }
 
     // Unwrapped so callers get the client's own exception, which langchain4j maps to the provider's status, rather than
     // the proxy's UndeclaredThrowableException.
-    private Object invoke(Object target, Method method, Object[] args) throws Throwable {
+    Object invoke(Object target, Method method, Object[] args) throws Throwable {
         try {
             return method.invoke(target, args);
         } catch (InvocationTargetException exception) {

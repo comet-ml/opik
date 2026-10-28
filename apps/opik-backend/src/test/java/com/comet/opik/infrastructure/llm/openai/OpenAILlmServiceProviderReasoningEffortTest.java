@@ -78,7 +78,7 @@ class OpenAILlmServiceProviderReasoningEffortTest {
 
     @BeforeEach
     void setUp() {
-        openAi = new WireMockServer(0);
+        openAi = LlmTestClients.newLoopbackWireMock();
         openAi.start();
         stubChatCompletions();
         stubResponses();
@@ -204,7 +204,7 @@ class OpenAILlmServiceProviderReasoningEffortTest {
     private LlmProviderService serviceFor(Map<String, String> configuration) {
         return serviceProvider.getService(LlmProviderClientApiConfig.builder()
                 .apiKey("test-key")
-                .baseUrl(openAi.baseUrl())
+                .baseUrl(LlmTestClients.baseUrlOf(openAi))
                 .configuration(configuration)
                 .build());
     }

@@ -30,12 +30,13 @@ public class OpenAIModule extends AbstractModule {
 
     /**
      * Replaces the OpenAI SDK's own transport, which follows redirects: they would take a request past the base URL
-     * check. Every connection is also resolved through the destination guard.
+     * check. Every connection is also resolved through the destination guard. It is shared by every Responses API
+     * client, none of which can close it, see {@link NonClosingHttpClient}.
      */
     @Provides
     @Singleton
     public HttpClient responsesApiHttpClient(@NonNull @Config("llmProviderClient") LlmProviderClientConfig config) {
-        return new OkHttpClient(DestinationGuardDns.clientBuilder(DestinationGuard.builder()
+        return new NonClosingHttpClient(new OkHttpClient(DestinationGuardDns.clientBuilder(DestinationGuard.builder()
                 .mode(config.getDestinationGuard())
                 .scheme(config.getDestinationScheme())
                 .build())
@@ -45,11 +46,11 @@ public class OpenAIModule extends AbstractModule {
                 // the SDK's own per-call read timeout never fires first, see OpenAIClientGenerator
                 .addNetworkInterceptor(StreamCallTimeouts.forEventStreams(readTimeout(config),
                         Duration.ofMillis(config.getStreamReadTimeout().toMilliseconds())))
-                .build());
+                .build()));
     }
 
     /** The configured read timeout, none when unset. */
-    static Duration readTimeout(LlmProviderClientConfig config) {
+    static Duration readTimeout(@NonNull LlmProviderClientConfig config) {
         return Optional.ofNullable(config.getReadTimeout())
                 .map(timeout -> Duration.ofMillis(timeout.toMilliseconds()))
                 .orElse(Duration.ZERO);

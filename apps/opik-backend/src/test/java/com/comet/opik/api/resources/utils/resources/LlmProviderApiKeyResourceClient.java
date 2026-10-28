@@ -72,6 +72,17 @@ public class LlmProviderApiKeyResourceClient {
                 .method(HttpMethod.PATCH, Entity.json(providerApiKeyUpdate));
     }
 
+    /** As {@link #callUpdateProviderApiKey(UUID, ProviderApiKeyUpdate, String, String)}, with a raw JSON body. */
+    public Response callUpdateProviderApiKey(UUID id, String body, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(id.toString())
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .method(HttpMethod.PATCH, Entity.entity(body, ContentType.APPLICATION_JSON.toString()));
+    }
+
     public Response callTestAuthConfig(ProviderAuthCheck providerAuthTest, String apiKey, String workspaceName) {
         return client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("auth-config")
