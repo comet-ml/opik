@@ -117,7 +117,8 @@ class LangChainUsage(pydantic.BaseModel):
             tokens = getattr(
                 self.input_token_details, f"ephemeral_{ttl}_input_tokens", None
             )
-            if isinstance(tokens, int):
+            # bool is an int subclass; neither it nor a negative count is a token count.
+            if isinstance(tokens, int) and not isinstance(tokens, bool) and tokens >= 0:
                 writes_by_ttl[ttl] = tokens
         return writes_by_ttl
 

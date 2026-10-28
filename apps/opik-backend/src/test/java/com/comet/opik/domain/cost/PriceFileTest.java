@@ -4,7 +4,6 @@ import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.lang3.math.NumberUtils;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -251,10 +250,20 @@ class PriceFileTest {
                     .isEmpty();
         }
 
-        // A rate written as a string is billed like a number, so it's checked like one.
+        // A rate written as a string is billed like a number, so it's checked like one. Text that isn't a decimal number
+        // (such as "0x1") skips its model, so it isn't a price.
         private static boolean isPrice(JsonNode value) {
-            return value.isObject() || ((value.isNumber() || value.isTextual())
-                    && NumberUtils.isCreatable(value.asText()) && new BigDecimal(value.asText()).signum() > 0);
+            if (value.isObject()) {
+                return true;
+            }
+            if (!value.isNumber() && !value.isTextual()) {
+                return false;
+            }
+            try {
+                return new BigDecimal(value.asText()).signum() > 0;
+            } catch (NumberFormatException exception) {
+                return false;
+            }
         }
 
         private static boolean accountedFor(String field, Map<String, JsonNode> fields, Format format) {

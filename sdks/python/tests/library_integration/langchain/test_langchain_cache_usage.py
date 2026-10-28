@@ -160,6 +160,28 @@ def test_anthropic_usage__langchain_ttl_cache_writes__split_kept_by_ttl():
     assert full_dict["original_usage.cache_creation.ephemeral_1h_input_tokens"] == 2000
 
 
+@pytest.mark.parametrize("invalid_count", [True, -100])
+def test_anthropic_usage__langchain_invalid_ttl_count__left_out_of_split(
+    invalid_count,
+):
+    details = {**TTL_SPLIT_DETAILS, "ephemeral_1h_input_tokens": invalid_count}
+    run = _run(
+        {"kwargs": {"anthropic_api_key": "fixture-value"}},
+        _usage_metadata(details, 2000),
+    )
+
+    usage = (
+        anthropic_usage_extractor.AnthropicUsageExtractor()
+        .get_llm_usage_info(run)
+        .usage
+    )
+
+    full_dict = usage.to_backend_compatible_full_usage_dict()
+    assert usage.provider_usage.cache_creation_input_tokens == 1000
+    assert full_dict["original_usage.cache_creation.ephemeral_5m_input_tokens"] == 1000
+    assert "original_usage.cache_creation.ephemeral_1h_input_tokens" not in full_dict
+
+
 @pytest.mark.parametrize("serialized", CONVERSE_SERIALIZED)
 def test_bedrock_usage__langchain_ttl_cache_writes__split_kept_by_ttl(serialized):
     run = _run(serialized, _usage_metadata(TTL_SPLIT_DETAILS, 4000))
