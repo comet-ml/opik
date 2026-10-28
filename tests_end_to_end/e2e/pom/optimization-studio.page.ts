@@ -322,6 +322,125 @@ export class OptimizationStudioPage {
     });
   }
 
+  /**
+   * As {@link selectModel}, but reaching the picker through its own testid
+   * rather than through `modelCombobox`'s text filter.
+   *
+   * `modelCombobox()` identifies the picker by the provider name it renders —
+   * Anthropic, OpenAI, Gemini, openrouter, free — which is the only way to tell
+   * it apart from the form's other comboboxes once a model is chosen. A CUSTOM
+   * provider renders its own user-defined name instead, so that filter matches
+   * nothing and `selectModel` cannot drive a model the test itself seeded. That
+   * matters for any spec that wants a model nothing can bill: the custom
+   * provider's base URL refuses every connection, which is the only way to put
+   * a selectable model on the form without exposing the run to spend.
+   *
+   * `modelPickerTrigger()` is anchored on the `select-a-llm-model` testid, so
+   * it holds whatever the picker shows. The retry shape is `selectModel`'s, and
+   * for the same reasons: the trigger can swallow the first click as a hover,
+   * and the option list remounts when the provider-key and registry queries
+   * resolve.
+   *
+   * The model-policy guard is deliberately NOT bypassed — a name the run did
+   * not register as unbilled still has to be on the allowlist.
+   */
+  async selectModelByName(displayName: string): Promise<void> {
+    assertAllowedModelDisplayName(displayName);
+    return test.step(`Select model "${displayName}" through the picker trigger`, async () => {
+      const search = this.page.getByRole('textbox', { name: 'Search model' });
+      await expect(async () => {
+        await this.modelPickerTrigger().click();
+        await expect(search).toBeVisible({ timeout: 2_000 });
+      }).toPass({ timeout: 15_000 });
+
+      await expect(async () => {
+        await search.fill(displayName);
+        const option = this.page.getByRole('option', { name: displayName, exact: true });
+        await expect(option).toHaveCount(1, { timeout: 2_000 });
+        await option.click({ timeout: 2_000 });
+        await expect(this.modelPickerTrigger()).toHaveText(displayName, { timeout: 2_000 });
+      }).toPass({ timeout: 30_000 });
+    });
+  }
+
+  /**
+   * Type a value into one slider's numeric input and commit it.
+   *
+   * `SliderInputControl` commits on blur or on Enter/Tab/Escape, not on change,
+   * and inside a Radix menu Tab moves no focus while Escape unmounts the menu
+   * without a blur — so Enter is the only key that reliably lands the typed
+   * value. Clamped by the control itself: a value outside [min, max] is
+   * replaced with the bound, which is why the caller is handed back what the
+   * input ENDED UP holding rather than what it asked for. A spec must assert
+   * against the returned value, or a silently clamped nudge would make it look
+   * as though the form had sent something it never held.
+   *
+   * `id` is the control id `PromptModelConfigs` passes (`temperature`,
+   * `maxCompletionTokens`, `topP`, …); the input's testid is `<id>-input`.
+   * Leaves the panel OPEN, so a caller can set several and read them back.
+   */
+  async setModelParameter(id: string, value: number): Promise<string> {
+    return test.step(`Set the "${id}" model parameter to ${value}`, async () => {
+      const panel = this.modelParametersPanel();
+      if (!(await panel.isVisible().catch(() => false))) {
+        await this.modelParametersTrigger().click();
+        await panel.waitFor({ state: 'visible' });
+      }
+      const input = panel.getByTestId(`${id}-input`);
+      await expect(
+        input,
+        `the parameters panel mounts exactly one "${id}" control`,
+      ).toHaveCount(1);
+      await input.fill(String(value));
+      await input.press('Enter');
+      return input.inputValue();
+    });
+  }
+
+  /**
+   * Replace the Extra body parameters editor's contents with `json`.
+   *
+   * This is the control behind `custom_parameters` — the one model parameter
+   * whose VALUE the backend inspects, since
+   * `StudioModelParameters.DESTINATION_KEYS` refuses an inner key that could
+   * pick a host, a credential or a fallback model. A CodeMirror
+   * `contenteditable`, so it is filled the way the message editors are, then
+   * blurred: `useJsonInput` commits on blur, and a value left uncommitted would
+   * never reach the payload.
+   *
+   * Leaves the panel open. Returns nothing: what the editor accepted is only
+   * observable in the submitted request, which is where the caller asserts it.
+   */
+  async setExtraBodyParameters(json: string): Promise<void> {
+    return test.step('Fill the Extra body parameters editor', async () => {
+      const panel = this.modelParametersPanel();
+      if (!(await panel.isVisible().catch(() => false))) {
+        await this.modelParametersTrigger().click();
+        await panel.waitFor({ state: 'visible' });
+      }
+      const editor = panel.locator('#custom_parameters .cm-content').first();
+      await editor.click();
+      await editor.fill(json);
+      // Commit by blurring onto the panel's own label rather than pressing
+      // Escape, which unmounts the Radix menu without a blur and so drops the
+      // typed value — the same trap `SliderInputControl` documents.
+      await panel.getByText('Extra body parameters', { exact: false }).first().click();
+      await expect(
+        panel.getByText('Invalid JSON', { exact: false }),
+        'the editor accepted the JSON — an invalid value is never saved',
+      ).toHaveCount(0);
+    });
+  }
+
+  /** Close the model-parameters popover, if it is open. Safe to call blind. */
+  async dismissModelParameters(): Promise<void> {
+    return test.step('Close the model parameters popover', async () => {
+      if (await this.modelParametersPanel().isVisible().catch(() => false)) {
+        await this.closeModelParameters();
+      }
+    });
+  }
+
   async selectOptimizer(optimizer: OptimizerName): Promise<void> {
     return test.step(`Select optimizer "${optimizer}"`, async () => {
       const combo = this.page

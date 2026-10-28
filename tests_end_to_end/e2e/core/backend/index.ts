@@ -32,6 +32,8 @@ export {
   type ProjectStatsRef,
   type ExperimentLifecycle,
   type ExperimentRefDetail,
+  type OptimizationRef,
+  type OptimizationPageRef,
   type StudioConfigSeed,
   type ExecutePromptSeed,
   type ExecuteExperimentsResult,

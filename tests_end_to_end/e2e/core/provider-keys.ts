@@ -34,6 +34,18 @@ export interface ProviderKeyRef {
   base_url?: string;
   auth_config?: ProviderAuthConfig;
   /**
+   * Static headers applied to every upstream call made with this key, as
+   * stored. Absent — not `{}` — when the key was created without any, which is
+   * a distinction a spec asserting "the blank row was dropped" needs to keep:
+   * a create that sent `headers: {}` and one that sent no `headers` field at
+   * all are different requests, and `convertHeadersForAPI` chooses between
+   * them on whether the dialog is editing or adding.
+   *
+   * Values come back in the clear (unlike `api_key`): the backend keeps header
+   * VALUES out of its logs, not out of this read.
+   */
+  headers?: Record<string, string>;
+  /**
    * The provider's own settings, as stored. `models` is a COMMA-SEPARATED
    * string of fully-qualified ids (`custom-llm/<provider>/<model>`), not an
    * array — see `providerModelNames` for reading it as a list.
@@ -256,6 +268,14 @@ export async function createProviderKeyRaw(payload: {
   api_key?: string;
   configuration?: Record<string, string>;
   auth_config?: ProviderAuthConfig;
+  /**
+   * Static headers for every upstream call. Typed loosely enough to send the
+   * shapes the dialog cannot build — a blank name, a `null` value — because
+   * those are exactly what `LlmProviderApiKeyService.validateHeaders` refuses
+   * and what a spec mirroring the dialog's rules against the server's has to be
+   * able to put on the wire.
+   */
+  headers?: Record<string, string | null>;
 }): Promise<{ status: number; body: string; id: string | null }> {
   const response = await fetch(endpoint(), {
     method: 'POST',
@@ -297,6 +317,8 @@ export async function patchProviderKey(
     api_key?: string;
     configuration?: Record<string, string>;
     auth_config?: ProviderAuthConfig;
+    /** As on {@link createProviderKeyRaw} — the update path runs the same rules. */
+    headers?: Record<string, string | null>;
   },
 ): Promise<{ status: number; body: string }> {
   const response = await fetch(endpoint(`/${id}`), {

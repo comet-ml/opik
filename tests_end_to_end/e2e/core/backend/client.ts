@@ -1563,6 +1563,19 @@ export interface OptimizationRef {
   totalOptimizationCost: number | null;
 }
 
+/**
+ * One page of the optimization runs list, envelope included.
+ *
+ * `total` is what says the page is a page OF something: a spec asserting that
+ * every run's aggregates survive being paged has to know the whole population
+ * was reached, and a short page whose `total` disagreed with the rows is itself
+ * the finding.
+ */
+export interface OptimizationPageRef {
+  total: number | null;
+  content: OptimizationRef[];
+}
+
 /** Backend discriminator for Dataset vs Test Suite (shared DB table). */
 const TEST_SUITE_TYPE = 'evaluation_suite';
 
@@ -7307,6 +7320,90 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         size: 100,
       });
       return (page.content ?? []).map(toOptimizationRef);
+    },
+
+    /**
+     * `POST` or `PUT /v1/private/optimizations` with a hand-built body, status
+     * and message kept.
+     *
+     * Both verbs run `StudioModelParameters.validate` on the `studio_config`
+     * and both answer 201, which is the whole reason this exists: the allowlist
+     * (opik#9245) guards the create path and the upsert path separately, so a
+     * spec that only replayed one would say nothing about the other — and a
+     * rerun saves through the upsert.
+     *
+     * Raw rather than through the pinned SDK, for the same reason `writeAlert`
+     * is: the REFUSALS are the contract. The typed client raises on any non-2xx
+     * and discards the body, but the 400's message is what names the key that
+     * was refused, and "rejected for the wrong reason" is indistinguishable
+     * from "rejected" without it.
+     *
+     * `studioConfig` is `unknown` on purpose. Its whole point is to carry a
+     * payload captured verbatim off the real form, plus deliberately invalid
+     * variants of it; typing it as `StudioConfigSeed` would make the negative
+     * cases — a parameter key the runner does not pass on, a
+     * `custom_parameters` entry that picks a destination — unexpressible
+     * without a cast at every call site.
+     */
+    async writeOptimizationRaw(
+      method: 'POST' | 'PUT',
+      body: {
+        id: string;
+        name: string;
+        datasetName: string;
+        projectName: string;
+        objectiveName: string;
+        studioConfig: unknown;
+      },
+    ): Promise<RawApiResult> {
+      const { status, message, location } = await rawFetch(
+        method,
+        '/v1/private/optimizations',
+        {
+          body: {
+            id: body.id,
+            name: body.name,
+            dataset_name: body.datasetName,
+            project_name: body.projectName,
+            objective_name: body.objectiveName,
+            status: 'initialized',
+            studio_config: body.studioConfig,
+          },
+        },
+      );
+      return { status, message, location };
+    },
+
+    /**
+     * One PAGE of the same read, with the envelope kept.
+     *
+     * Separate from `listOptimizations` rather than a pair of optional
+     * arguments on it: that one promises "every run in the project" and its
+     * callers rely on it, while the question here is what ONE page says — and
+     * `total` is part of the answer. opik#9252 moved the `LIMIT` inside the
+     * `optimization_final` CTE that feeds every per-run aggregate, so a run's
+     * `numTrials` and `totalOptimizationCost` are now computed over a window
+     * the page size chooses. That makes page size an input to a money number,
+     * which a spec can only pin by reading the same run at several sizes.
+     *
+     * `total` is read as `null` when absent rather than defaulted to 0, for the
+     * same reason `totalOptimizationCost` is: an envelope that carried no count
+     * and a project with no runs are different answers.
+     */
+    async listOptimizationsPage(args: {
+      projectId: string;
+      page: number;
+      size: number;
+    }): Promise<OptimizationPageRef> {
+      const page = await opik.api.optimizations.findOptimizations({
+        projectId: args.projectId,
+        page: args.page,
+        size: args.size,
+      });
+      return {
+        total: page.total ?? null,
+        content: (page.content ?? []).map(toOptimizationRef),
+      };
     },
 
     async pollOptimizationStatus(

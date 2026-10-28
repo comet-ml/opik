@@ -1,4 +1,4 @@
-export { test, expect } from './wide-content-thread.fixture';
+export { test, expect } from './studio-allowlist-runs.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -571,3 +571,10 @@ export type {
   WideContentThreadQueueRef,
   WideContentThreadFixtures,
 } from './wide-content-thread.fixture';
+export type {
+  PagedRunExpectation,
+  PagedOptimizationRunsRef,
+  PagedOptimizationRunsFixtures,
+} from './paged-optimization-runs.fixture';
+export { TRIAL_COST, TRIALS_PER_RUN } from './paged-optimization-runs.fixture';
+export type { StudioAllowlistRunsFixtures } from './studio-allowlist-runs.fixture';
