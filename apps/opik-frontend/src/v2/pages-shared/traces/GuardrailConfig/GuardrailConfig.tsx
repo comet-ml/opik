@@ -273,7 +273,7 @@ type GuardrailConfigProps = {
   enabled: boolean;
   toggleEnabled: () => void;
   className?: string;
-  children: React.ReactNode;
+  children?: React.ReactNode;
 };
 
 const GuardrailConfig: GuardrailConfigComponents &
@@ -296,7 +296,7 @@ const GuardrailConfig: GuardrailConfigComponents &
         </div>
         <Switch size="sm" checked={enabled} onCheckedChange={toggleEnabled} />
       </div>
-      {enabled && <div className="space-y-4 pb-3">{children}</div>}
+      {enabled && children && <div className="space-y-4 pb-3">{children}</div>}
     </div>
   );
 };

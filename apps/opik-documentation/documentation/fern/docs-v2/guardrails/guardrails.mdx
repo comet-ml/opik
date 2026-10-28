@@ -192,6 +192,20 @@ Each rule type has a matching class, taking the same settings the UI exposes:
 | LLM judge | `LLMJudge` | `name`, `instructions`, `model` |
 | Custom classifier | `CustomGuardrail` | `model_name`, `threshold` |
 
+### Upgrading from guards
+
+Earlier SDK versions called rules _guards_ and ran PII, Topic, and prompt injection on the guardrails server with a threshold you set. Opik now checks them itself and sets the thresholds, so code written for the older API needs these changes:
+
+| Before | Now |
+| --- | --- |
+| `Guardrail(guards=[...])` | `Guardrail(rules=[...])` |
+| `from opik.guardrails.guards import ...` | `from opik.guardrails import ...`, or `opik.guardrails.rules` |
+| `PII(blocked_entities=[...], threshold=..., language=...)` | `PII(entities=[...])` |
+| `Topic(restricted_topics=[...], allowed_topics=[...], threshold=...)` | `Topic(restricted_topics=[...], allowed_topics=[...])` |
+| `PromptInjection(threshold=...)` | `PromptInjection()` |
+
+`LLMJudge` and `CustomGuardrail` take the same arguments as before. `Guardrail.from_stored_policies(names=[...])` is unchanged.
+
 ## Manual guardrails
 
 For a check that fits none of the five rule types — a one-off heuristic, or a business rule that is genuinely just code — you can run it yourself and log the result to Opik directly. No rule class and no guardrails server are involved.

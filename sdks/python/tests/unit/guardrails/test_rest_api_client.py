@@ -44,12 +44,14 @@ def test_guardrails_api_client_validate__request_carries_auth_headers():
     assert "Content-Encoding" not in sent_requests[0].headers
 
 
-def _opik_client(handler):
+def _opik_client(handler, request_options_sent=None):
     httpx_client = httpx.Client(
         base_url="http://opik/api/", transport=httpx.MockTransport(handler)
     )
 
     def request(path, method, json, request_options):
+        if request_options_sent is not None:
+            request_options_sent.append(request_options)
         return httpx_client.request(method, path, json=json)
 
     return types.SimpleNamespace(
@@ -68,8 +70,10 @@ def test_validate_on_opik__posts_text_and_rules():
         sent_requests.append(request)
         return httpx.Response(200, json={"validation_passed": True, "validations": []})
 
+    request_options_sent = []
+
     result = rest_api_client.validate_on_opik(
-        client=_opik_client(handler),
+        client=_opik_client(handler, request_options_sent),
         text="some text",
         validations=[{"type": "PII", "config": {"entities": ["EMAIL_ADDRESS"]}}],
         timeout_seconds=7,
@@ -81,6 +85,7 @@ def test_validate_on_opik__posts_text_and_rules():
         "text": "some text",
         "validations": [{"type": "PII", "config": {"entities": ["EMAIL_ADDRESS"]}}],
     }
+    assert request_options_sent == [{"timeout_in_seconds": 7}]
 
 
 @pytest.mark.parametrize(

@@ -35,12 +35,9 @@ export const guardrailsMap: Record<GuardrailTypes, GuardrailConfig> = {
     hintText:
       "The topic guardrail is designed to prevent the model from generating responses on certain topics that might be inappropriate, unsafe, unethical, or outside its intended scope.",
     enabled: true,
-    threshold: 0.8,
     codeImportName: "Topic",
-    codeBuilder({ entities, threshold }) {
-      return `Topic(restricted_topics=${JSON.stringify(
-        entities,
-      )}, threshold=${threshold})`;
+    codeBuilder({ entities }) {
+      return `Topic(restricted_topics=${JSON.stringify(entities)})`;
     },
   },
   [GuardrailTypes.PII]: {
@@ -50,16 +47,13 @@ export const guardrailsMap: Record<GuardrailTypes, GuardrailConfig> = {
     hintText:
       "The PII (Personally Identifiable Information) guardrail is designed to prevent the model from generating, storing, or processing sensitive personal data that could identify individuals.",
     enabled: true,
-    threshold: 0.5,
     entities: [
       PiiSupportedEntities.CREDIT_CARD,
       PiiSupportedEntities.PHONE_NUMBER,
     ],
     codeImportName: "PII",
-    codeBuilder({ entities, threshold }) {
-      return `PII(blocked_entities=${JSON.stringify(
-        entities,
-      )}, threshold=${threshold})`;
+    codeBuilder({ entities }) {
+      return `PII(entities=${JSON.stringify(entities)})`;
     },
   },
   [GuardrailTypes.PROMPT_INJECTION]: {
@@ -67,12 +61,11 @@ export const guardrailsMap: Record<GuardrailTypes, GuardrailConfig> = {
     id: "prompt-injection-guardrail",
     title: "Prompt injection guardrail",
     hintText:
-      "The prompt injection guardrail runs a fine-tuned classifier on the guardrails server to detect prompt injection and jailbreak attempts.",
+      "The prompt injection guardrail detects attempts to manipulate the assistant, such as prompt injection and jailbreaks.",
     enabled: false,
-    threshold: 0.5,
     codeImportName: "PromptInjection",
-    codeBuilder({ threshold }) {
-      return `PromptInjection(threshold=${threshold})`;
+    codeBuilder() {
+      return "PromptInjection()";
     },
   },
   [GuardrailTypes.CUSTOM_CLASSIFIER]: {

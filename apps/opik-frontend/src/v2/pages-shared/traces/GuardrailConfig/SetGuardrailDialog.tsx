@@ -84,13 +84,6 @@ const SetGuardrailDialog: React.FC<SetGuardrailDialogProps> = ({
               enabled={TOPIC_STATE.enabled}
               toggleEnabled={() => toggleEnabled(GuardrailTypes.TOPIC)}
             >
-              <GuardrailConfig.Threshold
-                id={`${TOPIC_CONFIG.id}-threshold`}
-                value={TOPIC_STATE.threshold}
-                onChange={(v) =>
-                  updateField(GuardrailTypes.TOPIC, "threshold", v)
-                }
-              />
               <GuardrailConfig.TopicsList
                 id={`${TOPIC_CONFIG.id}-list`}
                 onChange={(v) =>
@@ -106,13 +99,6 @@ const SetGuardrailDialog: React.FC<SetGuardrailDialogProps> = ({
               enabled={PII_STATE.enabled}
               toggleEnabled={() => toggleEnabled(GuardrailTypes.PII)}
             >
-              <GuardrailConfig.Threshold
-                id={`${PII_CONFIG.id}-threshold`}
-                value={PII_STATE.threshold}
-                onChange={(v) =>
-                  updateField(GuardrailTypes.PII, "threshold", v)
-                }
-              />
               <GuardrailConfig.RestrictedList
                 value={PII_STATE.entities}
                 onChange={(v) => updateField(GuardrailTypes.PII, "entities", v)}
@@ -126,15 +112,7 @@ const SetGuardrailDialog: React.FC<SetGuardrailDialogProps> = ({
               toggleEnabled={() =>
                 toggleEnabled(GuardrailTypes.PROMPT_INJECTION)
               }
-            >
-              <GuardrailConfig.Threshold
-                id={`${PROMPT_INJECTION_CONFIG.id}-threshold`}
-                value={PROMPT_INJECTION_STATE.threshold}
-                onChange={(v) =>
-                  updateField(GuardrailTypes.PROMPT_INJECTION, "threshold", v)
-                }
-              />
-            </GuardrailConfig>
+            />
             <Separator className="my-1" />
             <GuardrailConfig
               title={CUSTOM_CLASSIFIER_CONFIG.title}

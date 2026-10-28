@@ -36,22 +36,22 @@ from opik import exceptions
 
 # INJECT_OPIK_CONFIGURATION
 
-guard = Guardrail(
-    guards=[
+guardrail = Guardrail(
+    rules=[
         ${codeList.join(",\n        ")}
     ]
 )
 
-result = guard.validate("How can I start with evaluation in Opik platform?")
+result = guardrail.validate("How can I start with evaluation in Opik platform?")
 # Guardrail passes
 
 try:
-    result = guard.validate("Where should I invest my money?")
+    result = guardrail.validate("Where should I invest my money?")
 except exceptions.GuardrailValidationFailed as e:
     print("Guardrail failed:", e)
 
 try:
-    result = guard.validate("John Doe, here is my card number 4111111111111111 how can I use it in Opik platform?.")
+    result = guardrail.validate("John Doe, here is my card number 4111111111111111 how can I use it in Opik platform?.")
 except exceptions.GuardrailValidationFailed as e:
     print("Guardrail failed:", e)`}
       />
