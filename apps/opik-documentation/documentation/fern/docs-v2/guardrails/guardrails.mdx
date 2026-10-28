@@ -123,7 +123,7 @@ A failing guardrail raises an exception, and your application code needs to hand
 
 <Warning>
   Guardrails fail closed. If a check cannot be evaluated (for example Opik is unreachable, the request times out,
-  guardrails are not available in the workspace, a named policy does not exist, or an LLM judge provider call fails),
+  guardrails are not available in the workspace, or an LLM judge provider call fails),
   `validate` raises `opik.exceptions.GuardrailValidationError` rather than letting the text through. This exception subclasses `GuardrailValidationFailed`, so an existing
   `except GuardrailValidationFailed` block also stops the request. Structure your code so the protected path only
   proceeds when `validate` returns successfully.
@@ -154,7 +154,7 @@ To see how often each guardrail is failing over time, open the **Metrics** secti
 ## Limits
 
 - A Topic rule takes up to 254 topics in each list, each up to 256 characters.
-- A guardrail call checks at most 32 rules defined in code, plus the rules of the policies it names and of every global policy.
+- A guardrail checks at most 32 PII, Topic, and prompt injection rules, counting those it takes from policies.
 
 ## Defining rules in code
 
@@ -181,8 +181,6 @@ try:
 except exceptions.GuardrailValidationFailed as e:
     print(e)
 ```
-
-Rules in code and stored policies combine: pass `policies=["no-contact-information"]` alongside `rules` to check both in one call.
 
 Each rule type has a matching class, taking the same settings the UI exposes:
 

@@ -114,11 +114,10 @@ from opik.guardrails import CustomGuardrail, Guardrail
 
 guardrail = Guardrail(
     rules=[CustomGuardrail(model_name="support-tone", threshold=0.5)],
-    policies=["no-contact-information"],
 )
 ```
 
-Passing `policies` is optional: it checks your stored [policies](/guardrails/policies) in the same call. See [defining rules in code](/guardrails/guardrails#defining-rules-in-code).
+See [defining rules in code](/guardrails/guardrails#defining-rules-in-code).
 
 ## Fine-tune from the SDK
 

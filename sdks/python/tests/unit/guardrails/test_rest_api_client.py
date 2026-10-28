@@ -61,7 +61,7 @@ def _opik_client(handler):
     )
 
 
-def test_validate_on_opik__posts_text_rules_and_policies():
+def test_validate_on_opik__posts_text_and_rules():
     sent_requests = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -72,7 +72,6 @@ def test_validate_on_opik__posts_text_rules_and_policies():
         client=_opik_client(handler),
         text="some text",
         validations=[{"type": "PII", "config": {"entities": ["EMAIL_ADDRESS"]}}],
-        policies=["no_contact_information"],
         timeout_seconds=7,
     )
 
@@ -81,34 +80,17 @@ def test_validate_on_opik__posts_text_rules_and_policies():
     assert json.loads(sent_requests[0].content) == {
         "text": "some text",
         "validations": [{"type": "PII", "config": {"entities": ["EMAIL_ADDRESS"]}}],
-        "policies": ["no_contact_information"],
     }
-
-
-def test_validate_on_opik__no_policies__policies_not_sent():
-    sent_requests = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        sent_requests.append(request)
-        return httpx.Response(200, json={"validation_passed": True, "validations": []})
-
-    rest_api_client.validate_on_opik(
-        client=_opik_client(handler),
-        text="some text",
-        validations=[],
-        policies=None,
-        timeout_seconds=7,
-    )
-
-    assert "policies" not in json.loads(sent_requests[0].content)
 
 
 @pytest.mark.parametrize(
     "response,expected_body",
     [
         (
-            httpx.Response(404, json={"message": "Guardrail policy not found"}),
-            {"message": "Guardrail policy not found"},
+            httpx.Response(
+                403, json={"message": "Guardrails is available on the Enterprise plan"}
+            ),
+            {"message": "Guardrails is available on the Enterprise plan"},
         ),
         (httpx.Response(502, text="Bad Gateway"), "Bad Gateway"),
     ],
@@ -118,8 +100,7 @@ def test_validate_on_opik__error_status__raises_api_error(response, expected_bod
         rest_api_client.validate_on_opik(
             client=_opik_client(lambda request: response),
             text="some text",
-            validations=[],
-            policies=["missing"],
+            validations=[{"type": "PROMPT_INJECTION", "config": {}}],
             timeout_seconds=7,
         )
 

@@ -3,7 +3,7 @@ import pytest
 
 import opik
 import opik.exceptions as exceptions
-from opik.guardrails import Guardrail, PII, rest_api_client, schemas
+from opik.guardrails import Guardrail, PII, Topic, rest_api_client, schemas
 from opik.guardrails.rules import rule as rule_module
 from opik.message_processing.messages import GuardrailBatchMessage
 from opik.rest_api import core as rest_api_core
@@ -42,8 +42,8 @@ def _guardrail_span_output(fake_backend):
 def _record_opik_calls(monkeypatch, response):
     calls = []
 
-    def validate_on_opik(client, text, validations, policies, timeout_seconds):
-        calls.append({"text": text, "validations": validations, "policies": policies})
+    def validate_on_opik(client, text, validations, timeout_seconds):
+        calls.append({"text": text, "validations": validations})
         if isinstance(response, Exception):
             raise response
         return response
@@ -118,12 +118,12 @@ def test_guardrail_validate__guardrails_not_available__backend_message_surfaced(
         guardrail.validate("some text")
 
 
-def test_guardrail_validate__opik_rules_and_policies__sent_to_opik_in_one_call(
+def test_guardrail_validate__opik_rules__sent_to_opik_in_one_call(
     fake_backend, monkeypatch
 ):
     calls = _record_opik_calls(monkeypatch, _pii_result(passed=True))
     guardrail = Guardrail(
-        rules=[PII(entities=["EMAIL_ADDRESS"])], policies=["no_contact_information"]
+        rules=[PII(entities=["EMAIL_ADDRESS"]), Topic(restricted_topics=["finance"])]
     )
 
     result = guardrail.validate("some text")
@@ -136,9 +136,12 @@ def test_guardrail_validate__opik_rules_and_policies__sent_to_opik_in_one_call(
                 {
                     "type": schemas.ValidationType.PII,
                     "config": {"entities": ["EMAIL_ADDRESS"]},
-                }
+                },
+                {
+                    "type": schemas.ValidationType.TOPIC,
+                    "config": {"restricted_topics": ["finance"]},
+                },
             ],
-            "policies": ["no_contact_information"],
         }
     ]
 
@@ -154,23 +157,6 @@ def test_guardrail_validate__opik_check_fails__raises_validation_failed(
 
     assert [validation.type for validation in error.value.failed_validations] == [
         schemas.ValidationType.PII
-    ]
-
-
-@pytest.mark.parametrize(
-    "names,expected_policies",
-    [(["no_contact_information"], ["no_contact_information"]), (None, [])],
-)
-def test_guardrail_from_stored_policies__policies_sent_without_rules(
-    fake_backend, monkeypatch, names, expected_policies
-):
-    calls = _record_opik_calls(monkeypatch, _pii_result(passed=True))
-    guardrail = Guardrail.from_stored_policies(names=names)
-
-    guardrail.validate("some text")
-
-    assert calls == [
-        {"text": "some text", "validations": [], "policies": expected_policies}
     ]
 
 

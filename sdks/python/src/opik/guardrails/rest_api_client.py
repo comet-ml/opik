@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List
 
 import httpx
 
@@ -15,35 +15,29 @@ def validate_on_opik(
     client: opik_client.Opik,
     text: str,
     validations: List[Dict[str, Any]],
-    policies: Optional[Sequence[str]],
     timeout_seconds: int,
 ) -> schemas.ValidationResponse:
     """
-    Check the text on the Opik backend against the given rules, the named stored policies
-    and every global policy of the workspace.
+    Check the text on the Opik backend against the given rules.
 
     Composed by hand rather than through the generated REST client: the endpoint is not
     yet part of the published OpenAPI definition the client is generated from.
     """
-    payload: Dict[str, Any] = {"text": text, "validations": validations}
-    if policies is not None:
-        payload["policies"] = list(policies)
-
     response = client.rest_client._client_wrapper.httpx_client.request(
         VALIDATIONS_PATH,
         method="POST",
-        json=payload,
+        json={"text": text, "validations": validations},
         request_options={"timeout_in_seconds": timeout_seconds},
     )
     if response.status_code != 200:
         raise rest_api_core.ApiError(
-            status_code=response.status_code, body=_error_body(response)
+            status_code=response.status_code, body=error_body(response)
         )
 
     return schemas.ValidationResponse(**response.json())
 
 
-def _error_body(response: httpx.Response) -> Any:
+def error_body(response: httpx.Response) -> Any:
     try:
         return response.json()
     except ValueError:

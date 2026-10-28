@@ -18,7 +18,7 @@ from opik.message_processing.messages import (
 )
 from opik.opik_context import get_current_span_data, get_current_trace_data
 
-from . import rules as rules_module, rest_api_client, schemas, tracing
+from . import rules as rules_module, rest_api_client, schemas, stored_policies, tracing
 
 
 LOGGER = logging.getLogger(__name__)
@@ -30,14 +30,13 @@ class Guardrail:
     """
     Client for Opik guardrails.
 
-    This class validates text against a set of rules: the ones given in code and those of the
+    This class validates text against a set of rules, given in code or taken from the
     guardrail policies stored in your Opik workspace.
     """
 
     def __init__(
         self,
         rules: Optional[List[rules_module.Rule]] = None,
-        policies: Optional[Sequence[str]] = None,
         guardrail_timeout: Optional[int] = None,
     ) -> None:
         """
@@ -45,10 +44,6 @@ class Guardrail:
 
         Args:
             rules: Rules to validate text against.
-            policies: Names of guardrail policies stored in your Opik workspace whose rules are
-                checked as well. Every global policy of the workspace is checked whenever the Opik
-                backend checks a text, whether or not it is named here. Every name must exist:
-                a name that does not is an error rather than a check silently not running.
             guardrail_timeout: Timeout in seconds for the guardrail checks.
 
         Example:
@@ -74,7 +69,6 @@ class Guardrail:
 
         """
         self.rules = list(rules) if rules is not None else []
-        self.policies = list(policies) if policies is not None else None
         self._client = opik_client.get_global_client()
 
         self.config_ = config.get_from_user_inputs(
@@ -96,15 +90,25 @@ class Guardrail:
 
         A policy is a named group of rules, stored in Opik. Referencing policies by name keeps
         the checks an application runs configurable without a code change. Every global policy
-        of the workspace is always checked, whether or not it is named here.
+        of the workspace is included, whether or not it is named here.
+
+        The policies are read once, here: build the guardrail again to pick up a change made
+        in the UI. The rules of all retrieved policies are checked together, as one flat set.
 
         Args:
-            names: Names of the policies to check. Every name must exist: a name that does not
-                is an error rather than a check silently not running.
+            names: Names of the policies to build the guardrail from. Every name must exist:
+                a name that does not is an error rather than a check silently not running.
             guardrail_timeout: Timeout in seconds for the guardrail checks.
 
         Returns:
             Guardrail: Guardrail checking the rules of the named and global policies.
+
+        Raises:
+            opik.rest_api.core.ApiError: If the policies cannot be retrieved, for example
+                when one of ``names`` does not exist in the workspace, or guardrails are not
+                available in it.
+            opik.exceptions.GuardrailPolicyError: If a policy holds a rule type this SDK
+                version cannot run.
 
         Example:
 
@@ -120,10 +124,23 @@ class Guardrail:
             print("Guardrail failed:", e)
         ```
         """
-        return cls(
-            policies=list(names) if names is not None else [],
-            guardrail_timeout=guardrail_timeout,
+        client = opik_client.get_global_client()
+        policies = stored_policies.retrieve_policies(client=client, names=names)
+        policy_rules = stored_policies.build_rules(policies)
+
+        if len(policy_rules) == 0:
+            LOGGER.warning(
+                "No rules were found in the stored guardrail policies, so this guardrail "
+                "will let every input pass. Requested policy names: %s",
+                list(names) if names is not None else [],
+            )
+
+        LOGGER.debug(
+            "Built a guardrail from stored policies: %s",
+            [policy.name for policy in policies],
         )
+
+        return cls(rules=policy_rules, guardrail_timeout=guardrail_timeout)
 
     def _initialize_api_client(self, host_url: str) -> None:
         self._api_client = rest_api_client.GuardrailsApiClient(
@@ -136,7 +153,7 @@ class Guardrail:
 
     def validate(self, text: str) -> schemas.ValidationResponse:
         """
-        Validate text against all configured rules and policies.
+        Validate text against all configured rules.
 
         Args:
             text: Text to validate
@@ -147,8 +164,8 @@ class Guardrail:
         Raises:
             opik.exceptions.GuardrailValidationFailed: If validation fails
             opik.exceptions.GuardrailValidationError: If the guardrail cannot be evaluated
-                (backend unreachable, timeout, guardrails not available in the workspace, a
-                named policy that does not exist, or an LLM judge provider failure).
+                (backend unreachable, timeout, guardrails not available in the workspace, or
+                an LLM judge provider failure).
                 Guardrails fail closed, so this blocks the protected code path.
         """
         result = self._validate(generation=text)
@@ -174,13 +191,11 @@ class Guardrail:
                 for rule in self._rules_at(rules_module.RuleLocation.OPIK)
                 for validation_config in rule.get_validation_configs()
             ]
-            # A guardrail of local rules only does not need the Opik backend to run guardrails.
-            if opik_validations or self.policies is not None:
+            if opik_validations:
                 result = rest_api_client.validate_on_opik(
                     client=self._client,
                     text=generation,
                     validations=opik_validations,
-                    policies=self.policies,
                     timeout_seconds=self.config_.guardrail_timeout,
                 )
 

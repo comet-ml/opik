@@ -185,8 +185,8 @@ class GuardrailValidationError(GuardrailValidationFailed):
 
 
 class GuardrailPolicyError(OpikException):
-    """Raised when a guardrail policy stored in the workspace cannot be turned into a
-    runtime guard, for example when it holds a guard type this SDK version does not know."""
+    """Raised when a guardrail policy stored in the workspace cannot be turned into
+    rules, for example when it holds a rule type this SDK version does not know."""
 
 
 class GuardrailTrainingError(OpikException):

@@ -9,7 +9,7 @@ og:site_name: Opik Documentation
 
 A **policy** is a named group of one or more rules, stored in your Opik workspace. Your application references the policy by name rather than spelling out the checks itself.
 
-That splits the work cleanly in two. Policies are created and edited **in the Opik UI**, and the SDK's job is to name them when it asks Opik to check a text. Changing what a guardrail enforces — adding a category of personal data, restricting another topic — is something a teammate does in the UI, with no code change and no redeploy.
+That splits the work cleanly in two. Policies are created and edited **in the Opik UI**, and the SDK's job is to fetch them and run the checks. Changing what a guardrail enforces — adding a category of personal data, restricting another topic — is something a teammate does in the UI, with no code change and no redeploy.
 
 This is how we recommend running guardrails. It keeps the checks visible to everyone on the team, lets you tighten them in response to something you saw in production without waiting on a release, and applies the same protection consistently across every application that references the policy.
 
@@ -83,18 +83,16 @@ guardrail = Guardrail.from_stored_policies(
 guardrail = Guardrail.from_stored_policies()
 ```
 
-Global policies also run whenever Opik checks rules [defined in code](/guardrails/guardrails#defining-rules-in-code).
-
 A few things worth knowing about the call:
 
-- Opik reads the policies on **every** `validate` call, so a change saved in the UI applies to the next check, with no restart or redeploy.
-- Every name you pass must exist. A name that does not makes `validate` raise `GuardrailValidationError`, rather than a check quietly not running.
+- Policies are read **once**, when you build the guardrail. Build it at startup rather than on every request, and restart (or rebuild the guardrail) to pick up a change made in the UI.
+- Every name you pass must exist. A name that does not is an error, rather than a check quietly not running.
 
 ## Manage policies
 
 The **Guardrails** page lists every policy in the workspace with the rules it holds, its execution scope, and who created it and when it last changed. Selecting a row opens the policy for editing, and the row menu offers **Duplicate** — a quick way to build a variant without retyping the rules.
 
-Saved changes apply to every application that references the policy on its next check.
+Saved changes apply to every application that references the policy the next time it builds its guardrail.
 
 ## Next steps
 

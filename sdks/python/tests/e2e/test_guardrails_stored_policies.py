@@ -12,6 +12,7 @@ import pytest
 import opik
 from opik import exceptions, opik_context, synchronization
 from opik.guardrails import Guardrail
+from opik.rest_api import core as rest_api_core
 
 from . import guardrails_support, verifiers
 from ..testlib import generate_project_name
@@ -184,8 +185,7 @@ def test_guardrail_from_stored_policies__text_violating_global_policy__validatio
 def test_guardrail_from_stored_policies__unknown_policy_name__error_raised(
     opik_client: opik.Opik,
 ):
-    missing_policy = f"e2e_missing_{uuid.uuid4().hex[:8]}"
-    guardrail = Guardrail.from_stored_policies(names=[missing_policy])
+    with pytest.raises(rest_api_core.ApiError) as exception_info:
+        Guardrail.from_stored_policies(names=[f"e2e_missing_{uuid.uuid4().hex[:8]}"])
 
-    with pytest.raises(exceptions.GuardrailValidationError, match=missing_policy):
-        guardrail.validate(PASSING_TEXT)
+    assert exception_info.value.status_code == 404
