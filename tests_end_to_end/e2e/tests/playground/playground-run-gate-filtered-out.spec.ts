@@ -121,7 +121,17 @@ test.describe(
           // The per-variant Run control only renders once there is more than
           // one variant (`showPerPromptRunControls`), so a single-variant page
           // cannot exercise that half of the gate at all.
-          await playground.duplicateLastVariant();
+          //
+          // `duplicateVariant(0)` rather than the `duplicateLastVariant` this
+          // spec was written against: opik#8759 (2.2.128) moved Duplicate off
+          // the Add-variant menu and onto each variant's own header, so the
+          // POM method that drove the old menu is gone. Duplicating variant 0
+          // is the same thing this step wanted — a second variant carrying the
+          // first's model and messages, rather than a blank one needing its
+          // own configuration — and the count is settled here because the
+          // click alone does not wait for the new card.
+          await playground.duplicateVariant(0);
+          await expect(playground.variantCards()).toHaveCount(2);
           await playground.clickRunExperiment();
           await playground.selectRunExperimentSource({
             mode: 'dataset',

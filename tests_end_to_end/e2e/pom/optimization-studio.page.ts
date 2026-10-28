@@ -162,7 +162,17 @@ export class OptimizationStudioPage {
   }
 
   /**
-   * Type into one composer row and settle once it really holds the new text.
+   * REPLACE the text of one composer row, and settle once it really holds the
+   * new text.
+   *
+   * Select-all then type, rather than `fillMessage`'s `fill()`, and the
+   * difference is not cosmetic: `fill()` on a CodeMirror editor that already
+   * holds text sometimes lands as an insertion at the cursor instead of a
+   * replacement — measured here on staging, where one run of three came back
+   * holding the old body followed by the new one. Replacing a selection is the
+   * one gesture that is a replacement whatever the editor makes of synthetic
+   * input events. `fillMessage` is left alone because its callers all type into
+   * an EMPTY row, where the two are the same thing.
    *
    * Resolving on the body rather than on the keystrokes is what makes the dirty
    * check assertable: `hasUnsavedChanges` is recomputed from the message's
@@ -171,9 +181,12 @@ export class OptimizationStudioPage {
    */
   async editComposerMessage(role: 'system' | 'user', content: string): Promise<void> {
     return test.step(`Edit the composer's ${role} message`, async () => {
-      await this.fillMessage(role, content);
+      const editor = this.promptEditor(role).first();
+      await editor.click();
+      await editor.press('ControlOrMeta+A');
+      await this.page.keyboard.type(content);
       await expect
-        .poll(async () => this.composerMessageBody(role), { timeout: 10_000 })
+        .poll(async () => this.composerMessageBody(role), { timeout: 15_000 })
         .toBe(content);
     });
   }
