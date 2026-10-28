@@ -125,11 +125,19 @@ export type RuleFieldKey = "pii.entities" | "topic.topics";
 
 export type RuleErrors = Partial<Record<RuleFieldKey, string>>;
 
+/** The check adds this option to every topic list itself, so the backend rejects it as a topic. */
+const RESERVED_TOPIC = "none of these";
+
 const validateTopicList = (topics: string[]): string | undefined => {
   if (topics.some((item) => item.length > MAX_TOPIC_LENGTH)) {
     return `A topic can be at most ${MAX_TOPIC_LENGTH} characters`;
   }
-  if (new Set(topics).size !== topics.length) {
+  const topicsLowerCase = topics.map((item) => item.toLowerCase());
+  if (topicsLowerCase.includes(RESERVED_TOPIC)) {
+    return `"${RESERVED_TOPIC}" is reserved: the check adds it to every list itself`;
+  }
+  // Compared ignoring case, as the backend and the model compare them.
+  if (new Set(topicsLowerCase).size !== topics.length) {
     return "Each topic can appear only once in a list";
   }
   return undefined;
