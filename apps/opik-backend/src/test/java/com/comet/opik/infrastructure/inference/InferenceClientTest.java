@@ -56,6 +56,8 @@ class InferenceClientTest {
     private static final String JOB_PATH = "/v1/batch/jobs/" + JOB_ID;
     private static final String STATUS_PATH = "/v1/batch/jobs/status";
     private static final String EMBED_PATH = "/v1/embed";
+    private static final String REALTIME_GENERATE_PATH = "/v1/generate";
+    private static final String REALTIME_GENERATE = "POST /v1/generate";
     private static final JsonNodeFactory NODES = JsonNodeFactory.instance;
 
     private WireMockServer server;
@@ -521,6 +523,140 @@ class InferenceClientTest {
         assertThat(server.getAllServeEvents()).isEmpty();
     }
 
+    @Test
+    void generateSendsAContractValidBodyAndReadsTheOutput() {
+        server.stubFor(post(urlEqualTo(REALTIME_GENERATE_PATH)).willReturn(generated()));
+
+        var response = client.generate(generateRequest(), later()).block();
+
+        assertThat(response.requestId()).isEqualTo("r-1");
+        assertThat(response.usage()).isEqualTo(Usage.builder().inputTokens(812).outputTokens(64).build());
+        assertThat(response.result().output().path("topics").get(0).path("name").asText()).isEqualTo("Billing");
+        var sent = single(postRequestedFor(urlEqualTo(REALTIME_GENERATE_PATH)));
+        assertThat(sent.getHeader("Authorization")).isEqualTo("Bearer " + CREDENTIAL);
+        var body = json(sent);
+        assertThat(InferenceContract.validateEndpoint(REALTIME_GENERATE, "request", body)).isEmpty();
+        assertThat(body.path("org_id").asText()).isEqualTo("workspace-1");
+        assertThat(body.path("lane").asText()).isEqualTo("batch");
+        assertThat(body.path("max_tokens").asInt()).isEqualTo(2500);
+        assertThat(body.path("schema").path("type").asText()).isEqualTo("object");
+        assertThat(body.path("request_id").asText()).isNotBlank();
+        assertThat(body.path("deadline_ms").asLong()).isBetween(1L, 60_000L);
+        assertThat(InferenceContract.validateEndpoint(REALTIME_GENERATE, "response",
+                InferenceJson.MAPPER.valueToTree(response))).isEmpty();
+    }
+
+    @Test
+    void generateKeepsTheSchemaKeyOrder() {
+        server.stubFor(post(urlEqualTo(REALTIME_GENERATE_PATH)).willReturn(generated()));
+        var schema = NODES.objectNode().put("type", "object");
+        var properties = schema.putObject("properties");
+        properties.putObject("topics").put("type", "array");
+        properties.putObject("other").put("type", "array");
+        schema.putArray("required").add("topics").add("other");
+
+        client.generate(generateRequest().toBuilder().schema(schema).build(), later()).block();
+
+        var sent = single(postRequestedFor(urlEqualTo(REALTIME_GENERATE_PATH))).getBodyAsString();
+        assertThat(sent).contains("\"schema\":{\"type\":\"object\",\"properties\":{\"topics\":{\"type\":\"array\"},"
+                + "\"other\":{\"type\":\"array\"}},\"required\":[\"topics\",\"other\"]}");
+    }
+
+    @Test
+    void generateQuotaExceededIsNotRetried() {
+        server.stubFor(post(urlEqualTo(REALTIME_GENERATE_PATH))
+                .willReturn(error("quota_exceeded", 429).withHeader("Retry-After", "2")));
+
+        assertThatThrownBy(() -> client.generate(generateRequest(), later()).block())
+                .isInstanceOfSatisfying(InferenceException.class, exception -> {
+                    assertThat(exception.isQuotaExceeded()).isTrue();
+                    assertThat(exception.getHttpStatus()).isEqualTo(429);
+                });
+        assertThat(server.findAll(postRequestedFor(urlEqualTo(REALTIME_GENERATE_PATH)))).hasSize(1);
+    }
+
+    @Test
+    void generateSchemaViolationIsNotRetried() {
+        server.stubFor(post(urlEqualTo(REALTIME_GENERATE_PATH)).willReturn(error("schema_violation", 500)));
+
+        assertThatThrownBy(() -> client.generate(generateRequest(), later()).block())
+                .isInstanceOfSatisfying(InferenceException.class, exception -> {
+                    assertThat(exception.isSchemaViolation()).isTrue();
+                    assertThat(exception.getHttpStatus()).isEqualTo(500);
+                });
+        assertThat(server.findAll(postRequestedFor(urlEqualTo(REALTIME_GENERATE_PATH)))).hasSize(1);
+    }
+
+    @Test
+    void generateServerErrorIsRetriedWithTheSameRequestIdThenSucceeds() {
+        stubSequence(() -> post(urlEqualTo(REALTIME_GENERATE_PATH)), error("overloaded", 503),
+                error("overloaded", 503), generated());
+
+        var response = client.generate(generateRequest(), later()).block();
+
+        assertThat(response.result().output().path("other")).isNotNull();
+        var sent = server.findAll(postRequestedFor(urlEqualTo(REALTIME_GENERATE_PATH)));
+        assertThat(sent).hasSize(InferenceClient.MAX_RETRIES + 1);
+        var requestId = json(sent.getFirst()).path("request_id").asText();
+        assertThat(sent).allSatisfy(request -> assertThat(json(request).path("request_id").asText())
+                .isEqualTo(requestId));
+    }
+
+    @Test
+    void generateTimeoutStopsAtTheDeadline() {
+        server.stubFor(post(urlEqualTo(REALTIME_GENERATE_PATH)).willReturn(generated().withFixedDelay(5_000)));
+
+        var started = System.nanoTime();
+        assertThatThrownBy(() -> client.generate(generateRequest(), Instant.now().plusMillis(300)).block())
+                .isInstanceOfSatisfying(InferenceException.class,
+                        exception -> assertThat(exception.getCode()).isEqualTo("upstream_error"));
+        var elapsed = Duration.ofNanos(System.nanoTime() - started);
+
+        assertThat(server.findAll(postRequestedFor(urlEqualTo(REALTIME_GENERATE_PATH)))).hasSize(1);
+        assertThat(elapsed).isLessThan(Duration.ofMillis(2_000));
+    }
+
+    @ParameterizedTest(name = "body ''{0}''")
+    @ValueSource(strings = {"<html>bad gateway</html>", "{\"request_id\": \"r-1\"}", "null"})
+    void generateNonJsonOrIncompleteAnswerIsAnUpstreamError(String answer) {
+        server.stubFor(post(urlEqualTo(REALTIME_GENERATE_PATH)).willReturn(aResponse().withStatus(200)
+                .withHeader("Content-Type", "application/json").withBody(answer)));
+
+        assertThatThrownBy(() -> client.generate(generateRequest(), later()).block())
+                .isInstanceOfSatisfying(InferenceException.class,
+                        exception -> assertThat(exception.getCode()).isEqualTo("upstream_error"));
+    }
+
+    @Test
+    void generateDeadlineIsCutToTheTimeLeftAndTheLanesMaximum() {
+        server.stubFor(post(urlEqualTo(REALTIME_GENERATE_PATH)).willReturn(generated()));
+
+        client.generate(generateRequest(), Instant.now().plusSeconds(600)).block();
+        client.generate(generateRequest().toBuilder().lane(GenerateRequest.Lane.REALTIME).build(),
+                Instant.now().plusSeconds(600)).block();
+        client.generate(generateRequest().toBuilder().deadlineMs(120_000L).build(), Instant.now().plusSeconds(5))
+                .block();
+
+        var sent = server.findAll(postRequestedFor(urlEqualTo(REALTIME_GENERATE_PATH))).stream()
+                .map(request -> json(request).path("deadline_ms").asLong())
+                .toList();
+        assertThat(sent).hasSize(3);
+        assertThat(sent.get(0)).isEqualTo(GenerateRequest.Lane.BATCH.getMaxDeadline().toMillis());
+        assertThat(sent.get(1)).isEqualTo(GenerateRequest.Lane.REALTIME.getMaxDeadline().toMillis());
+        assertThat(sent.get(2)).isBetween(1L, 5_000L);
+    }
+
+    @Test
+    void generateRejectsABadRequestWithoutSending() {
+        assertThatThrownBy(() -> client.generate(generateRequest().toBuilder().messages(List.of()).build(), later()))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> client.generate(generateRequest().toBuilder().maxTokens(4097).build(), later()))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> client.generate(generateRequest().toBuilder().deadlineMs(0L).build(), later()))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(server.getAllServeEvents()).isEmpty();
+    }
+
     private static Instant later() {
         return Instant.now().plusSeconds(60);
     }
@@ -587,6 +723,30 @@ class InferenceClientTest {
                         {"request_id": "r-1", "usage": {"input_tokens": 9, "output_tokens": 0}, "cache_hit": false,
                          "latency_ms": 12, "result": {"embeddings": [[0.6, 0.8], [1.0, 0.0]], "dimensions": 2}}
                         """);
+    }
+
+    private static ResponseDefinitionBuilder generated() {
+        return aResponse().withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("""
+                        {"request_id": "r-1", "usage": {"input_tokens": 812, "output_tokens": 64}, "cache_hit": false,
+                         "latency_ms": 2140, "result": {"output": {"topics": [{"name": "Billing",
+                         "definition": "Questions about invoices.", "clusters": [0, 2]}], "other": [1]}}}
+                        """);
+    }
+
+    private static GenerateRequest generateRequest() {
+        var schema = NODES.objectNode().put("type", "object");
+        return GenerateRequest.builder()
+                .orgId("workspace-1")
+                .workspaceId("workspace-1")
+                .cache(true)
+                .lane(GenerateRequest.Lane.BATCH)
+                .messages(List.of(Message.builder().role(Message.Role.USER).content("Name these groups").build()))
+                .schema(schema)
+                .maxTokens(2500)
+                .temperature(0)
+                .build();
     }
 
     private static EmbedRequest embedRequest() {

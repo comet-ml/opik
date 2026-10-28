@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.inference;
 
 import com.comet.opik.infrastructure.AiLabelsConfig;
+import com.comet.opik.infrastructure.inference.ItemResponse.GenerateResponse;
 import com.google.common.base.Preconditions;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -30,7 +31,7 @@ import java.util.UUID;
 import java.util.function.Function;
 
 /**
- * Client for the opik-inference v1 batch API and {@code /v1/embed}. Its retries mirror the Python client's: up to 2,
+ * Client for the opik-inference v1 batch API, {@code /v1/embed} and {@code /v1/generate}. Its retries mirror the Python client's: up to 2,
  * backing off 0.1 s then 0.2 s or honoring {@code Retry-After}, except that a submit or embed answered with
  * {@code quota_exceeded} fails at once, so the caller can back off.
  * <p>
@@ -64,6 +65,7 @@ public class InferenceClient {
     private static final String JOB_PATH_TEMPLATE = "v1/batch/jobs/{job_id}";
     private static final String JOBS_STATUS_PATH = "v1/batch/jobs/status";
     private static final String EMBED_PATH = "v1/embed";
+    private static final String GENERATE_PATH = "v1/generate";
 
     private final @NonNull Client client;
     private final @NonNull @Config("aiLabels") AiLabelsConfig config;
@@ -157,6 +159,50 @@ public class InferenceClient {
         });
     }
 
+    /**
+     * One completion, answered in the call. Retried like a submit: a retry sends the same bytes, so the same
+     * {@code request_id}, and a {@code quota_exceeded} answer fails at once. So does {@code schema_violation}: the
+     * service checks the answer against the schema, and the same bytes at temperature 0 give the same answer. The
+     * request's {@code deadline_ms} is the caller's, if set, cut to the time left before {@code deadline} and to the
+     * lane's maximum; the read timeout is that deadline, as the service holds the connection until the model answers.
+     */
+    public Mono<GenerateResponse> generate(@NonNull GenerateRequest request, @NonNull Instant deadline) {
+        Preconditions.checkArgument(!request.messages().isEmpty(), "a generate call takes at least one message");
+        Preconditions.checkArgument(
+                request.maxTokens() >= BatchGenerateItem.MIN_MAX_TOKENS
+                        && request.maxTokens() <= BatchGenerateItem.MAX_MAX_TOKENS,
+                "max_tokens must be between '%s' and '%s', maxTokens '%s'", BatchGenerateItem.MIN_MAX_TOKENS,
+                BatchGenerateItem.MAX_MAX_TOKENS, request.maxTokens());
+        Preconditions.checkArgument(request.deadlineMs() == null || request.deadlineMs() > 0,
+                "a generate deadline must be positive, deadlineMs '%s'", request.deadlineMs());
+        return Mono.defer(() -> {
+            var left = Duration.between(Instant.now(), deadline);
+            if (left.toMillis() < 1) {
+                return Mono.error(InferenceException.outOfTime());
+            }
+            var deadlineMs = Math.min(request.deadlineMs() == null ? Long.MAX_VALUE : request.deadlineMs(),
+                    Math.min(left.toMillis(), request.lane().getMaxDeadline().toMillis()));
+            var withIds = request.toBuilder()
+                    .requestId(request.requestId() == null ? newRequestId() : request.requestId())
+                    .deadlineMs(deadlineMs)
+                    .build();
+            // Serialized once, so every retry sends the same bytes and the same request_id.
+            var body = InferenceJson.writeBytes(withIds);
+            return execute(Call.<GenerateResponse>builder()
+                    .method(HttpMethod.POST)
+                    .path(GENERATE_PATH)
+                    .target(base -> base.path(GENERATE_PATH))
+                    .body(body)
+                    .readTimeout(config.getInference().getReadTimeout().toJavaDuration()
+                            .plusMillis(deadlineMs))
+                    .deadline(deadline)
+                    .type(GenerateResponse.class)
+                    .failFastOnQuotaExceeded(true)
+                    .failFastOnSchemaViolation(true)
+                    .build());
+        });
+    }
+
     private Mono<BatchSubmitResponse> submit(String path, Object request, int items, Instant deadline) {
         Preconditions.checkArgument(items >= 1 && items <= MAX_BATCH_ITEMS,
                 "a batch must have 1 to '%s' items, items '%s'", MAX_BATCH_ITEMS, items);
@@ -192,7 +238,8 @@ public class InferenceClient {
             return left.toMillis() >= 1 ? send(call, left) : Mono.<T>error(InferenceException.outOfTime());
         }).onErrorResume(InferenceException.class, exception -> {
             if (attempt >= MAX_RETRIES || !exception.isRetryable()
-                    || (call.failFastOnQuotaExceeded() && exception.isQuotaExceeded())) {
+                    || (call.failFastOnQuotaExceeded() && exception.isQuotaExceeded())
+                    || (call.failFastOnSchemaViolation() && exception.isSchemaViolation())) {
                 return Mono.error(exception);
             }
             var backoff = exception.getRetryAfter() != null
@@ -289,6 +336,7 @@ public class InferenceClient {
             @NonNull Duration readTimeout,
             @NonNull Instant deadline,
             @NonNull Class<T> type,
-            boolean failFastOnQuotaExceeded) {
+            boolean failFastOnQuotaExceeded,
+            boolean failFastOnSchemaViolation) {
     }
 }

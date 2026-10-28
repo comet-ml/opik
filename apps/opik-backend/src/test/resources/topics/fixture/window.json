@@ -1,0 +1,2007 @@
+{
+ "night": "2026-10-15T00:00:00Z",
+ "window_from": "2026-09-15T00:00:00Z",
+ "dimensions": 384,
+ "traces": [
+  {
+   "id": "01a0a2b9-425d-75c4-a338-9c0cd42bc034",
+   "created_at": "2026-09-15T01:40:45.277511Z",
+   "intent": "Generate a daily briefing report for project ARAVINTHAN."
+  },
+  {
+   "id": "01a0a2ed-541b-7b5c-8f8e-3e0380283f07",
+   "created_at": "2026-09-15T02:37:37.692020Z",
+   "intent": "Explain the total estimated cost of an AI agent trace. 🚀"
+  },
+  {
+   "id": "01a0a342-5ecc-7b71-b9f6-fe8c3722b6e4",
+   "created_at": "2026-09-15T04:10:30.988886Z",
+   "intent": "Generate a daily briefing report for the Default Project with trace statistics and error analysis."
+  },
+  {
+   "id": "01a0a384-7563-732e-b699-696b0ea17bb2",
+   "created_at": "2026-09-15T05:22:42.147629Z",
+   "intent": "Debug document store unavailable error"
+  },
+  {
+   "id": "01a0a384-a01a-7f0c-9b42-d348cf93a7e4",
+   "created_at": "2026-09-15T05:22:53.082937Z",
+   "intent": "Explain the total estimated cost of an AI agent trace."
+  },
+  {
+   "id": "01a0a3af-f1a0-72d6-844a-957b5022754e",
+   "created_at": "2026-09-15T06:10:12.000240Z",
+   "intent": "Generate a daily briefing report for project Rastro."
+  },
+  {
+   "id": "01a0a3bf-5b55-7dbe-8c63-655d910da59a",
+   "created_at": "2026-09-15T06:27:02.101605Z",
+   "intent": "Retry the previous response"
+  },
+  {
+   "id": "01a0a461-8e93-73e2-aae7-eb54ba83f0bf",
+   "created_at": "2026-09-15T09:24:12.051618Z",
+   "intent": "Retry the previous response"
+  },
+  {
+   "id": "01a0a4c2-9e53-7812-afa1-a4b1a2d49b87",
+   "created_at": "2026-09-15T11:10:13.075144Z",
+   "intent": "Generate a daily briefing report for project Elliot."
+  },
+  {
+   "id": "01a0a4c2-e165-7daa-b47a-40785e806994",
+   "created_at": "2026-09-15T11:10:30.245036Z",
+   "intent": "Gather trace statistics for the CRM Agent Observability project for the last 24 hours."
+  },
+  {
+   "id": "01a0a555-bc14-742e-8d95-266f0b974742",
+   "created_at": "2026-09-15T13:50:54.484548Z",
+   "intent": "Debug the PMTool project"
+  },
+  {
+   "id": "01a0a555-c7eb-70f9-a332-c808b9d4915f",
+   "created_at": "2026-09-15T13:50:57.515615Z",
+   "intent": "Generate a daily briefing report for project Default Project with a fun fact of the day"
+  },
+  {
+   "id": "01a0a567-72f4-70b8-882c-6c426fd82498",
+   "created_at": "2026-09-15T14:10:15.413009Z",
+   "intent": "Generate a daily briefing report for project release-pulse-ai"
+  },
+  {
+   "id": "01a0a587-265a-7b10-bb0d-4644a1a5fdd8",
+   "created_at": "2026-09-15T14:44:52.954111Z",
+   "intent": "Retry the previous response"
+  },
+  {
+   "id": "01a0a59d-eef3-7a78-b5e2-6c936463a4b8",
+   "created_at": "2026-09-15T15:09:46.099865Z",
+   "intent": "Explain the trace's total estimated cost breakdown to an engineer."
+  },
+  {
+   "id": "01a0a61e-96ed-7049-b1d3-a66bab9e4eeb",
+   "created_at": "2026-09-15T17:30:17.709792Z",
+   "intent": "Retry the previous response"
+  },
+  {
+   "id": "01a0a66b-7486-7f82-babf-bf07a3fbd8e6",
+   "created_at": "2026-09-15T18:54:15.175038Z",
+   "intent": "Retry the previous response"
+  },
+  {
+   "id": "01a0a698-0279-712e-a520-5106c6a1de37",
+   "created_at": "2026-09-15T19:42:55.097975Z",
+   "intent": "Retry the previous response attempt"
+  },
+  {
+   "id": "01a0a6d6-ad05-7aa3-b8a7-940c7c7e1d2a",
+   "created_at": "2026-09-15T20:51:21.989379Z",
+   "intent": "Retry the previous response"
+  },
+  {
+   "id": "01a0a78c-a7ae-7af4-b2f2-7e70617ca857",
+   "created_at": "2026-09-16T00:10:08.174705Z",
+   "intent": "Generate a daily briefing report for project Hermes"
+  },
+  {
+   "id": "01a0a78d-a7b9-7876-95c7-69289b1cdd39",
+   "created_at": "2026-09-16T00:11:13.721753Z",
+   "intent": "Generate a daily briefing report for project Hermes."
+  },
+  {
+   "id": "01a0a7a8-6c6e-7b66-b546-04e61b8e08de",
+   "created_at": "2026-09-16T00:40:28.012042Z",
+   "intent": "Generate a daily briefing report on the Opik Demo Agent Observability project."
+  },
+  {
+   "id": "01a0a7e0-0a6c-79f6-9fc3-a726af795d4d",
+   "created_at": "2026-09-16T01:41:12.940871Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability."
+  },
+  {
+   "id": "01a0a7e0-6ded-76d6-85a4-54580aa935d8",
+   "created_at": "2026-09-16T01:41:38.413390Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability."
+  },
+  {
+   "id": "01a0a812-2024-7955-aa82-29fcf030f155",
+   "created_at": "2026-09-16T02:35:55.300522Z",
+   "intent": "Debug LLM provider rate limit error"
+  },
+  {
+   "id": "01a0a812-b107-7fd0-9496-40cbd3153ccc",
+   "created_at": "2026-09-16T02:36:32.391459Z",
+   "intent": "Explain the trace's total duration and lack of span breakdown to an engineer."
+  },
+  {
+   "id": "01a0a8d6-feda-78ff-853a-d129c479815f",
+   "created_at": "2026-09-16T06:10:57.370599Z",
+   "intent": "Generate a daily briefing report for project Rastro."
+  },
+  {
+   "id": "01a0a9e9-a1ad-7a4d-b976-c683ce50e894",
+   "created_at": "2026-09-16T11:10:55.917060Z",
+   "intent": "Analyze CRM Agent Observability traces for daily briefing metrics"
+  },
+  {
+   "id": "01a0a9eb-b0a5-77ac-9a0a-c0bdc3aadedd",
+   "created_at": "2026-09-16T11:13:10.821382Z",
+   "intent": "Generate a daily briefing report for project CRM Agent Observability."
+  },
+  {
+   "id": "01a0aa20-8b34-7c0e-9a36-d594be9a8d4c",
+   "created_at": "2026-09-16T12:10:54.644362Z",
+   "intent": "Analyze project traces for errors, latency, and patterns"
+  },
+  {
+   "id": "01a0aa22-1672-7812-a81a-541527be9693",
+   "created_at": "2026-09-16T12:12:35.826057Z",
+   "intent": "Generate a daily briefing report for project CRM Agent Observability."
+  },
+  {
+   "id": "01a0aa22-3185-7306-b675-e15f40676c75",
+   "created_at": "2026-09-16T12:12:42.749390Z",
+   "intent": "Read experiment details for the CRM Agent Observability project."
+  },
+  {
+   "id": "01a0aa26-507a-7ec0-8844-8f62aa0fba01",
+   "created_at": "2026-09-16T12:17:12.826940Z",
+   "intent": "Clarify the purpose of the script request"
+  },
+  {
+   "id": "01a0ac7c-5632-71d0-8a26-cb4d504392a9",
+   "created_at": "2026-09-16T23:10:24.818034Z",
+   "intent": "Generate a daily briefing for the Opik Code project with trace, span, and thread statistics."
+  },
+  {
+   "id": "01a0ad05-8033-7979-ac58-97c9e1e4c63a",
+   "created_at": "2026-09-17T01:40:14.003670Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability"
+  },
+  {
+   "id": "01a0ad3b-5a35-7874-afd4-b2dd9c8218b7",
+   "created_at": "2026-09-17T02:39:03.221080Z",
+   "intent": "Debug the model provider rate limit exceeded error"
+  },
+  {
+   "id": "01a0ad3b-b980-7800-b026-b56dc35d9f52",
+   "created_at": "2026-09-17T02:39:27.616059Z",
+   "intent": "Explain the total estimated cost of an AI agent trace."
+  },
+  {
+   "id": "01a0ad3b-eb71-78ce-8433-8e67bd24e8cf",
+   "created_at": "2026-09-17T02:39:40.401397Z",
+   "intent": "Explain the trace duration and lack of span breakdown to an engineer."
+  },
+  {
+   "id": "01a0ad3c-49e3-76af-b8a7-a385ee6c5dfd",
+   "created_at": "2026-09-17T02:40:04.579494Z",
+   "intent": "Debug the rate limit error in the LLM trace"
+  },
+  {
+   "id": "01a0ad3d-d157-7fad-9fe7-3e6a6c91fb20",
+   "created_at": "2026-09-17T02:41:44.791139Z",
+   "intent": "Apply the system prompt change to include units in answers."
+  },
+  {
+   "id": "01a0adc5-cd83-7b20-b0a6-0eb398a5b70b",
+   "created_at": "2026-09-17T05:10:16.707709Z",
+   "intent": "Read the project details for Stue sofa gruppe"
+  },
+  {
+   "id": "01a0adfc-9ed1-7eab-9ae8-56b8b806db88",
+   "created_at": "2026-09-17T06:10:09.233803Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability"
+  },
+  {
+   "id": "01a0aed9-d370-7e6d-b3bf-81171dbfed64",
+   "created_at": "2026-09-17T10:11:46.160182Z",
+   "intent": "Debug the agent-fab project"
+  },
+  {
+   "id": "01a0af72-735c-7355-bc4c-b8d96488c16e",
+   "created_at": "2026-09-17T12:58:28.572179Z",
+   "intent": "Retry the previous response"
+  },
+  {
+   "id": "01a0afb4-0d95-7e6d-824d-0e1759710376",
+   "created_at": "2026-09-17T14:10:07.893768Z",
+   "intent": "Generate a daily briefing report for project release-pulse-ai"
+  },
+  {
+   "id": "01a0b00f-d4f4-7dc0-aad5-7b4b30116c8d",
+   "created_at": "2026-09-17T15:50:22.708272Z",
+   "intent": "Retry the previous response"
+  },
+  {
+   "id": "01a0b1f4-e63a-7439-a734-a5e3fda4f9b8",
+   "created_at": "2026-09-18T00:40:12.090187Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability."
+  },
+  {
+   "id": "01a0b1f5-13d6-7a75-b04d-8de84a5cd072",
+   "created_at": "2026-09-18T00:40:23.766284Z",
+   "intent": "Generate a daily briefing report on project activity and error statistics."
+  },
+  {
+   "id": "01a0b210-e202-7a60-981a-9907d37ed964",
+   "created_at": "2026-09-18T01:10:46.018359Z",
+   "intent": "Search for all traces in the project Medicore from the last 24 hours and provide a comprehensive summary."
+  },
+  {
+   "id": "01a0b211-793f-7673-a3a6-e79b869d0f9d",
+   "created_at": "2026-09-18T01:11:24.735426Z",
+   "intent": "Generate a daily briefing report for project Medicore."
+  },
+  {
+   "id": "01a0b2b5-4d8b-7722-a5d6-229c585c6b6b",
+   "created_at": "2026-09-18T04:10:21.451687Z",
+   "intent": "Generate a daily briefing report for the Default Project with trace statistics."
+  },
+  {
+   "id": "01a0b2ec-4c9f-7f38-96ee-12210855c562",
+   "created_at": "2026-09-18T05:10:25.695463Z",
+   "intent": "Retrieve project statistics for internal-ollie-assist-monitoring"
+  },
+  {
+   "id": "01a0b2ec-8d0c-7dde-b559-6cd48fdcb1d6",
+   "created_at": "2026-09-18T05:10:42.188921Z",
+   "intent": "Generate a daily briefing report for project Mark jack."
+  },
+  {
+   "id": "01a0b2ee-294f-7955-bf01-ed9df346c5c1",
+   "created_at": "2026-09-18T05:12:27.725077Z",
+   "intent": "Check the status of the Ollie online evaluation automation rule"
+  },
+  {
+   "id": "01a0b323-325e-7c9c-a4f4-6a24fad19ab9",
+   "created_at": "2026-09-18T06:10:23.454706Z",
+   "intent": "Search for traces in the Rastro project from the last 24 hours and report statistics."
+  },
+  {
+   "id": "01a0b323-766e-74f7-8cc1-8c79739124ca",
+   "created_at": "2026-09-18T06:10:40.874186Z",
+   "intent": "Generate a read-only daily briefing for the northwind-voice-demo project."
+  },
+  {
+   "id": "01a0b51e-371d-779d-8dae-c49e0956ca42",
+   "created_at": "2026-09-18T15:24:11.421868Z",
+   "intent": "Explain how to resume a previous session"
+  },
+  {
+   "id": "01a0b537-9673-7097-a18d-2dd8736faf06",
+   "created_at": "2026-09-18T15:51:54.227147Z",
+   "intent": "Ask if the AI can help with a theoretical physics study."
+  },
+  {
+   "id": "01a0b608-cd27-7008-809e-203acb641114",
+   "created_at": "2026-09-18T19:40:25.255739Z",
+   "intent": "Learn how to build an LLM-powered application"
+  },
+  {
+   "id": "01a0b6fb-2947-7ab1-8ee1-6805ee39256b",
+   "created_at": "2026-09-19T00:05:08.551050Z",
+   "intent": "Debug tripick-agent"
+  },
+  {
+   "id": "01a0b752-c345-777e-aaa3-22e74af07f7c",
+   "created_at": "2026-09-19T01:40:49.605241Z",
+   "intent": "Generate a daily briefing report for project ARAVINTHAN"
+  },
+  {
+   "id": "01a0b920-b580-7594-be69-3619eb340958",
+   "created_at": "2026-09-19T10:05:23.712563Z",
+   "intent": "Find out who uses the email address"
+  },
+  {
+   "id": "01a0b992-e5a4-7da2-8e8f-a73b4173c1c1",
+   "created_at": "2026-09-19T12:10:07.140779Z",
+   "intent": "Generate a daily briefing report for project CRM Agent Observability"
+  },
+  {
+   "id": "01a0b992-f738-7e24-a52d-ef9296a869ba",
+   "created_at": "2026-09-19T12:10:11.640975Z",
+   "intent": "Generate a daily briefing report for project CRM Agent Observability."
+  },
+  {
+   "id": "01a0b994-f53b-71e7-bf6c-0b7f8c3fbfec",
+   "created_at": "2026-09-19T12:12:22.203265Z",
+   "intent": "Generate a daily briefing report for project CRM Agent Observability."
+  },
+  {
+   "id": "01a0ba01-1bb2-7316-886e-4518a68c488f",
+   "created_at": "2026-09-19T14:10:29.936383Z",
+   "intent": "Analyze historical trace patterns and error rates for the release-pulse-ai project."
+  },
+  {
+   "id": "01a0ba06-d797-72c5-9efb-996cd27e7563",
+   "created_at": "2026-09-19T14:16:45.719308Z",
+   "intent": "De enfiar dentro do bumbum"
+  },
+  {
+   "id": "01a0ba18-aeae-7ca1-8ee0-0636f46ec5a1",
+   "created_at": "2026-09-19T14:36:14.894392Z",
+   "intent": "Generate a daily briefing report for project assign"
+  },
+  {
+   "id": "01a0bad8-a77c-7faf-b167-f78952d6db25",
+   "created_at": "2026-09-19T18:05:55.965007Z",
+   "intent": "Check the current status of the job-scout traces."
+  },
+  {
+   "id": "01a0bc17-26d3-7217-b341-5d805c074c14",
+   "created_at": "2026-09-19T23:53:49.011789Z",
+   "intent": "Read project details for adriangelity-core"
+  },
+  {
+   "id": "01a0bc17-a1fd-7604-90a5-6e358b630e4e",
+   "created_at": "2026-09-19T23:54:20.541944Z",
+   "intent": "Generate a daily briefing report for project adriangelity-core."
+  },
+  {
+   "id": "01a0bc1a-2585-73be-ad1b-fc74b4537603",
+   "created_at": "2026-09-19T23:57:05.286021Z",
+   "intent": "Analyze trace for errors and suggest improvements"
+  },
+  {
+   "id": "01a0bc21-6cf0-7907-b965-72160aef0cf5",
+   "created_at": "2026-09-20T00:05:02.320739Z",
+   "intent": "Debug the adriangelity-core project"
+  },
+  {
+   "id": "01a0bc41-9daa-7e2c-b115-1bc8bcf1cd0f",
+   "created_at": "2026-09-20T00:40:11.946806Z",
+   "intent": "Get project details for Opik Demo Agent Observability"
+  },
+  {
+   "id": "01a0bc41-a07a-731b-b5f6-411a0c8b4de2",
+   "created_at": "2026-09-20T00:40:12.666845Z",
+   "intent": "Generate a daily briefing report for the project."
+  },
+  {
+   "id": "01a0bc78-921e-7a49-918d-cd1f4e3732a7",
+   "created_at": "2026-09-20T01:40:13.470527Z",
+   "intent": "Generate a daily briefing report for project charusat."
+  },
+  {
+   "id": "01a0bcab-edb9-7739-9497-018da23c3261",
+   "created_at": "2026-09-20T02:36:19.257479Z",
+   "intent": "Analyze agent trace and suggest improvements"
+  },
+  {
+   "id": "01a0be82-b7ae-7858-95d6-ad535de31531",
+   "created_at": "2026-09-20T11:10:32.876157Z",
+   "intent": "Fetch and analyze spans from the last 24 hours for the CRM Agent Observability project."
+  },
+  {
+   "id": "01a0beb9-59b1-7335-aba5-d9ee43cb9e9c",
+   "created_at": "2026-09-20T12:10:13.297987Z",
+   "intent": "Read the details of the Default Project."
+  },
+  {
+   "id": "01a0beb9-5b98-7946-bbe9-da74a59caecd",
+   "created_at": "2026-09-20T12:10:13.784428Z",
+   "intent": "Generate a daily briefing report for project Default Project"
+  },
+  {
+   "id": "01a0c0de-e643-7d7c-abe1-7caea8f65370",
+   "created_at": "2026-09-20T22:10:28.545588Z",
+   "intent": "Collect all spans from the last 24 hours for the project Customer-Support-AI"
+  },
+  {
+   "id": "01a0c167-f9ce-721e-9f87-0a52f5d165ed",
+   "created_at": "2026-09-21T00:40:11.982949Z",
+   "intent": "Generate a daily briefing report for the Opik Demo Agent Observability project."
+  },
+  {
+   "id": "01a0c183-5f24-7732-87d1-b235ce67e926",
+   "created_at": "2026-09-21T01:10:07.396962Z",
+   "intent": "Generate a daily briefing report for project Medicore"
+  },
+  {
+   "id": "01a0c19e-eea3-780d-b89b-bade23776f66",
+   "created_at": "2026-09-21T01:40:13.603161Z",
+   "intent": "Read project details for Hey"
+  },
+  {
+   "id": "01a0c19e-ef66-7718-9e64-890563f33d50",
+   "created_at": "2026-09-21T01:40:13.798928Z",
+   "intent": "Generate a daily briefing report for project assign."
+  },
+  {
+   "id": "01a0c1d5-35bb-7038-9e1b-92dca8b49a3c",
+   "created_at": "2026-09-21T02:39:30.747337Z",
+   "intent": "Analyze traces in a project to identify errors and latency issues"
+  },
+  {
+   "id": "01a0c1d9-1b3a-7a19-b958-b4fca9439cc2",
+   "created_at": "2026-09-21T02:43:46.106674Z",
+   "intent": "Explain why a trace duration is not recorded"
+  },
+  {
+   "id": "01a0c228-6407-7587-b398-cf602787160a",
+   "created_at": "2026-09-21T04:10:22.087957Z",
+   "intent": "Generate a daily briefing report with trace statistics for the Default Project."
+  },
+  {
+   "id": "01a0c25f-39f2-7cc4-a38d-94a398e81a43",
+   "created_at": "2026-09-21T05:10:15.794203Z",
+   "intent": "Read the project details for Stue sofa gruppe"
+  },
+  {
+   "id": "01a0c25f-f1d8-754a-915b-e81ee73f88e9",
+   "created_at": "2026-09-21T05:11:02.872475Z",
+   "intent": "Generate a daily briefing report for project adriangelity-core."
+  },
+  {
+   "id": "01a0c279-a0a2-7fc2-bf4c-56ed4f2cf657",
+   "created_at": "2026-09-21T05:39:06.018045Z",
+   "intent": "Retry the previous response"
+  },
+  {
+   "id": "01a0c296-284a-7bd0-93ec-a71c45e9ad97",
+   "created_at": "2026-09-21T06:10:15.754354Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability."
+  },
+  {
+   "id": "01a0c2e0-95d0-7621-9619-793b97bfdac6",
+   "created_at": "2026-09-21T07:31:33.456134Z",
+   "intent": "Add a new prompt to Opik and determine whether to use a text or chat prompt."
+  },
+  {
+   "id": "01a0c3a8-b090-77e6-9a22-49c7aad30dbc",
+   "created_at": "2026-09-21T11:10:07.504428Z",
+   "intent": "Generate a daily briefing report for project CRM Agent Observability"
+  },
+  {
+   "id": "01a0c3a8-ff2a-7219-b96e-a9085b421c83",
+   "created_at": "2026-09-21T11:10:27.623765Z",
+   "intent": "Analyze threads from the last 24 hours for project CRM Agent Observability"
+  },
+  {
+   "id": "01a0c3aa-daef-7e3f-a303-fa69227bda02",
+   "created_at": "2026-09-21T11:12:29.422031Z",
+   "intent": "List annotation queues for the CRM project."
+  },
+  {
+   "id": "01a0c44d-947b-7909-8e44-3af241fd75a5",
+   "created_at": "2026-09-21T14:10:13.755390Z",
+   "intent": "Generate a daily briefing report for project release-pulse-ai"
+  },
+  {
+   "id": "01a0c476-3e32-7ffd-b72f-fb6b93dd82e7",
+   "created_at": "2026-09-21T14:54:38.315000Z",
+   "intent": "Check the weather in San Francisco today"
+  },
+  {
+   "id": "01a0c605-a97b-763c-ad80-421481d1e6e0",
+   "created_at": "2026-09-21T22:10:54.971248Z",
+   "intent": "Fetch and summarize traces from the Customer-Support-AI project for the last 24 hours."
+  },
+  {
+   "id": "01a0c63e-1582-7d54-9844-ab107c653b54",
+   "created_at": "2026-09-21T23:12:32.642662Z",
+   "intent": "Generate a bar chart of latency percentiles"
+  },
+  {
+   "id": "01a0c6c5-3b01-7343-92f4-be216e01ae45",
+   "created_at": "2026-09-22T01:40:09.601795Z",
+   "intent": "Generate a daily briefing report for project jo"
+  },
+  {
+   "id": "01a0c6c5-4c72-76f4-96d7-b66630111220",
+   "created_at": "2026-09-22T01:40:14.066940Z",
+   "intent": "Generate a daily briefing report for project ARAVINTHAN"
+  },
+  {
+   "id": "01a0c6c6-9718-7f1d-b89a-e646e5cf6b74",
+   "created_at": "2026-09-22T01:41:38.712852Z",
+   "intent": "Generate a daily briefing report for project assign."
+  },
+  {
+   "id": "01a0c6fa-8ad1-733f-8ed0-035c8a11a59f",
+   "created_at": "2026-09-22T02:38:23.441763Z",
+   "intent": "Explain the total estimated cost of an AI agent trace."
+  },
+  {
+   "id": "01a0c6fa-98d9-7fa8-826b-cb2ae733c652",
+   "created_at": "2026-09-22T02:38:27.033430Z",
+   "intent": "Explain the trace's total estimated cost breakdown"
+  },
+  {
+   "id": "01a0c733-37f5-7987-8d3f-5f0b708ac0d0",
+   "created_at": "2026-09-22T03:40:17.781722Z",
+   "intent": "Retrieve project details for ai-business-research"
+  },
+  {
+   "id": "01a0c898-8913-7bc6-8700-8efc9abd1d64",
+   "created_at": "2026-09-22T10:10:34.897161Z",
+   "intent": "Generate a daily briefing report on Opik project spans and LLM usage statistics."
+  },
+  {
+   "id": "01a0c8c8-7676-705b-91fd-8c93eed64ec2",
+   "created_at": "2026-09-22T11:02:55.862494Z",
+   "intent": "Open trace under feedback scores"
+  },
+  {
+   "id": "01a0c906-8baf-746f-9c79-23016d879a27",
+   "created_at": "2026-09-22T12:10:44.525226Z",
+   "intent": "Search for threads in the Default Project from the last 24 hours."
+  },
+  {
+   "id": "01a0c95b-9203-76d8-a7b7-4e391013d9be",
+   "created_at": "2026-09-22T13:43:36.707812Z",
+   "intent": "Debug the Sable Doug Observation project"
+  },
+  {
+   "id": "01a0c9e4-fe5a-7ffa-9f7f-bb5fe8ad160f",
+   "created_at": "2026-09-22T16:13:42.874727Z",
+   "intent": "Debug why the answer completeness score is low and how to fix it"
+  },
+  {
+   "id": "01a0cbeb-a41f-7e9b-8a87-2c3e83b512c7",
+   "created_at": "2026-09-23T01:40:12.959604Z",
+   "intent": "Retrieve project details for assign"
+  },
+  {
+   "id": "01a0cbeb-a60a-7691-808a-a652724c0140",
+   "created_at": "2026-09-23T01:40:13.450423Z",
+   "intent": "Generate a daily briefing report for project assign"
+  },
+  {
+   "id": "01a0cbeb-d36a-7100-964c-e9951d125fb1",
+   "created_at": "2026-09-23T01:40:25.066623Z",
+   "intent": "Search for traces, threads, and spans in the project ARAVINTHAN from the last 24 hours."
+  },
+  {
+   "id": "01a0cbeb-e9ee-79b0-9d5c-d4645bf650a0",
+   "created_at": "2026-09-23T01:40:30.830522Z",
+   "intent": "Generate a daily briefing report for the charusat project with trace statistics and error analysis."
+  },
+  {
+   "id": "01a0cbec-9606-7c42-8dcd-b72eb2b9538d",
+   "created_at": "2026-09-23T01:41:14.886844Z",
+   "intent": "Generate a daily briefing report for project charusat."
+  },
+  {
+   "id": "01a0cbed-1fb7-763d-ad00-6fffef9162ed",
+   "created_at": "2026-09-23T01:41:50.135396Z",
+   "intent": "Generate a daily briefing report for project assign."
+  },
+  {
+   "id": "01a0cc23-5058-72a7-bcba-448ef95f82fa",
+   "created_at": "2026-09-23T02:41:01.528196Z",
+   "intent": "Explain the total estimated cost of an AI agent trace."
+  },
+  {
+   "id": "01a0cc74-e6f2-7819-9ef8-dd4021ba00f7",
+   "created_at": "2026-09-23T04:10:08.498219Z",
+   "intent": "Generate a daily briefing report for project Default Project."
+  },
+  {
+   "id": "01a0cc75-2b1b-7f71-ac8a-a01442b12394",
+   "created_at": "2026-09-23T04:10:25.948033Z",
+   "intent": "Generate a daily briefing report for the Default Project with trace statistics from the last 24 hours."
+  },
+  {
+   "id": "01a0cdbe-18dd-7ba0-b870-a0dcdcc94625",
+   "created_at": "2026-09-23T10:09:42.621620Z",
+   "intent": "Analyze the project trace for errors and performance patterns"
+  },
+  {
+   "id": "01a0cdbe-7873-7ae8-becf-37cf4063867a",
+   "created_at": "2026-09-23T10:10:07.091574Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability"
+  },
+  {
+   "id": "01a0cdbe-8500-7bbf-a823-72bdbc52bc2b",
+   "created_at": "2026-09-23T10:10:10.304334Z",
+   "intent": "Get project details for Opik Demo Agent Observability"
+  },
+  {
+   "id": "01a0ce64-aa28-7692-8b7d-61ed6281a0b0",
+   "created_at": "2026-09-23T13:11:38.792134Z",
+   "intent": "Analyze agent trace errors and suggest code fixes"
+  },
+  {
+   "id": "01a0d088-b12b-7284-8528-a6dd262b8fae",
+   "created_at": "2026-09-23T23:10:14.315388Z",
+   "intent": "Read project details for aicube-robot"
+  },
+  {
+   "id": "01a0d089-038c-7263-a0e1-c355b93109c7",
+   "created_at": "2026-09-23T23:10:35.401638Z",
+   "intent": "Collect historical trace data for project aicube-robot to compare against current period."
+  },
+  {
+   "id": "01a0d08a-a95f-7d7f-a0ba-f89752c88abf",
+   "created_at": "2026-09-23T23:12:23.391057Z",
+   "intent": "Generate a daily briefing report for project aicube-robot"
+  },
+  {
+   "id": "01a0d112-8778-7cca-a691-4df52c95468c",
+   "created_at": "2026-09-24T01:40:47.608191Z",
+   "intent": "Generate a daily briefing report for project ARAVINTHAN."
+  },
+  {
+   "id": "01a0d147-5ef4-7b5e-8019-691c20cbd0e9",
+   "created_at": "2026-09-24T02:38:30.644787Z",
+   "intent": "Debug document store unavailable error"
+  },
+  {
+   "id": "01a0d1d2-3bc0-7286-9d19-5fa3a9ecac69",
+   "created_at": "2026-09-24T05:10:11.136382Z",
+   "intent": "Generate a daily briefing report for project Stue sofa gruppe"
+  },
+  {
+   "id": "01a0d20e-d1b1-77a9-a494-c6a509463c2a",
+   "created_at": "2026-09-24T06:16:21.681641Z",
+   "intent": "查看 instructions"
+  },
+  {
+   "id": "01a0d2c6-3e16-7573-875e-6fa7f70cdc46",
+   "created_at": "2026-09-24T09:36:42.518804Z",
+   "intent": "Debug the Opik Demo Agent Observability project"
+  },
+  {
+   "id": "01a0d2dc-3a8e-78af-87fb-1122b2b2cf61",
+   "created_at": "2026-09-24T10:00:43.406515Z",
+   "intent": "Retry the previous response"
+  },
+  {
+   "id": "01a0d352-c5b0-75ac-96dd-60739c21adfe",
+   "created_at": "2026-09-24T12:10:12.272493Z",
+   "intent": "Read the details of the Default Project."
+  },
+  {
+   "id": "01a0d352-fdf2-71c4-93dc-16ea3059fbb4",
+   "created_at": "2026-09-24T12:10:26.672121Z",
+   "intent": "Search for spans in the Default Project from the last 24 hours and report metrics."
+  },
+  {
+   "id": "01a0d3a5-9a0d-73c7-bcb6-0277b7ad7745",
+   "created_at": "2026-09-24T13:40:40.589937Z",
+   "intent": "Retry the previous response attempt"
+  },
+  {
+   "id": "01a0d3c0-1f71-70d7-b7bb-308c50263e83",
+   "created_at": "2026-09-24T14:09:38.673586Z",
+   "intent": "Retry the previous response"
+  },
+  {
+   "id": "01a0d42e-73f2-71bb-be41-c4dd45069402",
+   "created_at": "2026-09-24T16:10:09.266595Z",
+   "intent": "Debug the search engine"
+  },
+  {
+   "id": "01a0d437-9a2f-7833-a9a0-2dfb73ce87a1",
+   "created_at": "2026-09-24T16:20:08.879240Z",
+   "intent": "Debug the salesbot_live agent's error handling"
+  },
+  {
+   "id": "01a0d556-de78-71f0-a8f1-803bb8142b3e",
+   "created_at": "2026-09-24T21:33:55.192767Z",
+   "intent": "Find the backend URL"
+  },
+  {
+   "id": "01a0d5af-0216-78d2-abaa-76d93165477f",
+   "created_at": "2026-09-24T23:10:11.478713Z",
+   "intent": "Read project details for Opik Code"
+  },
+  {
+   "id": "01a0d5af-afa7-7825-a91a-6305c9db40b5",
+   "created_at": "2026-09-24T23:10:55.911498Z",
+   "intent": "Generate a daily briefing report for project Default Project."
+  },
+  {
+   "id": "01a0d5b1-34bf-7051-95ff-8ef17b8681ba",
+   "created_at": "2026-09-24T23:12:35.519647Z",
+   "intent": "Generate a daily briefing report for project aicube-robot"
+  },
+  {
+   "id": "01a0d5e1-595b-731c-9c81-f957866f570f",
+   "created_at": "2026-09-25T00:05:10.619818Z",
+   "intent": "Increase API credit limit for model generation requests"
+  },
+  {
+   "id": "01a0d6a6-4be6-79fd-b940-ac27a0e8b752",
+   "created_at": "2026-09-25T03:40:17.766608Z",
+   "intent": "Generate a daily briefing report for project ai-business-research"
+  },
+  {
+   "id": "01a0d6f8-9482-76a8-9533-54a2614dfe46",
+   "created_at": "2026-09-25T05:10:10.306512Z",
+   "intent": "Generate a daily briefing report for project internal-ollie-assist-monitoring"
+  },
+  {
+   "id": "01a0d6f8-9b62-7c19-8ea9-c87ec458d861",
+   "created_at": "2026-09-25T05:10:12.066617Z",
+   "intent": "Generate a daily briefing report for project Marketing"
+  },
+  {
+   "id": "01a0d6f9-2bef-72e8-a2c7-53b1a14b2c45",
+   "created_at": "2026-09-25T05:10:49.072023Z",
+   "intent": "Generate a daily briefing report for project Stue sofa gruppe."
+  },
+  {
+   "id": "01a0d6fa-b75a-7fe2-833e-b11e3ed0abd3",
+   "created_at": "2026-09-25T05:12:30.298095Z",
+   "intent": "Generate a daily briefing report for project internal-ollie-assist-monitoring"
+  },
+  {
+   "id": "01a0d72f-926b-73c2-bb68-2ec23b323cd8",
+   "created_at": "2026-09-25T06:10:14.251805Z",
+   "intent": "List CRM Agent projects"
+  },
+  {
+   "id": "01a0d79f-bf67-78d5-856a-744771e76d63",
+   "created_at": "2026-09-25T08:12:45.799244Z",
+   "intent": "Retry the previous response"
+  },
+  {
+   "id": "01a0d87a-9a49-7c91-8324-cef766934380",
+   "created_at": "2026-09-25T12:11:48.681945Z",
+   "intent": "Generate a daily briefing report for the CRM Agent Observability project."
+  },
+  {
+   "id": "01a0d8b4-b2e2-7030-972b-cb5fc1d607a6",
+   "created_at": "2026-09-25T13:15:16.066336Z",
+   "intent": "Retry the previous response"
+  },
+  {
+   "id": "01a0d9b9-7c73-7bff-b290-548cb9df400e",
+   "created_at": "2026-09-25T18:00:07.027700Z",
+   "intent": "Paste a JSON payload for analysis"
+  },
+  {
+   "id": "01a0da6e-a78c-74c1-ab50-c1d5a1e5610d",
+   "created_at": "2026-09-25T21:18:00.076876Z",
+   "intent": "Ask what the AI agent can do"
+  },
+  {
+   "id": "01a0dad5-a7bf-7d3d-8a98-2081413c960c",
+   "created_at": "2026-09-25T23:10:30.330755Z",
+   "intent": "Check threads and feedback scores in project aicube-robot for the last 24 hours."
+  },
+  {
+   "id": "01a0dad6-3ff6-740d-86e2-985616ef4d4d",
+   "created_at": "2026-09-25T23:11:09.302498Z",
+   "intent": "Generate a daily briefing report for project Opik Code."
+  },
+  {
+   "id": "01a0db5f-3c3d-7ee7-8979-13d4824bb2ef",
+   "created_at": "2026-09-26T01:40:46.781074Z",
+   "intent": "Generate a daily briefing report for project ARAVINTHAN"
+  },
+  {
+   "id": "01a0dbce-0920-7a88-a8f3-f3c8c8d26b19",
+   "created_at": "2026-09-26T03:41:48.192106Z",
+   "intent": "Generate a daily briefing report for project ai-business-research."
+  },
+  {
+   "id": "01a0dc55-f25c-7ba6-bc85-56c4a7688477",
+   "created_at": "2026-09-26T06:10:15.260434Z",
+   "intent": "Generate a daily briefing report for project CRM Agent"
+  },
+  {
+   "id": "01a0dc56-16cb-7642-a8ee-8077ac312300",
+   "created_at": "2026-09-26T06:10:24.587186Z",
+   "intent": "Generate a daily briefing report on the CRM Agent demo project activity and metrics."
+  },
+  {
+   "id": "01a0dd68-da7c-7bc9-96a0-b2e9fc937e95",
+   "created_at": "2026-09-26T11:10:31.548155Z",
+   "intent": "Analyze traces from the last 24 hours for project CRM Agent Observability."
+  },
+  {
+   "id": "01a0dd68-da82-7abd-a252-a851cd562ae9",
+   "created_at": "2026-09-26T11:10:31.549180Z",
+   "intent": "Analyze threads from the last 24 hours for project CRM Agent Observability"
+  },
+  {
+   "id": "01a0ddfb-ff02-7531-9238-2af036ba4f99",
+   "created_at": "2026-09-26T13:51:14.690700Z",
+   "intent": "Generate a daily briefing report for project Default Project with a fun fact of the day"
+  },
+  {
+   "id": "01a0e085-0f47-727c-af7a-db6e99497645",
+   "created_at": "2026-09-27T01:40:11.719306Z",
+   "intent": "Read project details for Hey"
+  },
+  {
+   "id": "01a0e085-26eb-782d-9e3d-ac1b7c641f24",
+   "created_at": "2026-09-27T01:40:17.771504Z",
+   "intent": "Generate a daily briefing report for project ARAVINTHAN"
+  },
+  {
+   "id": "01a0e17c-8cc8-770a-8827-838df05139ec",
+   "created_at": "2026-09-27T06:10:31.240741Z",
+   "intent": "Gather data for a daily briefing covering the last 24 hours of the CRM Agent project."
+  },
+  {
+   "id": "01a0e28e-d84d-7c59-ae6f-bd01ff959178",
+   "created_at": "2026-09-27T11:10:07.437364Z",
+   "intent": "Generate a daily briefing report for project CRM Agent Observability"
+  },
+  {
+   "id": "01a0e291-435e-7973-b9d8-a24c7fc3ec2d",
+   "created_at": "2026-09-27T11:12:45.919009Z",
+   "intent": "Generate a daily briefing report for project CRM Agent Observability."
+  },
+  {
+   "id": "01a0e2c7-5879-733b-b13e-e110c80a578d",
+   "created_at": "2026-09-27T12:11:50.265187Z",
+   "intent": "Generate a daily briefing report for project CRM Agent Observability."
+  },
+  {
+   "id": "01a0e321-5354-7245-a55f-304dc5eb6bc1",
+   "created_at": "2026-09-27T13:50:07.188640Z",
+   "intent": "Generate a daily briefing report for project Default Project with a fun fact of the day"
+  },
+  {
+   "id": "01a0e322-5848-7752-95b3-65f756637088",
+   "created_at": "2026-09-27T13:51:13.992841Z",
+   "intent": "Generate a daily briefing report for project Default Project with a fun fact of the day"
+  },
+  {
+   "id": "01a0e333-a5cb-79db-8062-20fe1579f84c",
+   "created_at": "2026-09-27T14:10:07.947699Z",
+   "intent": "Generate a daily briefing report for project release-pulse-ai"
+  },
+  {
+   "id": "01a0e333-b681-722e-bc16-039955797b09",
+   "created_at": "2026-09-27T14:10:12.225831Z",
+   "intent": "Retrieve project details for release-pulse-ai"
+  },
+  {
+   "id": "01a0e4eb-60a3-77a5-a69a-0ca9daf21c86",
+   "created_at": "2026-09-27T22:10:26.083345Z",
+   "intent": "Gather detailed data for a daily briefing report on the project git."
+  },
+  {
+   "id": "01a0e4ec-1eb4-7cde-a6f4-2701aee1cc2e",
+   "created_at": "2026-09-27T22:11:14.740064Z",
+   "intent": "Generate a daily briefing report for project git."
+  },
+  {
+   "id": "01a0e522-414b-7686-9955-1870d5666ffe",
+   "created_at": "2026-09-27T23:10:22.539101Z",
+   "intent": "Read the details of the Default Project."
+  },
+  {
+   "id": "01a0e5ab-99b8-7024-9180-5c5767957809",
+   "created_at": "2026-09-28T01:40:23.608507Z",
+   "intent": "Search for traces, spans, and threads in the project \"ARAVINTHAN \" from the last 24 hours."
+  },
+  {
+   "id": "01a0e5ac-4ea3-7d37-a665-91d78c6f7442",
+   "created_at": "2026-09-28T01:41:09.923511Z",
+   "intent": "Generate a daily briefing report for project assign."
+  },
+  {
+   "id": "01a0e61b-8894-7808-9c9e-0d812dfffce7",
+   "created_at": "2026-09-28T03:42:39.251076Z",
+   "intent": "List available experiments in the workspace"
+  },
+  {
+   "id": "01a0e638-fa78-7722-9afa-0ac4958c74e6",
+   "created_at": "2026-09-28T04:14:48.952700Z",
+   "intent": "Debug the OpenRouter API error caused by insufficient credits."
+  },
+  {
+   "id": "01a0e66d-b156-722e-9dee-45aeeb0be82b",
+   "created_at": "2026-09-28T05:12:23.636451Z",
+   "intent": "Check the status of the Ollie online evaluation automation rule"
+  },
+  {
+   "id": "01a0e6a3-0aa4-7158-867d-d696010526da",
+   "created_at": "2026-09-28T06:10:39.908262Z",
+   "intent": "Analyze traces from the last 24 hours for the CRM Agent project."
+  },
+  {
+   "id": "01a0e6a3-0aaa-7c1b-878b-aef8e8e2bc44",
+   "created_at": "2026-09-28T06:10:39.910371Z",
+   "intent": "Analyze threads from the last 24 hours for the project CRM Agent."
+  },
+  {
+   "id": "01a0e6a3-8db1-7576-a2c1-1d6c2b682b73",
+   "created_at": "2026-09-28T06:11:13.457557Z",
+   "intent": "Generate a daily briefing report for the northwind-governance-demo project."
+  },
+  {
+   "id": "01a0e707-666a-7c66-9f65-76dffc45a682",
+   "created_at": "2026-09-28T08:00:17.002453Z",
+   "intent": "Retry the previous response"
+  },
+  {
+   "id": "01a0e768-d1c5-7e2b-b53c-cb17347d5203",
+   "created_at": "2026-09-28T09:46:41.477434Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability"
+  },
+  {
+   "id": "01a0e76d-291e-7b0d-9f96-42c1b9f8ddcb",
+   "created_at": "2026-09-28T09:51:25.981109Z",
+   "intent": "List automation rule evaluators"
+  },
+  {
+   "id": "01a0e819-f36b-7172-9ebf-9f25911ba50e",
+   "created_at": "2026-09-28T13:00:09.963897Z",
+   "intent": "Debug the AI agent's performance issues"
+  },
+  {
+   "id": "01a0e845-0e40-72b8-9f39-8fc3c9d35c23",
+   "created_at": "2026-09-28T13:47:14.880865Z",
+   "intent": "Debug the AI agent's trace output"
+  },
+  {
+   "id": "01a0e847-bd57-752e-90f7-7e396efab6ed",
+   "created_at": "2026-09-28T13:50:10.775342Z",
+   "intent": "Read the details of the Default Project."
+  },
+  {
+   "id": "01a0e897-d940-7018-9880-fd7d4c6f4527",
+   "created_at": "2026-09-28T15:17:40.800250Z",
+   "intent": "Debug the AI agent's trace output"
+  },
+  {
+   "id": "01a0ead2-019e-7eea-ba18-26c49c3acb11",
+   "created_at": "2026-09-29T01:40:26.654156Z",
+   "intent": "Search for traces, spans, and threads in the project ARAVINTHAN from the last 24 hours."
+  },
+  {
+   "id": "01a0eafe-1d4c-7bce-90ea-43d20b363954",
+   "created_at": "2026-09-29T02:28:37.324656Z",
+   "intent": "Generate a daily briefing report for project Default Project."
+  },
+  {
+   "id": "01a0eb0b-aaab-7ff1-a26c-87c2b850d2b8",
+   "created_at": "2026-09-29T02:43:25.483321Z",
+   "intent": "Debug API key permission error for claude-3-opus model access"
+  },
+  {
+   "id": "01a0eb91-f8db-7c77-be84-cd7df749212a",
+   "created_at": "2026-09-29T05:10:07.323583Z",
+   "intent": "Generate a daily briefing report for project Marketing"
+  },
+  {
+   "id": "01a0eb92-1ae9-7747-84d6-9daf1c8c46e3",
+   "created_at": "2026-09-29T05:10:16.041968Z",
+   "intent": "Retrieve project statistics for internal-ollie-assist-monitoring"
+  },
+  {
+   "id": "01a0ec0b-802a-7a2b-9d5a-183211421cb6",
+   "created_at": "2026-09-29T07:22:51.818200Z",
+   "intent": "Explain how to configure prompts in Opik web UI for team evaluations"
+  },
+  {
+   "id": "01a0ecb2-0c43-79d6-a9d1-6fa9b76def0c",
+   "created_at": "2026-09-29T10:24:46.659389Z",
+   "intent": "Debug Groq API error where first message content is missing"
+  },
+  {
+   "id": "01a0ecc0-c85e-71e1-b8ac-2cb64472a5a0",
+   "created_at": "2026-09-29T10:40:52.318632Z",
+   "intent": "Generate a daily briefing report for project excel bot"
+  },
+  {
+   "id": "01a0ed52-c1db-71fc-8303-b339639faa99",
+   "created_at": "2026-09-29T13:20:18.907770Z",
+   "intent": "Retry the previous response"
+  },
+  {
+   "id": "01a0ee51-d176-7518-a331-62c45b4d4533",
+   "created_at": "2026-09-29T17:58:54.582911Z",
+   "intent": "Explain the meaning of 0 and 1 values in the experiment feedback scores table."
+  },
+  {
+   "id": "01a0ef1c-58b6-71dc-8482-029fe29c7072",
+   "created_at": "2026-09-29T21:40:07.478171Z",
+   "intent": "Compare and analyze prompt versions v1 and v2 for the credentialing audit task."
+  },
+  {
+   "id": "01a0ef37-cf6a-7054-b05a-059152caeebb",
+   "created_at": "2026-09-29T22:10:07.338811Z",
+   "intent": "Generate a daily briefing report for project git"
+  },
+  {
+   "id": "01a0ef4a-ba0f-743b-ac3f-0ac1d52ab413",
+   "created_at": "2026-09-29T22:30:47.055952Z",
+   "intent": "Debug the \"Calls end without the caller's problem solved\" issue in the northwind-compliance-demo project."
+  },
+  {
+   "id": "01a0ef54-bfde-7ff9-9812-6a898e8c9ec8",
+   "created_at": "2026-09-29T22:41:43.902595Z",
+   "intent": "Explore Opik Demo Agent Observability project"
+  },
+  {
+   "id": "01a0ef6e-d635-7bf1-a1db-ae59e2bc9914",
+   "created_at": "2026-09-29T23:10:13.557094Z",
+   "intent": "Read the details of the Default Project."
+  },
+  {
+   "id": "01a0efa5-c8ef-7145-b0c2-5cc492d9e90c",
+   "created_at": "2026-09-30T00:10:14.639622Z",
+   "intent": "Generate a daily briefing report for project Гтр."
+  },
+  {
+   "id": "01a0efd5-f187-721f-b926-ca3c734c82dc",
+   "created_at": "2026-09-30T01:02:50.759929Z",
+   "intent": "Retrieve experiment details for the Support agent prod candidate"
+  },
+  {
+   "id": "01a0f0b8-7f2f-74e6-aa7b-0a54dbfcce91",
+   "created_at": "2026-09-30T05:10:18.159604Z",
+   "intent": "Search for traces, spans, and threads in the Marketing project from the last 24 hours."
+  },
+  {
+   "id": "01a0f0b9-0e25-7666-8b6a-461a2a48357d",
+   "created_at": "2026-09-30T05:10:54.757487Z",
+   "intent": "Search for traces in the excel bot project from the last 24 hours"
+  },
+  {
+   "id": "01a0f0ba-1f4c-7d77-a5a5-3a4d5045d1f5",
+   "created_at": "2026-09-30T05:12:04.684695Z",
+   "intent": "Investigate error traces and summarize observability infrastructure for a project."
+  },
+  {
+   "id": "01a0f0ef-617f-742d-ac3f-cf81ca0c9135",
+   "created_at": "2026-09-30T06:10:15.039248Z",
+   "intent": "Retrieve project details for MoviSaúde"
+  },
+  {
+   "id": "01a0f0ef-ae0b-7206-ab2d-c1fac6e0b60a",
+   "created_at": "2026-09-30T06:10:34.635306Z",
+   "intent": "Fetch and analyze traces for the CRM Agent project"
+  },
+  {
+   "id": "01a0f0ef-f2d2-7fb0-a0d8-d85eab71e245",
+   "created_at": "2026-09-30T06:10:52.242958Z",
+   "intent": "Generate a daily briefing report for the northwind-voice-demo project."
+  },
+  {
+   "id": "01a0f201-ffd5-730a-a90e-e37b215da95b",
+   "created_at": "2026-09-30T11:10:12.437366Z",
+   "intent": "Retrieve project details for CRM Agent Observability"
+  },
+  {
+   "id": "01a0f202-5a8c-7e94-9645-1f2714b2e4cc",
+   "created_at": "2026-09-30T11:10:35.657969Z",
+   "intent": "Analyze spans from the last 24 hours for project CRM Agent Observability."
+  },
+  {
+   "id": "01a0f2a6-df4c-735b-9507-95868f4a431a",
+   "created_at": "2026-09-30T14:10:17.548592Z",
+   "intent": "Generate a daily briefing report for project release-pulse-ai"
+  },
+  {
+   "id": "01a0f2f5-1593-7af2-8718-4e85e4f37794",
+   "created_at": "2026-09-30T15:35:43.251292Z",
+   "intent": "Retry the previous response attempt"
+  },
+  {
+   "id": "01a0f323-bb94-7769-b89b-3f900d63520e",
+   "created_at": "2026-09-30T16:26:40.404339Z",
+   "intent": "Retry the previous response attempt"
+  },
+  {
+   "id": "01a0f3e3-60e8-71b1-970a-6932b2123cda",
+   "created_at": "2026-09-30T19:56:00.104233Z",
+   "intent": "Retry the previous response"
+  },
+  {
+   "id": "01a0f4cc-72c1-7240-affd-c05c24793664",
+   "created_at": "2026-10-01T00:10:34.561568Z",
+   "intent": "Generate a daily briefing report for project Гтр."
+  },
+  {
+   "id": "01a0f51e-953c-73b6-a4d0-47d34ffd5133",
+   "created_at": "2026-10-01T01:40:17.340375Z",
+   "intent": "Generate a daily briefing report for project Default Project."
+  },
+  {
+   "id": "01a0f55f-8caa-768a-878b-89d461575bca",
+   "created_at": "2026-10-01T02:51:14.986083Z",
+   "intent": "Explain the trace duration and identify slow spans"
+  },
+  {
+   "id": "01a0f55f-d8ab-7875-889b-8b5a58beacd7",
+   "created_at": "2026-10-01T02:51:34.443762Z",
+   "intent": "Debug the 429 rate limit error in the LLM trace"
+  },
+  {
+   "id": "01a0f58c-7eda-7ba5-86f3-7a07464cfd8f",
+   "created_at": "2026-10-01T03:40:20.570730Z",
+   "intent": "Generate a daily briefing report for project 'الهه'."
+  },
+  {
+   "id": "01a0f5fb-3c09-7240-aeaa-20c1b9329476",
+   "created_at": "2026-10-01T05:41:17.961203Z",
+   "intent": "Generate a bar chart showing average token usage per trace by metric type"
+  },
+  {
+   "id": "01a0f615-ad99-7302-975f-95a69a2026d6",
+   "created_at": "2026-10-01T06:10:10.969127Z",
+   "intent": "Generate a daily briefing report for project MoviSaúde"
+  },
+  {
+   "id": "01a0f615-ebcc-7886-b01b-6f6b1f421fae",
+   "created_at": "2026-10-01T06:10:26.892672Z",
+   "intent": "Analyze the CRM Agent demo project for recent activity and report findings."
+  },
+  {
+   "id": "01a0f685-570e-7e27-9f9e-d14ad079d66e",
+   "created_at": "2026-10-01T08:12:08.847029Z",
+   "intent": "Retry the previous response"
+  },
+  {
+   "id": "01a0f728-9731-7ac2-b7e6-8849a85289ff",
+   "created_at": "2026-10-01T11:10:27.631261Z",
+   "intent": "Compile a daily briefing report for the openclaw project."
+  },
+  {
+   "id": "01a0f729-e3f0-71c5-b67b-6273fa6cca19",
+   "created_at": "2026-10-01T11:11:52.816446Z",
+   "intent": "Generate a daily briefing report for project Default Project."
+  },
+  {
+   "id": "01a0f89b-52d9-764c-a5f1-bb4b08a8af73",
+   "created_at": "2026-10-01T17:55:23.993342Z",
+   "intent": "Retry the previous response"
+  },
+  {
+   "id": "01a0f998-36b0-730d-9fae-5f2450e13efc",
+   "created_at": "2026-10-01T22:31:37.392582Z",
+   "intent": "Retry the previous response attempt"
+  },
+  {
+   "id": "01a0f998-b3d7-787e-b8eb-78f62b819d74",
+   "created_at": "2026-10-01T22:32:09.431401Z",
+   "intent": "Retry the previous response"
+  },
+  {
+   "id": "01a0f999-6da9-7396-abbd-2f405431ea5f",
+   "created_at": "2026-10-01T22:32:57.001603Z",
+   "intent": "Generate a daily briefing report for project local-fourel-replay."
+  },
+  {
+   "id": "01a0f9a5-4823-7c22-9740-b8070a8fefb0",
+   "created_at": "2026-10-01T22:45:53.828040Z",
+   "intent": "Retry the previous response attempt"
+  },
+  {
+   "id": "01a0f9bb-84cb-7ca3-b850-e3002c678d08",
+   "created_at": "2026-10-01T23:10:11.147320Z",
+   "intent": "Read the details of the Default Project."
+  },
+  {
+   "id": "01a0f9bb-8620-7b8f-ac8c-ab3c226faafa",
+   "created_at": "2026-10-01T23:10:11.488716Z",
+   "intent": "Generate a daily briefing report for project Default Project."
+  },
+  {
+   "id": "01a0f9c0-39d4-7804-b628-14f856771d1a",
+   "created_at": "2026-10-01T23:15:19.636522Z",
+   "intent": "Retry the previous response"
+  },
+  {
+   "id": "01a0f9e9-7209-7fb3-8d90-ded1cc651469",
+   "created_at": "2026-10-02T00:00:21.001081Z",
+   "intent": "Retry the previous response"
+  },
+  {
+   "id": "01a0fa7f-c549-76d4-99bb-5996e5b57abe",
+   "created_at": "2026-10-02T02:44:32.713393Z",
+   "intent": "Analyze trace, identify errors, and suggest improvements"
+  },
+  {
+   "id": "01a0fa80-f2ba-7190-adda-729a84967581",
+   "created_at": "2026-10-02T02:45:49.882575Z",
+   "intent": "Explain the total estimated cost of a trace to an engineer."
+  },
+  {
+   "id": "01a0fa81-dc73-7b8a-ae99-0b386f54cb41",
+   "created_at": "2026-10-02T02:46:49.715730Z",
+   "intent": "Explain what a trace is in Opik"
+  },
+  {
+   "id": "01a0fab2-da7a-734d-973a-038696c623f0",
+   "created_at": "2026-10-02T03:40:20.474703Z",
+   "intent": "Read project details for the specified project ID"
+  },
+  {
+   "id": "01a0fb05-1e4e-7934-82be-1ef585e7230a",
+   "created_at": "2026-10-02T05:10:11.790773Z",
+   "intent": "Read the project details for Marketing"
+  },
+  {
+   "id": "01a0fb05-2094-75a9-9588-5e042c6d158e",
+   "created_at": "2026-10-02T05:10:12.372442Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability"
+  },
+  {
+   "id": "01a0fb05-3049-7a8c-aaec-f09bd0502f37",
+   "created_at": "2026-10-02T05:10:16.393484Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability"
+  },
+  {
+   "id": "01a0fc4e-bcab-71fd-85e5-2fe8f26fff78",
+   "created_at": "2026-10-02T11:10:13.675153Z",
+   "intent": "Generate a daily briefing report for project openclaw."
+  },
+  {
+   "id": "01a0fc4f-0507-7e8d-b433-ff1b12af44e4",
+   "created_at": "2026-10-02T11:10:32.199450Z",
+   "intent": "Generate a daily briefing report on the openclaw project's recent activity and statistics."
+  },
+  {
+   "id": "01a0fcf3-b686-75ad-8c6a-652ba9508f51",
+   "created_at": "2026-10-02T14:10:25.542460Z",
+   "intent": "Analyze recent activity for the project release-pulse-ai"
+  },
+  {
+   "id": "01a0fd2c-736a-7ad0-ba2b-3967507fee40",
+   "created_at": "2026-10-02T15:12:23.912722Z",
+   "intent": "Read experiment details"
+  },
+  {
+   "id": "01a0fd38-670a-7bf5-b973-5adb0769199c",
+   "created_at": "2026-10-02T15:25:27.178402Z",
+   "intent": "Retry the previous response"
+  },
+  {
+   "id": "01a0fdfd-5897-7e1f-a234-d8c9e8be5714",
+   "created_at": "2026-10-02T19:00:34.072038Z",
+   "intent": "Retry the previous response"
+  },
+  {
+   "id": "01a0fe76-04c9-7b3b-b27d-232110e2bc74",
+   "created_at": "2026-10-02T21:12:22.473402Z",
+   "intent": "Read the details of an automation rule evaluator."
+  },
+  {
+   "id": "01a0fef1-c689-70cc-9fa7-e10a3161a816",
+   "created_at": "2026-10-02T23:27:33.001294Z",
+   "intent": "Retry the previous response"
+  },
+  {
+   "id": "01a0ff01-97f3-7eb9-8d8d-7d9f4dc93caa",
+   "created_at": "2026-10-02T23:44:49.651841Z",
+   "intent": "Retry the previous failed response"
+  },
+  {
+   "id": "01a0ff18-d69a-7785-be72-8dbf6da76c30",
+   "created_at": "2026-10-03T00:10:13.018582Z",
+   "intent": "Generate a daily briefing report for project TestFlowise."
+  },
+  {
+   "id": "01a0ffa4-ee46-7ad4-8d66-0536bad6d073",
+   "created_at": "2026-10-03T02:43:14.118867Z",
+   "intent": "Analyze a single LLM trace error for an engineer."
+  },
+  {
+   "id": "01a0ffa5-490c-778e-8423-ad55098e0ad6",
+   "created_at": "2026-10-03T02:43:37.356936Z",
+   "intent": "Explain the trace duration and lack of sub-span breakdown to an engineer."
+  },
+  {
+   "id": "01a0ffd9-18d6-74d3-abfe-1be393dac271",
+   "created_at": "2026-10-03T03:40:12.886712Z",
+   "intent": "Generate a daily briefing report for project 'الهه'"
+  },
+  {
+   "id": "01a1002b-90a8-7732-b0f6-be4da8b389aa",
+   "created_at": "2026-10-03T05:10:17.512978Z",
+   "intent": "Retrieve project details for Opik Demo Agent Observability"
+  },
+  {
+   "id": "01a1002c-95ee-7254-8f30-6067741ac95e",
+   "created_at": "2026-10-03T05:11:24.398324Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Optimizer."
+  },
+  {
+   "id": "01a10175-40be-7c6c-83c5-0825b084fd00",
+   "created_at": "2026-10-03T11:10:23.934035Z",
+   "intent": "Gather all activity data from the last 24 hours for the project Default Project in workspace marquis-lee."
+  },
+  {
+   "id": "01a10176-929d-7744-8d5e-6b0e94f17992",
+   "created_at": "2026-10-03T11:11:50.429755Z",
+   "intent": "Generate a daily briefing report for project openclaw."
+  },
+  {
+   "id": "01a10250-ba45-7590-8086-2d7f1110326e",
+   "created_at": "2026-10-03T15:10:07.429455Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability"
+  },
+  {
+   "id": "01a10408-5e8d-7a19-bec1-a39720d3b693",
+   "created_at": "2026-10-03T23:10:19.787966Z",
+   "intent": "Generate a daily briefing report for the Default Project with trace analysis."
+  },
+  {
+   "id": "01a1043f-2bf6-75c2-a2a0-bfb1f8fd1786",
+   "created_at": "2026-10-04T00:10:11.318416Z",
+   "intent": "Read project details for Гтр"
+  },
+  {
+   "id": "01a104f2-b21d-7855-874e-f2f1c00dbbf8",
+   "created_at": "2026-10-04T03:26:16.605985Z",
+   "intent": "Explain the trace duration and lack of span breakdown to an engineer."
+  },
+  {
+   "id": "01a104f3-5cb7-75fa-8958-5d4dbceea02b",
+   "created_at": "2026-10-04T03:27:00.279813Z",
+   "intent": "Explain what a trace is in Opik"
+  },
+  {
+   "id": "01a10551-f068-74ac-88a9-69a861a48334",
+   "created_at": "2026-10-04T05:10:18.472824Z",
+   "intent": "Generate a daily briefing report for project local-fourel."
+  },
+  {
+   "id": "01a10552-ae29-7513-a957-e902c8ac7465",
+   "created_at": "2026-10-04T05:11:07.049531Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Optimizer."
+  },
+  {
+   "id": "01a1072e-ca74-727e-aaa6-3a675789848e",
+   "created_at": "2026-10-04T13:51:09.428246Z",
+   "intent": "Generate a daily briefing report for project Default Project with a fun fact of the day."
+  },
+  {
+   "id": "01a1081d-1af3-7af7-a37b-c26049f70447",
+   "created_at": "2026-10-04T18:11:27.603200Z",
+   "intent": "List automation rule evaluators"
+  },
+  {
+   "id": "01a1086e-530d-77e4-a7d8-dc4faf8653dc",
+   "created_at": "2026-10-04T19:40:10.381199Z",
+   "intent": "Retry the previous response"
+  },
+  {
+   "id": "01a108c0-ac92-7d95-ae62-83d31bb81f78",
+   "created_at": "2026-10-04T21:10:07.251043Z",
+   "intent": "Generate a daily briefing report for project salescadet"
+  },
+  {
+   "id": "01a109b8-a958-7ca0-8dd7-8955f1b15a3d",
+   "created_at": "2026-10-05T01:40:59.352656Z",
+   "intent": "Generate a daily briefing report for project 'jo'."
+  },
+  {
+   "id": "01a10a78-4944-770b-b226-fb454e9626ba",
+   "created_at": "2026-10-05T05:10:17.668509Z",
+   "intent": "Read project details for Opik Demo Optimizer"
+  },
+  {
+   "id": "01a10a78-82d8-7afd-b339-f62e05148b28",
+   "created_at": "2026-10-05T05:10:32.402047Z",
+   "intent": "Generate a daily briefing report on threads for the local-fourel-replay project."
+  },
+  {
+   "id": "01a10a78-9a94-722b-a324-a2b8f78769e7",
+   "created_at": "2026-10-05T05:10:38.479311Z",
+   "intent": "Search for all spans in the project excel bot from the last 24 hours"
+  },
+  {
+   "id": "01a10a79-074e-7103-8ba0-2a60c3d06afc",
+   "created_at": "2026-10-05T05:11:06.318055Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability."
+  },
+  {
+   "id": "01a10c01-93bb-7ae3-b196-d0f533e4f1f4",
+   "created_at": "2026-10-05T12:19:52.379147Z",
+   "intent": "Read project details for aiDemo"
+  },
+  {
+   "id": "01a10c66-9454-717e-9e18-93395b21e515",
+   "created_at": "2026-10-05T14:10:11.668873Z",
+   "intent": "Read project details for Enterprise Knowledge Agent - Synthetic"
+  },
+  {
+   "id": "01a10c66-cb40-7e07-9e6a-bb45a37da90f",
+   "created_at": "2026-10-05T14:10:25.728747Z",
+   "intent": "Analyze the project release-pulse-ai for a daily briefing report"
+  },
+  {
+   "id": "01a10c9d-c919-7b78-ac95-0d96cde2a9ce",
+   "created_at": "2026-10-05T15:10:29.657461Z",
+   "intent": "Summarize project traces, threads, errors, costs, and token usage patterns."
+  },
+  {
+   "id": "01a10cf1-3b72-7489-bc3b-1cfcd0607980",
+   "created_at": "2026-10-05T16:41:38.418545Z",
+   "intent": "Retry the previous response attempt"
+  },
+  {
+   "id": "01a10cfb-1bc9-7ab0-a998-a978b24ce0aa",
+   "created_at": "2026-10-05T16:52:25.673425Z",
+   "intent": "Retry the previous response"
+  },
+  {
+   "id": "01a10de7-70cb-75ab-85b5-d09bc8802449",
+   "created_at": "2026-10-05T21:10:33.928819Z",
+   "intent": "Analyze threads from the last 24 hours for project salescadet"
+  },
+  {
+   "id": "01a10ede-5eb8-7480-afb0-bc4318b0adee",
+   "created_at": "2026-10-06T01:40:16.696342Z",
+   "intent": "Read the details of the Default Project."
+  },
+  {
+   "id": "01a10f4c-60dd-7ebf-9a84-55b2d24a0723",
+   "created_at": "2026-10-06T03:40:26.205583Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability"
+  },
+  {
+   "id": "01a10f9e-8608-7b4f-8981-aa8c79bda0f6",
+   "created_at": "2026-10-06T05:10:09.672076Z",
+   "intent": "Generate a daily briefing report for project excel bot"
+  },
+  {
+   "id": "01a10f9e-9155-7acb-8cdf-ecff926b2be1",
+   "created_at": "2026-10-06T05:10:12.565480Z",
+   "intent": "Generate a daily briefing report for the internal-ollie-assist-monitoring project."
+  },
+  {
+   "id": "01a10fa0-38df-749d-a7c4-e5aebe1bf2d5",
+   "created_at": "2026-10-06T05:12:00.991602Z",
+   "intent": "Generate a daily briefing report for the Opik Demo Optimizer project."
+  },
+  {
+   "id": "01a10fa0-87e1-705a-a342-19b299047c9c",
+   "created_at": "2026-10-06T05:12:21.217320Z",
+   "intent": "Generate a bar chart of trace duration percentiles"
+  },
+  {
+   "id": "01a10fa1-146e-7a9e-85fa-08e007690f66",
+   "created_at": "2026-10-06T05:12:57.198696Z",
+   "intent": "Generate a daily briefing report for project internal-ollie-assist-monitoring."
+  },
+  {
+   "id": "01a10fd5-c04b-767d-a993-f3877a96313a",
+   "created_at": "2026-10-06T06:10:29.067409Z",
+   "intent": "Retrieve project details for northwind-governance-demo"
+  },
+  {
+   "id": "01a10fd5-c051-7276-b2d9-68b1d6a2f14f",
+   "created_at": "2026-10-06T06:10:29.069057Z",
+   "intent": "Analyze spans for a daily briefing report for the project northwind-governance-demo."
+  },
+  {
+   "id": "01a110e8-5137-72af-9d7d-73bf07c59539",
+   "created_at": "2026-10-06T11:10:23.031699Z",
+   "intent": "Check the Default Project for traces, spans, and threads from the last 24 hours."
+  },
+  {
+   "id": "01a11122-e5d6-7007-b753-b06fc8535740",
+   "created_at": "2026-10-06T12:14:22.166980Z",
+   "intent": "Access the playground"
+  },
+  {
+   "id": "01a1118c-f22e-7293-b602-243ba55267bf",
+   "created_at": "2026-10-06T14:10:12.142578Z",
+   "intent": "Read project details for Enterprise Knowledge Agent - Synthetic"
+  },
+  {
+   "id": "01a111bb-6b95-74b7-849d-81a369f9e0d5",
+   "created_at": "2026-10-06T15:00:57.877215Z",
+   "intent": "Retrieve project details for LAJ"
+  },
+  {
+   "id": "01a111bb-8cb8-777f-b6a6-13fd953ee76e",
+   "created_at": "2026-10-06T15:01:06.360425Z",
+   "intent": "Search for traces, spans, and threads in the LAJ project from the last 24 hours."
+  },
+  {
+   "id": "01a111d1-683c-7a3f-949d-621b6a285adc",
+   "created_at": "2026-10-06T15:24:58.812716Z",
+   "intent": "Analyze user topics from the past 30 days"
+  },
+  {
+   "id": "01a1129e-4c93-76fd-baf3-820113312bfc",
+   "created_at": "2026-10-06T19:08:46.611470Z",
+   "intent": "Debug API key issue"
+  },
+  {
+   "id": "01a1130a-5486-7b89-a187-02596923d3fb",
+   "created_at": "2026-10-06T21:06:46.534378Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability"
+  },
+  {
+   "id": "01a1130a-6134-7a80-ba82-1a4f365ff9f7",
+   "created_at": "2026-10-06T21:06:49.780392Z",
+   "intent": "Read experiment details for the support agent staging candidate"
+  },
+  {
+   "id": "01a113ad-a08c-7dfd-b879-b7aad875c27d",
+   "created_at": "2026-10-07T00:05:08.364147Z",
+   "intent": "Debug the CRM Assistant agent"
+  },
+  {
+   "id": "01a11404-b3e3-7cef-8bc4-49d93d56ac40",
+   "created_at": "2026-10-07T01:40:14.947119Z",
+   "intent": "Read project details for jo"
+  },
+  {
+   "id": "01a11404-e5ef-7164-9c1d-f7ba6e479f7c",
+   "created_at": "2026-10-07T01:40:27.759843Z",
+   "intent": "Read the details of the Default Project."
+  },
+  {
+   "id": "01a11443-dd1a-7ed1-83d6-2a4b79f8744b",
+   "created_at": "2026-10-07T02:49:14.266792Z",
+   "intent": "Retry the previous response attempt"
+  },
+  {
+   "id": "01a11447-9cb2-7813-a556-2b19cc65476b",
+   "created_at": "2026-10-07T02:53:19.922738Z",
+   "intent": "Analyze project traces to identify errors, latency issues, and patterns"
+  },
+  {
+   "id": "01a11448-7aad-7a61-936f-e93d76877619",
+   "created_at": "2026-10-07T02:54:16.749139Z",
+   "intent": "Debug the rate limit error from the LLM provider."
+  },
+  {
+   "id": "01a11472-a39b-78b8-bc12-7adb64c8e724",
+   "created_at": "2026-10-07T03:40:19.739756Z",
+   "intent": "Generate a daily briefing report for project 'اشکان آرمات'"
+  },
+  {
+   "id": "01a11472-b3f7-7bf0-9b7b-8b546e209bc1",
+   "created_at": "2026-10-07T03:40:23.927563Z",
+   "intent": "Generate a daily briefing report for project Dfdggg"
+  },
+  {
+   "id": "01a11472-c5c4-7f5d-9ce4-0388ab85359d",
+   "created_at": "2026-10-07T03:40:28.484729Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability"
+  },
+  {
+   "id": "01a1149f-1e11-7686-b95b-61d3f8725e15",
+   "created_at": "2026-10-07T04:28:54.673635Z",
+   "intent": "Retry the previous response"
+  },
+  {
+   "id": "01a114c4-e704-7f5f-93ed-b18cad6e5a7c",
+   "created_at": "2026-10-07T05:10:10.948563Z",
+   "intent": "Read project details for Marketing"
+  },
+  {
+   "id": "01a114c4-e95c-7bc0-99e6-309f5ad64b02",
+   "created_at": "2026-10-07T05:10:11.548094Z",
+   "intent": "Generate a daily briefing report for project Marketing"
+  },
+  {
+   "id": "01a114c7-2746-78cc-9268-7ef4d4070baf",
+   "created_at": "2026-10-07T05:12:38.470155Z",
+   "intent": "Generate a daily briefing report for project internal-ollie-assist-monitoring."
+  },
+  {
+   "id": "01a114c7-520d-71aa-bb62-8a5d41200fb5",
+   "created_at": "2026-10-07T05:12:49.419540Z",
+   "intent": "Read the details of a specific annotation queue."
+  },
+  {
+   "id": "01a114c7-5213-795f-867a-3cf3e2421b42",
+   "created_at": "2026-10-07T05:12:49.421469Z",
+   "intent": "Read the details of the annotation queue with the specified ID."
+  },
+  {
+   "id": "01a114fb-d936-7ee2-988a-819d663d4f7d",
+   "created_at": "2026-10-07T06:10:11.894709Z",
+   "intent": "Generate a daily briefing report for project MoviSaúde"
+  },
+  {
+   "id": "01a114fc-24b5-7d1f-8249-d78dc1beb7c7",
+   "created_at": "2026-10-07T06:10:31.216619Z",
+   "intent": "Debug permission denied error"
+  },
+  {
+   "id": "01a114fc-59c4-76e5-8cad-6817836967c6",
+   "created_at": "2026-10-07T06:10:44.804778Z",
+   "intent": "Generate a daily briefing report for the CRM Agent project."
+  },
+  {
+   "id": "01a114fc-7e67-72be-b102-2fdcf187b4f5",
+   "created_at": "2026-10-07T06:10:54.183509Z",
+   "intent": "Generate a daily briefing report for project Elwin Ghent."
+  },
+  {
+   "id": "01a114fc-85c5-79c8-bffe-33c39de938f4",
+   "created_at": "2026-10-07T06:10:56.069148Z",
+   "intent": "Generate a daily briefing report for project MoviSaúde."
+  },
+  {
+   "id": "01a11645-60be-78db-b327-ff0d2f7f235e",
+   "created_at": "2026-10-07T12:10:07.934469Z",
+   "intent": "Generate a daily briefing report for project LAJ"
+  },
+  {
+   "id": "01a11678-675c-74a0-a819-52f1ddc48d72",
+   "created_at": "2026-10-07T13:05:51.964781Z",
+   "intent": "Retry the previous response"
+  },
+  {
+   "id": "01a116b3-9b4c-742c-8945-4a5afe551924",
+   "created_at": "2026-10-07T14:10:31.884173Z",
+   "intent": "Generate a daily briefing report on the release-pulse-ai project's recent trace activity and error patterns."
+  },
+  {
+   "id": "01a118a3-d211-7dbe-8145-3ef4db14cd60",
+   "created_at": "2026-10-07T23:12:31.761714Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability."
+  },
+  {
+   "id": "01a11999-0434-7573-a48f-5759fe4a6886",
+   "created_at": "2026-10-08T03:40:20.916814Z",
+   "intent": "Generate a daily briefing report for project Default Project."
+  },
+  {
+   "id": "01a11999-0af2-7efb-a613-f77675fe9157",
+   "created_at": "2026-10-08T03:40:22.642487Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability"
+  },
+  {
+   "id": "01a11999-0c24-7064-9161-654767ec0d4d",
+   "created_at": "2026-10-08T03:40:22.948877Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability"
+  },
+  {
+   "id": "01a11999-12d9-7237-a3b8-6111346d4db5",
+   "created_at": "2026-10-08T03:40:24.665843Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability"
+  },
+  {
+   "id": "01a11999-1acc-774a-be8d-d689de1814d4",
+   "created_at": "2026-10-08T03:40:26.700858Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability"
+  },
+  {
+   "id": "01a11b5b-2b4f-72a6-9b37-32ab6affc9e8",
+   "created_at": "2026-10-08T11:52:02.126553Z",
+   "intent": "Generate a daily briefing report for the tam-prep project with trace data from the last 24 hours."
+  },
+  {
+   "id": "01a11b6b-cda6-7d83-b638-c1d2065240e2",
+   "created_at": "2026-10-08T12:10:12.262653Z",
+   "intent": "Read the project details for aiDemo"
+  },
+  {
+   "id": "01a11bd9-e803-794e-8ee1-68a9e683e182",
+   "created_at": "2026-10-08T14:10:27.971440Z",
+   "intent": "Generate a daily briefing report for the release-pulse-ai project."
+  },
+  {
+   "id": "01a11d26-2faa-787c-ae2b-a468971d02ad",
+   "created_at": "2026-10-08T20:13:24.266406Z",
+   "intent": "Check if the Opik account is a student account."
+  },
+  {
+   "id": "01a11dfe-f96f-7168-adaf-999905591495",
+   "created_at": "2026-10-09T00:10:11.695942Z",
+   "intent": "Read project details for Гтр"
+  },
+  {
+   "id": "01a11e51-aa28-7ca0-9289-ca61e5654018",
+   "created_at": "2026-10-09T01:40:30.888782Z",
+   "intent": "Generate a daily briefing report for the Travelling project with traces from the last 24 hours."
+  },
+  {
+   "id": "01a11ebf-52bb-7b5e-b960-ccd533579d06",
+   "created_at": "2026-10-09T03:40:17.467124Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability"
+  },
+  {
+   "id": "01a11ebf-5452-718b-bf05-48acb1f7e479",
+   "created_at": "2026-10-09T03:40:17.874816Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability"
+  },
+  {
+   "id": "01a11ebf-54a8-75da-af14-4e48683a409a",
+   "created_at": "2026-10-09T03:40:17.960730Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability"
+  },
+  {
+   "id": "01a11f12-0410-7aa5-b54d-6bd4226b6351",
+   "created_at": "2026-10-09T05:10:36.816407Z",
+   "intent": "Generate a daily briefing report for the Opik Demo Optimizer project."
+  },
+  {
+   "id": "01a122b7-8eb7-7970-b9e1-3f6da1face8a",
+   "created_at": "2026-10-09T22:10:17.399355Z",
+   "intent": "Generate a daily briefing report for project Default Project."
+  },
+  {
+   "id": "01a12325-5972-71a7-8bac-b12a0c8cb120",
+   "created_at": "2026-10-10T00:10:12.722839Z",
+   "intent": "Read project details for Гтр"
+  },
+  {
+   "id": "01a123e5-b3c4-7a97-bb3b-4c495ca5ef4f",
+   "created_at": "2026-10-10T03:40:18.756721Z",
+   "intent": "Generate a daily briefing report for project 'اشکان آرمات'"
+  },
+  {
+   "id": "01a123e5-baad-75a3-9b8d-d95b872a8d3f",
+   "created_at": "2026-10-10T03:40:20.525091Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability"
+  },
+  {
+   "id": "01a123e5-bd94-7e31-ad2c-74c34da28818",
+   "created_at": "2026-10-10T03:40:21.268895Z",
+   "intent": "Generate a daily briefing report for the project."
+  },
+  {
+   "id": "01a123e5-db53-70d4-ae4c-fd57e41ea261",
+   "created_at": "2026-10-10T03:40:28.883900Z",
+   "intent": "Read the details of the Default Project."
+  },
+  {
+   "id": "01a123e5-e909-7863-84c4-22da78917afc",
+   "created_at": "2026-10-10T03:40:32.393110Z",
+   "intent": "Generate a daily briefing report for project Xmn"
+  },
+  {
+   "id": "01a1245c-1e03-79ca-9690-d46542f551ec",
+   "created_at": "2026-10-10T05:49:39.203282Z",
+   "intent": "Analyze trace, identify errors, and suggest improvements for agent"
+  },
+  {
+   "id": "01a12581-8c26-7a67-8e1c-4f208bc5b2a9",
+   "created_at": "2026-10-10T11:10:09.446683Z",
+   "intent": "Generate a daily briefing report for project Default Project."
+  },
+  {
+   "id": "01a127dd-d71a-7699-a840-519b28e57661",
+   "created_at": "2026-10-10T22:10:12.378510Z",
+   "intent": "Generate a daily briefing report for project Default Project."
+  },
+  {
+   "id": "01a12882-d8f4-731b-887b-e1736705f7bc",
+   "created_at": "2026-10-11T01:10:26.292731Z",
+   "intent": "Debug the ADHD agent system"
+  },
+  {
+   "id": "01a1290c-041f-7f73-a212-f7fed6a9ad9c",
+   "created_at": "2026-10-11T03:40:15.775781Z",
+   "intent": "Generate a daily briefing report for project 'الهه'"
+  },
+  {
+   "id": "01a1290c-1059-7dcf-8e84-3399bb6c1b19",
+   "created_at": "2026-10-11T03:40:18.905561Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability"
+  },
+  {
+   "id": "01a1295e-67b8-7033-b510-d5c01ff2b6fd",
+   "created_at": "2026-10-11T05:10:15.224975Z",
+   "intent": "Retrieve project details for FinCompetition"
+  },
+  {
+   "id": "01a12bd5-def9-7a04-917d-5f46be63438a",
+   "created_at": "2026-10-11T16:39:58.969999Z",
+   "intent": "Generate a daily briefing report for project playground."
+  },
+  {
+   "id": "01a12c28-69d6-7bf4-bd06-26642e4292f7",
+   "created_at": "2026-10-11T18:10:08.470157Z",
+   "intent": "Generate a daily briefing report for project Default Project."
+  },
+  {
+   "id": "01a12d3b-2984-7bed-9089-c064fbdd05f7",
+   "created_at": "2026-10-11T23:10:14.404305Z",
+   "intent": "Read the details of the Default Project."
+  },
+  {
+   "id": "01a12e32-6b03-7dbf-b910-7d4f5c6deec2",
+   "created_at": "2026-10-12T03:40:18.563270Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability"
+  },
+  {
+   "id": "01a12e84-c1b6-790f-a2f6-4e8fe1f07c65",
+   "created_at": "2026-10-12T05:10:14.710302Z",
+   "intent": "Generate a daily briefing report for project FinCompetition."
+  },
+  {
+   "id": "01a12ec6-3b8b-7984-a742-93c45e356086",
+   "created_at": "2026-10-12T06:21:45.739331Z",
+   "intent": "Retry the previous response"
+  },
+  {
+   "id": "01a13015-206f-7530-a9a2-fecc74478e97",
+   "created_at": "2026-10-12T12:27:33.359158Z",
+   "intent": "Compare agent optimization capabilities beyond prompts in Opik"
+  },
+  {
+   "id": "01a13044-bff1-7c94-9d6e-51fe2a60a780",
+   "created_at": "2026-10-12T13:19:34.385942Z",
+   "intent": "Analyze project traces for errors, latency issues, and patterns"
+  },
+  {
+   "id": "01a13060-c5ff-77f3-8108-1e017351bfdb",
+   "created_at": "2026-10-12T13:50:10.943919Z",
+   "intent": "Read the project details for the Default Project."
+  },
+  {
+   "id": "01a13071-8eb3-7a2b-8ff2-7d0ac4db4540",
+   "created_at": "2026-10-12T14:08:30.900022Z",
+   "intent": "Create a new task for SEO optimization in Opik."
+  },
+  {
+   "id": "01a13075-b142-7213-b606-0466850b932b",
+   "created_at": "2026-10-12T14:13:01.890958Z",
+   "intent": "Set up an AI visibility audit to improve leads and calls."
+  },
+  {
+   "id": "01a130c3-3f5a-7060-9660-e71a47b15390",
+   "created_at": "2026-10-12T15:37:44.538480Z",
+   "intent": "Identify the main user frustration points when interacting with Ollie."
+  },
+  {
+   "id": "01a130ca-9a5b-79ee-98eb-ddee9109e553",
+   "created_at": "2026-10-12T15:45:46.587528Z",
+   "intent": "Clarify the difference between approval timeout rates and user decline rates."
+  },
+  {
+   "id": "01a13236-a88d-736c-82fd-070ce03b7585",
+   "created_at": "2026-10-12T22:23:25.325905Z",
+   "intent": "Generate a daily briefing report for project Paseo."
+  },
+  {
+   "id": "01a13298-680a-7511-b234-a3d14b356657",
+   "created_at": "2026-10-13T00:10:11.338167Z",
+   "intent": "Generate a daily briefing report for project Гтр."
+  },
+  {
+   "id": "01a133e2-05c3-70ec-b815-227b8659c60d",
+   "created_at": "2026-10-13T06:10:13.059333Z",
+   "intent": "Generate a daily briefing report for project Elwin Ghent."
+  },
+  {
+   "id": "01a133e2-1057-7483-94b7-c9bbaf46ea51",
+   "created_at": "2026-10-13T06:10:15.767457Z",
+   "intent": "Read project Paseo details"
+  },
+  {
+   "id": "01a13443-0c2b-7d63-a9d4-23ea8ab14c24",
+   "created_at": "2026-10-13T07:56:11.691094Z",
+   "intent": "Calculate approval timeout statistics since 2026-06-10"
+  },
+  {
+   "id": "01a1352b-8d26-713b-bf1c-331ea2ac0ed7",
+   "created_at": "2026-10-13T12:10:09.062471Z",
+   "intent": "Generate a daily briefing report for project aiDemo."
+  },
+  {
+   "id": "01a13599-7b3a-7b84-9eac-254e1733614e",
+   "created_at": "2026-10-13T14:10:13.434533Z",
+   "intent": "Generate a daily briefing report for project release-pulse-ai."
+  },
+  {
+   "id": "01a13675-1d32-7ab5-946b-3c4ec2909a42",
+   "created_at": "2026-10-13T18:10:07.282234Z",
+   "intent": "Generate a daily briefing report for project Default Project."
+  },
+  {
+   "id": "01a1368b-18cd-7aec-a0fa-29a6fb05a1a9",
+   "created_at": "2026-10-13T18:34:07.949271Z",
+   "intent": "List all optimization records"
+  },
+  {
+   "id": "01a136ac-8ae4-767d-981a-08487921d759",
+   "created_at": "2026-10-13T19:10:39.842228Z",
+   "intent": "Review the voice audio quality evaluation rule code"
+  },
+  {
+   "id": "01a136de-652b-79a5-ab56-5ceb5898a3bb",
+   "created_at": "2026-10-13T20:05:06.987234Z",
+   "intent": "Check if there is a separate widget mode available."
+  },
+  {
+   "id": "01a136e2-71cf-776e-9904-82fbe56bba4b",
+   "created_at": "2026-10-13T20:09:32.367538Z",
+   "intent": "Analyze p95 latency trends week over week for trace data."
+  },
+  {
+   "id": "01a13787-d790-7759-9dd1-37c1785d3c0c",
+   "created_at": "2026-10-13T23:10:11.856467Z",
+   "intent": "Retrieve project details for Opik Demo Agent Observability"
+  },
+  {
+   "id": "01a13811-2b95-7d4c-92d0-1993d6f0550e",
+   "created_at": "2026-10-14T01:40:11.797565Z",
+   "intent": "Generate a daily briefing report for project Travelling"
+  },
+  {
+   "id": "01a1387f-3545-7ce1-894c-52e4dffd366a",
+   "created_at": "2026-10-14T03:40:23.237352Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability"
+  },
+  {
+   "id": "01a1387f-3ffc-778d-b25c-36f5eaf9680c",
+   "created_at": "2026-10-14T03:40:25.980515Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability"
+  },
+  {
+   "id": "01a1387f-4b11-7728-adfb-0e62301c60c4",
+   "created_at": "2026-10-14T03:40:28.817243Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability"
+  },
+  {
+   "id": "01a13908-668b-771e-a381-29f4149cfcbe",
+   "created_at": "2026-10-14T06:10:14.283233Z",
+   "intent": "Read project details for MoviSaúde"
+  },
+  {
+   "id": "01a13908-6b87-7616-b4ee-cb197308c7c4",
+   "created_at": "2026-10-14T06:10:15.559520Z",
+   "intent": "Generate a daily briefing report for project MoviSaúde."
+  },
+  {
+   "id": "01a13908-cc53-7ba2-8840-608b503d37ad",
+   "created_at": "2026-10-14T06:10:40.339100Z",
+   "intent": "Extract trace details including name, duration, cost, and usage metrics."
+  },
+  {
+   "id": "01a13918-63a3-7370-8381-b5108876691f",
+   "created_at": "2026-10-14T06:27:42.115706Z",
+   "intent": "Get the code for a specific task"
+  },
+  {
+   "id": "01a139fc-7aeb-78db-baf8-fc562f90ff05",
+   "created_at": "2026-10-14T10:36:50.283147Z",
+   "intent": "Add a chart to a new dashboard called Haiku check"
+  },
+  {
+   "id": "01a13a1b-10bb-741b-b9ae-9a6a79651863",
+   "created_at": "2026-10-14T11:10:14.715722Z",
+   "intent": "Read the details of the Default Project."
+  },
+  {
+   "id": "01a13ad3-e9ba-7f88-b72e-037fbabe248a",
+   "created_at": "2026-10-14T14:32:08.890275Z",
+   "intent": "Debug evaluation task crashes caused by incorrect dataset item key access."
+  },
+  {
+   "id": "01a13b18-6868-76e2-ad9f-9952933b0013",
+   "created_at": "2026-10-14T15:46:57.768361Z",
+   "intent": "Debug the agent's error handling for the Useiterance project."
+  },
+  {
+   "id": "01a13b2f-d667-7325-a23e-60cb01d29583",
+   "created_at": "2026-10-14T16:12:33.255797Z",
+   "intent": "Apply for student offer"
+  },
+  {
+   "id": "01a13b76-a5a2-7ead-a3ab-0e61f378016d",
+   "created_at": "2026-10-14T17:29:53.826265Z",
+   "intent": "Connect to the AI agent and start building the app"
+  },
+  {
+   "id": "01a13cae-287e-7a88-8732-23afd37c7f84",
+   "created_at": "2026-10-14T23:10:09.022991Z",
+   "intent": "Generate a daily briefing report for project Default Project."
+  }
+ ]
+}

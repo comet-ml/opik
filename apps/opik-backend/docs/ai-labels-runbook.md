@@ -263,3 +263,167 @@ A trace delete deletes the vectors before the ai-labels rows, each on its own, s
 If the ai-labels delete fails, the trace's `done` status stays in `ai_label_status`, and the next tick writes its vector
 again from the label (the job reads only `ai_label_status` and `ai_labels`). Retention removes both, in workspaces with
 a retention policy.
+
+## Topics nightly job
+
+Once a night the job builds each project's topic list from its topic vectors. Stage 2a has the first build only: a
+project with a saved list is skipped every night until the nightly update ships. It reads the same workspaces as
+ai-labels, and runs only with `TOPICS_ENABLED=true`.
+
+A first build reads the project's window (the 30 whole UTC days before the night, the newest 30,000 traces at most),
+merges identical intent texts, groups them with k-means (15 to 50 groups), asks Qwen through opik-inference
+`/v1/generate` to name up to 10 topics over the groups, and assigns every window trace to its nearest topic prototype
+or to Other. It writes:
+
+| Table | Database | What |
+|---|---|---|
+| `topics` | MySQL | One row per topic: name, definition, `born` (the night), `size` (window traces). |
+| `topic_prototypes` | MySQL | The vectors traces are assigned by, several per topic, and the known-Other ones (`topic_id` null). |
+| `topic_project_states` | MySQL | One row per project with a saved list: `rebuilds`, `last_run_id`, `window_until`. |
+| `topic_runs` | MySQL | One row per run: `running`, then `saved` or `failed` with `error_code`. Kept 90 days. |
+| `trace_topics` | ClickHouse | One row per window trace and run: its `topic_id`, the all-zeros id for Other. The latest row wins. |
+
+### Turning it on and off
+
+| Env var | Default | Meaning |
+|---|---|---|
+| `TOPICS_NIGHTLY_ENABLED` | `true` | Runs the job. Needs `TOPICS_ENABLED=true`. |
+| `TOPICS_NIGHTLY_SCHEDULE` | `0 0 2 * * ?` | Quartz cron, UTC. The night is the UTC date the job starts on. |
+| `TOPICS_NIGHTLY_BUDGET` | `2h` | No project starts after this; the rest run the next night. |
+| `TOPICS_NIGHTLY_PROJECT_TIMEOUT` | `15m` | One run is stopped and failed with `timeout` after this. Under the budget. |
+| `TOPICS_NIGHTLY_MIN_VECTORS` | `100` | A project is built when its window holds at least this many traces with a vector. |
+| `TOPICS_NIGHTLY_WINDOW_DAYS` | `30` | The window, in whole UTC days before the night. |
+| `TOPICS_NIGHTLY_MAX_VECTORS` | `30000` | A larger window keeps its newest traces. |
+| `TOPICS_NIGHTLY_QWEN_DEADLINE` | `120s` | The deadline of the Qwen call. The call uses the `batch` lane, which takes up to 300s. |
+| `TOPICS_NIGHTLY_RUNS_RETENTION` | `90d` | `topic_runs` rows are deleted after this. |
+
+To turn it off, set `TOPICS_NIGHTLY_ENABLED=false` and restart. Saved lists stay.
+
+To stop it for one workspace without a restart, opt the workspace out (`UPDATE topic_workspaces SET enabled = FALSE
+WHERE workspace_id = '<workspace_id>'`). This also stops its topic vectors. The next night skips it; a night already
+running reads the workspaces once, at its start, so it still runs the workspace's projects.
+
+### How a night runs
+
+- Every pod fires the job on the cron. The first to take the Redis lock `topics:nightly:lock` runs the night and keeps
+  the lock until it expires (budget + project timeout + 5 minutes), so no other pod runs the same night. If that pod
+  dies during the night (a deploy), the rest of the night waits for the next night: the cron does not fire again, and
+  the night endpoint answers `409` until the lock expires. To finish the night sooner, delete the Redis key
+  `topics:nightly:lock` and call the night endpoint (see "Running by hand").
+- The night first fails runs left `running` by an earlier night (`error_code = 'abandoned'`), and deletes runs older
+  than the retention.
+- It counts each enabled workspace's projects in the window, drops those under `TOPICS_NIGHTLY_MIN_VECTORS` and those
+  with a saved list, and runs the rest smallest first, one at a time.
+- Each run holds the Redis lock `topics:project:<project_id>`, so a run started by hand and the night never build the
+  same project at once.
+- A first build under 1,000 traces is saved with `"provisional": true` in its stats.
+
+A failed run writes nothing but its `topic_runs` row; the project is built again the next night.
+
+| `error_code` | Meaning |
+|---|---|
+| `qwen_timeout` | The Qwen call ran out of `TOPICS_NIGHTLY_QWEN_DEADLINE`. |
+| `qwen_error` | The Qwen call failed after its 2 retries, or with a 4xx. `error_message` has the code and HTTP status. |
+| `qwen_bad_answer` | Qwen's answer has no JSON object, or breaks the schema: opik-inference answers `schema_violation` for a cut or off-schema answer, which is not retried. The answer is in the DEBUG logs. |
+| `window_read` | The ClickHouse window read failed, or the window had no usable vector. |
+| `invariant` | A check before the save failed: more than 10 topics, a blank or catch-all name, a prototype not of unit length, a trace not labelled once. |
+| `timeout` | The run outlasted `TOPICS_NIGHTLY_PROJECT_TIMEOUT`, or the job was interrupted. |
+| `save` | The ClickHouse insert or the MySQL transaction failed, or another run saved the project meanwhile (`error_message` says so; only if the project's Redis lock was lost). The run deletes the `trace_topics` rows it inserted; if that delete fails too (a WARN names the run), they stay until the next saved run replaces them. |
+| `abandoned` | The pod stopped during the run. |
+| `internal` | A bug: read the logs for the run id. |
+
+### Tonight's runs
+
+```sql
+-- MySQL: the runs started since midnight UTC, newest first
+SELECT run_id, workspace_id, project_id, mode, status, error_code, started_at, finished_at,
+       JSON_EXTRACT(stats, '$.vectors') AS vectors, JSON_EXTRACT(stats, '$.topics') AS topics,
+       JSON_EXTRACT(stats, '$.other_share') AS other_share, JSON_EXTRACT(stats, '$.provisional') AS provisional
+FROM topic_runs
+WHERE started_at >= UTC_DATE()
+ORDER BY started_at DESC;
+
+-- MySQL: a project's live topics
+SELECT name, size, born, definition FROM topics
+WHERE project_id = '<project_id>' AND retired_at IS NULL
+ORDER BY size DESC;
+```
+
+```sql
+-- ClickHouse: a project's trace counts per topic in the last saved window
+-- (window_from and window_until are in the run's stats)
+SELECT topic_id, count() AS traces
+FROM (
+    SELECT trace_id, topic_id
+    FROM trace_topics
+    WHERE workspace_id = '<workspace_id>' AND project_id = '<project_id>'
+    AND trace_created_at >= '<window_from>' AND trace_created_at < '<window_until>'
+    ORDER BY trace_id, updated_at DESC
+    LIMIT 1 BY trace_id
+)
+GROUP BY topic_id
+ORDER BY traces DESC;
+```
+
+Each run logs at INFO, by run id: Qwen's token counts, and one line with the window, vectors, unique texts, k, seed,
+the topics with their sizes, the Other share and the phase timings. The author prompt and Qwen's raw answer hold
+trace-derived text, so they are logged at DEBUG only (logger `com.comet.opik.domain.topics.TopicsRebuildService`).
+Search the logs for `Topics run '<run_id>'`.
+
+### Running by hand
+
+Two internal endpoints start work now instead of waiting for the night. Call them from inside the cluster. Both answer
+`501` when `TOPICS_ENABLED` is off and `409` when `TOPICS_NIGHTLY_ENABLED` is off. Both take `&night=yyyy-MM-dd`
+(`?night=` for the night endpoint): the night is today (UTC) by default, so the window ends at today's start. `night`
+is at most tomorrow, whose window holds today's traces so far, and at least 365 days ago.
+
+**One project.** The night's rules apply: the workspace is opted in to topics, and the project's window holds at least
+`TOPICS_NIGHTLY_MIN_VECTORS` vectors. Only one run by hand goes at a time across the cluster.
+
+```bash
+curl -X POST "http://<opik-backend>:8080/v1/internal/topics/projects/<project_id>/run?workspace_id=<workspace_id>"
+```
+
+It answers `202` with the `run_id`. The run goes on in the background with the same timeout; read its outcome in
+`topic_runs`. It answers `409` when the workspace is not opted in, the window is too small (or the project is not the
+workspace's), a run of the project or another run by hand is in progress, or the project already has a list.
+
+**A whole night.** It runs every eligible project, as the scheduled job does, under the same night lock. The lock is
+released when the night ends, so the scheduled job is skipped only while a night started by hand is still running.
+
+```bash
+curl -X POST "http://<opik-backend>:8080/v1/internal/topics/nights/run"
+```
+
+It answers `202` with the `night`, and `409` when a night is in progress. Each project's outcome is its `topic_runs`
+row.
+
+To build a project that already has a list again (for example after a bad first build), delete its list first. Its
+`trace_topics` rows stay until the new run replaces them:
+
+```sql
+-- MySQL: forget a project's list, so the next night (or the endpoint) builds it again
+DELETE FROM topics WHERE project_id = '<project_id>';
+DELETE FROM topic_prototypes WHERE project_id = '<project_id>';
+DELETE FROM topic_project_states WHERE project_id = '<project_id>';
+```
+
+### What to watch
+
+| Metric | Meaning |
+|---|---|
+| `topics.nightly.projects` by `decision` | Projects the night looked at: `skip` (under the minimum, a list already built, or held by a run started by hand), `first_build`, `not_reached` (the budget ran out: they run the next night). `not_reached` above zero means the budget is too short. |
+| `topics.runs` by `status`, `error_code` | Finished runs. |
+| `topics.run.duration_seconds` by `phase` | Time in `window` (ClickHouse read), `kmeans`, `qwen`, `assign`, `save`. |
+| `topics.qwen.calls` by `outcome` | `ok`, `timeout`, `error`, `bad_answer`. |
+| `topics.save.rows` by `table` | Rows saved runs wrote. |
+| `topics.nightly.budget_used_seconds` | Wall time of each night. Near `TOPICS_NIGHTLY_BUDGET` means projects will soon be `not_reached`. |
+
+ClickHouse queries of the job have a `log_comment` that starts with `topics:`.
+
+### Deletes
+
+A `trace_topics` row lives as long as its trace, as for `topic_vectors`: retention and the trace-delete cascade delete
+both. Deleting a project deletes its MySQL rows too: `topics`, `topic_prototypes`, `topic_project_states` and
+`topic_runs`, since names, definitions and prototypes come from its traces. `topic_runs` rows go after 90 days anyway.
+Deleting a workspace does not delete its MySQL rows, as for `ai_labels`.

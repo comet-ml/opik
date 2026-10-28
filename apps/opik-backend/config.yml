@@ -2664,3 +2664,31 @@ topics:
       #  Description: The window read skips traces created before its lower bound minus aiLabels.horizon minus this
       #  margin, which covers the time from the ai-labels sweep to the status write
       createdAtSlack: ${TOPICS_VECTORS_FIND_CREATED_AT_SLACK:-1d}
+  nightly:
+    #  Default: true
+    #  Description: Runs the nightly job that builds each project's topic list. Needs topics.enabled
+    enabled: ${TOPICS_NIGHTLY_ENABLED:-true}
+    #  Default: 0 0 2 * * ? (02:00 UTC)
+    #  Description: Quartz cron in UTC. The night is the UTC date the job starts on
+    schedule: ${TOPICS_NIGHTLY_SCHEDULE:-0 0 2 * * ?}
+    #  Default: 2h
+    #  Description: No project starts after this much of the night; the rest run the next night
+    budget: ${TOPICS_NIGHTLY_BUDGET:-2h}
+    #  Default: 15m
+    #  Description: One project's run is stopped and failed with timeout after this. Under budget
+    projectTimeout: ${TOPICS_NIGHTLY_PROJECT_TIMEOUT:-15m}
+    #  Default: 100
+    #  Description: A project is built when its window holds at least this many traces with a vector
+    minVectors: ${TOPICS_NIGHTLY_MIN_VECTORS:-100}
+    #  Default: 30
+    #  Description: The window: this many whole UTC days before the night
+    windowDays: ${TOPICS_NIGHTLY_WINDOW_DAYS:-30}
+    #  Default: 30000
+    #  Description: A larger window keeps its newest traces
+    maxVectors: ${TOPICS_NIGHTLY_MAX_VECTORS:-30000}
+    #  Default: 120s
+    #  Description: The deadline of the Qwen call that names the groups. At most 300s, under projectTimeout
+    qwenDeadline: ${TOPICS_NIGHTLY_QWEN_DEADLINE:-120s}
+    #  Default: 90d
+    #  Description: topic_runs rows are deleted after this
+    runsRetention: ${TOPICS_NIGHTLY_RUNS_RETENTION:-90d}

@@ -41,6 +41,10 @@ public class InferenceException extends RuntimeException {
         return InferenceErrorCode.QUOTA_EXCEEDED.getValue().equals(code);
     }
 
+    public boolean isSchemaViolation() {
+        return InferenceErrorCode.SCHEMA_VIOLATION.getValue().equals(code);
+    }
+
     public boolean isOutOfTime() {
         return OUT_OF_TIME.equals(code);
     }

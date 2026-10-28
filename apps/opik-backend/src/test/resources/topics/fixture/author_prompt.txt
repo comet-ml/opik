@@ -1,0 +1,108 @@
+You organise the traffic of one AI application into topics for its product owner. The owner will see each topic's name, definition and how many requests fall into it, so topics must be real, distinct kinds of user requests.
+
+Below are CLUSTERS of user requests found automatically. A request is a one-sentence summary of what the user wanted in one interaction. Each cluster shows its id, its share of all traffic, and example requests (most frequent first). Clusters are rough: two clusters can be the same kind of request, and one cluster can be a mix.
+
+Task: define at most 10 topics. For each topic give
+- "name": 2-5 words, Title Case, specific to what the user wants (not "General", "Other", "Miscellaneous").
+- "definition": one sentence, at most 25 words, saying which requests belong to it; precise enough that a reader can decide for a new request.
+- "clusters": the ids of the clusters that belong to this topic.
+Rules:
+- Group by what the user wants to get done, not by wording or by the product/person named in the request.
+- Cover as much traffic as possible: every cluster with share >= 2% must be in a topic unless its requests are not real user requests (retries, greetings, empty, system events) or it is a mix with no dominant kind; put those cluster ids in "other".
+- Topics must not overlap: a reader must be able to assign a request to exactly one topic.
+- Every topic name is unique. If two topics would get the same name, they are one kind of request: make them one topic.
+- A topic holding more than about 30% of traffic is usually too coarse to be useful to the owner: if its clusters show distinct sub-kinds (different subject areas or different goals), split it into those sub-kinds. Keep it whole only when the clusters are genuinely one kind.
+- Prefer fewer, cleaner topics over 10 forced ones; but do not fold different kinds of requests into one topic just to save a slot.
+- Every cluster id appears exactly once, in a topic or in "other".
+
+CLUSTERS
+  cluster 1: share 30.5% (last 7 days 32.9%), tightness 0.94
+    - Generate a daily briefing report for project Default Project.
+    - Generate a daily briefing report for project release-pulse-ai
+    - Generate a daily briefing report for project ARAVINTHAN
+    - Generate a daily briefing report for the project.
+    - Generate a daily briefing report for project assign.
+  cluster 2: share 10.5% (last 7 days 21.4%), tightness 0.97
+    - Generate a daily briefing report for project Opik Demo Agent Observability
+    - Generate a daily briefing report for project Opik Demo Agent Observability.
+    - Generate a daily briefing report for project Opik Demo Optimizer.
+    - Generate a daily briefing report on the Opik Demo Agent Observability project.
+    - Generate a daily briefing report for the Opik Demo Agent Observability project.
+  cluster 7: share 9.8% (last 7 days 1.4%), tightness 0.99
+    - Retry the previous response
+    - Retry the previous response attempt
+    - Explain how to resume a previous session
+    - Retry the previous failed response
+  cluster 9: share 7.2% (last 7 days 14.3%), tightness 0.77
+    - Check the status of the Ollie online evaluation automation rule
+    - List automation rule evaluators
+    - Add a new prompt to Opik and determine whether to use a text or chat prompt.
+    - Explain how to configure prompts in Opik web UI for team evaluations
+    - Compare agent optimization capabilities beyond prompts in Opik
+  cluster 8: share 6.8% (last 7 days 2.9%), tightness 0.86
+    - Explain the total estimated cost of an AI agent trace.
+    - Analyze threads from the last 24 hours for project CRM Agent Observability
+    - Analyze CRM Agent Observability traces for daily briefing metrics
+    - Analyze traces from the last 24 hours for project CRM Agent Observability.
+    - Gather trace statistics for the CRM Agent Observability project for the last 24 hours.
+  cluster 0: share 5.8% (last 7 days 10.0%), tightness 0.92
+    - Read the details of the Default Project.
+    - Read project details for Гтр
+    - Read project details for Opik Code
+    - Read the project details for the Default Project.
+    - Read project details for the specified project ID
+  cluster 10: share 5.0% (last 7 days 4.3%), tightness 0.86
+    - Read project details for Enterprise Knowledge Agent - Synthetic
+    - Read project details for Hey
+    - Read the project details for Stue sofa gruppe
+    - Read project details for Marketing
+    - Read the project details for Marketing
+  cluster 4: share 4.8% (last 7 days 2.9%), tightness 0.84
+    - Debug document store unavailable error
+    - De enfiar dentro do bumbum
+    - Debug API key issue
+    - Debug the agent-fab project
+    - Debug the adriangelity-core project
+  cluster 12: share 4.8% (last 7 days 2.9%), tightness 0.90
+    - Debug the AI agent's trace output
+    - Retrieve project statistics for internal-ollie-assist-monitoring
+    - Analyze agent trace and suggest improvements
+    - Analyze traces in a project to identify errors and latency issues
+    - Analyze project traces for errors, latency issues, and patterns
+  cluster 13: share 4.2% (last 7 days 0.0%), tightness 0.89
+    - Analyze threads from the last 24 hours for project salescadet
+    - Check the Default Project for traces, spans, and threads from the last 24 hours.
+    - Check threads and feedback scores in project aicube-robot for the last 24 hours.
+    - Search for traces, spans, and threads in the Marketing project from the last 24 hours.
+    - Search for traces, spans, and threads in the project ARAVINTHAN from the last 24 hours.
+  cluster 14: share 3.5% (last 7 days 0.0%), tightness 0.98
+    - Generate a daily briefing report for project CRM Agent Observability.
+    - Generate a daily briefing report for project CRM Agent Observability
+    - Gather data for a daily briefing covering the last 24 hours of the CRM Agent project.
+    - Generate a daily briefing report for the CRM Agent Observability project.
+    - Generate a daily briefing report for project CRM Agent
+  cluster 11: share 2.8% (last 7 days 0.0%), tightness 0.90
+    - Explain the trace duration and lack of span breakdown to an engineer.
+    - Explain what a trace is in Opik
+    - Explain the total estimated cost of a trace to an engineer.
+    - Explain the trace's total duration and lack of span breakdown to an engineer.
+    - Explain the trace duration and lack of sub-span breakdown to an engineer.
+  cluster 3: share 2.0% (last 7 days 0.0%), tightness 0.89
+    - Analyze a single LLM trace error for an engineer.
+    - Debug LLM provider rate limit error
+    - Debug the 429 rate limit error in the LLM trace
+    - Debug the rate limit error from the LLM provider.
+    - Debug the rate limit error in the LLM trace
+  cluster 5: share 1.8% (last 7 days 4.3%), tightness 0.86
+    - Add a chart to a new dashboard called Haiku check
+    - Analyze p95 latency trends week over week for trace data.
+    - Extract trace details including name, duration, cost, and usage metrics.
+    - Generate a bar chart of trace duration percentiles
+    - Generate a bar chart showing average token usage per trace by metric type
+  cluster 6: share 0.8% (last 7 days 2.9%), tightness 0.86
+    - Access the playground
+    - Debug the ADHD agent system
+    - Identify the main user frustration points when interacting with Ollie.
+
+Output JSON only, no prose:
+{"topics": [{"name": "...", "definition": "...", "clusters": [ids]}], "other": [ids]}
