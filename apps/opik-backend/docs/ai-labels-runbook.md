@@ -350,7 +350,7 @@ night does not count: the lifecycle counters and `rebuilds` change only on a sav
 |---|---|
 | `qwen_timeout` | A Qwen call ran out of its deadline: `TOPICS_NIGHTLY_QWEN_DEADLINE` for author and revise, 60s for verify, 30s for naming. |
 | `qwen_error` | A Qwen call (author, revise, verify or naming) failed after its 2 retries, or with a 4xx. `error_message` has the call's kind, code and HTTP status. |
-| `qwen_bad_answer` | The author or revise answer is not a JSON object, or the author answer breaks the schema, or two author answers in a row list a cluster id twice. The answer is in the logs. |
+| `qwen_bad_answer` | The author or revise answer is not a JSON object, or the author answer breaks the schema. The answer is in the logs. |
 | `window_read` | The ClickHouse window read failed, the window had no usable vector, or the nightly update could not read last night's labels. |
 | `invariant` | A check before the save failed: more than 10 live topics, a retired id live again, a renamed topic, a new topic not born tonight, a blank or catch-all name, a prototype not of unit length, a trace not labelled once or labelled with a retired topic. |
 | `timeout` | The run outlasted `TOPICS_NIGHTLY_PROJECT_TIMEOUT`, or the job was interrupted. |
@@ -536,7 +536,7 @@ DELETE FROM topic_project_states WHERE project_id = '<project_id>';
 | `topics.nightly.projects` by `decision` | Projects the night looked at: `skip` (under the minimum, or held by a run started by hand), `first_build`, `nightly_update`, `not_reached` (the budget ran out: they run the next night). `not_reached` above zero means the budget is too short. |
 | `topics.runs` by `status`, `error_code` | Finished runs. |
 | `topics.run.duration_seconds` by `phase` | Time in `window` (ClickHouse read), `kmeans`, `qwen`, `assign`, `save` (first build); `window`, `state`, `update`, `churn`, `save` (nightly update). |
-| `topics.qwen.calls` by `kind`, `outcome` | `kind` is `author`, `revise`, `verify` or `naming`; `outcome` is `ok`, `timeout`, `error`, `bad_answer` or `repeated_cluster` (the author answer lists a cluster id twice; the job asks once more, uncached). A failed call of any kind fails the run. |
+| `topics.qwen.calls` by `kind`, `outcome` | `kind` is `author`, `revise`, `verify` or `naming`; `outcome` is `ok`, `timeout`, `error` or `bad_answer`. A failed call of any kind fails the run. |
 | `topics.topics.live` | Live topics of a project after each saved run. |
 | `topics.topics.born` by `mode` | Topics born by saved runs. A few a week per project is normal; many every night means the list does not settle. |
 | `topics.topics.retired` by `reason` | `low_share`, `cap`, `merged`, `review`, `replaced`. |

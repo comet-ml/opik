@@ -66,8 +66,6 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.containing;
-import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
-import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
@@ -515,36 +513,6 @@ class TopicsNightlyJobTest {
     }
 
     @Test
-    @DisplayName("an answer that lists a cluster twice is asked again, uncached, and the second answer is saved")
-    void repeatedClusterAskedAgain() {
-        var workspaceId = enabledWorkspace();
-        var projectId = UUID.randomUUID();
-        seed(workspaceId, projectId, 0, BUILT);
-        stubAnswer(repeatedClusters());
-        stubUncachedAnswer(FIXTURE.answer);
-
-        var result = nightlyService.runNight(start());
-
-        assertThat(result.saved()).isEqualTo(1);
-        assertThat(topics(projectId)).isNotEmpty();
-        assertThat(json(runs(projectId).getFirst().stats()).path("qwen_calls").asInt()).isEqualTo(2);
-    }
-
-    @Test
-    @DisplayName("two answers that list a cluster twice fail the run with qwen_bad_answer and write nothing")
-    void repeatedClusterTwice() {
-        var workspaceId = enabledWorkspace();
-        var projectId = UUID.randomUUID();
-        seed(workspaceId, projectId, 0, BUILT);
-        stubAnswer(repeatedClusters());
-
-        var result = nightlyService.runNight(start());
-
-        assertThat(result.failed()).isEqualTo(1);
-        assertFailedWithNothingWritten(workspaceId, projectId, "qwen_bad_answer");
-    }
-
-    @Test
     @DisplayName("the internal endpoint starts a first build now, and refuses the same night twice")
     void rebuildByHand() {
         var workspaceId = enabledWorkspace();
@@ -894,15 +862,6 @@ class TopicsNightlyJobTest {
         vectorsDAO.insert(rows).block();
     }
 
-    /** Qwen's broken answer from a local run: one topic and Other both list the same clusters. */
-    private static JsonNode repeatedClusters() {
-        var answer = InferenceJson.MAPPER.createObjectNode();
-        answer.putArray("topics").addObject().put("name", "Daily Briefing Reports")
-                .put("definition", "Generate daily briefing reports.").putArray("clusters").add(0).add(1).add(0);
-        answer.putArray("other").add(1).add(2);
-        return answer;
-    }
-
     private void stubAnswer(JsonNode output) {
         stubAnswer(output, null);
     }
@@ -922,21 +881,6 @@ class TopicsNightlyJobTest {
         wireMock.stubFor(request.willReturn(aResponse().withStatus(200)
                 .withHeader("Content-Type", "application/json")
                 .withBody(body.toString())));
-    }
-
-    /** Answers {@code output} to the uncached calls only, ahead of the other stubs. */
-    private void stubUncachedAnswer(JsonNode output) {
-        ObjectNode body = InferenceJson.MAPPER.createObjectNode();
-        body.put("request_id", "r-2");
-        body.putObject("usage").put("input_tokens", 1_000).put("output_tokens", 200);
-        body.put("cache_hit", false);
-        body.put("latency_ms", 1_500);
-        body.putObject("result").set("output", output);
-        wireMock.stubFor(post(urlEqualTo(GENERATE_PATH)).atPriority(1)
-                .withRequestBody(matchingJsonPath("$.cache", equalTo("false")))
-                .willReturn(aResponse().withStatus(200)
-                        .withHeader("Content-Type", "application/json")
-                        .withBody(body.toString())));
     }
 
     private List<TopicRun> runs(UUID projectId) {
