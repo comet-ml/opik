@@ -352,15 +352,15 @@ Gemini and Vertex AI receive media as inline data, so Opik downloads the image, 
 
 Opik reads at most `LLM_PROVIDER_ERROR_BODY_MAX_SIZE` (default `64KB`, at most `1MiB`) of a custom provider's error response and discards the rest; only a short message parsed from it is returned.
 
-Every provider call except Vertex AI runs on one shared HTTP client, whose limits are set on the backend:
+Provider calls are bounded on the backend by the settings below. The stream read timeout applies to every provider except Vertex AI. The thread and request limits apply to the streamed calls of the shared HTTP client, which every provider uses except Vertex AI and the OpenAI Responses API; a call that isn't streamed runs on the thread that made it, outside these limits.
 
 | Variable | Default | Range | What it bounds |
 |---|---|---|---|
-| `LLM_PROVIDER_STREAM_READ_TIMEOUT` | `120s` | `1s` to `10m` | How long a provider's stream may stay silent once its response headers arrived; `LLM_PROVIDER_CLIENT_READ_TIMEOUT` bounds the wait for the headers. Keep it above your ingress or load balancer idle timeout, as models that reason before answering can be silent for a while. |
-| `LLM_PROVIDER_CLIENT_MAX_THREADS` | `1024` | `1` to `2048`, at least `LLM_PROVIDER_CLIENT_MAX_REQUESTS` | Threads of the shared client. A streamed call holds one from start to end. |
+| `LLM_PROVIDER_STREAM_READ_TIMEOUT` | `120s` | `1s` to `10m` | How long a provider's stream may stay silent once its response headers arrived; `LLM_PROVIDER_CLIENT_READ_TIMEOUT` bounds the wait for the headers. A proxy in front of the backend ends a silent stream at its own idle timeout, so a stream may stay silent for the lower of the two: the frontend nginx's `proxy_read_timeout` is `90s` on Docker Compose and nginx's `60s` default on Helm, set with `component.frontend.upstreamConfig`. To allow longer silences, as models that reason before answering can need, raise that timeout and any ingress or load balancer idle timeout too. |
+| `LLM_PROVIDER_CLIENT_MAX_THREADS` | `1024` | `1` to `2048`, at least `LLM_PROVIDER_CLIENT_MAX_REQUESTS` | Threads that run the shared client's streamed calls. A streamed call holds one from start to end. |
 | `LLM_PROVIDER_CLIENT_THREAD_KEEP_ALIVE` | `60s` | `1s` to `5m` | How long an idle thread lives, so the pool shrinks back after a burst. |
-| `LLM_PROVIDER_CLIENT_MAX_REQUESTS` | `1024` | `1` to `2048` | Provider calls that run at once; further calls wait in order, and their timeouts start once they run. |
-| `LLM_PROVIDER_CLIENT_MAX_REQUESTS_PER_HOST` | `1024` | `1` to `2048`, at most `LLM_PROVIDER_CLIENT_MAX_REQUESTS` | Calls that run at once to one host, such as one provider's API. |
+| `LLM_PROVIDER_CLIENT_MAX_REQUESTS` | `1024` | `1` to `2048` | Streamed calls that run at once; further calls wait in order, and their timeouts start once they run. |
+| `LLM_PROVIDER_CLIENT_MAX_REQUESTS_PER_HOST` | `1024` | `1` to `2048`, at most `LLM_PROVIDER_CLIENT_MAX_REQUESTS` | Streamed calls that run at once to one host, such as one provider's API. |
 
 A value outside its range, or limits that contradict each other, stops the backend at startup with a configuration error.
 
