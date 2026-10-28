@@ -636,6 +636,8 @@ ${cost_api_location}
         location /opik/api/ { proxy_pass http://em_opik_be/; }
         # Opik UI — Vite dev server (comet mode, base /opik) + HMR websocket
         location /opik/     { proxy_pass http://em_opik_fe; }
+        location /assistant/     { proxy_pass http://em_opik_fe; }
+        location /assistant-api/ { proxy_pass http://em_opik_fe; }
         # EM (comet-backend) API (strip /api -> /)
         location /api/      { proxy_pass http://em_comet_be/; }
         # EM UI — comet-react webpack dev server + HMR websocket
