@@ -372,6 +372,9 @@ component:
       # Seconds a new process-strategy worker may take to report ready before it is stopped and left out
       # of the pool. A positive number; any other value fails startup.
       PYTHON_CODE_EXECUTOR_READY_TIMEOUT_SECONDS: "10"
+      # Largest result, in bytes as JSON, a process-strategy worker may return; a longer one fails that
+      # evaluation. A positive integer; any other value fails startup. 67108864 is 64 MiB.
+      PYTHON_CODE_EXECUTOR_MAX_RESULT_SIZE_IN_BYTES: "67108864"
       PYTHON_CODE_EXECUTOR_CPU_SHARES: "512"
       PYTHON_CODE_EXECUTOR_MEM_LIMIT: "256m"
       # PYTHON_CODE_EXECUTOR_CPU_LIMIT: "0.5"  # Hard CPU limit per executor container (in CPUs, e.g. "0.5" = half a core). Unset by default — no hard limit.

@@ -451,6 +451,7 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS | string | `"3"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_IMAGE_NAME | string | `"opik-sandbox-executor-python"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_IMAGE_REGISTRY | string | `"ghcr.io/comet-ml/opik"` |  |
+| component.python-backend.env.PYTHON_CODE_EXECUTOR_MAX_RESULT_SIZE_IN_BYTES | string | `"67108864"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_MEM_LIMIT | string | `"256m"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_METRICS_INTERVAL_IN_SECONDS | string | `"60"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_PARALLEL_NUM | string | `"5"` |  |
