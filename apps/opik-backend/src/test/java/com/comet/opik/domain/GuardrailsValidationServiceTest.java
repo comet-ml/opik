@@ -1,7 +1,5 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.api.GuardrailPolicy;
-import com.comet.opik.api.GuardrailPolicyRule;
 import com.comet.opik.api.GuardrailType;
 import com.comet.opik.api.GuardrailsValidationRequest;
 import com.comet.opik.api.GuardrailsValidationRequest.ValidationDescriptor;
@@ -30,7 +28,6 @@ import reactor.core.publisher.Mono;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -49,7 +46,6 @@ class GuardrailsValidationServiceTest {
 
     private final InferenceClient inference = Mockito.mock(InferenceClient.class);
     private final WorkspaceFeaturesService workspaceFeatures = Mockito.mock(WorkspaceFeaturesService.class);
-    private final GuardrailPolicyService policies = Mockito.mock(GuardrailPolicyService.class);
     private final RequestContext requestContext = RequestContext.builder().workspaceId(WORKSPACE_ID).build();
     private OpikConfiguration configuration;
     private GuardrailsValidationServiceImpl service;
@@ -59,9 +55,8 @@ class GuardrailsValidationServiceTest {
         configuration = new OpikConfiguration();
         configuration.getServiceToggles().setGuardrailsValidationsEnabled(true);
         when(workspaceFeatures.isEnabled(requestContext, WorkspaceFeature.GUARDRAILS)).thenReturn(true);
-        when(policies.retrieve(any())).thenReturn(List.of());
         var access = new GuardrailsAccess(new FeatureFlags(configuration), () -> requestContext, workspaceFeatures);
-        service = new GuardrailsValidationServiceImpl(inference, configuration, access, policies);
+        service = new GuardrailsValidationServiceImpl(inference, configuration, access);
     }
 
     @Test
@@ -71,43 +66,6 @@ class GuardrailsValidationServiceTest {
         assertThatThrownBy(() -> validate(request(descriptor(GuardrailType.PROMPT_INJECTION, "{}"))))
                 .isInstanceOf(ForbiddenException.class)
                 .hasMessage(GuardrailsAccess.NOT_ENABLED_MESSAGE);
-        verifyNoInteractions(inference);
-    }
-
-    @Test
-    void namedAndGlobalPoliciesAddTheirRulesAfterTheRequestsOwnChecks() {
-        when(policies.retrieve(Set.of("support-bot"))).thenReturn(List.of(
-                policy("support-bot", GuardrailPolicyRule.builder().type(GuardrailType.PII)
-                        .config(JsonUtils.getJsonNodeFromString("{\"entities\":[\"PERSON\"]}")).build()),
-                policy("workspace-wide", GuardrailPolicyRule.builder().type(GuardrailType.TOPIC)
-                        .config(JsonUtils.getJsonNodeFromString("{\"restricted_topics\":[\"politics\"]}")).build())));
-        when(inference.decide(any(), any())).thenReturn(Mono.just(answers(Map.of(
-                "0.injection", noul(0.01),
-                "1.pii.PERSON", noul(0.9),
-                "2.topic.restricted", choice(Map.of("politics", 0.02, "none of these", 0.98))))));
-        var request = request(descriptor(GuardrailType.PROMPT_INJECTION, "{}")).toBuilder()
-                .policies(Set.of("support-bot"))
-                .build();
-
-        var response = validate(request);
-
-        assertThat(response.validations()).extracting(ValidationResult::type)
-                .containsExactly(GuardrailType.PROMPT_INJECTION, GuardrailType.PII, GuardrailType.TOPIC);
-        assertThat(response.validations()).extracting(ValidationResult::validationPassed)
-                .containsExactly(true, false, true);
-        var captor = ArgumentCaptor.forClass(DecideRequest.class);
-        verify(inference).decide(captor.capture(), any());
-        assertThat(captor.getValue().questions().keySet())
-                .containsExactly("0.injection", "1.pii.PERSON", "2.topic.restricted");
-    }
-
-    @Test
-    void nothingToCheckPassesWithoutCallingTheDecisionService() {
-        var response = validate(GuardrailsValidationRequest.builder().text(TEXT).build());
-
-        assertThat(response.validationPassed()).isTrue();
-        assertThat(response.validations()).isEmpty();
-        verify(policies).retrieve(Set.of());
         verifyNoInteractions(inference);
     }
 
@@ -359,10 +317,6 @@ class GuardrailsValidationServiceTest {
 
     private static GuardrailsValidationRequest request(ValidationDescriptor... descriptors) {
         return GuardrailsValidationRequest.builder().text(TEXT).validations(List.of(descriptors)).build();
-    }
-
-    private static GuardrailPolicy policy(String name, GuardrailPolicyRule... rules) {
-        return GuardrailPolicy.builder().name(name).rules(List.of(rules)).build();
     }
 
     private static ValidationDescriptor descriptor(GuardrailType type, String config) {
