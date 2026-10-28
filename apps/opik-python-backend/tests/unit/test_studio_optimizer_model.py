@@ -28,6 +28,12 @@ from opik_backend.studio.optimizers import LLM_MAX_TOKENS
 from opik_backend.studio.types import OptimizationConfig
 
 
+@pytest.fixture(autouse=True)
+def reset_gateway_seed(monkeypatch):
+    # build_optimizer_and_prompt records the run's seed for the gateway wrapper; each test starts without one.
+    monkeypatch.setattr(optimizer_runner, "_gateway_seed", {"value": None})
+
+
 def _config(
     task_model: str = ANTHROPIC_CLAUDE_HAIKU,
     task_params: dict | None = None,
@@ -411,3 +417,59 @@ def test_judge_metric_sends_the_stored_model_id(httpserver, monkeypatch, stored_
     assert result.value == 0.7
     assert result.reason == "ok"
     assert not result.scoring_failed
+
+
+@pytest.fixture
+def gateway(httpserver, monkeypatch):
+    """The gateway as the job sees it: the wrapper installed over the real litellm, which is restored afterwards."""
+    from opik_optimizer.agents.litellm_agent import LiteLLMAgent  # noqa: F401  (loaded before litellm is wrapped)
+
+    httpserver.expect_request("/v1/private/chat/completions", method="POST").respond_with_json(_GATEWAY_REPLY)
+    monkeypatch.setenv("OPENAI_API_KEY", "test")
+    monkeypatch.setattr(optimizer_runner, "OPENAI_API_BASE", httpserver.url_for("/v1/private"))
+    monkeypatch.setattr(optimizer_runner, "_gateway_workspace", {"name": None})
+    monkeypatch.setattr(litellm, "completion", litellm.completion)
+    monkeypatch.setattr(litellm, "acompletion", litellm.acompletion)
+    optimizer_runner.route_litellm_calls_through_gateway("my-workspace")
+    return httpserver
+
+
+def _sent_seeds(optimizer, prompt, gateway):
+    """The seed each kind of Studio call sends, through opik_optimizer's own call sites."""
+    from opik_optimizer.agents.litellm_agent import LiteLLMAgent
+
+    # A task call, as the optimizer's evaluation makes it: no seed argument.
+    LiteLLMAgent(project_name="p").invoke_agent(prompts={"p": prompt}, dataset_item={"text": "x"})
+    task_body = gateway.log[-1][0].get_json()
+    # An algorithm call, as GEPA's reflection makes it: the optimizer's seed and model parameters.
+    llm_calls.call_model(messages=[{"role": "user", "content": "hi"}], model=optimizer.model,
+                         seed=optimizer.seed, model_parameters=optimizer.model_parameters)
+    algorithm_body = gateway.log[-1][0].get_json()
+    return {"task": task_body.get("seed"), "algorithm": algorithm_body.get("seed"),
+            "temperature": task_body.get("temperature")}
+
+
+@pytest.mark.parametrize("optimizer_params, expected", [
+    # No optimizer seed: the run's model seed is used everywhere.
+    ({"verbose": True}, {"task": 7, "algorithm": 7, "temperature": 0.2}),
+    # The optimizer's own seed still drives its calls; the task model keeps the run's model seed.
+    ({"seed": 42}, {"task": 7, "algorithm": 42, "temperature": 0.2}),
+])
+def test_model_parameter_seed_reaches_the_gateway(gateway, optimizer_params, expected):
+    config = OptimizationConfig.from_dict(
+        _config(task_model="gpt-4o-mini", task_params={"seed": 7, "temperature": 0.2},
+                optimizer_params=optimizer_params))
+
+    optimizer, prompt = optimizer_runner.build_optimizer_and_prompt(config)
+
+    assert _sent_seeds(optimizer, prompt, gateway) == expected
+
+
+def test_model_parameter_seed_of_a_separate_algorithm_model_reaches_the_gateway(gateway):
+    config = OptimizationConfig.from_dict(
+        _config(task_model="gpt-4o-mini", task_params={"temperature": 0.2},
+                optimizer_params={"model": "gpt-4o", "model_parameters": {"seed": 5}}))
+
+    optimizer, prompt = optimizer_runner.build_optimizer_and_prompt(config)
+
+    assert _sent_seeds(optimizer, prompt, gateway) == {"task": 5, "algorithm": 5, "temperature": 0.2}

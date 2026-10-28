@@ -718,6 +718,21 @@ class KpiCardsResourceTest {
                                 .value(trace.output().toString())
                                 .build(),
                         1, 0, 1, 0),
+                // The UI search sends CONTAINS on input/output, the payload-filter shape the query reads once.
+                Arguments.of(
+                        (Function<Trace, TraceFilter>) trace -> TraceFilter.builder()
+                                .field(TraceField.INPUT)
+                                .operator(Operator.CONTAINS)
+                                .value(trace.input().propertyStream().toList().getFirst().getValue().asText())
+                                .build(),
+                        1, 0, 1, 0),
+                Arguments.of(
+                        (Function<Trace, TraceFilter>) trace -> TraceFilter.builder()
+                                .field(TraceField.OUTPUT)
+                                .operator(Operator.CONTAINS)
+                                .value(trace.output().propertyStream().toList().getFirst().getValue().asText())
+                                .build(),
+                        1, 0, 1, 0),
                 Arguments.of(
                         (Function<Trace, TraceFilter>) trace -> TraceFilter.builder()
                                 .field(TraceField.METADATA)

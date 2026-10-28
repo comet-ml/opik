@@ -12,7 +12,6 @@ import com.comet.opik.infrastructure.llm.OpenAiClientConfig;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.github.tomakehurst.wiremock.WireMockServer;
-import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.request.ChatRequest;
@@ -75,21 +74,26 @@ class OpenAIJudgeToolCallRouteTest {
 
     @BeforeAll
     void setUpAll() {
-        wireMock = new WireMockServer(WireMockConfiguration.options().dynamicPort());
+        wireMock = LlmTestClients.newLoopbackWireMock();
         wireMock.start();
 
         onOpenAi = new OpenAILlmServiceProvider(
-                new OpenAIClientGenerator(clientConfig(wireMock.baseUrl()), LlmTestClients.RESPONSES_API_HTTP_CLIENT) {
+                new OpenAIClientGenerator(clientConfig(LlmTestClients.baseUrlOf(wireMock)),
+                        LlmTestClients.RESPONSES_API_HTTP_CLIENT,
+                        LlmTestClients.LLM_HTTP_CLIENT_BUILDERS) {
                     @Override
                     boolean hasCustomBaseUrl(LlmProviderClientApiConfig config) {
                         return false;
                     }
                 }, mock(LlmProviderFactory.class));
         behindServerWideUrl = new OpenAILlmServiceProvider(
-                new OpenAIClientGenerator(clientConfig(wireMock.baseUrl()), LlmTestClients.RESPONSES_API_HTTP_CLIENT),
+                new OpenAIClientGenerator(clientConfig(LlmTestClients.baseUrlOf(wireMock)),
+                        LlmTestClients.RESPONSES_API_HTTP_CLIENT,
+                        LlmTestClients.LLM_HTTP_CLIENT_BUILDERS),
                 mock(LlmProviderFactory.class));
         withoutServerWideUrl = new OpenAILlmServiceProvider(
-                new OpenAIClientGenerator(clientConfig(null), LlmTestClients.RESPONSES_API_HTTP_CLIENT),
+                new OpenAIClientGenerator(clientConfig(null), LlmTestClients.RESPONSES_API_HTTP_CLIENT,
+                        LlmTestClients.LLM_HTTP_CLIENT_BUILDERS),
                 mock(LlmProviderFactory.class));
     }
 
@@ -123,7 +127,7 @@ class OpenAIJudgeToolCallRouteTest {
 
     @Test
     void aKeyWithItsOwnBaseUrlKeepsChatCompletionsAndGivesUpReasoningWhereTheModelAllowsIt() {
-        callTools(withoutServerWideUrl, keyInChatCompletionsMode(wireMock.baseUrl()),
+        callTools(withoutServerWideUrl, keyInChatCompletionsMode(LlmTestClients.baseUrlOf(wireMock)),
                 judge("{\"reasoning_effort\": \"high\"}"), tools(ChatCompletionsTools.EFFORT_NONE_ONLY));
 
         assertToolsOnChatCompletionsWithoutReasoning();
@@ -156,7 +160,7 @@ class OpenAIJudgeToolCallRouteTest {
 
     @Test
     void aModelThatTakesNoToolsOnChatCompletionsGoesToTheResponsesApiEvenBehindACustomBaseUrl() {
-        callTools(behindServerWideUrl, keyInChatCompletionsMode(wireMock.baseUrl()), judge(null),
+        callTools(behindServerWideUrl, keyInChatCompletionsMode(LlmTestClients.baseUrlOf(wireMock)), judge(null),
                 tools(ChatCompletionsTools.REFUSED));
 
         assertThat(sentBody(RESPONSES_PATH).at("/tool_choice").asText()).isEqualTo("required");

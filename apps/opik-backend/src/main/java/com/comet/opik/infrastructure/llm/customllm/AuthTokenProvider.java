@@ -4,9 +4,12 @@ import com.comet.opik.api.EncryptedAuthConfig;
 import com.comet.opik.api.ProviderAuthConfig;
 import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.LlmProviderTokenAuthConfig;
+import com.comet.opik.infrastructure.http.BodyDeadline;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.infrastructure.net.DestinationGuard;
+import com.comet.opik.infrastructure.net.DestinationGuardDnsResolver;
 import com.comet.opik.infrastructure.net.DestinationGuardException;
+import com.comet.opik.infrastructure.net.RefusedHostException;
 import com.comet.opik.infrastructure.redis.StringRedisClient;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -18,10 +21,19 @@ import io.opentelemetry.api.metrics.LongHistogram;
 import io.opentelemetry.api.metrics.Meter;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.ProcessingException;
+import jakarta.ws.rs.client.Client;
+import jakarta.ws.rs.client.Entity;
+import jakarta.ws.rs.client.Invocation;
+import jakarta.ws.rs.core.HttpHeaders;
+import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.exception.ExceptionUtils;
+import org.glassfish.jersey.client.ClientProperties;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
@@ -30,10 +42,6 @@ import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.net.URI;
 import java.net.URLEncoder;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpRequest.Builder;
-import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Base64;
@@ -85,29 +93,28 @@ public class AuthTokenProvider {
     private static final AttributeKey<String> ORIGIN = AttributeKey.stringKey("origin");
     private static final String ORIGIN_REQUEST = "request";
     private static final String ORIGIN_TEST = "test";
+    private static final String RELAXED_DESTINATION_GUARD_HINT = """
+            (self-hosted deployments with internal auth services can set \
+            LLM_PROVIDER_TOKEN_AUTH_DESTINATION_GUARD=relaxed)""";
 
     private final @NonNull StringRedisClient redisClient;
     private final @NonNull LockService lockService;
     private final @NonNull LlmProviderTokenAuthConfig config;
     private final DestinationGuard destinationGuard;
-    private final HttpClient httpClient;
+    private final Client client;
+    private final int fetchTimeoutMillis;
     private final LongCounter tokenRequests;
     private final LongHistogram fetchDurationMs;
 
     @Inject
     public AuthTokenProvider(@NonNull StringRedisClient redisClient, @NonNull LockService lockService,
-            @NonNull @Config("llmProviderTokenAuth") LlmProviderTokenAuthConfig config) {
+            @NonNull @Config("llmProviderTokenAuth") LlmProviderTokenAuthConfig config, @NonNull Client client) {
         this.redisClient = redisClient;
         this.lockService = lockService;
         this.config = config;
         this.destinationGuard = DestinationGuard.builder().mode(config.getDestinationGuard()).build();
-        // Same posture as the LLM clients: HTTP/1.1 and no redirect following (a token endpoint
-        // redirecting elsewhere is a misconfiguration or an attack, never a flow to honor).
-        this.httpClient = HttpClient.newBuilder()
-                .version(HttpClient.Version.HTTP_1_1)
-                .followRedirects(HttpClient.Redirect.NEVER)
-                .connectTimeout(Duration.ofMillis(config.getFetchTimeout().toMilliseconds()))
-                .build();
+        this.client = client;
+        this.fetchTimeoutMillis = Math.toIntExact(config.getFetchTimeout().toMilliseconds());
         Meter meter = GlobalOpenTelemetry.get().getMeter("opik.llm_provider_token_auth");
         this.tokenRequests = meter.counterBuilder("llm_provider_token_requests")
                 .setDescription("Bearer requests against the token cache, by outcome")
@@ -261,28 +268,42 @@ public class AuthTokenProvider {
             destinationGuard.validate(authConfig.tokenUrl());
         } catch (DestinationGuardException exception) {
             recordFetchMetric(startNanos, "destination_refused", origin);
-            throw new AuthTokenException(exception.getMessage()
-                    + " (self-hosted deployments with internal auth services can set LLM_PROVIDER_TOKEN_AUTH_DESTINATION_GUARD=relaxed)",
+            throw new AuthTokenException("%s %s".formatted(exception.getMessage(), RELAXED_DESTINATION_GUARD_HINT),
                     exception);
         }
-        HttpRequest request = buildRequest(authConfig);
-        HttpResponse<InputStream> response;
+        Invocation request = buildRequest(authConfig);
+        int status;
         byte[] bodyBytes;
-        try {
-            response = httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
-            // bounded read: at most cap+1 bytes ever reach the heap; closing the stream
-            // cancels whatever the endpoint is still sending
-            try (InputStream bodyStream = response.body()) {
-                bodyBytes = bodyStream.readNBytes(config.getMaxResponseChars() + 1);
+        // bounded read: at most cap+1 bytes ever reach the heap, within what remains of the fetch timeout, as the
+        // read timeout bounds each wait for bytes only; closing the response cancels whatever the endpoint is still
+        // sending
+        BodyDeadline deadline = null;
+        try (Response response = request.invoke();
+                InputStream bodyStream = response.readEntity(InputStream.class);
+                var bodyDeadline = BodyDeadline.closing(bodyStream,
+                        Duration.ofMillis(fetchTimeoutMillis).minusNanos(System.nanoTime() - startNanos))) {
+            deadline = bodyDeadline;
+            status = response.getStatus();
+            bodyBytes = bodyStream.readNBytes(config.getMaxResponseChars() + 1);
+            if (bodyDeadline.expired()) {
+                throw new IOException("the deadline closed the body");
             }
-        } catch (IOException exception) {
+        } catch (IOException | ProcessingException exception) {
+            if (deadline != null && deadline.expired()) {
+                recordFetchMetric(startNanos, "slow_reply", origin);
+                throw new AuthTokenException("token reply from '%s' took longer than the fetch timeout"
+                        .formatted(authConfig.tokenUrl()));
+            }
+            // the guard checks each address connected to as well, refusing a host that no longer resolves as above
+            var refused = ExceptionUtils.throwableOfType(exception, RefusedHostException.class);
+            if (refused != null) {
+                recordFetchMetric(startNanos, "destination_refused", origin);
+                throw new AuthTokenException("%s %s".formatted(refused.getMessage(), RELAXED_DESTINATION_GUARD_HINT),
+                        exception);
+            }
             recordFetchMetric(startNanos, "unreachable", origin);
             throw new AuthTokenException("token fetch failed: could not reach '%s': %s"
                     .formatted(authConfig.tokenUrl(), redact(authConfig, exception.getMessage())), exception);
-        } catch (InterruptedException exception) {
-            Thread.currentThread().interrupt();
-            recordFetchMetric(startNanos, "interrupted", origin);
-            throw new AuthTokenException("token fetch was interrupted", exception);
         }
         if (bodyBytes.length > config.getMaxResponseChars()) {
             recordFetchMetric(startNanos, "oversized_reply", origin);
@@ -291,10 +312,10 @@ public class AuthTokenProvider {
         }
 
         String body = new String(bodyBytes, StandardCharsets.UTF_8);
-        if (response.statusCode() < 200 || response.statusCode() >= 300) {
+        if (status < 200 || status >= 300) {
             recordFetchMetric(startNanos, "upstream_error", origin);
             throw new AuthTokenException("token fetch failed with status '%d' from '%s': %s"
-                    .formatted(response.statusCode(), authConfig.tokenUrl(), redact(authConfig, body)));
+                    .formatted(status, authConfig.tokenUrl(), redact(authConfig, body)));
         }
 
         JsonNode root;
@@ -303,7 +324,7 @@ public class AuthTokenProvider {
         } catch (UncheckedIOException exception) {
             recordFetchMetric(startNanos, "non_json_reply", origin);
             throw new AuthTokenException("token endpoint at '%s' returned a non-JSON reply (status '%d')"
-                    .formatted(authConfig.tokenUrl(), response.statusCode()));
+                    .formatted(authConfig.tokenUrl(), status));
         }
 
         String tokenField = defaultIfBlank(authConfig.tokenField(), DEFAULT_TOKEN_FIELD);
@@ -320,27 +341,29 @@ public class AuthTokenProvider {
         return new FetchedToken(tokenNode.asText(), ttlSeconds);
     }
 
-    private HttpRequest buildRequest(ProviderAuthConfig authConfig) {
+    private Invocation buildRequest(ProviderAuthConfig authConfig) {
         List<ProviderAuthConfig.Credential> credentials = Optional.ofNullable(authConfig.credentials())
                 .orElse(List.of());
         var sendAs = Optional.ofNullable(authConfig.sendAs()).orElse(ProviderAuthConfig.SendAs.FORM);
 
-        Builder builder;
+        Invocation.Builder builder;
         try {
-            builder = HttpRequest.newBuilder(URI.create(authConfig.tokenUrl()))
-                    .timeout(Duration.ofMillis(config.getFetchTimeout().toMilliseconds()));
+            builder = client.target(httpUri(authConfig.tokenUrl()))
+                    .request()
+                    // a token endpoint redirecting elsewhere is a misconfiguration, never a flow to honor
+                    .property(ClientProperties.FOLLOW_REDIRECTS, false)
+                    .property(DestinationGuardDnsResolver.PROPERTY, destinationGuard)
+                    .property(ClientProperties.CONNECT_TIMEOUT, fetchTimeoutMillis)
+                    .property(ClientProperties.READ_TIMEOUT, fetchTimeoutMillis);
         } catch (IllegalArgumentException exception) {
             throw new AuthTokenException(
                     "token_url '%s' is not a usable http(s) URL".formatted(authConfig.tokenUrl()), exception);
         }
 
-        switch (sendAs) {
-            case FORM -> builder
-                    .header("Content-Type", "application/x-www-form-urlencoded")
-                    .POST(HttpRequest.BodyPublishers.ofString(formEncode(credentials)));
-            case JSON -> builder
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(jsonEncode(credentials)));
+        return switch (sendAs) {
+            case FORM -> builder.buildPost(
+                    Entity.entity(formEncode(credentials), MediaType.APPLICATION_FORM_URLENCODED_TYPE));
+            case JSON -> builder.buildPost(Entity.entity(jsonEncode(credentials), MediaType.APPLICATION_JSON_TYPE));
             case BASIC -> {
                 // OAuth2-standard mixed mode: client id/secret in the Basic header, every
                 // remaining field in the form body
@@ -355,13 +378,22 @@ public class AuthTokenProvider {
                         .filter(credential -> !CLIENT_ID_KEY.equals(credential.key())
                                 && !CLIENT_SECRET_KEY.equals(credential.key()))
                         .toList();
-                builder.header("Authorization", "Basic " + Base64.getEncoder().encodeToString(
+                yield builder.header(HttpHeaders.AUTHORIZATION, "Basic " + Base64.getEncoder().encodeToString(
                         (clientId + ":" + clientSecret).getBytes(StandardCharsets.UTF_8)))
-                        .header("Content-Type", "application/x-www-form-urlencoded")
-                        .POST(HttpRequest.BodyPublishers.ofString(formEncode(bodyCredentials)));
+                        .buildPost(Entity.entity(formEncode(bodyCredentials),
+                                MediaType.APPLICATION_FORM_URLENCODED_TYPE));
             }
+        };
+    }
+
+    /** Refuses what the previous client refused up front: a malformed URL, or one without an http(s) host. */
+    private static URI httpUri(String url) {
+        URI uri = URI.create(url);
+        if (!("http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme()))
+                || uri.getHost() == null) {
+            throw new IllegalArgumentException("not an http(s) URL with a host");
         }
-        return builder.build();
+        return uri;
     }
 
     /**

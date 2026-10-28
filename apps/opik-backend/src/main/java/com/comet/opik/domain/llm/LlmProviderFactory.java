@@ -36,12 +36,6 @@ public interface LlmProviderFactory {
      */
     LlmProviderClientApiConfig getClientApiConfig(String workspaceId, String model);
 
-    /**
-     * Whether the model's requests go to a destination the workspace configured (a provider base URL) rather than one
-     * Opik fixes: what such a destination answers is not echoed back beyond a parsed provider error.
-     */
-    boolean hasUserConfiguredDestination(String workspaceId, String model);
-
     LlmProvider getLlmProvider(String model);
 
     StructuredOutputStrategy getStructuredOutputStrategy(String model);

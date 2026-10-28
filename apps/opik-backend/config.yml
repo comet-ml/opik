@@ -11,6 +11,10 @@ logging:
     # Default: INFO
     # Description: Set to DEBUG to see complete assembled LLM streaming responses (application-level logging)
     com.comet.opik.infrastructure.llm: ${LLM_PROXY_REQUEST_LOG_LEVEL:-INFO}
+    # Default: ERROR
+    # Description: langchain4j logs each retry of a model's own retry loop with the provider's response; Opik logs its
+    #   own retries without it
+    dev.langchain4j.internal.RetryUtils: ERROR
 
 # Description: state database configuration
 # https://www.dropwizard.io/en/stable/manual/configuration.html#database
@@ -618,6 +622,13 @@ cipxTokenValidation:
   # Default: http://ai-cost-backend
   # Description: Base URL of the cost-api service that validates device tokens; the validator endpoint is appended to it. The in-cluster service name, not the public front door: the validator is reached only from inside the cluster
   url: ${CIPX_TOKEN_VALIDATION_URL:-http://ai-cost-backend}
+
+# The admin server: Dropwizard's tasks (log level, gc), /healthcheck, /metrics, /threads and /ping, on the port of
+# server.adminConnectors. The probes use /health-check on the application port, which stays.
+adminServer:
+  # Default: true
+  # Description: Whether the admin server runs. When false, nothing listens on the admin port, on any interface
+  enabled: ${SERVER_ADMIN_ENABLED:-true}
 
 # https://www.dropwizard.io/en/stable/manual/configuration.html#servers
 server:
@@ -1593,7 +1604,7 @@ llmProviderTokenAuth:
   # Description: Refresh the cached token once its remaining lifetime drops below this fraction of the total lifetime
   refreshFraction: ${LLM_PROVIDER_TOKEN_AUTH_REFRESH_FRACTION:-0.25}
   # Default: 10s
-  # Description: Timeout for the token fetch call to the configured auth service
+  # Description: Timeout for the token fetch call to the configured auth service. Capped at 1m
   fetchTimeout: ${LLM_PROVIDER_TOKEN_AUTH_FETCH_TIMEOUT:-10s}
   # Default: 15s
   # Description: Lease time for the cross-pod single-flight lock around a token fetch
@@ -1663,14 +1674,51 @@ llmProviderClient:
   #   detects the MIME type of an extensionless video URL, and the download of the image, audio, video and PDF URLs
   #   that Gemini and Vertex AI receive as inline data
   videoUrlDestinationGuard: ${LLM_PROVIDER_VIDEO_URL_DESTINATION_GUARD:-strict}
+  # Default: plaintext_or_tls
+  # Values: ['plaintext_or_tls', 'https_only']
+  #   - plaintext_or_tls: http and https
+  #   - https_only: https only
+  # Description: Schemes allowed for the image, audio, video and PDF URLs that Gemini and Vertex AI receive as inline
+  #   data, checked in strict mode only; a URL that isn't http or https is refused in every mode
+  mediaUrlDestinationScheme: ${LLM_PROVIDER_MEDIA_URL_DESTINATION_SCHEME:-plaintext_or_tls}
   # Default: 30s
   # Description: Time allowed for downloading one media URL that Gemini or Vertex AI receives as inline data,
-  #   connecting included
+  #   connecting included; at most 2m
   mediaDownloadTimeout: ${LLM_PROVIDER_MEDIA_DOWNLOAD_TIMEOUT:-30s}
   # Default: 20MB
-  # Description: Largest media file downloaded for Gemini or Vertex AI; a Gemini request carries at most 20 MB of
-  #   inline data
+  # Description: Most bytes downloaded for all the media of one Gemini or Vertex AI request, which carries at most
+  #   20 MB of inline data; at most 100MB
   mediaDownloadMaxSize: ${LLM_PROVIDER_MEDIA_DOWNLOAD_MAX_SIZE:-20MB}
+  # Default: 300
+  # Description: Longest provider error message passed on to a caller. Provider error messages are one or two
+  #   sentences; a longer, multi-line or markup-bearing message is replaced by "Unexpected error calling LLM provider";
+  #   at most 1000
+  providerErrorMessageMaxLength: ${LLM_PROVIDER_ERROR_MESSAGE_MAX_LENGTH:-300}
+  # Default: 64KB
+  # Description: Most bytes read from a custom provider's error response body; the rest is discarded, as only a
+  #   short message parsed from it reaches callers; at most 1MiB
+  providerErrorBodyMaxSize: ${LLM_PROVIDER_ERROR_BODY_MAX_SIZE:-64KB}
+  # Default: 120s
+  # Description: Longest a provider's stream may stay silent once its headers arrived; readTimeout bounds only the
+  #   wait for the headers. Above the 90s ingress idle timeout, as models that reason before answering can be silent
+  #   for a while; between 1s and 10m
+  streamReadTimeout: ${LLM_PROVIDER_STREAM_READ_TIMEOUT:-120s}
+  # Default: 1024
+  # Description: Most threads of the shared HTTP client for LLM provider calls. A call made asynchronously, a stream
+  #   included, holds one from start to end, so it must be at least httpClientMaxRequests; at most 2048
+  httpClientMaxThreads: ${LLM_PROVIDER_CLIENT_MAX_THREADS:-1024}
+  # Default: 60s
+  # Description: How long an idle thread of the shared LLM HTTP client lives before it ends, so the pool shrinks
+  #   back after a burst; between 1s and 5m
+  httpClientThreadKeepAlive: ${LLM_PROVIDER_CLIENT_THREAD_KEEP_ALIVE:-60s}
+  # Default: 1024
+  # Description: Most LLM provider calls made asynchronously, streams included, that run at once on the shared
+  #   client. Further calls wait in order for one to end, and their timeouts start once they run; at most 2048
+  httpClientMaxRequests: ${LLM_PROVIDER_CLIENT_MAX_REQUESTS:-1024}
+  # Default: 1024
+  # Description: Most of httpClientMaxRequests that run at once to a single host. Most calls go to a few hosts, such
+  #   as one provider's API, so it defaults to the overall limit and can't exceed it
+  httpClientMaxRequestsPerHost: ${LLM_PROVIDER_CLIENT_MAX_REQUESTS_PER_HOST:-1024}
   # Configuration for OpenAI client
   openAiClient:
     # Default:
@@ -2209,6 +2257,15 @@ webhook:
   #   link-local, private and unresolvable destinations; 'relaxed' allows them, as self-hosted
   #   deployments legitimately point webhooks at internal services
   destinationGuard: ${WEBHOOK_DESTINATION_GUARD:-relaxed}
+  # Default: plaintext_or_tls
+  # Values: ['plaintext_or_tls', 'https_only']
+  #   - plaintext_or_tls: http and https
+  #   - https_only: https only
+  # Description: Schemes allowed for webhook URLs, checked in strict mode only
+  destinationScheme: ${WEBHOOK_DESTINATION_SCHEME:-plaintext_or_tls}
+  # Default: 512B
+  # Description: Maximum bytes read from a webhook response body, which is only logged; the rest is discarded (at most 64KiB)
+  responseBodyMaxSize: ${WEBHOOK_RESPONSE_BODY_MAX_SIZE:-512B}
   # Default: 10
   # Description: Claim pending messages every N polling intervals
   claimIntervalRatio: ${WEBHOOK_CLAIM_INTERVAL_RATIO:-10}

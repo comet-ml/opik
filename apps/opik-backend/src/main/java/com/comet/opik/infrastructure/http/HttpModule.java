@@ -26,8 +26,7 @@ public class HttpModule extends DropwizardAwareModule<OpikConfiguration> {
     @Provides
     @Singleton
     public Client client(@Config("jerseyClient") JerseyClientConfiguration config) {
-        var builder = new JerseyClientBuilder(environment());
-        return buildClient(builder, config);
+        return buildClient(new DestinationGuardJerseyClientBuilder(environment()), config);
     }
 
     /**
