@@ -66,13 +66,15 @@ const WorkspacePreloader: React.FunctionComponent<WorkspacePreloaderProps> = ({
 }) => {
   const setAppUser = useSetAppUser();
   const { data: user, isLoading } = useUser();
+  // Comet refuses these until the email is verified
+  const canLoadWorkspaces = !!user?.loggedIn && !user.emailVerificationRequired;
 
   const { data: allWorkspaces } = useAllWorkspaces({
-    enabled: !!user?.loggedIn,
+    enabled: canLoadWorkspaces,
   });
 
   const { data: organizations } = useOrganizations({
-    enabled: !!user?.loggedIn,
+    enabled: canLoadWorkspaces,
   });
 
   const matchRoute = useMatchRoute();
@@ -157,6 +159,7 @@ const WorkspacePreloader: React.FunctionComponent<WorkspacePreloaderProps> = ({
 
   // Comet refuses everything but sign-in until the email is verified; its own page takes over
   if (user.emailVerificationRequired) {
+    persistMcpOAuthReturn();
     window.location.href = buildUrl("email-verification");
     return null;
   }
