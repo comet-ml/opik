@@ -547,6 +547,22 @@ class InferenceClientTest {
     }
 
     @Test
+    void generateKeepsTheSchemaKeyOrder() {
+        server.stubFor(post(urlEqualTo(REALTIME_GENERATE_PATH)).willReturn(generated()));
+        var schema = NODES.objectNode().put("type", "object");
+        var properties = schema.putObject("properties");
+        properties.putObject("topics").put("type", "array");
+        properties.putObject("other").put("type", "array");
+        schema.putArray("required").add("topics").add("other");
+
+        client.generate(generateRequest().toBuilder().schema(schema).build(), later()).block();
+
+        var sent = single(postRequestedFor(urlEqualTo(REALTIME_GENERATE_PATH))).getBodyAsString();
+        assertThat(sent).contains("\"schema\":{\"type\":\"object\",\"properties\":{\"topics\":{\"type\":\"array\"},"
+                + "\"other\":{\"type\":\"array\"}},\"required\":[\"topics\",\"other\"]}");
+    }
+
+    @Test
     void generateQuotaExceededIsNotRetried() {
         server.stubFor(post(urlEqualTo(REALTIME_GENERATE_PATH))
                 .willReturn(error("quota_exceeded", 429).withHeader("Retry-After", "2")));
