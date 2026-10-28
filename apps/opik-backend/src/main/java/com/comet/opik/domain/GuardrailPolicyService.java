@@ -34,7 +34,6 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -269,11 +268,11 @@ class GuardrailPolicyServiceImpl implements GuardrailPolicyService {
                         .formatted(index, ALLOWED_TOPICS, RESTRICTED_TOPICS));
             }
             // Topics are compared ignoring case, as the model reads them.
-            var restrictedLowerCase = restricted.stream()
-                    .map(topic -> topic.toLowerCase(Locale.ROOT))
+            var restrictedKeys = restricted.stream()
+                    .map(GuardrailQuestions::topicKey)
                     .collect(Collectors.toSet());
             allowed.stream()
-                    .filter(topic -> restrictedLowerCase.contains(topic.toLowerCase(Locale.ROOT)))
+                    .filter(topic -> restrictedKeys.contains(GuardrailQuestions.topicKey(topic)))
                     .findFirst()
                     .ifPresent(topic -> {
                         throw new BadRequestException("rules[%d].config has '%s' in both %s and %s"
@@ -310,9 +309,9 @@ class GuardrailPolicyServiceImpl implements GuardrailPolicyService {
                     .formatted(index, field, GuardrailQuestions.NONE_OF_THESE));
         }
         // Case variants would be separate options of one choice question and split its probability.
-        var topicsLowerCase = new HashSet<String>();
+        var topicKeys = new HashSet<String>();
         topics.stream()
-                .filter(topic -> !topicsLowerCase.add(topic.toLowerCase(Locale.ROOT)))
+                .filter(topic -> !topicKeys.add(GuardrailQuestions.topicKey(topic)))
                 .findFirst()
                 .ifPresent(topic -> {
                     throw new BadRequestException("rules[%d].config.%s contains '%s' more than once, ignoring case"
