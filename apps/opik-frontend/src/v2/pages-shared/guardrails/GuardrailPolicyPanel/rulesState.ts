@@ -7,6 +7,8 @@ import {
 import { GUARDRAIL_RULE_TYPES_ORDER } from "@/constants/guardrails";
 
 export const MAX_TOPIC_LENGTH = 256;
+/** The backend's limit: a list plus its "none of these" option fills one choice question. */
+export const MAX_TOPICS = 254;
 
 type PiiRuleState = {
   enabled: boolean;
@@ -129,6 +131,9 @@ export type RuleErrors = Partial<Record<RuleFieldKey, string>>;
 const RESERVED_TOPIC = "none of these";
 
 const validateTopicList = (topics: string[]): string | undefined => {
+  if (topics.length > MAX_TOPICS) {
+    return `A list can have at most ${MAX_TOPICS} topics`;
+  }
   if (topics.some((item) => item.length > MAX_TOPIC_LENGTH)) {
     return `A topic can be at most ${MAX_TOPIC_LENGTH} characters`;
   }

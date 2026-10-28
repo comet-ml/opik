@@ -4,6 +4,7 @@ import { GuardrailPolicyRule, GuardrailTypes } from "@/types/guardrails";
 import {
   DEFAULT_RULES_STATE,
   MAX_TOPIC_LENGTH,
+  MAX_TOPICS,
   RulesState,
   toRulesPayload,
   toRulesState,
@@ -92,6 +93,11 @@ describe("validateRules", () => {
 
   it.each([
     [[" ", ""], [], "Enter at least one restricted or allowed topic"],
+    [
+      Array.from({ length: MAX_TOPICS + 1 }, (_, index) => `topic ${index}`),
+      [],
+      `A list can have at most ${MAX_TOPICS} topics`,
+    ],
     [
       [],
       ["a".repeat(MAX_TOPIC_LENGTH + 1)],
