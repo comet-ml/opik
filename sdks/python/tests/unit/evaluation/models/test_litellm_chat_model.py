@@ -814,6 +814,55 @@ def test_litellm_chat_model_keeps_reasoning_effort_for_openai(monkeypatch):
     assert kwargs.get("reasoning_effort") == "low"
 
 
+@pytest.mark.parametrize(
+    "model_name,expected",
+    [("gpt-6-luna", True), ("ollama/qwen2.5:1.5b", False)],
+)
+def test_litellm_chat_model__supported_features__reasoning_effort_follows_the_model_map(
+    monkeypatch, model_name, expected
+):
+    stub = _install_litellm_stub(monkeypatch)
+    stub.supports_reasoning = lambda model: model == "gpt-6-luna"
+
+    model = litellm_chat_model.LiteLLMChatModel(model_name=model_name)
+
+    assert model.supported_features.reasoning_effort is expected
+
+
+def test_litellm_chat_model__model_map_lookup_fails__no_reasoning_effort(monkeypatch):
+    stub = _install_litellm_stub(monkeypatch)
+
+    def supports_reasoning(model):
+        raise Exception(f"This model isn't mapped yet. model={model}")
+
+    stub.supports_reasoning = supports_reasoning
+
+    model = litellm_chat_model.LiteLLMChatModel(model_name="my-local-model")
+
+    assert model.supported_features.reasoning_effort is False
+
+
+@pytest.mark.parametrize(
+    "model_name,expected",
+    [
+        ("gemini/gemini-2.5-flash", False),
+        ("vertex_ai/gemini-2.0-flash-001", False),
+        ("gemini/gemini-1.5-pro", False),
+        ("vertex_ai/gemini-3.5-flash", True),
+        ("gpt-6-luna", True),
+        ("claude-haiku-4-5", True),
+    ],
+)
+def test_litellm_chat_model__supported_features__response_format_with_tools_refused_before_gemini_3(
+    monkeypatch, model_name, expected
+):
+    _install_litellm_stub(monkeypatch)
+
+    model = litellm_chat_model.LiteLLMChatModel(model_name=model_name)
+
+    assert model.supported_features.response_format_with_tools is expected
+
+
 def test_litellm_chat_model_keeps_seed_when_provider_supports_it(monkeypatch):
     """Counterpart to the drop test: when `seed` IS in the provider's
     supported set (e.g. OpenAI), it must round-trip through to the

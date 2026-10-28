@@ -2,7 +2,7 @@ from unittest.mock import MagicMock
 
 from opik.evaluation.engine.metrics_evaluator import build_metrics_evaluator
 from opik.evaluation.metrics import base_metric
-from opik.evaluation.models.litellm import util as litellm_util
+from opik.evaluation.models import base_model, models_factory
 from opik.evaluation.types import ErrorTolerance
 from opik.evaluation.suite_evaluators import llm_judge
 
@@ -11,6 +11,14 @@ def _make_judge(assertions, **kwargs):
     defaults = {"track": False, "name": "llm_judge"}
     defaults.update(kwargs)
     return llm_judge.LLMJudge(assertions=assertions, **defaults)
+
+
+def _fake_models_factory(monkeypatch, takes_reasoning_effort):
+    model = MagicMock()
+    model.supported_features = base_model.ModelFeatures(
+        reasoning_effort=takes_reasoning_effort
+    )
+    monkeypatch.setattr(models_factory, "get", lambda **_: model)
 
 
 def _make_non_judge_metric(name="other_metric"):
@@ -93,7 +101,7 @@ class TestLLMJudgeMerged:
         assert llm_judge.LLMJudge.merged([j1]) is None
 
     def test_default_and_explicit_default_effort__merges(self, monkeypatch):
-        monkeypatch.setattr(litellm_util, "takes_reasoning_effort", lambda _: True)
+        _fake_models_factory(monkeypatch, takes_reasoning_effort=True)
         j1 = _make_judge(["A"], model="gpt-5-nano")
         j2 = _make_judge(["B"], model="gpt-5-nano", reasoning_effort="low")
 
@@ -105,7 +113,7 @@ class TestLLMJudgeMerged:
     def test_model_without_reasoning__default_and_explicit_effort__not_merged(
         self, monkeypatch
     ):
-        monkeypatch.setattr(litellm_util, "takes_reasoning_effort", lambda _: False)
+        _fake_models_factory(monkeypatch, takes_reasoning_effort=False)
         j1 = _make_judge(["A"], model="ollama/qwen2.5:1.5b")
         j2 = _make_judge(["B"], model="ollama/qwen2.5:1.5b", reasoning_effort="low")
 

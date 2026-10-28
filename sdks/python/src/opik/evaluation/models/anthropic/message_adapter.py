@@ -5,6 +5,7 @@ from __future__ import annotations
 import inspect
 import json
 import logging
+import re
 from typing import Any, Dict, List, Optional, Set, Tuple, Type
 
 import pydantic
@@ -54,6 +55,12 @@ _SUPPORTED_PARAMS: frozenset[str] = frozenset(
         "metadata",
     }
 )
+
+_SAMPLING_PARAMS = ("temperature", "top_p", "top_k")
+
+# The minor version is one or two digits so a date suffix
+# (claude-sonnet-4-20250514) is not read as one.
+_CLAUDE_VERSION = re.compile(r"^claude-([a-z]+)-(\d+)(?:-(\d{1,2}))?(?:-|$)")
 
 
 def _parse_tool_call_arguments(arguments: Any) -> Dict[str, Any]:
@@ -249,18 +256,25 @@ def filter_unsupported_params(
     return filtered
 
 
+def _rejects_sampling_params(model_name: str) -> bool:
+    match = _CLAUDE_VERSION.match(model_name)
+    if match is None:
+        return False
+    family, major, minor = match.groups()
+    version = (int(major), int(minor or 0))
+    return version >= (5, 0) or (family == "opus" and version >= (4, 7))
+
+
 def drop_unsupported_sampling_params(
     params: Dict[str, Any],
     model_name: str,
     already_warned: Set[str],
 ) -> None:
-    from ..litellm import util as litellm_util
-
-    present = [param for param in litellm_util.SAMPLING_PARAMS if param in params]
-    # Anthropic SDKs from 1.0.0 no longer take these, so they are usually gone
-    # already. Checked first because importing LiteLLM fetches its model map.
-    if not present or not litellm_util.rejects_sampling_params(model_name):
+    # Anthropic SDKs from 1.0.0 no longer take these, so this only matters on
+    # older SDKs, where `filter_unsupported_params` leaves them in.
+    if not _rejects_sampling_params(model_name):
         return
+    present = [param for param in _SAMPLING_PARAMS if param in params]
     for param in present:
         value = params.pop(param)
         if param not in already_warned:

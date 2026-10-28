@@ -131,6 +131,15 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
 
         return supported_params
 
+    @cached_property
+    def supported_features(self) -> base_model.ModelFeatures:
+        return base_model.ModelFeatures(
+            reasoning_effort=util.takes_reasoning_effort(self.model_name),
+            response_format_with_tools=util.takes_response_format_with_tools(
+                self.model_name
+            ),
+        )
+
     def _ensure_supported_params(self, params: Set[str]) -> None:
         """
         LiteLLM may have broken support for some parameters. If we detect it, we

@@ -14,6 +14,10 @@ _OPENAI_GPT_VERSION = re.compile(r"^gpt-(\d+)(?:\.(\d+))?(?![\d.])")
 # Responses bridge for tool calls exists only on the direct OpenAI route.
 _ROUTING_PREFIXES = ("openrouter/", "azure/")
 
+# "Function calling with a response mime type: 'application/json' is unsupported"
+# on Google AI Studio and Vertex AI; Gemini 3 takes both.
+_RESPONSE_FORMAT_WITH_TOOLS_REFUSED = re.compile(r"^gemini-[12](?:[.-]|$)")
+
 
 def coerce_temperature_to_float(value: Any) -> Optional[float]:
     """Normalize a `temperature` value to a float.
@@ -117,12 +121,18 @@ def rejects_sampling_params(model_name: str) -> bool:
 
 
 def takes_reasoning_effort(model_name: str) -> bool:
+    # Ollama turns any effort into `think`, which models that can't think reject.
     import litellm
 
     try:
         return bool(litellm.supports_reasoning(model=model_name))
     except Exception:
         return False
+
+
+def takes_response_format_with_tools(model_name: str) -> bool:
+    vendor_model_name = model_name.rsplit("/", 1)[-1]
+    return _RESPONSE_FORMAT_WITH_TOOLS_REFUSED.match(vendor_model_name) is None
 
 
 def is_openai_gpt_5_4_plus(model_name: str) -> bool:

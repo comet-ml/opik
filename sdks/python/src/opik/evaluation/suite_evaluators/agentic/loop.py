@@ -6,8 +6,8 @@ the judge can decide on the first turn whether any drill-in tool
 throughout, and `response_format` is set on every turn — so any turn
 where the model declines to call a tool already produces the structured
 JSON verdict the caller parses. A dedicated wrap-up turn only runs as a
-force-finalize when the loop exits via `max_rounds`, or for models that
-take no `response_format` next to tools (Gemini before 3).
+force-finalize when the loop exits via `max_rounds`, or for models whose
+`supported_features` say they take no `response_format` next to tools.
 
 Telemetry is emitted via `LOGGER` at the end of each loop run so an
 operator running `evaluate()` over a dataset can spot misconfigured
@@ -18,7 +18,6 @@ signal in particular).
 import collections
 import dataclasses
 import logging
-import re
 from typing import Any, Dict, List, Set, Tuple, Type
 
 import pydantic
@@ -52,11 +51,6 @@ _DEDUP_HINT_TEMPLATE = (
     "for a specific path, or `search` for a keyword. Repeating this call "
     "cannot produce new information."
 )
-
-
-# "Function calling with a response mime type: 'application/json' is unsupported"
-# on Google AI Studio and Vertex AI; Gemini 3 takes both.
-_JSON_FORMAT_WITH_TOOLS_REFUSED = re.compile(r"^gemini-[12](?:[.-]|$)")
 
 
 @dataclasses.dataclass
@@ -102,7 +96,7 @@ def run_agentic_judge(
     """
     tool_specs: List[Any] = registry.specs()
     tool_round_format = (
-        response_format if _takes_json_format_with_tools(model) else None
+        response_format if model.supported_features.response_format_with_tools else None
     )
     telemetry = LoopTelemetry()
     # Tracks every (tool_name, arguments) pair seen during this loop run.
@@ -249,11 +243,6 @@ def run_agentic_judge(
         temperature=0,
     )
     return verdict.get("content") or ""
-
-
-def _takes_json_format_with_tools(model: base_model.OpikBaseModel) -> bool:
-    model_name = getattr(model, "model_name", None) or ""
-    return _JSON_FORMAT_WITH_TOOLS_REFUSED.match(model_name.rsplit("/", 1)[-1]) is None
 
 
 def _emit_telemetry(

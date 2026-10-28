@@ -1,4 +1,5 @@
 import abc
+import dataclasses
 import logging
 import sys
 from contextlib import contextmanager, asynccontextmanager
@@ -52,6 +53,14 @@ class ConversationDict(TypedDict, total=False):
     name: str
 
 
+# Every feature defaults to True so a model subclassed outside Opik, which
+# doesn't override `supported_features`, keeps getting the requests it got before.
+@dataclasses.dataclass(frozen=True)
+class ModelFeatures:
+    reasoning_effort: bool = True
+    response_format_with_tools: bool = True
+
+
 class OpikBaseModel(abc.ABC):
     """
     This class serves as an interface to LLMs.
@@ -68,6 +77,11 @@ class OpikBaseModel(abc.ABC):
             model_name: The name of the LLM to be used.
         """
         self.model_name = model_name
+
+    # Not abstract, so existing user implementations keep working
+    @property
+    def supported_features(self) -> ModelFeatures:
+        return ModelFeatures()
 
     @abc.abstractmethod
     def generate_string(

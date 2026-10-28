@@ -12,7 +12,6 @@ from typing import Any, Dict, List, Optional, Union
 import tenacity
 
 from opik.evaluation.models import base_model, models_factory
-from opik.evaluation.models.litellm import util as litellm_util
 from opik.evaluation.metrics import score_result
 from opik.exceptions import EmptyLLMResponseError, LLMJudgeParseError
 
@@ -237,8 +236,7 @@ class LLMJudge(base.BaseSuiteEvaluator):
             self._model_name == other._model_name
             and self._temperature == other._temperature
             and self._seed == other._seed
-            and self._effective_reasoning_effort()
-            == other._effective_reasoning_effort()
+            and self._effective_reasoning_effort == other._effective_reasoning_effort
             and self.track == other.track
             and self._scoring_tool_strategy_input == other._scoring_tool_strategy_input
         )
@@ -285,22 +283,24 @@ class LLMJudge(base.BaseSuiteEvaluator):
             model_kwargs["temperature"] = self._temperature
         if self._seed is not None:
             model_kwargs["seed"] = self._seed
-        reasoning_effort = self._effective_reasoning_effort()
-        if reasoning_effort is not None:
-            model_kwargs["reasoning_effort"] = reasoning_effort
+
+        self._effective_reasoning_effort = self._reasoning_effort
+        if self._effective_reasoning_effort is None:
+            self._model = models_factory.get(
+                model_name=self._model_name, track=self.track, **model_kwargs
+            )
+            # A model that can't reason may reject any effort, so the default
+            # only goes to the models that take one.
+            if not self._model.supported_features.reasoning_effort:
+                return
+            self._effective_reasoning_effort = llm_judge_config.DEFAULT_REASONING_EFFORT
 
         self._model = models_factory.get(
-            model_name=self._model_name, track=self.track, **model_kwargs
+            model_name=self._model_name,
+            track=self.track,
+            reasoning_effort=self._effective_reasoning_effort,
+            **model_kwargs,
         )
-
-    def _effective_reasoning_effort(self) -> Optional[str]:
-        if self._reasoning_effort is not None:
-            return self._reasoning_effort
-        # A model that can't reason rejects any effort (Ollama turns it into
-        # `think`), so the default only goes to the models that take one.
-        if litellm_util.takes_reasoning_effort(self._model_name):
-            return llm_judge_config.DEFAULT_REASONING_EFFORT
-        return None
 
     def score(
         self,

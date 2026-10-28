@@ -13,7 +13,6 @@ from opik.evaluation.models import models_factory
 from opik.evaluation.models import base_model
 from opik.evaluation.models.anthropic import anthropic_chat_model
 from opik.evaluation.models.anthropic import message_adapter, response_parser
-from opik.evaluation.models.litellm import util as litellm_util
 
 from ....testlib import patch_submodule
 
@@ -74,19 +73,6 @@ def _clear_model_cache():
     models_factory._MODEL_CACHE.clear()
     yield
     models_factory._MODEL_CACHE.clear()
-
-
-SAMPLING_REFUSING_MODELS = {"claude-sonnet-5-5"}
-
-
-@pytest.fixture(autouse=True)
-def _fake_model_map(monkeypatch):
-    # The real lookup imports LiteLLM, which fetches its model map over the network.
-    monkeypatch.setattr(
-        litellm_util,
-        "rejects_sampling_params",
-        lambda model_name: model_name in SAMPLING_REFUSING_MODELS,
-    )
 
 
 class TestResponseParser:
@@ -911,13 +897,24 @@ class TestParamFiltering:
         assert "logprobs" not in call_kwargs
         assert "top_logprobs" not in call_kwargs
 
-    def test_sampling_params__model_refuses_them__not_sent(self, monkeypatch):
+    @pytest.mark.parametrize(
+        "model_name",
+        [
+            "anthropic/claude-sonnet-5-5",
+            "claude-fable-5-1",
+            "claude-opus-4-7-20260416",
+            "claude-opus-4-8",
+        ],
+    )
+    def test_sampling_params__model_refuses_them__not_sent(
+        self, monkeypatch, model_name
+    ):
         _, mock_client, _ = _install_anthropic_stub(monkeypatch)
         monkeypatch.setattr(message_adapter, "_sdk_accepted_params", lambda: None)
         monkeypatch.setenv("OPIK_ENABLE_LITELLM_MODELS_MONITORING", "false")
 
         model = anthropic_chat_model.AnthropicChatModel(
-            model_name="anthropic/claude-sonnet-5-5", track=False, temperature=0.0
+            model_name=model_name, track=False, temperature=0.0
         )
         model.generate_provider_response(
             [{"role": "user", "content": "hi"}], top_p=0.9, top_k=5, max_tokens=10
@@ -954,13 +951,23 @@ class TestParamFiltering:
             "Model claude-sonnet-5-5 does not accept top_p. Dropping top_p=0.9.",
         ]
 
-    def test_sampling_params__model_accepts_them__sent(self, monkeypatch):
+    @pytest.mark.parametrize(
+        "model_name",
+        [
+            "anthropic/claude-sonnet-4-6",
+            "claude-opus-4-6",
+            "claude-sonnet-4-20250514",
+            "claude-haiku-4-5-20251001",
+            "claude-3-5-haiku-latest",
+        ],
+    )
+    def test_sampling_params__model_accepts_them__sent(self, monkeypatch, model_name):
         _, mock_client, _ = _install_anthropic_stub(monkeypatch)
         monkeypatch.setattr(message_adapter, "_sdk_accepted_params", lambda: None)
         monkeypatch.setenv("OPIK_ENABLE_LITELLM_MODELS_MONITORING", "false")
 
         model = anthropic_chat_model.AnthropicChatModel(
-            model_name="anthropic/claude-sonnet-4-6", track=False, temperature=0.0
+            model_name=model_name, track=False, temperature=0.0
         )
         model.generate_provider_response([{"role": "user", "content": "hi"}])
 

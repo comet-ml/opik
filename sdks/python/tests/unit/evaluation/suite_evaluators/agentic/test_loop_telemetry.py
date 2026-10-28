@@ -57,11 +57,16 @@ class _StubChatModel(base_model.OpikBaseModel):
     def __init__(
         self,
         responses: List[base_model.ConversationDict],
-        model_name: str = "stub-model",
+        features: base_model.ModelFeatures = base_model.ModelFeatures(),
     ) -> None:
-        super().__init__(model_name=model_name)
+        super().__init__(model_name="stub-model")
         self._responses = list(responses)
+        self._features = features
         self.calls: List[dict] = []
+
+    @property
+    def supported_features(self) -> base_model.ModelFeatures:
+        return self._features
 
     def generate_string(
         self,
@@ -133,9 +138,13 @@ def _tool_call(tool_id: str, name: str, arguments: str = "{}") -> dict:
 
 
 def _run_with_responses(
-    responses, tools, ctx, overview_truncated=False, model_name="stub-model"
+    responses,
+    tools,
+    ctx,
+    overview_truncated=False,
+    features=base_model.ModelFeatures(),
 ):
-    model = _StubChatModel(responses, model_name=model_name)
+    model = _StubChatModel(responses, features=features)
     registry = tool_registry.ToolRegistry(tools=tools)
     content = loop.run_agentic_judge(
         model=model,
@@ -421,11 +430,8 @@ class TestDuplicateToolCallShortCircuit:
 
 
 class TestResponseFormatOnToolRounds:
-    @pytest.mark.parametrize(
-        "model_name", ["gemini/gemini-2.5-flash", "vertex_ai/gemini-2.0-flash-001"]
-    )
-    def test_run_agentic_judge__gemini_before_3__tool_rounds_unformatted_and_wrapup_structures(
-        self, model_name
+    def test_run_agentic_judge__model_refuses_format_with_tools__tool_rounds_unformatted_and_wrapup_structures(
+        self,
     ):
         tools = [_StubTool("read")]
         responses = [
@@ -439,7 +445,10 @@ class TestResponseFormatOnToolRounds:
         ]
 
         content, model, _ = _run_with_responses(
-            responses, tools, _ctx(_trace()), model_name=model_name
+            responses,
+            tools,
+            _ctx(_trace()),
+            features=base_model.ModelFeatures(response_format_with_tools=False),
         )
 
         assert [call["response_format"] for call in model.calls] == [
@@ -449,11 +458,8 @@ class TestResponseFormatOnToolRounds:
         ]
         assert content == '{"verdict": "pass"}'
 
-    @pytest.mark.parametrize(
-        "model_name", ["vertex_ai/gemini-3.5-flash", "gpt-6-luna", "claude-haiku-4-5"]
-    )
     def test_run_agentic_judge__model_taking_both__every_round_formatted_without_wrapup(
-        self, model_name
+        self,
     ):
         tools = [_StubTool("read")]
         responses = [
@@ -465,9 +471,7 @@ class TestResponseFormatOnToolRounds:
             {"role": "assistant", "content": '{"verdict": "pass"}'},
         ]
 
-        content, model, _ = _run_with_responses(
-            responses, tools, _ctx(_trace()), model_name=model_name
-        )
+        content, model, _ = _run_with_responses(responses, tools, _ctx(_trace()))
 
         assert [call["response_format"] for call in model.calls] == [
             _WrapupSchema,
