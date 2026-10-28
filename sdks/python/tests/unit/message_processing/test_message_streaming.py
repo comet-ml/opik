@@ -1,4 +1,5 @@
 import threading
+import time
 from unittest import mock
 from unittest.mock import sentinel
 
@@ -166,3 +167,51 @@ def test_streamer__trace__batching_enabled__messages_that_support_batching_are_p
     assert tested.flush(1.1) is True
 
     mock_message_processor.process.assert_called_once()
+
+
+def test_streamer__flush_with_zero_timeout__does_not_wait_for_an_in_flight_message(
+    fake_file_upload_manager, fake_replay_manager
+):
+    # Opik.flush(timeout=0) reaches Streamer.flush(0). A zero budget must be
+    # honoured even while a message is still inside the consumer: Opik.flush
+    # documents that it never blocks beyond the timeout and returns once the
+    # timeout is reached, whatever the queue is doing.
+    process_started = threading.Event()
+    release_process = threading.Event()
+
+    def slow_process(message):
+        process_started.set()
+        release_process.wait(timeout=3.0)
+
+    mock_message_processor = mock.Mock()
+    mock_message_processor.process.side_effect = slow_process
+
+    tested = streamer_constructors.construct_streamer(
+        message_processor=mock_message_processor,
+        n_consumers=1,
+        use_batching=False,
+        use_attachment_extraction=False,
+        file_uploader=fake_file_upload_manager,
+        max_queue_size=None,
+        fallback_replay_manager=fake_replay_manager,
+    )
+    try:
+        tested.put(messages.BaseMessage())
+        assert process_started.wait(timeout=2.0) is True
+
+        started = time.monotonic()
+        flushed = tested.flush(timeout=0)
+        elapsed = time.monotonic() - started
+
+        # The message is still in flight, so the flush cannot report success,
+        # and it must not have waited for it to come out of the processor.
+        assert flushed is False
+        assert elapsed < 1.0
+    finally:
+        release_process.set()
+        # Let the in-flight message finish before the fire-and-forget close:
+        # close(flush=False) clears the queue and resets its unfinished-task
+        # counter, and a consumer still inside the processor would then call
+        # task_done() on a queue that no longer counts it.
+        tested.flush(timeout=5)
+        tested.close(flush=False)

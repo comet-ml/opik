@@ -15,7 +15,11 @@ def wait_for_done(
     """
     Wait up to TIMEOUT seconds for the check function to return True
     """
-    end_time = time.time() + timeout if timeout else float("inf")
+    # A timeout of 0 is a budget of zero, not "no timeout": only None means wait
+    # forever. Treating 0 as falsy made callers that ask for a non-blocking flush
+    # (Opik.flush(timeout=0), OPIK_DEFAULT_FLUSH_TIMEOUT=0) block until the queue
+    # drained instead of returning.
+    end_time = time.time() + timeout if timeout is not None else float("inf")
     while check_function() is False and time.time() < end_time:
         if progress_callback is not None:
             progress_callback()
