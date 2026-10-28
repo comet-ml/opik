@@ -61,7 +61,8 @@ public class TopicVectorsDAO {
      * <p>A key is kept only when its latest {@code ai_labels} output row has the status's task version and a summary
      * that isn't blank, and this is checked before the {@code LIMIT}: otherwise unusable rows, which stay in the window
      * until they age out, could fill every tick's batch and hold back newer traces. The output read takes only the
-     * traces of {@code done}, so it reads the window's traces and not the workspace's history.
+     * (project, trace) pairs of {@code done}, so it reads the window's traces and not the workspace's history. A tie on
+     * {@code updated_at} takes the higher task version, so the pick doesn't change between runs.
      */
     private static final String FIND_UNVECTORED = """
             WITH done AS (
@@ -87,11 +88,11 @@ public class TopicVectorsDAO {
                     WHERE workspace_id = :workspace_id
                     AND task = :task
                     AND key = 'output'
-                    AND trace_id IN (SELECT trace_id FROM done)
-                    ORDER BY workspace_id, project_id, task, trace_id, key, updated_at DESC
+                    AND (project_id, trace_id) IN (SELECT project_id, trace_id FROM done)
+                    ORDER BY workspace_id, project_id, task, trace_id, key, updated_at DESC, task_version DESC
                     LIMIT 1 BY workspace_id, project_id, task, trace_id, key
                 )
-                WHERE match(summary, '[^[:space:]]')
+                WHERE match(summary, :non_blank)
             )
             SELECT workspace_id, project_id, trace_id, trace_created_at, task_version, updated_at
             FROM done
@@ -108,6 +109,14 @@ public class TopicVectorsDAO {
                 max_execution_time = <max_execution_time>, priority = 100, log_comment = '<log_comment>'
             """;
 
+    /**
+     * RE2 for "not {@link String#isBlank()}": a character that is not {@link Character#isWhitespace(char)}. That is
+     * anything outside the ASCII controls tab to carriage return and file to unit separator and outside Unicode
+     * separators ({@code \p{Z}}), except the no-break spaces, which Java does not count as whitespace. Bound as a
+     * parameter so the backslashes need no escaping in the template.
+     */
+    static final String NON_BLANK = "[^\\t\\n\\x0B\\f\\r\\x1C-\\x1F\\p{Z}]|[\\x{A0}\\x{2007}\\x{202F}]";
+
     /** The runbook's summary read: each trace's latest output row, its text extracted in SQL exactly as stored. */
     private static final String FIND_SUMMARIES = """
             SELECT project_id, trace_id, task_version, JSONExtractString(output, 'summary') AS summary
@@ -117,7 +126,7 @@ public class TopicVectorsDAO {
             AND key = 'output'
             AND id_at >= toDateTime(:min_id_at_seconds, 'UTC')
             AND trace_id IN :trace_ids
-            ORDER BY workspace_id, project_id, task, trace_id, key, updated_at DESC
+            ORDER BY workspace_id, project_id, task, trace_id, key, updated_at DESC, task_version DESC
             LIMIT 1 BY workspace_id, project_id, task, trace_id, key
             SETTINGS log_comment = '<log_comment>', max_execution_time = <max_execution_time>,
                 max_rows_to_read = <max_rows_to_read>, max_memory_usage = <max_memory_usage>
@@ -242,6 +251,7 @@ public class TopicVectorsDAO {
                         .bind("lower_bound_micros", toEpochMicros(lowerBound))
                         .bind("upper_bound_micros", toEpochMicros(upperBound))
                         .bind("limit", limit)
+                        .bind("non_blank", NON_BLANK)
                         .execute())
                 .flatMap(result -> result.map((row, metadata) -> toCandidate(row)));
     }
