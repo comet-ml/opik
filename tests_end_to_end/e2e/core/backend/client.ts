@@ -464,6 +464,27 @@ export interface FeedbackScoreRef {
 }
 
 /**
+ * One library prompt, as `GET /v1/private/prompts` answers — the prompt itself
+ * rather than one of its commits.
+ *
+ * `templateStructure` is where "which TYPE did that save write" is observable:
+ * the library list renders a badge, but `template_structure` is the field the
+ * Playground's own load branches on, so a spec about a save writing the wrong
+ * type has to read this. It is `string | null` and never defaulted for the same
+ * reason `PromptVersionRef.versionNumber` is: a prompt the server sent no
+ * structure for is a real answer, and collapsing it into `'text'` would make
+ * the very regression a type assertion exists to catch pass on half the cases.
+ * `versionCount` is `number | null` on the same grounds — an absent count is
+ * not a count of zero.
+ */
+export interface LibraryPromptRef {
+  id: string;
+  name: string;
+  templateStructure: string | null;
+  versionCount: number | null;
+}
+
+/**
  * One commit of a prompt, as the versions endpoints answer.
  *
  * `versionNumber` is `string | null` and never defaulted: it is the `vN` label
@@ -2144,6 +2165,36 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     }
   };
 
+  /**
+   * Every library prompt in `projectId` named exactly `name`.
+   *
+   * Hoisted for the same reason as `localGetTrace`, one caller closer: both
+   * `listPromptsByName` and `getPromptByName` below answer from it, and the
+   * estate's client methods are self-contained (nothing else in here calls
+   * `this`), so sharing through a closure is how the two stay one query.
+   *
+   * The endpoint's `name` is a partial match, so the exact re-check is what
+   * keeps a neighbouring `…-chat` prompt out of a `…` lookup's answer.
+   */
+  const localListPromptsByName = async (
+    name: string,
+    projectId?: string,
+  ): Promise<LibraryPromptRef[]> => {
+    const page = await opik.api.prompts.getPrompts({
+      name,
+      size: 50,
+      ...(projectId ? { projectId } : {}),
+    });
+    return (page.content ?? [])
+      .filter((p) => p.name === name)
+      .map((p) => ({
+        id: String(p.id ?? ''),
+        name: p.name,
+        templateStructure: p.templateStructure ?? null,
+        versionCount: p.versionCount ?? null,
+      }));
+  };
+
   return {
     /**
      * Seeds a dashboard through the SDK's dashboards client.
@@ -2611,6 +2662,35 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       });
       const match = (page.content ?? []).find((p) => p.name === name);
       return match?.id ? String(match.id) : null;
+    },
+
+    /**
+     * Every library prompt in `projectId` named exactly `name`.
+     *
+     * A LIST and not a single prompt, because "how many are there" is half of
+     * what the callers assert: a save that took the wrong branch creates a
+     * SECOND prompt beside the one it should have committed to, and a lookup
+     * that returned the first match would report that as a success.
+     */
+    async listPromptsByName(name: string, projectId?: string): Promise<LibraryPromptRef[]> {
+      return localListPromptsByName(name, projectId);
+    },
+
+    /**
+     * The one library prompt named `name`, asserting that it is the only one.
+     *
+     * Throws rather than returning null: every caller is about what a save
+     * wrote, and "there are two prompts of this name now" is a failure of the
+     * claim, not a missing precondition to branch on.
+     */
+    async getPromptByName(name: string, projectId?: string): Promise<LibraryPromptRef> {
+      const matches = await localListPromptsByName(name, projectId);
+      if (matches.length !== 1) {
+        throw new Error(
+          `getPromptByName("${name}") found ${matches.length} prompts, expected exactly 1`,
+        );
+      }
+      return matches[0];
     },
 
     async promptExistsByName(name: string, projectId?: string): Promise<boolean> {

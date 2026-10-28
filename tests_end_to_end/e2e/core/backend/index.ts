@@ -38,6 +38,7 @@ export {
   type TestSuiteRef as BackendTestSuiteRef,
   type TestSuiteItemRef,
   type FeedbackScoreRef,
+  type LibraryPromptRef,
   type PromptVersionRef,
   type SpanCostRef,
   type SpanRef,

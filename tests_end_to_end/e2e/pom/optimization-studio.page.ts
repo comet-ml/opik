@@ -2,6 +2,7 @@ import type { Page, Locator } from '@playwright/test';
 import { test, expect } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 import { TraceLogsSidebarPage } from './trace-logs-sidebar.page';
+import { PromptLibraryMenu } from './prompt-library-menu';
 import { assertAllowedModelDisplayName } from '@e2e/core/llm-model-policy';
 
 export type OptimizerName = 'GEPA optimizer' | 'Hierarchical Reflective';
@@ -120,6 +121,168 @@ export class OptimizationStudioPage {
     await editor.click();
     await editor.fill(content);
     await expect(editor).toContainText(content);
+  }
+
+  // ── the composer's shared message-row prompt library ────────────────────
+  //
+  // The new-run composer is the ONLY surface outside the Playground that mounts
+  // `LLMPromptMessages` with `hidePromptActions` false, so it is the only other
+  // place the per-row Load/Save strip — and the dirty check opik#8759 moved into
+  // `useMessageTextPrompt` — renders at all. (`PromptTemplateEditor`,
+  // `NewBlueprintFieldEditor`, `AgentRunnerPromptCard` and `BlueprintValuePrompt`
+  // all pass `hidePromptActions`, which defaults to true.) Everything in this
+  // group is scoped to `newRunPanel()` for that reason: the identical testids
+  // exist on the Playground's own rows.
+
+  /** One of the composer's message rows, by the role it carries. */
+  composerMessageRow(role: 'system' | 'user'): Locator {
+    return this.newRunPanel().locator(
+      `[data-testid="playground-message-row"][data-role="${role}"]`,
+    );
+  }
+
+  /**
+   * The text one composer row currently holds.
+   *
+   * Read from the CodeMirror content node with its placeholder stripped, the
+   * same way `PlaygroundPage.messageBodies` does: an empty editor renders "Type
+   * your message" as a child element, which `innerText` would hand back as the
+   * row's body.
+   */
+  async composerMessageBody(role: 'system' | 'user'): Promise<string> {
+    return test.step(`Read the composer's ${role} message body`, async () => {
+      return this.promptEditor(role)
+        .first()
+        .evaluate((editor) => {
+          const clone = editor.cloneNode(true) as HTMLElement;
+          clone.querySelectorAll('.cm-placeholder').forEach((node) => node.remove());
+          return (clone.textContent ?? '').trim();
+        });
+    });
+  }
+
+  /**
+   * Type into one composer row and settle once it really holds the new text.
+   *
+   * Resolving on the body rather than on the keystrokes is what makes the dirty
+   * check assertable: `hasUnsavedChanges` is recomputed from the message's
+   * content, so a read taken before the edit has propagated reports the state
+   * before the edit.
+   */
+  async editComposerMessage(role: 'system' | 'user', content: string): Promise<void> {
+    return test.step(`Edit the composer's ${role} message`, async () => {
+      await this.fillMessage(role, content);
+      await expect
+        .poll(async () => this.composerMessageBody(role), { timeout: 10_000 })
+        .toBe(content);
+    });
+  }
+
+  /**
+   * Load one named version of a text prompt into a composer row, through the
+   * row's own library door.
+   *
+   * The popover is the shared `PromptLibraryMenu`, driven from
+   * `pom/prompt-library-menu.ts` — the same driver `PlaygroundPage` uses, so
+   * the hover/retry workarounds the Radix hovercard needs live in one place.
+   * The row is hovered first because the strip holding its Load button is
+   * `invisible group-hover:visible`.
+   *
+   * No type chooser is involved: only `PlaygroundPrompt.tsx` passes
+   * `chooseTemplateStructure`, so this menu opens straight on the list.
+   */
+  async loadTextPromptVersionIntoComposer(
+    role: 'system' | 'user',
+    promptName: string,
+    versionLabel: string,
+  ): Promise<void> {
+    return test.step(
+      `Load text prompt "${promptName}" ${versionLabel} into the composer's ${role} message`,
+      async () => {
+        const row = this.composerMessageRow(role);
+        await row.hover();
+        await row.getByTestId('load-text-prompt-button').click();
+
+        const menu = new PromptLibraryMenu(this.page);
+        await menu.waitForOpen();
+        await menu.selectVersion(promptName, versionLabel);
+      },
+    );
+  }
+
+  /**
+   * The chip `LoadedPromptDisplay` puts on a row once a library prompt is
+   * linked to it, addressed by that prompt's name.
+   */
+  composerLoadedPromptChip(role: 'system' | 'user', promptName: string): Locator {
+    return this.composerMessageRow(role).getByText(promptName, { exact: true });
+  }
+
+  /**
+   * Settle on the row really showing that prompt's chip.
+   *
+   * The hover is re-applied on every attempt, for the reason
+   * `PlaygroundPage.waitForLoadedPromptVersionInMessage` records: the strip
+   * holding the chip is `invisible group-hover:visible`, so it is on screen only
+   * while the cursor is over the row — and applying a loaded prompt REBUILDS
+   * the row as fresh DOM. A single `hover()` is one synthetic mouse move, so
+   * once the node under the cursor has been replaced nothing re-fires it and a
+   * plain `toBeVisible()` waits out its whole timeout watching an element it
+   * can never un-hide.
+   */
+  async expectComposerPromptChip(role: 'system' | 'user', promptName: string): Promise<void> {
+    return test.step(`Assert the composer's ${role} row is linked to "${promptName}"`, async () => {
+      const chip = this.composerLoadedPromptChip(role, promptName);
+      await expect
+        .poll(
+          async () => {
+            await this.composerMessageRow(role).hover();
+            return chip.isVisible();
+          },
+          {
+            timeout: 30_000,
+            intervals: [250, 500, 1_000],
+            message: `the ${role} row never showed a chip for "${promptName}"`,
+          },
+        )
+        .toBe(true);
+    });
+  }
+
+  /**
+   * The amber dot the chip grows when the row no longer matches the version it
+   * was loaded from.
+   *
+   * The same class-scoped selector, and the same last-resort reasoning, as
+   * `PlaygroundPage.unsavedChangesDot`: the dot is a bare decorative `<span>`
+   * with no text, no role and no testid, and these specs run against a deployed
+   * Opik. `composerSaveTooltipText` asserts the same `saveWarning` flag through
+   * an independent text handle, so a renamed utility class surfaces as the two
+   * disagreeing rather than as a silent pass.
+   */
+  composerUnsavedChangesDot(role: 'system' | 'user'): Locator {
+    return this.composerMessageRow(role).locator('span.rounded-full.bg-warning');
+  }
+
+  /**
+   * Hover a composer row's save-to-library button and read its tooltip.
+   *
+   * The user-readable half of the same flag the dot renders: "Save as text
+   * prompt" while the row still matches its loaded version, "This prompt
+   * version hasn't been saved" once it does not. Radix portals the content out
+   * of the row, so it is read at page scope.
+   */
+  async composerSaveTooltipText(role: 'system' | 'user'): Promise<string> {
+    return test.step(`Read the composer's ${role} row save tooltip`, async () => {
+      const row = this.composerMessageRow(role);
+      await row.hover();
+      const save = row.getByTestId('save-text-prompt-button');
+      await expect(save, 'the row offers a save-to-library button').toHaveCount(1);
+      await save.hover();
+      const tooltip = this.page.getByRole('tooltip');
+      await expect(tooltip.first()).toBeVisible({ timeout: 10_000 });
+      return (await tooltip.first().innerText()).trim();
+    });
   }
 
   async selectModel(displayName: string): Promise<void> {

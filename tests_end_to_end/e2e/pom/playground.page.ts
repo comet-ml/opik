@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import type { Page, Locator } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 import { assertAllowedModelDisplayName } from '@e2e/core/llm-model-policy';
+import { PromptLibraryMenu } from './prompt-library-menu';
 import { readRecordedToasts, startRecordingToasts } from './toast-recorder';
 
 export type RunExperimentSourceMode = 'dataset' | 'test_suite';
@@ -1861,51 +1862,21 @@ export class PlaygroundPage {
    * Open the prompt library menu in the first variant card, hover the named prompt
    * to reveal the version submenu, and click the specified version label (e.g. "v1").
    *
-   * Two things here are worked around rather than waited on, and neither is a
-   * product defect — a human moving a mouse continuously hits neither:
-   *
-   * 1. The row list REMOUNTS when the search result lands, so a pointer already
-   *    parked over the row raises no fresh `pointerenter` and the Radix
-   *    `HoverCard` (`openDelay: 120`) never opens. The pointer is moved away and
-   *    the row hovered again until the submenu is really up.
-   * 2. The HoverCard content ANIMATES in, and a real click has to walk the
-   *    pointer off the trigger to reach it — so Playwright's actionability check
-   *    never settles and `click()` times out. The click is dispatched on the
-   *    version row instead.
+   * The popover driver itself lives in `pom/prompt-library-menu.ts`: the same
+   * menu is reached from the Optimization Studio composer, which has no page
+   * object in common with this one, and the hover/retry dance it needs was
+   * being restated verbatim there. Behaviour is unchanged — this is the same
+   * code, moved.
    */
   private async navigateLibraryMenuToVersion(promptName: string, versionLabel: string): Promise<void> {
-    const menu = this.page.getByTestId('prompt-library-menu');
-    await menu.waitFor({ state: 'visible' });
+    const menu = this.promptLibraryMenu();
+    await menu.waitForOpen();
+    await menu.selectVersion(promptName, versionLabel);
+  }
 
-    await menu.getByPlaceholder('Search').fill(promptName);
-
-    const promptRow = menu.getByRole('button').filter({ hasText: promptName }).first();
-    await promptRow.waitFor({ state: 'visible' });
-
-    const versionSubmenu = this.page.getByTestId('prompt-versions-submenu');
-
-    const versionRow = versionSubmenu
-      .getByRole('button')
-      .filter({ has: this.page.getByText(versionLabel, { exact: true }) });
-
-    // The hover, the count check and the click are retried as a GROUP, and the
-    // search above is not: `PromptsSelectBox` mounts the menu with
-    // `refetchOnMount`, so the list can re-render under the cursor and detach
-    // the version submenu between opening it and clicking into it. Re-hovering
-    // re-opens it against the row that is mounted now; re-filling the search
-    // box would reset the list and lose the hover that opens the submenu at
-    // all. The mouse is parked first so each re-hover is a real pointer move.
-    await expect(async () => {
-      await this.page.mouse.move(0, 0);
-      await promptRow.hover();
-      await expect(versionSubmenu).toBeVisible({ timeout: 2_000 });
-      // Exactly one, not `.first()`: an ambiguous match would silently load a
-      // version the caller did not ask for.
-      await expect(versionRow, `version "${versionLabel}" of "${promptName}"`).toHaveCount(1, {
-        timeout: 2_000,
-      });
-      await versionRow.dispatchEvent('click');
-    }).toPass({ timeout: 20_000 });
+  /** The shared library popover, whichever door opened it. */
+  promptLibraryMenu(): PromptLibraryMenu {
+    return new PromptLibraryMenu(this.page);
   }
 
   async loadPromptVersionFromLibrary(promptName: string, versionLabel: string): Promise<void> {
@@ -1947,6 +1918,149 @@ export class PlaygroundPage {
       await messageRow.getByTestId('load-text-prompt-button').click();
 
       await this.navigateLibraryMenuToVersion(promptName, versionLabel);
+    });
+  }
+
+  // ── the variant HEADER's own Load and Save (opik#8759) ──────────────────
+  //
+  // A different door from the message-row controls above, and the distinction
+  // is the whole point of the methods here: the row's Load replaces ONE
+  // message, while the header's Text branch (`handleImportTextPrompt`) replaces
+  // every message in the card with one. `loadTextPromptVersionFromLibrary`
+  // reaches the former; nothing reached the latter before these.
+  //
+  // Every control in the header strip is behind the card's own hover: the strip
+  // is `max-w-0 … group-hover/prompt:max-w-none` under `@media(hover:hover)`,
+  // which a desktop Chromium matches, so its buttons have a zero-width box and
+  // read as not visible until the card is hovered. That is why each method here
+  // hovers the card before addressing anything in it, and why none of them
+  // parks the mouse away first.
+
+  /**
+   * The header's library trigger — present whether or not it is enabled, since
+   * `hasNoSavedPrompts` swaps the `PromptLibraryMenu` for a disabled Button
+   * carrying the same testid. Public because the empty-library case is about
+   * the button's own disabled state rather than about clicking it.
+   */
+  headerLoadButton(variantIndex = 0): Locator {
+    return this.variantCard(variantIndex).getByTestId('load-prompt-button');
+  }
+
+  /** Hover the header's Load and read the reason it gives. */
+  async headerLoadTooltipText(variantIndex = 0): Promise<string> {
+    return test.step(`read variant ${variantIndex}'s header Load tooltip`, async () => {
+      await this.variantCard(variantIndex).hover();
+      return this.hoverAndReadTooltip(this.headerLoadButton(variantIndex));
+    });
+  }
+
+  /** The header's save-to-library trigger. */
+  headerSaveButton(variantIndex = 0): Locator {
+    return this.variantCard(variantIndex).getByTestId('playground-save-prompt-button');
+  }
+
+  /**
+   * Hover the header's Save and read its tooltip.
+   *
+   * The tooltip is the user-visible half of `savesAsTextPrompt` — the flag that
+   * decides which TYPE the save writes — so it is the only place a user can see
+   * which branch they are about to take before they take it. Three states, in
+   * precedence order: the unsaved-changes warning, "Save as text prompt", "Save
+   * as chat prompt".
+   */
+  async headerSaveTooltipText(variantIndex = 0): Promise<string> {
+    return test.step(`read variant ${variantIndex}'s header Save tooltip`, async () => {
+      await this.variantCard(variantIndex).hover();
+      return this.hoverAndReadTooltip(this.headerSaveButton(variantIndex));
+    });
+  }
+
+  /**
+   * Open the header's library menu and hand back the popover driver.
+   *
+   * Deliberately does NOT dismiss a type choice: whether the menu asks for one
+   * is a fact about the project's library that callers assert, and a helper that
+   * clicked through it would be the tolerance
+   * `chooseChatPromptsInLibraryMenu` has to carry for the shared workspace.
+   */
+  async openHeaderLibraryMenu(variantIndex = 0): Promise<PromptLibraryMenu> {
+    return test.step(`open variant ${variantIndex}'s header library menu`, async () => {
+      await this.variantCard(variantIndex).hover();
+      await this.headerLoadButton(variantIndex).click();
+      const menu = this.promptLibraryMenu();
+      await menu.waitForOpen();
+      return menu;
+    });
+  }
+
+  /**
+   * Load one named prompt's LATEST version through the variant header.
+   *
+   * The library's own type decides which branch the app takes — a text prompt
+   * collapses the card to one message, a chat prompt replaces its messages —
+   * so this method does not take a type and must not assert one: which
+   * happened is what the caller is checking.
+   */
+  async loadPromptFromHeader(promptName: string, variantIndex = 0): Promise<void> {
+    return test.step(`load "${promptName}" through variant ${variantIndex}'s header`, async () => {
+      const menu = await this.openHeaderLibraryMenu(variantIndex);
+      await menu.selectPrompt(promptName);
+    });
+  }
+
+  /**
+   * Remove one message row through its own Remove button.
+   *
+   * By its icon, like `detachLoadedPrompt` and for the same reason: the button
+   * is icon-only with no testid and no accessible name (its label is a Radix
+   * `TooltipContent`), and these specs run against a deployed Opik where an
+   * attribute added alongside them would not exist. The trailing group is
+   * [Remove, Duplicate] and both are `lucide` icons, so the tooltip is read and
+   * asserted BEFORE the click — a layout change then fails loudly here instead
+   * of silently duplicating the row it meant to delete.
+   *
+   * Resolves only once the card really holds one row fewer, so a caller reading
+   * the card "after the removal" cannot read it before.
+   */
+  async removeMessageAt(messageIndex: number, variantIndex = 0): Promise<void> {
+    return test.step(`remove message ${messageIndex} of variant ${variantIndex}`, async () => {
+      const before = await this.messageRows(variantIndex).count();
+      const row = this.messageRowAt(messageIndex, variantIndex);
+      await row.hover();
+      const remove = row.locator('button:has(svg.lucide-trash)');
+      await expect(remove, "the row's own Remove control").toHaveCount(1);
+      expect(
+        await this.hoverAndReadTooltip(remove),
+        'the button being clicked is Remove and not Duplicate',
+      ).toBe('Remove message');
+      await remove.click();
+      await expect(this.messageRows(variantIndex)).toHaveCount(before - 1);
+    });
+  }
+
+  /**
+   * One variant card's message bodies, in render order.
+   *
+   * Card-scoped, where {@link messageBodies} reads every card on the page: a
+   * spec about what a load did to ONE card must not have its answer widened by
+   * a second card's rows, and the header's Text load is precisely a gesture
+   * that changes how many rows a card has.
+   *
+   * The CodeMirror placeholder node is excluded for the same reason it is in
+   * {@link messageBodies} — `innerText` would report "Type your message" as the
+   * body of an empty row.
+   */
+  async variantMessageBodies(variantIndex = 0): Promise<string[]> {
+    return test.step(`read variant ${variantIndex}'s message bodies`, async () => {
+      return this.messageRows(variantIndex)
+        .locator('.cm-content')
+        .evaluateAll((editors) =>
+          editors.map((editor) => {
+            const clone = editor.cloneNode(true) as HTMLElement;
+            clone.querySelectorAll('.cm-placeholder').forEach((node) => node.remove());
+            return (clone.textContent ?? '').trim();
+          }),
+        );
     });
   }
 
@@ -2452,16 +2566,34 @@ export class PlaygroundPage {
   }
 
   /**
+   * Click the variant HEADER's Save and submit the "Save to prompt library"
+   * dialog in "Save as new" mode under the given name.
+   *
+   * Type-neutral on purpose, and that is the whole point of it existing beside
+   * {@link saveNewChatPromptToLibrary}: one button, and since opik#8759 two
+   * destinations — `handleSavePrompt` opens the text dialog or the chat one
+   * according to `savesAsTextPrompt`, which the card's own shape decides. A
+   * spec about WHICH type a save wrote cannot drive it through a method whose
+   * name has already answered that.
+   */
+  async saveNewPromptFromHeader(promptName: string): Promise<void> {
+    return test.step(`save new prompt "${promptName}" to library from the variant header`, async () => {
+      await this.variantCard(0).hover();
+      await this.headerSaveButton(0).click();
+      await this.submitSaveDialog(promptName);
+    });
+  }
+
+  /**
    * Click the Save button in variant 0 and submit the "Save to prompt library"
    * dialog in "Save as new" mode — for prompts NOT imported from the library.
    * Fills the given name and clicks "Save to library".
+   *
+   * Kept as the name its existing callers use; the gesture is the one
+   * {@link saveNewPromptFromHeader} performs.
    */
   async saveNewChatPromptToLibrary(promptName: string): Promise<void> {
-    return test.step(`save new chat prompt "${promptName}" to library from Playground`, async () => {
-      await this.variantCard(0).hover();
-      await this.page.getByTestId('playground-save-prompt-button').click();
-      await this.submitSaveDialog(promptName);
-    });
+    return this.saveNewPromptFromHeader(promptName);
   }
 
   /**
