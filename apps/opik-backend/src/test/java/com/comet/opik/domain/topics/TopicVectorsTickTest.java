@@ -463,19 +463,23 @@ class TopicVectorsTickTest {
     }
 
     @Test
-    @DisplayName("a done status without an output row is skipped and counted, the rest written")
-    void missingOutputRow() {
+    @DisplayName("done statuses without an output row or with a blank summary are not found or counted; the rest are "
+            + "written")
+    void unusableSummaries() {
         var workspaceId = enabledWorkspace();
         var projectId = UUID.randomUUID();
-        var traceIds = labelTraces(workspaceId, projectId, 2, 1);
         var withoutOutput = ID_GENERATOR.generateId();
         statusDAO.insert(List.of(doneStatus(workspaceId, projectId, withoutOutput, 1))).block();
+        var blank = ID_GENERATOR.generateId();
+        labelsDAO.insert(List.of(outputLabel(workspaceId, projectId, blank, 1, " \t\n"))).block();
+        statusDAO.insert(List.of(doneStatus(workspaceId, projectId, blank, 1))).block();
+        var traceIds = labelTraces(workspaceId, projectId, 2, 1);
 
         var result = tickService.tick(Instant.now());
 
         assertThat(result.written()).isEqualTo(2);
-        assertThat(result.skipped()).isEqualTo(Map.of(TopicVectorsTickService.MISSING_SUMMARY, 1));
-        assertThat(vectors(workspaceId, List.of(withoutOutput))).isEmpty();
+        assertThat(result.skipped()).isEmpty();
+        assertThat(vectors(workspaceId, List.of(withoutOutput, blank))).isEmpty();
         assertThat(vectors(workspaceId, traceIds)).hasSize(2);
     }
 
@@ -648,6 +652,8 @@ class TopicVectorsTickTest {
             var traceId = ID_GENERATOR.generateId();
             var failedTraceId = ID_GENERATOR.generateId();
             var status = doneStatus(workspaceId, projectId, traceId, 3);
+            labelsDAO.insert(List.of(outputLabel(workspaceId, projectId, traceId, 3),
+                    outputLabel(workspaceId, projectId, failedTraceId, 3))).block();
             statusDAO.insert(List.of(status)).block();
             // Done, then failed: its latest row is not done.
             statusDAO.insert(List.of(doneStatus(workspaceId, projectId, failedTraceId, 3))).block();
@@ -668,6 +674,7 @@ class TopicVectorsTickTest {
 
             assertThat(findUnvectored(workspaceId, lower)).isEmpty();
             // Another version of the same trace still needs its own vector.
+            labelsDAO.insert(List.of(outputLabel(workspaceId, projectId, traceId, 4))).block();
             statusDAO.insert(List.of(doneStatus(workspaceId, projectId, traceId, 4))).block();
             assertThat(findUnvectored(workspaceId, lower)).extracting(TopicVectorCandidate::taskVersion)
                     .containsExactly(4);
@@ -683,6 +690,8 @@ class TopicVectorsTickTest {
             var inside = ID_GENERATOR.generateId();
             var insideCreatedAt = createdAfter.plus(1, ChronoUnit.HOURS);
             var outside = ID_GENERATOR.generateId();
+            labelsDAO.insert(List.of(outputLabel(workspaceId, projectId, inside, 1),
+                    outputLabel(workspaceId, projectId, outside, 1))).block();
             statusDAO.insert(List.of(
                     doneStatus(workspaceId, projectId, inside, 1).toBuilder().traceCreatedAt(insideCreatedAt).build(),
                     doneStatus(workspaceId, projectId, outside, 1).toBuilder()
@@ -704,6 +713,31 @@ class TopicVectorsTickTest {
             statusDAO.insert(List.of(doneStatus(workspaceId, projectId, inside, 1).toBuilder()
                     .traceCreatedAt(insideCreatedAt).build())).block();
             assertThat(findUnvectored(workspaceId, lower, createdAfter)).isEmpty();
+        }
+
+        @Test
+        @DisplayName("statuses without a usable summary don't take the LIMIT: an older blank, missing or "
+                + "other-version output leaves room for a newer usable one")
+        void unusableSummariesBeforeLimit() {
+            var workspaceId = UUID.randomUUID().toString();
+            var projectId = UUID.randomUUID();
+            var blank = ID_GENERATOR.generateId();
+            var missing = ID_GENERATOR.generateId();
+            var otherVersion = ID_GENERATOR.generateId();
+            var usable = ID_GENERATOR.generateId();
+            labelsDAO.insert(List.of(outputLabel(workspaceId, projectId, blank, 1, "   "),
+                    outputLabel(workspaceId, projectId, otherVersion, 2),
+                    outputLabel(workspaceId, projectId, usable, 1))).block();
+            var oldest = Instant.now().minus(30, ChronoUnit.MINUTES);
+            insertStatusAt(workspaceId, projectId, blank, 1, oldest);
+            insertStatusAt(workspaceId, projectId, missing, 1, oldest.plusSeconds(1));
+            insertStatusAt(workspaceId, projectId, otherVersion, 1, oldest.plusSeconds(2));
+            insertStatusAt(workspaceId, projectId, usable, 1, oldest.plusSeconds(3));
+
+            var found = vectorsDAO.findUnvectored(workspaceId, TASK, Instant.now().minus(1, ChronoUnit.HOURS),
+                    Instant.now(), Instant.EPOCH, 1, 10).collectList().block();
+
+            assertThat(found).extracting(TopicVectorCandidate::traceId).containsExactly(usable);
         }
 
         @Test
@@ -729,22 +763,26 @@ class TopicVectorsTickTest {
         }
 
         @Test
-        @DisplayName("the trace-delete event deletes the traces' vectors and leaves other traces and workspaces")
+        @DisplayName("the trace-delete event deletes the traces' vectors and leaves other traces, projects and workspaces")
         void traceDeleteCascade() {
             var workspaceId = UUID.randomUUID().toString();
             var otherWorkspaceId = UUID.randomUUID().toString();
             var projectId = UUID.randomUUID();
+            var otherProjectId = UUID.randomUUID();
             var deleted = ID_GENERATOR.generateId();
             var kept = ID_GENERATOR.generateId();
             vectorsDAO.insert(List.of(vector(workspaceId, projectId, deleted, 1),
                     vector(workspaceId, projectId, kept, 1),
+                    vector(workspaceId, otherProjectId, deleted, 1),
                     vector(otherWorkspaceId, projectId, deleted, 1))).block();
 
             eventBus.post(new TracesDeleted(Set.of(deleted), projectId, workspaceId, "user"));
 
+            // The same trace id under another project of the workspace keeps its vector.
             Awaitility.await().atMost(30, TimeUnit.SECONDS).pollInterval(Duration.ofMillis(300))
                     .untilAsserted(() -> assertThat(vectors(workspaceId, Set.of(deleted, kept)))
-                            .extracting(TopicVector::traceId).containsExactly(kept));
+                            .extracting(TopicVector::projectId, TopicVector::traceId)
+                            .containsExactlyInAnyOrder(tuple(projectId, kept), tuple(otherProjectId, deleted)));
             assertThat(vectors(otherWorkspaceId, List.of(deleted))).hasSize(1);
         }
 
@@ -943,7 +981,12 @@ class TopicVectorsTickTest {
     }
 
     private static AiLabel outputLabel(String workspaceId, UUID projectId, UUID traceId, int taskVersion) {
-        var output = InferenceJson.MAPPER.createObjectNode().put("summary", summaryOf(traceId, taskVersion));
+        return outputLabel(workspaceId, projectId, traceId, taskVersion, summaryOf(traceId, taskVersion));
+    }
+
+    private static AiLabel outputLabel(String workspaceId, UUID projectId, UUID traceId, int taskVersion,
+            String summary) {
+        var output = InferenceJson.MAPPER.createObjectNode().put("summary", summary);
         return AiLabel.builder()
                 .workspaceId(workspaceId)
                 .projectId(projectId)
