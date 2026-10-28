@@ -23,14 +23,55 @@ export const getModelParams = (
   if (!hasLatestModelList(provider)) {
     return undefined;
   }
-  const params =
-    getLatestListedModelParams(provider, model) ??
-    getLatestProviderProfile(provider);
-  return (route ? params?.routes?.[route] : undefined) ?? params;
+  const profile = getLatestProviderProfile(provider);
+  const params = getLatestListedModelParams(provider, model) ?? profile;
+  const routed = (route ? params?.routes?.[route] : undefined) ?? params;
+  return (
+    routed &&
+    withSamplingRanges(
+      routed,
+      (route ? profile?.routes?.[route] : undefined) ?? profile,
+    )
+  );
 };
+
+// The backend serves a refused param without its range, but sampling that comes back at effort none
+// still needs one for the slider shown then, so it takes the provider profile's.
+const withSamplingRanges = (
+  params: ModelParams,
+  profile?: ModelParams,
+): ModelParams =>
+  params.sampling_at_effort_none && profile
+    ? {
+        ...params,
+        temperature: params.temperature && {
+          ...profile.temperature,
+          ...params.temperature,
+        },
+        top_p: params.top_p && { ...profile.top_p, ...params.top_p },
+      }
+    : params;
 
 export const isAccepted = (param?: { accepted?: boolean }): boolean =>
   param?.accepted === true;
+
+// OpenAI: "When reasoning effort is not none, remove temperature, top_p, and top_logprobs". So a model
+// whose catalog says so takes both back while it runs at none, as ParamResolver does. The effort is the
+// one the request sends, which is only ever a level the model offers.
+const takesSampling = (
+  param: NumberParam | undefined,
+  params: ModelParams,
+  effort: string | undefined,
+): boolean =>
+  isAccepted(param) ||
+  (params.sampling_at_effort_none === true && effort === "none");
+
+export const refusesSamplingAt = (
+  params: ModelParams,
+  effort: string | undefined,
+): boolean =>
+  params.sampling_at_effort_none === true &&
+  !takesSampling(params.temperature, params, effort);
 
 export const getEffortLevels = (effort?: EffortParam): string[] =>
   isAccepted(effort) ? effort?.levels ?? [] : [];
@@ -122,12 +163,15 @@ export type SamplingValues = { temperature?: number; topP?: number };
 export const resolveSampling = (
   params: ModelParams,
   configs: { temperature?: number | null; topP?: number | null },
+  effort?: string,
 ): SamplingValues => {
-  const takesTemperature = isAccepted(params.temperature);
+  const takesTemperature = takesSampling(params.temperature, params, effort);
   const temperature = takesTemperature
     ? configs.temperature ?? undefined
     : undefined;
-  const topP = isAccepted(params.top_p) ? configs.topP ?? undefined : undefined;
+  const topP = takesSampling(params.top_p, params, effort)
+    ? configs.topP ?? undefined
+    : undefined;
 
   if (!params.sampling_exclusive) {
     return {
@@ -212,10 +256,13 @@ export const getParamControls = (
   const numberControl = (param: NumberParamName): NumberControl | undefined => {
     const configKey = shownKey(param);
     const spec = params[param];
+    const backAtEffortNone =
+      params.sampling_at_effort_none === true &&
+      (param === "temperature" || param === "top_p");
     if (
       !configKey ||
       !spec ||
-      !isAccepted(spec) ||
+      !(isAccepted(spec) || backAtEffortNone) ||
       spec.min === undefined ||
       spec.max === undefined
     ) {

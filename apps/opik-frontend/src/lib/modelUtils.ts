@@ -756,10 +756,21 @@ export const getOpenAIEffortLevels = (
 
 export const resolveOpenAIEffort = (
   params: ModelParams,
-  stored: unknown,
+  ...stored: unknown[]
 ): OpenAIReasoningEffort | undefined =>
   toOpenAIReasoningEffort(
-    resolveEffortLevel(params.effort, [stored], getOpenAIEffortLevels(params)),
+    resolveEffortLevel(params.effort, stored, getOpenAIEffortLevels(params)),
+  );
+
+// The form's pick, else the effort a judge rule saved under custom_parameters.
+export const resolveOpenAIConfigEffort = (
+  params: ModelParams,
+  configs: EffortParams,
+): OpenAIReasoningEffort | undefined =>
+  resolveOpenAIEffort(
+    params,
+    configs.reasoningEffort,
+    getCustomParametersReasoningEffort(configs.custom_parameters),
   );
 
 export const supportsOpenAIReasoningEffort = (
@@ -1166,7 +1177,11 @@ export const resolveSamplingParams = (
   if (provider === PROVIDER_TYPE.OPEN_AI) {
     const params = getOpenAIListedParams(model);
     if (params) {
-      return resolveSampling(params, configs);
+      return resolveSampling(
+        params,
+        configs,
+        resolveOpenAIConfigEffort(params, configs),
+      );
     }
   }
 
@@ -1276,10 +1291,7 @@ export const resolveEffort = (
   if (provider === PROVIDER_TYPE.OPEN_AI) {
     const params = getOpenAIListedParams(model, openAiPipelineMode);
     if (params) {
-      const reasoningEffort = resolveOpenAIEffort(
-        params,
-        configs.reasoningEffort,
-      );
+      const reasoningEffort = resolveOpenAIConfigEffort(params, configs);
       return reasoningEffort ? { reasoningEffort } : {};
     }
     const options = getOpenAIReasoningEffortOptions(model, openAiPipelineMode);
@@ -1521,10 +1533,14 @@ export const writeOpenAIRequest = (
   configs: Record<string, unknown>,
   params: ModelParams,
 ): Record<string, unknown> => {
+  const reasoningEffort = resolveOpenAIConfigEffort(
+    params,
+    configs as EffortParams,
+  );
   const sanitized = writeCatalogRequest(
     configs,
     params,
-    resolveSampling(params, configs as SamplingParams),
+    resolveSampling(params, configs as SamplingParams, reasoningEffort),
   );
 
   if (!isAccepted(params.frequency_penalty)) {
@@ -1534,7 +1550,6 @@ export const writeOpenAIRequest = (
     delete sanitized.presencePenalty;
   }
 
-  const reasoningEffort = resolveOpenAIEffort(params, configs.reasoningEffort);
   if (reasoningEffort) {
     sanitized.reasoningEffort = reasoningEffort;
   }

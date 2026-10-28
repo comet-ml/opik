@@ -26,6 +26,7 @@ export type ModelParams = {
   seed?: FlagParam;
   effort?: EffortParam;
   sampling_exclusive?: boolean;
+  sampling_at_effort_none?: boolean;
   thinks_by_default?: boolean;
   routes?: Record<string, ModelParams>;
 };
