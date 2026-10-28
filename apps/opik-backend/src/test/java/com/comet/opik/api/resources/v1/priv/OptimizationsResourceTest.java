@@ -1419,6 +1419,98 @@ class OptimizationsResourceTest {
         }
 
         /**
+         * The list is paged before its per-run aggregates, but the tagged-cost project bound must not be: run X's
+         * tagged trace is stored in run Y's project, so X's spend is found only when Y's project is in the bound.
+         * Bounding on the page instead would charge X on a page that also holds Y and read it as free on a page
+         * that does not. With a trial on Y the list takes {@code FIND}, without one {@code FIND_WITHOUT_EXPERIMENTS}.
+         */
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        @DisplayName("Tagged cost in another run's project does not depend on the page")
+        void find__whenTaggedTraceIsInAnotherRunsProject__costDoesNotDependOnThePage(boolean withTrial) {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var datasetName = "paged-tag-scope-test-" + UUID.randomUUID();
+            var datasetId = datasetResourceClient.createDataset(
+                    Dataset.builder().name(datasetName).build(), apiKey, workspaceName);
+
+            Project projectY = podamFactory.manufacturePojo(Project.class);
+            projectResourceClient.createProject(projectY, apiKey, workspaceName);
+            Project projectX = podamFactory.manufacturePojo(Project.class);
+            projectResourceClient.createProject(projectX, apiKey, workspaceName);
+
+            var optimizationYId = optimizationResourceClient.create(
+                    optimizationResourceClient.createPartialOptimization()
+                            .datasetId(datasetId)
+                            .datasetName(datasetName)
+                            .projectName(projectY.name())
+                            .build(),
+                    apiKey, workspaceName);
+            if (withTrial) {
+                createTrialWithUnfinishedTraceItem(optimizationYId, true, apiKey, workspaceName);
+            }
+
+            // Created last, so X alone fills a page of size 1.
+            var optimizationXId = optimizationResourceClient.create(
+                    optimizationResourceClient.createPartialOptimization()
+                            .datasetId(datasetId)
+                            .datasetName(datasetName)
+                            .projectName(projectX.name())
+                            .build(),
+                    apiKey, workspaceName);
+
+            Trace taggedTrace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(projectY.id())
+                    .projectName(projectY.name())
+                    .startTime(Instant.now().minusSeconds(2))
+                    .endTime(Instant.now().minusSeconds(1))
+                    .tags(Set.of(optimizationXId.toString()))
+                    .guardrailsValidations(null)
+                    .threadId(null)
+                    .feedbackScores(null)
+                    .usage(null)
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(taggedTrace), apiKey, workspaceName);
+
+            var expectedCost = BigDecimal.valueOf(0.07);
+            Span span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectId(projectY.id())
+                    .projectName(projectY.name())
+                    .traceId(taggedTrace.id())
+                    .parentSpanId(null)
+                    .startTime(Instant.now().minusSeconds(2))
+                    .endTime(Instant.now().minusSeconds(1))
+                    .totalEstimatedCost(expectedCost)
+                    .feedbackScores(null)
+                    .build();
+            spanResourceClient.batchCreateSpans(List.of(span), apiKey, workspaceName);
+
+            await().atMost(10, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var pageWithBoth = optimizationResourceClient.find(
+                                apiKey, workspaceName, 1, 10, datasetId, null, null, 200);
+                        var pageWithXOnly = optimizationResourceClient.find(
+                                apiKey, workspaceName, 1, 1, datasetId, null, null, 200);
+
+                        var actualXWithBoth = pageWithBoth.content().stream()
+                                .filter(optimization -> optimization.id().equals(optimizationXId))
+                                .findFirst()
+                                .orElseThrow();
+                        assertThat(actualXWithBoth.totalOptimizationCost()).isEqualByComparingTo(expectedCost);
+
+                        assertThat(pageWithXOnly.content()).hasSize(1);
+                        var actualXOnly = pageWithXOnly.content().getFirst();
+                        assertThat(actualXOnly.id()).isEqualTo(optimizationXId);
+                        assertThat(actualXOnly.totalOptimizationCost()).isEqualByComparingTo(expectedCost);
+                    });
+        }
+
+        /**
          * Tagged attribution is scoped to the projects of the runs in scope, on the traces read and on the spans read
          * alike. A run created with neither {@code project_id} nor {@code project_name} resolves to no project at
          * all, so that set is empty for it and there is no tagged spend to find - its cost stays trial-only, which

@@ -554,7 +554,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
      *
      * <p><b>{@code optimization_tagged_costs}</b> prunes the spans scan on {@code project_id} because
      * {@code trace_id} is only the third primary-key column. That project set comes from
-     * {@code optimization_final} rather than from {@code optimization_tagged_traces}: ClickHouse substitutes
+     * {@code optimization_scope} rather than from {@code optimization_tagged_traces}: ClickHouse substitutes
      * CTEs textually, so naming the trace CTE there would re-run its scan. Reading {@code optimizations} is
      * cheap by comparison, and a superset of the candidate projects is all a prefix prune needs; the
      * authoritative filter is the {@code trace_id IN} beside it.
@@ -568,9 +568,11 @@ class OptimizationDAOImpl implements OptimizationDAO {
      * <p>The page is cut in {@code optimization_final}, not on the outer select, in both projections. Every
      * downstream CTE is keyed per optimization, so the result is the same, but paging late made them run for
      * every optimization in scope: a project with ~2.2k runs read ~93M rows and took ~30 s for a 100-row page.
+     * The tagged-cost project bounds are the exception and read the unpaged {@code optimization_scope}: a run's
+     * tagged trace stored in another run's project must not depend on whether that run is on the same page.
      */
     private static final String FIND = """
-            WITH optimization_final AS (
+            WITH optimization_scope AS (
                 SELECT
                     *
                 FROM (
@@ -589,6 +591,9 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 <if(dataset_deleted)>AND dataset_deleted = :dataset_deleted<endif>
                 <if(studio_only)>AND studio_config != ''<endif>
                 <if(filters)>AND <filters><endif>
+            ), optimization_final AS (
+                SELECT *
+                FROM optimization_scope
                 ORDER BY id DESC
                 <if(limit)> LIMIT :limit <endif> <if(offset)> OFFSET :offset <endif>
             ), experiments_final AS (
@@ -900,7 +905,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     SELECT id AS trace_id, project_id, tags
                     FROM traces
                     WHERE workspace_id = :workspace_id
-                    AND project_id IN (SELECT project_id FROM optimization_final WHERE notEmpty(project_id))
+                    AND project_id IN (SELECT project_id FROM optimization_scope WHERE notEmpty(project_id))
                     <if(traces_partitioned)>AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                         >= (
                             SELECT subtractWeeks(
@@ -930,7 +935,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                         SELECT workspace_id, project_id, trace_id, id, total_estimated_cost, last_updated_at
                         FROM spans
                         WHERE workspace_id = :workspace_id
-                        AND project_id IN (SELECT project_id FROM optimization_final WHERE notEmpty(project_id))
+                        AND project_id IN (SELECT project_id FROM optimization_scope WHERE notEmpty(project_id))
                         AND trace_id IN (SELECT trace_id FROM optimization_tagged_traces)
                         <if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT id_week FROM span_weeks WHERE workspace_id = :workspace_id AND trace_id IN (SELECT trace_id FROM optimization_tagged_traces))<endif>
                         ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
@@ -1029,7 +1034,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
      * before that column existed.
      */
     private static final String FIND_WITHOUT_EXPERIMENTS = """
-            WITH optimization_final AS (
+            WITH optimization_scope AS (
                 SELECT
                     *
                 FROM (
@@ -1048,6 +1053,9 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 <if(dataset_deleted)>AND dataset_deleted = :dataset_deleted<endif>
                 <if(studio_only)>AND studio_config != ''<endif>
                 <if(filters)>AND <filters><endif>
+            ), optimization_final AS (
+                SELECT *
+                FROM optimization_scope
                 ORDER BY id DESC
                 <if(limit)> LIMIT :limit <endif> <if(offset)> OFFSET :offset <endif>
             ), optimization_tagged_traces AS (
@@ -1058,7 +1066,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     SELECT id AS trace_id, project_id, tags
                     FROM traces
                     WHERE workspace_id = :workspace_id
-                    AND project_id IN (SELECT project_id FROM optimization_final WHERE notEmpty(project_id))
+                    AND project_id IN (SELECT project_id FROM optimization_scope WHERE notEmpty(project_id))
                     <if(traces_partitioned)>AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                         >= (
                             SELECT subtractWeeks(
@@ -1083,7 +1091,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                         SELECT workspace_id, project_id, trace_id, id, total_estimated_cost, last_updated_at
                         FROM spans
                         WHERE workspace_id = :workspace_id
-                        AND project_id IN (SELECT project_id FROM optimization_final WHERE notEmpty(project_id))
+                        AND project_id IN (SELECT project_id FROM optimization_scope WHERE notEmpty(project_id))
                         AND trace_id IN (SELECT trace_id FROM optimization_tagged_traces)
                         <if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT id_week FROM span_weeks WHERE workspace_id = :workspace_id AND trace_id IN (SELECT trace_id FROM optimization_tagged_traces))<endif>
                         ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
