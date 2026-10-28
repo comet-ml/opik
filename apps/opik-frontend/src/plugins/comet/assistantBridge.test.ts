@@ -216,6 +216,39 @@ describe("assistantBridge — chart editing capability", () => {
     });
     expect(bridge.canEditChart!()).toBe(true);
   });
+
+  it("offers Duplicate in Ollie only to a console that handles the duplicate flag", () => {
+    const bridge = createBridge(makeRefs(createHostListeners()));
+
+    // A v5 console edits charts but drops `duplicate`: its card would save over the original.
+    useExplainStore.getState().onConsoleReady({
+      bridgeVersion: 5,
+      capabilities: ["explain", "charts"],
+    });
+    expect(bridge.canEditChart!()).toBe(true);
+    expect(bridge.canDuplicateChart!()).toBe(false);
+
+    useExplainStore.getState().onConsoleReady({
+      bridgeVersion: 6,
+      capabilities: ["explain", "charts"],
+    });
+    expect(bridge.canDuplicateChart!()).toBe(true);
+  });
+
+  it("hides Duplicate in Ollie without chart editing or a known console version", () => {
+    const bridge = createBridge(makeRefs(createHostListeners()));
+
+    useExplainStore
+      .getState()
+      .onConsoleReady({ bridgeVersion: 6, capabilities: ["explain"] });
+    expect(bridge.canDuplicateChart!()).toBe(false);
+
+    useExplainStore.setState({
+      capabilities: ["explain", "charts"],
+      consoleBridgeVersion: null,
+    });
+    expect(bridge.canDuplicateChart!()).toBe(false);
+  });
 });
 
 describe("assistantBridge — artifacts", () => {

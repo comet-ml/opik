@@ -551,6 +551,16 @@ class TracesPartitionPruningMutationTest {
                 .block();
     }
 
+    /** One trace id per page, so every page past the first is read under a cursor. */
+    private List<UUID> traceIdsPage(UUID projectId, UUID lastId) {
+        return appTemplate.nonTransaction(connection -> traceDAO.getTraceIdsByProjectId(projectId, lastId, 1,
+                connection).collectList())
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
+                        .put(RequestContext.USER_NAME, USER))
+                .block();
+    }
+
     /**
      * The SQL of the trace delete that carried {@code traceId}, as ClickHouse received it. Two filters, because either
      * alone is ambiguous: {@code log_comment} narrows to this one template ({@code TraceDAO} stamps every statement
@@ -853,6 +863,29 @@ class TracesPartitionPruningMutationTest {
                         partitionNameOf(ERA_MONDAYS.get(1)),
                         partitionNameOf(ERA_MONDAYS.get(2)),
                         LEGACY_WEEK_OF_2200);
+    }
+
+    @Test
+    @DisplayName("a project's trace ids paged one at a time come back from every era, past each cursor's week bound")
+    void traceIdsByProjectIdPagedPastEachCursorReturnEveryEra() {
+        // Each page past the first is bound to the cursor's week and later, so a bound naming a later week than the
+        // one ClickHouse filed a row under would skip that row. Seeded raw in a minted project, as in
+        // deleteClearsEveryEraAndBindsExactlyThosePartitions, plus two ids whose id_at saturates, so one is paged
+        // past the other's cursor.
+        var projectId = ID_GENERATOR.generateId();
+        var ids = new ArrayList<>(ERA_MONDAYS.stream().map(TracesPartitionPruningMutationTest::idInWeekOf).toList());
+        ids.add(newOutOfRangeId());
+        ids.add(newOutOfRangeId());
+        ids.forEach(id -> insertRawTrace(projectId, id));
+
+        var actualIds = new ArrayList<UUID>();
+        var page = traceIdsPage(projectId, null);
+        while (!page.isEmpty()) {
+            actualIds.addAll(page);
+            page = traceIdsPage(projectId, page.getLast());
+        }
+
+        assertThat(actualIds).containsExactlyInAnyOrderElementsOf(ids);
     }
 
     @Test

@@ -130,6 +130,9 @@ def reconfigure_rich_console():
 # workspace without needing to be torn down and rebuilt.
 _gateway_workspace = {"name": None}
 
+# LiteLLM parameters that choose where a completion goes or how it authenticates, other than api_base
+_DESTINATION_PARAMS = ("base_url", "custom_llm_provider", "api_key", "api_version", "organization")
+
 
 def route_litellm_calls_through_gateway(workspace_name):
     """Attach the ``Comet-Workspace`` header to gateway LLM calls.
@@ -166,6 +169,11 @@ def route_litellm_calls_through_gateway(workspace_name):
         return
 
     def _add_workspace_header(kwargs):
+        # Model parameters come from the caller's optimization config and reach this call as they are, so the
+        # destination is pinned to the gateway: nothing passed in can pick another host, handler or credential.
+        for name in _DESTINATION_PARAMS:
+            kwargs.pop(name, None)
+        kwargs["api_base"] = OPENAI_API_BASE
         extra_headers = dict(kwargs.get("extra_headers") or {})
         extra_headers.setdefault("Comet-Workspace", _gateway_workspace["name"])
         kwargs["extra_headers"] = extra_headers
@@ -281,6 +289,12 @@ def build_optimizer_and_prompt(config):
 def main():
     """Main entry point for optimizer runner subprocess."""
     try:
+        # Start the isolation template before reading the job or its credentials, so a code metric's
+        # isolated worker forks from the template and not from this process once it holds them.
+        from opik_backend.executor_process import isolation_enabled, start_job_isolation_template
+        if isolation_enabled():
+            start_job_isolation_template()
+
         # Read input from stdin
         input_data = sys.stdin.read()
         if not input_data:
@@ -338,7 +352,7 @@ def main():
         with optimization_lifecycle(status_manager):
             # Load dataset
             dataset, dataset_size = load_and_validate_dataset(
-                client, config.dataset_name
+                client, config.dataset_name, context.project_name
             )
 
             # Build the optimizer + prompt: resolves the gateway-routed prompt
@@ -353,6 +367,7 @@ def main():
                 config.metric_params,
                 prompt.model,
                 dataset_items_provider=lambda: list(dataset.get_items()),
+                project_name=context.project_name,
             )
 
             # Run optimization

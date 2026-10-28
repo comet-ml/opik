@@ -1,19 +1,18 @@
 package com.comet.opik.infrastructure.llm.openai;
 
+import com.comet.opik.infrastructure.llm.DelegatingHttpClient;
 import com.comet.opik.infrastructure.llm.DelegatingHttpClientBuilder;
 import dev.langchain4j.exception.HttpException;
 import dev.langchain4j.exception.NonRetriableException;
 import dev.langchain4j.http.client.HttpClient;
 import dev.langchain4j.http.client.HttpClientBuilder;
-import dev.langchain4j.http.client.HttpClientBuilderLoader;
 import dev.langchain4j.http.client.HttpRequest;
 import dev.langchain4j.http.client.SuccessfulHttpResponse;
-import dev.langchain4j.http.client.sse.ServerSentEventListener;
-import dev.langchain4j.http.client.sse.ServerSentEventParser;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
+
+import java.util.concurrent.CompletableFuture;
 
 /**
  * {@link HttpClient} decorator that marks OpenAI {@code insufficient_quota} (HTTP 429, out-of-credits)
@@ -36,33 +35,47 @@ import org.apache.commons.lang3.StringUtils;
  *       {@code ExceptionMapper.findRoot()} would unwrap to it and re-map the 429 back to a retryable
  *       {@code RateLimitException}, defeating the guard.</li>
  * </ul>
- * Rate-limit 429s and every other status are passed through unchanged and remain retryable.
+ * Rate-limit 429s and every other status are passed through unchanged and remain retryable. Streaming responses
+ * are not wrapped in a retry policy, so there is nothing to short-circuit and both streaming calls are forwarded
+ * as they are.
  */
-@RequiredArgsConstructor
-public class QuotaAwareHttpClient implements HttpClient {
+public class QuotaAwareHttpClient extends DelegatingHttpClient {
 
     private static final String INSUFFICIENT_QUOTA = "insufficient_quota";
 
-    private final @NonNull HttpClient delegate;
+    /** Makes the calls through {@code delegate} quota-aware. */
+    public QuotaAwareHttpClient(@NonNull HttpClient delegate) {
+        super(delegate);
+    }
 
+    /** Throws {@link NonRetriableException} for an {@code insufficient_quota} response. */
     @Override
     public SuccessfulHttpResponse execute(HttpRequest request) {
         try {
             return delegate.execute(request);
         } catch (HttpException httpException) {
             if (isInsufficientQuota(httpException)) {
-                // Body as message (so it still maps to 402 downstream); no HttpException cause (so the
-                // inner ExceptionMapper cannot unwrap and re-map the 429 to a retryable error).
-                throw new NonRetriableException(httpException.getMessage());
+                throw nonRetriable(httpException);
             }
             throw httpException;
         }
     }
 
+    /** Fails the future with {@link NonRetriableException} for an {@code insufficient_quota} response. */
     @Override
-    public void execute(HttpRequest request, ServerSentEventParser parser, ServerSentEventListener listener) {
-        // Streaming responses are not wrapped in a retry policy, so there is nothing to short-circuit.
-        delegate.execute(request, parser, listener);
+    public CompletableFuture<SuccessfulHttpResponse> executeAsync(HttpRequest request) {
+        return recoverAsync(delegate.executeAsync(request), failure -> CompletableFuture.failedFuture(
+                failure instanceof HttpException httpException && isInsufficientQuota(httpException)
+                        ? nonRetriable(httpException)
+                        : failure));
+    }
+
+    /**
+     * Body as message (so it still maps to 402 downstream); no HttpException cause (so the inner ExceptionMapper
+     * cannot unwrap and re-map the 429 to a retryable error).
+     */
+    private static NonRetriableException nonRetriable(HttpException httpException) {
+        return new NonRetriableException(httpException.getMessage());
     }
 
     private static boolean isInsufficientQuota(HttpException httpException) {
@@ -70,11 +83,9 @@ public class QuotaAwareHttpClient implements HttpClient {
                 && StringUtils.containsIgnoreCase(httpException.getMessage(), INSUFFICIENT_QUOTA);
     }
 
-    /**
-     * Wraps the default (classpath) {@link HttpClientBuilder} so every client it builds is quota-aware.
-     */
-    public static HttpClientBuilder builder() {
-        return new Builder(HttpClientBuilderLoader.loadHttpClientBuilder());
+    /** Wraps the given {@link HttpClientBuilder} so every client it builds is quota-aware. */
+    public static HttpClientBuilder builder(@NonNull HttpClientBuilder delegate) {
+        return new Builder(delegate);
     }
 
     private static final class Builder extends DelegatingHttpClientBuilder {
