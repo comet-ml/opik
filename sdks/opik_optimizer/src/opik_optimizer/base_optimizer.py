@@ -27,6 +27,7 @@ from .core import evaluation as task_evaluator
 from .core import llm_calls
 from .core import runtime
 from .core.evaluation import compute_scoring_health
+from .core.lineage import CandidateLineage
 from .utils.display.run import OptimizationRunDisplay, RunDisplay
 from .utils.reporting import convert_tqdm_to_rich
 from .api_objects import chat_prompt
@@ -170,6 +171,7 @@ class BaseOptimizer(ABC):
         self.experiment_config = None
         self._opik_client = None  # Lazy initialization
         self.current_optimization_id: str | None = None  # Track current optimization
+        self._lineage = CandidateLineage()
         self.project_name: str = resolve_project_name()
         self.n_threads: int = normalize_eval_threads(None)  # Safe default thread count
         self._rng = rng_utils.make_rng(seed)
@@ -495,6 +497,7 @@ class BaseOptimizer(ABC):
         # repeats the same run for the same seed.
         self._reset_counters()
         self._rng = rng_utils.make_rng(self.seed)
+        self._lineage.reset()
 
         opik_optimization = self._get_or_create_optimization(
             dataset, metric, optimization_id
@@ -1240,9 +1243,20 @@ class BaseOptimizer(ABC):
         """Hook fired after baseline evaluation completes."""
         return None
 
+    def _tag_lineage(
+        self,
+        experiment_config: dict[str, Any] | None,
+        prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
+    ) -> dict[str, Any]:
+        """Add candidate lineage to a trial experiment's config (see core/lineage.py)."""
+        if self.current_optimization_id is None:
+            return dict(experiment_config or {})
+        return self._lineage.tag(experiment_config, prompt)
+
     def pre_round(self, context: OptimizationContext, **extras: Any) -> Any:
         """Hook fired before a round begins."""
         handle = self._history_builder.start_round(extras=extras or None)
+        self._lineage.start_round(context.current_best_prompt or context.prompts)
         debug_log(
             "round_context",
             round_index=handle,
@@ -2068,6 +2082,7 @@ class BaseOptimizer(ABC):
             is_single_prompt_optimization=isinstance(prompt, chat_prompt.ChatPrompt),
             build_optimizer_version=_OPTIMIZER_VERSION,
         )
+        experiment_config = self._tag_lineage(experiment_config, prompt)
 
         # Every evaluation of a run scores the same items, so candidates are
         # compared with each other and the baseline on equal terms. The

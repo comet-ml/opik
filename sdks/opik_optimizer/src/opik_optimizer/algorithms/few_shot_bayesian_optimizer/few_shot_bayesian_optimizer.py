@@ -196,7 +196,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 dataset=dataset,
                 metric=metric,
                 n_threads=n_threads,
-                experiment_config=experiment_config,
+                experiment_config=self._tag_lineage(experiment_config, prompt),
                 verbose=verbose,
                 allow_tool_use=allow_tool_use,
                 use_evaluate_on_dict_items=use_evaluate_on_dict_items,

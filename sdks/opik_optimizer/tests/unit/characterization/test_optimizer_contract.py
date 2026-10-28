@@ -87,6 +87,46 @@ def test_improves_the_score_without_touching_the_callers_prompt(
 
 
 @pytest.mark.parametrize("optimizer_name", harness.OPTIMIZERS)
+def test_trial_experiments_record_the_candidate_tree(
+    optimizer_name: str, install_fakes: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Opik draws the search tree and labels trials Passed/Discarded from these
+    # keys; without them it chains trials in creation order.
+    scenario = harness.build_scenario("S1_single")
+    install_fakes(scenario)
+    configs: list[dict[str, Any]] = []
+
+    def _recording_trial(**kwargs: Any) -> Any:
+        if kwargs.get("experiment_type", "trial") == "trial":
+            configs.append(kwargs["experiment_config"])
+        return fake_opik.fake_evaluate(**kwargs)
+
+    monkeypatch.setattr(
+        "opik_optimizer.core.evaluation.opik_evaluator.evaluate_optimization_trial",
+        _recording_trial,
+    )
+
+    result = harness.run_optimizer(optimizer_name, scenario)
+
+    assert result.score > result.initial_score
+    assert configs[0]["candidate_id"] == "baseline"
+    seen: dict[str, tuple[int, list[str]]] = {}
+    for config in configs:
+        node = (config["step_index"], config["parent_candidate_ids"])
+        candidate_id = config["candidate_id"]
+        if candidate_id in seen:
+            assert seen[candidate_id] == node  # re-evaluations keep their place
+            continue
+        step_index, parent_ids = node
+        assert all(parent in seen for parent in parent_ids)
+        expected_step = 1 + max((seen[p][0] for p in parent_ids), default=-1)
+        assert step_index == expected_step
+        seen[candidate_id] = node
+    assert len(seen) > 1
+    assert all(parents for cid, (_, parents) in seen.items() if cid != "baseline")
+
+
+@pytest.mark.parametrize("optimizer_name", harness.OPTIMIZERS)
 def test_perfect_baseline_returns_it_without_searching(
     optimizer_name: str, install_fakes: Any
 ) -> None:

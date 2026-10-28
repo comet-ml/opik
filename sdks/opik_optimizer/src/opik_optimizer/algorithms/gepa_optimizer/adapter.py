@@ -311,6 +311,9 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
             agent=self._agent,
             build_optimizer_version=_OPTIMIZER_VERSION,
         )
+        experiment_config = self._optimizer._tag_lineage(
+            experiment_config, prompt_variants
+        )
         project_name = experiment_config.get("project_name") or getattr(
             self._optimizer, "project_name", None
         )
