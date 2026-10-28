@@ -80,7 +80,7 @@ public record ChunkedResponseHandler(
 
     /** As {@link #onPartialResponse(String)}; when the caller is gone, the provider call is cancelled. */
     @Override
-    public void onPartialResponse(PartialResponse partialResponse, PartialResponseContext context) {
+    public void onPartialResponse(@NonNull PartialResponse partialResponse, @NonNull PartialResponseContext context) {
         try {
             onNext(partialResponse.text());
         } catch (ClientDisconnectedException exception) {

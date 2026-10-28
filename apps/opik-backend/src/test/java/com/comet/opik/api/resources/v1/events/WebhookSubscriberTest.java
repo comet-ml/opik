@@ -8,6 +8,7 @@ import ch.qos.logback.core.read.ListAppender;
 import com.comet.opik.api.AlertEventType;
 import com.comet.opik.api.AlertType;
 import com.comet.opik.api.events.webhooks.WebhookEvent;
+import com.comet.opik.api.resources.utils.LogCaptureUtils;
 import com.comet.opik.api.resources.utils.TestHttpClientUtils;
 import com.comet.opik.api.resources.v1.events.webhooks.WebhookHttpClient;
 import com.comet.opik.infrastructure.WebhookConfig;
@@ -260,6 +261,38 @@ class WebhookSubscriberTest {
         wireMockServer.verify(postRequestedFor(urlEqualTo("/webhook"))
                 .withHeader("X-Custom-Header", equalTo("custom-value"))
                 .withHeader("Authorization", equalTo("Bearer token123")));
+    }
+
+    /** A webhook's header values are sent, but reach neither the server logs nor the user-facing ones. */
+    @ParameterizedTest
+    @ValueSource(ints = {200, 500})
+    void processEvent_neverLogsTheHeaderValues(int status) {
+        var headerName = "X-Route-%s".formatted(RandomStringUtils.secure().nextAlphabetic(8));
+        var headerValue = "marker-%s".formatted(RandomStringUtils.secure().nextAlphanumeric(16));
+        wireMockServer.stubFor(post(urlEqualTo("/webhook")).willReturn(aResponse().withStatus(status)));
+        var userFacingLogger = mock(Logger.class);
+        WebhookHttpClient webhookHttpClient;
+        try (MockedStatic<UserFacingLoggingFactory> mockedFactory = mockStatic(UserFacingLoggingFactory.class)) {
+            mockedFactory.when(() -> UserFacingLoggingFactory.getLogger(any(Class.class)))
+                    .thenReturn(userFacingLogger);
+            webhookHttpClient = new WebhookHttpClient(TestHttpClientUtils.client(), webhookConfig);
+        }
+        var subscriber = new WebhookSubscriber(webhookConfig, redisson, webhookHttpClient);
+        var webhookEvent = createWebhookEvent("http://localhost:%d/webhook".formatted(wireMockServer.port()))
+                .toBuilder()
+                .headers(Map.of(headerName, headerValue))
+                .build();
+
+        var actualServerLogs = LogCaptureUtils.logEventsOf(
+                () -> StepVerifier.create(subscriber.processEvent(webhookEvent)).verifyComplete());
+
+        wireMockServer.verify(moreThanOrExactly(1), postRequestedFor(urlEqualTo("/webhook"))
+                .withHeader(headerName, equalTo(headerValue)));
+        var actualUserFacingLogs = mockingDetails(userFacingLogger).getInvocations().stream()
+                .map(invocation -> Arrays.deepToString(invocation.getArguments()))
+                .toList();
+        assertThat(actualServerLogs).isNotEmpty().noneMatch(line -> line.contains(headerValue));
+        assertThat(actualUserFacingLogs).noneMatch(line -> line.contains(headerValue));
     }
 
     @Test

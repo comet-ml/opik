@@ -61,7 +61,7 @@ class LlmProviderOpenAiResponsesUsageTest {
 
     @BeforeEach
     void setUp() {
-        openAi = new WireMockServer(0);
+        openAi = LlmTestClients.newLoopbackWireMock();
         openAi.start();
         provider = new LlmProviderOpenAiResponses(
                 new OpenAIClientGenerator(TestConfigUtils.loadConfigTest().getLlmProviderClient(),
@@ -69,7 +69,7 @@ class LlmProviderOpenAiResponsesUsageTest {
                         LlmTestClients.LLM_HTTP_CLIENT_BUILDERS),
                 LlmProviderClientApiConfig.builder()
                         .apiKey("test-key")
-                        .baseUrl(openAi.baseUrl())
+                        .baseUrl(LlmTestClients.baseUrlOf(openAi))
                         .build());
     }
 

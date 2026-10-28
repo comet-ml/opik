@@ -204,8 +204,12 @@ public class JsonUtils {
      * A streaming parser over {@code content}, under the shared mapper's read constraints, for reading part of a
      * document without building a tree of all of it.
      */
-    public static JsonParser createParser(@NonNull String content) throws IOException {
-        return MAPPER.getFactory().createParser(content);
+    public static JsonParser createParser(@NonNull String content) {
+        try {
+            return MAPPER.getFactory().createParser(content);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
     public static JsonNode getJsonNodeFromString(@NonNull String value) {

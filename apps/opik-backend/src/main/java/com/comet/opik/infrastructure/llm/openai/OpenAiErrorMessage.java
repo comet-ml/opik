@@ -11,6 +11,7 @@ import lombok.Builder;
 import static com.comet.opik.infrastructure.llm.openai.OpenAiErrorMessage.OpenAiError;
 
 @Builder(toBuilder = true)
+@JsonIgnoreProperties(ignoreUnknown = true)
 public record OpenAiErrorMessage(OpenAiError error) implements LlmProviderError<OpenAiError> {
 
     @Builder(toBuilder = true)

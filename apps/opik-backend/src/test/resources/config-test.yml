@@ -492,6 +492,13 @@ mcpOAuth:
   # Description: Maximum time the scrub job waits to acquire the Redis lock before giving up for this cycle
   scrubLockWaitTime: PT0.1S
 
+# The admin server: Dropwizard's tasks (log level, gc), /healthcheck, /metrics, /threads and /ping, on the port of
+# server.adminConnectors. The probes use /health-check on the application port, which stays.
+adminServer:
+  # Default: true
+  # Description: Whether the admin server runs. When false, nothing listens on the admin port, on any interface
+  enabled: true
+
 # https://www.dropwizard.io/en/stable/manual/configuration.html#servers
 server:
   # Default: false
@@ -815,7 +822,7 @@ llmProviderClient:
   mediaUrlDestinationScheme: plaintext_or_tls
   # Default: 30s
   # Description: Time allowed for downloading one media URL that Gemini or Vertex AI receives as inline data,
-  #   connecting included; at most 5m
+  #   connecting included; at most 2m
   mediaDownloadTimeout: 30s
   # Default: 20MB
   # Description: Most bytes downloaded for all the media of one Gemini or Vertex AI request, which carries at most
@@ -833,19 +840,19 @@ llmProviderClient:
   # Default: 120s
   # Description: Longest a provider's stream may stay silent once its headers arrived; readTimeout bounds only the
   #   wait for the headers. Above the 90s ingress idle timeout, as models that reason before answering can be silent
-  #   for a while; between 1s and 1h
+  #   for a while; between 1s and 10m
   streamReadTimeout: 120s
   # Default: 1024
   # Description: Most threads of the shared HTTP client for LLM provider calls. A call made asynchronously, a stream
-  #   included, holds one from start to end, so it must be at least httpClientMaxRequests; at most 10000
+  #   included, holds one from start to end, so it must be at least httpClientMaxRequests; at most 2048
   httpClientMaxThreads: 1024
   # Default: 60s
   # Description: How long an idle thread of the shared LLM HTTP client lives before it ends, so the pool shrinks
-  #   back after a burst; between 1s and 1h
+  #   back after a burst; between 1s and 5m
   httpClientThreadKeepAlive: 60s
   # Default: 1024
   # Description: Most LLM provider calls made asynchronously, streams included, that run at once on the shared
-  #   client. Further calls wait in order for one to end, and their timeouts start once they run; at most 10000
+  #   client. Further calls wait in order for one to end, and their timeouts start once they run; at most 2048
   httpClientMaxRequests: 1024
   # Default: 1024
   # Description: Most of httpClientMaxRequests that run at once to a single host. Most calls go to a few hosts, such

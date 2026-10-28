@@ -38,4 +38,12 @@ public record ProviderApiKeyUpdate(
     public String toString() {
         return "ProviderApiKeyUpdate{}";
     }
+
+    /** Hand-declared so that Lombok's toString, which would print the API key and the header values, isn't. */
+    public static class ProviderApiKeyUpdateBuilder {
+        @Override
+        public String toString() {
+            return "ProviderApiKeyUpdateBuilder{}";
+        }
+    }
 }

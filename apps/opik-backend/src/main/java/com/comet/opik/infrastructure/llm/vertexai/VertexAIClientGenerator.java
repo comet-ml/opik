@@ -18,6 +18,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.google.auth.oauth2.ServiceAccountCredentials;
 import com.google.common.base.Preconditions;
 import com.google.genai.Client;
+import com.google.genai.types.ClientOptions;
 import com.google.genai.types.HttpOptions;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.model.chat.ChatModel;
@@ -28,11 +29,13 @@ import jakarta.ws.rs.InternalServerErrorException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import okhttp3.OkHttpClient;
 import org.apache.commons.lang3.StringUtils;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -52,12 +55,22 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
     private final @NonNull RemoteMediaInliner remoteMediaInliner;
     private final @NonNull VideoMimeTypeUtils videoMimeTypeUtils;
 
+    /**
+     * The connection pool and dispatcher every Vertex AI call runs on, set up as the SDK sets up its own client: no
+     * connect, read or write timeout. Each call derives its own client from it, sharing both.
+     */
+    private final OkHttpClient baseHttpClient = new OkHttpClient.Builder()
+            .connectTimeout(Duration.ZERO)
+            .readTimeout(Duration.ZERO)
+            .writeTimeout(Duration.ZERO)
+            .build();
+
     List<ChatMessage> mapMessages(@NonNull ChatCompletionRequest request) {
         return LlmProviderLangChainMapper.INSTANCE.mapMessages(request, videoMimeTypeUtils);
     }
 
     CloseableVertexAiChatModel newVertexAIClient(LlmProviderClientApiConfig apiKey, ChatCompletionRequest request) {
-        return buildOwnedClient(apiKey, request, (client, model) -> {
+        return buildOwnedClient(apiKey, request, (client, calls, model) -> {
             var builder = GoogleGenAiChatModel.builder()
                     .client(client)
                     .modelName(model);
@@ -78,7 +91,7 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
 
     CloseableVertexAiStreamingChatModel newVertexAIStreamingClient(@NonNull LlmProviderClientApiConfig apiKey,
             @NonNull ChatCompletionRequest request) {
-        return buildOwnedClient(apiKey, request, (client, model) -> {
+        return buildOwnedClient(apiKey, request, (client, calls, model) -> {
             var builder = GoogleGenAiStreamingChatModel.builder()
                     .client(client)
                     .modelName(model);
@@ -93,7 +106,7 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
 
             applyThinking(builder::thinkingLevel, builder::thinkingBudget, model, request.customParameters());
 
-            return new CloseableVertexAiStreamingChatModel(builder.build(), client, remoteMediaInliner);
+            return new CloseableVertexAiStreamingChatModel(builder.build(), client, calls, remoteMediaInliner);
         });
     }
 
@@ -112,8 +125,8 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
         params.wireBudgetFor(model).ifPresent(budget);
     }
 
-    // Fresh Client per call, handed to the wrapper that owns and closes it; closed here if setup fails first.
-    // Built here rather than by the model builder, which keeps its client private and is not closeable.
+    // A Client per call, on the shared transport, so that the call's own calls can be cancelled. Built here rather
+    // than by the model builder, which keeps its client private.
     private <T> T buildOwnedClient(LlmProviderClientApiConfig apiKey, ChatCompletionRequest request,
             OwnedClientFactory<T> factory) {
         // The enum fallback mirrors LlmProviderFactoryImpl's routing, so every model it sends here can be built here.
@@ -123,31 +136,32 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
                 .or(() -> VertexAIModelName.byQualifiedName(request.model()).map(VertexAIModelName::toString))
                 .orElseThrow(() -> new IllegalArgumentException("Unsupported model: %s".formatted(request.model())));
 
-        Client client = buildClient(apiKey);
-        try {
-            return factory.create(client, modelId);
-        } catch (RuntimeException e) {
-            closeSuppressing(client, e);
-            throw e;
-        }
+        var calls = new CancellableCalls();
+        return factory.create(buildClient(apiKey, newHttpClient(calls)), calls, modelId);
     }
 
     @FunctionalInterface
     private interface OwnedClientFactory<T> {
-        T create(Client client, String model);
+        T create(Client client, CancellableCalls calls, String model);
+    }
+
+    /**
+     * The call's HTTP client, given to the SDK: on the shared pool and dispatcher, with the call timeout as the
+     * whole-call bound, as the SDK sets it, and {@code calls} keeping this call's own calls only, so that they alone can
+     * be cancelled.
+     */
+    private OkHttpClient newHttpClient(CancellableCalls calls) {
+        var builder = baseHttpClient.newBuilder()
+                .addInterceptor(calls);
+        // The SDK takes milliseconds as an int, and the configuration is only bounded below, so it is clamped alike.
+        Optional.ofNullable(clientConfig.getCallTimeout())
+                .map(timeout -> Duration.ofMillis(Math.min(timeout.toMilliseconds(), Integer.MAX_VALUE)))
+                .ifPresent(builder::callTimeout);
+        return builder.build();
     }
 
     private InternalServerErrorException failWithError(Exception e) {
         return new InternalServerErrorException("Failed to create GoogleCredentials", e);
-    }
-
-    // Close a client we built but couldn't hand to a wrapping owner, so it can't outlive the failure.
-    private static void closeSuppressing(Client client, RuntimeException failure) {
-        try {
-            client.close();
-        } catch (Exception e) {
-            failure.addSuppressed(e);
-        }
     }
 
     /**
@@ -176,7 +190,7 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
         return endpoint.startsWith("http://") || endpoint.startsWith("https://") ? endpoint : "https://" + endpoint;
     }
 
-    private Client buildClient(LlmProviderClientApiConfig config) {
+    private Client buildClient(LlmProviderClientApiConfig config, OkHttpClient httpClient) {
         var location = Optional.ofNullable(config.configuration().get("location"))
                 .filter(StringUtils::isNotBlank)
                 .map(VertexAIClientGenerator::canonicalLocation);
@@ -209,7 +223,9 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
                     .map(timeout -> (int) Math.min(timeout.toMilliseconds(), Integer.MAX_VALUE))
                     .ifPresent(httpOptions::timeout);
 
-            return builder.httpOptions(httpOptions.build()).build();
+            return builder.httpOptions(httpOptions.build())
+                    .clientOptions(ClientOptions.builder().customHttpClient(httpClient).build())
+                    .build();
         } catch (IOException e) {
             throw failWithError(e);
         }

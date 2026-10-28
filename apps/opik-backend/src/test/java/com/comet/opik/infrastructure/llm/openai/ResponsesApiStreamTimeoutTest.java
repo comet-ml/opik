@@ -6,6 +6,7 @@ import com.comet.opik.infrastructure.llm.LlmTestClients;
 import com.openai.errors.OpenAIIoException;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionResponse;
+import lombok.Builder;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -135,14 +136,19 @@ class ResponsesApiStreamTimeoutTest {
     }
 
     /** What a stream ended with: its chunks, and the error it failed with, if any. */
+    @Builder(toBuilder = true)
     private record Outcome(List<ChatCompletionResponse> chunks, Throwable error) {
     }
 
-    private static LlmProviderOpenAiResponses provider(ServerSocket server, String readTimeout,
-            String streamReadTimeout) {
+    /** The client's read timeout and stream read timeout, as the config writes them. */
+    @Builder(toBuilder = true)
+    private record Timeouts(String readTimeout, String streamReadTimeout) {
+    }
+
+    private static LlmProviderOpenAiResponses provider(ServerSocket server, Timeouts timeouts) {
         var config = TestConfigUtils.loadConfigTest().getLlmProviderClient();
-        config.setReadTimeout(TestConfigUtils.duration(readTimeout));
-        config.setStreamReadTimeout(TestConfigUtils.duration(streamReadTimeout));
+        config.setReadTimeout(TestConfigUtils.duration(timeouts.readTimeout()));
+        config.setStreamReadTimeout(TestConfigUtils.duration(timeouts.streamReadTimeout()));
         var generator = new OpenAIClientGenerator(config, new OpenAIModule().responsesApiHttpClient(config),
                 LlmTestClients.LLM_HTTP_CLIENT_BUILDERS);
         return new LlmProviderOpenAiResponses(generator, LlmProviderClientApiConfig.builder()
@@ -151,16 +157,15 @@ class ResponsesApiStreamTimeoutTest {
                 .build());
     }
 
-    private static Outcome stream(ServerSocket server, String readTimeout, String streamReadTimeout)
-            throws Exception {
-        var provider = provider(server, readTimeout, streamReadTimeout);
+    private static Outcome stream(ServerSocket server, Timeouts timeouts) throws Exception {
+        var provider = provider(server, timeouts);
         var chunks = new CopyOnWriteArrayList<ChatCompletionResponse>();
         var done = new CompletableFuture<Throwable>();
 
         provider.generateStream(ChatCompletionRequest.builder().model("gpt-4o").addUserMessage("hello").build(),
                 "workspace", chunks::add, () -> done.complete(null), done::complete);
 
-        return new Outcome(chunks, done.get(30, TimeUnit.SECONDS));
+        return Outcome.builder().chunks(chunks).error(done.get(30, TimeUnit.SECONDS)).build();
     }
 
     /**
@@ -172,7 +177,7 @@ class ResponsesApiStreamTimeoutTest {
     void aJsonReplyPausingPastTheStreamReadTimeoutCompletes() throws Exception {
         var pause = Duration.ofSeconds(2);
         try (var server = pausingServer("application/json", pause, RESPONSE)) {
-            var provider = provider(server, "5s", "1s");
+            var provider = provider(server, Timeouts.builder().readTimeout("5s").streamReadTimeout("1s").build());
             var expectedContent = "ok";
             long startNanos = System.nanoTime();
 
@@ -190,7 +195,7 @@ class ResponsesApiStreamTimeoutTest {
     @DisplayName("a Responses API stream whose headers arrive within the read timeout completes")
     void headersWithinTheReadTimeoutArrive() throws Exception {
         try (var server = delayedStreamServer(Duration.ofMillis(300), Duration.ZERO)) {
-            var actualOutcome = stream(server, "1s", "5s");
+            var actualOutcome = stream(server, Timeouts.builder().readTimeout("1s").streamReadTimeout("5s").build());
 
             assertThat(actualOutcome.error()).isNull();
             assertThat(actualOutcome.chunks()).isNotEmpty();
@@ -241,7 +246,7 @@ class ResponsesApiStreamTimeoutTest {
         var actualWaits = new CopyOnWriteArrayList<Duration>();
         try (var server = neverAnsweringServer(actualWaits)) {
 
-            var actualOutcome = stream(server, "500ms", "5s");
+            var actualOutcome = stream(server, Timeouts.builder().readTimeout("500ms").streamReadTimeout("5s").build());
 
             assertThat(actualOutcome.error()).isExactlyInstanceOf(OpenAIIoException.class)
                     .cause()
@@ -259,7 +264,7 @@ class ResponsesApiStreamTimeoutTest {
         try (var server = silentStreamServer(silence)) {
             long startNanos = System.nanoTime();
 
-            var actualOutcome = stream(server, "500ms", "5s");
+            var actualOutcome = stream(server, Timeouts.builder().readTimeout("500ms").streamReadTimeout("5s").build());
 
             var actualElapsed = Duration.ofNanos(System.nanoTime() - startNanos);
             assertThat(actualOutcome.error()).isNull();
@@ -276,7 +281,7 @@ class ResponsesApiStreamTimeoutTest {
         try (var server = silentStreamServer(Duration.ofSeconds(30))) {
             long startNanos = System.nanoTime();
 
-            var actualOutcome = stream(server, "500ms", "1s");
+            var actualOutcome = stream(server, Timeouts.builder().readTimeout("500ms").streamReadTimeout("1s").build());
 
             var actualElapsed = Duration.ofNanos(System.nanoTime() - startNanos);
             // the SDK's stream failure, over the read that the stream read timeout ended: the body's own timeout
