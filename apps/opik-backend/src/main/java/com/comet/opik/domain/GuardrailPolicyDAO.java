@@ -101,12 +101,13 @@ public interface GuardrailPolicyDAO {
 
     // Names and global policies are two statements: each uses its own index, while a single
     // `name IN (...) OR execution_scope = 'global'` scans the whole workspace (see migration 000112).
-    @SqlQuery(SELECT_POLICIES + "WHERE p.workspace_id = :workspaceId AND p.name IN (<names>)")
+    @SqlQuery(SELECT_POLICIES + "WHERE p.workspace_id = :workspaceId AND p.name IN (<names>) ORDER BY p.name, p.id")
     @UseStringTemplateEngine
     List<GuardrailPolicy> findByNames(@BindList("names") Collection<String> names,
             @Bind("workspaceId") String workspaceId);
 
-    @SqlQuery(SELECT_POLICIES + "WHERE p.workspace_id = :workspaceId AND p.execution_scope = 'global'")
+    @SqlQuery(SELECT_POLICIES
+            + "WHERE p.workspace_id = :workspaceId AND p.execution_scope = 'global' ORDER BY p.name, p.id")
     List<GuardrailPolicy> findGlobal(@Bind("workspaceId") String workspaceId);
 
     @SqlQuery("SELECT id FROM guardrail_policies WHERE workspace_id = :workspaceId AND id IN (<ids>)")

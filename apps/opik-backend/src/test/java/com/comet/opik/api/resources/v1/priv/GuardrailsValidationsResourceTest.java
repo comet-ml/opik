@@ -28,6 +28,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -35,7 +38,9 @@ import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 
+import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
@@ -200,19 +205,29 @@ class GuardrailsValidationsResourceTest {
         wireMock.server().verify(0, postRequestedFor(urlPathEqualTo(DECIDE_PATH)));
     }
 
-    @Test
-    @DisplayName("blank text is rejected")
-    void validate__whenTextIsBlank__thenUnprocessable() {
-        var request = GuardrailsValidationRequest.builder()
-                .text("  ")
-                .validations(List.of(descriptor(GuardrailType.PROMPT_INJECTION, "{}")))
-                .build();
+    static Stream<Arguments> invalidRequests() {
+        return Stream.of(
+                Arguments.of("blank text", GuardrailsValidationRequest.builder()
+                        .text("  ")
+                        .validations(List.of(descriptor(GuardrailType.PROMPT_INJECTION, "{}")))
+                        .build(), "text must not be blank"),
+                Arguments.of("a null check", GuardrailsValidationRequest.builder()
+                        .text("some text")
+                        .validations(Arrays.asList(descriptor(GuardrailType.PROMPT_INJECTION, "{}"), null))
+                        .build(), "must not be null"));
+    }
 
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("invalidRequests")
+    @DisplayName("invalid requests are rejected before any check")
+    void validate__whenRequestIsInvalid__thenUnprocessable(String scenario, GuardrailsValidationRequest request,
+            String expectedError) {
         try (var response = guardrailsResourceClient.validate(request, API_KEY, TEST_WORKSPACE)) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
             assertThat(response.readEntity(com.comet.opik.api.error.ErrorMessage.class).errors())
-                    .contains("text must not be blank");
+                    .anyMatch(error -> error.contains(expectedError));
         }
+        wireMock.server().verify(0, postRequestedFor(urlPathEqualTo(DECIDE_PATH)));
     }
 
     @Test

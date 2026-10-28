@@ -29,7 +29,7 @@ public record GuardrailPolicy(
         @JsonView({GuardrailPolicy.View.Public.class,
                 GuardrailPolicy.View.Write.class}) @Nullable @Size(max = 1000, message = "description cannot exceed 1000 characters") String description,
         @JsonView({GuardrailPolicy.View.Public.class,
-                GuardrailPolicy.View.Write.class}) @Schema(description = "on_request applies the policy when the SDK names it, global applies it to every check in the workspace. Defaults to on_request") @Nullable GuardrailExecutionScope executionScope,
+                GuardrailPolicy.View.Write.class}) @Schema(description = "on_request applies the policy when the SDK names it, global applies it to every guardrail built from stored policies in the workspace. Missing or null means on_request", defaultValue = "on_request") @Nullable GuardrailExecutionScope executionScope,
         @JsonView({GuardrailPolicy.View.Public.class,
                 GuardrailPolicy.View.Write.class}) @Schema(description = "At most one rule per type") @NotEmpty List<@NotNull @Valid GuardrailPolicyRule> rules,
         @JsonView({

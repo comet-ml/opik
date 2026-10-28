@@ -30,6 +30,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -188,9 +189,10 @@ class GuardrailPolicyServiceImpl implements GuardrailPolicyService {
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(GuardrailPolicyDAO.class);
             var named = names.isEmpty() ? List.<GuardrailPolicy>of() : dao.findByNames(names, workspaceId);
-            // Names match ignoring case, as the schema collation does.
+            // Names match ignoring case and trailing spaces, as the schema collation does.
             var missing = names.stream()
-                    .filter(name -> named.stream().noneMatch(policy -> policy.name().equalsIgnoreCase(name)))
+                    .filter(name -> named.stream().noneMatch(policy -> StringUtils.stripEnd(policy.name(), " ")
+                            .equalsIgnoreCase(StringUtils.stripEnd(name, " "))))
                     .sorted()
                     .toList();
             if (!missing.isEmpty()) {
@@ -250,7 +252,7 @@ class GuardrailPolicyServiceImpl implements GuardrailPolicyService {
         }
         var normalized = JsonUtils.createObjectNode();
         if (rule.type() == GuardrailType.PII) {
-            var entities = strings(index, config, "entities");
+            var entities = normalizedUniqueStrings(index, config, "entities");
             entities.stream()
                     .filter(entity -> !GuardrailQuestions.PII_DESCRIPTIONS.containsKey(entity))
                     .findFirst()
@@ -293,7 +295,7 @@ class GuardrailPolicyServiceImpl implements GuardrailPolicyService {
         if (node.isMissingNode() || node.isNull() || (node.isArray() && node.isEmpty())) {
             return Set.of();
         }
-        var topics = strings(index, config, field);
+        var topics = normalizedUniqueStrings(index, config, field);
         if (topics.size() > MAX_TOPICS) {
             throw new BadRequestException("rules[%d].config.%s has more than %d topics"
                     .formatted(index, field, MAX_TOPICS));
@@ -307,10 +309,19 @@ class GuardrailPolicyServiceImpl implements GuardrailPolicyService {
             throw new BadRequestException("rules[%d].config.%s cannot contain '%s'"
                     .formatted(index, field, GuardrailQuestions.NONE_OF_THESE));
         }
+        // Case variants would be separate options of one choice question and split its probability.
+        var topicsLowerCase = new HashSet<String>();
+        topics.stream()
+                .filter(topic -> !topicsLowerCase.add(topic.toLowerCase(Locale.ROOT)))
+                .findFirst()
+                .ifPresent(topic -> {
+                    throw new BadRequestException("rules[%d].config.%s contains '%s' more than once, ignoring case"
+                            .formatted(index, field, topic));
+                });
         return topics;
     }
 
-    private static Set<String> strings(int index, JsonNode config, String field) {
+    private static Set<String> normalizedUniqueStrings(int index, JsonNode config, String field) {
         var node = config.path(field);
         if (!node.isArray() || node.isEmpty()) {
             throw new BadRequestException("rules[%d].config.%s must be a non-empty list of strings"
