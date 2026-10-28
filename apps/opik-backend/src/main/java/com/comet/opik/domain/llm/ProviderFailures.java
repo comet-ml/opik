@@ -1,9 +1,11 @@
 package com.comet.opik.domain.llm;
 
-import com.google.common.base.Throwables;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
 
 /**
@@ -31,13 +33,14 @@ public class ProviderFailures {
         return chain(throwable).getLast().getClass().getSimpleName();
     }
 
-    /** The failure and its causes, outermost first; only the failure itself when its causes loop, so that logging it can't fail. */
+    /** The failure and its causes, outermost first, up to where the causes loop back, so that logging it can't fail. */
     private static List<Throwable> chain(Throwable throwable) {
-        try {
-            return Throwables.getCausalChain(throwable);
-        } catch (IllegalArgumentException loop) {
-            return List.of(throwable);
+        var seen = Collections.newSetFromMap(new IdentityHashMap<Throwable, Boolean>());
+        var chain = new ArrayList<Throwable>();
+        for (var link = throwable; link != null && seen.add(link); link = link.getCause()) {
+            chain.add(link);
         }
+        return chain;
     }
 
     /** Stands for a throwable of the class it names, without its message. */
