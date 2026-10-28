@@ -280,6 +280,12 @@ public class OpenTelemetryMapper {
             extractToolOutputEvent(events, output);
         }
 
+        // Claude Code reports its cache writes without their TTL, and writes almost all of them with a 1-hour one, so
+        // they're priced at the 1-hour rate, as Cost Intelligence counts them.
+        if (isClaudeCode && usage.containsKey("cache_creation_input_tokens")) {
+            usage.put("cache_creation.ephemeral_1h_input_tokens", usage.get("cache_creation_input_tokens"));
+        }
+
         // Fall back to the current `gen_ai.provider.name` only when the deprecated `gen_ai.system`
         // did not report a provider.
         // Both sides must be non-blank: a non-string or empty `gen_ai.provider.name` yields ""

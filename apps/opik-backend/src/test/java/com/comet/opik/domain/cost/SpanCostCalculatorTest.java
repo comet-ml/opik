@@ -273,9 +273,10 @@ class SpanCostCalculatorTest {
         @Test
         void textGenerationCostScalesTheReasoningAndAudioRatesAboveATier() {
             // The tier raises the text rates but publishes no reasoning or audio rate, as Gemini Pro's on OpenRouter.
+            // Every rate differs from its text rate, so billing it at the base rate or at the tier's text rate fails.
             var tiered = NO_CACHE_PRICES.toBuilder()
-                    .outputReasoningTokenPrice(new BigDecimal("0.02"))
-                    .inputAudioTokenPrice(new BigDecimal("0.01"))
+                    .outputReasoningTokenPrice(new BigDecimal("0.01"))
+                    .inputAudioTokenPrice(new BigDecimal("0.05"))
                     .outputAudioTokenPrice(new BigDecimal("0.04"))
                     .promptTiers(List.of(ModelPrice.PromptTier.builder()
                             .threshold(ModelPrice.TIER_THRESHOLD_200K)
@@ -289,10 +290,10 @@ class SpanCostCalculatorTest {
                     "prompt_tokens_details.audio_tokens", 10_000, "completion_tokens_details.reasoning_tokens", 800,
                     "completion_tokens_details.audio_tokens", 100);
 
-            // Each rate keeps its base ratio to the text rate: reasoning 0.02 * 0.03 / 0.02, audio input
-            // 0.01 * 0.02 / 0.01, audio output 0.04 * 0.03 / 0.02:
-            // 200,000 * 0.02 + 10,000 * 0.02 + 100 * 0.03 + 800 * 0.03 + 100 * 0.06
-            assertThat(textCost(tiered, usage)).isEqualByComparingTo("4233.00");
+            // Each rate keeps its base ratio to the text rate: reasoning 0.01 * 0.03 / 0.02, audio input
+            // 0.05 * 0.02 / 0.01, audio output 0.04 * 0.03 / 0.02:
+            // 200,000 * 0.02 + 10,000 * 0.10 + 100 * 0.03 + 800 * 0.015 + 100 * 0.06
+            assertThat(textCost(tiered, usage)).isEqualByComparingTo("5021.00");
         }
     }
 
@@ -342,6 +343,34 @@ class SpanCostCalculatorTest {
 
             // 10 + 2 + 50 * 0.015 + 100 * 0.02
             assertThat(textCost(modelPrice, usage)).isEqualByComparingTo("14.75");
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource
+        void textGenerationCostBillsOneHourCacheWritesAtTheOneHourRateUnderEverySpelling(String description,
+                SpanUsage usage) {
+            var modelPrice = CACHE_PRICES.toBuilder()
+                    .cacheCreationInputTokenPriceAbove1hr(new BigDecimal("0.02"))
+                    .build();
+
+            // 10 + 2 + 50 * 0.015 + 100 * 0.02
+            assertThat(textCost(modelPrice, usage)).isEqualByComparingTo("14.75");
+        }
+
+        static Stream<Arguments> textGenerationCostBillsOneHourCacheWritesAtTheOneHourRateUnderEverySpelling() {
+            return Stream.of(
+                    Arguments.of("flat OTel, the split flattened by underscores",
+                            spanUsage("anthropic", "input_tokens", 1000, "output_tokens", 100,
+                                    "cache_creation_input_tokens", 150, "cache_creation_ephemeral_1h_input_tokens",
+                                    100)),
+                    Arguments.of("Converse's names, the split in cacheDetails",
+                            spanUsage("anthropic", "inputTokens", 1000, "outputTokens", 100,
+                                    "cacheWriteInputTokens", 150, "cacheDetails.5m.inputTokens", 50,
+                                    "cacheDetails.1h.inputTokens", 100)),
+                    Arguments.of("Claude on Vertex",
+                            spanUsage("vertex_ai-anthropic_models", "input_tokens", 1000, "output_tokens", 100,
+                                    "cache_creation_input_tokens", 150, "cache_creation_ephemeral_1h_input_tokens",
+                                    100)));
         }
 
         @Test
@@ -467,6 +496,32 @@ class SpanCostCalculatorTest {
 
             // 1000 * 0.01 + 100 * 0.02 + 50 * 0.015 + 100 * 0.02
             assertThat(textCost(modelPrice, usage)).isEqualByComparingTo("14.75");
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource
+        void textGenerationCostBillsLiteLlmsOneHourCacheWritesAtTheOneHourRate(String description, SpanUsage usage) {
+            var modelPrice = CACHE_PRICES.toBuilder()
+                    .cacheCreationInputTokenPriceAbove1hr(new BigDecimal("0.02"))
+                    .build();
+
+            // 1000 * 0.01 + 100 * 0.02 + 50 * 0.015 + 100 * 0.02
+            assertThat(textCost(modelPrice, usage)).isEqualByComparingTo("14.75");
+        }
+
+        static Stream<Arguments> textGenerationCostBillsLiteLlmsOneHourCacheWritesAtTheOneHourRate() {
+            return Stream.of(
+                    Arguments.of("prompt without the cache",
+                            spanUsage("bedrock", "prompt_tokens", 1000, "completion_tokens", 100,
+                                    "cache_creation_input_tokens", 150,
+                                    "cache_creation_token_details.ephemeral_1h_input_tokens", 100)),
+                    Arguments.of("prompt with the cache, which the prompt's details report",
+                            spanUsage("bedrock", "prompt_tokens", 1150, "completion_tokens", 100,
+                                    "cache_creation_input_tokens", 150,
+                                    "prompt_tokens_details.cache_creation_tokens", 150,
+                                    "prompt_tokens_details.cache_creation_token_details.ephemeral_5m_input_tokens", 50,
+                                    "prompt_tokens_details.cache_creation_token_details.ephemeral_1h_input_tokens",
+                                    100)));
         }
     }
 

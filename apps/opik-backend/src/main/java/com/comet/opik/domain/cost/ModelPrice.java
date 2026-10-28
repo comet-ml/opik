@@ -34,9 +34,12 @@ public record ModelPrice(
     public static final int TIER_THRESHOLD_200K = 200_000;
 
     /**
-     * One prompt-size tier for a model: the threshold plus each rate the tier overrides. Any rate left at
-     * {@link BigDecimal#ZERO} means "this tier does not override that rate — fall through to a lower tier or the base
-     * rate", as most tiers publish only some of them.
+     * One prompt-size tier for a model: the threshold plus each rate the tier overrides, as most tiers publish only some
+     * of them. A rate left at {@link BigDecimal#ZERO} isn't overridden, and what replaces it depends on the rate. The
+     * input, output, cache-read and five-minute write rates fall through to a lower tier that publishes them, then to
+     * the base rate. The one-hour write rate falls through to a lower tier too, but without one it's the base one-hour
+     * rate scaled like the five-minute rate, and never below that five-minute rate. The reasoning and audio rates, which
+     * no tier publishes, scale with the text rates the same way ({@link SpanCostCalculator#scaledToTier}).
      */
     @Builder(toBuilder = true)
     public record PromptTier(

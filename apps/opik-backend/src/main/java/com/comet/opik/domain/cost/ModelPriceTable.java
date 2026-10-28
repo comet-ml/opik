@@ -87,7 +87,7 @@ public class ModelPriceTable {
                 // Per-image rows such as 1024-x-1024/gpt-image-1.5 share their model's key: a row that prices no token
                 // never replaces one that does.
                 parsedModelPrices.merge(runtimeKey, price,
-                        (kept, row) -> pricesTokens(kept) && !pricesTokens(row) ? kept : row);
+                        (kept, row) -> hasTokenPrices(kept) && !hasTokenPrices(row) ? kept : row);
             }
         });
 
@@ -144,11 +144,15 @@ public class ModelPriceTable {
     static Map<String, ModelCostData> toModelCosts(String file, Map<String, JsonNode> rows) {
         var modelCosts = new LinkedHashMap<String, ModelCostData>();
         rows.forEach((modelName, row) -> {
+            // A null row reads as a null price instead of failing to read.
+            if (!row.isObject()) {
+                log.warn("Skipping model '{}' of '{}', whose row isn't an object: '{}'", modelName, file, row);
+                return;
+            }
             try {
                 modelCosts.put(modelName, JsonUtils.treeToValue(row, ModelCostData.class));
             } catch (UncheckedIOException exception) {
-                log.warn("Skipping model '{}' of '{}', which doesn't read as a price: '{}'", modelName, file,
-                        exception.getMessage());
+                log.warn("Skipping model '{}' of '{}', which doesn't read as a price", modelName, file, exception);
             }
         });
         return modelCosts;
@@ -237,7 +241,7 @@ public class ModelPriceTable {
         try {
             return buildModelPrice(modelCost);
         } catch (NumberFormatException exception) {
-            log.warn("Skipping model '{}', a rate of which isn't a number: '{}'", modelName, exception.getMessage());
+            log.warn("Skipping model '{}', a rate of which isn't a number", modelName, exception);
             return null;
         }
     }
@@ -312,10 +316,15 @@ public class ModelPriceTable {
         var ratesByThreshold = new TreeMap<Integer, Map<String, BigDecimal>>(Comparator.reverseOrder());
         fields.forEach((name, value) -> {
             var matcher = PROMPT_TIER_RATE.matcher(name);
-            if (matcher.matches() && value.isNumber() && value.decimalValue().signum() > 0) {
+            // A rate written as a string reads like a base rate, and one that isn't a number skips the model the same
+            // way.
+            if (!matcher.matches() || !(value.isNumber() || value.isTextual())) {
+                return;
+            }
+            BigDecimal rate = value.isNumber() ? value.decimalValue() : new BigDecimal(value.textValue());
+            if (rate.signum() > 0) {
                 int threshold = Integer.parseInt(matcher.group(2)) * (matcher.group(3).isEmpty() ? 1 : 1000);
-                ratesByThreshold.computeIfAbsent(threshold, unused -> new HashMap<>())
-                        .put(matcher.group(1), value.decimalValue());
+                ratesByThreshold.computeIfAbsent(threshold, unused -> new HashMap<>()).put(matcher.group(1), rate);
             }
         });
         return ratesByThreshold.entrySet().stream()
@@ -380,7 +389,7 @@ public class ModelPriceTable {
         return Optional.ofNullable(value).map(v -> v.compareTo(BigDecimal.ZERO) > 0).orElse(false);
     }
 
-    private static boolean pricesTokens(ModelPrice price) {
+    private static boolean hasTokenPrices(ModelPrice price) {
         return isPositive(price.inputPrice()) || isPositive(price.outputPrice())
                 || isPositive(price.cacheCreationInputTokenPrice()) || isPositive(price.cacheReadInputTokenPrice());
     }

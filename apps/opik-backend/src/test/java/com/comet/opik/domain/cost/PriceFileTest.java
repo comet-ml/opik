@@ -4,6 +4,7 @@ import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.math.NumberUtils;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -31,6 +32,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Every price of the shipped price file, as the backend bills it. The file is replaced by an automated LiteLLM sync,
  * so these checks also guard every sync: a price field the backend ignores, or a rate it bills wrong, fails here.
+ * Each failing check takes its own fix:
+ * <ul>
+ * <li>{@link Coverage#everyPriceIsBilledOrListedAsNotPriced}: bill the field, or list it with the reason in
+ * {@link #NOT_PRICED}, or in {@link #NOT_PRICED_IN_FORMAT} when only one provider's usage format has no count for it.</li>
+ * <li>{@link Coverage#anOverrideSetsEveryRateTheUpstreamRowItReplacesBills}: set the rate in the override, or remove
+ * the override when upstream now prices the model right.</li>
+ * <li>{@link Rates} and {@link Invariants}: fix the cost calculation. Listing a field as not priced never fixes a rate
+ * billed wrong.</li>
+ * </ul>
  * <p>
  * These tests guard what every span is billed: add a check for each cost path and each bug found, and never remove one.
  * When a fix shows a check expected the wrong cost, correct that check in the same change and say why.
@@ -241,8 +251,10 @@ class PriceFileTest {
                     .isEmpty();
         }
 
+        // A rate written as a string is billed like a number, so it's checked like one.
         private static boolean isPrice(JsonNode value) {
-            return value.isObject() || (value.isNumber() && value.decimalValue().signum() > 0);
+            return value.isObject() || ((value.isNumber() || value.isTextual())
+                    && NumberUtils.isCreatable(value.asText()) && new BigDecimal(value.asText()).signum() > 0);
         }
 
         private static boolean accountedFor(String field, Map<String, JsonNode> fields, Format format) {

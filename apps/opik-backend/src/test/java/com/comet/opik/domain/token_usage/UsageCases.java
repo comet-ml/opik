@@ -54,6 +54,19 @@ public final class UsageCases {
                         anthropic("anthropic_native").inputTokens(100).cacheReadInputTokens(20)
                                 .cacheCreation5mInputTokens(100).cacheCreation1hInputTokens(200).outputTokens(10)
                                 .build()),
+                new UsageCase("Anthropic through flat OTel with the TTL split flattened by underscores", "anthropic",
+                        usage("input_tokens", 12, "output_tokens", 7, "cache_creation_input_tokens", 1024,
+                                "cache_creation_ephemeral_1h_input_tokens", 256, "cache_read_input_tokens", 4096),
+                        anthropic("anthropic_native").inputTokens(12).cacheReadInputTokens(4096)
+                                .cacheCreation5mInputTokens(768).cacheCreation1hInputTokens(256).outputTokens(7)
+                                .build()),
+                new UsageCase("Anthropic in Converse's names with the TTL split in cacheDetails", "anthropic",
+                        usage("inputTokens", 200, "outputTokens", 100, "cacheWriteInputTokens", 50,
+                                "cacheReadInputTokens", 30, "cacheDetails.1h.inputTokens", 20,
+                                "cacheDetails.5m.inputTokens", 30),
+                        anthropic("anthropic_native").inputTokens(200).cacheReadInputTokens(30)
+                                .cacheCreation5mInputTokens(30).cacheCreation1hInputTokens(20).outputTokens(100)
+                                .build()),
                 new UsageCase("Anthropic native in camelCase", "anthropic",
                         usage("inputTokens", 200, "outputTokens", 100, "cacheReadInputTokens", 30),
                         anthropic("anthropic_native").inputTokens(200).cacheReadInputTokens(30).outputTokens(100)
@@ -187,6 +200,23 @@ public final class UsageCases {
                                 "input_tokens_details.cached_tokens", 500, "output_tokens_details.reasoning_tokens", 0),
                         openAi("responses").promptTokens(1500).cachedTokens(500).completionTokens(300)
                                 .totalTokens(1800).build()),
+                new UsageCase("Responses API with Claude's cache writes split by TTL", "openrouter",
+                        usage("input_tokens", 1500, "output_tokens", 300, "total_tokens", 1800,
+                                "input_tokens_details.cached_tokens", 200, "cache_creation_input_tokens", 300,
+                                "cache_creation.ephemeral_5m_input_tokens", 100,
+                                "cache_creation.ephemeral_1h_input_tokens", 200),
+                        OpenAiNativeUsage.builder().provider("openrouter").variant("responses").promptTokens(1500)
+                                .cachedTokens(200).cacheWriteTokens(300).cacheWrite1hTokens(200)
+                                .completionTokens(300).totalTokens(1800).build()),
+                new UsageCase("Responses API with Claude's cache writes split by TTL and no total of them",
+                        "openrouter",
+                        usage("input_tokens", 1500, "output_tokens", 300, "total_tokens", 1800,
+                                "input_tokens_details.cached_tokens", 200,
+                                "cache_creation.ephemeral_5m_input_tokens", 100,
+                                "cache_creation.ephemeral_1h_input_tokens", 200),
+                        OpenAiNativeUsage.builder().provider("openrouter").variant("responses").promptTokens(1500)
+                                .cachedTokens(200).cacheWriteTokens(300).cacheWrite1hTokens(200)
+                                .completionTokens(300).totalTokens(1800).build()),
                 new UsageCase("OpenAI through flat OTel", "openai",
                         usage("gen_ai.usage.input_tokens", 12000, "gen_ai.usage.output_tokens", 500,
                                 "gen_ai.usage.cache_read_input_tokens", 10000),
@@ -329,6 +359,22 @@ public final class UsageCases {
                                 "cache_creation_input_tokens", 1000),
                         bedrock("litellm").inputTokens(200).cacheReadInputTokens(4000).cacheWriteInputTokens(1000)
                                 .outputTokens(100).build()),
+                new UsageCase("Bedrock through LiteLLM with cache writes split by TTL", "bedrock",
+                        usage("prompt_tokens", 200, "completion_tokens", 100, "cache_read_input_tokens", 4000,
+                                "cache_creation_input_tokens", 1000,
+                                "cache_creation_token_details.ephemeral_5m_input_tokens", 400,
+                                "cache_creation_token_details.ephemeral_1h_input_tokens", 600),
+                        bedrock("litellm").inputTokens(200).cacheReadInputTokens(4000).cacheWriteInputTokens(1000)
+                                .cacheWrite1hInputTokens(600).outputTokens(100).build()),
+                new UsageCase("Bedrock through LiteLLM 1.82, the cache and its TTL split in the prompt's details",
+                        "bedrock",
+                        usage("prompt_tokens", 5200, "completion_tokens", 100, "cache_read_input_tokens", 4000,
+                                "cache_creation_input_tokens", 1000, "prompt_tokens_details.cached_tokens", 4000,
+                                "prompt_tokens_details.cache_creation_tokens", 1000,
+                                "prompt_tokens_details.cache_creation_token_details.ephemeral_5m_input_tokens", 400,
+                                "prompt_tokens_details.cache_creation_token_details.ephemeral_1h_input_tokens", 600),
+                        bedrock("litellm").inputTokens(200).cacheReadInputTokens(4000).cacheWriteInputTokens(1000)
+                                .cacheWrite1hInputTokens(600).outputTokens(100).build()),
                 new UsageCase("Bedrock InvokeModel with a Mistral body", "bedrock",
                         usage("prompt_tokens", 10, "completion_tokens", 20, "total_tokens", 30),
                         bedrock("totals_only").inputTokens(10).outputTokens(20).build()),

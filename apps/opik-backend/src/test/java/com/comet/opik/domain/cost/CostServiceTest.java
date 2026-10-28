@@ -257,15 +257,31 @@ class CostServiceTest {
     }
 
     /**
-     * Tier thresholds are parsed while the price table loads, where an int overflow or a NumberFormatException would
-     * leave every span unpriced, so a threshold too large for any prompt isn't read as a tier.
+     * Tier thresholds are parsed while the price table loads. An int overflow would bill every prompt at the tier rate,
+     * and a NumberFormatException would stop the price table, and with it span ingestion, from loading. So a threshold
+     * of seven digits or more, too large for any prompt, isn't read as a tier.
      */
     @Test
     void promptTierRateSkipsAThresholdTooLargeForAnyPrompt() {
         assertThat(ModelPriceTable.PROMPT_TIER_RATE.matcher("input_cost_per_token_above_99999999999k_tokens").matches())
                 .isFalse();
+        assertThat(ModelPriceTable.PROMPT_TIER_RATE.matcher("input_cost_per_token_above_1000000k_tokens").matches())
+                .isFalse();
         assertThat(ModelPriceTable.PROMPT_TIER_RATE.matcher("input_cost_per_token_above_999999k_tokens").matches())
                 .isTrue();
+
+        var modelCost = JsonUtils.treeToValue(JsonUtils.getJsonNodeFromString("""
+                {"litellm_provider": "openai", "input_cost_per_token": 1e-06,
+                 "input_cost_per_token_above_999999k_tokens": 2e-06,
+                 "input_cost_per_token_above_1000000k_tokens": 3e-06,
+                 "input_cost_per_token_above_99999999999k_tokens": 4e-06}"""), ModelCostData.class);
+
+        assertThat(ModelPriceTable.buildModelPrice("gpt-huge-tiers", modelCost).promptTiers())
+                .singleElement()
+                .satisfies(tier -> {
+                    assertThat(tier.threshold()).isEqualTo(999_999_000);
+                    assertThat(tier.inputPrice()).isEqualByComparingTo("2e-06");
+                });
     }
 
     /** A price row that doesn't read as one would stop the price table from loading, and with it span ingestion. */
@@ -275,7 +291,9 @@ class CostServiceTest {
                 "gpt-good", JsonUtils.getJsonNodeFromString(
                         "{\"litellm_provider\": \"openai\", \"input_cost_per_token\": 1e-06}"),
                 "gpt-rate-as-object", JsonUtils.getJsonNodeFromString(
-                        "{\"litellm_provider\": \"openai\", \"input_cost_per_token\": {\"usd\": 1e-06}}"));
+                        "{\"litellm_provider\": \"openai\", \"input_cost_per_token\": {\"usd\": 1e-06}}"),
+                "gpt-null-row", JsonUtils.getJsonNodeFromString("null"),
+                "gpt-number-row", JsonUtils.getJsonNodeFromString("1e-06"));
 
         assertThat(ModelPriceTable.toModelCosts("test prices", rows)).containsOnlyKeys("gpt-good");
     }
@@ -286,6 +304,31 @@ class CostServiceTest {
         var modelCost = ModelCostData.builder().litellmProvider("openai").inputCostPerToken(rate).build();
 
         assertThat(ModelPriceTable.buildModelPrice("gpt-bad-rate", modelCost)).isNull();
+    }
+
+    /** Base rates are read as strings, so a tier rate written as one is billed like them, not dropped. */
+    @Test
+    void aTierRateWrittenAsAStringIsBilled() {
+        var modelCost = JsonUtils.treeToValue(JsonUtils.getJsonNodeFromString("""
+                {"litellm_provider": "anthropic", "input_cost_per_token": "3e-06",
+                 "input_cost_per_token_above_200k_tokens": "6e-06"}"""), ModelCostData.class);
+
+        assertThat(ModelPriceTable.buildModelPrice("claude-string-tier", modelCost).promptTiers())
+                .singleElement()
+                .satisfies(tier -> {
+                    assertThat(tier.threshold()).isEqualTo(200_000);
+                    assertThat(tier.inputPrice()).isEqualByComparingTo("6e-06");
+                });
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"n/a", ""})
+    void aTierRateThatIsNotANumberSkipsOnlyItsModel(String rate) {
+        var modelCost = ModelCostData.builder().litellmProvider("anthropic").inputCostPerToken("3e-06")
+                .otherFields(Map.of("input_cost_per_token_above_200k_tokens", JsonUtils.valueToTree(rate)))
+                .build();
+
+        assertThat(ModelPriceTable.buildModelPrice("claude-bad-tier-rate", modelCost)).isNull();
     }
 
     @Test
@@ -732,9 +775,7 @@ class CostServiceTest {
                 Arguments.of("elser_model_2", "elastic"),
                 Arguments.of("gemini-3-flash", "google_ai"),
                 Arguments.of("gemini-3.1-pro", "google_ai"),
-                Arguments.of("gemini-embedding-002", "google_ai"),
-                Arguments.of("mistral-medium-3-5", "mistral"),
-                Arguments.of("mistral-small-2603", "mistral"));
+                Arguments.of("gemini-embedding-002", "google_ai"));
     }
 
     /**

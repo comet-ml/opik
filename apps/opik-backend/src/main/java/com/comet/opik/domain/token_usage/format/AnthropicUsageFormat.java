@@ -80,9 +80,7 @@ final class AnthropicUsageFormat implements UsageFormat {
                     .build();
         }
         // Bedrock Converse names the writes cacheWriteInputTokens.
-        var cacheWrites = CacheWrites.of(keys, "cache_creation.ephemeral_5m_input_tokens",
-                "cache_creation.ephemeral_1h_input_tokens",
-                keys.first("cache_creation_input_tokens", "cache_write_input_tokens"));
+        var cacheWrites = CacheWrites.of(keys, keys.first("cache_creation_input_tokens", "cache_write_input_tokens"));
         return builder(input)
                 .inputTokens(keys.get("input_tokens"))
                 .cacheReadInputTokens(keys.get("cache_read_input_tokens"))

@@ -1,9 +1,12 @@
 package com.comet.opik.domain.token_usage.format;
 
+import lombok.Builder;
+
 /**
  * Cache writes split by TTL, as Claude reports them. Without the split, every write counts as a 5-minute write, and so
  * do the writes of a reported total that the split doesn't account for: they happened all the same.
  */
+@Builder(toBuilder = true)
 record CacheWrites(long fiveMinutes, long oneHour) {
 
     // The split under the names clients report Claude's usage with, wherever it's served: Claude's own (Bedrock
@@ -19,19 +22,14 @@ record CacheWrites(long fiveMinutes, long oneHour) {
 
     /** The writes of the total, split by whichever of the names above the usage reports. */
     static CacheWrites of(UsageKeys keys, long total) {
-        return of(keys, FIVE_MINUTE_WRITES, ONE_HOUR_WRITES, total);
-    }
-
-    static CacheWrites of(UsageKeys keys, String fiveMinutesKey, String oneHourKey, long total) {
-        return of(keys, new String[]{fiveMinutesKey}, new String[]{oneHourKey}, total);
-    }
-
-    private static CacheWrites of(UsageKeys keys, String[] fiveMinutes, String[] oneHour, long total) {
-        if (keys.hasAny(fiveMinutes) || keys.hasAny(oneHour)) {
-            long oneHourWrites = keys.first(oneHour);
-            return new CacheWrites(Math.max(keys.first(fiveMinutes), total - oneHourWrites), oneHourWrites);
+        if (keys.hasAny(FIVE_MINUTE_WRITES) || keys.hasAny(ONE_HOUR_WRITES)) {
+            long oneHourWrites = keys.first(ONE_HOUR_WRITES);
+            return CacheWrites.builder()
+                    .fiveMinutes(Math.max(keys.first(FIVE_MINUTE_WRITES), total - oneHourWrites))
+                    .oneHour(oneHourWrites)
+                    .build();
         }
-        return new CacheWrites(total, 0);
+        return CacheWrites.builder().fiveMinutes(total).build();
     }
 
     long total() {
