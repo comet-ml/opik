@@ -216,7 +216,11 @@ class TopicVectorsTickTest {
 
     @BeforeEach
     void setUp() {
-        template.inTransaction(WRITE, handle -> handle.execute("UPDATE ai_label_workspaces SET enabled = FALSE"));
+        template.inTransaction(WRITE, handle -> {
+            handle.execute("UPDATE ai_label_workspaces SET enabled = FALSE");
+            handle.execute("UPDATE topic_workspaces SET enabled = FALSE");
+            return null;
+        });
         wireMock.resetAll();
         wireMock.stubFor(post(urlEqualTo(EMBED_PATH)).willReturn(aResponse().withTransformers(EmbedStub.NAME)));
         embedStub.reset();
@@ -280,6 +284,40 @@ class TopicVectorsTickTest {
             assertThat(enabled).contains(body.path("org_id").asText());
             assertThat(body.path("cache").asBoolean(true)).isFalse();
         });
+    }
+
+    @Test
+    @DisplayName("a workspace needs both opt-ins: ai-labels alone, topics alone or topics turned off get no vectors")
+    void topicsOptIn() {
+        var both = enabledWorkspace();
+        var aiLabelsOnly = workspaceWith(true, false);
+        var topicsOnly = workspaceWith(false, true);
+        var noTopicsRow = UUID.randomUUID().toString();
+        template.inTransaction(WRITE, handle -> {
+            handle.attach(AiLabelWorkspaceDAO.class).upsert(noTopicsRow, true, "test");
+            return null;
+        });
+        var labeled = new java.util.LinkedHashMap<String, List<UUID>>();
+        for (var workspaceId : List.of(both, aiLabelsOnly, topicsOnly, noTopicsRow)) {
+            labeled.put(workspaceId, labelTraces(workspaceId, 2, 1));
+        }
+
+        assertThat(tickService.tick(Instant.now()).written()).isEqualTo(2);
+
+        assertThat(vectors(both, labeled.get(both))).hasSize(2);
+        for (var workspaceId : List.of(aiLabelsOnly, topicsOnly, noTopicsRow)) {
+            assertThat(vectors(workspaceId, labeled.get(workspaceId))).isEmpty();
+        }
+
+        // Turned off: the next tick drops the workspace; its stored vectors stay.
+        template.inTransaction(WRITE, handle -> {
+            handle.attach(TopicWorkspaceDAO.class).upsert(both, false, "test");
+            return null;
+        });
+        var later = labelTraces(both, 2, 1);
+        assertThat(tickService.tick(Instant.now()).written()).isZero();
+        assertThat(vectors(both, later)).isEmpty();
+        assertThat(vectors(both, labeled.get(both))).hasSize(2);
     }
 
     @Test
@@ -830,6 +868,17 @@ class TopicVectorsTickTest {
         var workspaceId = UUID.randomUUID().toString();
         template.inTransaction(WRITE, handle -> {
             handle.attach(AiLabelWorkspaceDAO.class).upsert(workspaceId, true, "test");
+            handle.attach(TopicWorkspaceDAO.class).upsert(workspaceId, true, "test");
+            return null;
+        });
+        return workspaceId;
+    }
+
+    private String workspaceWith(boolean aiLabels, boolean topics) {
+        var workspaceId = UUID.randomUUID().toString();
+        template.inTransaction(WRITE, handle -> {
+            handle.attach(AiLabelWorkspaceDAO.class).upsert(workspaceId, aiLabels, "test");
+            handle.attach(TopicWorkspaceDAO.class).upsert(workspaceId, topics, "test");
             return null;
         });
         return workspaceId;

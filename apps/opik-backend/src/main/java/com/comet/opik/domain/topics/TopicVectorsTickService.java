@@ -2,7 +2,6 @@ package com.comet.opik.domain.topics;
 
 import com.comet.opik.domain.ailabels.AiLabelTask;
 import com.comet.opik.domain.ailabels.AiLabelTaskRegistry;
-import com.comet.opik.domain.ailabels.AiLabelWorkspaceDAO;
 import com.comet.opik.infrastructure.AiLabelsConfig;
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.inference.EmbedRequest;
@@ -50,7 +49,7 @@ import static io.opentelemetry.api.common.AttributeKey.longKey;
 import static io.opentelemetry.api.common.AttributeKey.stringKey;
 
 /**
- * One topic vectors tick: for every workspace ai-labels is enabled for, find the traces whose latest
+ * One topic vectors tick: for every workspace topics and ai-labels are enabled for, find the traces whose latest
  * {@code trace_summary} status is done and that have no vector yet, embed their summaries with {@code /v1/embed} and
  * store the unit-length vectors in {@code topic_vectors}. Runs on the leader only.
  *
@@ -302,7 +301,7 @@ public class TopicVectorsTickService {
     private Found find(Instant start, Instant lowerBound, Instant createdAfter, Instant deadline) {
         int limit = config.getVectors().getMaxTracesPerTick();
         var workspaceIds = rotated(template.inTransaction(READ_ONLY,
-                handle -> handle.attach(AiLabelWorkspaceDAO.class).enabledWorkspaceIds()), tickSequence(start));
+                handle -> handle.attach(TopicWorkspaceDAO.class).enabledWorkspaceIds()), tickSequence(start));
         var oldest = new LinkedHashMap<String, Instant>();
         var found = new ArrayList<TopicVectorCandidate>();
         boolean complete = true;

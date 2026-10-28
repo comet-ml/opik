@@ -98,8 +98,31 @@ LIMIT 1 BY workspace_id, project_id, task, trace_id, key;
 
 The topic vectors job stores one bge-small vector (384 numbers, unit length) for every trace that has a `done`
 `trace_summary` label. It embeds the summary text through opik-inference `/v1/embed` and writes the row to the
-ClickHouse table `topic_vectors`, one row per (trace, task version). It reads the same workspaces as ai-labels: there is
-no separate opt-in. It is off by default everywhere.
+ClickHouse table `topic_vectors`, one row per (trace, task version). It is off by default everywhere.
+
+### Opting workspaces in and out
+
+Topics have their own opt-in, the `topic_workspaces` table in the state database (MySQL). It works like
+`ai_label_workspaces`, and there is no API. Topics read the ai-labels `trace_summary`, so a workspace runs topics only
+when it is enabled in **both** tables. Opting a workspace in to ai-labels does not turn topics on.
+
+```sql
+-- MySQL: enable (or re-enable) topics for a workspace. It must also be enabled in ai_label_workspaces.
+INSERT INTO topic_workspaces (workspace_id, enabled, added_by)
+VALUES ('<workspace_id>', TRUE, '<your name>')
+ON DUPLICATE KEY UPDATE enabled = TRUE, added_by = '<your name>';
+
+-- MySQL: disable topics for a workspace. The next tick drops it. Stored vectors stay.
+UPDATE topic_workspaces SET enabled = FALSE WHERE workspace_id = '<workspace_id>';
+
+-- MySQL: the workspaces topics run for
+SELECT t.workspace_id, t.added_at, t.added_by
+FROM topic_workspaces t JOIN ai_label_workspaces a ON a.workspace_id = t.workspace_id
+WHERE t.enabled = TRUE AND a.enabled = TRUE ORDER BY t.added_at;
+```
+
+A workspace opted in after its traces were labeled gets vectors for the last 7 days (the long window). For older
+labels, see "Backfill".
 
 ### Turning it on
 
@@ -152,7 +175,7 @@ Older ones need a backfill.
 ### Backfill
 
 The job only looks back as far as the long window (7 days). To write vectors for older labels, for example when
-topics is turned on weeks after ai-labels or a workspace is opted in again:
+topics is turned on weeks after ai-labels, or a workspace is opted in to topics later than to ai-labels:
 
 1. Set `TOPICS_VECTORS_BACKFILL_WINDOW` to the age to cover (for example `30d`), and restart.
 2. Delete the Redis key `topics:vectors:long_window` to start the pass now. Otherwise it starts at the next interval.
