@@ -201,6 +201,40 @@ def test_never_scores_a_prompt_twice_on_the_same_items(
 
 
 @pytest.mark.parametrize("optimizer_name", harness.OPTIMIZERS)
+def test_scoring_the_result_after_the_run_is_not_one_of_its_trials(
+    optimizer_name: str, install_fakes: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Opik groups a run's trials by candidate_id to report its baseline and
+    # best scores, so a test-split evaluation logged into the finished run
+    # would be averaged into whichever candidate shares the prompt.
+    scenario = harness.build_scenario("S1_single")
+    install_fakes(scenario)
+    optimizer = harness.make_optimizer(optimizer_name)
+    result = harness.run_optimizer(optimizer_name, scenario, optimizer=optimizer)
+    configs = _record_trial_configs(monkeypatch)
+    standalone: list[dict[str, Any]] = []
+
+    def _recording_evaluate(**kwargs: Any) -> Any:
+        standalone.append(kwargs)
+        return fake_opik.fake_evaluate(**kwargs)
+
+    monkeypatch.setattr(
+        "opik_optimizer.core.evaluation.opik_evaluator.evaluate", _recording_evaluate
+    )
+
+    optimizer.evaluate_prompt(
+        prompt=result.prompt,
+        dataset=harness.make_dataset(scenario),
+        metric=harness.answer_match,
+        agent=scenario.agent,
+    )
+
+    assert configs == []
+    assert len(standalone) == 1
+    assert "candidate_id" not in (standalone[0].get("experiment_config") or {})
+
+
+@pytest.mark.parametrize("optimizer_name", harness.OPTIMIZERS)
 def test_perfect_baseline_returns_it_without_searching(
     optimizer_name: str, install_fakes: Any
 ) -> None:

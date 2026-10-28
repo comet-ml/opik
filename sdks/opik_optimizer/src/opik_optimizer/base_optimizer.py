@@ -1994,7 +1994,9 @@ class BaseOptimizer(ABC):
             logger.warning(
                 f"Cannot update optimization status to {status}: optimization object is None"
             )
-        # No implicit context storage; nothing to clear here.
+        # The run is over: a later evaluate_prompt (scoring the result on a test
+        # split, say) is a plain experiment, not a trial of this optimization.
+        self.current_optimization_id = None
 
     @overload
     def evaluate_prompt(
