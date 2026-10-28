@@ -1,11 +1,10 @@
 package com.comet.opik.domain.llm;
 
+import com.google.common.base.Throwables;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 
-import java.util.Collections;
-import java.util.IdentityHashMap;
-import java.util.Set;
+import java.util.List;
 
 /**
  * LLM provider failures as they may be logged. A provider exception's message, and those of its causes, is often what
@@ -19,27 +18,26 @@ public class ProviderFailures {
      * where a call failed. Each link names the class it stands for.
      */
     public static Throwable redacted(@NonNull Throwable throwable) {
-        return redacted(throwable, Collections.newSetFromMap(new IdentityHashMap<>()));
+        RedactedThrowable redacted = null;
+        for (var link : chain(throwable).reversed()) {
+            redacted = new RedactedThrowable(link.getClass().getName(), redacted);
+            redacted.setStackTrace(link.getStackTrace());
+        }
+        return redacted;
     }
 
     /** The simple class name of the failure's innermost cause, which names what went wrong without any text. */
     public static String rootType(@NonNull Throwable throwable) {
-        var root = throwable;
-        var seen = Collections.<Throwable>newSetFromMap(new IdentityHashMap<>());
-        while (root.getCause() != null && seen.add(root)) {
-            root = root.getCause();
-        }
-        return root.getClass().getSimpleName();
+        return chain(throwable).getLast().getClass().getSimpleName();
     }
 
-    private static Throwable redacted(Throwable throwable, Set<Throwable> seen) {
-        seen.add(throwable);
-        var cause = throwable.getCause() != null && !seen.contains(throwable.getCause())
-                ? redacted(throwable.getCause(), seen)
-                : null;
-        var redacted = new RedactedThrowable(throwable.getClass().getName(), cause);
-        redacted.setStackTrace(throwable.getStackTrace());
-        return redacted;
+    /** The failure and its causes, outermost first; only the failure itself when its causes loop, so that logging it can't fail. */
+    private static List<Throwable> chain(Throwable throwable) {
+        try {
+            return Throwables.getCausalChain(throwable);
+        } catch (IllegalArgumentException loop) {
+            return List.of(throwable);
+        }
     }
 
     /** Stands for a throwable of the class it names, without its message. */

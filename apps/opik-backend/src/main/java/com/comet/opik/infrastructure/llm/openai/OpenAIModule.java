@@ -50,7 +50,7 @@ public class OpenAIModule extends AbstractModule {
     }
 
     /** The configured read timeout, none when unset. */
-    static Duration readTimeout(LlmProviderClientConfig config) {
+    static Duration readTimeout(@NonNull LlmProviderClientConfig config) {
         return Optional.ofNullable(config.getReadTimeout())
                 .map(timeout -> Duration.ofMillis(timeout.toMilliseconds()))
                 .orElse(Duration.ZERO);

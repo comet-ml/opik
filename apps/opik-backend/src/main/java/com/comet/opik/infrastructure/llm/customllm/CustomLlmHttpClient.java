@@ -328,17 +328,17 @@ class CustomLlmHttpClient implements HttpClient {
         private final ServerSentEventListener delegate;
 
         @Override
-        public void onEvent(ServerSentEvent event, ServerSentEventContext context) {
+        public void onEvent(@NonNull ServerSentEvent event, @NonNull ServerSentEventContext context) {
             delegate.onEvent(event, context);
         }
 
         @Override
-        public void onEvent(ServerSentEvent event) {
+        public void onEvent(@NonNull ServerSentEvent event) {
             delegate.onEvent(event);
         }
 
         @Override
-        public void onError(Throwable throwable) {
+        public void onError(@NonNull Throwable throwable) {
             delegate.onError(throwable instanceof IOException ioException ? failure(ioException) : throwable);
         }
     }

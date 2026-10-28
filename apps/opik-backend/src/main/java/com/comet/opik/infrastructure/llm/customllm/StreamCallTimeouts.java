@@ -1,7 +1,9 @@
 package com.comet.opik.infrastructure.llm.customllm;
 
 import com.comet.opik.infrastructure.http.BodyDeadline;
+import lombok.AccessLevel;
 import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import okhttp3.Interceptor;
 import okhttp3.OkHttpClient;
 import okhttp3.Response;
@@ -26,17 +28,12 @@ import java.util.function.Predicate;
  * <p>An unset, zero read timeout leaves the header wait unbounded, as it did with the JDK client; the stream read
  * timeout still bounds the body.
  */
+@RequiredArgsConstructor(access = AccessLevel.PRIVATE)
 public final class StreamCallTimeouts implements Interceptor {
 
     private final Duration readTimeout;
     private final Duration streamReadTimeout;
     private final Predicate<Response> isStream;
-
-    private StreamCallTimeouts(Duration readTimeout, Duration streamReadTimeout, Predicate<Response> isStream) {
-        this.readTimeout = readTimeout;
-        this.streamReadTimeout = streamReadTimeout;
-        this.isStream = isStream;
-    }
 
     /** For a client that makes only streaming calls. */
     public static StreamCallTimeouts forStreams(@NonNull Duration readTimeout, @NonNull Duration streamReadTimeout) {

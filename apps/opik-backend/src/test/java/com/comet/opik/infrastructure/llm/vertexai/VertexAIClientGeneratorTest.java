@@ -22,6 +22,7 @@ import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import io.dropwizard.util.Duration;
 import jakarta.ws.rs.client.Client;
+import lombok.Builder;
 import okhttp3.ConnectionPool;
 import okhttp3.Dispatcher;
 import okhttp3.OkHttpClient;
@@ -1080,9 +1081,10 @@ class VertexAIClientGeneratorTest {
     }
 
     /** The pool and dispatcher a client runs on. */
+    @Builder(toBuilder = true)
     private record Transport(ConnectionPool connectionPool, Dispatcher dispatcher) {
         static Transport of(OkHttpClient client) {
-            return new Transport(client.connectionPool(), client.dispatcher());
+            return Transport.builder().connectionPool(client.connectionPool()).dispatcher(client.dispatcher()).build();
         }
     }
 

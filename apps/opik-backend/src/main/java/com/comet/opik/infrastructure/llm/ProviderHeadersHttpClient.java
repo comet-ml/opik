@@ -7,6 +7,7 @@ import dev.langchain4j.http.client.SuccessfulHttpResponse;
 import dev.langchain4j.http.client.sse.HttpStreamingEvent;
 import dev.langchain4j.http.client.sse.ServerSentEventListener;
 import dev.langchain4j.http.client.sse.ServerSentEventParser;
+import jakarta.annotation.Nullable;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.MapUtils;
@@ -37,14 +38,15 @@ public class ProviderHeadersHttpClient extends DelegatingHttpClient {
     }
 
     /** {@code delegate}, whose every client adds {@code headers} to its requests; as it is when there are none. */
-    public static HttpClientBuilder builder(@NonNull HttpClientBuilder delegate, Map<String, String> headers) {
+    public static HttpClientBuilder builder(@NonNull HttpClientBuilder delegate,
+            @Nullable Map<String, String> headers) {
         var normalizedProviderHeaders = normalizedProviderHeaders(headers);
         if (normalizedProviderHeaders.isEmpty()) {
             return delegate;
         }
         return new DelegatingHttpClientBuilder(delegate) {
             @Override
-            protected HttpClient wrap(HttpClient client) {
+            protected HttpClient wrap(@NonNull HttpClient client) {
                 return new ProviderHeadersHttpClient(client, normalizedProviderHeaders);
             }
         };
@@ -77,25 +79,27 @@ public class ProviderHeadersHttpClient extends DelegatingHttpClient {
 
     /** Sends the request with the provider's headers. */
     @Override
-    public SuccessfulHttpResponse execute(HttpRequest request) {
+    public SuccessfulHttpResponse execute(@NonNull HttpRequest request) {
         return delegate.execute(withHeaders(request));
     }
 
     /** Sends the request with the provider's headers. */
     @Override
-    public CompletableFuture<SuccessfulHttpResponse> executeAsync(HttpRequest request) {
+    public CompletableFuture<SuccessfulHttpResponse> executeAsync(@NonNull HttpRequest request) {
         return delegate.executeAsync(withHeaders(request));
     }
 
     /** Sends the request with the provider's headers. */
     @Override
-    public void execute(HttpRequest request, ServerSentEventParser parser, ServerSentEventListener listener) {
+    public void execute(@NonNull HttpRequest request, @NonNull ServerSentEventParser parser,
+            @NonNull ServerSentEventListener listener) {
         delegate.execute(withHeaders(request), parser, listener);
     }
 
     /** Sends the request with the provider's headers. */
     @Override
-    public Flow.Publisher<HttpStreamingEvent> stream(HttpRequest request, ServerSentEventParser parser) {
+    public Flow.Publisher<HttpStreamingEvent> stream(@NonNull HttpRequest request,
+            @NonNull ServerSentEventParser parser) {
         return delegate.stream(withHeaders(request), parser);
     }
 

@@ -3,6 +3,7 @@ package com.comet.opik.domain.llm;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.google.common.base.CharMatcher;
 import io.dropwizard.jersey.errors.ErrorMessage;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
@@ -100,7 +101,7 @@ public class ProviderErrorMessageValidator {
      * The first line of a message, stripped. Google APIs put a one-line summary first and the specifics, such as the
      * quota that was exceeded, on the lines after it.
      */
-    public static String firstLine(String text) {
+    public static @Nullable String firstLine(@Nullable String text) {
         return text == null ? null : LINE_BREAK.split(text, 2)[0].strip();
     }
 
