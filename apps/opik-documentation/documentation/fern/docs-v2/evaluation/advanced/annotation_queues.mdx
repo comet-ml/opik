@@ -5,13 +5,22 @@ og:description: Optimize your AI projects by enabling SMEs to efficiently review
 og:site_name: Opik Documentation
 og:title: Streamline Annotation Queues with Opik
 subtitle: Enable subject matter experts to review and annotate agent outputs with
-  easy queues,  invitations, and a clean annotation UI
+  easy queues, invitations, and a clean annotation UI
 title: Annotation Queues
 ---
 
 Involving subject matter experts in AI projects is essential because they provide the domain knowledge and contextual judgment that ensures model outputs are accurate, relevant, and aligned with real-world expectations. Annotation Queues in Opik make it simple for subject matter experts (SMEs) to review and annotate agent outputs. This feature streamlines the human-in-the-loop process by providing easy queue management, simple invitation flows, and a distraction-free annotation experience designed for non-technical users.
 
-![SME Annotation Flow](/img/evaluation/sme_flow_annotating.gif)
+<video
+  src="/img/evaluation/sme_flow_annotating.mp4"
+  width="854"
+  height="478"
+  autoPlay
+  muted
+  loop
+  playsInline
+  preload="auto"
+/>
 
 Annotation Queues are collections of traces or threads that need human review and feedback. They enable you to organize content for review, share with SMEs easily, collect structured feedback, and track progress across all your evaluation workflows.
 
@@ -25,37 +34,41 @@ Each annotation queue is defined by a collection of traces or threads, evaluatio
 
 ### Setting Up Your First Queue
 
-Navigate to the **Annotation Queues** page in your project and click **Create Queue**.
+Open your project, select **Annotation queues** in the sidebar, and click **Create queue**.
 
 <Frame>
-  <img src="/img/evaluation/create_new_annotation_queue.png" />
+  <img src="/img/evaluation/create_new_annotation_queue.png" alt="The Create annotation queue form" />
 </Frame>
 
 Configure your queue with:
 
 - **Name**: Clear identification for your queue
 - **Scope**: Choose between traces or threads
-- **Instructions**: Provide context and guidance for reviewers
-- **Feedback Definitions**: Select the metrics SMEs will use for scoring
+- **Instructions** (optional): Provide context and guidance for reviewers
+- **Feedback scores** (optional): Select the [feedback definitions](/administration/workspace-settings/feedback_definitions) SMEs will use for scoring
+- **Annotators per item**: How many annotators must score an item before it counts as complete
+- **Lock timeout**: How long an item stays reserved for the annotator who opened it. After this time, another annotator can pick it up
+- **Automation**: Add items automatically based on their feedback scores (see [Populating a Queue Automatically](#populating-a-queue-automatically))
+- **Annotator view**: What annotators see for each item (see [Customize what annotators see](#customize-what-annotators-see))
 
 ### Adding Content to Your Queue
 
 You can add items to your queue in several ways:
 
-**From Traces/Threads Lists:**
+**From the Traces or Threads list on the Logs page:**
 
 - Select one or multiple items
-- Click **Add to -> Add to annotation queue**
+- Click **Add to > Annotation queue**
 - Choose an existing queue or create a new one
 
-**From Individual Trace/Thread Details:**
+**From a single trace or thread:**
 
-- Open the trace or thread detail view
-- Click **Add to -> Add to annotation queue** in the actions panel
+- Open the trace or thread
+- Click **Add to > Annotation queue** in its toolbar
 - Select your target queue
 
 <Frame>
-  <img src="/img/evaluation/add_to_annotation_queue.png" />
+  <img src="/img/evaluation/add_to_annotation_queue.png" alt="The Add to annotation queue dialog on the Logs page" />
 </Frame>
 
 ### Populating a Queue Automatically
@@ -115,38 +128,106 @@ Once your queue is set up, you can share it with SMEs:
   to your project first, then share the queue link.
 </Tip>
 
-- Click the **Share queue** button on your queue to copy the queue link
+- Open the queue and click **Share** to copy the queue link
 - Share the link directly with SMEs via email, Slack, or other communication tools
+
+Click **Annotate** to open the queue the way your annotators see it.
 
 ## SME Annotation Experience
 
-When SMEs access a queue, they experience a streamlined, distraction-free interface designed for efficient review.
+When SMEs open a queue link, they land on a welcome page with the queue's instructions and the feedback scores they will give.
 
 <Frame>
-  <img src="/img/evaluation/sme_instruction_page.png" />
+  <img src="/img/evaluation/sme_instruction_page.png" alt="The welcome page of an annotation queue" />
 </Frame>
 
-The annotation workflow begins with clear instructions and context, allowing SMEs to understand what they're evaluating and how to provide meaningful feedback.
+They click **Start annotating** (or **Resume annotating** when they come back) and review one item at a time.
 
 <Frame>
-  <img src="/img/evaluation/sme_annotation_page.png" />
+  <img src="/img/evaluation/sme_annotation_page.png" alt="An annotator reviewing a trace with the default view" />
 </Frame>
 
-The SME interface provides:
+The annotation page has three parts:
 
-1. **Clean, focused design**: No technical jargon or complex navigation
-2. **Clear instructions**: Queue-specific guidance displayed prominently
-3. **Structured feedback**: Predefined metrics with clear descriptions
-4. **Progress tracking**: Visual indicators of completion status
-5. **Comment system**: Optional text feedback for additional context
+1. **Queue items**: the items still **To review** and the ones already **Processed**, so annotators can go back to an item
+2. **The item**: a trace shows its input, output and metadata; a thread shows the conversation. A queue can replace this with a [custom view](#customize-what-annotators-see)
+3. **Annotate**: a comment and the queue's feedback scores, each with an optional reason
+
+**Read instructions** shows the queue's instructions again at any time.
 
 ### Annotation Workflow
 
 1. **Access the queue**: SME clicks the shared link
-2. **Review content**: Examine the trace or thread output
-3. **Provide feedback**: Score using predefined metrics
+2. **Review content**: Examine the trace or thread
+3. **Provide feedback**: Score using the queue's feedback scores
 4. **Add comments**: Optional text feedback
-5. **Submit and continue**: Move to the next item
+5. **Continue**: Click **Next** to move to the next item
+
+When a queue asks for more than one annotator per item, each item is reserved for the annotator who opened it for
+the queue's **Lock timeout**, so two people don't review the same item at once. An item counts as complete once
+the number of annotators set in **Annotators per item** have scored it.
+
+## Customize what annotators see
+
+By default, annotators see a trace's input, output and metadata, or a thread as a conversation. That works for
+many queues, but annotators often need the item laid out around what they judge: the plan next to the request,
+the budget checked against its limit, judge scores kept out of sight until they've given their own score.
+
+An **annotator view** replaces the default view for every item in a queue. It is a small HTML view built for the
+queue's data. Scoring, comments and navigation stay the same.
+
+<Frame>
+  <img src="/img/evaluation/sme_annotation_custom_view.png" alt="An annotator reviewing a trace with a custom annotator view" />
+</Frame>
+
+### Build it with Ollie
+
+[Ollie](/ollie) looks at the queue's items (or the project's latest traces when the queue is empty), proposes a
+layout, and writes the view for you.
+
+<Steps>
+  <Step title="Open the annotator view">
+    Create a queue, or open one and click **Edit**. In the **Annotator view** card, click
+    **Preview & edit with Ollie**.
+  </Step>
+  <Step title="Describe what annotators need">
+    Ollie opens next to a live preview of the view. Tell it what to show, hide or highlight, or pick one of its
+    suggestions. Each change shows up in the preview right away.
+  </Step>
+  <Step title="Check it on real items">
+    Use the arrows above the preview to step through sample items.
+  </Step>
+  <Step title="Save">
+    Click **Save changes** (or **Create queue** for a new queue). Annotators see the new view for every item.
+  </Step>
+</Steps>
+
+<video
+  src="/img/evaluation/annotator_view_ollie.mp4"
+  width="854"
+  height="478"
+  autoPlay
+  muted
+  loop
+  playsInline
+  preload="auto"
+/>
+
+- **Fix with Ollie**: when the view fails on a sample item, the preview offers to fix it.
+- **Revert to default**: removes the custom view. Annotators see the default view again once you save.
+
+### Build it with your coding agent
+
+No Ollie in your workspace, or out of Ollie credits? Build the view with your own coding agent instead. Connect it
+to the [Opik MCP server](/mcp-server) and ask for the view in plain words, for example:
+
+```text wordWrap
+Build a custom annotator view for the "Itinerary review" queue in the Travel Assistant project.
+Show the plan next to the request and hide the judge scores until the annotator reveals them.
+```
+
+The agent reads the queue and its items, writes the view, saves it to the queue, and returns the queue link so
+you can check it. Ask it for changes the same way, or to remove the view.
 
 ## Managing Queues programmatically
 
@@ -380,26 +461,6 @@ queue.remove_traces(short_traces)
 queue.delete()
 ```
 
-### Listing Annotation Queues
-
-```python wordWrap
-import opik
-
-client = opik.Opik()
-
-# Get all traces annotation queues for a project
-traces_queues = client.get_traces_annotation_queues(project_name="my-project")
-
-for queue in traces_queues:
-    print(f"Traces Queue: {queue.name}, Items: {queue.items_count}")
-
-# Get all threads annotation queues for a project
-threads_queues = client.get_threads_annotation_queues(project_name="my-project")
-
-for queue in threads_queues:
-    print(f"Threads Queue: {queue.name}, Items: {queue.items_count}")
-```
-
     </Tab>
     <Tab value="TypeScript" title="TypeScript">
 
@@ -496,3 +557,5 @@ You can learn more about Opik's annotation and evaluation features in:
 
 1. [Evaluation overview](/evaluation/overview)
 2. [Feedback definitions](/administration/workspace-settings/feedback_definitions)
+3. [Ollie](/ollie)
+4. [Opik MCP server](/mcp-server)
