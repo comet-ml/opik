@@ -36,6 +36,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -140,6 +141,7 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
             throw new BadRequestException("provider is built in and can't be saved, provider '%s'"
                     .formatted(LlmProvider.OPIK_FREE.getValue()));
         }
+        validateHeaders(providerApiKey.headers());
         validateDestinations(providerApiKey.baseUrl(), providerApiKey.provider(),
                 providerApiKey.authConfig() == null ? null : providerApiKey.authConfig().value());
         UUID apiKeyId = idGenerator.generateId();
@@ -186,6 +188,7 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
 
         // 404 before any destination lookup; validation resolves DNS, so it stays outside the write transaction
         var stored = find(id, workspaceId);
+        validateHeaders(providerApiKeyUpdate.headers());
         validateDestinations(providerApiKeyUpdate.baseUrl(), stored.provider(), providerApiKeyUpdate.authConfig());
 
         template.inTransaction(WRITE, handle -> {
@@ -325,6 +328,29 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
                     changing base_url requires resubmitting the provider credentials (api_key or auth_config) and \
                     headers""");
         }
+    }
+
+    /**
+     * Each header needs a name and a value, and names differ in more than case, as HTTP compares them ignoring it.
+     * Messages name the header, never its value.
+     */
+    private void validateHeaders(Map<String, String> headers) {
+        if (MapUtils.isEmpty(headers)) {
+            return;
+        }
+        var names = new TreeSet<String>(String.CASE_INSENSITIVE_ORDER);
+        headers.forEach((name, value) -> {
+            if (StringUtils.isBlank(name)) {
+                throw new BadRequestException("header names must not be blank");
+            }
+            if (value == null) {
+                throw new BadRequestException("header value must not be null, header '%s'".formatted(name));
+            }
+            if (!names.add(name)) {
+                throw new BadRequestException(
+                        "header names must differ in more than case, header '%s'".formatted(name));
+            }
+        });
     }
 
     private void validateNoStaticKeyConflict(String encryptedApiKey, boolean authConfigPresent) {

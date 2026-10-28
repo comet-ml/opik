@@ -68,7 +68,7 @@ class LlmProviderOpenAiResponsesExtraBodyTest {
 
     @BeforeEach
     void setUp() {
-        openAi = new WireMockServer(0);
+        openAi = LlmTestClients.newLoopbackWireMock();
         openAi.start();
         openAi.stubFor(post(urlPathEqualTo(RESPONSES_PATH)).willReturn(aResponse()
                 .withStatus(400)
@@ -80,7 +80,7 @@ class LlmProviderOpenAiResponsesExtraBodyTest {
                         LlmTestClients.LLM_HTTP_CLIENT_BUILDERS),
                 LlmProviderClientApiConfig.builder()
                         .apiKey("test-key")
-                        .baseUrl(openAi.baseUrl())
+                        .baseUrl(LlmTestClients.baseUrlOf(openAi))
                         .headers(Map.of(CUSTOM_HEADER, "custom-value"))
                         .build());
     }

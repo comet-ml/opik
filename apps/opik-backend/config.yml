@@ -619,6 +619,13 @@ cipxTokenValidation:
   # Description: Base URL of the cost-api service that validates device tokens; the validator endpoint is appended to it. The in-cluster service name, not the public front door: the validator is reached only from inside the cluster
   url: ${CIPX_TOKEN_VALIDATION_URL:-http://ai-cost-backend}
 
+# The admin server: Dropwizard's tasks (log level, gc), /healthcheck, /metrics, /threads and /ping, on the port of
+# server.adminConnectors. The probes use /health-check on the application port, which stays.
+adminServer:
+  # Default: true
+  # Description: Whether the admin server runs. When false, nothing listens on the admin port, on any interface
+  enabled: ${SERVER_ADMIN_ENABLED:-true}
+
 # https://www.dropwizard.io/en/stable/manual/configuration.html#servers
 server:
   # Default: false
@@ -1672,7 +1679,7 @@ llmProviderClient:
   mediaUrlDestinationScheme: ${LLM_PROVIDER_MEDIA_URL_DESTINATION_SCHEME:-plaintext_or_tls}
   # Default: 30s
   # Description: Time allowed for downloading one media URL that Gemini or Vertex AI receives as inline data,
-  #   connecting included; at most 5m
+  #   connecting included; at most 2m
   mediaDownloadTimeout: ${LLM_PROVIDER_MEDIA_DOWNLOAD_TIMEOUT:-30s}
   # Default: 20MB
   # Description: Most bytes downloaded for all the media of one Gemini or Vertex AI request, which carries at most
@@ -1690,19 +1697,19 @@ llmProviderClient:
   # Default: 120s
   # Description: Longest a provider's stream may stay silent once its headers arrived; readTimeout bounds only the
   #   wait for the headers. Above the 90s ingress idle timeout, as models that reason before answering can be silent
-  #   for a while; between 1s and 1h
+  #   for a while; between 1s and 10m
   streamReadTimeout: ${LLM_PROVIDER_STREAM_READ_TIMEOUT:-120s}
   # Default: 1024
   # Description: Most threads of the shared HTTP client for LLM provider calls. A call made asynchronously, a stream
-  #   included, holds one from start to end, so it must be at least httpClientMaxRequests; at most 10000
+  #   included, holds one from start to end, so it must be at least httpClientMaxRequests; at most 2048
   httpClientMaxThreads: ${LLM_PROVIDER_CLIENT_MAX_THREADS:-1024}
   # Default: 60s
   # Description: How long an idle thread of the shared LLM HTTP client lives before it ends, so the pool shrinks
-  #   back after a burst; between 1s and 1h
+  #   back after a burst; between 1s and 5m
   httpClientThreadKeepAlive: ${LLM_PROVIDER_CLIENT_THREAD_KEEP_ALIVE:-60s}
   # Default: 1024
   # Description: Most LLM provider calls made asynchronously, streams included, that run at once on the shared
-  #   client. Further calls wait in order for one to end, and their timeouts start once they run; at most 10000
+  #   client. Further calls wait in order for one to end, and their timeouts start once they run; at most 2048
   httpClientMaxRequests: ${LLM_PROVIDER_CLIENT_MAX_REQUESTS:-1024}
   # Default: 1024
   # Description: Most of httpClientMaxRequests that run at once to a single host. Most calls go to a few hosts, such
@@ -1859,6 +1866,30 @@ attachmentsConfig:
   stripMinSize: ${ATTACHMENTS_STRIP_MIN_SIZE:-256000}
 
 # Python evaluator configuration
+# Per-organization features the platform switches on (guardrails today), asked for on demand by the endpoints that
+# need them, and only when authentication is enabled.
+workspaceFeatures:
+  # Default: 5s
+  # Description: How long one workspace's answer for a feature is cached in Redis; a feature switched on or off in the platform is seen within it. 0s asks the platform on every call
+  cacheTtl: ${WORKSPACE_FEATURES_CACHE_TTL:-5s}
+
+# Guardrail checks the backend runs on opik-inference (url and credential: aiLabels.inference, required at startup
+# when serviceToggles.guardrailsValidationsEnabled is true). Thresholds are server-side only; the validations endpoint
+# rejects a threshold sent by the caller.
+guardrails:
+  # Default: 0.5
+  # Description: A PII check fails when any selected class scores at or above this
+  piiThreshold: ${GUARDRAILS_PII_THRESHOLD:-0.5}
+  # Default: 0.3
+  # Description: A topic counts as matched when its probability is at or above this
+  topicThreshold: ${GUARDRAILS_TOPIC_THRESHOLD:-0.3}
+  # Default: 0.4
+  # Description: A prompt injection check fails when the probability is at or above this
+  promptInjectionThreshold: ${GUARDRAILS_PROMPT_INJECTION_THRESHOLD:-0.4}
+  # Default: 1s
+  # Description: Time the decision service may spend on one check (sent as deadline_ms); the realtime lane allows up to 5s
+  deadline: ${GUARDRAILS_INFERENCE_DEADLINE:-1s}
+
 pythonEvaluator:
   # Default: http://localhost:8000
   # Description: URL of the Python evaluator service, generally the opik-python-backend service
@@ -1926,7 +1957,7 @@ serviceToggles:
   # Description: Whether or not Guardrails feature is enabled
   guardrailsEnabled: ${TOGGLE_GUARDRAILS_ENABLED:-"false"}
   # Default: false
-  # Description: Whether or not the backend's own guardrails are enabled, starting with the guardrail policies API
+  # Description: Whether or not the backend runs guardrails itself: the checks on opik-inference (POST /v1/private/guardrails/v2/validations) and the guardrail policies API; requires aiLabels.inference url and credential
   guardrailsValidationsEnabled: ${TOGGLE_GUARDRAILS_VALIDATIONS_ENABLED:-"false"}
   # Default: false
   # Description: Whether or not to enable the trace thread Python evaluator

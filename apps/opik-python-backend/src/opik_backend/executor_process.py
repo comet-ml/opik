@@ -149,9 +149,8 @@ _KILL_GRACE_SECONDS = 1
 # it bounds each pause rather than the whole reply, so a large reply that keeps arriving completes. Draining uses it
 # as a fixed bound: pending replies are discarded, and a worker that can't be drained in time is just replaced.
 _REPLY_GRACE_SECONDS = 1
-# The whole of a Studio one-shot reply once its first byte has arrived (the run before it has no deadline). The
-# largest reply, 64 MiB by default, crosses a local pipe in well under a second, so this only ends a worker that
-# keeps a reply going without finishing it.
+# The whole of a Studio one-shot reply once its first byte has arrived (the run before it has no deadline), so a
+# worker that keeps a reply going without finishing it is ended rather than read from forever.
 _ONE_SHOT_REPLY_SECONDS = 30
 
 

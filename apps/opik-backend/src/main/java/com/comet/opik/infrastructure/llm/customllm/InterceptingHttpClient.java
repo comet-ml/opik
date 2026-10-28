@@ -334,7 +334,7 @@ class InterceptingHttpClient extends DelegatingHttpClient {
         Optional<String> model;
         try {
             model = topLevelModel(body);
-        } catch (IOException exception) {
+        } catch (IOException | UncheckedIOException exception) {
             log.warn("Failed to parse request body as JSON for '{}' substitution; forwarding URL unchanged",
                     MODEL_PLACEHOLDER, exception);
             return url;

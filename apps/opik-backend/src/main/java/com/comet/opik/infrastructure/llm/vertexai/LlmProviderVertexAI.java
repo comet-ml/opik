@@ -8,6 +8,7 @@ import com.comet.opik.domain.llm.ProviderFailures;
 import com.comet.opik.infrastructure.llm.GeminiMaxOutputTokens;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderLangChainMapper;
+import com.comet.opik.utils.ClientDisconnectedException;
 import com.google.genai.errors.ApiException;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
@@ -109,9 +110,18 @@ public class LlmProviderVertexAI implements LlmProviderService {
 
                     try {
                         List<ChatMessage> chatMessages = getChatMessages(request);
+                        // the SDK reads the stream to its end unless the call is cancelled
+                        Consumer<ChatCompletionResponse> handleMessageOrCancel = message -> {
+                            try {
+                                handleMessage.accept(message);
+                            } catch (ClientDisconnectedException exception) {
+                                client.cancel();
+                                throw exception;
+                            }
+                        };
                         client.chat(chatMessages, failingWhenCutOffBeforeAnswering(request,
-                                new ChunkedResponseHandler(handleMessage, handleCloseAndRelease, handleErrorAndRelease,
-                                        request.model())));
+                                new ChunkedResponseHandler(handleMessageOrCancel, handleCloseAndRelease,
+                                        handleErrorAndRelease, request.model())));
                     } catch (Exception e) {
                         if (terminalReached.compareAndSet(false, true)) {
                             // Synchronous failure before any terminal — deliver the error and close the stream.
