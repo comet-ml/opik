@@ -1778,6 +1778,26 @@ public class ExperimentDAO {
             ;
             """;
 
+    // Experiments created before dataset versioning have an empty dataset_version_id and resolve to the
+    // latest version at read time, so they only match when the requested version is the latest one.
+    private static final String FIND_IDS_BY_DATASET_ID = """
+            SELECT id
+            FROM (
+                SELECT id, dataset_version_id
+                FROM experiments
+                WHERE workspace_id = :workspace_id
+                AND dataset_id = :dataset_id
+                ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            )
+            <if(dataset_version_id)>
+            WHERE dataset_version_id = :dataset_version_id
+            <if(include_unversioned)>OR dataset_version_id = ''<endif>
+            <endif>
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
     private static final String FIND_EXPERIMENT_DATASET_ID_EXPERIMENT_IDS = """
             SELECT
                 distinct dataset_id, type
@@ -2579,6 +2599,29 @@ public class ExperimentDAO {
                 .flatMap(result -> result.map((row, rowMetadata) -> new DatasetLastExperimentCreated(
                         row.get("dataset_id", UUID.class),
                         row.get("created_at", Instant.class))));
+    }
+
+    @WithSpan
+    public Mono<Set<UUID>> findIdsByDatasetId(@NonNull UUID datasetId, UUID datasetVersionId,
+            boolean includeUnversioned) {
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
+                    var template = getSTWithLogComment(FIND_IDS_BY_DATASET_ID,
+                            "find_experiment_ids_by_dataset_id", workspaceId, userName, datasetId);
+                    if (datasetVersionId != null) {
+                        template.add("dataset_version_id", true);
+                        template.add("include_unversioned", includeUnversioned);
+                    }
+                    var statement = connection.createStatement(template.render())
+                            .bind("workspace_id", workspaceId)
+                            .bind("dataset_id", datasetId);
+                    if (datasetVersionId != null) {
+                        statement.bind("dataset_version_id", datasetVersionId.toString());
+                    }
+                    return Flux.from(statement.execute());
+                }))
+                .flatMap(result -> result.map((row, rowMetadata) -> row.get("id", UUID.class)))
+                .collect(toSet());
     }
 
     @WithSpan

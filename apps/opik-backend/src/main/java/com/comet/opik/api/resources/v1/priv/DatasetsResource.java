@@ -87,6 +87,7 @@ import jakarta.ws.rs.core.UriInfo;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.glassfish.jersey.media.multipart.ContentDisposition;
 import org.glassfish.jersey.media.multipart.FormDataParam;
 import org.glassfish.jersey.server.ChunkedOutput;
@@ -778,18 +779,28 @@ public class DatasetsResource {
             @PathParam("id") UUID datasetId,
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
-            @QueryParam("experiment_ids") @NotNull String experimentIdsQueryParam,
+            @QueryParam("experiment_ids") @Schema(description = "JSON array of experiment IDs. Omit to include every experiment on the dataset") String experimentIdsQueryParam,
+            @QueryParam("dataset_version") @Schema(description = "Dataset version hash or tag. Only experiments run against this version are included. Requires experiment_ids to be omitted") String datasetVersion,
             @QueryParam("filters") String filters,
             @QueryParam("sorting") String sorting,
             @QueryParam("search") String search,
             @QueryParam("truncate") @Schema(description = "Truncate image included in either input, output or metadata") boolean truncate) {
 
-        var experimentIds = ParamsValidator.getIds(experimentIdsQueryParam);
+        boolean allDatasetExperiments = StringUtils.isBlank(experimentIdsQueryParam);
+        Set<UUID> experimentIds = allDatasetExperiments ? Set.of() : ParamsValidator.getIds(experimentIdsQueryParam);
 
-        if (experimentIds.isEmpty()) {
+        String validationError = null;
+        if (!allDatasetExperiments && experimentIds.isEmpty()) {
+            validationError = "experiment_ids cannot be empty";
+        } else if (!allDatasetExperiments && StringUtils.isNotBlank(datasetVersion)) {
+            validationError = "dataset_version can only be used when experiment_ids is omitted";
+        } else if (allDatasetExperiments && !featureFlags.isDatasetVersioningEnabled()) {
+            validationError = "experiment_ids is required when dataset versioning is disabled";
+        }
+
+        if (validationError != null) {
             return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(new ErrorMessage(Response.Status.BAD_REQUEST.getStatusCode(),
-                            "experiment_ids cannot be empty"))
+                    .entity(new ErrorMessage(Response.Status.BAD_REQUEST.getStatusCode(), validationError))
                     .build();
         }
 
@@ -806,6 +817,8 @@ public class DatasetsResource {
                 .entityType(EntityType.TRACE)
                 .truncate(truncate)
                 .versionHashOrTag(null) // Service layer will resolve to experiment's version when experimentIds present
+                .allDatasetExperiments(allDatasetExperiments)
+                .experimentsVersionHashOrTag(datasetVersion)
                 .build();
 
         String workspaceId = requestContext.get().getWorkspaceId();
