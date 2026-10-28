@@ -1,10 +1,11 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 
 import { Description } from "@/ui/description";
 import CopyButton from "@/shared/CopyButton/CopyButton";
 import CodeHighlighter from "@/shared/CodeHighlighter/CodeHighlighter";
 import { SUPPORTED_LANGUAGE } from "@/constants/codeLanguage";
+import { buildPolicySnippet } from "@/v2/pages-shared/guardrails/GuardrailPolicyPanel/policySnippet";
 
 type GuardrailPolicyCodeSectionProps = {
   policyName: string;
@@ -18,23 +19,7 @@ const GuardrailPolicyCodeSection: React.FC<GuardrailPolicyCodeSectionProps> = ({
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
-  const name = policyName.trim() || "my-policy";
-  const escapedName = name
-    .replace(/\\/g, "\\\\")
-    .replace(/"/g, '\\"')
-    .replace(/\n/g, "\\n")
-    .replace(/\r/g, "\\r")
-    .replace(/\t/g, "\\t");
-
-  const snippet = `from opik import exceptions
-from opik.guardrails import Guardrail
-
-guardrail = Guardrail.from_stored_policies(names=["${escapedName}"])
-
-try:
-    guardrail.validate("How can I start with evaluation in Opik platform?")
-except exceptions.GuardrailValidationFailed as e:
-    print("Guardrail failed:", e)`;
+  const snippet = useMemo(() => buildPolicySnippet(policyName), [policyName]);
 
   return (
     <div className="overflow-hidden rounded-md border border-border bg-primary-foreground">

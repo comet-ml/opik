@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { ColumnPinningState, ColumnSort } from "@tanstack/react-table";
 import {
@@ -11,6 +11,8 @@ import useLocalStorageState from "use-local-storage-state";
 import { Plus } from "lucide-react";
 
 import { Button } from "@/ui/button";
+import { useToast } from "@/ui/use-toast";
+import { getApiErrorMessage } from "@/lib/api-error";
 import { Separator } from "@/ui/separator";
 import useAppStore from "@/store/AppStore";
 import NoData from "@/shared/NoData/NoData";
@@ -94,6 +96,7 @@ const getRuleTypes = (policy: GuardrailPolicy): GuardrailPolicyRuleType[] =>
 
 const GuardrailsPage: React.FunctionComponent = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const { toast } = useToast();
 
   const [openCreatePanel, setOpenCreatePanel] = useState(false);
 
@@ -173,13 +176,15 @@ const GuardrailsPage: React.FunctionComponent = () => {
   const [page = 1, setPage] = useQueryParam("page", NumberParam, {
     updateType: "replaceIn",
   });
-  const [rowSelection = {}, setRowSelection] = useQueryParam(
+  const [selectionParam, setRowSelection] = useQueryParam(
     "selection",
     JsonParam,
     {
       updateType: "replaceIn",
     },
   );
+  // A hand-edited link can carry selection=null, which a destructuring default does not cover.
+  const rowSelection = useMemo(() => selectionParam ?? {}, [selectionParam]);
 
   const [size, setSize] = useQueryParamAndLocalStorageState<
     number | null | undefined
@@ -226,10 +231,27 @@ const GuardrailsPage: React.FunctionComponent = () => {
     [policies, openedPolicyId],
   );
 
-  const { data: fetchedPolicy } = useGuardrailPolicyById(
-    { policyId: openedPolicyId! },
-    { enabled: Boolean(openedPolicyId) && !policyOnPage },
-  );
+  const { data: fetchedPolicy, error: policyLookupError } =
+    useGuardrailPolicyById(
+      { policyId: openedPolicyId! },
+      { enabled: Boolean(openedPolicyId) && !policyOnPage },
+    );
+
+  // A link to a policy that was deleted, or that failed to load, drops the id from the URL rather
+  // than leaving a panel that never opens; opening the row again retries.
+  useEffect(() => {
+    if (!policyLookupError) return;
+
+    setOpenedPolicyId(undefined);
+    toast({
+      title: "Policy could not be opened",
+      description: getApiErrorMessage(
+        policyLookupError,
+        "Failed to load the policy",
+      ),
+      variant: "destructive",
+    });
+  }, [policyLookupError, setOpenedPolicyId, toast]);
 
   const openedPolicy = policyOnPage ?? fetchedPolicy;
 

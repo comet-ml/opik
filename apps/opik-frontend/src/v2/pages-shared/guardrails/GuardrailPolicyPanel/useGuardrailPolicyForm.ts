@@ -79,11 +79,8 @@ const useGuardrailPolicyForm = ({
     defaultValues: toFormValues(policy, initialName),
   });
 
-  const { mutate: createMutate, isPending: isCreating } =
-    useGuardrailPolicyCreateMutation();
-  const { mutate: updateMutate, isPending: isUpdating } =
-    useGuardrailPolicyUpdateMutation();
-  const isSubmitting = isCreating || isUpdating;
+  const { mutateAsync: createPolicy } = useGuardrailPolicyCreateMutation();
+  const { mutateAsync: updatePolicy } = useGuardrailPolicyUpdateMutation();
 
   // Keyed on the policy's id rather than the policy object: a list refetch hands back an equal but
   // freshly allocated row, and re-seeding on that would wipe whatever the user is part-way through
@@ -132,37 +129,33 @@ const useGuardrailPolicyForm = ({
 
   const submitHandler = useMemo(
     () =>
-      form.handleSubmit((values) => {
-        if (isSubmitting) return;
-
+      // Awaiting the request keeps formState.isSubmitting true until it settles.
+      form.handleSubmit(async (values) => {
         const payload = toPolicyPayload(values);
-        const onSuccess = () => {
-          setOpen(false);
-          toast({
-            title: isEdit ? "Policy updated" : "Policy created",
-            description: `"${payload.name}" is ready to use.`,
-          });
-        };
 
-        if (isEdit && policy) {
-          updateMutate(
-            { policyId: policy.id, policy: payload },
-            { onSuccess, onError: handleError },
-          );
-        } else {
-          createMutate(
-            { policy: payload },
-            { onSuccess, onError: handleError },
-          );
+        try {
+          if (isEdit && policy) {
+            await updatePolicy({ policyId: policy.id, policy: payload });
+          } else {
+            await createPolicy({ policy: payload });
+          }
+        } catch (error) {
+          handleError(error as Error);
+          return;
         }
+
+        setOpen(false);
+        toast({
+          title: isEdit ? "Policy updated" : "Policy created",
+          description: `"${payload.name}" is ready to use.`,
+        });
       }),
     [
       form,
-      isSubmitting,
       isEdit,
       policy,
-      updateMutate,
-      createMutate,
+      updatePolicy,
+      createPolicy,
       handleError,
       setOpen,
       toast,
@@ -174,6 +167,7 @@ const useGuardrailPolicyForm = ({
 
   // Creating or duplicating always has something to save; an edit only once a value changed.
   const isDirty = !isEdit || form.formState.isDirty;
+  const isSubmitting = form.formState.isSubmitting;
 
   // The resolver puts a message about "rules" on rules.root once its fields are mounted, as it does
   // for a field array, and on "rules" itself before that.

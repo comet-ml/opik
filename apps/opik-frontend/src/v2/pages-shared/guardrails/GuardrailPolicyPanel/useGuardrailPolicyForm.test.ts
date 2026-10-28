@@ -19,10 +19,10 @@ const { createMutate, updateMutate, toast } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/api/guardrail-policies/useGuardrailPolicyCreateMutation", () => ({
-  default: () => ({ mutate: createMutate, isPending: false }),
+  default: () => ({ mutateAsync: createMutate }),
 }));
 vi.mock("@/api/guardrail-policies/useGuardrailPolicyUpdateMutation", () => ({
-  default: () => ({ mutate: updateMutate, isPending: false }),
+  default: () => ({ mutateAsync: updateMutate }),
 }));
 vi.mock("@/ui/use-toast", () => ({ useToast: () => ({ toast }) }));
 
@@ -69,7 +69,7 @@ describe("useGuardrailPolicyForm", () => {
   });
 
   it("creates a policy with the trimmed name and the enabled rules", async () => {
-    const { result } = renderForm("create");
+    const { result, setOpen } = renderForm("create");
 
     act(() => {
       result.current.form.setValue("name", "  support-bot  ");
@@ -78,21 +78,19 @@ describe("useGuardrailPolicyForm", () => {
     await submit(result);
 
     expect(updateMutate).not.toHaveBeenCalled();
-    expect(createMutate).toHaveBeenCalledWith(
-      {
-        policy: {
-          name: "support-bot",
-          execution_scope: GUARDRAIL_EXECUTION_SCOPE.ON_REQUEST,
-          rules: [
-            {
-              type: GuardrailTypes.PII,
-              config: { entities: ["CREDIT_CARD", "PHONE_NUMBER"] },
-            },
-          ],
-        },
+    expect(setOpen).toHaveBeenCalledWith(false);
+    expect(createMutate).toHaveBeenCalledWith({
+      policy: {
+        name: "support-bot",
+        execution_scope: GUARDRAIL_EXECUTION_SCOPE.ON_REQUEST,
+        rules: [
+          {
+            type: GuardrailTypes.PII,
+            config: { entities: ["CREDIT_CARD", "PHONE_NUMBER"] },
+          },
+        ],
       },
-      expect.anything(),
-    );
+    });
   });
 
   it("updates an edited policy by its id", async () => {
@@ -108,19 +106,14 @@ describe("useGuardrailPolicyForm", () => {
     await submit(result);
 
     expect(createMutate).not.toHaveBeenCalled();
-    expect(updateMutate).toHaveBeenCalledWith(
-      {
-        policyId: "policy-1",
-        policy: expect.objectContaining({ description: "Updated" }),
-      },
-      expect.anything(),
-    );
+    expect(updateMutate).toHaveBeenCalledWith({
+      policyId: "policy-1",
+      policy: expect.objectContaining({ description: "Updated" }),
+    });
   });
 
   it("shows a taken name on the name field instead of a toast", async () => {
-    createMutate.mockImplementation((_, { onError }) =>
-      onError({ response: { status: 409 } }),
-    );
+    createMutate.mockRejectedValue({ response: { status: 409 } });
     const { result } = renderForm("duplicate", createPolicy());
 
     await submit(result);
@@ -129,6 +122,7 @@ describe("useGuardrailPolicyForm", () => {
       NAME_TAKEN_MESSAGE,
     );
     expect(toast).not.toHaveBeenCalled();
+    expect(result.current.isSubmitting).toBe(false);
   });
 
   it("does not send a policy with no rule switched on", async () => {
