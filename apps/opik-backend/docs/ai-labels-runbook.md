@@ -317,7 +317,7 @@ A failed run writes nothing but its `topic_runs` row; the project is built again
 |---|---|
 | `qwen_timeout` | The Qwen call ran out of `TOPICS_NIGHTLY_QWEN_DEADLINE`. |
 | `qwen_error` | The Qwen call failed after its 2 retries, or with a 4xx. `error_message` has the code and HTTP status. |
-| `qwen_bad_answer` | Qwen's answer has no JSON object, or breaks the schema, or lists a cluster id twice in two answers in a row. The answer is in the logs. |
+| `qwen_bad_answer` | Qwen's answer has no JSON object, or breaks the schema. The answer is in the logs. |
 | `window_read` | The ClickHouse window read failed, or the window had no usable vector. |
 | `invariant` | A check before the save failed: more than 10 topics, a blank or catch-all name, a prototype not of unit length, a trace not labelled once. |
 | `timeout` | The run outlasted `TOPICS_NIGHTLY_PROJECT_TIMEOUT`, or the job was interrupted. |
@@ -406,7 +406,7 @@ DELETE FROM topic_project_states WHERE project_id = '<project_id>';
 | `topics.nightly.projects` by `decision` | Projects the night looked at: `skip` (under the minimum, a list already built, or held by a run started by hand), `first_build`, `not_reached` (the budget ran out: they run the next night). `not_reached` above zero means the budget is too short. |
 | `topics.runs` by `status`, `error_code` | Finished runs. |
 | `topics.run.duration_seconds` by `phase` | Time in `window` (ClickHouse read), `kmeans`, `qwen`, `assign`, `save`. |
-| `topics.qwen.calls` by `outcome` | `ok`, `timeout`, `error`, `bad_answer`, `repeated_cluster` (the author answer lists a cluster id twice; the job asks once more, uncached). |
+| `topics.qwen.calls` by `outcome` | `ok`, `timeout`, `error`, `bad_answer`. |
 | `topics.save.rows` by `table` | Rows saved runs wrote. |
 | `topics.nightly.budget_used_seconds` | Wall time of each night. Near `TOPICS_NIGHTLY_BUDGET` means projects will soon be `not_reached`. |
 

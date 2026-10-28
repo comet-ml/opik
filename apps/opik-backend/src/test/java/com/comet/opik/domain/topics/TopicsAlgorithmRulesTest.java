@@ -110,17 +110,6 @@ class TopicsAlgorithmRulesTest {
 
         @ParameterizedTest(name = "{0}")
         @CsvSource(delimiter = '|', value = {
-                "{\"topics\": [{\"name\": \"A\", \"definition\": \"d\", \"clusters\": [0, 1]}], \"other\": [2]}|false",
-                "{\"topics\": [{\"name\": \"A\", \"definition\": \"d\", \"clusters\": [0, 0]}], \"other\": []}|true",
-                "{\"topics\": [{\"name\": \"A\", \"definition\": \"d\", \"clusters\": [0]}, {\"name\": \"B\", \"definition\": \"d\", \"clusters\": [0]}], \"other\": []}|true",
-                "{\"topics\": [{\"name\": \"A\", \"definition\": \"d\", \"clusters\": [0]}], \"other\": [0]}|true"})
-        @DisplayName("a cluster id listed twice, in a topic, across topics or in a topic and Other, is a repeat")
-        void repeatsCluster(String text, boolean repeats) {
-            assertThat(AuthorAnswer.parse(TextNode.valueOf(text)).repeatsCluster()).isEqualTo(repeats);
-        }
-
-        @ParameterizedTest(name = "{0}")
-        @CsvSource(delimiter = '|', value = {
                 "not json at all",
                 "{\"topics\": []}",
                 "{\"other\": []}",
