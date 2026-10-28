@@ -321,6 +321,25 @@ class TopicVectorsTickTest {
     }
 
     @Test
+    @DisplayName("a trace id reused in two projects gets each project's own summary")
+    void traceIdReusedInTwoProjects() {
+        var workspaceId = enabledWorkspace();
+        var first = UUID.randomUUID();
+        var second = UUID.randomUUID();
+        var traceId = labelTraces(workspaceId, first, 1, 1).getFirst();
+        // The same trace id in another project, with another summary (the text depends on the task version).
+        label(workspaceId, second, List.of(traceId), 2);
+
+        assertThat(tickService.tick(Instant.now()).written()).isEqualTo(2);
+
+        assertThat(vectors(workspaceId, List.of(traceId)))
+                .extracting(TopicVector::projectId, TopicVector::taskVersion, TopicVector::text)
+                .containsExactlyInAnyOrder(
+                        org.assertj.core.groups.Tuple.tuple(first, 1, summaryOf(traceId, 1)),
+                        org.assertj.core.groups.Tuple.tuple(second, 2, summaryOf(traceId, 2)));
+    }
+
+    @Test
     @DisplayName("a second tick writes nothing new")
     void idempotent() {
         var workspaceId = enabledWorkspace();
@@ -568,17 +587,20 @@ class TopicVectorsTickTest {
         Awaitility.await().atMost(20, TimeUnit.SECONDS).pollInterval(Duration.ofMillis(500))
                 .until(() -> !tickService.tick(Instant.now()).longWindowPass());
 
+        // An undrained pass is due again after one normal tick (1.5 tick intervals): wait for each pass tick.
+        config().setTickInterval(io.dropwizard.util.Duration.seconds(1));
         var ticks = new ArrayList<TopicVectorsTickService.TickResult>();
-        Awaitility.await().atMost(20, TimeUnit.SECONDS).pollInterval(Duration.ofMillis(500))
-                .until(() -> {
-                    var result = tickService.tick(Instant.now());
-                    if (result.longWindowPass()) {
-                        ticks.add(result);
-                    }
-                    return result.longWindowPass();
-                });
-        ticks.add(tickService.tick(Instant.now()));
-        ticks.add(tickService.tick(Instant.now()));
+        for (int pass = 0; pass < 3; pass++) {
+            var holder = new java.util.concurrent.atomic.AtomicReference<TopicVectorsTickService.TickResult>();
+            Awaitility.await().atMost(20, TimeUnit.SECONDS).pollInterval(Duration.ofMillis(200))
+                    .until(() -> {
+                        var result = tickService.tick(Instant.now());
+                        holder.set(result);
+                        return result.longWindowPass();
+                    });
+            ticks.add(holder.get());
+        }
+        // Drained: not due again for longWindowInterval.
         ticks.add(tickService.tick(Instant.now()));
 
         assertThat(ticks)

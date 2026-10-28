@@ -195,15 +195,15 @@ Run both queries for one workspace. The counts must match, up to the traces labe
 stays means the job skips traces: see `topics.vectors.skipped` and the logs.
 
 ```sql
--- ClickHouse: traces with a done trace_summary label in the last 24 hours (latest status per trace and version)
+-- ClickHouse: traces with a done trace_summary label in the last 24 hours (latest status per trace, as the job reads it)
 SELECT count()
 FROM (
     SELECT status, updated_at
     FROM ai_label_status
     WHERE workspace_id = '<workspace_id>'
       AND task = 'trace_summary'
-    ORDER BY workspace_id, project_id, task, trace_id, task_version, updated_at DESC
-    LIMIT 1 BY workspace_id, project_id, task, trace_id, task_version
+    ORDER BY workspace_id, project_id, task, trace_id, updated_at DESC
+    LIMIT 1 BY workspace_id, project_id, task, trace_id
 )
 WHERE status = 'done'
   AND updated_at >= now64(6) - INTERVAL 24 HOUR;
@@ -221,8 +221,8 @@ FROM (
               FROM ai_label_status
               WHERE workspace_id = '<workspace_id>'
                 AND task = 'trace_summary'
-              ORDER BY workspace_id, project_id, task, trace_id, task_version, updated_at DESC
-              LIMIT 1 BY workspace_id, project_id, task, trace_id, task_version
+              ORDER BY workspace_id, project_id, task, trace_id, updated_at DESC
+              LIMIT 1 BY workspace_id, project_id, task, trace_id
           )
           WHERE status = 'done'
             AND updated_at >= now64(6) - INTERVAL 24 HOUR
