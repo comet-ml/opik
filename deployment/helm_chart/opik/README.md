@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 2.2.128](https://img.shields.io/badge/Version-2.2.128-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.2.128](https://img.shields.io/badge/AppVersion-2.2.128-informational?style=flat-square)
+![Version: 2.2.129](https://img.shields.io/badge/Version-2.2.129-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.2.129](https://img.shields.io/badge/AppVersion-2.2.129-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -451,10 +451,12 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS | string | `"3"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_IMAGE_NAME | string | `"opik-sandbox-executor-python"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_IMAGE_REGISTRY | string | `"ghcr.io/comet-ml/opik"` |  |
+| component.python-backend.env.PYTHON_CODE_EXECUTOR_MAX_RESULT_SIZE_IN_BYTES | string | `"67108864"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_MEM_LIMIT | string | `"256m"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_METRICS_INTERVAL_IN_SECONDS | string | `"60"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_PARALLEL_NUM | string | `"5"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_PROCESS_NETWORK_ISOLATION | string | `"false"` |  |
+| component.python-backend.env.PYTHON_CODE_EXECUTOR_READY_TIMEOUT_SECONDS | string | `"10"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_STRATEGY | string | `"process"` |  |
 | component.python-backend.env.REDIS_URL | string | `"redis://:wFSuJX9nDBdCa25sKZG7bh@opik-redis-master:6379/"` |  |
 | component.python-backend.envFrom[0].configMapRef.name | string | `"opik-python-backend"` |  |
