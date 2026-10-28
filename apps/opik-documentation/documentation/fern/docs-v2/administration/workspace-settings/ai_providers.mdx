@@ -376,6 +376,8 @@ Some custom providers may require additional HTTP headers beyond the API key for
 - Add multiple headers as needed
 - Use the trash icon to remove headers
 
+Each header needs a name and a value, and names are compared ignoring case, so two headers can't differ only in case (`X-Team` and `x-team`); saving such headers fails with a `400`.
+
 **Common use cases for custom headers:**
 - **Custom authentication**: Additional authentication tokens or headers required by your infrastructure
 - **Request routing**: Headers for routing requests to specific model versions or deployments

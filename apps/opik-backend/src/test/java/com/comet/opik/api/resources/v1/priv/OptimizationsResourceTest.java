@@ -2615,6 +2615,34 @@ class OptimizationsResourceTest {
         @DisplayName("Create Studio optimization - model parameters the runner wouldn't pass on are rejected")
         void studioModelParametersOutsideTheRunnersAreRejected(String llmModelParameters,
                 String optimizerModelParameters, String expectedMessage) {
+            var optimization = studioOptimization(llmModelParameters, optimizerModelParameters);
+            var expectedError = new ErrorMessage(HttpStatus.SC_BAD_REQUEST,
+                    expectedMessage);
+
+            try (var response = optimizationResourceClient.callCreate(optimization, API_KEY, TEST_WORKSPACE_NAME)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                assertThat(response.readEntity(ErrorMessage.class))
+                        .isEqualTo(expectedError);
+            }
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("studioModelParametersOutsideTheRunnersAreRejected")
+        @DisplayName("Upsert Studio optimization - model parameters the runner wouldn't pass on are rejected")
+        void studioModelParametersOutsideTheRunnersAreRejectedOnUpsert(String llmModelParameters,
+                String optimizerModelParameters, String expectedMessage) {
+            var optimization = studioOptimization(llmModelParameters, optimizerModelParameters);
+            var expectedError = new ErrorMessage(HttpStatus.SC_BAD_REQUEST,
+                    expectedMessage);
+
+            try (var response = optimizationResourceClient.callUpsert(optimization, API_KEY, TEST_WORKSPACE_NAME)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                assertThat(response.readEntity(ErrorMessage.class))
+                        .isEqualTo(expectedError);
+            }
+        }
+
+        private Optimization studioOptimization(String llmModelParameters, String optimizerModelParameters) {
             var studioConfig = createStudioConfig();
             if (llmModelParameters != null) {
                 studioConfig = studioConfig.toBuilder().llmModel(studioConfig.llmModel().toBuilder()
@@ -2626,17 +2654,9 @@ class OptimizationsResourceTest {
                                 .formatted(optimizerModelParameters)))
                         .build()).build();
             }
-            var optimization = optimizationResourceClient.createPartialOptimization()
+            return optimizationResourceClient.createPartialOptimization()
                     .studioConfig(studioConfig)
                     .build();
-            var expectedError = new ErrorMessage(HttpStatus.SC_BAD_REQUEST,
-                    expectedMessage);
-
-            try (var response = optimizationResourceClient.callCreate(optimization, API_KEY, TEST_WORKSPACE_NAME)) {
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
-                assertThat(response.readEntity(ErrorMessage.class))
-                        .isEqualTo(expectedError);
-            }
         }
 
         @Test

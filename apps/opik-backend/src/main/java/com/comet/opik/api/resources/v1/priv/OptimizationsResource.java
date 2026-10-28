@@ -78,6 +78,9 @@ public class OptimizationsResource {
         var workspaceId = requestContext.get().getWorkspaceId();
         log.info("Upserting optimization with id '{}', name '{}', datasetName '{}', workspaceId '{}'",
                 optimization.id(), optimization.name(), optimization.datasetName(), workspaceId);
+        if (optimization.studioConfig() != null) {
+            StudioModelParameters.validate(optimization.studioConfig());
+        }
         var id = optimizationService.upsert(optimization)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
