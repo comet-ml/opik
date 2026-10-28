@@ -9073,15 +9073,16 @@ class DatasetsResourceTest {
 
         Stream<Arguments> findWhenInvalidParams() {
             return Stream.of(
-                    arguments(List.of(), null, "experiment_ids cannot be empty"),
-                    arguments(List.of(UUID.randomUUID()), "v1",
+                    arguments("[]", null, "experiment_ids cannot be empty"),
+                    arguments(" ", null, "experiment_ids cannot be empty"),
+                    arguments(JsonUtils.writeValueAsString(List.of(UUID.randomUUID())), "v1",
                             "dataset_version can only be used when experiment_ids is omitted"));
         }
 
         @ParameterizedTest
         @MethodSource
         @DisplayName("when params are invalid, then return bad request")
-        void findWhenInvalidParams(List<UUID> experimentIds, String datasetVersion, String expectedError) {
+        void findWhenInvalidParams(String experimentIds, String datasetVersion, String expectedError) {
             try (var response = datasetResourceClient.callGetDatasetItemsWithExperimentItems(
                     UUID.randomUUID(), experimentIds, datasetVersion, null, apiKey, workspaceName)) {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);

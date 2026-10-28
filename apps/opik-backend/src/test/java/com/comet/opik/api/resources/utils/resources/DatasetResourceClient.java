@@ -593,7 +593,7 @@ public class DatasetResourceClient {
         }
     }
 
-    public Response callGetDatasetItemsWithExperimentItems(UUID datasetId, List<UUID> experimentIds,
+    public Response callGetDatasetItemsWithExperimentItems(UUID datasetId, String experimentIds,
             String datasetVersion, List<? extends Filter> filters, String apiKey, String workspaceName) {
         var webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path(datasetId.toString())
@@ -602,7 +602,7 @@ public class DatasetResourceClient {
                 .path("items");
 
         if (experimentIds != null) {
-            webTarget = webTarget.queryParam("experiment_ids", JsonUtils.writeValueAsString(experimentIds));
+            webTarget = webTarget.queryParam("experiment_ids", experimentIds);
         }
 
         if (StringUtils.isNotBlank(datasetVersion)) {

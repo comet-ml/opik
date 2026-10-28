@@ -786,8 +786,10 @@ public class DatasetsResource {
             @QueryParam("search") String search,
             @QueryParam("truncate") @Schema(description = "Truncate image included in either input, output or metadata") boolean truncate) {
 
-        boolean allDatasetExperiments = StringUtils.isBlank(experimentIdsQueryParam);
-        Set<UUID> experimentIds = allDatasetExperiments ? Set.of() : ParamsValidator.getIds(experimentIdsQueryParam);
+        boolean allDatasetExperiments = experimentIdsQueryParam == null;
+        Set<UUID> experimentIds = allDatasetExperiments || StringUtils.isBlank(experimentIdsQueryParam)
+                ? Set.of()
+                : ParamsValidator.getIds(experimentIdsQueryParam);
 
         String validationError = null;
         if (!allDatasetExperiments && experimentIds.isEmpty()) {
