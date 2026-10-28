@@ -40,6 +40,20 @@ const ollieChats = new Map<
   { entryId: string; sessionId?: string; html: string | null; details: string }
 >();
 
+const useTrackOllieSession = (chatKeyRef: React.MutableRefObject<string>) => {
+  const unsubscribe = useRef<() => void>();
+  useEffect(() => () => unsubscribe.current?.(), []);
+  return useCallback(() => {
+    unsubscribe.current?.();
+    unsubscribe.current = window.opikBridge?.subscribeConversationStarted?.(
+      ({ entryId, sessionId }) => {
+        const chat = ollieChats.get(chatKeyRef.current);
+        if (chat && chat.entryId === entryId) chat.sessionId = sessionId;
+      },
+    );
+  }, [chatKeyRef]);
+};
+
 export type AnnotatorViewOllieState =
   | "none"
   | "credits"
@@ -149,16 +163,7 @@ const useAnnotatorViewEditor = ({
   const chatKeyRef = useRef(chatKey);
   chatKeyRef.current = chatKey;
   const hasStartedOllie = useRef(false);
-  useEffect(
-    () =>
-      window.opikBridge?.subscribeConversationStarted?.(
-        ({ entryId, sessionId }) => {
-          const chat = ollieChats.get(chatKeyRef.current);
-          if (chat && chat.entryId === entryId) chat.sessionId = sessionId;
-        },
-      ),
-    [],
-  );
+  const trackOllieSession = useTrackOllieSession(chatKeyRef);
   useEffect(() => {
     if (open) return;
     if (!queueId) {
@@ -238,6 +243,7 @@ const useAnnotatorViewEditor = ({
         ? chat.sessionId
         : undefined;
     const entryId = uuidv4();
+    trackOllieSession();
     ollieChats.set(chatKey, {
       entryId,
       sessionId,
