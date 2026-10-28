@@ -43,7 +43,10 @@ public class TraceTopicsDAO {
 
     static final String TABLE = "trace_topics";
 
-    /** The latest row of every trace of the project. */
+    /**
+     * The latest row of every trace of the project. run_id is a UUID v7 string, so on an updated_at tie its text order
+     * puts the later run first.
+     */
     private static final String FIND_BY_PROJECT = """
             SELECT workspace_id, project_id, trace_id, trace_created_at, topic_id, source, run_id
             FROM trace_topics

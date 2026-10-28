@@ -395,6 +395,36 @@ class TopicsNightlyJobTest {
     }
 
     @Test
+    @DisplayName("a project deleted during the run fails the save, and nothing of the run stays")
+    void deletedDuringRun() {
+        var workspaceId = enabledWorkspace();
+        var projectId = UUID.randomUUID();
+        var today = LocalDate.now(ZoneOffset.UTC).atStartOfDay(ZoneOffset.UTC).toInstant();
+        seed(workspaceId, projectId, 0, BUILT, FIXTURE.night, today);
+        stubAnswer(FIXTURE.answer, 3_000);
+
+        try (var response = rebuild(workspaceId, projectId)) {
+            assertThat(response.getStatus()).isEqualTo(202);
+        }
+        Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> assertThat(
+                wireMock.findAll(postRequestedFor(urlEqualTo(GENERATE_PATH)))).hasSize(1));
+        template.inTransaction(WRITE,
+                handle -> handle.execute("DELETE FROM projects WHERE id = ?", projectId.toString()));
+
+        Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> assertThat(runs(projectId))
+                .singleElement().satisfies(run -> {
+                    assertThat(run.status()).isEqualTo(TopicRun.Status.FAILED);
+                    assertThat(run.errorCode()).isEqualTo("save");
+                    assertThat(run.errorMessage()).contains("the project was deleted during the run");
+                }));
+        assertThat(topics(projectId)).isEmpty();
+        List<TopicProjectState> states = template.inTransaction(READ_ONLY,
+                handle -> handle.attach(TopicDAO.class).findStates(Set.of(projectId)));
+        assertThat(states).isEmpty();
+        assertThat(traceTopicsDAO.findByProject(workspaceId, projectId).collectList().block()).isEmpty();
+    }
+
+    @Test
     @DisplayName("deleting a project deletes its topics, prototypes, state and runs")
     void projectDeleted() {
         var workspaceId = enabledWorkspace();
