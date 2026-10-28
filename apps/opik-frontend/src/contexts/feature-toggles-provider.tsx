@@ -23,6 +23,7 @@ const DEFAULT_STATE: FeatureToggles = {
   // guardrail data — they don't depend on the guardrails validation service being
   // deployed. Keep them always available regardless of backend config.
   [FeatureToggleKeys.GUARDRAILS_ENABLED]: true,
+  [FeatureToggleKeys.GUARDRAILS_VALIDATIONS_ENABLED]: false,
   [FeatureToggleKeys.TOGGLE_OPIK_AI_ENABLED]: false,
   [FeatureToggleKeys.WELCOME_WIZARD_ENABLED]: false,
   [FeatureToggleKeys.EXPORT_ENABLED]: true,

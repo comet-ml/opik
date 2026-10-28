@@ -82,3 +82,50 @@ export type GuardrailComputedResult = {
   name: GuardrailTypes;
   status: GuardrailResult;
 };
+
+/**
+ * When a stored policy applies: `on_request` when the SDK names it, `global` on every check in
+ * the workspace.
+ */
+export enum GUARDRAIL_EXECUTION_SCOPE {
+  ON_REQUEST = "on_request",
+  GLOBAL = "global",
+}
+
+export type PiiRuleConfig = {
+  entities: string[];
+};
+
+/** At least one of the two lists is set. */
+export type TopicRuleConfig = {
+  allowed_topics?: string[];
+  restricted_topics?: string[];
+};
+
+export type PromptInjectionRuleConfig = Record<string, never>;
+
+/**
+ * One check of a policy. `type` discriminates the shape of `config`, and a policy holds at most
+ * one rule per type, which is what makes the form a toggle per type.
+ */
+export type GuardrailPolicyRule =
+  | { type: GuardrailTypes.PII; config: PiiRuleConfig }
+  | { type: GuardrailTypes.TOPIC; config: TopicRuleConfig }
+  | {
+      type: GuardrailTypes.PROMPT_INJECTION;
+      config: PromptInjectionRuleConfig;
+    };
+
+export type GuardrailPolicyRuleType = GuardrailPolicyRule["type"];
+
+export type GuardrailPolicy = {
+  id: string;
+  name: string;
+  description?: string;
+  execution_scope: GUARDRAIL_EXECUTION_SCOPE;
+  rules: GuardrailPolicyRule[];
+  created_at: string;
+  created_by: string;
+  last_updated_at: string;
+  last_updated_by: string;
+};
