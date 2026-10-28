@@ -2,7 +2,6 @@ package com.comet.opik.domain.topics;
 
 import com.comet.opik.domain.ailabels.AiLabelTask;
 import com.comet.opik.domain.ailabels.AiLabelTaskRegistry;
-import com.comet.opik.domain.ailabels.AiLabelWorkspaceDAO;
 import com.comet.opik.infrastructure.AiLabelsConfig;
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.inference.EmbedRequest;
@@ -23,6 +22,7 @@ import jakarta.inject.Singleton;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
@@ -50,7 +50,7 @@ import static io.opentelemetry.api.common.AttributeKey.longKey;
 import static io.opentelemetry.api.common.AttributeKey.stringKey;
 
 /**
- * One topic vectors tick: for every workspace ai-labels is enabled for, find the traces whose latest
+ * One topic vectors tick: for every workspace topics and ai-labels are enabled for, find the traces whose latest
  * {@code trace_summary} status is done and that have no vector yet, embed their summaries with {@code /v1/embed} and
  * store the unit-length vectors in {@code topic_vectors}. Runs on the leader only.
  *
@@ -152,6 +152,13 @@ public class TopicVectorsTickService {
             written += rows;
             TopicVectorsTickService.this.written.add(rows);
         }
+    }
+
+    /** Trace ids per summary read: about 40 KB of SQL. */
+    static final int SUMMARY_READ_CHUNK = 1_000;
+
+    /** A trace id reused in another project is another trace. */
+    private record TraceKey(UUID projectId, UUID traceId) {
     }
 
     private record Pending(TopicVectorCandidate candidate, String text) {
@@ -275,23 +282,25 @@ public class TopicVectorsTickService {
     }
 
     /**
-     * Drained: the pass is not due again for {@code longWindowInterval}. Otherwise it stays due, so the next tick runs
-     * it again: until a long-window tick reads every workspace, finds fewer than the cap in each, and leaves nothing for
-     * want of time, a read, a back-off or an insert.
+     * Drained: the pass is not due again for {@code longWindowInterval}. Otherwise it is due again after one normal
+     * tick: until a long-window tick reads every workspace, finds fewer than the cap in each, and leaves nothing for
+     * want of time, a read, a back-off or an insert. The normal tick in between keeps the short window served when the
+     * pass can't drain, for example when one workspace's long read fails every time.
      */
     private void finishLongWindow(boolean drained) {
-        var release = lockService.unlockUsingToken(LONG_WINDOW_LOCK);
-        var finish = drained
-                ? release.then(lockService.lockUsingToken(LONG_WINDOW_LOCK,
-                        config.getVectors().getLongWindowInterval().toJavaDuration()))
-                : release;
+        var vectors = config.getVectors();
+        var notDueFor = drained
+                ? vectors.getLongWindowInterval().toJavaDuration()
+                : vectors.getTickInterval().toJavaDuration().multipliedBy(3).dividedBy(2);
+        var finish = lockService.unlockUsingToken(LONG_WINDOW_LOCK)
+                .then(lockService.lockUsingToken(LONG_WINDOW_LOCK, notDueFor));
         try {
             finish.block();
         } catch (RuntimeException exception) {
             log.warn("Topic vectors long-window lock update failed, drained '{}'", drained, exception);
         }
         if (!drained) {
-            log.info("Topic vectors long-window pass not drained, running it again next tick");
+            log.info("Topic vectors long-window pass not drained, running it again after one normal tick");
         }
     }
 
@@ -302,7 +311,7 @@ public class TopicVectorsTickService {
     private Found find(Instant start, Instant lowerBound, Instant createdAfter, Instant deadline) {
         int limit = config.getVectors().getMaxTracesPerTick();
         var workspaceIds = rotated(template.inTransaction(READ_ONLY,
-                handle -> handle.attach(AiLabelWorkspaceDAO.class).enabledWorkspaceIds()), tickSequence(start));
+                handle -> handle.attach(TopicWorkspaceDAO.class).enabledWorkspaceIds()), tickSequence(start));
         var oldest = new LinkedHashMap<String, Instant>();
         var found = new ArrayList<TopicVectorCandidate>();
         boolean complete = true;
@@ -350,12 +359,16 @@ public class TopicVectorsTickService {
                 tally.cut(OVER_BUDGET, group.size());
                 continue;
             }
-            Map<UUID, TopicSummary> summaries;
+            Map<TraceKey, TopicSummary> summaries;
             try {
-                summaries = dao.findSummaries(workspaceId, TASK,
-                        group.stream().map(TopicVectorCandidate::traceId).collect(Collectors.toSet()),
-                        secondsLeft(deadline))
-                        .collectMap(TopicSummary::traceId, Function.identity())
+                // In chunks: ClickHouse parses the ids as SQL, and one read of maxTracesPerTick ids could pass
+                // max_query_size.
+                summaries = Flux.fromIterable(Lists.partition(group, SUMMARY_READ_CHUNK))
+                        .concatMap(chunk -> dao.findSummaries(workspaceId, TASK,
+                                chunk.stream().map(TopicVectorCandidate::traceId).collect(Collectors.toSet()),
+                                secondsLeft(deadline)))
+                        .collectMap(summary -> new TraceKey(summary.projectId(), summary.traceId()),
+                                Function.identity())
                         .block();
             } catch (RuntimeException exception) {
                 tally.cut(READ_FAILED, group.size());
@@ -367,9 +380,10 @@ public class TopicVectorsTickService {
             var pending = new ArrayList<Pending>();
             var missing = new ArrayList<TopicVectorCandidate>();
             for (var candidate : group) {
-                summaryText(candidate, summaries.get(candidate.traceId())).ifPresentOrElse(
-                        text -> pending.add(new Pending(candidate, text)),
-                        () -> missing.add(candidate));
+                summaryText(candidate, summaries.get(new TraceKey(candidate.projectId(), candidate.traceId())))
+                        .ifPresentOrElse(
+                                text -> pending.add(new Pending(candidate, text)),
+                                () -> missing.add(candidate));
             }
             if (!missing.isEmpty()) {
                 tally.skip(MISSING_SUMMARY, missing.size());
