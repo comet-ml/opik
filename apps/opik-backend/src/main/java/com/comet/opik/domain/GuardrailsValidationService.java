@@ -33,9 +33,11 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @ImplementedBy(GuardrailsValidationServiceImpl.class)
 public interface GuardrailsValidationService {
@@ -56,14 +58,14 @@ class GuardrailsValidationServiceImpl implements GuardrailsValidationService {
 
     /** The decision service rejects a longer state; longer texts are cut and every verdict says so. */
     static final int MAX_TEXT_LENGTH = 16_384;
-    /** The topic question adds "none of these" to the policy's topics, within the service's option limit. */
+    /** Each topic list is one choice question, which adds "none of these" to it, within the option limit. */
     static final int MAX_TOPICS = Question.ChoiceQuestion.MAX_OPTIONS - 1;
     /** A topic is a short label the model reads as one option of the topic question. */
     static final int MAX_TOPIC_LENGTH = 256;
     /** What a check that could not run reports. The cause is logged, not returned: it may name internal hosts. */
     static final String FAIL_OPEN_MESSAGE = "Guardrail check unavailable; it passed without running";
-    static final String MODE_ALLOW = "allow";
-    static final String MODE_RESTRICT = "restrict";
+    static final String ALLOWED_TOPICS = "allowed_topics";
+    static final String RESTRICTED_TOPICS = "restricted_topics";
     /** FR-5: what a workspace whose organization is not enabled is told. */
     static final String NOT_ENABLED_MESSAGE = "Guardrails is available on the Enterprise plan";
 
@@ -135,7 +137,7 @@ class GuardrailsValidationServiceImpl implements GuardrailsValidationService {
         }
         return switch (descriptor.type()) {
             case PII -> new PiiRule(index, descriptor, entities(index, config));
-            case TOPIC -> new TopicRule(index, descriptor, topics(index, config), mode(index, config));
+            case TOPIC -> topicRule(index, descriptor, config);
             case PROMPT_INJECTION -> new InjectionRule(index, descriptor);
             default -> throw new BadRequestException("validations[%d].type '%s' is not supported by this endpoint"
                     .formatted(index, descriptor.type()));
@@ -153,17 +155,43 @@ class GuardrailsValidationServiceImpl implements GuardrailsValidationService {
         return entities;
     }
 
-    private static List<String> topics(int index, JsonNode config) {
-        var topics = stringList(index, config, "topics", MAX_TOPICS);
+    private static TopicRule topicRule(int index, ValidationDescriptor descriptor, JsonNode config) {
+        var allowed = topics(index, config, ALLOWED_TOPICS);
+        var restricted = topics(index, config, RESTRICTED_TOPICS);
+        if (allowed.isEmpty() && restricted.isEmpty()) {
+            throw new BadRequestException("validations[%d].config needs %s or %s"
+                    .formatted(index, ALLOWED_TOPICS, RESTRICTED_TOPICS));
+        }
+        // Topics are compared ignoring case, as the model reads them.
+        var restrictedLowerCase = restricted.stream()
+                .map(topic -> topic.toLowerCase(Locale.ROOT))
+                .collect(Collectors.toSet());
+        allowed.stream()
+                .filter(topic -> restrictedLowerCase.contains(topic.toLowerCase(Locale.ROOT)))
+                .findFirst()
+                .ifPresent(topic -> {
+                    throw new BadRequestException("validations[%d].config has '%s' in both %s and %s"
+                            .formatted(index, topic, ALLOWED_TOPICS, RESTRICTED_TOPICS));
+                });
+        return new TopicRule(index, descriptor, allowed, restricted);
+    }
+
+    /** An absent or empty list means the check does not use it. */
+    private static List<String> topics(int index, JsonNode config, String field) {
+        var node = config.path(field);
+        if (node.isMissingNode() || node.isNull() || (node.isArray() && node.isEmpty())) {
+            return List.of();
+        }
+        var topics = stringList(index, config, field, MAX_TOPICS);
         for (var topic : topics) {
             if (topic.length() > MAX_TOPIC_LENGTH) {
-                throw new BadRequestException("validations[%d].config.topics has a topic longer than %d characters"
-                        .formatted(index, MAX_TOPIC_LENGTH));
+                throw new BadRequestException("validations[%d].config.%s has a topic longer than %d characters"
+                        .formatted(index, field, MAX_TOPIC_LENGTH));
             }
             // The check adds this option itself; a policy topic with the same name would make its answer ambiguous.
             if (GuardrailQuestions.NONE_OF_THESE.equalsIgnoreCase(topic)) {
-                throw new BadRequestException("validations[%d].config.topics cannot contain '%s'"
-                        .formatted(index, GuardrailQuestions.NONE_OF_THESE));
+                throw new BadRequestException("validations[%d].config.%s cannot contain '%s'"
+                        .formatted(index, field, GuardrailQuestions.NONE_OF_THESE));
             }
         }
         return topics;
@@ -187,15 +215,6 @@ class GuardrailsValidationServiceImpl implements GuardrailsValidationService {
             }
         }
         return List.copyOf(values);
-    }
-
-    private static String mode(int index, JsonNode config) {
-        var mode = config.path("mode").asText(null);
-        if (!MODE_ALLOW.equals(mode) && !MODE_RESTRICT.equals(mode)) {
-            throw new BadRequestException("validations[%d].config.mode must be '%s' or '%s'"
-                    .formatted(index, MODE_ALLOW, MODE_RESTRICT));
-        }
-        return mode;
     }
 
     private static Answer answer(Map<String, Answer> answers, String questionId) {
@@ -283,24 +302,53 @@ class GuardrailsValidationServiceImpl implements GuardrailsValidationService {
         }
     }
 
-    private record TopicRule(int index, ValidationDescriptor descriptor, List<String> topics, String mode)
+    /**
+     * Each list is its own choice question, the shape the evaluation measured: the text fails on any restricted
+     * topic, and, when allowed topics are given, on matching none of them.
+     */
+    private record TopicRule(int index, ValidationDescriptor descriptor, List<String> allowed, List<String> restricted)
             implements
                 Rule {
 
         @Override
         public Map<String, Question> questions() {
-            return Map.of(questionId(), GuardrailQuestions.topic(topics));
+            var questions = new LinkedHashMap<String, Question>();
+            if (!restricted.isEmpty()) {
+                questions.put(questionId("restricted"), GuardrailQuestions.topic(restricted));
+            }
+            if (!allowed.isEmpty()) {
+                questions.put(questionId("allowed"), GuardrailQuestions.topic(allowed));
+            }
+            return questions;
         }
 
-        private String questionId() {
-            return "%d.topic".formatted(index);
+        private String questionId(String list) {
+            return "%d.topic.%s".formatted(index, list);
         }
 
         @Override
         public ValidationResult evaluate(Map<String, Answer> answers, GuardrailsConfig thresholds,
                 boolean truncated) {
-            var probabilities = probabilities(answers, questionId());
             var scores = JsonUtils.createObjectNode();
+            var details = details(truncated);
+            boolean passed = true;
+            if (!restricted.isEmpty()) {
+                var matched = matched(answers, "restricted", restricted, thresholds, scores);
+                details.set("matched_restricted_topics", matched);
+                passed = matched.isEmpty();
+            }
+            if (!allowed.isEmpty()) {
+                var matched = matched(answers, "allowed", allowed, thresholds, scores);
+                details.set("matched_allowed_topics", matched);
+                passed = passed && !matched.isEmpty();
+            }
+            details.set("scores", scores);
+            return result(passed, details, null);
+        }
+
+        private ObjectNode matched(Map<String, Answer> answers, String list, List<String> topics,
+                GuardrailsConfig thresholds, ObjectNode scores) {
+            var probabilities = probabilities(answers, questionId(list));
             var matched = JsonUtils.createObjectNode();
             for (var topic : topics) {
                 double score = probabilities.getOrDefault(topic, 0.0);
@@ -309,11 +357,7 @@ class GuardrailsValidationServiceImpl implements GuardrailsValidationService {
                     matched.put(topic, score);
                 }
             }
-            boolean passed = MODE_RESTRICT.equals(mode) ? matched.isEmpty() : !matched.isEmpty();
-            var details = details(truncated);
-            details.set("matched_topics_scores", matched);
-            details.set("scores", scores);
-            return result(passed, details, null);
+            return matched;
         }
     }
 

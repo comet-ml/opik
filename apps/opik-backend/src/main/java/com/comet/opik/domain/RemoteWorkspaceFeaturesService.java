@@ -125,17 +125,17 @@ public class RemoteWorkspaceFeaturesService implements WorkspaceFeaturesService 
         }
     }
 
-    private void logCacheFailure(String action, String workspaceId, WorkspaceFeature feature,
+    private void logCacheFailure(String operation, String workspaceId, WorkspaceFeature feature,
             RuntimeException cacheFailed) {
         long now = System.nanoTime();
         long last = lastCacheWarningNanos.get();
         if (now - last >= CACHE_WARNING_INTERVAL.toNanos() && lastCacheWarningNanos.compareAndSet(last, now)) {
-            log.warn("Could not {} the workspace feature cache for feature '{}', workspaceId '{}'; the platform "
+            log.warn("Workspace feature cache failed, operation '{}', feature '{}', workspaceId '{}'; the platform "
                     + "answers instead, and further cache failures in the next minute log at debug",
-                    action, feature.getValue(), workspaceId, cacheFailed);
+                    operation, feature.getValue(), workspaceId, cacheFailed);
         } else {
-            log.debug("Could not {} the workspace feature cache for feature '{}', workspaceId '{}'",
-                    action, feature.getValue(), workspaceId, cacheFailed);
+            log.debug("Workspace feature cache failed, operation '{}', feature '{}', workspaceId '{}'",
+                    operation, feature.getValue(), workspaceId, cacheFailed);
         }
     }
 

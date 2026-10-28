@@ -4,6 +4,7 @@ import com.comet.opik.api.GuardrailType;
 import com.comet.opik.api.GuardrailsValidationRequest;
 import com.comet.opik.api.GuardrailsValidationRequest.ValidationDescriptor;
 import com.comet.opik.api.GuardrailsValidationResponse;
+import com.comet.opik.api.GuardrailsValidationResponse.ValidationResult;
 import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -73,20 +74,20 @@ class GuardrailsValidationServiceTest {
         var request = request(
                 descriptor(GuardrailType.PII,
                         "{\"entities\":[\"EMAIL_ADDRESS\",\"PHONE_NUMBER\"],\"language\":\"en\"}"),
-                descriptor(GuardrailType.TOPIC, "{\"topics\":[\"billing\",\"shipping\"],\"mode\":\"allow\"}"),
-                descriptor(GuardrailType.TOPIC, "{\"topics\":[\"legal advice\"],\"mode\":\"restrict\"}"),
+                descriptor(GuardrailType.TOPIC,
+                        "{\"allowed_topics\":[\"billing\",\"shipping\"],\"restricted_topics\":[\"legal advice\"]}"),
                 descriptor(GuardrailType.PROMPT_INJECTION, "{}"));
         when(inference.decide(any(), any())).thenReturn(Mono.just(answers(Map.of(
                 "0.pii.EMAIL_ADDRESS", noul(0.97),
                 "0.pii.PHONE_NUMBER", noul(0.02),
-                "1.topic", choice(Map.of("billing", 0.65, "shipping", 0.05, "none of these", 0.3)),
-                "2.topic", choice(Map.of("legal advice", 0.1, "none of these", 0.9)),
-                "3.injection", noul(0.12)))));
+                "1.topic.restricted", choice(Map.of("legal advice", 0.1, "none of these", 0.9)),
+                "1.topic.allowed", choice(Map.of("billing", 0.65, "shipping", 0.05, "none of these", 0.3)),
+                "2.injection", noul(0.12)))));
 
         var response = validate(request);
 
         assertThat(response.validationPassed()).isFalse();
-        assertThat(response.validations()).hasSize(4);
+        assertThat(response.validations()).hasSize(3);
 
         var pii = response.validations().get(0);
         assertThat(pii.validationPassed()).isFalse();
@@ -98,18 +99,16 @@ class GuardrailsValidationServiceTest {
         assertThat(pii.validationDetails().path("detected_entities").has("PHONE_NUMBER")).isFalse();
         assertThat(pii.validationDetails().path("scores").path("PHONE_NUMBER").asDouble()).isEqualTo(0.02);
 
-        var allowed = response.validations().get(1);
-        assertThat(allowed.validationPassed()).isTrue();
-        assertThat(allowed.validationDetails().path("matched_topics_scores").path("billing").asDouble())
+        var topic = response.validations().get(1);
+        assertThat(topic.validationPassed()).isTrue();
+        assertThat(topic.validationDetails().path("matched_allowed_topics").path("billing").asDouble())
                 .isEqualTo(0.65);
-        assertThat(allowed.validationDetails().path("matched_topics_scores").has("shipping")).isFalse();
-        assertThat(allowed.validationDetails().path("scores").path("shipping").asDouble()).isEqualTo(0.05);
+        assertThat(topic.validationDetails().path("matched_allowed_topics").has("shipping")).isFalse();
+        assertThat(topic.validationDetails().path("matched_restricted_topics").isEmpty()).isTrue();
+        assertThat(topic.validationDetails().path("scores").path("shipping").asDouble()).isEqualTo(0.05);
+        assertThat(topic.validationDetails().path("scores").path("legal advice").asDouble()).isEqualTo(0.1);
 
-        var restricted = response.validations().get(2);
-        assertThat(restricted.validationPassed()).isTrue();
-        assertThat(restricted.validationDetails().path("matched_topics_scores").isEmpty()).isTrue();
-
-        var injection = response.validations().get(3);
+        var injection = response.validations().get(2);
         assertThat(injection.validationPassed()).isTrue();
         assertThat(injection.validationDetails().path("injection_score").asDouble()).isEqualTo(0.12);
 
@@ -122,32 +121,54 @@ class GuardrailsValidationServiceTest {
         assertThat(sent.deadlineMs()).isEqualTo(configuration.getGuardrails().getDeadline().toMilliseconds());
         var questions = sent.questions();
         assertThat(questions.keySet()).containsExactly(
-                "0.pii.EMAIL_ADDRESS", "0.pii.PHONE_NUMBER", "1.topic", "2.topic", "3.injection");
+                "0.pii.EMAIL_ADDRESS", "0.pii.PHONE_NUMBER", "1.topic.restricted", "1.topic.allowed", "2.injection");
         assertThat(questions.get("0.pii.EMAIL_ADDRESS"))
                 .isInstanceOfSatisfying(Question.NoulQuestion.class, question -> assertThat(
                         question.instructions().asText()).isEqualTo("Does this text contain an email address?"));
-        assertThat(questions.get("1.topic"))
+        assertThat(questions.get("1.topic.allowed"))
                 .isInstanceOfSatisfying(Question.ChoiceQuestion.class, question -> assertThat(
                         question.criteria().keySet())
                         .containsExactly("billing", "shipping", GuardrailQuestions.NONE_OF_THESE));
-        assertThat(questions.get("3.injection").instructions().asText())
+        assertThat(questions.get("1.topic.restricted"))
+                .isInstanceOfSatisfying(Question.ChoiceQuestion.class, question -> assertThat(
+                        question.criteria().keySet())
+                        .containsExactly("legal advice", GuardrailQuestions.NONE_OF_THESE));
+        assertThat(questions.get("2.injection").instructions().asText())
                 .isEqualTo(GuardrailQuestions.INJECTION_QUESTION);
     }
 
     @Test
     void restrictedTopicMatchAndMissingAllowedTopicBothFail() {
         var request = request(
-                descriptor(GuardrailType.TOPIC, "{\"topics\":[\"legal advice\"],\"mode\":\"restrict\"}"),
-                descriptor(GuardrailType.TOPIC, "{\"topics\":[\"billing\"],\"mode\":\"allow\"}"));
+                descriptor(GuardrailType.TOPIC, "{\"restricted_topics\":[\"legal advice\"]}"),
+                descriptor(GuardrailType.TOPIC, "{\"allowed_topics\":[\"billing\"]}"),
+                descriptor(GuardrailType.TOPIC,
+                        "{\"allowed_topics\":[\"billing\"],\"restricted_topics\":[\"legal advice\"]}"));
         when(inference.decide(any(), any())).thenReturn(Mono.just(answers(Map.of(
-                "0.topic", choice(Map.of("legal advice", 0.4, "none of these", 0.6)),
-                "1.topic", choice(Map.of("billing", 0.1, "none of these", 0.9))))));
+                "0.topic.restricted", choice(Map.of("legal advice", 0.4, "none of these", 0.6)),
+                "1.topic.allowed", choice(Map.of("billing", 0.1, "none of these", 0.9)),
+                "2.topic.restricted", choice(Map.of("legal advice", 0.05, "none of these", 0.95)),
+                "2.topic.allowed", choice(Map.of("billing", 0.2, "none of these", 0.8))))));
 
         var response = validate(request);
 
         assertThat(response.validationPassed()).isFalse();
-        assertThat(response.validations().get(0).validationPassed()).isFalse();
-        assertThat(response.validations().get(1).validationPassed()).isFalse();
+        assertThat(response.validations()).extracting(ValidationResult::validationPassed)
+                .containsExactly(false, false, false);
+        assertThat(response.validations().get(2).validationDetails().path("matched_allowed_topics").isEmpty())
+                .isTrue();
+    }
+
+    @Test
+    void topicConfigNeedsAListAndNoTopicInBoth() {
+        assertThatThrownBy(() -> validate(request(descriptor(GuardrailType.TOPIC, "{\"allowed_topics\":[]}"))))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("validations[0].config needs allowed_topics or restricted_topics");
+        assertThatThrownBy(() -> validate(request(descriptor(GuardrailType.TOPIC,
+                "{\"allowed_topics\":[\"Billing\"],\"restricted_topics\":[\"billing\"]}"))))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("validations[0].config has 'Billing' in both allowed_topics and restricted_topics");
+        verifyNoInteractions(inference);
     }
 
     @Test
@@ -181,9 +202,6 @@ class GuardrailsValidationServiceTest {
         assertThatThrownBy(() -> validate(request(descriptor(GuardrailType.PII, "{\"entities\":[\"US_SSN\"]}"))))
                 .isInstanceOf(BadRequestException.class)
                 .hasMessageContaining("US_SSN");
-        assertThatThrownBy(() -> validate(request(descriptor(GuardrailType.TOPIC, "{\"topics\":[\"billing\"]}"))))
-                .isInstanceOf(BadRequestException.class)
-                .hasMessageContaining("mode");
         verifyNoInteractions(inference);
     }
 
@@ -206,10 +224,12 @@ class GuardrailsValidationServiceTest {
         });
     }
 
+    // The limits are the documented contract (254 topics of up to 256 characters), written out rather than read from
+    // the service's constants, so a changed constant fails here.
     @Test
     void topicsAtTheLimitsAreAccepted() {
-        var topics = IntStream.range(0, GuardrailsValidationServiceImpl.MAX_TOPICS)
-                .mapToObj(i -> i == 0 ? "t".repeat(GuardrailsValidationServiceImpl.MAX_TOPIC_LENGTH) : "topic " + i)
+        var topics = IntStream.range(0, 254)
+                .mapToObj(i -> i == 0 ? "t".repeat(256) : "topic " + i)
                 .toList();
         var request = request(topicDescriptor(topics));
         when(inference.decide(any(), any())).thenReturn(Mono.error(new IllegalStateException("not answered")));
@@ -218,21 +238,17 @@ class GuardrailsValidationServiceTest {
 
         var captor = ArgumentCaptor.forClass(DecideRequest.class);
         verify(inference).decide(captor.capture(), any());
-        assertThat(captor.getValue().questions().get("0.topic"))
+        assertThat(captor.getValue().questions().get("0.topic.restricted"))
                 .isInstanceOfSatisfying(Question.ChoiceQuestion.class, question -> assertThat(question.criteria())
-                        .hasSize(Question.ChoiceQuestion.MAX_OPTIONS));
+                        .hasSize(255));
     }
 
     static Stream<Arguments> rejectedTopicLists() {
         return Stream.of(
                 Arguments.of("more topics than the choice question holds",
-                        IntStream.rangeClosed(0, GuardrailsValidationServiceImpl.MAX_TOPICS)
-                                .mapToObj(i -> "topic " + i)
-                                .toList(),
-                        "1 to " + GuardrailsValidationServiceImpl.MAX_TOPICS),
-                Arguments.of("a topic over the length limit",
-                        List.of("t".repeat(GuardrailsValidationServiceImpl.MAX_TOPIC_LENGTH + 1)),
-                        "longer than " + GuardrailsValidationServiceImpl.MAX_TOPIC_LENGTH),
+                        IntStream.range(0, 255).mapToObj(i -> "topic " + i).toList(),
+                        "1 to 254"),
+                Arguments.of("a topic over the length limit", List.of("t".repeat(257)), "longer than 256"),
                 Arguments.of("the reserved none-of-these option", List.of("billing", "None of these"),
                         GuardrailQuestions.NONE_OF_THESE),
                 Arguments.of("a repeated topic", List.of("billing", "billing"), "more than once"));
@@ -308,8 +324,8 @@ class GuardrailsValidationServiceTest {
     }
 
     private static ValidationDescriptor topicDescriptor(List<String> topics) {
-        var config = JsonUtils.createObjectNode().put("mode", "restrict");
-        topics.forEach(config.putArray("topics")::add);
+        var config = JsonUtils.createObjectNode();
+        topics.forEach(config.putArray("restricted_topics")::add);
         return ValidationDescriptor.builder().type(GuardrailType.TOPIC).config(config).build();
     }
 

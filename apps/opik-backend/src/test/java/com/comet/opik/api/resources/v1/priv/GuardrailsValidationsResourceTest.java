@@ -67,7 +67,7 @@ class GuardrailsValidationsResourceTest {
             {"request_id":"req_1","cache_hit":false,"latency_ms":40,"result":{"answers":{
               "0.pii.EMAIL_ADDRESS":{"type":"noul","noul":0.97},
               "0.pii.PHONE_NUMBER":{"type":"noul","noul":0.02},
-              "1.topic":{"type":"choice","choice":"none of these",
+              "1.topic.allowed":{"type":"choice","choice":"none of these",
                          "probabilities":{"billing":0.05,"shipping":0.05,"none of these":0.9},"confidence":0.9},
               "2.injection":{"type":"noul","noul":0.08}}}}
             """;
@@ -136,7 +136,7 @@ class GuardrailsValidationsResourceTest {
         wireMock.server().stubFor(post(urlPathEqualTo(DECIDE_PATH)).willReturn(okJson(DECIDE_BODY)));
         var request = request(
                 descriptor(GuardrailType.PII, "{\"entities\":[\"EMAIL_ADDRESS\",\"PHONE_NUMBER\"]}"),
-                descriptor(GuardrailType.TOPIC, "{\"topics\":[\"billing\",\"shipping\"],\"mode\":\"allow\"}"),
+                descriptor(GuardrailType.TOPIC, "{\"allowed_topics\":[\"billing\",\"shipping\"]}"),
                 descriptor(GuardrailType.PROMPT_INJECTION, "{}"));
 
         try (var response = guardrailsResourceClient.validate(request, API_KEY, TEST_WORKSPACE)) {
@@ -164,7 +164,7 @@ class GuardrailsValidationsResourceTest {
                 .withRequestBody(matchingJsonPath("$.org_id", equalTo(WORKSPACE_ID)))
                 .withRequestBody(matchingJsonPath("$.state", equalTo(TEXT)))
                 .withRequestBody(matchingJsonPath("$.questions['0.pii.EMAIL_ADDRESS'].type", equalTo("noul")))
-                .withRequestBody(matchingJsonPath("$.questions['1.topic'].type", equalTo("choice")))
+                .withRequestBody(matchingJsonPath("$.questions['1.topic.allowed'].type", equalTo("choice")))
                 .withRequestBody(matchingJsonPath("$.questions['2.injection'].type", equalTo("noul"))));
     }
 
