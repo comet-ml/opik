@@ -54,7 +54,8 @@ import static dev.langchain4j.http.client.sse.ServerSentEventListenerUtils.ignor
  * The custom provider client's transport: OkHttp, whose {@link DestinationGuardDns} checks each address connected to.
  * Otherwise it behaves as the JDK client it replaces: the read timeout bounds the wait for the response headers but
  * not the body, a non-2xx response is an {@link HttpException} carrying its body, and a stream is read on a client
- * thread. Unlike the JDK client, a non-2xx body is read only up to {@link #errorBodyMaxSize}: callers pass on just a
+ * thread. Unlike the JDK client, a stream waits for its headers as long as it may stay silent, see
+ * {@link StreamCallTimeouts}, and a non-2xx body is read only up to {@link #errorBodyMaxSize}: callers pass on just a
  * short message parsed from it.
  */
 @Slf4j
@@ -74,8 +75,9 @@ class CustomLlmHttpClient implements HttpClient {
     private final OkHttpClient client;
 
     /**
-     * {@link #client} for streams, on the same pool and dispatcher: the read timeout bounds the wait for the headers,
-     * and the stream read timeout each read of the body, see {@link StreamCallTimeouts}.
+     * {@link #client} for streams, on the same pool and dispatcher: the longer of the read timeout and the stream read
+     * timeout bounds the wait for the headers, and the stream read timeout each read of the body, see
+     * {@link StreamCallTimeouts}.
      */
     private final OkHttpClient streamingClient;
 

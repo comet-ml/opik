@@ -24,6 +24,8 @@ import com.comet.opik.domain.llm.langchain4j.OpikUserMessage;
 import com.comet.opik.domain.llm.langchain4j.VideoUrl;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.LlmProviderClientConfig;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.llm.antropic.AnthropicModelName;
 import com.comet.opik.infrastructure.llm.gemini.GeminiModelName;
@@ -33,9 +35,14 @@ import com.comet.opik.infrastructure.llm.vertexai.VertexAIModelName;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder;
+import com.github.tomakehurst.wiremock.http.Fault;
+import com.github.tomakehurst.wiremock.stubbing.Scenario;
 import com.github.tomakehurst.wiremock.verification.LoggedRequest;
+import com.google.inject.Injector;
 import com.redis.testcontainers.RedisContainer;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
+import dev.langchain4j.model.openai.internal.chat.ChatCompletionResponse;
 import dev.langchain4j.model.openai.internal.chat.Content;
 import dev.langchain4j.model.openai.internal.chat.ContentType;
 import dev.langchain4j.model.openai.internal.chat.ImageUrl;
@@ -88,6 +95,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import java.util.zip.GZIPOutputStream;
 
@@ -160,9 +168,10 @@ class ChatCompletionsResourceTest {
     private ChatCompletionsClient chatCompletionsClient;
     private LlmProviderApiKeyResourceClient llmProviderApiKeyResourceClient;
     private ClientSupport clientSupport;
+    private LlmProviderClientConfig llmProviderClientConfig;
 
     @BeforeAll
-    void setUpAll(ClientSupport clientSupport) {
+    void setUpAll(ClientSupport clientSupport, Injector injector) {
 
         ClientSupportUtils.config(clientSupport);
         mockTargetWorkspace(WORKSPACE_NAME, WORKSPACE_ID);
@@ -170,6 +179,7 @@ class ChatCompletionsResourceTest {
         this.chatCompletionsClient = new ChatCompletionsClient(clientSupport);
         this.llmProviderApiKeyResourceClient = new LlmProviderApiKeyResourceClient(clientSupport);
         this.clientSupport = clientSupport;
+        this.llmProviderClientConfig = injector.getInstance(OpikConfiguration.class).getLlmProviderClient();
     }
 
     private void mockTargetWorkspace(String workspaceName, String workspaceId) {
@@ -606,6 +616,100 @@ class ChatCompletionsResourceTest {
             assertThat(actualErrors).isEqualTo(List.of(expectedError, expectedStreamedError));
             assertThat(actualProviderCalls).isEqualTo(expectedProviderCalls);
             assertThat(actualEvents).isNotEmpty().noneMatch(event -> event.contains(marker));
+        }
+
+        /**
+         * Runs {@code test} with a retry budget of {@code maxRetries}, read by the service on every call, and restores
+         * the configured one after it.
+         */
+        private void withRetryBudget(int maxRetries, Runnable test) {
+            var configuredRetries = llmProviderClientConfig.getMaxAttempts();
+            llmProviderClientConfig.setMaxAttempts(maxRetries);
+            try {
+                test.run();
+            } finally {
+                llmProviderClientConfig.setMaxAttempts(configuredRetries);
+            }
+        }
+
+        private Stream<Arguments> aTransientFailureIsRetriedUpToTheBudget() {
+            var failures = List.of(
+                    named("an upstream 500", aResponse()
+                            .withStatus(HttpStatus.SC_INTERNAL_SERVER_ERROR)
+                            .withHeader("Content-Type", "text/plain")
+                            .withBody(RandomStringUtils.secure().nextAlphanumeric(20))),
+                    named("a connection reset", aResponse().withFault(Fault.CONNECTION_RESET_BY_PEER)));
+            return failures.stream()
+                    .flatMap(failure -> Stream.of(1, 2).map(maxRetries -> arguments(failure, maxRetries)));
+        }
+
+        /**
+         * A failure another attempt can fix is retried: the provider fails every attempt the budget allows to fail,
+         * and the last one succeeds. The budget can't be 0, as the configuration requires at least 1.
+         */
+        @ParameterizedTest(name = "{0}, maxRetries={1}")
+        @MethodSource
+        @DisplayName("a transient provider failure is retried up to the retry budget")
+        void aTransientFailureIsRetriedUpToTheBudget(ResponseDefinitionBuilder failure, int maxRetries) {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            mockTargetWorkspace(workspaceName, UUID.randomUUID().toString());
+            createCustomProvider(workspaceName);
+            var scenario = UUID.randomUUID().toString();
+            var successBody = """
+                    {"id":"chatcmpl-%s","object":"chat.completion","created":%d,"model":"gpt-4o",\
+                    "choices":[{"index":0,"message":{"role":"assistant","content":"%s"},"finish_reason":"stop"}]}"""
+                    .formatted(RandomStringUtils.secure().nextAlphanumeric(10), System.currentTimeMillis() / 1000,
+                            RandomStringUtils.secure().nextAlphanumeric(20));
+            IntStream.range(0, maxRetries).forEach(failed -> WIRE_MOCK.server().stubFor(
+                    post(urlPathMatching(CHAT_COMPLETIONS_REGEX))
+                            .inScenario(scenario)
+                            .whenScenarioStateIs(failed == 0 ? Scenario.STARTED : "failed %d".formatted(failed))
+                            .willReturn(failure)
+                            .willSetStateTo("failed %d".formatted(failed + 1))));
+            WIRE_MOCK.server().stubFor(post(urlPathMatching(CHAT_COMPLETIONS_REGEX))
+                    .inScenario(scenario)
+                    .whenScenarioStateIs("failed %d".formatted(maxRetries))
+                    .willReturn(okJson(successBody)));
+            var request = ChatCompletionRequest.builder().stream(false).model(MODEL).addUserMessage("ping").build();
+            var expectedResponse = JsonUtils.readValue(successBody, ChatCompletionResponse.class);
+            var expectedProviderCalls = maxRetries + 1;
+
+            withRetryBudget(maxRetries, () -> {
+                var actualResponse = chatCompletionsClient.create(API_KEY, workspaceName, request);
+
+                assertThat(actualResponse).isEqualTo(expectedResponse);
+                assertThat(providerCalls()).isEqualTo(expectedProviderCalls);
+            });
+        }
+
+        /**
+         * A failure that isn't recognised as transient fails on its first attempt, whatever the budget, as another one
+         * could repeat a call the provider already acted on: here a reply that can't be parsed.
+         */
+        @ParameterizedTest(name = "maxRetries={0}")
+        @ValueSource(ints = {1, 2})
+        @DisplayName("a failure that isn't transient is not retried")
+        void aFailureThatIsNotTransientIsNotRetried(int maxRetries) {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            mockTargetWorkspace(workspaceName, UUID.randomUUID().toString());
+            createCustomProvider(workspaceName);
+            WIRE_MOCK.server().stubFor(post(urlPathMatching(CHAT_COMPLETIONS_REGEX))
+                    .willReturn(aResponse()
+                            .withStatus(HttpStatus.SC_OK)
+                            .withHeader("Content-Type", "application/json")
+                            .withBody("{\"choices\": %s".formatted(RandomStringUtils.secure().nextAlphanumeric(20)))));
+            var request = ChatCompletionRequest.builder().stream(false).model(MODEL).addUserMessage("ping").build();
+            var expectedError = new ErrorMessage(HttpStatus.SC_INTERNAL_SERVER_ERROR,
+                    UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
+            var expectedProviderCalls = 1;
+
+            withRetryBudget(maxRetries, () -> {
+                var actualError = chatCompletionsClient.create(API_KEY, workspaceName, request,
+                        HttpStatus.SC_INTERNAL_SERVER_ERROR);
+
+                assertThat(actualError).isEqualTo(expectedError);
+                assertThat(providerCalls()).isEqualTo(expectedProviderCalls);
+            });
         }
 
         /**

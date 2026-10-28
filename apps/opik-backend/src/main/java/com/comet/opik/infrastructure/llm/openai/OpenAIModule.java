@@ -42,8 +42,9 @@ public class OpenAIModule extends AbstractModule {
                 .build())
                 .followRedirects(false)
                 .followSslRedirects(false)
-                // the read timeout bounds every call's headers, then the stream read timeout an event stream's body;
-                // the SDK's own per-call read timeout never fires first, see OpenAIClientGenerator
+                // the read timeout bounds a call's headers, the longer of it and the stream read timeout those of a call
+                // accepting an event stream, then the stream read timeout an event stream's body; the SDK's own
+                // per-call read timeout never fires first, see OpenAIClientGenerator
                 .addNetworkInterceptor(StreamCallTimeouts.forEventStreams(readTimeout(config),
                         Duration.ofMillis(config.getStreamReadTimeout().toMilliseconds())))
                 .build()));

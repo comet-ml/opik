@@ -54,6 +54,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.net.ConnectException;
+import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.nio.channels.ClosedChannelException;
 import java.util.List;
@@ -489,8 +490,8 @@ class ChatCompletionServiceTest {
         }
 
         @Test
-        @DisplayName("transient failures must still be retried")
-        void create__whenTransientException__thenStillRetried() {
+        @DisplayName("transport failures must still be retried")
+        void create__whenTransportFailure__thenStillRetried() {
             // Given
             var request = podamFactory.manufacturePojo(ChatCompletionRequest.class);
             var workspaceId = "test-workspace-id";
@@ -500,7 +501,8 @@ class ChatCompletionServiceTest {
                     new ParamResolver(llmProviderFactory, bundledRegistry()), providerErrorMessageValidator);
 
             when(llmProviderFactory.getService(anyString(), anyString())).thenReturn(llmProviderService);
-            when(llmProviderService.generate(any(), anyString())).thenThrow(new RuntimeException("transient"));
+            when(llmProviderService.generate(any(), anyString()))
+                    .thenThrow(new RuntimeException(new SocketException("Connection reset")));
             when(llmProviderService.getLlmProviderError(any())).thenReturn(Optional.empty());
 
             // When & Then
@@ -1041,6 +1043,27 @@ class ChatCompletionServiceTest {
 
             assertRetryable(thrown);
             verify(chatModel, times(expectedAttempts)).chat(any(ChatRequest.class));
+        }
+
+        private static Stream<Arguments> wrappedNonRetriableFailures() {
+            return Stream.of(
+                    arguments("behind a transport failure", new RuntimeException(new NonRetriableException(
+                            UUID.randomUUID().toString(), new SocketException(UUID.randomUUID().toString())))),
+                    arguments("behind a transient wire status", new RuntimeException(new NonRetriableException(
+                            UUID.randomUUID().toString(), new HttpException(503, UUID.randomUUID().toString())))));
+        }
+
+        /**
+         * No provider path wraps a {@code NonRetriableException} today, so this drives the shape directly: the
+         * classification walks the chain, so a wrapper can't hide it behind a retriable signal deeper down.
+         */
+        @ParameterizedTest(name = "a wrapped NonRetriableException {0} is attempted once")
+        @MethodSource("wrappedNonRetriableFailures")
+        @DisplayName("A wrapped NonRetriableException does not consume the in-process retry budget")
+        void scoreTrace__whenWrappedNonRetriable__thenAttemptedOnce(String label, RuntimeException providerFailure) {
+            scoreTraceWithBudget(2, providerFailure);
+
+            verify(chatModel, times(1)).chat(any(ChatRequest.class));
         }
 
         /**

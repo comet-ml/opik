@@ -119,9 +119,10 @@ public class LlmProviderClientConfig {
     @NotNull @Positive @Max(1000) private Integer providerErrorMessageMaxLength;
 
     /**
-     * Longest a provider's stream may stay silent once its headers arrived; the read timeout bounds only the wait for
-     * the headers. Models that reason before answering can be silent for a while, so it is above the ingress idle
-     * timeout, beyond which the caller is gone anyway. At most 10 minutes: a stream silent for longer has stalled.
+     * Longest a provider's stream may stay silent, before its headers or between reads of its body: a stream waits for
+     * its headers up to the longer of this and the read timeout, a call that isn't one up to the read timeout only.
+     * Models that reason before answering can be silent for a while, so it is above the ingress idle timeout, beyond
+     * which the caller is gone anyway. At most 10 minutes: a stream silent for longer has stalled.
      */
     @NotNull @MinDuration(value = 1, unit = TimeUnit.SECONDS)
     @MaxDuration(value = 10, unit = TimeUnit.MINUTES)

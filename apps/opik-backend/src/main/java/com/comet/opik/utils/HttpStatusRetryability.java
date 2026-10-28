@@ -47,4 +47,13 @@ public class HttpStatusRetryability {
         return familyOf(status) == Response.Status.Family.CLIENT_ERROR
                 && !TRANSIENT_CLIENT_ERRORS.contains(status);
     }
+
+    /**
+     * Whether a request answered with this status may succeed on retry: a 5xx or one of
+     * {@link #TRANSIENT_CLIENT_ERRORS}. Unlike {@link #isPermanent}, anything else, an unrecognised status included,
+     * is not.
+     */
+    public static boolean isTransient(int status) {
+        return familyOf(status) == Response.Status.Family.SERVER_ERROR || TRANSIENT_CLIENT_ERRORS.contains(status);
+    }
 }

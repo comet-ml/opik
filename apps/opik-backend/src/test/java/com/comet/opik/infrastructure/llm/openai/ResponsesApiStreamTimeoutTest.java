@@ -24,11 +24,13 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
 
 /**
  * The Responses API stream runs on the OpenAI SDK's own transport, which gets the same timeouts as every other
- * provider's stream: the read timeout bounds the wait for the headers, then the stream read timeout applies, and no
- * whole-call timeout cuts a long stream. A raw server sends the headers, stays silent, then sends the events.
+ * provider's stream: the longer of the read timeout and the stream read timeout bounds the wait for the headers, then
+ * the stream read timeout applies, and no whole-call timeout cuts a long stream. A call that isn't a stream keeps the
+ * read timeout for its headers. A raw server sends the headers, stays silent, then sends the events.
  */
 class ResponsesApiStreamTimeoutTest {
 
@@ -233,25 +235,70 @@ class ResponsesApiStreamTimeoutTest {
         return server;
     }
 
+    /** A provider can hold a stream's headers while the model reasons: within the stream read timeout, they arrive. */
+    @Test
+    @DisplayName("a Responses API stream whose headers take longer than the read timeout, within the stream one, completes")
+    void headersWithinTheStreamReadTimeoutArrive() throws Exception {
+        var headerDelay = Duration.ofMillis(1_500);
+        try (var server = delayedStreamServer(headerDelay, Duration.ZERO)) {
+            long startNanos = System.nanoTime();
+
+            var actualOutcome = stream(server, Timeouts.builder().readTimeout("500ms").streamReadTimeout("5s").build());
+
+            var actualElapsed = Duration.ofNanos(System.nanoTime() - startNanos);
+            assertThat(actualOutcome.error()).isNull();
+            assertThat(actualOutcome.chunks()).isNotEmpty();
+            assertThat(actualElapsed).isGreaterThanOrEqualTo(headerDelay);
+        }
+    }
+
     /**
-     * Headers that never arrive fail at the read timeout, not at the longer stream read timeout that the SDK's own
-     * read timeout is set to. Measured per connection, from the request on, as the SDK retries the call.
+     * Headers that never arrive fail at the stream read timeout, the longer of the two here; the header deadline and
+     * the SDK's own read timeout are both that long, so either fires first. Measured per connection, from the request
+     * on, as the SDK retries the call.
      */
     @Test
-    @DisplayName("a Responses API stream whose headers never arrive fails at the read timeout")
-    void headersThatNeverArriveFailAtTheReadTimeout() throws Exception {
+    @DisplayName("a Responses API stream whose headers never arrive fails at the stream read timeout")
+    void headersThatNeverArriveFailAtTheStreamReadTimeout() throws Exception {
         // the server's clock starts after accept(), a little after the client's deadline did, so it can read just under
-        var expectedMinWait = Duration.ofMillis(400);
-        var expectedMaxWait = Duration.ofMillis(1_500);
+        var expectedMinWait = Duration.ofMillis(1_200);
+        var expectedMaxWait = Duration.ofMillis(3_000);
         var actualWaits = new CopyOnWriteArrayList<Duration>();
         try (var server = neverAnsweringServer(actualWaits)) {
 
-            var actualOutcome = stream(server, Timeouts.builder().readTimeout("500ms").streamReadTimeout("5s").build());
+            var actualOutcome = stream(server,
+                    Timeouts.builder().readTimeout("500ms").streamReadTimeout("1500ms").build());
 
             assertThat(actualOutcome.error()).isExactlyInstanceOf(OpenAIIoException.class)
                     .cause()
                     .isExactlyInstanceOf(SocketTimeoutException.class)
-                    .hasMessage("the response headers took longer than the read timeout");
+                    .extracting(Throwable::getMessage)
+                    .isIn("the response headers took longer than their timeout", "timeout", "Read timed out");
+            assertThat(actualWaits).isNotEmpty().allSatisfy(wait -> assertThat(wait).isBetween(expectedMinWait,
+                    expectedMaxWait));
+        }
+    }
+
+    /**
+     * A call that isn't a stream, on the same transport, keeps the read timeout for its headers rather than the longer
+     * stream read timeout. Measured per connection, as the SDK retries the call.
+     */
+    @Test
+    @DisplayName("a Responses API call that isn't a stream fails at the read timeout when its headers never arrive")
+    void headersOfACallThatIsNotAStreamFailAtTheReadTimeout() throws Exception {
+        var expectedMinWait = Duration.ofMillis(400);
+        var expectedMaxWait = Duration.ofMillis(1_500);
+        var actualWaits = new CopyOnWriteArrayList<Duration>();
+        try (var server = neverAnsweringServer(actualWaits)) {
+            var provider = provider(server, Timeouts.builder().readTimeout("500ms").streamReadTimeout("5s").build());
+
+            var actualError = catchThrowable(() -> provider.generate(
+                    ChatCompletionRequest.builder().model("gpt-4o").addUserMessage("hello").build(), "workspace"));
+
+            assertThat(actualError).isExactlyInstanceOf(OpenAIIoException.class)
+                    .cause()
+                    .isExactlyInstanceOf(SocketTimeoutException.class)
+                    .hasMessage("the response headers took longer than their timeout");
             assertThat(actualWaits).isNotEmpty().allSatisfy(wait -> assertThat(wait).isBetween(expectedMinWait,
                     expectedMaxWait));
         }
