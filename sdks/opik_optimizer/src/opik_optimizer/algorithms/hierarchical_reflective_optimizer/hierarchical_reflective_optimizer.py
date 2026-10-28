@@ -53,9 +53,6 @@ class ScoredEvaluation:
 
 
 class HierarchicalReflectiveOptimizer(BaseOptimizer):
-    supports_tool_optimization: bool = True
-    supports_prompt_optimization: bool = True
-    supports_multimodal: bool = True
     """
     The Hierarchical Reflective Optimizer uses hierarchical root cause analysis to improve prompts
     based on failure modes identified during the evaluation process.
@@ -87,6 +84,10 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             If a dict, keys should match DEFAULT_PROMPTS keys.
             If a callable, receives the PromptLibrary instance for in-place modification.
     """
+
+    supports_tool_optimization: bool = True
+    supports_prompt_optimization: bool = True
+    supports_multimodal: bool = True
 
     DEFAULT_PROMPTS: dict[str, str] = {
         "batch_analysis_prompt": hierarchical_prompts.BATCH_ANALYSIS_PROMPT,

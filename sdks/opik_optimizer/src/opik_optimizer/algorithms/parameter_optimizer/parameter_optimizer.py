@@ -41,10 +41,6 @@ class _BestState(TypedDict):
 
 
 class ParameterOptimizer(BaseOptimizer):
-    supports_tool_optimization: bool = False
-    supports_prompt_optimization: bool = False
-    uses_reasoning: bool = False
-    supports_multimodal: bool = True
     """
     The Parameter Optimizer uses Bayesian optimization to tune model parameters like
     temperature, top_p, and other LLM call parameters for optimal performance.
@@ -66,6 +62,11 @@ class ParameterOptimizer(BaseOptimizer):
         verbose: Controls internal logging/progress bars (0=off, 1=on)
         seed: Random seed for reproducibility
     """
+
+    supports_tool_optimization: bool = False
+    supports_prompt_optimization: bool = False
+    uses_reasoning: bool = False
+    supports_multimodal: bool = True
 
     DEFAULT_PROMPTS: dict[str, str] = param_prompts.DEFAULT_PROMPTS
 

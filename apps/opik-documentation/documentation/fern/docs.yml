@@ -368,10 +368,6 @@ navigation:
               - section: Advanced Topics
                 slug: /advanced
                 contents:
-                  - page: Extending optimizers
-                    icon: fa-regular fa-puzzle-piece
-                    path: ./docs-v2/development/optimization-runs/advanced/extending_optimizers.mdx
-                    slug: extending_optimizers
                   - page: Custom metrics
                     icon: fa-regular fa-sliders
                     path: ./docs-v2/development/optimization-runs/advanced/custom_metrics.mdx
@@ -1950,7 +1946,10 @@ redirects:
     destination: "/docs/opik/development/optimization-runs/advanced/custom_metrics"
     permanent: true
   - source: "/docs/opik/agent_optimization/advanced/extending_optimizers"
-    destination: "/docs/opik/development/optimization-runs/advanced/extending_optimizers"
+    destination: "/docs/opik/development/optimization-runs/advanced/api_reference"
+    permanent: true
+  - source: "/docs/opik/development/optimization-runs/advanced/extending_optimizers"
+    destination: "/docs/opik/development/optimization-runs/advanced/api_reference"
     permanent: true
   - source: "/docs/opik/agent_optimization/advanced/multiple_completions"
     destination: "/docs/opik/development/optimization-runs/advanced/multiple_completions"

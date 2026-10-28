@@ -22,9 +22,6 @@ logger = logging.getLogger(__name__)
 
 
 class EvolutionaryOptimizer(BaseOptimizer):
-    supports_tool_optimization: bool = True
-    supports_prompt_optimization: bool = True
-    supports_multimodal: bool = True
     """
     Evolutionary Optimizer that uses genetic algorithms to evolve and improve prompts over generations.
 
@@ -66,6 +63,10 @@ class EvolutionaryOptimizer(BaseOptimizer):
             Dict: {"prompt_key": "new_template"} to override specific prompts.
             Callable: function(prompts: PromptLibrary) -> None to modify prompts programmatically.
     """
+
+    supports_tool_optimization: bool = True
+    supports_prompt_optimization: bool = True
+    supports_multimodal: bool = True
 
     DEFAULT_EARLY_STOPPING_GENERATIONS = (
         constants.EVOLUTIONARY_DEFAULT_EARLY_STOPPING_GENERATIONS

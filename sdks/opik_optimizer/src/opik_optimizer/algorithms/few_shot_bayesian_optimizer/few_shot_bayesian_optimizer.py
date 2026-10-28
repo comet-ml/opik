@@ -59,9 +59,6 @@ logger = logging.getLogger(__name__)
 
 
 class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
-    supports_tool_optimization: bool = False
-    supports_prompt_optimization: bool = True
-    supports_multimodal: bool = True
     """
     Few-Shot Bayesian Optimizer that adds few-shot examples to prompts using Bayesian optimization.
 
@@ -91,6 +88,10 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             If a dict, keys should match DEFAULT_PROMPTS keys.
             If a callable, receives the PromptLibrary instance for in-place modification.
     """
+
+    supports_tool_optimization: bool = False
+    supports_prompt_optimization: bool = True
+    supports_multimodal: bool = True
 
     DEFAULT_PROMPTS: dict[str, str] = {
         "example_placeholder": few_shot_prompts.FEW_SHOT_EXAMPLE_PLACEHOLDER,

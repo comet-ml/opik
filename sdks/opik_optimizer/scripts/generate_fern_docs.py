@@ -473,7 +473,7 @@ Import `EvidenceCase`, `ReasoningEvidence`, `TextEdit`, `describe_text_segments`
 ## Trial experiments
 
 Each candidate evaluation is logged as an experiment in the Opik optimization run. Its metadata
-records `candidate_id`, `parent_candidate_ids` (the prompt the candidate was derived from; the
+records `candidate_id`, `parent_candidate_ids` (the prompts the candidate was derived from; the
 baseline is the root) and `step_index` (its depth in that tree), which the Opik UI uses to mark
 trials as Passed or Discarded. A prompt already scored on the same items in the run is not
 scored again. `evaluate_prompt(..., experiment_type="mini-batch")` logs an evaluation that is not a
@@ -496,9 +496,8 @@ ranking trial, such as HRPO's failure analysis on training items, so it stays ou
   The `begin_round`, `finish_round`, `start_candidate`, and `finish_candidate` hooks are removed;
   use `pre_round`, `post_round`, `pre_trial`, and `post_trial` respectively.
 
-See [Configure models](/development/optimization-runs/optimization/configure_models),
-[ParameterOptimizer](/development/optimization-runs/algorithms/parameter_optimizer), and
-[Extending optimizers](/development/optimization-runs/advanced/extending_optimizers) for examples.
+See [Configure models](/development/optimization-runs/optimization/configure_models) and
+[ParameterOptimizer](/development/optimization-runs/algorithms/parameter_optimizer) for examples.
 
 """
 
