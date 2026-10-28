@@ -183,7 +183,14 @@ test.describe('Playground logs — which runs are listed', { tag: ['@area:playgr
                   )
                 ).filter((id) => id !== ''),
               ),
-            { timeout: 30_000, intervals: [500, 1_000, 2_000] },
+            {
+              message:
+                'the Playground logs sidebar to settle on exactly the dataset and test-suite ' +
+                'run traces — a timeout here means the set never matched, so read the diff ' +
+                'below as "which rows the sidebar listed", not as a mounting delay',
+              timeout: 30_000,
+              intervals: [500, 1_000, 2_000],
+            },
           )
           .toEqual(expectedIds);
 
