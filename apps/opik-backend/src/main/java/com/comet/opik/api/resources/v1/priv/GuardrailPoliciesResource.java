@@ -141,7 +141,7 @@ public class GuardrailPoliciesResource {
 
     @POST
     @Path("/retrieve")
-    @Operation(operationId = "retrieveGuardrailPolicies", summary = "Retrieve guardrail policies by name", description = "Return the named policies plus every global policy of the workspace. Fails when a named policy does not exist", responses = {
+    @Operation(operationId = "retrieveGuardrailPolicies", summary = "Retrieve guardrail policies by name", description = "Return the named policies plus every global policy of the workspace, ordered by name. Fails when a named policy does not exist", responses = {
             @ApiResponse(responseCode = "200", description = "Guardrail policies", content = @Content(schema = @Schema(implementation = GuardrailPolicyRetrieveResponse.class))),
             @ApiResponse(responseCode = "404", description = "A named policy does not exist", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     @JsonView(GuardrailPolicy.View.Public.class)

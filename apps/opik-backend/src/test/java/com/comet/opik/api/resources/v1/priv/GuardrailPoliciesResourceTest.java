@@ -454,13 +454,15 @@ class GuardrailPoliciesResourceTest {
 
     static Stream<Arguments> retrieveCases() {
         return Stream.of(
-                Arguments.of("a name in another case", Set.of("SUPPORT-BOT"), List.of("support-bot", "workspace-wide")),
-                Arguments.of("the name of a global policy", Set.of("workspace-wide"), List.of("workspace-wide")),
-                Arguments.of("no names", Set.of(), List.of("workspace-wide")),
+                Arguments.of("a name in another case", Set.of("SUPPORT-BOT"),
+                        List.of("all-requests", "support-bot", "workspace-wide")),
+                Arguments.of("the name of a global policy", Set.of("workspace-wide"),
+                        List.of("all-requests", "workspace-wide")),
+                Arguments.of("no names", Set.of(), List.of("all-requests", "workspace-wide")),
                 Arguments.of("a name stored with a trailing space", Set.of("padded-bot"),
-                        List.of("padded-bot ", "workspace-wide")),
+                        List.of("all-requests", "padded-bot ", "workspace-wide")),
                 Arguments.of("several names, in name order", Set.of("support-bot", "padded-bot"),
-                        List.of("padded-bot ", "support-bot", "workspace-wide")));
+                        List.of("all-requests", "padded-bot ", "support-bot", "workspace-wide")));
     }
 
     @ParameterizedTest(name = "{0}")
@@ -473,7 +475,9 @@ class GuardrailPoliciesResourceTest {
                 piiPolicy("padded-bot "),
                 piiPolicy("sales-bot"),
                 policy("workspace-wide", rule(GuardrailType.TOPIC, "{\"restricted_topics\":[\"politics\"]}"))
-                        .toBuilder().executionScope(GuardrailExecutionScope.GLOBAL).build())
+                        .toBuilder().executionScope(GuardrailExecutionScope.GLOBAL).build(),
+                // A global policy that sorts before the named ones, so the merged order is checked.
+                piiPolicy("all-requests").toBuilder().executionScope(GuardrailExecutionScope.GLOBAL).build())
                 .map(policy -> create(workspace, policy))
                 .collect(Collectors.toMap(GuardrailPolicy::name, Function.identity()));
         create(newWorkspace(), piiPolicy("other-global").toBuilder()
