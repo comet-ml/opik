@@ -270,9 +270,17 @@ public class ParamResolver {
                         : request.reasoningEffort();
     }
 
+    // Nested first: on the Responses API a stored reasoning object replaces the one built from reasoning_effort, so of
+    // two copies the nested one is what the model runs at. The rule editor writes it there next to keys like summary.
     private static String judgeEffort(JsonNode customParameters) {
-        var effort = customParameters == null ? null : customParameters.get(REASONING_EFFORT);
-        return effort != null && effort.isTextual() ? effort.asText() : null;
+        if (customParameters == null) {
+            return null;
+        }
+        var nested = customParameters.path(REASONING).path(EFFORT);
+        var effort = nested.isTextual() && StringUtils.isNotBlank(nested.asText())
+                ? nested
+                : customParameters.path(REASONING_EFFORT);
+        return effort.isTextual() ? effort.asText() : null;
     }
 
     private static Optional<String> judgeThinkingLevel(JsonNode customParameters) {
