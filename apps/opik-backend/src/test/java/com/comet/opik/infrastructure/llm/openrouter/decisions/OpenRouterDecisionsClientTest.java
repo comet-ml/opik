@@ -7,6 +7,7 @@ import com.comet.opik.infrastructure.RetriableHttpClient;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.customllm.ProviderBaseUrlGuard;
 import com.comet.opik.infrastructure.net.DestinationGuard;
+import com.comet.opik.infrastructure.net.DestinationGuardDns;
 import com.comet.opik.utils.RetryUtils;
 import com.github.tomakehurst.wiremock.stubbing.Scenario;
 import io.dropwizard.util.Duration;
@@ -232,7 +233,8 @@ class OpenRouterDecisionsClientTest {
                 .baseUrl(wireMock.runtimeInfo().getHttpBaseUrl() + "/api/v1")
                 .build();
 
-        assertThatThrownBy(() -> strictClient.decide(request(), config).block()).isNotNull();
+        assertThatThrownBy(() -> strictClient.decide(request(), config).block())
+                .matches(DestinationGuardDns::isRefused);
         assertThat(wireMock.server().getAllServeEvents()).isEmpty();
     }
 

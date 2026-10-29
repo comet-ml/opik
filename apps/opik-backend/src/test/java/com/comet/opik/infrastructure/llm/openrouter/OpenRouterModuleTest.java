@@ -2,6 +2,7 @@ package com.comet.opik.infrastructure.llm.openrouter;
 
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.RetriableHttpClient;
+import com.comet.opik.infrastructure.llm.customllm.ProviderBaseUrlGuard;
 import com.comet.opik.infrastructure.llm.openrouter.decisions.OpenRouterDecisionsClient;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.Test;
@@ -21,7 +22,7 @@ class OpenRouterModuleTest {
     @Test
     void decisionsClientIsProvidedWithTheLlmProviderClientConfig() throws NoSuchMethodException {
         var provider = OpenRouterModule.class.getMethod("decisionsClient", RetriableHttpClient.class,
-                LlmProviderClientConfig.class);
+                LlmProviderClientConfig.class, ProviderBaseUrlGuard.class);
 
         var config = provider.getParameters()[1].getAnnotation(Config.class);
 

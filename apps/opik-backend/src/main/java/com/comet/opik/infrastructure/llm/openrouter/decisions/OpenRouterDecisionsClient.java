@@ -69,7 +69,7 @@ public class OpenRouterDecisionsClient {
 
     public Mono<DecisionsResponse> decide(@NonNull DecisionsRequest request,
             @NonNull LlmProviderClientApiConfig config) {
-        var openRouterUrl = StringUtils.isNotEmpty(config.baseUrl())
+        var openRouterUrl = StringUtils.isNotBlank(config.baseUrl())
                 ? config.baseUrl()
                 : llmProviderClientConfig.getOpenRouterUrl();
         String decisionsUrl;
