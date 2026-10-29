@@ -1,4 +1,5 @@
 import pytest
+from jinja2.exceptions import SecurityError
 from opik.api_objects.prompt import PromptTemplate, PromptType
 from opik import exceptions
 
@@ -136,3 +137,84 @@ def test_prompt__format__none_values_render_as_empty_strings() -> None:
 
     result = tested.format(primary="cat", secondary=None)
     assert result == "Primary: cat Secondary: "
+
+
+def test_prompt__format__value_containing_placeholder_syntax__inserted_as_is():
+    # Substitution used to run once per argument, so a value containing
+    # "{{answer}}" was itself rewritten when the "answer" key was applied.
+    tested = PromptTemplate("Q: {{question}} A: {{answer}}")
+
+    result = tested.format(question="what is {{answer}}?", answer="42")
+
+    assert result == "Q: what is {{answer}}? A: 42"
+
+
+def test_prompt__format__whitespace_inside_placeholder__substituted():
+    tested = PromptTemplate("Hi {{ name }}, welcome to {{city}}.")
+
+    result = tested.format(name="Harry", city="London")
+
+    assert result == "Hi Harry, welcome to London."
+
+
+def test_prompt__format__whitespace_in_argument_name__substituted():
+    tested = PromptTemplate("Hi {{ name }}, welcome to {{city}}.")
+
+    result = tested.format(**{" name ": "Harry", "city": "London"})
+
+    assert result == "Hi Harry, welcome to London."
+
+
+def test_prompt__format__placeholder_without_argument__left_unchanged():
+    tested = PromptTemplate(
+        "Hi {{name}}, welcome to {{ city }}.", validate_placeholders=False
+    )
+
+    result = tested.format(name="Harry")
+
+    assert result == "Hi Harry, welcome to {{ city }}."
+
+
+def test_prompt__format__brace_right_before_placeholder__substituted():
+    tested = PromptTemplate("x{{{n}}}y JSON: {{{n}}: 1}")
+
+    result = tested.format(n="H")
+
+    assert result == "x{H}y JSON: {H: 1}"
+
+
+@pytest.mark.parametrize(
+    "template",
+    [
+        "{{ ''.__class__.__mro__ }}",
+        "{{ cycler.__init__.__globals__ }}",
+    ],
+)
+def test_prompt__format_jinja2__sandboxed_rendering_blocks_attribute_escape(template):
+    tested = PromptTemplate(template, type=PromptType.JINJA2)
+
+    with pytest.raises(SecurityError):
+        tested.format()
+
+
+def test_prompt__format_jinja2__normal_substitution_still_works_under_sandbox():
+    tested = PromptTemplate(
+        "{{ name | upper }} from {{ city }}", type=PromptType.JINJA2
+    )
+
+    result = tested.format(name="harry", city="London")
+
+    assert result == "HARRY from London"
+
+
+def test_prompt__format_jinja2__underscore_and_computed_data_access_render():
+    tested = PromptTemplate(
+        "{{ hit._id }}: {% for k in keys %}{{ row[k] }}{% endfor %}",
+        type=PromptType.JINJA2,
+    )
+
+    result = tested.format(
+        hit={"_id": "507f"}, keys=["a", "b"], row={"a": "1", "b": "2"}
+    )
+
+    assert result == "507f: 12"

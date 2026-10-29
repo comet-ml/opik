@@ -94,6 +94,34 @@ describe("detectOpenAIFormat", () => {
       };
       expect(detectOpenAIFormat(data, { fieldType: "output" })).toBe(false);
     });
+
+    it("should detect a conversation logged as output", () => {
+      // Shape the Open WebUI Opik filter logs as the span output
+      const data = {
+        model: "llama3.1:8b",
+        chat_id: "c-1",
+        messages: [
+          { id: "m-1", role: "user", content: "Hi", timestamp: 1 },
+          {
+            id: "m-2",
+            role: "assistant",
+            content: "Hello! How can I help?",
+            usage: { prompt_eval_count: 10, eval_count: 7 },
+          },
+        ],
+      };
+      expect(detectOpenAIFormat(data, { fieldType: "output" })).toBe(true);
+    });
+
+    it("should detect a direct message array logged as output", () => {
+      const data = [{ role: "assistant", content: "Hello!" }];
+      expect(detectOpenAIFormat(data, { fieldType: "output" })).toBe(true);
+    });
+
+    it("should reject output messages without a valid role", () => {
+      const data = { messages: [{ type: "ai", content: "Hello!" }] };
+      expect(detectOpenAIFormat(data, { fieldType: "output" })).toBe(false);
+    });
   });
 
   describe("Edge cases", () => {

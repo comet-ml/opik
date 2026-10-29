@@ -1,6 +1,7 @@
 import litellm
 
 from opik import Opik, synchronization
+from ... import llm_constants
 from ...e2e import verifiers
 from ...testlib import ANY_DICT, ANY_STRING
 
@@ -17,11 +18,14 @@ def test_litellm_opik_logging__happyflow(
 
     def streaming_function(input):
         messages = [{"role": "user", "content": input}]
-        # Note: no reasoning_effort here — the litellm pinned in the e2e env
-        # doesn't recognize it for gpt-5-nano and raises UnsupportedParamsError.
+        # The pinned litellm (<1.75) rejects a top-level `reasoning_effort` for
+        # gpt-5-nano with UnsupportedParamsError; extra_body skips that check
+        # and is still forwarded to OpenAI.
         response = litellm.completion(
             model=constants.MODEL_NAME,
             messages=messages,
+            max_completion_tokens=64,
+            extra_body={"reasoning_effort": llm_constants.OPENAI_REASONING_EFFORT},
             metadata={
                 "opik": {
                     "tags": ["streaming-test"],
@@ -30,7 +34,7 @@ def test_litellm_opik_logging__happyflow(
         )
         return response
 
-    _response = streaming_function("Why is tracking and evaluation of LLMs important?")
+    _response = streaming_function("Reply with one word: hello")
 
     if not synchronization.until(
         function=lambda: (len(opik_client.search_traces()) > 0),
@@ -54,7 +58,7 @@ def test_litellm_opik_logging__happyflow(
         metadata=ANY_DICT.containing({"created_from": "litellm"}),
         input=[
             {
-                "content": "Why is tracking and evaluation of LLMs important?",
+                "content": "Reply with one word: hello",
                 "role": "user",
             }
         ],
@@ -73,7 +77,7 @@ def test_litellm_opik_logging__happyflow(
         metadata=ANY_DICT.containing({"created_from": "litellm"}),
         input=[
             {
-                "content": "Why is tracking and evaluation of LLMs important?",
+                "content": "Reply with one word: hello",
                 "role": "user",
             }
         ],

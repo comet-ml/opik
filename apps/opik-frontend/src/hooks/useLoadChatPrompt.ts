@@ -10,8 +10,13 @@ import { PromptWithLatestVersion } from "@/types/prompts";
 export interface UseLoadChatPromptOptions {
   selectedChatPromptId: string | undefined;
   selectedChatPromptVersionId?: string;
+  appliedChatPromptVersionId?: string;
   messages: LLMMessage[];
-  onMessagesLoaded: (messages: LLMMessage[], promptName: string) => void;
+  onMessagesLoaded: (
+    messages: LLMMessage[],
+    promptName: string,
+    versionId: string,
+  ) => void;
   /**
    * Fired when the loaded prompt is reported as missing by the backend (404),
    * typically after it was deleted from the library. Callers should clear the
@@ -35,6 +40,7 @@ export interface UseLoadChatPromptReturn {
 const useLoadChatPrompt = ({
   selectedChatPromptId,
   selectedChatPromptVersionId,
+  appliedChatPromptVersionId,
   messages,
   onMessagesLoaded,
   onPromptUnavailable,
@@ -158,7 +164,10 @@ const useLoadChatPrompt = ({
       chatPromptData &&
       chatPromptVersionDataLoaded &&
       chatPromptKey &&
-      loadedChatPromptRef.current !== chatPromptKey // prevent duplicate loads
+      loadedChatPromptRef.current !== chatPromptKey && // prevent duplicate loads
+      // The ref is empty again after a remount; the caller's persisted record
+      // is what keeps a remount from overwriting unsaved edits.
+      chatPromptVersionData.id !== appliedChatPromptVersionId
     ) {
       // Skip the first load for duplicated prompts that already have messages.
       // We still mark the key as loaded so the hook won't re-trigger and
@@ -178,6 +187,7 @@ const useLoadChatPrompt = ({
             }),
           ],
           chatPromptData.name,
+          chatPromptVersionData.id,
         );
         loadedChatPromptRef.current = chatPromptKey;
       };
@@ -205,7 +215,11 @@ const useLoadChatPrompt = ({
           }),
       );
 
-      onMessagesLoaded(newMessages, chatPromptData.name);
+      onMessagesLoaded(
+        newMessages,
+        chatPromptData.name,
+        chatPromptVersionData.id,
+      );
       loadedChatPromptRef.current = chatPromptKey;
     }
 
@@ -218,6 +232,7 @@ const useLoadChatPrompt = ({
     selectedChatPromptId,
     chatPromptData,
     chatPromptVersionDataLoaded,
+    appliedChatPromptVersionId,
     onMessagesLoaded,
     skipInitialLoad,
   ]);

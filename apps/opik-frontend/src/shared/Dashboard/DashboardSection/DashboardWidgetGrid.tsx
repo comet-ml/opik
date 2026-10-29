@@ -63,6 +63,7 @@ const DashboardWidgetGrid: React.FunctionComponent<
   if (isEmpty(widgets)) {
     return (
       <DashboardWidgetGridEmpty
+        sectionId={sectionId}
         onAddWidget={handleAddWidget}
         readOnly={readOnly}
       />

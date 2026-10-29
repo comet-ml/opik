@@ -7,6 +7,7 @@ import com.comet.opik.api.ExistenceResponse;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatchContainer;
 import com.comet.opik.api.FeedbackScoreBatchContainer.FeedbackScoreBatch;
+import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Source;
 import com.comet.opik.api.Span;
@@ -187,6 +188,28 @@ public class SpanResourceClient extends BaseCommentResourceClient {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
             assertThat(actualResponse.hasEntity()).isFalse();
+        }
+    }
+
+    public FeedbackScoreNames getFeedbackScoreNames(UUID projectId, SpanType type, String apiKey,
+            String workspaceName) {
+        var webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("feedback-scores")
+                .path("names")
+                .queryParam("project_id", projectId);
+
+        if (type != null) {
+            webTarget = webTarget.queryParam("type", type.name());
+        }
+
+        try (var actualResponse = webTarget
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+            return actualResponse.readEntity(FeedbackScoreNames.class);
         }
     }
 

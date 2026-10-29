@@ -4,5 +4,6 @@ export const ExperimentWriteStatus = {
     Running: "running",
     Completed: "completed",
     Cancelled: "cancelled",
+    Failed: "failed",
 } as const;
 export type ExperimentWriteStatus = (typeof ExperimentWriteStatus)[keyof typeof ExperimentWriteStatus];

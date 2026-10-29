@@ -274,6 +274,18 @@ describe("OpikQueryLanguage", () => {
         value: "5",
       });
     });
+
+    it("should handle escaped quotes in values", () => {
+      const oql = new OpikQueryLanguage('name = "say ""hi"""');
+      const parsed = oql.getFilterExpressions();
+
+      expect(parsed).toHaveLength(1);
+      expect(parsed![0]).toMatchObject({
+        field: "name",
+        operator: "=",
+        value: 'say "hi"',
+      });
+    });
   });
 
   describe("invalid OQL expressions", () => {

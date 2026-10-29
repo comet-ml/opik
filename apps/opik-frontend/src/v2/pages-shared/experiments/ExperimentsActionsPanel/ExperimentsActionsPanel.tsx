@@ -6,6 +6,7 @@ import { Experiment } from "@/types/datasets";
 import { useNavigate } from "@tanstack/react-router";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import FilterExperimentsToCompareDialog from "@/v2/pages-shared/experiments/ExperimentsActionsPanel/FilterExperimentsToCompareDialog";
+import CompareExperimentsDialog from "@/v2/pages-shared/experiments/CompareExperimentsDialog/CompareExperimentsDialog";
 import useExperimentBatchDeleteMutation from "@/api/datasets/useExperimentBatchDeleteMutation";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
@@ -29,25 +30,38 @@ const ExperimentsActionsPanel: React.FunctionComponent<
   const activeProjectId = useActiveProjectId();
   const disabled = !experiments?.length;
 
+  const navigateToCompare = (datasetId: string, experimentsIds: string[]) => {
+    navigate({
+      to: "/$workspaceName/projects/$projectId/experiments/$datasetId/compare",
+      params: {
+        datasetId,
+        workspaceName,
+        projectId: activeProjectId!,
+      },
+      search: {
+        experiments: experimentsIds,
+      },
+    });
+  };
+
   const handleCompareClick = () => {
     if (experiments.length === 0) return;
+
+    if (experiments.length === 1) {
+      setOpen(4);
+      resetKeyRef.current = resetKeyRef.current + 1;
+      return;
+    }
 
     const hasTheSameDataset = experiments.every(
       (e) => e.dataset_id === experiments[0].dataset_id,
     );
 
     if (hasTheSameDataset) {
-      navigate({
-        to: "/$workspaceName/projects/$projectId/experiments/$datasetId/compare",
-        params: {
-          datasetId: experiments[0].dataset_id,
-          workspaceName,
-          projectId: activeProjectId!,
-        },
-        search: {
-          experiments: experiments.map((e) => e.id),
-        },
-      });
+      navigateToCompare(
+        experiments[0].dataset_id,
+        experiments.map((e) => e.id),
+      );
     } else {
       setOpen(1);
       resetKeyRef.current = resetKeyRef.current + 1;
@@ -71,6 +85,16 @@ const ExperimentsActionsPanel: React.FunctionComponent<
         open={open === 1}
         setOpen={setOpen}
       />
+      {experiments.length === 1 && (
+        <CompareExperimentsDialog
+          key={`compare-${resetKeyRef.current}`}
+          open={open === 4}
+          setOpen={setOpen}
+          datasetId={experiments[0].dataset_id}
+          experimentsIds={[experiments[0].id]}
+          onCompare={(ids) => navigateToCompare(experiments[0].dataset_id, ids)}
+        />
+      )}
       <ConfirmDialog
         key={`delete-${resetKeyRef.current}`}
         open={open === 2}

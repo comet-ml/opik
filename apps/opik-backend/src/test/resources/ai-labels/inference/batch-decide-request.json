@@ -1,0 +1,33 @@
+{
+  "org_id": "workspace-1",
+  "workspace_id": "workspace-1",
+  "request_id": "6f1c2c9e-8d0b-4a8e-9a43-3f8f5c6f1a10",
+  "cache": false,
+  "items": [
+    {
+      "item_id": "0192f0c4-4d1e-7a6b-9c3d-2e1f0a9b8c7d",
+      "state": {
+        "input": {"question": "Where is my refund?"},
+        "name": "support-agent",
+        "output": {"answer": "It was issued on Monday."}
+      },
+      "questions": {
+        "agent_outcome.quality": {
+          "type": "score",
+          "instructions": "How good was the answer?",
+          "criteria": ["poor", "fair", "good"]
+        },
+        "agent_outcome.succeeded": {
+          "type": "noul",
+          "instructions": "Did the agent accomplish the user's goal?",
+          "criteria": {"true": "The goal was met", "false": "It was not"}
+        },
+        "agent_outcome.topic": {
+          "type": "choice",
+          "instructions": "Main topic?",
+          "criteria": {"billing": null, "other": null, "technical": "Bugs and errors"}
+        }
+      }
+    }
+  ]
+}

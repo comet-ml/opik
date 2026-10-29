@@ -4,7 +4,7 @@ import { ListTree } from "lucide-react";
 
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 import {
-  useOutputByPromptDatasetItemId,
+  useOutputByPromptId,
   useDatasetType,
   useExperimentIdByPromptId,
 } from "@/store/PlaygroundStore";
@@ -14,11 +14,14 @@ import PlaygroundOutputLoader from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/
 import PlaygroundOutputError from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputError";
 import PlaygroundOutputScoresContainer from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputScores/PlaygroundOutputScoresContainer";
 import PlaygroundOutputAssertionStatus from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputScores/PlaygroundOutputAssertionStatus";
-import PlaygroundTestSuiteLastRunOutput from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputScores/PlaygroundTestSuiteLastRunOutput";
+import PlaygroundExperimentItemOutput from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputScores/PlaygroundExperimentItemOutput";
+import usePlaygroundExperimentItem from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/usePlaygroundExperimentItem";
 import { usePlaygroundDataset } from "@/hooks/usePlaygroundDataset";
 import { parseDatasetVersionKey } from "@/utils/datasetVersionStorage";
+import { cn } from "@/lib/utils";
 import { PLAYGROUND_PROMPT_COLORS } from "@/constants/llm";
 import PlaygroundNoRunsYet from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundNoRunsYet";
+import PlaygroundStaleOutputNote from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundStaleOutputNote";
 import { generateTracesURL } from "@/lib/annotation-queues";
 import { EXPERIMENT_TAB } from "@/lib/experiments";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
@@ -51,16 +54,9 @@ const PlaygroundOutputCell: React.FunctionComponent<
   // cutting the per-token selector work by 5x. The selector returns the stored
   // object reference, which only changes when this cell's own output changes, so
   // unrelated updates still don't re-render this cell.
-  const output = useOutputByPromptDatasetItemId(
-    promptId,
-    originalRow.dataItemId,
-  );
-  const value = output?.value ?? null;
-  const isLoading = output?.isLoading ?? false;
+  const output = useOutputByPromptId(promptId);
   const stale = output?.stale ?? false;
-  const traceId = output?.traceId ?? null;
-  const error = output?.error;
-  const selectedRuleIds = output?.selectedRuleIds;
+  const errorHint = output?.errorHint;
 
   const datasetType = useDatasetType();
   const experimentId = useExperimentIdByPromptId(promptId);
@@ -69,6 +65,29 @@ const PlaygroundOutputCell: React.FunctionComponent<
     parseDatasetVersionKey(versionedDatasetId)?.datasetId || versionedDatasetId;
 
   const isTestSuite = datasetType === DATASET_TYPE.TEST_SUITE;
+
+  const isBackendRun = !!experimentId;
+  const experimentItem = usePlaygroundExperimentItem(
+    experimentId,
+    originalRow.dataItemId,
+    plainDatasetId || "",
+  );
+
+  const { value, isLoading, traceId, error } = isBackendRun
+    ? {
+        value: experimentItem.output,
+        // Keyed off the item, not its output: a call that returned nothing must settle, not spin.
+        // A stopped run leaves rows it never reached with no item at all, so those settle too.
+        isLoading: !experimentItem.hasItem && !experimentItem.notRun,
+        traceId: experimentItem.traceId,
+        error: experimentItem.error,
+      }
+    : {
+        value: output?.value ?? null,
+        isLoading: output?.isLoading ?? false,
+        traceId: output?.traceId ?? null,
+        error: output?.error ?? null,
+      };
 
   const activeProjectId = useActiveProjectId();
 
@@ -107,12 +126,10 @@ const PlaygroundOutputCell: React.FunctionComponent<
     window.open(url, "_blank");
   };
 
+  // A run read back from the server keeps its results once the prompt is edited, dimmed and
+  // noted rather than cleared, so the last run stays readable until another replaces it.
   const hasOutput =
-    !stale &&
-    (value !== null ||
-      Boolean(error) ||
-      isLoading ||
-      (isTestSuite && !!experimentId));
+    isBackendRun || value !== null || Boolean(error) || isLoading;
   const promptColor =
     PLAYGROUND_PROMPT_COLORS[
       (promptIndex ?? 0) % PLAYGROUND_PROMPT_COLORS.length
@@ -126,6 +143,17 @@ const PlaygroundOutputCell: React.FunctionComponent<
 
     if (error) {
       return null;
+    }
+
+    if (isBackendRun) {
+      if (experimentItem.notRun) {
+        return (
+          <p className="comet-body-s text-light-slate">
+            {experimentItem.cancelled ? "Cancelled" : "Not run"}
+          </p>
+        );
+      }
+      return <PlaygroundExperimentItemOutput item={experimentItem} />;
     }
 
     return <MarkdownPreview>{value}</MarkdownPreview>;
@@ -151,33 +179,36 @@ const PlaygroundOutputCell: React.FunctionComponent<
               </Button>
             </TooltipWrapper>
           )}
-          <div className="mb-2 min-h-[var(--cell-top-height)]">
-            {error ? (
-              <PlaygroundOutputError message={error} />
-            ) : isTestSuite ? (
-              <PlaygroundOutputAssertionStatus
-                experimentId={experimentId}
-                datasetItemId={originalRow.dataItemId}
-                datasetId={plainDatasetId || ""}
-              />
-            ) : (
-              <PlaygroundOutputScoresContainer
-                traceId={traceId}
-                selectedRuleIds={selectedRuleIds}
-                stale={stale}
-              />
+          {stale && (
+            <PlaygroundStaleOutputNote
+              changes={output?.staleChanges}
+              compact
+              className="mb-3"
+            />
+          )}
+          <div
+            className={cn(
+              "flex min-h-0 flex-1 flex-col",
+              stale && "opacity-50",
             )}
-          </div>
-          <div className="flex-1 overflow-y-auto">
-            {isTestSuite ? (
-              <PlaygroundTestSuiteLastRunOutput
-                experimentId={experimentId}
-                datasetItemId={originalRow.dataItemId}
-                datasetId={plainDatasetId || ""}
-              />
-            ) : (
-              renderContent()
-            )}
+          >
+            <div className="mb-2 min-h-[var(--cell-top-height)]">
+              {error ? (
+                <PlaygroundOutputError message={error} hint={errorHint} />
+              ) : isTestSuite ? (
+                <PlaygroundOutputAssertionStatus
+                  experimentId={experimentId}
+                  datasetItemId={originalRow.dataItemId}
+                  datasetId={plainDatasetId || ""}
+                />
+              ) : (
+                <PlaygroundOutputScoresContainer
+                  traceId={traceId}
+                  notRun={experimentItem.notRun}
+                />
+              )}
+            </div>
+            <div className="flex-1 overflow-y-auto">{renderContent()}</div>
           </div>
         </div>
       ) : (

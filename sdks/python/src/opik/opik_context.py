@@ -77,7 +77,8 @@ def update_current_span(
     Args:
         name: The name of the span.
         input: The input data of the span.
-        output: The output data of the span.
+        output: The output data of the span. Output set here is logged instead of
+            the return value that `@track` captures when the function ends.
         metadata: The metadata of the span.
         tags: The tags of the span.
         usage: Usage data for the span. In order for input, output, and total tokens to be visible in the UI,
@@ -139,7 +140,8 @@ def update_current_trace(
     Args:
         name: The name of the trace.
         input: The input data of the trace.
-        output: The output data of the trace.
+        output: The output data of the trace. Output set here is logged instead of
+            the return value that `@track` captures when the function ends.
         metadata: The metadata of the trace.
         tags: The tags of the trace.
         feedback_scores: The feedback scores of the trace.

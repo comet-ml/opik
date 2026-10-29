@@ -1,4 +1,4 @@
-from crewai import Agent, Crew, Process, Task
+from crewai import Agent, Crew, LLM, Process, Task
 from crewai.project import CrewBase, agent, crew, task
 
 from . import constants
@@ -16,7 +16,7 @@ class LatestAiDevelopmentCrew:
             tools=[
                 # SerperDevTool()
             ],
-            llm=constants.MODEL_NAME_SHORT,
+            llm=LLM(model=constants.OPENAI_MODEL, **constants.OPENAI_MODEL_KWARGS),
         )
 
     @agent
@@ -24,7 +24,7 @@ class LatestAiDevelopmentCrew:
         return Agent(
             config=self.agents_config["reporting_analyst"],
             verbose=True,
-            llm=constants.MODEL_NAME_SHORT,
+            llm=LLM(model=constants.OPENAI_MODEL, **constants.OPENAI_MODEL_KWARGS),
         )
 
     @task

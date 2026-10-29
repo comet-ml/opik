@@ -107,6 +107,85 @@ export class ExperimentsClient {
     }
 
     /**
+     * Stops the given experiments: queued items are skipped and the experiments are marked cancelled
+     *
+     * @param {OpikApi.IdsHolder} request
+     * @param {ExperimentsClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link OpikApi.ForbiddenError}
+     * @throws {@link OpikApi.TooManyRequestsError}
+     *
+     * @example
+     *     await client.experiments.cancelExperiments({
+     *         ids: ["ids"]
+     *     })
+     */
+    public cancelExperiments(
+        request: OpikApi.IdsHolder,
+        requestOptions?: ExperimentsClient.RequestOptions,
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__cancelExperiments(request, requestOptions));
+    }
+
+    private async __cancelExperiments(
+        request: OpikApi.IdsHolder,
+        requestOptions?: ExperimentsClient.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
+        const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
+            this._options?.headers,
+            mergeOnlyDefinedHeaders({
+                "Comet-Workspace": requestOptions?.workspaceName ?? this._options?.workspaceName,
+            }),
+            requestOptions?.headers,
+        );
+        const _response = await core.fetcher({
+            url: core.url.join(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "v1/private/experiments/cancel",
+            ),
+            method: "PUT",
+            headers: _headers,
+            contentType: "application/json",
+            queryParameters: requestOptions?.queryParams,
+            requestType: "json",
+            body: serializers.IdsHolder.jsonOrThrow(request, { unrecognizedObjectKeys: "strip", omitUndefined: true }),
+            timeoutMs: (requestOptions?.timeoutInSeconds ?? this._options?.timeoutInSeconds ?? 60) * 1000,
+            maxRetries: requestOptions?.maxRetries ?? this._options?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+            fetchFn: this._options?.fetch,
+            logging: this._options.logging,
+        });
+        if (_response.ok) {
+            return { data: undefined, rawResponse: _response.rawResponse };
+        }
+
+        if (_response.error.reason === "status-code") {
+            switch (_response.error.statusCode) {
+                case 403:
+                    throw new OpikApi.ForbiddenError(_response.error.body, _response.rawResponse);
+                case 429:
+                    throw new OpikApi.TooManyRequestsError(_response.error.body, _response.rawResponse);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                        rawResponse: _response.rawResponse,
+                    });
+            }
+        }
+
+        return handleNonStatusCodeError(
+            _response.error,
+            _response.rawResponse,
+            "PUT",
+            "/v1/private/experiments/cancel",
+        );
+    }
+
+    /**
      * Find experiments
      *
      * @param {OpikApi.FindExperimentsRequest} request
@@ -504,6 +583,10 @@ export class ExperimentsClient {
      * @param {OpikApi.ExperimentExecutionRequest} request
      * @param {ExperimentsClient.RequestOptions} requestOptions - Request-specific configuration.
      *
+     * @throws {@link OpikApi.BadRequestError}
+     * @throws {@link OpikApi.ForbiddenError}
+     * @throws {@link OpikApi.TooManyRequestsError}
+     *
      * @example
      *     await client.experiments.executeExperiment({
      *         datasetName: "dataset_name",
@@ -574,11 +657,20 @@ export class ExperimentsClient {
         }
 
         if (_response.error.reason === "status-code") {
-            throw new errors.OpikApiError({
-                statusCode: _response.error.statusCode,
-                body: _response.error.body,
-                rawResponse: _response.rawResponse,
-            });
+            switch (_response.error.statusCode) {
+                case 400:
+                    throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
+                case 403:
+                    throw new OpikApi.ForbiddenError(_response.error.body, _response.rawResponse);
+                case 429:
+                    throw new OpikApi.TooManyRequestsError(_response.error.body, _response.rawResponse);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                        rawResponse: _response.rawResponse,
+                    });
+            }
         }
 
         return handleNonStatusCodeError(

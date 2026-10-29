@@ -14,6 +14,8 @@ from ..errors.bad_request_error import BadRequestError
 from ..errors.conflict_error import ConflictError
 from ..errors.not_found_error import NotFoundError
 from ..errors.unprocessable_entity_error import UnprocessableEntityError
+from ..types.annotation_queue_annotator_view import AnnotationQueueAnnotatorView
+from ..types.annotation_queue_annotator_view_write import AnnotationQueueAnnotatorViewWrite
 from ..types.annotation_queue_automation import AnnotationQueueAutomation
 from ..types.annotation_queue_automation_write import AnnotationQueueAutomationWrite
 from ..types.annotation_queue_items_public import AnnotationQueueItemsPublic
@@ -156,6 +158,7 @@ class RawAnnotationQueuesClient:
         annotators_per_item: typing.Optional[int] = OMIT,
         lock_timeout_seconds: typing.Optional[int] = OMIT,
         automation: typing.Optional[AnnotationQueueAutomationWrite] = OMIT,
+        annotator_view: typing.Optional[AnnotationQueueAnnotatorViewWrite] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -185,6 +188,8 @@ class RawAnnotationQueuesClient:
 
         automation : typing.Optional[AnnotationQueueAutomationWrite]
 
+        annotator_view : typing.Optional[AnnotationQueueAnnotatorViewWrite]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -208,6 +213,9 @@ class RawAnnotationQueuesClient:
                 "lock_timeout_seconds": lock_timeout_seconds,
                 "automation": convert_and_respect_annotation_metadata(
                     object_=automation, annotation=AnnotationQueueAutomationWrite, direction="write"
+                ),
+                "annotator_view": convert_and_respect_annotation_metadata(
+                    object_=annotator_view, annotation=AnnotationQueueAnnotatorViewWrite, direction="write"
                 ),
             },
             headers={
@@ -431,6 +439,7 @@ class RawAnnotationQueuesClient:
         annotators_per_item: typing.Optional[int] = OMIT,
         lock_timeout_seconds: typing.Optional[int] = OMIT,
         automation: typing.Optional[AnnotationQueueAutomation] = OMIT,
+        annotator_view: typing.Optional[AnnotationQueueAnnotatorView] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -456,6 +465,8 @@ class RawAnnotationQueuesClient:
 
         automation : typing.Optional[AnnotationQueueAutomation]
 
+        annotator_view : typing.Optional[AnnotationQueueAnnotatorView]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -476,6 +487,9 @@ class RawAnnotationQueuesClient:
                 "lock_timeout_seconds": lock_timeout_seconds,
                 "automation": convert_and_respect_annotation_metadata(
                     object_=automation, annotation=AnnotationQueueAutomation, direction="write"
+                ),
+                "annotator_view": convert_and_respect_annotation_metadata(
+                    object_=annotator_view, annotation=AnnotationQueueAnnotatorView, direction="write"
                 ),
             },
             headers={
@@ -818,6 +832,7 @@ class AsyncRawAnnotationQueuesClient:
         annotators_per_item: typing.Optional[int] = OMIT,
         lock_timeout_seconds: typing.Optional[int] = OMIT,
         automation: typing.Optional[AnnotationQueueAutomationWrite] = OMIT,
+        annotator_view: typing.Optional[AnnotationQueueAnnotatorViewWrite] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -847,6 +862,8 @@ class AsyncRawAnnotationQueuesClient:
 
         automation : typing.Optional[AnnotationQueueAutomationWrite]
 
+        annotator_view : typing.Optional[AnnotationQueueAnnotatorViewWrite]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -870,6 +887,9 @@ class AsyncRawAnnotationQueuesClient:
                 "lock_timeout_seconds": lock_timeout_seconds,
                 "automation": convert_and_respect_annotation_metadata(
                     object_=automation, annotation=AnnotationQueueAutomationWrite, direction="write"
+                ),
+                "annotator_view": convert_and_respect_annotation_metadata(
+                    object_=annotator_view, annotation=AnnotationQueueAnnotatorViewWrite, direction="write"
                 ),
             },
             headers={
@@ -1093,6 +1113,7 @@ class AsyncRawAnnotationQueuesClient:
         annotators_per_item: typing.Optional[int] = OMIT,
         lock_timeout_seconds: typing.Optional[int] = OMIT,
         automation: typing.Optional[AnnotationQueueAutomation] = OMIT,
+        annotator_view: typing.Optional[AnnotationQueueAnnotatorView] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -1118,6 +1139,8 @@ class AsyncRawAnnotationQueuesClient:
 
         automation : typing.Optional[AnnotationQueueAutomation]
 
+        annotator_view : typing.Optional[AnnotationQueueAnnotatorView]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -1138,6 +1161,9 @@ class AsyncRawAnnotationQueuesClient:
                 "lock_timeout_seconds": lock_timeout_seconds,
                 "automation": convert_and_respect_annotation_metadata(
                     object_=automation, annotation=AnnotationQueueAutomation, direction="write"
+                ),
+                "annotator_view": convert_and_respect_annotation_metadata(
+                    object_=annotator_view, annotation=AnnotationQueueAnnotatorView, direction="write"
                 ),
             },
             headers={

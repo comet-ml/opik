@@ -34,6 +34,7 @@ export const TraceSearchStreamRequestPublicExcludeItem: core.serialization.Schem
     "visibility_mode",
     "providers",
     "experiment",
+    "annotation_queues",
     "source",
     "environment",
 ]);
@@ -66,6 +67,7 @@ export declare namespace TraceSearchStreamRequestPublicExcludeItem {
         | "visibility_mode"
         | "providers"
         | "experiment"
+        | "annotation_queues"
         | "source"
         | "environment";
 }

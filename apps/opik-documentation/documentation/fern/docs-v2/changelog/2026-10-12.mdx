@@ -1,0 +1,33 @@
+## Ollama Integration
+
+Opik now has a native integration for the [Ollama](https://ollama.com/) Python SDK. Wrap your client with `track_ollama` and every `chat()` call, from both `ollama.Client` and `ollama.AsyncClient`, is logged with its messages, response, model and token usage. Streaming is supported, and Ollama's own counters are mapped to Opik token usage so local model runs show up alongside the rest of your traces.
+
+[Learn more in the Ollama integration docs](/integrations/ollama).
+
+## Bug Fixes & Improvements
+
+- **Logs keep their filters** — Filters on the Logs page are restored when you return to it.
+- **Anthropic thinking effort is respected** — The effort chosen for Claude models is sent to Anthropic as `output_config.effort` in the Playground, experiment runs and LLM-as-judge rules, and `max_tokens` is honoured for Anthropic chat completions. `claude-opus-5-5` is available as a model.
+- **Better model parameter panels** — Ollama and Bedrock get their own parameter panels, the **max** reasoning effort is offered on OpenAI keys set to the Responses API, and sampling parameters that OpenAI reasoning models, Gemini 3 models, and OpenRouter ignore are hidden or no longer sent. Vertex AI's max output tokens slider is respected.
+- **Clearer Playground** — The Playground starts with a system and a user message, **+ Message** keeps them alternating, runs with audio a model can't accept are blocked, the per-prompt Run is hidden when there's only one prompt, and the output explains why it is greyed out after a prompt edit.
+- **Dataset uploads report problems up front** — CSV files with duplicate headers and JSON/JSONL files with syntax errors are rejected when uploaded, and a failed import is shown on the dataset items tab.
+- **Spans with an unloaded parent show at the trace root** — Spans whose parent isn't loaded are displayed at the top level of the trace instead of being hidden.
+- **Easier navigation from evaluation items** — "View evaluation item" has a way back to the experiment, and the run toast says "View experiment" when a single experiment ran.
+- **Self-hosted Comet API keys resolve to a login** — The Python SDK CLI identifies self-hosted Comet users the same way it does on cloud.
+- **`opik mcp configure` for agents** — The command accepts `--deployment cloud|local|self-hosted` with `--url` and `--workspace`, so a coding agent can run it without a terminal, and exits with code 1 when the connection check fails.
+- **SDK tracing fixes** — `@track` generators that aren't exhausted, async LangChain callbacks, and OpenAI streams (each now aggregated with its own API's aggregator) all log correct spans. An explicit `update_current_span`/`update_current_trace` output wins over the value `@track` captures.
+- **TypeScript SDK** — OpenAI Responses API input/output tokens map to prompt/completion tokens, scores from metrics that fail during `evaluate()` are kept and reported, and OQL string values accept doubled-quote escapes.
+- **OpenTelemetry ingestion** — An OTel batch is kept when the Redis trace-id lookup fails.
+- **Thread stats** — Thread counts and stats are attributed by their traces' IDs.
+
+## Performance Improvements
+
+- **Faster thread and trace search** — Trace and thread search read only the weeks of the project being searched, once, and `find_thread_by_id` reads thread messages for just two traces.
+- **Faster charts and workspace metrics** — Charts, KPI cards and workspace metrics use ID-based, open-ended time ranges.
+- **Faster prompt lookups** — A prompt's latest version is served from the index.
+
+---
+
+And much more! 👉 [See full commit log on GitHub](https://github.com/comet-ml/opik/compare/2.2.88...2.2.96)
+
+_Releases_: `2.2.89`, `2.2.90`, `2.2.91`, `2.2.92`, `2.2.93`, `2.2.94`, `2.2.95`, `2.2.96`

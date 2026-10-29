@@ -5,7 +5,7 @@ import logging
 from typing import Any, Dict, List
 
 from .. import usage_converters
-from .base import ChunkAggregator
+from .base import ChunkAggregator, updated_token_count
 
 LOGGER = logging.getLogger(__name__)
 
@@ -65,10 +65,12 @@ class MistralAggregator(ChunkAggregator):
                 # Extract usage from last chunk
                 if "usage" in chunk_data and chunk_data["usage"]:
                     usage = chunk_data["usage"]
-                    if "prompt_tokens" in usage:
-                        input_tokens = usage["prompt_tokens"]
-                    if "completion_tokens" in usage:
-                        output_tokens = usage["completion_tokens"]
+                    input_tokens = updated_token_count(
+                        usage.get("prompt_tokens"), input_tokens
+                    )
+                    output_tokens = updated_token_count(
+                        usage.get("completion_tokens"), output_tokens
+                    )
                     LOGGER.debug(
                         "Mistral usage: prompt=%d, completion=%d",
                         input_tokens,
@@ -78,8 +80,12 @@ class MistralAggregator(ChunkAggregator):
                 # Use bedrock metrics as authoritative source
                 metrics = chunk_data.get("amazon-bedrock-invocationMetrics", {})
                 if metrics:
-                    input_tokens = metrics.get("inputTokenCount", input_tokens)
-                    output_tokens = metrics.get("outputTokenCount", output_tokens)
+                    input_tokens = updated_token_count(
+                        metrics.get("inputTokenCount"), input_tokens
+                    )
+                    output_tokens = updated_token_count(
+                        metrics.get("outputTokenCount"), output_tokens
+                    )
                     LOGGER.debug(
                         "Mistral bedrock metrics: input=%d, output=%d",
                         input_tokens,

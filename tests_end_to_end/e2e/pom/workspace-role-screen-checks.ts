@@ -73,7 +73,7 @@ export const CREATE_CONTROL_CHECKS: CreateControlCheck[] = [
   { name: 'Annotation queues', path: (id) => `/projects/${id}/annotation-queues`, buttonName: 'Create queue' },
   { name: 'Prompt library', path: (id) => `/projects/${id}/prompts`, buttonName: /Create a text prompt/ },
   { name: 'Experiments', path: (id) => `/projects/${id}/experiments`, buttonName: 'Create experiment' },
-  { name: 'Online evaluation rules', path: (id) => `/projects/${id}/online-evaluation`, buttonName: 'Create rule' },
+  { name: 'Online evaluation rules', path: (id) => `/projects/${id}/online-evaluation`, buttonName: /^Evaluator$/ },
   { name: 'Alerts', path: (id) => `/projects/${id}/alerts`, buttonName: 'Create alert' },
 ];
 

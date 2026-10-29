@@ -26,7 +26,7 @@ class RawEnvironmentsClient:
         self, *, request_options: typing.Optional[RequestOptions] = None
     ) -> HttpResponse[EnvironmentPagePublic]:
         """
-        Find environments for the workspace. Capped at the workspace limit (default 20).
+        Find environments for the workspace. Capped at the workspace limit (default 100).
 
         Parameters
         ----------
@@ -297,7 +297,7 @@ class AsyncRawEnvironmentsClient:
         self, *, request_options: typing.Optional[RequestOptions] = None
     ) -> AsyncHttpResponse[EnvironmentPagePublic]:
         """
-        Find environments for the workspace. Capped at the workspace limit (default 20).
+        Find environments for the workspace. Capped at the workspace limit (default 100).
 
         Parameters
         ----------

@@ -4,7 +4,7 @@ Three cases that previously produced no score and no actionable error are now re
 
 A new `error_tolerance` argument lets you opt into recording pre-scoring failures — a missing required score argument, or an item-level evaluator that can't be built — as failed score results instead of aborting the whole run and discarding every metric that already succeeded:
 
-```python
+```python wordWrap
 from opik.evaluation import evaluate
 from opik.evaluation.metrics import ErrorTolerance
 

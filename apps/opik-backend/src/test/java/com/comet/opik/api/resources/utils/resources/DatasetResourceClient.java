@@ -16,6 +16,7 @@ import com.comet.opik.api.DatasetVersionDiff;
 import com.comet.opik.api.DatasetVersionRetrieveRequest;
 import com.comet.opik.api.DatasetVersionTag;
 import com.comet.opik.api.DatasetVersionUpdate;
+import com.comet.opik.api.PageColumns;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.filter.DatasetFilter;
@@ -620,6 +621,28 @@ public class DatasetResourceClient {
         }
     }
 
+    public PageColumns getDatasetItemsOutputColumns(UUID datasetId, List<UUID> experimentIds, String apiKey,
+            String workspaceName) {
+        var experimentIdsQueryParam = JsonUtils.writeValueAsString(experimentIds);
+
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(datasetId.toString())
+                .path("items")
+                .path("experiments")
+                .path("items")
+                .path("output")
+                .path("columns")
+                .queryParam("experiment_ids", experimentIdsQueryParam)
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            return response.readEntity(PageColumns.class);
+        }
+    }
+
     public DatasetVersion.DatasetVersionPage listVersions(UUID datasetId, String apiKey, String workspaceName) {
         return listVersions(datasetId, apiKey, workspaceName, null, null);
     }
@@ -792,6 +815,26 @@ public class DatasetResourceClient {
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(retrieveRequest));
+    }
+
+    public DatasetVersion getVersionByHash(UUID datasetId, String versionHash, String apiKey,
+            String workspaceName) {
+        try (var response = callGetVersionByHash(datasetId, versionHash, apiKey, workspaceName)) {
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+            return response.readEntity(DatasetVersion.class);
+        }
+    }
+
+    public Response callGetVersionByHash(UUID datasetId, String versionHash, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(datasetId.toString())
+                .path("versions")
+                .path("hash")
+                .path(versionHash)
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
     }
 
     public void deleteDatasetItems(List<UUID> itemIds, String apiKey, String workspaceName) {

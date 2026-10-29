@@ -17,7 +17,7 @@ Conversation metrics evaluate multi-turn conversations rather than single input-
 
 Conversation thread metrics work with a standardized conversation format:
 
-```python
+```python wordWrap
 from typing import List
 from typing_extensions import Required, TypedDict
 
@@ -46,7 +46,7 @@ documents retrieved by a RAG pipeline. It is populated by the `trace_context_tra
 `role` and `content` explicitly rather than stringifying the message dicts, so a key you don't expect
 can never end up in front of the judge:
 
-```python
+```python wordWrap
 from typing import Any
 
 from opik.evaluation.metrics import score_result
@@ -72,7 +72,7 @@ class GroundedAnswersMetric(conversation_thread_metric.ConversationThreadMetric)
 
 To create a custom conversation metric, subclass [`ConversationThreadMetric`](https://www.comet.com/docs/opik/python-sdk-reference/evaluation/metrics/ConversationThreadMetric.html) and implement the `score` method:
 
-```python
+```python wordWrap
 from typing import Any
 from opik.evaluation.metrics import score_result
 from opik.evaluation.metrics.conversation import (
@@ -117,7 +117,7 @@ Here's an example that evaluates the quality of assistant responses:
 
 ### Step 1: Define the Output Schema
 
-```python
+```python wordWrap
 import pydantic
 
 class ConversationQualityScore(pydantic.BaseModel):
@@ -130,7 +130,7 @@ class ConversationQualityScore(pydantic.BaseModel):
 
 ### Step 2: Create the Evaluation Prompt
 
-```python
+```python wordWrap
 def create_evaluation_prompt(conversation: list) -> str:
     """
     Create a prompt that asks the LLM to evaluate conversation quality.
@@ -155,7 +155,7 @@ Your evaluation (JSON only):
 
 ### Step 3: Implement the Metric
 
-```python
+```python wordWrap
 import logging
 from typing import Optional, Union, Any
 import pydantic
@@ -177,7 +177,7 @@ class ConversationQualityMetric(ConversationThreadMetric):
     An LLM-as-judge metric that evaluates conversation quality.
 
     Args:
-        model: The LLM to use as a judge (e.g., "gpt-4", "claude-3-5-sonnet-20241022").
+        model: The LLM to use as a judge (e.g., "gpt-4", "claude-sonnet-4-6").
                If None, uses the default model.
         name: The name of this metric.
         track: Whether to track the metric in Opik.
@@ -268,12 +268,12 @@ class ConversationQualityMetric(ConversationThreadMetric):
 
 ### Step 4: Use the Metric
 
-```python
+```python wordWrap
 from opik.evaluation import evaluate_threads
 
 # Initialize the metric with your preferred judge model
 quality_metric = ConversationQualityMetric(
-    model="gpt-4o",  # or "claude-3-5-sonnet-20241022", etc.
+    model="gpt-4o",  # or "claude-sonnet-4-6", etc.
     name="conversation_quality"
 )
 
@@ -299,7 +299,7 @@ When building LLM-as-judge metrics, follow these best practices:
 
 You can use custom metrics with `evaluate_threads`:
 
-```python
+```python wordWrap
 from opik.evaluation import evaluate_threads
 
 # Initialize your metrics

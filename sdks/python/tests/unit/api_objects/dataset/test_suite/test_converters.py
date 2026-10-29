@@ -10,6 +10,7 @@ import pytest
 from unittest import mock
 
 from opik.api_objects.dataset import dataset_item
+from opik.api_objects.dataset import converters as dataset_converters
 from opik.api_objects.dataset.test_suite import converters
 
 
@@ -344,6 +345,30 @@ def test_from_pandas__nan_values__skipped():
 
     assert result[0] == {"data": {"question": "Hello"}, "assertions": ["Is polite"]}
     assert result[1] == {"data": {"question": "Bye"}}
+
+
+def test_from_pandas__same_rows_as_dataset_converter():
+    dataframe = pd.DataFrame(
+        {
+            "input": [1, None],
+            "count": pd.array([3, None], dtype="Int64"),
+            "score": [0.5, 0.7],
+            "skip": ["a", "b"],
+        }
+    )
+    keys_mapping = {"score": "expected"}
+
+    suite_rows = converters.from_pandas(dataframe, keys_mapping, ["skip"])
+    dataset_rows = [
+        item.get_content()
+        for item in dataset_converters.from_pandas(dataframe, keys_mapping, ["skip"])
+    ]
+
+    assert suite_rows == dataset_rows
+    assert suite_rows == [
+        {"input": 1.0, "count": 3, "expected": 0.5},
+        {"expected": 0.7},
+    ]
 
 
 # ---------------------------------------------------------------------------

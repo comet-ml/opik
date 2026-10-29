@@ -30,7 +30,7 @@ You can create new versions from the Opik UI or from code using the SDK.
     Call `create_prompt` (or `create_chat_prompt`) again with the same `name` and the updated
     template — the SDK creates the next sequential version automatically:
 
-    ```python
+    ```python wordWrap
     import opik
 
     client = opik.Opik()
@@ -56,7 +56,7 @@ You can create new versions from the Opik UI or from code using the SDK.
     Call `createPrompt` (or `createChatPrompt`) again with the same `name` and the updated
     template — the SDK creates the next sequential version automatically:
 
-    ```ts
+    ```ts wordWrap
     import { Opik } from "opik";
 
     const client = new Opik();
@@ -80,12 +80,17 @@ You can create new versions from the Opik UI or from code using the SDK.
   </Tab>
 </Tabs>
 
+<Tip>
+  A new version doesn't change your environments. If your agent fetches the prompt by environment, deploy the new
+  version to that environment when it's ready. See [Environments](/development/prompt-library/environments).
+</Tip>
+
 ## Fetching a specific version
 
 Pass the `version` parameter to fetch a specific version, or omit it to fetch the most recent:
 
 <CodeBlocks>
-  ```python title="Python"
+  ```python title="Python" wordWrap
   import opik
 
   client = opik.Opik()
@@ -97,7 +102,7 @@ Pass the `version` parameter to fetch a specific version, or omit it to fetch th
   latest = client.get_prompt(name="system_prompt", project_name="my-agent")
   ```
 
-  ```ts title="TypeScript"
+  ```ts title="TypeScript" wordWrap
   import { Opik } from "opik";
 
   const client = new Opik();

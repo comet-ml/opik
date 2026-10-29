@@ -51,6 +51,32 @@ def test_opik_usage_factory__vertex_ai_none_candidates_token_count__happy_flow()
     assert result.total_tokens == 7859
 
 
+def test_opik_usage_factory__bedrock_with_cache_counters__prompt_includes_cache():
+    """The factory seam every Bedrock caller goes through, with a cache hit.
+
+    `inputTokens` counts only the tokens that were not served from cache, so a
+    caller that omits the counters is how they get dropped. The public Bedrock
+    tests use ANY_BUT_NONE and would not notice either way.
+    """
+    result = llm_usage.build_opik_usage(
+        provider=opik.LLMProvider.BEDROCK,
+        usage={
+            "inputTokens": 12,
+            "outputTokens": 7,
+            "cacheReadInputTokens": 4096,
+            "cacheWriteInputTokens": 1024,
+        },
+    )
+
+    assert result.prompt_tokens == 5132
+    assert result.completion_tokens == 7
+    assert result.total_tokens == 5139
+
+    assert result.provider_usage.inputTokens == 12
+    assert result.provider_usage.cacheReadInputTokens == 4096
+    assert result.provider_usage.cacheWriteInputTokens == 1024
+
+
 def test_opik_usage_factory__unknown_provider__unparseable_usage__returns_none():
     """The last-resort builder must not raise.
 

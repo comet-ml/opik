@@ -15,7 +15,7 @@ export class OlliePage {
     return test.step('open the Ollie page', async () => {
       const env = loadEnvConfig();
       const url = `${env.baseUrl}/${env.workspace}/projects/${this.projectId}/ollie`;
-      const onTarget = new RegExp(`/projects/${this.projectId}/ollie(?:$|[/?#])`);
+      const onTarget = this.ollieRoute();
 
       await this.page.goto(url);
       // A redirect away from this project's /ollie route (e.g. the project
@@ -57,16 +57,31 @@ export class OlliePage {
    */
   async waitForReady(timeoutMs = 150_000): Promise<void> {
     return test.step('wait for Ollie to be ready', async () => {
-      await this.iframeElement().waitFor({ state: 'visible', timeout: timeoutMs });
-      // The usable input is the surface-agnostic readiness signal: it's present
-      // once Ollie has fully loaded, regardless of whether the project is empty
-      // (onboarding greeting) or already has traces (chat greeting). Key
-      // readiness on it, not on a specific greeting line — the greeting copy
-      // varies (onboarding vs chat vs "Ollie connected") and can render split
-      // across nodes, which makes an exact-text wait flake when the pod is slow
-      // to provision.
-      await expect(this.inputTextbox()).toBeVisible({ timeout: timeoutMs });
-      await expect(this.inputTextbox()).toBeEnabled({ timeout: timeoutMs });
+      const awaitUsableInput = async () => {
+        await this.iframeElement().waitFor({ state: 'visible', timeout: timeoutMs });
+        // The usable input is the surface-agnostic readiness signal: it's present
+        // once Ollie has fully loaded, regardless of whether the project is empty
+        // (onboarding greeting) or already has traces (chat greeting). Key
+        // readiness on it, not on a specific greeting line — the greeting copy
+        // varies (onboarding vs chat vs "Ollie connected") and can render split
+        // across nodes, which makes an exact-text wait flake when the pod is slow
+        // to provision.
+        await expect(this.inputTextbox()).toBeVisible({ timeout: timeoutMs });
+        await expect(this.inputTextbox()).toBeEnabled({ timeout: timeoutMs });
+      };
+
+      await awaitUsableInput();
+      // Workaround for OPIK-8540: if the route renders before /toggles loads,
+      // OlliePage redirects on the Ollie toggle's `false` default and the host
+      // lands on Logs, where this surface-agnostic input still passes but the
+      // sidebar has no "Send message" button. Re-open once; remove with the fix.
+      if (!this.ollieRoute().test(this.page.url())) {
+        await this.goto();
+        await awaitUsableInput();
+      }
+      await expect(this.page, 'the host navigated away from the Ollie page').toHaveURL(
+        this.ollieRoute(),
+      );
     });
   }
 
@@ -340,6 +355,10 @@ export class OlliePage {
   // change ships. Both resolve to the same single iframe.
   private static readonly IFRAME_SELECTOR =
     '[data-testid="ollie-assistant-iframe"], iframe[title="Assistant"]';
+
+  private ollieRoute(): RegExp {
+    return new RegExp(`/projects/${this.projectId}/ollie(?:$|[/?#])`);
+  }
 
   private iframeElement(): Locator {
     return this.page.locator(OlliePage.IFRAME_SELECTOR);

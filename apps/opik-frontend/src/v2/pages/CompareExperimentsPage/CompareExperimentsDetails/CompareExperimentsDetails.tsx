@@ -134,15 +134,30 @@ const CompareExperimentsDetails: React.FunctionComponent<
             }
           />
         )}
-        {experiment?.prompt_versions &&
-          experiment.prompt_versions.length > 0 && (
-            <NavigationTag
-              id={experiment.prompt_versions[0].prompt_id}
-              name={experiment.prompt_versions[0].prompt_name}
-              resource={RESOURCE_TYPE.prompt}
-              prefix="Prompt"
-            />
-          )}
+        {!isCompare &&
+          experiment?.prompt_versions?.map((promptVersion) => {
+            const version =
+              promptVersion.version_number ?? promptVersion.commit;
+
+            return (
+              <NavigationTag
+                key={promptVersion.id}
+                id={promptVersion.prompt_id}
+                name={promptVersion.prompt_name}
+                resource={RESOURCE_TYPE.prompt}
+                search={{ activeVersionId: promptVersion.id }}
+                prefix="Prompt"
+                suffix={
+                  version ? (
+                    <span className="flex items-center gap-0 pt-px text-xs text-muted-slate">
+                      <GitCommitVertical className="size-[10px]" />
+                      {version}
+                    </span>
+                  ) : undefined
+                }
+              />
+            );
+          })}
         {!isCompare &&
           isTestSuiteExperiment(experiment) &&
           isNumber(experiment.pass_rate) && (

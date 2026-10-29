@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from "react";
+import { ArrowRight } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -15,6 +16,8 @@ import {
   selectRuntimeConfig,
 } from "@/store/DashboardStore";
 import WidgetTypeSelector from "./WidgetTypeSelector";
+import OllieIcon from "@/icons/ollie-owl.svg?react";
+import useAskOllieForWidget from "@/shared/Dashboard/useAskOllieForWidget";
 import WidgetConfigPreview from "./WidgetConfigPreview";
 import {
   DashboardWidget,
@@ -105,6 +108,12 @@ const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
     onOpenChange(false);
   };
 
+  const { isOllieAvailable, askOllie } = useAskOllieForWidget();
+  const handleDescribeToOllie = () => {
+    onOpenChange(false);
+    askOllie("widget_dialog", sectionId);
+  };
+
   const dialogTitle = isEditMode ? "Edit widget" : "Add widget";
 
   return (
@@ -146,13 +155,30 @@ const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
           </div>
         </div>
 
-        <DialogFooter className="flex flex-row justify-end gap-2 border-t pt-4 sm:flex-row sm:justify-end">
-          <Button variant="outline" onClick={handleCancel}>
-            Cancel
-          </Button>
-          <Button onClick={handleSave} disabled={!previewWidget}>
-            {isEditMode ? "Save changes" : "Add widget"}
-          </Button>
+        <DialogFooter className="flex flex-row flex-wrap items-center justify-end gap-2 border-t pt-4 sm:flex-row sm:justify-end">
+          {!isEditMode && isOllieAvailable && (
+            <div className="comet-code mr-auto flex items-center gap-2 text-foreground">
+              Need a custom widget?
+              <Button
+                variant="link"
+                onClick={handleDescribeToOllie}
+                className="comet-code h-auto gap-1 rounded-none border-b border-current p-0 pb-0.5 text-foreground hover:text-primary-hover hover:no-underline dark:text-foreground"
+              >
+                <OllieIcon className="size-4 text-[var(--color-ollie)]" />
+                Ask Ollie
+                <ArrowRight className="size-4" />
+              </Button>
+            </div>
+          )}
+          {/* One group, so the pair wraps below the Ollie prompt together. */}
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={handleCancel}>
+              Cancel
+            </Button>
+            <Button onClick={handleSave} disabled={!previewWidget}>
+              {isEditMode ? "Save changes" : "Add widget"}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

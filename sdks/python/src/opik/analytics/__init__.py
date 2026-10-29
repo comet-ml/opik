@@ -22,6 +22,7 @@ Reporting happens on a background thread, is switched off by
 
 from .api import (
     Component,
+    entry_point,
     flush,
     internal,
     reporting_allowed,
@@ -34,6 +35,7 @@ from .worker import PropertyValue
 __all__ = [
     "Component",
     "PropertyValue",
+    "entry_point",
     "flush",
     "internal",
     "register_rule",

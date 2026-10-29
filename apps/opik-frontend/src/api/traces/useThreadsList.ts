@@ -19,6 +19,7 @@ type UseThreadListParams = {
   toTime?: string;
   logsSource?: LOGS_SOURCE;
   annotationQueueId?: string;
+  exclude?: string[];
 };
 
 export type UseThreadListResponse = {
@@ -41,6 +42,7 @@ const getThreadList = async (
     toTime,
     logsSource,
     annotationQueueId,
+    exclude,
   }: UseThreadListParams,
 ) => {
   const { data } = await api.get<UseThreadListResponse>(
@@ -63,6 +65,8 @@ const getThreadList = async (
         ...(annotationQueueId && {
           annotation_queue_id: annotationQueueId,
         }),
+        ...(exclude &&
+          exclude.length > 0 && { exclude: JSON.stringify(exclude) }),
       },
     },
   );

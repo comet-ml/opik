@@ -1,0 +1,126 @@
+name: Live Model Check
+
+on:
+  pull_request:
+    paths:
+      - 'apps/opik-backend/src/main/resources/llm-models-default.yaml'
+      - 'apps/opik-backend/src/main/resources/llm-models-curated.yaml'
+      - 'scripts/check_new_models.py'
+      - '.github/workflows/live_model_check.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PIP_RETRIES: 8
+  PIP_DEFAULT_TIMEOUT: 30
+  UV_HTTP_TIMEOUT: 30
+  UV_HTTP_RETRIES: 8
+  OPIK_URL_OVERRIDE: http://localhost:8080
+
+jobs:
+  build-opik:
+    # Fork PRs get no secrets and a read-only token, so there is nothing to check with.
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/build_e2e_docker.yaml
+
+  check-models:
+    needs: build-opik
+    name: Call new models through the backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Fetch the PR base
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: git fetch --no-tags --depth=1 origin "$BASE_SHA"
+
+      - name: Login to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull Docker images from GHCR
+        env:
+          TAG: ${{ needs.build-opik.outputs.image_tag }}
+        run: |
+          docker pull "ghcr.io/comet-ml/opik/opik-backend:$TAG"
+          docker pull "ghcr.io/comet-ml/opik/opik-python-backend:$TAG"
+          docker tag "ghcr.io/comet-ml/opik/opik-backend:$TAG" ghcr.io/comet-ml/opik/opik-backend:latest
+          docker tag "ghcr.io/comet-ml/opik/opik-python-backend:$TAG" ghcr.io/comet-ml/opik/opik-python-backend:latest
+
+      - name: Run Opik backend
+        env:
+          OPIK_USAGE_REPORT_ENABLED: false
+          COMPOSE_BAKE: false
+          OPIK_BACKEND_PULL_POLICY: never
+          PYTHON_BACKEND_PULL_POLICY: never
+        run: ./opik.sh --backend --port-mapping
+
+      - name: Check Opik backend health
+        run: |
+          chmod +x tests_end_to_end/installer_utils/*.sh
+          tests_end_to_end/installer_utils/check_docker_compose_pods.sh
+          tests_end_to_end/installer_utils/check_backend.sh
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10.2.0
+
+      - name: Install dependencies
+        run: uv pip install --system requests pyyaml
+
+      - name: Call new and changed models
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_E2E_TESTS }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          python scripts/check_new_models.py \
+            --base-ref "$BASE_SHA" \
+            --backend-url "$OPIK_URL_OVERRIDE" \
+            --output live_model_check.md
+          cat live_model_check.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Post the report on the PR
+        if: ${{ hashFiles('live_model_check.md') != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          COMMENT_ID=$(gh api "repos/$REPO/issues/$PR_NUMBER/comments" --paginate \
+            --jq '.[] | select(.body | startswith("<!-- live-model-check -->")) | .id' | sed -n 1p)
+          if [ -n "$COMMENT_ID" ]; then
+            gh api -X PATCH "repos/$REPO/issues/comments/$COMMENT_ID" -F body=@live_model_check.md > /dev/null
+          else
+            gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file live_model_check.md
+          fi
+
+      - name: Stop Opik
+        if: always()
+        run: ./opik.sh --stop

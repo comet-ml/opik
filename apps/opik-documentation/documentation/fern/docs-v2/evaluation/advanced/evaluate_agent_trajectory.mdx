@@ -42,13 +42,13 @@ If your agent isn't traced yet, see [Log Traces](/tracing/advanced/log_traces) t
 
 To install the Opik Python SDK you can run the following command:
 
-```bash
+```bash wordWrap
 pip install opik
 ```
 
 Then you can configure the SDK by running the following command:
 
-```bash
+```bash wordWrap
 opik configure
 ```
 
@@ -60,7 +60,7 @@ In order to be able to evaluate the agent's trajectory, you need to add tracing 
 will allow us to capture the agent's trajectory and evaluate it.
 
 <CodeBlocks>
-    ```python title="LangChain" language="python" {2,4,22} maxLines=25
+    ```python title="LangChain" language="python" {2,4,22} maxLines=25 wordWrap
     from langchain.agents import create_agent
     from opik.integrations.langchain import OpikTracer
 
@@ -86,7 +86,7 @@ will allow us to capture the agent's trajectory and evaluate it.
     )
     ```
 
-    ```python title="OpenAI" language="python" {4,5,7,24,29} maxLines=25
+    ```python title="OpenAI" language="python" {4,5,7,24,29} maxLines=25 wordWrap
     import json
     import openai
 
@@ -163,7 +163,7 @@ metric and then run the evaluation.
 We are going to create a dataset with a set of user questions and some expected tools that the
 agent should be calling:
 
-```python
+```python wordWrap
 from opik import Opik
 
 client = Opik()
@@ -197,7 +197,7 @@ The key to this metric is the use of the optional `task_span` parameter, this is
 custom metrics and can be used to access the agent's trajectory:
 
 <CodeBlocks>
-    ```python title="Strict Tool Adherence Metric" maxLines=1000
+    ```python title="Strict Tool Adherence Metric" maxLines=1000 wordWrap
     from opik.evaluation.metrics import BaseMetric, score_result
     from opik.message_processing.emulation.models import SpanModel
     from typing import List
@@ -247,7 +247,7 @@ custom metrics and can be used to access the agent's trajectory:
                 
     ```
 
-    ```python title="Tool Adherence Metric" maxLines=1000
+    ```python title="Tool Adherence Metric" maxLines=1000 wordWrap
     from opik.evaluation.metrics import BaseMetric, score_result
     from opik.message_processing.emulation.models import SpanModel
     from typing import List
@@ -302,7 +302,7 @@ custom metrics and can be used to access the agent's trajectory:
 Let's define our evaluation task that will run our agent and return the assistant's response:
 
 <CodeBlocks>
-    ```python title="LangChain" maxLines=1000
+    ```python title="LangChain" maxLines=1000 wordWrap
     def evaluation_task(dataset_item: dict) -> dict:
         res = agent.invoke(
             {"messages": [{
@@ -315,7 +315,7 @@ Let's define our evaluation task that will run our agent and return the assistan
         return {"output": res['messages'][-1].content}
     ```
 
-    ```python title="OpenAI" maxLines=1000
+    ```python title="OpenAI" maxLines=1000 wordWrap
     def evaluation_task(dataset_item: dict) -> dict:
         res = agent_with_tools(dataset_item["input"])
         return {"output": messages[-1]['content']}
@@ -324,7 +324,7 @@ Let's define our evaluation task that will run our agent and return the assistan
 
 Now that we have our dataset and metric, we can run the evaluation:
 
-```python title="Running the evaluation" maxLines=1000
+```python title="Running the evaluation" maxLines=1000 wordWrap
 from opik.evaluation import evaluate
 
 # Run the evaluation

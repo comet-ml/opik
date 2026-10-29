@@ -1,0 +1,190 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: transparent;
+}
+
+body {
+  color: var(--kit-text);
+  font-family: var(--kit-font);
+  font-size: 14px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  margin: 0 0 8px;
+  color: var(--kit-text-strong);
+  font-weight: 500;
+}
+
+h1 {
+  font-size: 20px;
+  line-height: 28px;
+}
+
+h2 {
+  font-size: 18px;
+  line-height: 28px;
+}
+
+h3 {
+  font-size: 16px;
+  line-height: 24px;
+}
+
+h4 {
+  font-size: 14px;
+  line-height: 20px;
+}
+
+p {
+  margin: 0 0 8px;
+}
+
+small {
+  color: var(--kit-muted);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+a {
+  color: var(--kit-primary);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+ul,
+ol {
+  margin: 0 0 8px;
+  padding-left: 20px;
+}
+
+blockquote {
+  margin: 0 0 8px;
+  padding: 4px 12px;
+  border-left: 3px solid var(--kit-border);
+  color: var(--kit-muted);
+}
+
+hr {
+  margin: 12px 0;
+  border: 0;
+  border-top: 1px solid var(--kit-border);
+}
+
+mark {
+  padding: 0 2px;
+  border-radius: 2px;
+  background: var(--kit-warning-soft);
+  color: inherit;
+}
+
+code,
+kbd,
+pre {
+  font-family: var(--kit-mono);
+  font-size: 12px;
+}
+
+code,
+kbd {
+  padding: 1px 4px;
+  border-radius: var(--kit-radius-sm);
+  background: var(--kit-fill);
+}
+
+pre {
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  border-radius: var(--kit-radius-sm);
+  background: var(--kit-fill);
+  line-height: 18px;
+  white-space: pre-wrap;
+}
+
+pre code {
+  padding: 0;
+  background: none;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+th,
+td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--kit-border);
+  text-align: left;
+  vertical-align: top;
+}
+
+th {
+  color: var(--kit-muted);
+  font-weight: 500;
+}
+
+details {
+  margin: 0 0 8px;
+}
+
+summary {
+  color: var(--kit-muted);
+  cursor: pointer;
+}
+
+button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--kit-border);
+  border-radius: var(--kit-radius-sm);
+  background: var(--kit-bg);
+  color: var(--kit-text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+button:hover {
+  background: var(--kit-fill);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+input,
+select,
+textarea {
+  padding: 4px 8px;
+  border: 1px solid var(--kit-border);
+  border-radius: var(--kit-radius-sm);
+  background: var(--kit-bg);
+  color: var(--kit-text);
+  font: inherit;
+  font-size: 12px;
+}
+
+:focus-visible {
+  outline: 2px solid var(--kit-primary);
+  outline-offset: 1px;
+}

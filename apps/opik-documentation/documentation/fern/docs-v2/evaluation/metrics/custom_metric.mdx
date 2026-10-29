@@ -30,7 +30,7 @@ If you want to write an LLM as a Judge metric, you can use either the [G-Eval me
 To define a custom metric, you need to subclass the `BaseMetric` class and implement the `score`
 method and an optional `ascore` method:
 
-```python
+```python wordWrap
 from typing import Any
 
 from opik.evaluation.metrics import base_metric, score_result
@@ -70,7 +70,7 @@ used to compute asynchronously if needed.
 
 Now you can use the custom metric to score LLM outputs:
 
-```python
+```python wordWrap
 metric = MyCustomMetric()
 
 metric.score(input="What is the capital of France?", output="Paris")
@@ -82,7 +82,7 @@ Also, this metric can now be used in the `evaluate` function as explained here: 
 
 You can access the trajectory data in a custom metric by using the `task_span` parameter.
 
-```python
+```python wordWrap
 from opik.evaluation.metrics import base_metric, score_result
 from opik.message_processing.emulation.models import SpanModel
 
@@ -111,7 +111,7 @@ class MyCustomMetric(base_metric.BaseMetric):
 
 You can implement your own custom metric by creating a class that subclasses the `BaseMetric` class and implements the `score` method.
 
-```python
+```python wordWrap
 import json
 from typing import Any
 
@@ -173,7 +173,7 @@ class LLMJudgeMetric(base_metric.BaseMetric):
 
 You can then use this metric to score your LLM outputs:
 
-```python
+```python wordWrap
 metric = LLMJudgeMetric()
 
 metric.score(output="Paris is the capital of France")
@@ -187,7 +187,7 @@ In order to support a wide range of LLM providers, we recommend using the `litel
 
 Opik providers a `LitellmChatModel` class that wraps the `litellm` library and can be used in your custom metric:
 
-```python
+```python wordWrap
 import json
 from typing import Any
 
@@ -242,7 +242,7 @@ class LLMJudgeMetric(base_metric.BaseMetric):
 
 You can then use this metric to score your LLM outputs:
 
-```python
+```python wordWrap
 metric = LLMJudgeMetric()
 
 metric.score(output="Paris is the capital of France")
@@ -254,7 +254,7 @@ You can implement a metric that returns multiple scores, which will display as s
 
 To do so, setup your `score` method to return a list of `ScoreResult` objects.
 
-```python
+```python wordWrap
 from typing import Any, List
 
 from opik.evaluation.metrics import base_metric, score_result
@@ -284,7 +284,7 @@ In the examples above, we ask the LLM to respond with a JSON object. However as 
 
 For this we define the format of the response we expect from the LLM in the `LLMJudgeBinaryResult` class and pass it to the LiteLLM client:
 
-```python
+```python wordWrap
 import json
 from pydantic import BaseModel
 from typing import Any
@@ -339,7 +339,7 @@ class LLMJudgeMetric(base_metric.BaseMetric):
 
 Similarly to the previous example, you can then use this metric to score your LLM outputs:
 
-```python
+```python wordWrap
 metric = LLMJudgeMetric()
 
 metric.score(output="Paris is the capital of France")
@@ -352,7 +352,7 @@ You can read more about this advanced metric [here](/evaluation/metrics/g_eval).
 
 To use G-Eval, you will need to specify a task introduction and evaluation criteria:
 
-```python
+```python wordWrap
 from opik.evaluation.metrics import GEval
 
 metric = GEval(
@@ -386,7 +386,7 @@ Custom LLM as a Judge and custom Python code metrics can run automatically again
 
 Keep your metric code wherever you like — your application, a scheduled job, your CI — and attach the score to the trace, span or thread yourself:
 
-```python
+```python wordWrap
 metric = MyCustomMetric()
 result = metric.score(input=..., output=...)
 

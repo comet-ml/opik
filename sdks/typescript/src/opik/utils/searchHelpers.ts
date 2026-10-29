@@ -41,6 +41,7 @@ export async function searchAndWaitForDone<T>(
   waitForTimeout: number,
   sleepTime: number
 ): Promise<T[]> {
+  const timeout = Number.isNaN(waitForTimeout) ? 0 : waitForTimeout;
   const startTime = Date.now();
   let result: T[] = [];
 
@@ -55,13 +56,15 @@ export async function searchAndWaitForDone<T>(
 
     // Check if timeout exceeded
     const elapsedTime = Date.now() - startTime;
-    if (elapsedTime >= waitForTimeout) {
+    if (elapsedTime >= timeout) {
       // Return best attempt results
       return result;
     }
 
-    // Sleep before next attempt
-    await new Promise((resolve) => setTimeout(resolve, sleepTime));
+    // Sleep only for the time remaining in the caller's timeout budget.
+    await new Promise((resolve) =>
+      setTimeout(resolve, Math.min(sleepTime, timeout - elapsedTime))
+    );
   }
 }
 

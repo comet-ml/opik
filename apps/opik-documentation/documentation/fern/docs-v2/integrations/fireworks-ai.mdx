@@ -25,7 +25,7 @@ First, you'll need a Comet.com account to use Opik. If you don't have one, you c
 
 Install the required packages:
 
-```bash
+```bash wordWrap
 pip install opik openai
 ```
 
@@ -33,7 +33,7 @@ pip install opik openai
 
 Configure Opik to send traces to your Comet project:
 
-```python
+```python wordWrap
 import opik
 
 opik.configure(
@@ -46,7 +46,7 @@ opik.configure(
 
 Set your Fireworks AI API key as an environment variable:
 
-```bash
+```bash wordWrap
 export FIREWORKS_API_KEY="your-fireworks-api-key"
 ```
 
@@ -56,7 +56,7 @@ You can obtain a Fireworks AI API key from the [Fireworks AI dashboard](https://
 
 ### Import and Setup
 
-```python
+```python wordWrap
 from opik.integrations.openai import track_openai
 from openai import OpenAI
 
@@ -72,7 +72,7 @@ tracked_client = track_openai(client, project_name="your-project-name")
 
 ### Making API Calls
 
-```python
+```python wordWrap
 # Make a chat completion call
 response = tracked_client.chat.completions.create(
     model="accounts/fireworks/models/llama-v3p1-8b-instruct",
@@ -91,7 +91,7 @@ print(response.choices[0].message.content)
 
 You can combine the tracked client with Opik's `@track` decorator for more comprehensive tracing:
 
-```python
+```python wordWrap
 from opik import track
 
 @track
@@ -114,7 +114,7 @@ result = analyze_text_with_fireworks("Open source AI models are becoming increas
 
 Fireworks AI supports streaming responses, which are also tracked by Opik:
 
-```python
+```python wordWrap
 response = tracked_client.chat.completions.create(
     model="accounts/fireworks/models/llama-v3p1-8b-instruct",
     messages=[
@@ -175,7 +175,7 @@ If you encounter issues with the integration:
 
 Make sure to set the following environment variables:
 
-```bash
+```bash wordWrap
 # Fireworks AI Configuration
 export FIREWORKS_API_KEY="your-fireworks-api-key"
 

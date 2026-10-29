@@ -1,0 +1,9 @@
+models:
+  anthropic:
+    - id: claude-sonnet-4-6
+      label: "from the first row"
+      params:
+        temperature: {min: 0, max: 1, default: 0}
+    - id: claude-sonnet-4-6
+      params:
+        effort: {levels: [low], default: low}

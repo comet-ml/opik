@@ -96,9 +96,13 @@ test.describe('Alerts — name suggestion', { tag: ['@t2-cuj', '@area:alerts'] }
       });
 
       // The other half of the gate: re-validation has to report an empty name
-      // too, not merely stay quiet once it has been silenced.
-      await test.step('Verify emptying the name brings the error back', async () => {
-        await editor.clearName();
+      // too, not merely stay quiet once it has been silenced. Clearing the field
+      // cannot reach that state — with a trigger set the form re-suggests into
+      // it at once (the first test's last step) — so the name is emptied the way
+      // the form itself empties it: by leaving nothing to suggest from.
+      await test.step('Verify removing the last trigger brings the error back', async () => {
+        await editor.removeTrigger(TRACE_ERRORS);
+        await expect(editor.nameInput).toHaveValue('');
         await expect(editor.nameError).toBeVisible();
       });
     },

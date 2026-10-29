@@ -593,6 +593,59 @@ describe("helpers.ts", () => {
 
           expect(filterFunction(mockTrace, filter)).toBe(true);
         });
+
+        it.each([
+          { key: '["a.b"]', value: "2", expected: true },
+          { key: '["a.b"]', value: "3", expected: false },
+          { key: '["ctx"]["a.b"]', value: "3", expected: true },
+          { key: "a.b", value: "1", expected: true },
+          { key: "a.b", value: "2", expected: false },
+        ])(
+          "reads bracket-quoted keys at the root only ($key = $value)",
+          ({ key, value, expected }) => {
+            const trace = {
+              ...mockTrace,
+              metadata: { a: { b: 1 }, "a.b": 2, ctx: { "a.b": 3 } },
+            };
+            const filter: Filters = [
+              {
+                id: "filter-1",
+                field: "metadata",
+                operator: "=",
+                value,
+                type: COLUMN_TYPE.dictionary,
+                key,
+              },
+            ];
+
+            expect(filterFunction(trace, filter)).toBe(expected);
+          },
+        );
+
+        it.each([
+          { value: "es", expected: true },
+          { value: "en", expected: false },
+        ])(
+          "reads a bracket-quoted custom input key at the root only ($value)",
+          ({ value, expected }) => {
+            const span = {
+              ...mockSpan,
+              input: { "req.lang": "es", history: [{ "req.lang": "en" }] },
+            };
+            const filter: Filters = [
+              {
+                id: "filter-1",
+                field: COLUMN_CUSTOM_ID,
+                operator: "=",
+                value,
+                type: COLUMN_TYPE.dictionary,
+                key: 'input.["req.lang"]',
+              },
+            ];
+
+            expect(filterFunction(span, filter)).toBe(expected);
+          },
+        );
       });
 
       // Test tags (list) column

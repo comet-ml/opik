@@ -29,6 +29,11 @@ export const getRunFailureCopy = (reason?: string): RunFailureCopy => {
         description:
           "The run was never picked up (the service may have been restarting). Try again.",
       };
+    case "timed_out":
+      return {
+        title: "Diagnostics timed out",
+        description: "The run took too long to finish.",
+      };
     case "permission_denied":
       return {
         title: "Diagnostics couldn't access this project",

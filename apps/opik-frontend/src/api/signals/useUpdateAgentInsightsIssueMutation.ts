@@ -14,6 +14,8 @@ type UseUpdateAgentInsightsIssueMutationParams = {
   issueId: string;
   projectId: string;
   status: AGENT_INSIGHTS_ISSUE_STATUS;
+  // Stored only with status=closed; any other status clears it.
+  closeNote?: string;
 };
 
 const useUpdateAgentInsightsIssueMutation = () => {
@@ -25,10 +27,15 @@ const useUpdateAgentInsightsIssueMutation = () => {
       issueId,
       projectId,
       status,
+      closeNote,
     }: UseUpdateAgentInsightsIssueMutationParams) => {
       const { data } = await api.patch(
         `${AGENT_INSIGHTS_REST_ENDPOINT}issues/${issueId}`,
-        { project_id: projectId, status },
+        {
+          project_id: projectId,
+          status,
+          ...(closeNote && { close_note: closeNote }),
+        },
       );
       return data;
     },

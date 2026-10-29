@@ -46,8 +46,10 @@ const RuleTracesCell = (context: CellContext<EvaluatorsRule, string>) => {
         sourceFilters={ruleFilters}
         lockScope
         scopeLabel={rule.name}
-        label="Go to traces"
+        label="Traces"
+        variant="link"
         renderSidebar={false}
+        stopClickPropagation
       />
     </CellWrapper>
   );

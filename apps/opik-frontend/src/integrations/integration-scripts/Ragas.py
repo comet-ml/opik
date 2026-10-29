@@ -8,7 +8,7 @@ from ragas.metrics import AnswerRelevancy
 
 configure(project_name="PROJECT_NAME_PLACEHOLDER")  # HIGHLIGHTED_LINE
 
-llm = LangchainLLMWrapper(ChatOpenAI())
+llm = LangchainLLMWrapper(ChatOpenAI(model="gpt-4o-mini"))
 emb = LangchainEmbeddingsWrapper(OpenAIEmbeddings())
 ragas_answer_relevancy_metric = AnswerRelevancy(llm=llm, embeddings=emb)
 

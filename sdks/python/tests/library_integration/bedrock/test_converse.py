@@ -3,6 +3,7 @@ import pytest
 
 import opik
 from opik.integrations.bedrock import track_bedrock
+from ... import llm_constants
 from ...testlib import (
     ANY_BUT_NONE,
     ANY_DICT,
@@ -12,10 +13,7 @@ from ...testlib import (
     assert_equal,
 )
 from .constants import (
-    BEDROCK_MODEL_FOR_TESTS,
     EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT,
-    MISTRAL_PIXTRAL_MODEL_FOR_TESTS,
-    MISTRAL_PIXTRAL_REGION_FOR_TESTS,
 )
 
 pytestmark = pytest.mark.usefixtures("ensure_aws_bedrock_configured")
@@ -42,7 +40,7 @@ def test_bedrock_converse__happyflow(fake_backend, project_name, expected_projec
     ]
 
     _ = tracked_client.converse(
-        modelId=BEDROCK_MODEL_FOR_TESTS,
+        modelId=llm_constants.BEDROCK_CLAUDE_SONNET,
         messages=messages,
         system=system_prompt,
         inferenceConfig={
@@ -76,7 +74,7 @@ def test_bedrock_converse__happyflow(fake_backend, project_name, expected_projec
                 tags=["bedrock"],
                 metadata=ANY_DICT.containing({"created_from": "bedrock"}),
                 last_updated_at=ANY_BUT_NONE,
-                model=BEDROCK_MODEL_FOR_TESTS,
+                model=llm_constants.BEDROCK_CLAUDE_SONNET,
                 usage=ANY_DICT.containing(EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT),
                 provider="bedrock",
                 spans=[],
@@ -172,7 +170,7 @@ def test_bedrock_converse__converse_call_made_in_another_tracked_function__bedro
         messages = [{"role": "user", "content": [{"text": question}]}]
 
         response = tracked_client.converse(
-            modelId=BEDROCK_MODEL_FOR_TESTS,
+            modelId=llm_constants.BEDROCK_CLAUDE_SONNET,
             messages=messages,
             inferenceConfig={"maxTokens": 50},
         )
@@ -215,7 +213,7 @@ def test_bedrock_converse__converse_call_made_in_another_tracked_function__bedro
                         tags=["bedrock"],
                         metadata=ANY_DICT.containing({"created_from": "bedrock"}),
                         last_updated_at=ANY_BUT_NONE,
-                        model=BEDROCK_MODEL_FOR_TESTS,
+                        model=llm_constants.BEDROCK_CLAUDE_SONNET,
                         usage=ANY_DICT.containing(EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT),
                         provider="bedrock",
                         spans=[],
@@ -238,30 +236,30 @@ def test_bedrock_converse__converse_call_made_in_another_tracked_function__bedro
     [
         # Standard Claude model - baseline for converse_stream event structure
         # Ref: https://docs.aws.amazon.com/bedrock/latest/userguide/conversation-inference.html
-        BEDROCK_MODEL_FOR_TESTS,
+        llm_constants.BEDROCK_CLAUDE_SONNET,
         # DeepSeek R1 reasoning model - OPIK-2910: Different event structure for reasoning models
         # Reasoning models may have unique streaming patterns, including reasoning traces
         # Ref: https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-deepseek.html
-        "us.deepseek.r1-v1:0",
+        llm_constants.BEDROCK_DEEPSEEK_R1,
         # Amazon Nova - Tests Amazon's proprietary model streaming format
         # Nova models use different internal event structures
         # Ref: https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-nova.html
-        "us.amazon.nova-pro-v1:0",
+        llm_constants.BEDROCK_AMAZON_NOVA,
         # Meta Llama - Tests open-source model integration
         # Llama models may have different tokenization and streaming patterns
         # Ref: https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-meta.html
-        "us.meta.llama3-1-8b-instruct-v1:0",
+        llm_constants.BEDROCK_META_LLAMA,
         # Mistral Pixtral - Tests multimodal model streaming (text focus in this test)
         # Multimodal models may include additional event types
         # Ref: https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-mistral.html
-        MISTRAL_PIXTRAL_MODEL_FOR_TESTS,
+        llm_constants.BEDROCK_MISTRAL_PIXTRAL,
     ],
 )
 def test_bedrock_converse__stream_mode_is_on__generator_tracked_correctly(
     fake_backend, model_id
 ):
     region_name_by_model_id = {
-        MISTRAL_PIXTRAL_MODEL_FOR_TESTS: MISTRAL_PIXTRAL_REGION_FOR_TESTS,
+        llm_constants.BEDROCK_MISTRAL_PIXTRAL: llm_constants.BEDROCK_MISTRAL_PIXTRAL_REGION,
     }
 
     client = boto3.client(
@@ -365,7 +363,7 @@ def test_bedrock_converse__stream_with_tool_use__structured_output_tracked_corre
     }
 
     response = tracked_client.converse_stream(
-        modelId=BEDROCK_MODEL_FOR_TESTS,
+        modelId=llm_constants.BEDROCK_CLAUDE_SONNET,
         messages=messages,
         toolConfig=tool_config,
         inferenceConfig={"maxTokens": 100},
@@ -407,7 +405,7 @@ def test_bedrock_converse__stream_with_tool_use__structured_output_tracked_corre
                 tags=["bedrock"],
                 metadata=ANY_DICT.containing({"created_from": "bedrock"}),
                 last_updated_at=ANY_BUT_NONE,
-                model=BEDROCK_MODEL_FOR_TESTS,
+                model=llm_constants.BEDROCK_CLAUDE_SONNET,
                 usage=ANY_DICT.containing(EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT),
                 provider="bedrock",
                 spans=[],
@@ -429,7 +427,7 @@ def test_bedrock_converse__stream_called_2_times__generator_tracked_correctly(
 
     # Make first stream call
     response1 = tracked_client.converse_stream(
-        modelId=BEDROCK_MODEL_FOR_TESTS,
+        modelId=llm_constants.BEDROCK_CLAUDE_SONNET,
         messages=[{"role": "user", "content": [{"text": "Hello"}]}],
         inferenceConfig={"maxTokens": 20},
     )
@@ -440,7 +438,7 @@ def test_bedrock_converse__stream_called_2_times__generator_tracked_correctly(
 
     # Make second stream call
     response2 = tracked_client.converse_stream(
-        modelId=BEDROCK_MODEL_FOR_TESTS,
+        modelId=llm_constants.BEDROCK_CLAUDE_SONNET,
         messages=[{"role": "user", "content": [{"text": "Goodbye"}]}],
         inferenceConfig={"maxTokens": 20},
     )
@@ -478,7 +476,7 @@ def test_bedrock_converse__stream_called_2_times__generator_tracked_correctly(
                 tags=["bedrock"],
                 metadata=ANY_DICT.containing({"created_from": "bedrock"}),
                 last_updated_at=ANY_BUT_NONE,
-                model=BEDROCK_MODEL_FOR_TESTS,
+                model=llm_constants.BEDROCK_CLAUDE_SONNET,
                 usage=ANY_DICT.containing(EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT),
                 provider="bedrock",
                 spans=[],
@@ -512,7 +510,7 @@ def test_bedrock_converse__stream_called_2_times__generator_tracked_correctly(
                 tags=["bedrock"],
                 metadata=ANY_DICT.containing({"created_from": "bedrock"}),
                 last_updated_at=ANY_BUT_NONE,
-                model=BEDROCK_MODEL_FOR_TESTS,
+                model=llm_constants.BEDROCK_CLAUDE_SONNET,
                 usage=ANY_DICT.containing(EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT),
                 provider="bedrock",
                 spans=[],
@@ -558,7 +556,7 @@ def test_bedrock_converse__opik_args__happyflow(
     }
 
     _ = tracked_client.converse(
-        modelId=BEDROCK_MODEL_FOR_TESTS,
+        modelId=llm_constants.BEDROCK_CLAUDE_SONNET,
         messages=messages,
         system=system_prompt,
         inferenceConfig={
@@ -596,7 +594,7 @@ def test_bedrock_converse__opik_args__happyflow(
                     {"created_from": "bedrock", "span_key": "span_value"}
                 ),
                 last_updated_at=ANY_BUT_NONE,
-                model=BEDROCK_MODEL_FOR_TESTS,
+                model=llm_constants.BEDROCK_CLAUDE_SONNET,
                 usage=ANY_DICT.containing(EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT),
                 provider="bedrock",
                 spans=[],

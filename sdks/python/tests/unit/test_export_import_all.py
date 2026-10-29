@@ -1169,7 +1169,7 @@ class TestExportAll:
                 f"{_EXPORT_MODULE}.prepare_project_export_dir",
                 side_effect=_fake_prepare_export_dir,
             ),
-            patch(f"{_EXPORT_MODULE}._export_all_datasets", return_value=(0, 0)),
+            patch(f"{_EXPORT_MODULE}._export_all_datasets", return_value=(0, 0, 0)),
             patch(f"{_EXPORT_MODULE}._export_all_prompts", return_value=(0, 0, 0)),
             patch(
                 f"{_EXPORT_MODULE}._export_project_traces",
@@ -1203,7 +1203,7 @@ class TestExportAll:
                 f"{_EXPORT_MODULE}.prepare_project_export_dir",
                 side_effect=_fake_prepare_export_dir,
             ),
-            patch(f"{_EXPORT_MODULE}._export_all_datasets", return_value=(0, 0)),
+            patch(f"{_EXPORT_MODULE}._export_all_datasets", return_value=(0, 0, 0)),
             patch(f"{_EXPORT_MODULE}._export_all_prompts", return_value=(0, 0, 0)),
             patch(
                 f"{_EXPORT_MODULE}._export_project_traces",
@@ -1237,7 +1237,7 @@ class TestExportAll:
         with (
             patch(f"{_EXPORT_MODULE}.opik.Opik", return_value=client),
             patch(
-                f"{_EXPORT_MODULE}._export_all_datasets", return_value=(2, 0)
+                f"{_EXPORT_MODULE}._export_all_datasets", return_value=(2, 0, 0)
             ) as mock_ds,
             patch(
                 f"{_EXPORT_MODULE}._export_all_prompts", return_value=(0, 0, 0)
@@ -1274,7 +1274,7 @@ class TestExportAll:
         client = _make_export_client()
         with (
             patch(f"{_EXPORT_MODULE}.opik.Opik", return_value=client),
-            patch(f"{_EXPORT_MODULE}._export_all_datasets", return_value=(1, 0)),
+            patch(f"{_EXPORT_MODULE}._export_all_datasets", return_value=(1, 0, 0)),
             patch(f"{_EXPORT_MODULE}._export_all_prompts", return_value=(2, 0, 0)),
             patch(
                 f"{_EXPORT_MODULE}._export_project_traces",
@@ -1311,7 +1311,7 @@ class TestExportAll:
         client = _make_export_client()
         with (
             patch(f"{_EXPORT_MODULE}.opik.Opik", return_value=client) as mock_opik,
-            patch(f"{_EXPORT_MODULE}._export_all_datasets", return_value=(0, 0)),
+            patch(f"{_EXPORT_MODULE}._export_all_datasets", return_value=(0, 0, 0)),
             patch(f"{_EXPORT_MODULE}._export_all_prompts", return_value=(0, 0, 0)),
             patch(
                 f"{_EXPORT_MODULE}._export_project_traces",

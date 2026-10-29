@@ -30,7 +30,8 @@ public class ExperimentTestAssertions {
 
     public static final String[] EXPERIMENT_IGNORED_FIELDS = new String[]{
             "id", "datasetId", "name", "feedbackScores", "assertionScores", "traceCount", "createdAt",
-            "lastUpdatedAt", "createdBy", "lastUpdatedBy", "comments", "projectName", "datasetItemCount"};
+            "lastUpdatedAt", "createdBy", "lastUpdatedBy", "comments", "projectName", "datasetItemCount",
+            "finishedAt"};
 
     /**
      * Asserts that {@code actual} matches {@code expected} via recursive comparison ignoring

@@ -1,0 +1,52 @@
+name: Sandbox Executor Docker Build
+run-name: "Sandbox Executor Docker Build ${{ github.ref_name }} by @${{ github.actor }}"
+permissions:
+  contents: read
+on:
+  pull_request:
+    paths:
+      - "apps/opik-sandbox-executor-python/**"
+      - ".github/workflows/build_sandbox_executor_docker.yml"
+  # Also on main: catches a break that lands despite green PRs -- e.g. two PRs that
+  # each build fine alone but not merged together.
+  push:
+    branches:
+      - 'main'
+    paths:
+      - "apps/opik-sandbox-executor-python/**"
+      - ".github/workflows/build_sandbox_executor_docker.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    name: Build sandbox executor image
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      # Build only, no push. Otherwise the image is only built on main by build_apps.yml, so
+      # a requirements.txt pin that conflicts with a transitive one passes its PR and breaks
+      # main. The build also runs selftest.sh. amd64 only, as in build_frontend_docker.yml.
+      - name: Build sandbox executor image
+        uses: docker/build-push-action@v7
+        env:
+          DOCKER_BUILD_RECORD_UPLOAD: false
+          DOCKER_BUILD_SUMMARY: false
+        with:
+          context: apps/opik-sandbox-executor-python
+          file: apps/opik-sandbox-executor-python/Dockerfile
+          platforms: linux/amd64
+          push: false
+          load: false
+          provenance: false

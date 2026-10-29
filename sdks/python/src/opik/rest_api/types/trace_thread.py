@@ -5,6 +5,7 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
+from .annotation_queue_reference import AnnotationQueueReference
 from .comment import Comment
 from .feedback_score import FeedbackScore
 from .json_list_string import JsonListString
@@ -27,6 +28,11 @@ class TraceThread(UniversalBaseModel):
     usage: typing.Optional[typing.Dict[str, int]] = None
     comments: typing.Optional[typing.List[Comment]] = None
     tags: typing.Optional[typing.List[str]] = None
+    annotation_queues: typing.Optional[typing.List[AnnotationQueueReference]] = pydantic.Field(default=None)
+    """
+    Annotation queues this thread is currently an item of
+    """
+
     last_updated_at: typing.Optional[dt.datetime] = None
     last_updated_by: typing.Optional[str] = None
     created_by: typing.Optional[str] = None

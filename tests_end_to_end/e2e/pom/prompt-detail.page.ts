@@ -198,29 +198,64 @@ export class PromptDetailPage {
     return this.page.getByTestId(`version-history-item-${label}`);
   }
 
-  async editTextPrompt(newTemplate: string): Promise<void> {
-    return test.step(`edit text prompt template`, async () => {
+  /**
+   * Open the Edit sheet and return it, committing nothing.
+   *
+   * Separate from the two `edit*` methods below so a spec can inspect the
+   * sheet's own state — whether its commit control is enabled for a given
+   * draft — without saving a version as a side effect.
+   */
+  async openEditSheet(): Promise<Locator> {
+    return test.step('open the prompt Edit sheet', async () => {
       await this.page.getByRole('button', { name: 'Edit' }).click();
       const sheet = this.page.getByRole('dialog');
       await sheet.waitFor({ state: 'visible' });
-      const editor = sheet.getByPlaceholder('Type your prompt...');
-      await editor.fill(newTemplate);
-      await sheet.getByRole('button', { name: 'Create new version' }).click();
+      return sheet;
+    });
+  }
+
+  /**
+   * The Edit sheet's commit control.
+   *
+   * Disabled while the draft still matches the active version, which is the
+   * UI half of opik#8923 — the API answers a no-op save with the existing
+   * latest version, and the form declines to send one at all.
+   */
+  editSheetSubmit(sheet: Locator): Locator {
+    return sheet.getByRole('button', { name: 'Create new version' });
+  }
+
+  /** The Edit sheet's template editor, for a TEXT prompt. */
+  editSheetTemplateEditor(sheet: Locator): Locator {
+    return sheet.getByPlaceholder('Type your prompt...');
+  }
+
+  /** Dismiss the Edit sheet without committing, and wait until it is really gone. */
+  async closeEditSheet(sheet: Locator): Promise<void> {
+    return test.step('close the prompt Edit sheet without saving', async () => {
+      await this.page.keyboard.press('Escape');
+      await sheet.waitFor({ state: 'hidden' });
+    });
+  }
+
+  async editTextPrompt(newTemplate: string): Promise<void> {
+    return test.step(`edit text prompt template`, async () => {
+      const sheet = await this.openEditSheet();
+      await this.editSheetTemplateEditor(sheet).fill(newTemplate);
+      await this.editSheetSubmit(sheet).click();
       await sheet.waitFor({ state: 'hidden' });
     });
   }
 
   async editChatFirstMessage(newContent: string): Promise<void> {
     return test.step(`edit first chat message`, async () => {
-      await this.page.getByRole('button', { name: 'Edit' }).click();
-      const sheet = this.page.getByRole('dialog');
-      await sheet.waitFor({ state: 'visible' });
+      const sheet = await this.openEditSheet();
       const firstMessageRow = sheet.getByTestId('playground-message-row').first();
       const editor = firstMessageRow.getByTestId('playground-message-editor').locator('.cm-content').first();
       await editor.click();
       await editor.press('ControlOrMeta+a');
       await editor.pressSequentially(newContent);
-      await sheet.getByRole('button', { name: 'Create new version' }).click();
+      await this.editSheetSubmit(sheet).click();
       await sheet.waitFor({ state: 'hidden' });
     });
   }

@@ -36,7 +36,7 @@ This section covers text prompts. For chat prompts with structured messages, see
 
 Create a text prompt with the `createPrompt` method:
 
-```typescript
+```typescript wordWrap
 import { Opik, PromptType } from "opik";
 
 const client = new Opik();
@@ -57,7 +57,7 @@ console.log(`Created prompt with version: ${prompt.version}`);
 
 Get prompts by name or specific version:
 
-```typescript
+```typescript wordWrap
 // Get latest version
 const prompt = await client.getPrompt({ name: "greeting-prompt" });
 
@@ -82,7 +82,7 @@ Opik supports two powerful template engines:
 
 The `format()` method works on both `Prompt` and `PromptVersion` instances:
 
-```typescript
+```typescript wordWrap
 const prompt = await client.getPrompt({ name: "greeting-prompt" });
 
 // Format with variables
@@ -97,7 +97,7 @@ const oldText = previousVersion.format({ name: "Alice", score: 95 });
 
 **Template Syntax Examples:**
 
-```typescript
+```typescript wordWrap
 // Mustache syntax (default)
 await client.createPrompt({
   name: "mustache-prompt",
@@ -134,7 +134,7 @@ The `createPrompt` method intelligently handles versioning based on content chan
 - Template, metadata, and type are all identical
 - Only `tags` or `description` differ
 
-```typescript
+```typescript wordWrap
 // First call - creates new prompt with version 1
 const prompt1 = await client.createPrompt({
   name: "greeting-prompt",
@@ -184,7 +184,7 @@ const prompt4 = await client.createPrompt({
 
 Update prompt metadata without creating new versions:
 
-```typescript
+```typescript wordWrap
 const prompt = await client.getPrompt({ name: "greeting-prompt" });
 
 // Update name, description, or tags
@@ -225,7 +225,7 @@ Search and filter prompts using [Opik Query Language (OQL)](/reference/typescrip
 
 **Search Examples:**
 
-```typescript
+```typescript wordWrap
 // Search all prompts (no filter)
 const allPrompts = await client.searchPrompts();
 
@@ -255,7 +255,7 @@ const prodChatPrompts = await client.searchPrompts(
 
 ### Deleting Prompts
 
-```typescript
+```typescript wordWrap
 const prompt = await client.getPrompt({ name: "greeting-prompt" });
 
 // Delete prompt and all its versions
@@ -273,7 +273,7 @@ await client.deletePrompts([prompt.id, anotherPrompt.id]);
 
 Access comprehensive version information:
 
-```typescript
+```typescript wordWrap
 const prompt = await client.getPrompt({ name: "greeting-prompt" });
 const versions = await prompt.getVersions();
 const latest = versions[0];
@@ -298,7 +298,7 @@ console.log(latest.getVersionAge());
 
 #### Viewing Version History
 
-```typescript
+```typescript wordWrap
 const prompt = await client.getPrompt({ name: "greeting-prompt" });
 
 // Get all versions
@@ -316,7 +316,7 @@ versions.forEach((version) => {
 
 #### Getting Specific Versions
 
-```typescript
+```typescript wordWrap
 // Option 1: Fetch a specific version straight from the client
 const oldVersion = await client.getPrompt({
   name: "greeting-prompt",
@@ -347,7 +347,7 @@ console.log(formattedText);
 
 #### Comparing Versions
 
-```typescript
+```typescript wordWrap
 const versions = await prompt.getVersions();
 
 if (versions.length >= 2) {
@@ -370,7 +370,7 @@ if (versions.length >= 2) {
 
 #### Restoring Previous Versions
 
-```typescript
+```typescript wordWrap
 const prompt = await client.getPrompt({ name: "greeting-prompt" });
 const versions = await prompt.getVersions();
 
@@ -392,7 +392,7 @@ if (previousVersion) {
 
 Prompts work seamlessly with Opik's tracing functionality:
 
-```typescript
+```typescript wordWrap
 import { Opik, track } from "opik";
 
 const client = new Opik();
@@ -421,7 +421,7 @@ async function generateGreeting(userName: string, userScore: number) {
 
 Keep your prompts versioned alongside your code:
 
-```typescript
+```typescript wordWrap
 // prompts/greeting.ts
 export const GREETING_TEMPLATE = "Hello {{name}}, your score is {{score}}";
 
@@ -438,7 +438,7 @@ const prompt = await client.createPrompt({
 
 #### Use Meaningful Version Descriptions
 
-```typescript
+```typescript wordWrap
 const prompt = await client.createPrompt({
   name: "summary-prompt",
   prompt: updatedTemplate,
@@ -450,7 +450,7 @@ const prompt = await client.createPrompt({
 
 #### Tag Your Prompts
 
-```typescript
+```typescript wordWrap
 const prompt = await client.createPrompt({
   name: "production-greeting",
   prompt: template,
@@ -478,7 +478,7 @@ Chat prompts are structured message-based templates designed for conversational 
 
 Create chat prompts using the `createChatPrompt` method:
 
-```typescript
+```typescript wordWrap
 import { Opik, PromptType } from "opik";
 
 const client = new Opik();
@@ -512,7 +512,7 @@ console.log(`Created chat prompt with version: ${chatPrompt.version}`);
 
 Format chat prompts with variables to get ready-to-use message arrays:
 
-```typescript
+```typescript wordWrap
 const chatPrompt = await client.getChatPrompt({
   name: "educational-assistant",
 });
@@ -537,7 +537,7 @@ if (chatPrompt) {
 
 Create templates for multi-turn conversations:
 
-```typescript
+```typescript wordWrap
 const messages = [
   {
     role: "system",
@@ -577,7 +577,7 @@ Chat prompts support multimodal content for vision-enabled models:
 
 #### Image Analysis
 
-```typescript
+```typescript wordWrap
 // Chat prompt with image content
 const messages = [
   {
@@ -617,7 +617,7 @@ const formatted = chatPrompt.format(
 
 #### Video Analysis
 
-```typescript
+```typescript wordWrap
 // Chat prompt with video content
 const messages = [
   {
@@ -657,7 +657,7 @@ const formatted = chatPrompt.format(
 
 #### Mixed Content
 
-```typescript
+```typescript wordWrap
 // Chat prompt with multiple images and text
 const messages = [
   {
@@ -708,7 +708,7 @@ This allows you to use the same prompt template with different models that may o
 
 Get chat prompts by name or specific version:
 
-```typescript
+```typescript wordWrap
 // Get latest version
 const chatPrompt = await client.getChatPrompt({
   name: "educational-assistant",
@@ -730,7 +730,7 @@ const oldVersion = await client.getChatPrompt({
 
 Search for chat prompts specifically using the `template_structure` filter:
 
-```typescript
+```typescript wordWrap
 // Search for only chat prompts
 const chatPrompts = await client.searchPrompts(
   'template_structure = "chat" AND name contains "assistant"',
@@ -752,7 +752,7 @@ Chat prompts support two template types:
 
 #### Mustache (Default)
 
-```typescript
+```typescript wordWrap
 import { PromptType } from "opik";
 
 const messages = [
@@ -778,7 +778,7 @@ const formatted = chatPrompt.format({
 
 #### Jinja2
 
-```typescript
+```typescript wordWrap
 import { PromptType } from "opik";
 
 const messages = [
@@ -826,7 +826,7 @@ const formatted2 = chatPrompt.format({
 
 Chat prompts are automatically versioned when the messages change:
 
-```typescript
+```typescript wordWrap
 // Create initial version
 const messagesV1 = [
   { role: "system", content: "You are helpful." },
@@ -865,7 +865,7 @@ console.log(`Total versions: ${versions.length}`);
 
 Chat prompts support the same version management features as text prompts:
 
-```typescript
+```typescript wordWrap
 const chatPrompt = await client.getChatPrompt({
   name: "greeting-prompt",
 });
@@ -899,7 +899,7 @@ if (previousVersion) {
 
 Update chat prompt metadata without creating new versions:
 
-```typescript
+```typescript wordWrap
 const chatPrompt = await client.getChatPrompt({
   name: "greeting-prompt",
 });
@@ -997,7 +997,7 @@ Updates tags for one or more prompt versions in a single batch operation.
 
 **Examples:**
 
-```typescript
+```typescript wordWrap
 // Replace all tags on multiple versions (default behavior)
 await client.updatePromptVersionTags(["version-id-1", "version-id-2"], {
   tags: ["production", "v2"],
@@ -1034,7 +1034,7 @@ Creates a new chat prompt or returns existing version if content unchanged.
 
 **ChatMessage Format:**
 
-```typescript
+```typescript wordWrap
 interface ChatMessage {
   role: "system" | "user" | "assistant";
   content: string | ContentPart[];
@@ -1101,7 +1101,7 @@ Retrieves all version history for this prompt, with optional filtering, sorting,
 
 **Examples:**
 
-```typescript
+```typescript wordWrap
 // Get all versions
 const versions = await prompt.getVersions();
 
@@ -1167,7 +1167,7 @@ Returns a `Prompt` instance pinned to a specific version of this prompt. Accepts
 
 **Returns:** `Promise<Prompt | null>` - Prompt instance pinned to that version, or `null` if not found
 
-```typescript
+```typescript wordWrap
 // Preferred: fetch by sequential version identifier
 const v3 = await prompt.getVersion("v3");
 
@@ -1281,7 +1281,7 @@ Formats the chat prompt messages with provided variables.
 
 **SupportedModalities Format:**
 
-```typescript
+```typescript wordWrap
 interface SupportedModalities {
   vision?: boolean; // Support for image content (default: true)
   video?: boolean; // Support for video content (default: true)
@@ -1294,7 +1294,7 @@ interface SupportedModalities {
 
 **Example:**
 
-```typescript
+```typescript wordWrap
 const formatted = chatPrompt.format(
   { name: "Alice", topic: "AI" },
   { vision: true, video: false },
@@ -1323,7 +1323,7 @@ Returns a `ChatPrompt` instance pinned to a specific version of this chat prompt
 
 **Returns:** `Promise<ChatPrompt | null>` - ChatPrompt instance pinned to that version, or `null` if not found
 
-```typescript
+```typescript wordWrap
 // Preferred: fetch by sequential version identifier
 const v3 = await chatPrompt.getVersion("v3");
 

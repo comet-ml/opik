@@ -103,4 +103,78 @@ export class ExperimentsPage {
   get rows(): Locator {
     return this.page.locator('tbody tr[data-row-id]');
   }
+
+  // --- Selection and the Compare gesture ---
+
+  /**
+   * Tick the select checkbox on each named experiment row.
+   *
+   * By row id, never by position: the list's order is the server's and a
+   * positional pick would silently select a different experiment the moment
+   * sorting or a new row changes it.
+   */
+  async selectExperiments(experimentIds: string[]): Promise<void> {
+    await test.step(`select ${experimentIds.length} experiment(s)`, async () => {
+      for (const id of experimentIds) {
+        const checkbox = this.rowById(id).getByRole('checkbox', { name: 'Select row' });
+        await expect(checkbox, `select checkbox for experiment ${id}`).toHaveCount(1);
+        await checkbox.click();
+        await expect(checkbox, `experiment ${id} after ticking`).toBeChecked();
+      }
+    });
+  }
+
+  /** The Compare button in the experiments actions panel. */
+  get compareButton(): Locator {
+    return this.page.getByRole('button', { name: 'Compare', exact: true });
+  }
+
+  /** Click Compare, without asserting what it does — the branch IS the subject. */
+  async clickCompare(): Promise<void> {
+    await test.step('click Compare', async () => {
+      await expect(this.compareButton, 'the Compare button').toBeEnabled();
+      await this.compareButton.click();
+    });
+  }
+
+  /**
+   * The same-dataset picker, raised when exactly one experiment is selected.
+   *
+   * Titled "Compare experiments" — distinct from the mixed-dataset guard
+   * below, which is a different dialog with a different title, and telling the
+   * two apart is most of what this PR's branches are about.
+   */
+  get comparePickerDialog(): Locator {
+    return this.page.getByRole('dialog').filter({
+      has: this.page.getByRole('heading', { name: 'Compare experiments' }),
+    });
+  }
+
+  /** The mixed-dataset guard, raised when the selection spans two datasets. */
+  get datasetFilterDialog(): Locator {
+    return this.page.getByRole('dialog').filter({
+      has: this.page.getByRole('heading', { name: 'Select experiments to compare' }),
+    });
+  }
+
+  /**
+   * One experiment's checkbox inside the compare picker.
+   *
+   * Scoped to the dialog and found through the entry's NAME, because the
+   * picker's rows carry no id: `CompareExperimentsDialog` renders one `<label>`
+   * per experiment holding an aria-labelled checkbox beside the name. The
+   * `toHaveCount(1)` at each call site is what keeps a name that happens to be
+   * a prefix of another from resolving to two.
+   */
+  comparePickerCheckbox(experimentName: string): Locator {
+    return this.comparePickerDialog
+      .locator('label')
+      .filter({ hasText: experimentName })
+      .getByRole('checkbox', { name: 'Select experiment' });
+  }
+
+  /** The picker's submit button, whose label carries the running selection count. */
+  get comparePickerSubmit(): Locator {
+    return this.comparePickerDialog.getByRole('button', { name: /^Compare \d+ experiments?$/ });
+  }
 }

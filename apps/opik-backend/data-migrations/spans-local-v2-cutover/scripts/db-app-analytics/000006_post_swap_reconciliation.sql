@@ -26,8 +26,11 @@
 --                                  000004_rollback_reverse_replay.sql unchanged, which already masks every key bridged
 --                                  since cutover_start.
 --
--- ALL SEVEN placeholders the driver substitutes, so a new one is never missed here (an unsubstituted ${...} reaches the
--- server as a literal and the statement fails):
+-- ALL NINE placeholders the driver substitutes, so a new one is never missed here (an unsubstituted ${...} reaches the
+-- server as a literal and the statement fails). Seven are ordinary value substitutions; ${PARTITION_SCOPE} and
+-- ${BRIDGE_WINDOW_END} are not — see `forward-deletion-replay` below, where the driver expands the whole block once
+-- per partition, rendering the first as `IN PARTITION <p>` in each copy and the second as the upper bound of the
+-- bridge window that scope was derived from (OPIK-8607):
 --   ${ANALYTICS_DB_DATABASE_NAME}          the analytics database
 --   ${LIVE_TABLE}                          the live table the sweep writes into: `spans`, or `spans_local` on a
 --                                          wrapped estate (a Distributed table accepts INSERT, but the deletion replay
@@ -43,6 +46,12 @@
 --   ${MAX_PARTITIONS_PER_INSERT_BLOCK}     partitions one block may span — a correctness gate, exactly as in 000001/000002
 --   ${MAX_INSERT_BLOCK_SIZE}               rows per part-forming block. Follows the byte bound below as a second,
 --                                          coarser cap on the same statements, as it does for the delta
+--   ${PARTITION_SCOPE}                     `forward-deletion-replay` ONLY: the per-copy `IN PARTITION <p>`, or empty
+--                                          for the unbounded fallback. Not a value the operator supplies — the driver
+--                                          derives it (000002_delete_partition_scope.sql) and expands the block
+--   ${BRIDGE_WINDOW_END}                   `forward-deletion-replay` ONLY: the upper bound of the bridge window that
+--                                          scope was derived from, so the statement cannot match an id whose partition
+--                                          the scope does not name. Empty in the unbounded form, which needs none
 --   ${MIN_INSERT_BLOCK_SIZE_BYTES}         bytes per part-forming block. Carried here and not in the traces equivalent
 --                                          for the reason 000001's header gives: at spans' partition count the
 --                                          per-partition buffers are hundreds of MiB, so the row-data term has to be
@@ -267,7 +276,34 @@ SETTINGS max_partitions_per_insert_block = ${MAX_PARTITIONS_PER_INSERT_BLOCK},
 -- mitigation is the one the runbook already carries for the other delete-side residuals — quiesce user trace deletes
 -- across the swap, which empties the window this needs. Clamping a future client last_updated_at at ingestion is the
 -- durable fix and is not this procedure's to make.
+--
+-- ${PARTITION_SCOPE} IS WHAT KEEPS THIS BLOCK FROM BEING THE DANGEROUS ONE (OPIK-8607). Unbounded, this mutation
+-- allocates a block number in every partition of the live successor in one atomic ZooKeeper request and fails with a
+-- dropped session past `jute.maxbuffer`. It is the worst of the three places that can happen, because it happens AFTER
+-- the EXCHANGE: the swap would have succeeded and the reconciliation would then fail, leaving the estate swapped with
+-- an unreconciled tail gap. Nothing else closes that gap — a weekly verify.sh compare cannot, because the gap rows sit
+-- in the cutover week every weekly bound excludes. So ../reconcile.sh derives the partitions from the bridged ids
+-- (000002_delete_partition_scope.sql) and expands this whole block once per partition, each copy naming its own; the
+-- three arms below are identical in every copy, so the union removes exactly the rows one unbounded statement removed.
+-- The arms decide which rows match; `IN PARTITION` only decides which parts the mutation is registered against.
+--
+-- WHAT THE BOUND DOES NOT CLOSE, stated because the four counts cannot see it. ${BRIDGE_WINDOW_END} makes this pass
+-- cover exactly the bridge window its scope was derived from, so nothing inside that window is silently skipped. A
+-- delete bridged AFTER it is simply not this pass's to replay — the same residual every replay here has always had,
+-- since a statement cannot mask a key the bridge did not yet name when it ran; the bound only makes the edge explicit
+-- instead of timing-dependent. The postcondition cannot report it either: all four counts start from a row in the
+-- PARKED table and look up its live version, and a delete that was never replayed is live on the successor and absent
+-- from the parked side, which is the one shape they are structurally blind to. So ../reconcile.sh prints how many
+-- events were bridged past this pass's bound, and the mitigation is the runbook's existing one: QUIESCE USER TRACE
+-- DELETES across the window. Re-running the driver picks them up on the next pass's wider window.
+--
+-- The scope comes from ARM 1's bridge window alone — the same ${GAP_START} floor, deliberately ignoring arms 2 and 3.
+-- Those two only ever REMOVE rows from what arm 1 admits, so the partitions arm 1's ids resolve to are a superset of
+-- the partitions this statement can delete from. A superset is the safe direction: a statement scoped to a partition
+-- holding none of the matching rows deletes nothing. A subset would be a silently skipped delete, which is why the
+-- scope is not narrowed to "what will actually match" even though that is computable.
 DELETE FROM ${ANALYTICS_DB_DATABASE_NAME}.${LIVE_TABLE}
+${PARTITION_SCOPE}
 WHERE created_at      <  toDateTime64('${SWAP_DONE}', 6, 'UTC')
   AND last_updated_at <  toDateTime64('${SWAP_DONE}', 6, 'UTC')
   AND (workspace_id, project_id, id) IN (
@@ -278,6 +314,7 @@ WHERE created_at      <  toDateTime64('${SWAP_DONE}', 6, 'UTC')
       FROM ${ANALYTICS_DB_DATABASE_NAME}.deletion_events_local
       WHERE source_table = 'spans'
         AND event_time >= toDateTime64('${GAP_START}', 6, 'UTC')
+        ${BRIDGE_WINDOW_END}
         AND project_id != ''
         AND length(project_id) = 36
         AND length(deleted_id) = 36

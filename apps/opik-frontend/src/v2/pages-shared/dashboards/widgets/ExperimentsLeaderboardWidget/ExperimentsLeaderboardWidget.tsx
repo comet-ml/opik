@@ -324,6 +324,10 @@ const ExperimentsLeaderboardWidget: React.FunctionComponent<
           getSearch: (data: Experiment) => ({
             experiments: [data.id],
           }),
+          // The leaderboard spans the workspace, so open each experiment in
+          // its own project rather than the one the dashboard belongs to.
+          getParams: (data: Experiment) =>
+            data.project_id ? { projectId: data.project_id } : {},
         },
       }),
     );

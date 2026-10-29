@@ -11,6 +11,7 @@ import {
 } from "@/ui/dialog";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import { Experiment } from "@/types/datasets";
+import { isTestSuiteExperiment } from "@/lib/experiments";
 import { Button } from "@/ui/button";
 import { useNavigate } from "@tanstack/react-router";
 import { Checkbox } from "@/ui/checkbox";
@@ -68,6 +69,8 @@ const FilterExperimentsToCompareDialog: React.FunctionComponent<
     return experiments.map((e) => {
       const checked =
         findIndex(selectedExperiments, (se) => se.id === e.id) !== -1;
+      // Pre-migration experiments carry no evaluation_method; they are datasets.
+      const sourceLabel = isTestSuiteExperiment(e) ? "Test suite" : "Dataset";
       return (
         <label
           key={e.id}
@@ -84,7 +87,9 @@ const FilterExperimentsToCompareDialog: React.FunctionComponent<
               <span className="comet-body-s-accented truncate">{e.name}</span>
             </div>
             <div className="comet-body-s truncate pl-6 text-light-slate">
-              Test suite: {e.dataset_name ?? "Deleted test suite"}
+              {`${sourceLabel}: ${
+                e.dataset_name ?? `Deleted ${sourceLabel.toLowerCase()}`
+              }`}
             </div>
           </div>
         </label>
@@ -99,7 +104,7 @@ const FilterExperimentsToCompareDialog: React.FunctionComponent<
           <DialogTitle>Select experiments to compare</DialogTitle>
         </DialogHeader>
         <div className="w-full overflow-hidden">
-          <ExplainerDescription description="You can only compare experiments that use the same test suite. Please make sure all the experiments use the same test suite." />
+          <ExplainerDescription description="You can only compare experiments that use the same item source. Please make sure all the experiments use the same item source." />
           <div className="my-4 flex max-h-[400px] min-h-36 max-w-full flex-col justify-stretch gap-2.5 overflow-y-auto">
             {renderListItems()}
           </div>

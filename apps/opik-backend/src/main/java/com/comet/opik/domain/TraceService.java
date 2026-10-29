@@ -94,6 +94,8 @@ public interface TraceService {
 
     Mono<Void> delete(Set<UUID> ids, UUID projectId);
 
+    Mono<Void> deleteByProjectIds(Set<UUID> projectIds);
+
     Mono<TracePage> find(int page, int size, TraceSearchCriteria criteria);
 
     Mono<Boolean> existsByProjectId(TraceSearchCriteria criteria, boolean threadScoped);
@@ -135,6 +137,12 @@ public interface TraceService {
 class TraceServiceImpl implements TraceService {
 
     public static final String TRACE_KEY = "Trace";
+
+    /**
+     * Same as the batch delete endpoint's max, so each {@code TracesDeleted} cascade posted per batch is no larger than
+     * one a user's batch delete can post.
+     */
+    static final int DELETE_BY_PROJECT_IDS_BATCH_SIZE = 1_000;
 
     private final @NonNull TraceDAO dao;
     private final @NonNull DeletionEventDAO deletionEventDAO;
@@ -545,6 +553,60 @@ class TraceServiceImpl implements TraceService {
                             ? Mono.empty()
                             : template.nonTransaction(connection -> delete(pairs, connection));
                 });
+    }
+
+    /**
+     * Deletes every trace of the given projects in batches of {@code (project_id, id)} pairs that span projects, so
+     * small projects share a delete statement rather than each costing its own. Each batch goes through
+     * {@link #delete(Set, Connection)}, so it gets the same deletion-events capture as a user's delete and a
+     * {@code TracesDeleted} cascade per project. Ids are read one project at a time, keeping each page's cursor within
+     * one project, where it prunes partitions. A failed read of a project or a failed batch is logged and doesn't stop
+     * the rest.
+     */
+    @Override
+    @WithSpan
+    public Mono<Void> deleteByProjectIds(@NonNull Set<UUID> projectIds) {
+        log.info("Deleting all traces of projects, count '{}'", projectIds.size());
+
+        return Mono.deferContextual(ctx -> Flux.fromIterable(projectIds)
+                .concatMap(projectId -> getTraceIdsByProjectId(projectId)
+                        .map(id -> Pair.of(projectId, id))
+                        .onErrorResume(error -> {
+                            log.error(
+                                    "Failed to read the traces of a project to delete, project id '{}', workspace '{}'",
+                                    projectId, ctx.get(RequestContext.WORKSPACE_ID), error);
+                            return Mono.empty();
+                        }))
+                .buffer(DELETE_BY_PROJECT_IDS_BATCH_SIZE)
+                .concatMap(batch -> template.nonTransaction(connection -> delete(Set.copyOf(batch), connection))
+                        .thenReturn(batch.size())
+                        .onErrorResume(error -> {
+                            log.error("Failed to delete a batch of the projects' traces, count '{}', workspace '{}'",
+                                    batch.size(), ctx.get(RequestContext.WORKSPACE_ID), error);
+                            return Mono.just(0);
+                        }))
+                .reduce(0, Integer::sum)
+                .doOnSuccess(total -> log.info(
+                        "Finished deleting traces of projects, project count '{}', deleted trace count '{}'",
+                        projectIds.size(), total))
+                .then());
+    }
+
+    /**
+     * Pages through the project's trace ids in id order, reading the next page only once the previous one is
+     * consumed.
+     */
+    private Flux<UUID> getTraceIdsByProjectId(UUID projectId) {
+        return getTraceIdsPage(projectId, null)
+                .expand(page -> page.size() < DELETE_BY_PROJECT_IDS_BATCH_SIZE
+                        ? Mono.empty()
+                        : getTraceIdsPage(projectId, page.getLast()))
+                .concatMapIterable(page -> page);
+    }
+
+    private Mono<List<UUID>> getTraceIdsPage(UUID projectId, UUID lastId) {
+        return template.nonTransaction(connection -> dao.getTraceIdsByProjectId(projectId, lastId,
+                DELETE_BY_PROJECT_IDS_BATCH_SIZE, connection).collectList());
     }
 
     /**

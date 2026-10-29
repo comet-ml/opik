@@ -76,7 +76,7 @@ title: Optimizer Frequently Asked Questions
   <Accordion title="What models are supported for optimization?">
   The Opik Agent Optimizer uses [LiteLLM](https://docs.litellm.ai/) to support 100+ LLM providers including:
   - **OpenAI** (GPT-4o, GPT-4o-mini, o1, o3-mini)
-  - **Anthropic** (Claude 3.5 Sonnet, Claude 3 Opus)
+  - **Anthropic** (Claude Sonnet 4.6, Claude Opus 4.7)
   - **Google Gemini** (Gemini 2.0 Flash, Gemini 1.5 Pro)
   - **Azure OpenAI**
   - **Ollama** (local models like Llama 3, Mistral)
@@ -119,7 +119,7 @@ For frequent setup and usage errors, head to [Known Issues](/development/optimiz
   <Accordion title="How can I avoid overfitting during optimization?">
     To prevent overfitting, use the `validation_dataset` parameter when calling `optimize_prompt()`. This separates your data into training (for generating prompt improvements) and validation (for evaluating candidate prompts). The optimizer will use the training dataset to understand failure modes and generate improvements, then rank candidates using the validation dataset. This mirrors standard ML practices and helps ensure your optimized prompt generalizes to unseen data.
 
-    ```python
+    ```python wordWrap
     result = optimizer.optimize_prompt(
         prompt=my_prompt,
         dataset=training_dataset,  # Used for analysis and improvements

@@ -39,7 +39,8 @@ class OllamaServiceProvider implements LlmServiceProvider {
     public LlmProviderService getService(@NonNull LlmProviderClientApiConfig apiConfig) {
         return new CustomLlmProvider(
                 clientGenerator.newCustomLlmClient(apiConfig),
-                apiConfig.configuration());
+                apiConfig.configuration(),
+                LlmProvider.OLLAMA);
     }
 
     @Override

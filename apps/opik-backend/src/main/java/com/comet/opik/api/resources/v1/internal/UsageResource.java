@@ -5,17 +5,25 @@ import com.comet.opik.api.BiInformationResponse;
 import com.comet.opik.api.SpansCountResponse;
 import com.comet.opik.api.TraceCountResponse;
 import com.comet.opik.api.UsageByWorkspaceProjectUserResponse;
+import com.comet.opik.api.UsageProjectsRequest;
+import com.comet.opik.api.UsageProjectsResponse;
+import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.domain.DatasetService;
 import com.comet.opik.domain.ExperimentService;
+import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.TraceService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.parameters.RequestBody;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
@@ -23,6 +31,9 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
+import java.util.List;
+import java.util.Optional;
 
 @Path("/v1/internal/usage")
 @Produces(MediaType.APPLICATION_JSON)
@@ -37,6 +48,7 @@ public class UsageResource {
     private final @NonNull SpanService spanService;
     private final @NonNull ExperimentService experimentService;
     private final @NonNull DatasetService datasetService;
+    private final @NonNull ProjectService projectService;
 
     @GET
     @Path("/workspace-trace-counts")
@@ -66,6 +78,20 @@ public class UsageResource {
         return spanService.getSpanBreakdownPerWorkspace()
                 .map(breakdownResponse -> Response.ok(breakdownResponse).build())
                 .block();
+    }
+
+    @POST
+    @Path("/projects")
+    @Operation(operationId = "findUsageProjects", summary = "Find projects across workspaces by ids or name", description = "Find projects across the given workspaces, optionally narrowed by project ids or a case-insensitive name substring. Unknown or deleted projects are omitted.", responses = {
+            @ApiResponse(responseCode = "200", description = "UsageProjectsResponse resource", content = @Content(schema = @Schema(implementation = UsageProjectsResponse.class))),
+            @ApiResponse(responseCode = "422", description = "Unprocessable Content", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
+    public Response findProjects(
+            @RequestBody(content = @Content(schema = @Schema(implementation = UsageProjectsRequest.class))) @NotNull @Valid UsageProjectsRequest request) {
+        int limit = Optional.ofNullable(request.limit()).orElse(UsageProjectsRequest.DEFAULT_LIMIT);
+        List<UsageProjectsResponse.WorkspaceProjectName> projects = projectService.findAcrossWorkspaces(
+                request.workspaceIds(), request.projectIds(), request.name(), limit);
+
+        return Response.ok(UsageProjectsResponse.builder().projects(projects).build()).build();
     }
 
     @GET

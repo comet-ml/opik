@@ -3,7 +3,7 @@ import {
   EVALUATORS_RULE_SCOPE,
   EvaluatorsRule,
 } from "@/types/automations";
-import { getUIRuleScope } from "@/v2/pages-shared/automations/AddEditRuleDialog/helpers";
+import { getUIRuleScope } from "@/v2/pages-shared/automations/RuleEditorPanel/helpers";
 
 export const isTraceRule = (rule: EvaluatorsRule): boolean =>
   getUIRuleScope(rule.type) === EVALUATORS_RULE_SCOPE.trace;

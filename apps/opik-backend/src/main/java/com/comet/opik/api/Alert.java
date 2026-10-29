@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Builder;
@@ -36,6 +37,12 @@ public record Alert(
         @JsonView({Alert.View.Public.class,
                 Alert.View.Write.class}) Map<String, String> metadata,
 
+        @JsonView({Alert.View.Public.class,
+                Alert.View.Write.class}) @Size(max = MAX_CUSTOM_FIELDS) @Schema(description = """
+                        Optional user-defined key/value pairs, added as top-level keys of the alert's \
+                        EventBridge event detail. Keys must not collide with the event's own keys.\
+                        """) Map<@NotBlank @Size(max = MAX_CUSTOM_FIELD_KEY_LENGTH) String, @NotBlank @Size(max = MAX_CUSTOM_FIELD_VALUE_LENGTH) String> customFields,
+
         @JsonView({
                 Alert.View.Public.class, Alert.View.Write.class}) @Valid @NotNull Webhook webhook,
 
@@ -61,6 +68,10 @@ public record Alert(
                         Sending both project_id and a scope:project trigger config will result in an error.\
                         """) UUID projectId,
         @JsonIgnore String workspaceId) {
+
+    public static final int MAX_CUSTOM_FIELDS = 20;
+    public static final int MAX_CUSTOM_FIELD_KEY_LENGTH = 64;
+    public static final int MAX_CUSTOM_FIELD_VALUE_LENGTH = 255;
 
     public static class View {
         public static class Public {

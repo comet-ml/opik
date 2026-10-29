@@ -20,8 +20,9 @@ export const DefaultRow: React.FC<DefaultRowProps> = ({
       <td className="p-1"></td>
       {!hideSorting && (
         <td className="p-1">
-          {config?.sortingMessage ? (
-            <div className="comet-body-s h-10 max-w-[300px] rounded-md border border-border p-2 text-light-slate">
+          {!group.field ? null : config?.sortingMessage ? (
+            // A fixed sort order isn't selectable, so it's shown as text rather than an input.
+            <div className="comet-body-s max-w-[300px] px-2 text-light-slate">
               {config.sortingMessage}
             </div>
           ) : (

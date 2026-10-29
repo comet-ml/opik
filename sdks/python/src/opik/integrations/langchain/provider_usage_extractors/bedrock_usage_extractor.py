@@ -48,13 +48,29 @@ class BedrockUsageExtractor(
         )
 
 
+def _is_converse_run(run_dict: Dict[str, Any]) -> bool:
+    """Whether the run went through the Bedrock Converse API.
+
+    `ChatBedrock` serializes `beta_use_converse_api` when it is set, including
+    the Nova models it switches over by itself.
+    """
+    serialized = run_dict.get("serialized") or {}
+    class_id = serialized.get("id") or []
+    if class_id and class_id[-1] == "ChatBedrockConverse":
+        return True
+    kwargs = serialized.get("kwargs") or {}
+    return kwargs.get("beta_use_converse_api") is True
+
+
 def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsage]:
     try:
         if token_usage := langchain_run_helpers.try_to_get_usage_by_search(
             run_dict, candidate_keys=None
         ):
             if isinstance(token_usage, langchain_usage.LangChainUsage):
-                bedrock_usage_dict = token_usage.map_to_bedrock_usage()
+                bedrock_usage_dict = token_usage.map_to_bedrock_usage(
+                    input_tokens_include_cache=_is_converse_run(run_dict)
+                )
                 return llm_usage.OpikUsage.from_bedrock_dict(bedrock_usage_dict)
 
         opik_logging.log_once_at_level(

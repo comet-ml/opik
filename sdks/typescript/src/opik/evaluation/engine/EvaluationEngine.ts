@@ -44,6 +44,17 @@ interface ProgressTracker {
 }
 
 /**
+ * A score that could not be computed. It is not a real 0: it is excluded from
+ * averages and is neither logged on the trace nor sent as an assertion result.
+ */
+function failedScoreResult(
+  name: string,
+  reason: string,
+): EvaluationScoreResult {
+  return { name, value: 0, reason, scoringFailed: true };
+}
+
+/**
  * Extended options that include suite-specific fields.
  */
 export type EvaluationEngineOptions<T = Record<string, unknown>> =
@@ -409,14 +420,7 @@ export class EvaluationEngine<T = Record<string, unknown>> {
         scoringInputs: this.prepareScoringInputs(datasetItem, {}),
         taskOutput: {},
       },
-      scoreResults: [
-        {
-          name: TASK_ERROR_SCORE_NAME,
-          value: 0,
-          reason: errorMessage,
-          scoringFailed: true,
-        },
-      ],
+      scoreResults: [failedScoreResult(TASK_ERROR_SCORE_NAME, errorMessage)],
     };
 
     if (this.suiteMode) {
@@ -506,6 +510,8 @@ export class EvaluationEngine<T = Record<string, unknown>> {
         const errorMessage =
           error instanceof Error ? error.message : String(error);
         logger.error(`Metric ${metric.name} failed: ${errorMessage}`);
+        // Keep the failure visible in the results instead of dropping it.
+        scoreResults.push(failedScoreResult(metric.name, errorMessage));
       }
 
       logger.debug(`Finished calculating score for metric ${metric.name}`);

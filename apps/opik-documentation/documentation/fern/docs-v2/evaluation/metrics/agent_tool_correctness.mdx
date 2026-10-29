@@ -12,7 +12,7 @@ title: Agent tool correctness
 
 `AgentToolCorrectnessJudge` checks if an agent called the right tools with valid arguments and interpreted the outputs accurately. It’s invaluable for diagnosing production agents that orchestrate APIs, databases, or internal services.
 
-```python title="Inspect tool usage"
+```python title="Inspect tool usage" wordWrap
 from opik.evaluation.metrics import AgentToolCorrectnessJudge
 
 payload = """TOOL weather_api(city='Paris') -> 12°C and raining.

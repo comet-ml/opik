@@ -17,6 +17,7 @@ import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
+import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.Webhook;
 import com.comet.opik.api.WebhookTestResult;
@@ -401,6 +402,37 @@ class AlertResourceTest {
                             new ErrorMessage(List.of("webhook must not be null")),
                             ErrorMessage.class),
 
+                    // Custom fields validation
+                    arguments(
+                            generateAlert().toBuilder().customFields(IntStream.rangeClosed(0, Alert.MAX_CUSTOM_FIELDS)
+                                    .boxed()
+                                    .collect(Collectors.toMap(i -> "key-" + i, i -> "value"))).build(),
+                            422,
+                            new ErrorMessage(List.of("customFields size must be between 0 and 20")),
+                            ErrorMessage.class),
+                    arguments(
+                            generateAlert().toBuilder().customFields(Map.of("impact", " ")).build(),
+                            422,
+                            new ErrorMessage(List.of("customFields[impact].<map value> must not be blank")),
+                            ErrorMessage.class),
+                    arguments(
+                            generateAlert().toBuilder()
+                                    .customFields(Map.of("k".repeat(Alert.MAX_CUSTOM_FIELD_KEY_LENGTH + 1), "1"))
+                                    .build(),
+                            422,
+                            new ErrorMessage(List.of("customFields<K>[%s].<map key> size must be between 0 and 64"
+                                    .formatted("k".repeat(Alert.MAX_CUSTOM_FIELD_KEY_LENGTH + 1)))),
+                            ErrorMessage.class),
+                    arguments(
+                            generateAlert().toBuilder()
+                                    .customFields(
+                                            Map.of("impact", "1", "alertId", "x", "payload", "y", "max_retries", "z"))
+                                    .build(),
+                            HttpStatus.SC_BAD_REQUEST,
+                            new io.dropwizard.jersey.errors.ErrorMessage(HttpStatus.SC_BAD_REQUEST,
+                                    "'custom_fields' keys [alertId, max_retries, payload] are reserved by the alert event payload, use different keys"),
+                            io.dropwizard.jersey.errors.ErrorMessage.class),
+
                     // Invalid UUID version
                     arguments(
                             generateAlert().toBuilder().id(UUID.randomUUID()).build(),
@@ -678,6 +710,123 @@ class AlertResourceTest {
                     .containsEntry(WINDOW_CONFIG_KEY, "900");
         }
 
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("operatorValidationByEventType")
+        @DisplayName("update applies the same operator gating as create")
+        void updateAlert__operatorValidationIsScopedToTheEventTypesThatUseIt(
+                String name, AlertEventType eventType, String operator, int expectedCreateStatus,
+                int expectedUpdateStatus) {
+            // validateThresholdConfigs runs on both paths, so the gating has to hold on both; an update is a
+            // full replacement and could regress independently of create.
+            var valid = generateAlert().toBuilder()
+                    .triggers(List.of(AlertTrigger.builder()
+                            .eventType(AlertEventType.TRACE_FEEDBACK_SCORE)
+                            .triggerConfigs(List.of(thresholdConfig("0.5", "3600")))
+                            .build()))
+                    .build();
+            var alertId = alertResourceClient.createAlert(valid, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_CREATED);
+
+            var replacement = valid.toBuilder()
+                    .id(alertId)
+                    .triggers(List.of(AlertTrigger.builder()
+                            .eventType(eventType)
+                            .triggerConfigs(List.of(operatorConfig(eventType, operator)))
+                            .build()))
+                    .build();
+
+            alertResourceClient.updateAlert(alertId, replacement, mock.getLeft(), mock.getRight(),
+                    expectedUpdateStatus);
+        }
+
+        private AlertTriggerConfig operatorConfig(AlertEventType eventType, String operator) {
+            var configValue = new HashMap<String, String>();
+            configValue.put(THRESHOLD_CONFIG_KEY, "0.5");
+            configValue.put(WINDOW_CONFIG_KEY, "900");
+            configValue.put(OPERATOR_CONFIG_KEY, operator);
+            if (eventType == AlertEventType.TRACE_FEEDBACK_SCORE
+                    || eventType == AlertEventType.TRACE_THREAD_FEEDBACK_SCORE) {
+                configValue.put(NAME_CONFIG_KEY, "quality");
+            }
+            return AlertTriggerConfig.builder()
+                    .type(AlertTriggerConfigType.thresholdTypeFor(eventType).orElseThrow())
+                    .configValue(configValue)
+                    .build();
+        }
+
+        @Test
+        @DisplayName("when a config is sent with the enum-name operator, then it is stored as the symbol")
+        void createAlert__whenOperatorIsTheEnumName__thenStoredNormalized() {
+            // The mirror of the legacy-window case above, and the reason this PR exists: the alerts editor
+            // reads anything that is not exactly "<" as ">", so a stored "less_than" showed the opposite
+            // comparison and was written back as ">" on the next save.
+            var config = AlertTriggerConfig.builder()
+                    .type(AlertTriggerConfigType.THRESHOLD_FEEDBACK_SCORE)
+                    .configValue(Map.of(
+                            NAME_CONFIG_KEY, "quality",
+                            THRESHOLD_CONFIG_KEY, "0.5",
+                            WINDOW_CONFIG_KEY, "900",
+                            OPERATOR_CONFIG_KEY, "less_than"))
+                    .build();
+            var alert = generateAlert().toBuilder()
+                    .triggers(List.of(AlertTrigger.builder()
+                            .eventType(AlertEventType.TRACE_FEEDBACK_SCORE)
+                            .triggerConfigs(List.of(config))
+                            .build()))
+                    .build();
+
+            var alertId = alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_CREATED);
+
+            var stored = alertResourceClient.getAlertById(alertId, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_OK);
+
+            assertThat(stored.triggers().getFirst().triggerConfigs().getFirst().configValue())
+                    .containsEntry(OPERATOR_CONFIG_KEY, MetricsAlertJob.Operator.LESS_THAN.getValue());
+        }
+
+        static Stream<Arguments> operatorValidationByEventType() {
+            return Stream.of(
+                    // MetricsAlertJob reads the operator only for the feedback-score event types, so an
+                    // unrecognised value there is the silent never-fires this validation exists to prevent.
+                    // Create and update are separate columns rather than one derived from the other: they are
+                    // two endpoint contracts, and their success statuses differ (201 vs 204).
+                    Arguments.arguments("unknown operator on trace feedback score",
+                            AlertEventType.TRACE_FEEDBACK_SCORE, "sideways",
+                            HttpStatus.SC_BAD_REQUEST, HttpStatus.SC_BAD_REQUEST),
+                    Arguments.arguments("blank operator on trace feedback score",
+                            AlertEventType.TRACE_FEEDBACK_SCORE, "   ",
+                            HttpStatus.SC_BAD_REQUEST, HttpStatus.SC_BAD_REQUEST),
+                    Arguments.arguments("unknown operator on trace thread feedback score",
+                            AlertEventType.TRACE_THREAD_FEEDBACK_SCORE, "sideways",
+                            HttpStatus.SC_BAD_REQUEST, HttpStatus.SC_BAD_REQUEST),
+                    // Everywhere else the job hardcodes GREATER_THAN and never reads the stored value, so
+                    // rejecting it would 400 released clients over a field that has never had any effect.
+                    Arguments.arguments("inert operator on cost", AlertEventType.TRACE_COST, "sideways",
+                            HttpStatus.SC_CREATED, HttpStatus.SC_NO_CONTENT),
+                    Arguments.arguments("inert operator on latency", AlertEventType.TRACE_LATENCY, "sideways",
+                            HttpStatus.SC_CREATED, HttpStatus.SC_NO_CONTENT),
+                    Arguments.arguments("inert operator on errors", AlertEventType.TRACE_ERRORS, "sideways",
+                            HttpStatus.SC_CREATED, HttpStatus.SC_NO_CONTENT));
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("operatorValidationByEventType")
+        @DisplayName("operator validation applies only where the job reads the operator")
+        void createAlert__operatorValidationIsScopedToTheEventTypesThatUseIt(
+                String name, AlertEventType eventType, String operator, int expectedCreateStatus,
+                int expectedUpdateStatus) {
+            // Each of the two tests reads its own status column; the other is unused here by design.
+            var alert = generateAlert().toBuilder()
+                    .triggers(List.of(AlertTrigger.builder()
+                            .eventType(eventType)
+                            .triggerConfigs(List.of(operatorConfig(eventType, operator)))
+                            .build()))
+                    .build();
+
+            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), expectedCreateStatus);
+        }
+
         private AlertTriggerConfig thresholdConfig(String threshold, String window) {
             return AlertTriggerConfig.builder()
                     .type(AlertTriggerConfigType.THRESHOLD_FEEDBACK_SCORE)
@@ -760,6 +909,34 @@ class AlertResourceTest {
                     HttpStatus.SC_OK);
 
             compareAlerts(updatedAlert, actualUpdatedAlert, true);
+        }
+
+        @Test
+        @DisplayName("when custom fields are changed or cleared, then the stored alert reflects it")
+        void updateAlert__whenCustomFieldsChangedOrCleared__thenStored() {
+            var mock = prepareMockWorkspace();
+
+            var alertId = alertResourceClient.createAlert(
+                    generateAlert().toBuilder().customFields(Map.of("urgency", "3")).build(),
+                    mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
+            var created = alertResourceClient.getAlertById(alertId, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_OK);
+            assertThat(created.customFields()).isEqualTo(Map.of("urgency", "3"));
+
+            alertResourceClient.updateAlert(alertId,
+                    generateAlertUpdate(created).toBuilder().customFields(Map.of("urgency", "1", "level", "Error"))
+                            .build(),
+                    mock.getLeft(), mock.getRight(), HttpStatus.SC_NO_CONTENT);
+            var updated = alertResourceClient.getAlertById(alertId, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_OK);
+            assertThat(updated.customFields()).isEqualTo(Map.of("urgency", "1", "level", "Error"));
+
+            alertResourceClient.updateAlert(alertId,
+                    generateAlertUpdate(updated).toBuilder().customFields(null).build(),
+                    mock.getLeft(), mock.getRight(), HttpStatus.SC_NO_CONTENT);
+            var cleared = alertResourceClient.getAlertById(alertId, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_OK);
+            assertThat(cleared.customFields()).isNull();
         }
 
         @Test
@@ -1632,6 +1809,56 @@ class AlertResourceTest {
         }
 
         @Test
+        @DisplayName("Success: should send each deleted prompt with its own latest version to webhook")
+        void deletePromptsEvent__whenPromptsHaveSeveralVersions__thenPayloadHasEachLatestVersion() {
+            // Given
+            var mock = prepareMockWorkspace();
+
+            var alert = createAlertForEvent(AlertTrigger.builder()
+                    .eventType(PROMPT_DELETED)
+                    .build());
+
+            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
+
+            var expectedPrompts = IntStream.range(0, 3)
+                    .mapToObj(i -> {
+                        var prompt = buildPrompt();
+                        var promptId = promptResourceClient.createPrompt(prompt, mock.getLeft(), mock.getRight());
+                        var lastVersion = IntStream.range(0, 3)
+                                .mapToObj(j -> promptResourceClient.createPromptVersion(prompt, mock.getLeft(),
+                                        mock.getRight()))
+                                .toList()
+                                .getLast();
+                        var actualPrompt = promptResourceClient.getPrompt(promptId, mock.getLeft(), mock.getRight());
+                        // The latest version is the last one created, not the one a read returns
+                        return actualPrompt.toBuilder()
+                                .latestVersion(lastVersion)
+                                .build();
+                    })
+                    .toList();
+
+            // When
+            promptResourceClient.deletePromptBatch(expectedPrompts.stream().map(Prompt::id).collect(Collectors.toSet()),
+                    mock.getLeft(), mock.getRight());
+
+            // Then
+            var payload = verifyWebhookCalledAndGetPayload(alert);
+            List<Prompt> prompts = JsonUtils.readCollectionValue(payload, List.class, Prompt.class);
+
+            assertThat(prompts)
+                    .usingRecursiveFieldByFieldElementComparator(
+                            RecursiveComparisonConfiguration.builder()
+                                    // The read API's view hides the prompt type, and the payload's version JSON
+                                    // leaves out the template structure the create response carries
+                                    .withIgnoredFields("type", "latestVersion.templateStructure")
+                                    .withComparatorForType(
+                                            PromptResourceTest::comparatorForCreateAtAndUpdatedAt,
+                                            Instant.class)
+                                    .build())
+                    .containsExactlyInAnyOrderElementsOf(expectedPrompts);
+        }
+
+        @Test
         @DisplayName("Success: should successfully send prompt commit event to webhook")
         void testPromptCommitEvent__whenWebhookServerReceivesAlert() {
             // Given
@@ -2393,6 +2620,57 @@ class AlertResourceTest {
 
             alertResourceClient.deleteAlertBatch(batchDelete, mock.getLeft(), mock.getRight(),
                     HttpStatus.SC_NO_CONTENT);
+        }
+
+        @Test
+        @DisplayName("when a span's cost is updated, then cost alert counts only the latest span version")
+        void whenSpanCostUpdated_thenCostAlertCountsOnlyLatestSpanVersion() {
+            var mock = prepareMockWorkspace();
+
+            String projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            UUID projectId = projectResourceClient.createProject(projectName, mock.getLeft(), mock.getRight());
+
+            var alertTrigger = triggerWithThreshold(AlertEventType.TRACE_COST, AlertTriggerConfigType.THRESHOLD_COST,
+                    projectId, "50.00", "60");
+            var alert = createAlertForEvent(alertTrigger);
+            var alertId = alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_CREATED);
+
+            Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .usage(null)
+                    .visibilityMode(null)
+                    .build();
+            traceResourceClient.createTrace(trace, mock.getLeft(), mock.getRight());
+
+            Span updatedSpan = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .traceId(trace.id())
+                    .totalEstimatedCost(new BigDecimal("30.00"))
+                    .build();
+            spanResourceClient.createSpan(updatedSpan, mock.getLeft(), mock.getRight());
+            Span otherSpan = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .traceId(trace.id())
+                    .totalEstimatedCost(new BigDecimal("15.00"))
+                    .build();
+            spanResourceClient.createSpan(otherSpan, mock.getLeft(), mock.getRight());
+
+            // The update writes a second row version for the span: summing both would report $85, not $55
+            spanResourceClient.updateSpan(updatedSpan.id(), SpanUpdate.builder()
+                    .projectName(projectName)
+                    .traceId(trace.id())
+                    .parentSpanId(updatedSpan.parentSpanId())
+                    .totalEstimatedCost(new BigDecimal("40.00"))
+                    .build(), mock.getLeft(), mock.getRight());
+
+            var payload = verifyWebhookCalledAndGetPayload(alert);
+            MetricsAlertPayload costPayload = JsonUtils.readValue(payload, MetricsAlertPayload.class);
+
+            verifyMetricsPayload(costPayload, "TRACE_COST", "55", "50", "60", projectId, projectName);
+
+            alertResourceClient.deleteAlertBatch(BatchDelete.builder().ids(Set.of(alertId)).build(), mock.getLeft(),
+                    mock.getRight(), HttpStatus.SC_NO_CONTENT);
         }
 
         @Test

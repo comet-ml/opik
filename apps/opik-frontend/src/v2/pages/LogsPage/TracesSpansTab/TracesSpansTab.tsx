@@ -35,6 +35,7 @@ import useTracesOrSpansList, {
 } from "@/hooks/useTracesOrSpansList";
 import useTracesOrSpansScoresColumns from "@/hooks/useTracesOrSpansScoresColumns";
 import {
+  COLUMN_ANNOTATION_QUEUES_ID,
   COLUMN_COMMENTS_ID,
   COLUMN_ENVIRONMENT_ID,
   COLUMN_EXPERIMENT_ID,
@@ -51,20 +52,22 @@ import {
   DynamicColumn,
   ROW_HEIGHT,
 } from "@/types/shared";
-import {
-  ENVIRONMENT_UNTAGGED_VALUE,
-  generateEnvironmentFilter,
-} from "@/lib/filters";
-import useEnvironmentsList from "@/api/environments/useEnvironmentsList";
+import { generateEnvironmentFilter } from "@/lib/filters";
 import useFilterChips from "@/shared/filter-chips/hooks/useFilterChips";
 import FilterChipBar from "@/shared/filter-chips/FilterChipBar/FilterChipBar";
 import { useTagsChipActions } from "@/shared/filter-chips/hooks/useTagsChipActions";
-import { useQuickAttributeFilterActions } from "@/shared/filter-chips/hooks/useQuickAttributeFilterActions";
+import { useLogsQuickAttributeFilter } from "@/v2/pages/LogsPage/TracesSpansTab/useLogsQuickAttributeFilter";
+import { useLogsEnvironment } from "@/v2/pages/LogsPage/TracesSpansTab/useLogsEnvironment";
+import {
+  LOGS_DEFAULT_PINNED_CHIPS,
+  LOGS_TABLE_ID,
+  getLogsFiltersMemoryKey,
+  getLogsFiltersUrlKey,
+} from "@/v2/pages/LogsPage/TracesSpansTab/constants";
 import { QuickAttributeFilterProvider } from "@/shared/filter-chips/QuickAttributeFilterContext";
 import { ChipDefinition } from "@/shared/filter-chips/types";
 import { STRING_OPERATORS } from "@/shared/filter-chips/chips/QueryBuilderChip/operators";
 import {
-  TRACE_DEFAULT_PINNED_CHIPS,
   buildSharedDynamicChips,
   buildTraceChipDefinitions,
 } from "@/v2/pages-shared/traces/traceChipDefinitions";
@@ -94,6 +97,7 @@ import DataTableNoMatchingData from "@/shared/DataTableNoData/DataTableNoMatchin
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 import LinkCell from "@/shared/DataTableCells/LinkCell";
 import ResourceCell from "@/shared/DataTableCells/ResourceCell";
+import ResourceListCell from "@/shared/DataTableCells/ResourceListCell";
 import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
 import IdCell from "@/shared/DataTableCells/IdCell";
 import CodeCell from "@/shared/DataTableCells/CodeCell";
@@ -339,6 +343,7 @@ const DEFAULT_TRACES_COLUMNS_ORDER: string[] = [
   "llm_span_count",
   "thread_id",
   COLUMN_EXPERIMENT_ID,
+  COLUMN_ANNOTATION_QUEUES_ID,
   "created_by",
   COLUMN_GUARDRAILS_ID,
 ];
@@ -524,8 +529,6 @@ const SPAN_CHIP_ORDER: string[] = [
   "custom",
 ];
 
-const SPAN_DEFAULT_PINNED_CHIPS = ["type", "tags", "with_errors", "metadata"];
-
 type TracesSpansTabProps = {
   type: TRACE_DATA_TYPE;
   projectId: string;
@@ -578,14 +581,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     updateType: "replaceIn",
   });
 
-  const [environment = "", setEnvironment] = useQueryParam(
-    "environment",
-    StringParam,
-    {
-      updateType: "replaceIn",
-    },
-  );
-
   const [page = 1, setPage] = useQueryParam("page", NumberParam, {
     updateType: "replaceIn",
   });
@@ -617,24 +612,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     queryParamConfig: StringParam,
     syncQueryWithLocalStorageOnInit: true,
   });
-
-  const { data: environmentsData } = useEnvironmentsList();
-
-  const envList = environmentsData?.content;
-
-  const envIsValid = (() => {
-    if (!environment) return null;
-    if (environment === ENVIRONMENT_UNTAGGED_VALUE) return true;
-    if (!envList) return null;
-    return envList.some((e) => e.name === environment);
-  })();
-
-  useEffect(() => {
-    if (envIsValid === false) {
-      setEnvironment(undefined);
-      setPage(1);
-    }
-  }, [envIsValid, setEnvironment, setPage]);
 
   const isGuardrailsEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.GUARDRAILS_ENABLED,
@@ -746,14 +723,9 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     type === TRACE_DATA_TYPE.traces
       ? traceChipDefinitions
       : spanChipDefinitions;
-  const defaultPinned =
-    type === TRACE_DATA_TYPE.traces
-      ? TRACE_DEFAULT_PINNED_CHIPS
-      : SPAN_DEFAULT_PINNED_CHIPS;
-  const tableId =
-    type === TRACE_DATA_TYPE.traces ? "logs.traces" : "logs.spans";
-  const filtersUrlKey = `${type}_filters`;
-
+  const defaultPinned = LOGS_DEFAULT_PINNED_CHIPS[type];
+  const tableId = LOGS_TABLE_ID[type];
+  const filtersUrlKey = getLogsFiltersUrlKey(type);
   const {
     chipsPinned,
     chipsUnpinned,
@@ -774,7 +746,15 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     definitions: chipDefinitions,
     defaultPinned,
     onChange: handleChipFiltersChange,
+    persistKey: getLogsFiltersMemoryKey(projectId, filtersUrlKey),
   });
+
+  const { environment, envIsValid, changeEnvironment } =
+    useLogsEnvironment(projectId);
+
+  useEffect(() => {
+    if (envIsValid === false) setPage(1);
+  }, [envIsValid, setPage]);
 
   const { addTag: addTagFilter } = useTagsChipActions({
     chipId: "tags",
@@ -783,12 +763,19 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     pinChip,
   });
 
-  const quickAttributeFilterApi = useQuickAttributeFilterActions({
+  const quickFilterDefinitions = useMemo(
+    () => ({
+      [TRACE_DATA_TYPE.traces]: traceChipDefinitions,
+      [TRACE_DATA_TYPE.spans]: spanChipDefinitions,
+    }),
+    [traceChipDefinitions, spanChipDefinitions],
+  );
+
+  const quickAttributeFilterApi = useLogsQuickAttributeFilter({
     type,
-    tableId,
-    values: chipValues,
-    applyValue: applyChipValue,
-    pinChip,
+    projectId,
+    definitionsByType: quickFilterDefinitions,
+    onLogsTypeChange,
   });
 
   const effectiveFilters = useMemo(() => {
@@ -823,6 +810,13 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       !selectedColumns.includes(COLUMN_EXPERIMENT_ID)
     ) {
       exclude.push("experiment");
+    }
+
+    if (
+      type === TRACE_DATA_TYPE.traces &&
+      !selectedColumns.includes(COLUMN_ANNOTATION_QUEUES_ID)
+    ) {
+      exclude.push(COLUMN_ANNOTATION_QUEUES_ID);
     }
 
     const hasFeedbackScoreColumn = selectedColumns.some(
@@ -928,9 +922,9 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const handleClearFilters = useCallback(() => {
     setSearch("");
     clearAllChips();
-    setEnvironment(undefined);
+    changeEnvironment("");
     setPage(1);
-  }, [setSearch, clearAllChips, setEnvironment, setPage]);
+  }, [setSearch, clearAllChips, changeEnvironment, setPage]);
 
   const rows: Array<Span | Trace> = useMemo(
     () => uniqBy(data?.content ?? [], "id"),
@@ -1262,6 +1256,20 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
                 }),
               },
             },
+            {
+              id: COLUMN_ANNOTATION_QUEUES_ID,
+              label: "Annotation queues",
+              type: COLUMN_TYPE.list,
+              size: 220,
+              accessorFn: (row: BaseTraceData) =>
+                get(row, "annotation_queues", []),
+              cell: ResourceListCell as never,
+              customMeta: {
+                nameKey: "name",
+                idKey: "id",
+                resource: RESOURCE_TYPE.annotationQueue,
+              },
+            },
           ]
         : []),
       ...(type === TRACE_DATA_TYPE.spans
@@ -1470,7 +1478,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           <EnvironmentFilterSelect
             value={environment ?? ""}
             onChange={(next) => {
-              setEnvironment(next || undefined);
+              changeEnvironment(next);
               setPage(1);
             }}
           />

@@ -80,14 +80,23 @@ public class DatasetEventListener {
     @Subscribe
     public void onExperimentsDeleted(ExperimentsDeleted event) {
 
-        if (event.datasetInfo().isEmpty()) {
-            log.info("No datasets found for ExperimentsDeleted event '{}'", event);
+        // Guarded on the REGULAR ids, not on the raw datasetInfo. Those ids are what both steps below
+        // consume, and getMostRecentCreatedExperimentFromDatasets rejects an empty set outright, so an
+        // event carrying datasetInfo with no REGULAR entry passed the old check and then threw out of
+        // the listener — leaving the datasets' last-experiment bookkeeping stale while the caller's
+        // delete had already reported success (OPIK-8577). Computed once and passed down, since both
+        // steps previously derived it separately.
+        Set<UUID> datasetIds = getDatasetIds(event, ExperimentType.REGULAR);
+
+        if (datasetIds.isEmpty()) {
+            // Routine here, unlike the anomalous empty-event guards below, so DEBUG rather than INFO.
+            log.debug("No datasets with regular experiments found for ExperimentsDeleted event '{}'", event);
             return;
         }
 
-        Set<UUID> updatedDatasets = updateAndGetDatasetsWithExperiments(event);
+        Set<UUID> updatedDatasets = updateAndGetDatasetsWithExperiments(event, datasetIds);
 
-        updateDatasetsWithoutExperiments(event, updatedDatasets);
+        updateDatasetsWithoutExperiments(event, datasetIds, updatedDatasets);
     }
 
     @Subscribe
@@ -116,9 +125,9 @@ public class DatasetEventListener {
                 .block();
     }
 
-    private Set<UUID> updateAndGetDatasetsWithExperiments(ExperimentsDeleted event) {
+    private Set<UUID> updateAndGetDatasetsWithExperiments(ExperimentsDeleted event, Set<UUID> datasetIds) {
         return experimentService
-                .getMostRecentCreatedExperimentFromDatasets(getDatasetIds(event, ExperimentType.REGULAR))
+                .getMostRecentCreatedExperimentFromDatasets(datasetIds)
                 .collect(Collectors.toSet())
                 .flatMap(datasets -> {
                     log.info("Updating datasets '{}' with last experiment created time", datasets);
@@ -143,8 +152,9 @@ public class DatasetEventListener {
                 .block();
     }
 
-    private void updateDatasetsWithoutExperiments(ExperimentsDeleted event, Set<UUID> updatedDatasets) {
-        Flux.fromIterable(SetUtils.difference(getDatasetIds(event, ExperimentType.REGULAR), updatedDatasets))
+    private void updateDatasetsWithoutExperiments(ExperimentsDeleted event, Set<UUID> datasetIds,
+            Set<UUID> updatedDatasets) {
+        Flux.fromIterable(SetUtils.difference(datasetIds, updatedDatasets))
                 .map(datasetId -> new DatasetLastExperimentCreated(datasetId, null))
                 .collect(Collectors.toSet())
                 .flatMap(datasets -> {

@@ -90,7 +90,7 @@ def export_single_dataset(
 
     except Exception as e:
         console.print(f"[red]Error exporting dataset {dataset.name}: {e}[/red]")
-        return 0
+        raise
 
 
 def export_dataset_by_name(

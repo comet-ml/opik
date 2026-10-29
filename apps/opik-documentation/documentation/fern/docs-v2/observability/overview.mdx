@@ -60,16 +60,18 @@ With Opik, you can:
   <Step title="Connect your project">
     Run `opik connect` from your agent's directory to pair it with Opik:
 
-    ```bash
+    ```bash wordWrap
     opik connect --project <YOUR_PROJECT_NAME>
     ```
   </Step>
   <Step title="Instrument your code">
     The fastest way to add tracing is with [opik-skills](https://github.com/comet-ml/opik-skills) — install the skill and let your coding agent handle the rest:
 
-    ```bash
-    npx skills add comet-ml/opik-skills
+    ```bash wordWrap
+    uvx opik mcp configure
     ```
+
+    It installs the Opik skills and connects the Opik MCP server. It needs [`uv`](https://docs.astral.sh/uv/).
 
     Then ask your coding agent:
 
@@ -80,7 +82,7 @@ With Opik, you can:
     This works with Claude Code, Cursor, Codex, OpenCode, and other coding agents. You can also instrument manually with the SDK:
 
     <CodeBlocks>
-      ```python title="Python"
+      ```python title="Python" wordWrap
       import opik
 
       @opik.track
@@ -90,17 +92,16 @@ With Opik, you can:
           return response
       ```
 
-      ```ts title="TypeScript"
-      import { Opik } from "opik";
-      const client = new Opik();
+      ```ts title="TypeScript" wordWrap
+      import { track } from "opik";
 
-      const myAgent = client.track({
-        name: "my-agent",
-        fn: async (userMessage: string) => {
+      const myAgent = track(
+        { name: "my-agent" },
+        async (userMessage: string) => {
           const context = await retrieveContext(userMessage);
           return await callLlm(userMessage, context);
-        },
-      });
+        }
+      );
       ```
     </CodeBlocks>
   </Step>

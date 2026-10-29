@@ -16,6 +16,11 @@ class AlertPublic(UniversalBaseModel):
     enabled: typing.Optional[bool] = None
     alert_type: typing.Optional[AlertPublicAlertType] = None
     metadata: typing.Optional[typing.Dict[str, str]] = None
+    custom_fields: typing.Optional[typing.Dict[str, str]] = pydantic.Field(default=None)
+    """
+    Optional user-defined key/value pairs, added as top-level keys of the alert's EventBridge event detail. Keys must not collide with the event's own keys.
+    """
+
     webhook: WebhookPublic
     triggers: typing.Optional[typing.List[AlertTriggerPublic]] = None
     created_at: typing.Optional[dt.datetime] = None

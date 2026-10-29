@@ -1,9 +1,6 @@
 import enum
-import logging
 import sys
 from typing import Optional
-
-LOGGER = logging.getLogger(__name__)
 
 
 def is_interactive() -> bool:
@@ -77,41 +74,20 @@ def _in_colab_environment() -> bool:
     return "google.colab" in str(ipy)
 
 
-def ask_user_for_approval(message: str) -> bool:
-    """
-    Prompt the user with a message for approval (Y/Yes/N/No).
+def ask_user_for_approval(question: str) -> bool:
+    """Ask a yes/no question that Enter answers yes.
 
-    Args:
-        message (str): The message to display to the user.
-
-    Returns:
-        bool: True if the user approves (Y/Yes/empty input), False if the user disapproves (N/No).
-
-    Logs:
-        Error when the user input is not recognized.
+    Adds the indent and ``[Y/n]`` itself, matching the CLI's prompts. Plain
+    ``input``: this is reachable from ``opik.configure()``, a library call.
     """
     while True:
-        users_choice = input(message).strip().upper()
-        if users_choice in ("Y", "YES", ""):
+        answer = input(f"  {question} [Y/n]: ").strip().upper()
+        if answer in ("Y", "YES", ""):
             return True
-        if users_choice in ("N", "NO"):
+        if answer in ("N", "NO"):
             return False
-        LOGGER.error("Wrong choice. Please try again.")
-
-
-def ask_user_for_approval_default_no(message: str) -> bool:
-    """Prompt the user for approval, defaulting to "no" on empty input.
-
-    Mirrors :func:`ask_user_for_approval` but treats an empty answer as a "no",
-    for opt-in steps that should not happen unless explicitly requested.
-    """
-    while True:
-        users_choice = input(message).strip().upper()
-        if users_choice in ("N", "NO", ""):
-            return False
-        if users_choice in ("Y", "YES"):
-            return True
-        LOGGER.error("Wrong choice. Please try again.")
+        # Printed like the prompt, not logged as an `OPIK:` line.
+        print("  Please answer y or n.")
 
 
 class DeploymentType(enum.Enum):
@@ -133,6 +109,13 @@ class DeploymentType(enum.Enum):
         raise ValueError(f"No DeploymentType with value '{value}'")
 
 
+#: Shared by `opik configure` and `opik.configure()`, so both word it the same.
+DEPLOYMENT_QUESTION = "Where should Opik log your traces?"
+
+#: What follows the options, wherever they were drawn.
+DEPLOYMENT_ANSWER_PROMPT = "\n  Enter 1, 2 or 3 [1]: "
+
+
 def ask_user_for_deployment_type(prompt: Optional[str] = None) -> DeploymentType:
     """
     Asks the user to select a deployment type from the available Opik deployment options.
@@ -150,12 +133,12 @@ def ask_user_for_deployment_type(prompt: Optional[str] = None) -> DeploymentType
     if prompt is not None:
         message_string = prompt
     else:
-        msg = ["Which Opik deployment do you want to log your traces to?"]
+        msg = [DEPLOYMENT_QUESTION]
 
         for deployment in DeploymentType:
             msg.append(f"{deployment.value[0]} - {deployment.value[1]}")
 
-        msg.append("\n> ")
+        msg.append(DEPLOYMENT_ANSWER_PROMPT)
 
         message_string = "\n".join(msg)
 
@@ -163,7 +146,7 @@ def ask_user_for_deployment_type(prompt: Optional[str] = None) -> DeploymentType
         choice_str = input(message_string).strip()
 
         if choice_str not in ("1", "2", "3", ""):
-            LOGGER.error("Wrong choice. Please try again.\n")
+            print("  Please enter 1, 2 or 3.")
             continue
 
         if choice_str == "":

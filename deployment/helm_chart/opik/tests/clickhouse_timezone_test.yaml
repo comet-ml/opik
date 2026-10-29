@@ -1,0 +1,11 @@
+suite: clickhouse server default timezone
+
+templates:
+  - templates/clickhouseinstallation.yaml
+
+tests:
+  - it: renders UTC as the server default timezone out of the box
+    asserts:
+      - matchRegex:
+          path: spec.configuration.files["conf.d/timezone.xml"]
+          pattern: "<timezone>UTC</timezone>"

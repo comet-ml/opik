@@ -8,6 +8,8 @@ public class LlmModelRegistryConfig {
 
     private String defaultResource = "llm-models-default.yaml";
 
+    private String curatedResource = "llm-models-curated.yaml";
+
     private String localOverridePath;
 
     private boolean remoteEnabled = false;

@@ -3,6 +3,7 @@ import { BooleanParam, StringParam, useQueryParam } from "use-query-params";
 import { ColumnPinningState } from "@tanstack/react-table";
 import useLocalStorageState from "use-local-storage-state";
 import isObject from "lodash/isObject";
+import isUndefined from "lodash/isUndefined";
 import uniq from "lodash/uniq";
 import toLower from "lodash/toLower";
 import find from "lodash/find";
@@ -21,15 +22,19 @@ import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodySt
 import PageBodyStickyTableWrapper from "@/v2/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import { convertColumnDataToColumn } from "@/lib/table";
 import SearchInput from "@/shared/SearchInput/SearchInput";
-import NavigationTag from "@/shared/NavigationTag";
-import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
 import { Experiment } from "@/types/datasets";
-import { formatPromptVersionLabel } from "@/lib/experiments";
+import {
+  formatExperimentPromptVersions,
+  sortPromptVersions,
+} from "@/lib/experiments";
 import { Switch } from "@/ui/switch";
 import { Label } from "@/ui/label";
 import { Separator } from "@/ui/separator";
 
 const COLUMNS_WIDTH_KEY = "compare-experiments-config-columns-width";
+
+// Suffixed so it can't collide with a user metadata key named "Prompt version".
+const PROMPT_VERSION_ROW_NAME = "Prompt version (linked)";
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   left: ["name"],
@@ -64,10 +69,6 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
   });
 
   const isCompare = experimentsIds.length > 1;
-
-  // Prompt-version links only make sense for a single experiment; in compare
-  // mode we don't show them. An empty array simply renders nothing.
-  const promptVersions = isCompare ? [] : experiments[0]?.prompt_versions ?? [];
 
   const [columnsWidth, setColumnsWidth] = useLocalStorageState<
     Record<string, number>
@@ -112,6 +113,38 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
     }, {});
   }, [experiments]);
 
+  const promptVersionRow = useMemo(() => {
+    if (!isCompare) return null;
+
+    const data: Record<string, CompareFiledValue> = {};
+    const promptVersionsByExperimentId: CompareConfig["promptVersionsByExperimentId"] =
+      {};
+
+    experimentsIds.forEach((id: string) => {
+      const experiment = find(experiments, (e) => e.id === id);
+      data[id] = formatExperimentPromptVersions(experiment);
+      promptVersionsByExperimentId[id] = experiment?.prompt_versions?.length
+        ? sortPromptVersions(experiment.prompt_versions)
+        : undefined;
+    });
+
+    if (Object.values(data).every(isUndefined)) return null;
+
+    // Labels can collide (prompt names are only unique per project, and every
+    // deleted prompt reads the same), so diff on the versions themselves.
+    const versionKeys = experimentsIds.map(
+      (id) => promptVersionsByExperimentId[id]?.map((pv) => pv.id).join(),
+    );
+
+    return {
+      name: PROMPT_VERSION_ROW_NAME,
+      base: experimentsIds[0],
+      data,
+      promptVersionsByExperimentId,
+      different: !versionKeys.every((key) => key === versionKeys[0]),
+    } as CompareConfig;
+  }, [isCompare, experimentsIds, experiments]);
+
   const rows = useMemo(() => {
     const keys = uniq(
       Object.values(flattenExperimentMetadataMap).reduce<string[]>(
@@ -140,14 +173,16 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
   }, [flattenExperimentMetadataMap, experimentsIds]);
 
   const filteredRows = useMemo(() => {
-    return rows.filter((row) => {
+    const allRows = promptVersionRow ? [promptVersionRow, ...rows] : rows;
+
+    return allRows.filter((row) => {
       if (isCompare && onlyDiff && !row.different) {
         return false;
       }
 
       return !(search && !toLower(row.name).includes(toLower(search)));
     });
-  }, [rows, search, onlyDiff, isCompare]);
+  }, [rows, promptVersionRow, search, onlyDiff, isCompare]);
 
   const noDataText = search
     ? "No search results"
@@ -173,24 +208,13 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
         direction="bidirectional"
         limitWidth
       >
-        <div className="flex flex-wrap items-center gap-2">
-          <SearchInput
-            searchText={search as string}
-            setSearchText={setSearch}
-            placeholder="Search by name"
-            className="w-[200px] shrink-0"
-            dimension="xs"
-          ></SearchInput>
-          {promptVersions.map((pv) => (
-            <NavigationTag
-              key={pv.id}
-              id={pv.prompt_id}
-              name={formatPromptVersionLabel(pv)}
-              resource={RESOURCE_TYPE.prompt}
-              search={{ activeVersionId: pv.id }}
-            />
-          ))}
-        </div>
+        <SearchInput
+          searchText={search as string}
+          setSearchText={setSearch}
+          placeholder="Search by name"
+          className="w-[200px] shrink-0"
+          dimension="xs"
+        ></SearchInput>
         <div className="flex items-center gap-2">
           <CompareExperimentsActionsPanel />
           {isCompare && (

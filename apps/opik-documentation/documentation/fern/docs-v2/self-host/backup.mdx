@@ -41,7 +41,7 @@ This is the default backup method that uses ClickHouse's native `BACKUP` command
 
 Create a Kubernetes secret with your S3 credentials:
 
-```bash
+```bash wordWrap
 kubectl create secret generic clickhouse-backup-secret \
   --from-literal=access_key_id=YOUR_ACCESS_KEY \
   --from-literal=access_key_secret=YOUR_SECRET_KEY
@@ -49,7 +49,7 @@ kubectl create secret generic clickhouse-backup-secret \
 
 Then configure the backup:
 
-```yaml
+```yaml wordWrap
 clickhouse:
   backup:
     enabled: true
@@ -62,7 +62,7 @@ clickhouse:
 
 For AWS EKS clusters, you can use IAM roles instead of access keys:
 
-```yaml
+```yaml wordWrap
 clickhouse:
   serviceAccount:
     create: true
@@ -77,7 +77,7 @@ clickhouse:
 
 **Required IAM Policy:**
 
-```json
+```json wordWrap
 {
   "Version": "2012-10-17",
   "Statement": [
@@ -92,7 +92,7 @@ clickhouse:
 
 **Trust Relationship Policy:**
 
-```json
+```json wordWrap
 {
   "Version": "2012-10-17",
   "Statement": [
@@ -117,7 +117,7 @@ clickhouse:
 
 You can customize the backup command if needed:
 
-```yaml
+```yaml wordWrap
 clickhouse:
   backup:
     enabled: true
@@ -144,7 +144,7 @@ The SQL-based backup:
 
 To restore from a SQL-based backup:
 
-```bash
+```bash wordWrap
 # Connect to ClickHouse
 kubectl exec -it deployment/clickhouse-opik-clickhouse -- clickhouse-client
 
@@ -168,11 +168,11 @@ The ClickHouse Backup Tool provides more advanced backup features including comp
 
 #### Enable Backup Server
 
-```yaml
+```yaml wordWrap
 clickhouse:
   backupServer:
     enabled: true
-    image: "altinity/clickhouse-backup:2.6.23"
+    image: "altinity/clickhouse-backup:2.7.4"
     port: 7171
     env:
       LOG_LEVEL: "info"
@@ -185,7 +185,7 @@ clickhouse:
 
 Set up S3 configuration for the backup tool:
 
-```yaml
+```yaml wordWrap
 clickhouse:
   backupServer:
     enabled: true
@@ -203,13 +203,13 @@ Use Kubernetes secrets for sensitive data:
 
 (can be ignored when using IAM roles)
 
-```bash
+```bash wordWrap
 kubectl create secret generic clickhouse-backup-tool-secret \
   --from-literal=S3_ACCESS_KEY=YOUR_ACCESS_KEY \
   --from-literal=S3_SECRET_KEY=YOUR_SECRET_KEY
 ```
 
-```yaml
+```yaml wordWrap
 clickhouse:
   backupServer:
     enabled: true
@@ -225,7 +225,7 @@ clickhouse:
 
 #### Create Backup
 
-```bash
+```bash wordWrap
 # Port-forward to access the backup server
 kubectl port-forward svc/chi-opik-clickhouse-cluster-0-0 7171:7171
 
@@ -238,14 +238,14 @@ curl "http://localhost:7171/backup/list"
 
 #### Upload Backup to S3
 
-```bash
+```bash wordWrap
 # Upload backup to S3
 curl -X POST "http://localhost:7171/backup/upload/backup-20240101-120000"
 ```
 
 #### Download and Restore
 
-```bash
+```bash wordWrap
 # Download backup from S3
 curl -X POST "http://localhost:7171/backup/download/backup-20240101-120000"
 
@@ -257,7 +257,7 @@ curl -X POST "http://localhost:7171/backup/restore/backup-20240101-120000"
 
 You can create a custom CronJob to automate the backup tool:
 
-```yaml
+```yaml wordWrap
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -270,7 +270,7 @@ spec:
         spec:
           containers:
             - name: backup-tool
-              image: altinity/clickhouse-backup:2.6.23
+              image: altinity/clickhouse-backup:2.7.4
               command:
                 - /bin/bash
                 - -c
@@ -302,7 +302,7 @@ The job does not retry (`backoffLimit: 0`) and is capped by `activeDeadlineSecon
   <Step title="Find the backup name">
     `backupName` is required, and must match a name the backup server knows:
 
-    ```bash
+    ```bash wordWrap
     kubectl port-forward -n <namespace> svc/chi-opik-clickhouse-cluster-0-0 7171:7171
 
     # Backups in S3
@@ -327,7 +327,7 @@ The job does not retry (`backoffLimit: 0`) and is capped by `activeDeadlineSecon
     the Job, so nothing under `backupServer` reaches the cluster through it — if the server is not
     enabled yet, roll it out with `helm upgrade` first:
 
-    ```yaml
+    ```yaml wordWrap
     # part of your release values
     clickhouse:
       backupServer:
@@ -342,7 +342,7 @@ The job does not retry (`backoffLimit: 0`) and is capped by `activeDeadlineSecon
 
     Then put the restore settings, which are only needed at render time, in their own values file:
 
-    ```yaml
+    ```yaml wordWrap
     # restore-values.yaml
     clickhouse:
       backup:
@@ -356,7 +356,7 @@ The job does not retry (`backoffLimit: 0`) and is capped by `activeDeadlineSecon
     Render only the restore job. Pass your existing values file first, so the job inherits the same
     service account, node selector and tolerations as your ClickHouse pods:
 
-    ```bash
+    ```bash wordWrap
     helm template opik opik/opik \
       -f your-values.yaml -f restore-values.yaml \
       --show-only templates/clickhouse_restore_job.yaml > clickhouse-restore-job.yaml
@@ -366,7 +366,7 @@ The job does not retry (`backoffLimit: 0`) and is capped by `activeDeadlineSecon
     job's metadata or pass `-n` when you apply it.
   </Step>
   <Step title="Create the job">
-    ```bash
+    ```bash wordWrap
     kubectl apply -f clickhouse-restore-job.yaml -n <namespace>
     ```
 
@@ -375,7 +375,7 @@ The job does not retry (`backoffLimit: 0`) and is capped by `activeDeadlineSecon
     that name in the commands here and in the next step. It is fixed per release, so delete the
     previous job before restoring again:
 
-    ```bash
+    ```bash wordWrap
     kubectl delete job opik-clickhouse-restore -n <namespace>
     ```
 
@@ -384,7 +384,7 @@ The job does not retry (`backoffLimit: 0`) and is capped by `activeDeadlineSecon
     instead of starting a second.
   </Step>
   <Step title="Watch the restore">
-    ```bash
+    ```bash wordWrap
     kubectl get job opik-clickhouse-restore -n <namespace>
 
     kubectl logs -f job/opik-clickhouse-restore -n <namespace>
@@ -402,7 +402,7 @@ cost order.
 
 Per-table progress, from the backup server's log:
 
-```bash
+```bash wordWrap
 kubectl logs chi-opik-clickhouse-cluster-0-0-0 -c clickhouse-backup -n <namespace> \
   | grep download_data | tail -5
 ```
@@ -413,14 +413,14 @@ distinct positions you have seen, or the numerator will look stuck while most ta
 
 Current status and start time:
 
-```bash
+```bash wordWrap
 kubectl exec chi-opik-clickhouse-cluster-0-0-0 -c clickhouse-backup -n <namespace> \
   -- curl -s localhost:7171/backup/actions | tail -3
 ```
 
 Bytes landed on disk, against the backup's own size:
 
-```bash
+```bash wordWrap
 # how much is on the data volume now
 kubectl exec chi-opik-clickhouse-cluster-0-0-0 -c clickhouse-backup -n <namespace> \
   -- df -h /var/lib/clickhouse
@@ -485,7 +485,7 @@ Setting `createJob: true` in your release values works too — `helm upgrade` th
 
 #### Backup Job Fails
 
-```bash
+```bash wordWrap
 # Check backup job logs
 kubectl logs -l app=clickhouse-backup
 
@@ -496,7 +496,7 @@ kubectl describe cronjob clickhouse-backup
 
 #### S3 Access Issues
 
-```bash
+```bash wordWrap
 # Test S3 connectivity
 kubectl exec -it deployment/clickhouse-opik-clickhouse -- \
   clickhouse-client --query "SELECT * FROM system.disks WHERE name='s3'"
@@ -504,7 +504,7 @@ kubectl exec -it deployment/clickhouse-opik-clickhouse -- \
 
 #### Backup Tool API Issues
 
-```bash
+```bash wordWrap
 # Check backup server logs
 kubectl logs -l app=clickhouse-backup-server
 
@@ -517,7 +517,7 @@ curl "http://localhost:7171/backup/list"
 
 Set up monitoring for backup operations:
 
-```yaml
+```yaml wordWrap
 # Example Prometheus alerts
 - alert: ClickHouseBackupFailed
   expr: increase(kube_job_status_failed{job_name=~".*clickhouse-backup.*"}[5m]) > 0
@@ -535,7 +535,7 @@ Set up monitoring for backup operations:
 
 1. Enable the backup server:
 
-   ```yaml
+   ```yaml wordWrap
    clickhouse:
      backupServer:
        enabled: true
@@ -543,7 +543,7 @@ Set up monitoring for backup operations:
 
 2. Create initial backup with the tool
 3. Disable SQL-based backup:
-   ```yaml
+   ```yaml wordWrap
    clickhouse:
      backup:
        enabled: false
@@ -553,14 +553,14 @@ Set up monitoring for backup operations:
 
 1. Disable backup server:
 
-   ```yaml
+   ```yaml wordWrap
    clickhouse:
      backupServer:
        enabled: false
    ```
 
 2. Enable SQL-based backup:
-   ```yaml
+   ```yaml wordWrap
    clickhouse:
      backup:
        enabled: true

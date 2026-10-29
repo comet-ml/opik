@@ -13,6 +13,10 @@ export const Alert: core.serialization.ObjectSchema<serializers.Alert.Raw, OpikA
     enabled: core.serialization.boolean().optional(),
     alertType: core.serialization.property("alert_type", AlertAlertType.optional()),
     metadata: core.serialization.record(core.serialization.string(), core.serialization.string()).optional(),
+    customFields: core.serialization.property(
+        "custom_fields",
+        core.serialization.record(core.serialization.string(), core.serialization.string()).optional(),
+    ),
     webhook: Webhook,
     triggers: core.serialization.list(AlertTrigger).optional(),
     createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
@@ -29,6 +33,7 @@ export declare namespace Alert {
         enabled?: boolean | null;
         alert_type?: AlertAlertType.Raw | null;
         metadata?: Record<string, string> | null;
+        custom_fields?: Record<string, string> | null;
         webhook: Webhook.Raw;
         triggers?: AlertTrigger.Raw[] | null;
         created_at?: string | null;

@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.Span;
+import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.domain.mapping.OpenTelemetryMappingRuleFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.fasterxml.uuid.Generators;
@@ -21,6 +22,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -283,6 +285,41 @@ class OpenTelemetryMapperTest {
                         AnyValue.newBuilder().setDoubleValue(Double.POSITIVE_INFINITY).build(), null),
                 Arguments.of("negative infinity",
                         AnyValue.newBuilder().setDoubleValue(Double.NEGATIVE_INFINITY).build(), null));
+    }
+
+    @ParameterizedTest(name = "opik.project_name as {0}")
+    @MethodSource("opikProjectNameCases")
+    void extractOpikProjectName(String label, List<KeyValue> attributes, String expected) {
+        assertThat(OpenTelemetryMapper.extractOpikProjectName(attributes)).isEqualTo(Optional.ofNullable(expected));
+    }
+
+    static Stream<Arguments> opikProjectNameCases() {
+        return Stream.of(
+                Arguments.of("absent", List.of(), null),
+                Arguments.of("blank", List.of(projectNameAttribute("  ")), null),
+                Arguments.of("present", List.of(projectNameAttribute("my-project")), "my-project"));
+    }
+
+    @ParameterizedTest(name = "opik.project_name of {0} is valid: {2}")
+    @MethodSource("projectNameLengthCases")
+    void isValidProjectName(String label, String projectName, boolean expected) {
+        assertThat(OpenTelemetryMapper.isValidProjectName(projectName)).isEqualTo(expected);
+    }
+
+    static Stream<Arguments> projectNameLengthCases() {
+        return Stream.of(
+                Arguments.of("150 characters", "a".repeat(150), true),
+                Arguments.of("151 characters", "a".repeat(151), false),
+                Arguments.of("150 characters with surrounding spaces", " " + "a".repeat(150) + " ", true),
+                Arguments.of("150 surrogate pair characters", "🙂".repeat(150), true),
+                Arguments.of("151 surrogate pair characters", "🙂".repeat(151), false));
+    }
+
+    private static KeyValue projectNameAttribute(String value) {
+        return KeyValue.newBuilder()
+                .setKey("opik.project_name")
+                .setValue(AnyValue.newBuilder().setStringValue(value))
+                .build();
     }
 
     private Span.SpanBuilder newSpanBuilder() {
@@ -1549,6 +1586,29 @@ class OpenTelemetryMapperTest {
         }
 
         /**
+         * quarkus-langchain4j reports LangChain4j's {@code ModelProvider} enum, lowercased, in
+         * {@code gen_ai.provider.name} ({@code open_ai}, not {@code openai}). Unaliased, those match
+         * no price row and the span costs 0.
+         */
+        @ParameterizedTest(name = "[{index}] {0} -> {1}")
+        @CsvSource({
+                "open_ai,          openai",
+                "amazon_bedrock,   bedrock",
+                "google_ai_gemini, google_ai",
+        })
+        void quarkusLangChain4jProviderIsAliasedToCanonicalProvider(String wireValue, String expected) {
+            assertThat(map(attr("gen_ai.provider.name", wireValue)).provider()).isEqualTo(expected);
+        }
+
+        /**
+         * {@code google_genai} fronts either the Gemini API or Vertex, so it cannot be aliased to one.
+         */
+        @Test
+        void quarkusLangChain4jGoogleGenAiIsNotAliased() {
+            assertThat(map(attr("gen_ai.provider.name", "google_genai")).provider()).isEqualTo("google_genai");
+        }
+
+        /**
          * The Azure AI Inference endpoint fronts both Azure OpenAI and Foundry models (Claude,
          * Llama), which LiteLLM prices under a separate {@code azure_ai} provider. Aliasing it to
          * {@code azure} would price a Foundry model against the OpenAI table, so it stays untouched.
@@ -2070,6 +2130,26 @@ class OpenTelemetryMapperTest {
             assertThat(span.usage().get("cache_creation_input_tokens")).isEqualTo(50);
             assertThat(span.input()).isNull();
             assertThat(span.output()).isNull();
+        }
+
+        @Test
+        void cacheWritesArePricedAsFiveMinuteWrites() {
+            var span = enrich(List.of(
+                    str("model", "claude-sonnet-4-5"),
+                    intVal("input_tokens", 1234),
+                    intVal("output_tokens", 26),
+                    intVal("cache_read_tokens", 100),
+                    intVal("cache_creation_tokens", 50)),
+                    null, "claude_code.llm_request");
+
+            // Claude Code reports no TTL, and its 1-hour writes are a subscription default: on an API key, Bedrock or
+            // Vertex it writes with a 5-minute one, and those users pay per token. So nothing marks the writes as
+            // 1-hour, and they bill at the 5-minute rate.
+            assertThat(span.usage()).doesNotContainKey("cache_creation.ephemeral_1h_input_tokens");
+            // 1234 input at $3/MTok, 100 cache reads at $0.30/MTok, 50 five-minute writes at $3.75/MTok and 26 output
+            // at $15/MTok.
+            assertThat(CostService.calculateCost(span.model(), span.provider(), span.usage(), span.metadata()))
+                    .isEqualByComparingTo("0.0043095");
         }
 
         @Test

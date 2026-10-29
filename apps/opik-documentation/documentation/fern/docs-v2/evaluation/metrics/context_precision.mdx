@@ -14,7 +14,7 @@ The context precision metric evaluates the accuracy and relevance of an LLM's re
 
 You can use the `ContextPrecision` metric as follows:
 
-```python
+```python wordWrap
 from opik.evaluation.metrics import ContextPrecision
 
 metric = ContextPrecision()
@@ -35,7 +35,7 @@ Opik uses an LLM as a Judge to compute context precision, for this we have a pro
 
 The template uses a few-shot prompting technique to compute context precision. The template is as follows:
 
-```markdown
+```markdown wordWrap
 YOU ARE AN EXPERT EVALUATOR SPECIALIZED IN ASSESSING THE "CONTEXT PRECISION" METRIC FOR LLM GENERATED OUTPUTS.
 YOUR TASK IS TO EVALUATE HOW PRECISELY A GIVEN ANSWER FROM AN LLM FITS THE EXPECTED ANSWER, GIVEN THE CONTEXT AND USER INPUT.
 

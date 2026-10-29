@@ -27,13 +27,13 @@ provides a hosted version of the Opik platform, [simply create an account](https
 
 To use Agent Spec with Opik, install `opik` and `pyagentspec`:
 
-```bash
+```bash wordWrap
 pip install -U opik pyagentspec opentelemetry-sdk opentelemetry-instrumentation
 ```
 
 If you are using the LangGraph adapter (as in the example below), install the LangGraph extra as well:
 
-```bash
+```bash wordWrap
 pip install -U "pyagentspec[langgraph]"
 ```
 
@@ -57,13 +57,13 @@ You can [find or create your API keys in these pages](https://platform.openai.co
 
 You can set them as environment variables:
 
-```bash
+```bash wordWrap
 export OPENAI_API_KEY="YOUR_API_KEY"
 ```
 
 Or set them programmatically:
 
-```python
+```python wordWrap
 import os
 import getpass
 
@@ -76,7 +76,7 @@ if "OPENAI_API_KEY" not in os.environ:
 Opik provides an `AgentSpecInstrumentor` that connects Agent Spec Tracing to Opik.
 Wrap your Agent Spec runtime execution in the instrumentor context to capture traces.
 
-```python
+```python wordWrap
 import asyncio
 import uuid
 

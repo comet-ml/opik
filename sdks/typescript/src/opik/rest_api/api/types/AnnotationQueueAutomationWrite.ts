@@ -6,4 +6,6 @@ export interface AnnotationQueueAutomationWrite {
     enabled?: boolean;
     conditions?: OpikApi.ConditionsWrite;
     maxItemsInQueue?: number;
+    /** When true, removes the item ceiling so automation adds without bound */
+    clearMaxItemsInQueue?: boolean;
 }

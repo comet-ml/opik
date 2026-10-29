@@ -26,7 +26,7 @@ In this guide, we will showcase how to integrate Opik with Instructor so that al
 
 First, ensure you have both `opik` and `instructor` installed:
 
-```bash
+```bash wordWrap
 pip install opik instructor
 ```
 
@@ -45,7 +45,7 @@ In order to use Instructor, you will need to configure your LLM provider API key
 
 You can set them as environment variables:
 
-```bash
+```bash wordWrap
 export OPENAI_API_KEY="YOUR_API_KEY"
 export ANTHROPIC_API_KEY="YOUR_API_KEY"
 export GOOGLE_API_KEY="YOUR_API_KEY"
@@ -53,7 +53,7 @@ export GOOGLE_API_KEY="YOUR_API_KEY"
 
 Or set them programmatically:
 
-```python
+```python wordWrap
 import os
 import getpass
 
@@ -73,7 +73,7 @@ In order to log traces from Instructor into Opik, we are going to patch the `ins
 
 For all the integrations, we will first add tracking to the LLM client and then pass it to the Instructor library:
 
-```python
+```python wordWrap
 from opik.integrations.openai import track_openai
 import instructor
 from pydantic import BaseModel
@@ -114,7 +114,7 @@ Here are the code snippets needed for the integration with different providers:
 
 ### Anthropic
 
-```python
+```python wordWrap
 from opik.integrations.anthropic import track_anthropic
 import instructor
 from anthropic import Anthropic
@@ -128,7 +128,7 @@ client = instructor.from_anthropic(
 )
 
 user_info = client.chat.completions.create(
-    model="claude-3-5-sonnet-20241022",
+    model="claude-sonnet-4-6",
     response_model=UserInfo,
     messages=[{"role": "user", "content": "John Doe is 30 years old."}],
     max_tokens=1000,
@@ -139,7 +139,7 @@ print(user_info)
 
 ### Gemini
 
-```python
+```python wordWrap
 from opik.integrations.genai import track_genai
 import instructor
 from google import genai

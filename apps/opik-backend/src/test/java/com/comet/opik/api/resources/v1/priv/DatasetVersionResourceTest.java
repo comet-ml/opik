@@ -55,6 +55,7 @@ import com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesServic
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -414,6 +415,70 @@ class DatasetVersionResourceTest {
                     TEST_WORKSPACE)) {
                 // Then
                 assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+            }
+        }
+    }
+
+    @Nested
+    @DisplayName("Get Version by Hash:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class GetVersionByHash {
+
+        @Test
+        @DisplayName("Success: Get an older version by its hash")
+        void getVersionByHash__whenOlderVersionHash__thenReturnThatVersion() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            for (int i = 1; i <= 3; i++) {
+                createDatasetItems(datasetId, 1);
+            }
+            var expected = datasetResourceClient.retrieveVersion(datasetId, "v2", API_KEY, TEST_WORKSPACE);
+
+            var version = datasetResourceClient.getVersionByHash(datasetId, expected.versionHash(), API_KEY,
+                    TEST_WORKSPACE);
+
+            assertThat(version).usingRecursiveComparison().isEqualTo(expected);
+            assertThat(version.isLatest()).isFalse();
+        }
+
+        @Test
+        @DisplayName("Error: Unknown hash returns not found")
+        void getVersionByHash__whenUnknownHash__thenReturnNotFound() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 1);
+
+            try (var response = datasetResourceClient.callGetVersionByHash(datasetId, "deadbeef", API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+            }
+        }
+
+        @Test
+        @DisplayName("Error: Returns forbidden when DATASET_VIEW permission is denied")
+        void getVersionByHash__whenDatasetViewDenied__thenReturnForbidden() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.DATASET_VIEW.getValue());
+
+            try (var response = datasetResourceClient.callGetVersionByHash(UUID.randomUUID(), "deadbeef", apiKey,
+                    workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
+
+        @Test
+        @DisplayName("Error: Hash from another dataset returns not found")
+        void getVersionByHash__whenHashBelongsToAnotherDataset__thenReturnNotFound() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 1);
+            var otherDatasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(otherDatasetId, 1);
+            var otherHash = getLatestVersion(otherDatasetId).versionHash();
+
+            try (var response = datasetResourceClient.callGetVersionByHash(datasetId, otherHash, API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NOT_FOUND);
             }
         }
     }

@@ -92,6 +92,11 @@ export interface ExperimentItemReference {
   dataset_item_id: string;
 }
 
+export interface AnnotationQueueReference {
+  id: string;
+  name: string;
+}
+
 export interface Trace extends BaseTraceData {
   span_count?: number;
   llm_span_count?: number;
@@ -103,6 +108,7 @@ export interface Trace extends BaseTraceData {
   visibility_mode?: TRACE_VISIBILITY_MODE;
   span_feedback_scores?: TraceFeedbackScore[];
   experiment?: ExperimentItemReference;
+  annotation_queues?: AnnotationQueueReference[];
   source?: LOGS_SOURCE;
 }
 
@@ -149,4 +155,5 @@ export interface Thread {
   feedback_scores?: TraceFeedbackScore[];
   comments?: CommentItems;
   tags?: string[];
+  annotation_queues?: AnnotationQueueReference[];
 }

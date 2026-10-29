@@ -1,4 +1,4 @@
-from typing import AsyncIterator, Iterator, List, Optional, Union
+from typing import Any, AsyncIterator, Dict, Iterator, List, Optional, Union
 
 import google
 import pytest
@@ -18,6 +18,12 @@ pytest_skip_for_adk_older_than_1_3_0 = pytest.mark.skipif(
     semantic_version.SemanticVersion.parse(google.adk.__version__) < "1.3.0",
     reason="Test only applies to ADK versions >= 1.3.0",
 )
+
+
+def expected_graph_node_metadata(node_id: str) -> Dict[str, Any]:
+    if semantic_version.SemanticVersion.parse(google.adk.__version__) < "1.3.0":
+        return {}
+    return {"_opik": {"graph_node_id": node_id}}
 
 
 def build_sync_runner(root_agent: adk_agents.Agent) -> adk_runners.Runner:

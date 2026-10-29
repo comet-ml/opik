@@ -30,7 +30,7 @@ pnpm add opik-openai
 ### Requirements
 
 - Node.js ≥ 18
-- OpenAI SDK (`openai` ≥ 6.0.1)
+- OpenAI SDK (`openai` ≥ 6.0.1; the Decisions API needs `openai` ≥ 7.30.0)
 - Opik SDK (`opik` peer dependency)
 
 ## Usage

@@ -37,7 +37,7 @@ sequenceDiagram
 
 Set the `n` parameter in your `ChatPrompt.model_parameters`:
 
-```python
+```python wordWrap
 from opik_optimizer import ChatPrompt
 
 # Generate 3 candidates per evaluation, select best
@@ -70,7 +70,7 @@ prompt = ChatPrompt(
   <Accordion title="Reducing Evaluation Variance">
     Single-sample evaluation is noisy. With `n=3`, the optimizer scores each candidate and uses the best result, which makes optimization more robust to stochastic failures.
 
-    ```python
+    ```python wordWrap
     # Before: Single sample - noisy evaluation
     prompt = ChatPrompt(model="gpt-4o-mini", messages=[...])
     # Score might be 0.6 or 0.9 depending on luck
@@ -88,7 +88,7 @@ prompt = ChatPrompt(
   <Accordion title="Pass@k Style Optimization">
     Inspired by code generation benchmarks (pass@k), this approach measures whether a prompt *can* produce correct output, not just whether it *usually* does.
 
-    ```python
+    ```python wordWrap
     # Optimize for "can this prompt ever get it right?"
     prompt = ChatPrompt(
         model="gpt-4o-mini",
@@ -106,7 +106,7 @@ prompt = ChatPrompt(
   <Accordion title="Handling Stochastic Tasks">
     Some tasks naturally have multiple valid answers. Using `n > 1` helps the optimizer find prompts that can generate *any* valid answer.
 
-    ```python
+    ```python wordWrap
     # Creative task: multiple valid outputs
     prompt = ChatPrompt(
         model="gpt-4o-mini",
@@ -133,7 +133,7 @@ Use the `selection_policy` key in `model_parameters` to override. The optimizer
 routes these policies through a shared candidate-selection utility so behavior
 is consistent across optimizers:
 
-```python
+```python wordWrap
 prompt = ChatPrompt(
     model="gpt-4o-mini",
     messages=[...],
@@ -146,7 +146,7 @@ prompt = ChatPrompt(
 
 For `max_logprob`, enable logprobs in your model kwargs (provider support varies):
 
-```python
+```python wordWrap
 prompt = ChatPrompt(
     model="gpt-4o-mini",
     messages=[...],
@@ -165,7 +165,7 @@ When `selection_policy=best_by_metric`, the optimizer:
 2. The candidate with the highest score is selected as the final output
 3. All scores and the chosen index are logged to the trace metadata
 
-```python
+```python wordWrap
 # What happens internally:
 candidates = ["output_1", "output_2", "output_3"]
 scores = [metric(item, c) for c in candidates]  # [0.7, 0.9, 0.6]
@@ -204,7 +204,7 @@ The trace metadata includes:
   <Accordion title="Tool-calling forces n=1">
     When `allow_tool_use=True` and tools are defined, the optimizer forces `n=1`. This is because tool-calling requires maintaining a coherent message thread, which isn't compatible with multiple independent completions.
 
-    ```python
+    ```python wordWrap
     # Tool-calling prompt - n will be forced to 1
     prompt = ChatPrompt(
         model="gpt-4o-mini",
@@ -226,7 +226,7 @@ The trace metadata includes:
 
 ## Full Example
 
-```python
+```python wordWrap
 from opik_optimizer import ChatPrompt, MetaPromptOptimizer
 from opik.evaluation.metrics import LevenshteinRatio
 

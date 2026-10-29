@@ -45,6 +45,7 @@ import { Skeleton } from "@/ui/skeleton";
 import FeedbackScoreHoverCard from "@/shared/FeedbackScoreTag/FeedbackScoreHoverCard";
 import ResizableSidePanel from "@/shared/ResizableSidePanel/ResizableSidePanel";
 import ResizableSidePanelTopBar from "@/shared/ResizableSidePanel/ResizableSidePanelTopBar";
+import AnnotationQueuesNavigation from "@/v2/pages-shared/traces/AnnotationQueuesNavigation/AnnotationQueuesNavigation";
 import ResizableSidePanelArrowNavigation from "@/shared/ResizableSidePanel/ResizableSidePanelArrowNavigation";
 import { Button } from "@/ui/button";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
@@ -52,6 +53,11 @@ import useThreadById from "@/api/traces/useThreadById";
 import useTracesList from "@/api/traces/useTracesList";
 import useThreadBatchDeleteMutation from "@/api/traces/useThreadBatchDeleteMutation";
 import TraceMessages from "@/v2/pages-shared/traces/TraceMessages/TraceMessages";
+import InternalTracesToggle from "@/v2/pages-shared/traces/InternalTracesToggle";
+import {
+  ONLY_INTERNAL_CALLS_MESSAGE,
+  useVisibleTraces,
+} from "@/v2/pages-shared/traces/hiddenSpans";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
 import {
   ButtonLayoutSize,
@@ -105,6 +111,8 @@ export type ThreadDetailsPanelProps = {
 };
 
 const DEFAULT_TAB = "messages";
+// The backend counts two messages (input + output) per trace in `number_of_messages`.
+const MESSAGES_PER_TRACE = 2;
 
 const ThreadHeaderSkeleton: React.FC = () => (
   <div className="flex flex-col gap-2">
@@ -252,7 +260,13 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
     [tracesData],
   );
 
-  const { media } = useThreadMedia(traces);
+  // Internal traces (e.g. an integration's title-generation call) are not conversation
+  // turns, so Messages hides them by default, the same way the trace tree hides spans.
+  // The selected trace stays visible even when internal, so the panel can scroll to it.
+  const visibleTraces = useVisibleTraces(traces, traceId);
+  const hiddenTracesCount = traces.length - visibleTraces.length;
+
+  const { media } = useThreadMedia(visibleTraces);
 
   const handleOpenTrace = useCallback(
     (id: string, shouldFilterToolCalls: boolean) => {
@@ -421,11 +435,21 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
               {thread?.start_time ? formatDate(thread?.start_time) : "NA"}
             </div>
           </TooltipWrapper>
-          <TooltipWrapper content="Number of messages in the thread">
+          <TooltipWrapper
+            content={
+              hiddenTracesCount && thread?.number_of_messages
+                ? `${thread.number_of_messages} messages in the thread, hidden ones included`
+                : "Number of messages in the thread"
+            }
+          >
             <div className="flex items-center gap-1">
               <Hash className="size-3.5 shrink-0 text-muted-slate" />
               {thread?.number_of_messages
-                ? `${thread.number_of_messages} messages`
+                ? `${Math.max(
+                    thread.number_of_messages -
+                      hiddenTracesCount * MESSAGES_PER_TRACE,
+                    0,
+                  )} messages`
                 : "NA"}
             </div>
           </TooltipWrapper>
@@ -475,7 +499,10 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
         value={currentActiveTab}
         onValueChange={setActiveTab}
       >
-        <div className="mx-4" data-panel-tabs="true">
+        <div
+          className="mx-4 flex items-center justify-between gap-2"
+          data-panel-tabs="true"
+        >
           <TabsList variant="segmented-primary">
             <TabsTrigger variant="segmented-primary" size="sm" value="messages">
               Messages
@@ -488,6 +515,9 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
               Feedback scores
             </TabsTrigger>
           </TabsList>
+          {currentActiveTab === "messages" && (
+            <InternalTracesToggle traces={traces} keepTraceId={traceId} />
+          )}
         </div>
         <TabsContent value="messages">
           {isTracesPending ? (
@@ -502,11 +532,15 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
                 </div>
               )}
               <div style={bodyStyle}>
-                <TraceMessages
-                  traces={traces}
-                  handleOpenTrace={handleOpenTrace}
-                  traceId={traceId}
-                />
+                {traces.length > 0 && !visibleTraces.length ? (
+                  <NoData message={ONLY_INTERNAL_CALLS_MESSAGE} icon={null} />
+                ) : (
+                  <TraceMessages
+                    traces={visibleTraces}
+                    handleOpenTrace={handleOpenTrace}
+                    traceId={traceId}
+                  />
+                )}
               </div>
             </MediaProvider>
           )}
@@ -727,6 +761,8 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
             <ArrowUpRight className="ml-1 size-3.5" />
           </Button>
         </TooltipWrapper>
+
+        <AnnotationQueuesNavigation queues={thread?.annotation_queues} />
       </ResizableSidePanelTopBar>
     );
   };

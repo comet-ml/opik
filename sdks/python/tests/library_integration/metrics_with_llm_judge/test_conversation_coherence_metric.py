@@ -33,17 +33,6 @@ def real_model_conversation():
     ]
 
 
-def test_conversation_coherence_metric(real_model_conversation):
-    """Integration test with a real model."""
-    metric = conversational_coherence.ConversationalCoherenceMetric(
-        track=False, window_size=5, reasoning_effort="minimal"
-    )  # Uses default model
-    result = metric.score(real_model_conversation)
-
-    assert_helpers.assert_score_result(result)
-    # We don't assert specific values since the real model's output may vary
-
-
 @pytest.mark.asyncio
 async def test_conversation_coherence_metric_async(real_model_conversation):
     """Integration test with a real model asyncio mode."""

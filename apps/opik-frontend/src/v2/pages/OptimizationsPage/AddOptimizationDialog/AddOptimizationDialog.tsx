@@ -364,7 +364,7 @@ const AddOptimizationDialog: React.FunctionComponent<
           </div>
           <div className="flex w-full max-w-[700px] flex-col gap-2 rounded-md border border-border p-6">
             <div className="comet-body-s text-foreground-secondary">
-              1. Select test suite
+              1. Select item source
             </div>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -372,7 +372,7 @@ const AddOptimizationDialog: React.FunctionComponent<
                   <LoadableSelectBox
                     options={options}
                     value={datasetName}
-                    placeholder="Select a test suite"
+                    placeholder="Select an item source"
                     onChange={setDatasetName}
                     onLoadMore={
                       total > DEFAULT_LOADED_DATASET_ITEMS && !isLoadedMore

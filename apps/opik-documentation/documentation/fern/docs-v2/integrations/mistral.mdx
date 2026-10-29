@@ -25,7 +25,7 @@ This guide explains how to integrate Opik with the Mistral AI Python SDK. By usi
 
 First, ensure you have both `opik` and `mistralai` packages installed. This integration targets the Mistral Python SDK v1 (`from mistralai import Mistral`), version 1.3.0 or newer:
 
-```bash
+```bash wordWrap
 pip install opik "mistralai>=1.3.0,<2"
 ```
 
@@ -42,7 +42,7 @@ Configure the Opik Python SDK for your deployment type. See the [Python SDK Conf
 
 You'll need to set your Mistral AI API key. You can [find or create your Mistral API Key in the console](https://console.mistral.ai/api-keys/):
 
-```bash
+```bash wordWrap
 export MISTRAL_API_KEY="YOUR_API_KEY"
 ```
 
@@ -50,7 +50,7 @@ export MISTRAL_API_KEY="YOUR_API_KEY"
 
 In order to log the LLM calls to Opik, you will need to wrap the Mistral client with `track_mistral`. When making calls with that wrapped client, all calls will be logged to Opik:
 
-```python
+```python wordWrap
 import os
 from mistralai import Mistral
 from opik.integrations.mistral import track_mistral
@@ -78,7 +78,7 @@ print(response.choices[0].message.content)
 
 If you have multiple steps in your LLM pipeline, you can use the `@track` decorator to log the traces for each step. If Mistral is called within one of these steps, the LLM call will be associated with that corresponding step:
 
-```python
+```python wordWrap
 import os
 from mistralai import Mistral
 from opik import track
@@ -125,7 +125,7 @@ The trace can now be viewed in the UI with hierarchical spans showing the relati
 
 Streamed responses are tracked as well â€” the chunks are aggregated into a single span with the full output and token usage:
 
-```python
+```python wordWrap
 stream = mistral_client.chat.stream(
     model="mistral-small-latest",
     messages=[{"role": "user", "content": "Tell me a fact about space."}],
@@ -142,7 +142,7 @@ to `complete()`/`stream()` internally, so the call is logged as a single
 `chat_completion_create` / `chat_completion_stream` span with the structured
 JSON in the output:
 
-```python
+```python wordWrap
 from pydantic import BaseModel
 
 
@@ -164,7 +164,7 @@ print(response.choices[0].message.parsed)
 
 By default the provider recorded on each LLM span is `mistral`, which Opik recognizes for cost tracking. You can override it by passing `provider` to `track_mistral`:
 
-```python
+```python wordWrap
 from opik import LLMProvider
 from opik.integrations.mistral import track_mistral
 
@@ -196,7 +196,7 @@ If you prefer to route Mistral calls through [LiteLLM](/integrations/litellm) â€
 
 To track Mistral calls made through LiteLLM, create the `OpikLogger` callback and add it to LiteLLM:
 
-```python
+```python wordWrap
 from litellm.integrations.opik.opik import OpikLogger
 import litellm
 
@@ -213,7 +213,7 @@ response = litellm.completion(
 
 If you are using LiteLLM within a function tracked with the [`@track`](/tracing/advanced/log_traces#using-function-decorators) decorator, pass the `current_span_data` as metadata to the `litellm.completion` call:
 
-```python
+```python wordWrap
 from opik import track, opik_context
 import litellm
 

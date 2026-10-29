@@ -25,19 +25,19 @@ This integration captures:
 
 <Steps>
   <Step title="1. Install the plugin">
-    ```bash
+    ```bash wordWrap
     openclaw plugins install @opik/opik-openclaw
     ```
   </Step>
   <Step title="2. Configure the plugin">
-    ```bash
+    ```bash wordWrap
     openclaw opik configure
     ```
 
     This command validates your Opik URL, validates API key access (when required), enables the plugin, and writes plugin-scoped config.
   </Step>
   <Step title="3. Check status and restart the OpenClaw gateway">
-    ```bash
+    ```bash wordWrap
     openclaw opik status
     openclaw gateway restart
     ```
@@ -51,7 +51,7 @@ For the latest plugin-specific options, see [opik-openclaw](https://github.com/c
 
 Add this to your OpenClaw config:
 
-```json
+```json wordWrap
 {
   "plugins": {
     "entries": {
@@ -82,7 +82,7 @@ Environment variable fallbacks are also supported:
 
 <Steps>
   <Step title="1. Check plugin status">
-    ```bash
+    ```bash wordWrap
     openclaw opik status
     ```
   </Step>

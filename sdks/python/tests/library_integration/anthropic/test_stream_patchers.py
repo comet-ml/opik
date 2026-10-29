@@ -1,10 +1,13 @@
 from dataclasses import dataclass
+import json
+import time
 from typing import Callable
 from unittest import mock
 
 import pytest
 
 import anthropic
+import httpx2 as httpx
 
 import opik.integrations.anthropic.stream_patchers as sp
 
@@ -361,3 +364,225 @@ async def test_async_stream_accumulates_events_into_the_final_message(
     _, kwargs = callback.call_args
     assert kwargs["error_info"] is None
     _assert_accumulated_message_matches(kwargs["output"])
+
+
+@pytest.mark.parametrize(
+    "config",
+    [config for config in _sync_wrappers() if config.needs_get_final_message],
+    ids=lambda config: config.id,
+)
+def test_sync_message_stream_early_exit_uses_current_snapshot(
+    restore_stream_patches, config
+):
+    partial_snapshot = object()
+    complete_snapshot = object()
+
+    def _iter_events(self):
+        yield "first"
+        yield "second"
+
+    def _drain_remaining_events():
+        return complete_snapshot
+
+    callback = mock.Mock()
+    _install(config, _iter_events, callback)
+    stream = _make_stream(config, tracked=True)
+    stream.get_final_message = mock.Mock(side_effect=_drain_remaining_events)
+
+    with mock.patch.object(
+        config.stream_cls,
+        "current_message_snapshot",
+        new_callable=mock.PropertyMock,
+        return_value=partial_snapshot,
+    ):
+        iterator = iter(stream)
+        assert next(iterator) == "first"
+        iterator.close()
+
+    stream.get_final_message.assert_not_called()
+    callback.assert_called_once()
+    assert callback.call_args.kwargs["output"] is partial_snapshot
+
+
+@pytest.mark.parametrize(
+    "config",
+    [config for config in _async_wrappers() if config.needs_get_final_message],
+    ids=lambda config: config.id,
+)
+@pytest.mark.asyncio
+async def test_async_message_stream_early_exit_uses_current_snapshot(
+    restore_stream_patches, config
+):
+    partial_snapshot = object()
+    complete_snapshot = object()
+
+    async def _aiter_events(self):
+        yield "first"
+        yield "second"
+
+    async def _drain_remaining_events():
+        return complete_snapshot
+
+    callback = mock.Mock()
+    _install(config, _aiter_events, callback)
+    stream = _make_stream(config, tracked=True, is_async=True)
+    stream.get_final_message = mock.AsyncMock(side_effect=_drain_remaining_events)
+
+    with mock.patch.object(
+        config.stream_cls,
+        "current_message_snapshot",
+        new_callable=mock.PropertyMock,
+        return_value=partial_snapshot,
+    ):
+        iterator = stream.__aiter__()
+        assert await anext(iterator) == "first"
+        await iterator.aclose()
+
+    stream.get_final_message.assert_not_awaited()
+    callback.assert_called_once()
+    assert callback.call_args.kwargs["output"] is partial_snapshot
+
+
+@pytest.mark.parametrize(
+    "config",
+    [config for config in _sync_wrappers() if config.needs_get_final_message],
+    ids=lambda config: config.id,
+)
+def test_sync_empty_message_stream_closes_callback_without_snapshot(
+    restore_stream_patches, config
+):
+    def _iter_events(self):
+        yield from ()
+
+    callback = mock.Mock()
+    _install(config, _iter_events, callback)
+    stream = _make_stream(config, tracked=True)
+    stream.get_final_message = mock.Mock(
+        side_effect=AssertionError("message snapshot is not initialized")
+    )
+    snapshot = mock.PropertyMock(
+        side_effect=AssertionError("message snapshot is not initialized")
+    )
+
+    with mock.patch.object(config.stream_cls, "current_message_snapshot", snapshot):
+        assert list(stream) == []
+
+    stream.get_final_message.assert_not_called()
+    snapshot.assert_not_called()
+    callback.assert_called_once()
+    assert callback.call_args.kwargs["output"] is None
+
+
+@pytest.mark.parametrize(
+    "config",
+    [config for config in _async_wrappers() if config.needs_get_final_message],
+    ids=lambda config: config.id,
+)
+@pytest.mark.asyncio
+async def test_async_empty_message_stream_closes_callback_without_snapshot(
+    restore_stream_patches, config
+):
+    async def _aiter_events(self):
+        for _ in ():
+            yield None
+
+    callback = mock.Mock()
+    _install(config, _aiter_events, callback)
+    stream = _make_stream(config, tracked=True, is_async=True)
+    stream.get_final_message = mock.AsyncMock(
+        side_effect=AssertionError("message snapshot is not initialized")
+    )
+    snapshot = mock.PropertyMock(
+        side_effect=AssertionError("message snapshot is not initialized")
+    )
+
+    with mock.patch.object(config.stream_cls, "current_message_snapshot", snapshot):
+        assert [event async for event in stream] == []
+
+    stream.get_final_message.assert_not_awaited()
+    snapshot.assert_not_called()
+    callback.assert_called_once()
+    assert callback.call_args.kwargs["output"] is None
+
+
+def test_sync_message_stream_early_exit_does_not_read_unread_sse_events(
+    restore_stream_patches,
+):
+    pulled_deltas = []
+
+    def _event_frame(event):
+        return f"event: {event['type']}\ndata: {json.dumps(event)}\n\n".encode()
+
+    def _response_body():
+        yield _event_frame(
+            {
+                "type": "message_start",
+                "message": {
+                    "id": "msg_1",
+                    "type": "message",
+                    "role": "assistant",
+                    "model": "test-model",
+                    "content": [],
+                    "stop_reason": None,
+                    "stop_sequence": None,
+                    "usage": {"input_tokens": 1, "output_tokens": 0},
+                },
+            }
+        )
+        yield _event_frame(
+            {
+                "type": "content_block_start",
+                "index": 0,
+                "content_block": {"type": "text", "text": ""},
+            }
+        )
+        for index in range(4):
+            time.sleep(0.01)
+            pulled_deltas.append(index)
+            yield _event_frame(
+                {
+                    "type": "content_block_delta",
+                    "index": 0,
+                    "delta": {"type": "text_delta", "text": f"part-{index}"},
+                }
+            )
+
+    client = anthropic.Anthropic(
+        api_key="test",
+        base_url="http://mock",
+        http_client=httpx.Client(
+            transport=httpx.MockTransport(
+                lambda request: httpx.Response(
+                    200,
+                    headers={"content-type": "text/event-stream"},
+                    content=_response_body(),
+                )
+            )
+        ),
+    )
+    callback = mock.Mock()
+    stream_manager = client.messages.stream(
+        model="test-model",
+        max_tokens=16,
+        messages=[{"role": "user", "content": "hello"}],
+    )
+    sp.patch_sync_message_stream_manager(
+        stream_manager,
+        span_to_end=None,
+        trace_to_end=None,
+        finally_callback=callback,
+    )
+
+    try:
+        with stream_manager as stream:
+            iterator = iter(stream)
+            assert next(iterator).type == "message_start"
+            iterator.close()
+    finally:
+        client.close()
+
+    assert pulled_deltas == []
+    callback.assert_called_once()
+    output = callback.call_args.kwargs["output"]
+    assert output.id == "msg_1"
+    assert output.content == []

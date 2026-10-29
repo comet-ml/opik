@@ -35,21 +35,21 @@ stack and follow the three steps to log your first trace:
       <Step>
         Install the Opik Python SDK:
 
-        ```bash
+        ```bash wordWrap
         pip install opik
         ```
       </Step>
       <Step>
         Configure the Opik Python SDK:
 
-        ```bash
+        ```bash wordWrap
         opik configure
         ```
       </Step>
       <Step>
         Wrap your function with the `@track` decorator:
 
-        ```python
+        ```python wordWrap
         from opik import track
 
         @track
@@ -71,14 +71,14 @@ stack and follow the three steps to log your first trace:
       <Step>
         Install the Opik TypeScript SDK:
 
-        ```bash
+        ```bash wordWrap
         npm install opik
         ```
       </Step>
       <Step>
         Configure the Opik TypeScript SDK by running the interactive CLI tool:
 
-        ```bash
+        ```bash wordWrap
         npx opik-ts configure
         ```
 
@@ -87,7 +87,7 @@ stack and follow the three steps to log your first trace:
       <Step>
         Log a trace using the Opik client:
 
-        ```typescript
+        ```typescript wordWrap
         import { Opik } from "opik";
 
         const client = new Opik();
@@ -114,7 +114,7 @@ stack and follow the three steps to log your first trace:
       <Step>
         Install the Opik Python SDK:
 
-        ```bash
+        ```bash wordWrap
         pip install opik
         ```
       </Step>
@@ -122,14 +122,14 @@ stack and follow the three steps to log your first trace:
         Configure the Opik Python SDK, this will prompt you for your API key if you are using Opik
         Cloud or your Opik server address if you are self-hosting:
 
-        ```bash
+        ```bash wordWrap
         opik configure
         ```
       </Step>
       <Step>
         Wrap your OpenAI client with the `track_openai` function:
 
-        ```python
+        ```python wordWrap
         from opik.integrations.openai import track_openai
         from openai import OpenAI
 
@@ -162,14 +162,14 @@ stack and follow the three steps to log your first trace:
       <Step>
         Install the Opik TypeScript SDK:
 
-        ```bash
+        ```bash wordWrap
         npm install opik-openai
         ```
       </Step>
       <Step>
         Configure the Opik TypeScript SDK by running the interactive CLI tool:
 
-        ```bash
+        ```bash wordWrap
         npx opik-ts configure
         ```
 
@@ -178,7 +178,7 @@ stack and follow the three steps to log your first trace:
       <Step>
         Wrap your OpenAI client with the `trackOpenAI` function:
 
-        ```typescript
+        ```typescript wordWrap
         import OpenAI from "openai";
         import { trackOpenAI } from "opik-openai";
 
@@ -214,21 +214,21 @@ stack and follow the three steps to log your first trace:
       <Step>
         Install the Opik SDK:
 
-        ```bash
+        ```bash wordWrap
         pip install opik
         ```
       </Step>
       <Step>
         Configure the Opik SDK by running the `opik configure` command in your terminal:
 
-        ```bash
+        ```bash wordWrap
         opik configure
         ```
       </Step>
       <Step>
         Track your LangGraph graph with `track_langgraph`:
 
-        ```python
+        ```python wordWrap
         from opik.integrations.langchain import OpikTracer, track_langgraph
 
         # Create your LangGraph graph
@@ -251,13 +251,15 @@ stack and follow the three steps to log your first trace:
   </Tab>
   <Tab title="AI integration">
     If you already use a coding agent (Claude Code, Codex, Cursor, OpenCode, etc.), you can let it
-    instrument your app for you with the Opik Skill. Requires Node.js installed.
+    instrument your app for you with the Opik skills.
 
     <Steps>
       <Step title="Install the Opik skill">
-        ```bash
-        npx skills add comet-ml/opik-skills
+        ```bash wordWrap
+        uvx opik mcp configure
         ```
+
+        It installs the Opik skills and connects the Opik MCP server. It needs [`uv`](https://docs.astral.sh/uv/).
       </Step>
       <Step title="Run the integration">
         Once the skill is installed, you can integrate with Opik using the following prompt:

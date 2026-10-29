@@ -15,13 +15,23 @@ import { OnlineEvaluationPage } from '@e2e/pom/online-evaluation.page';
 const ARRAY_THEN_PROSE_PROMPT =
   '[{"type": "text", "text": "example"}] Now grade the output above.\n\nOUTPUT:\n{{output}}';
 
+/**
+ * The same prompt as the editor shows it. The editor has no variable mapping
+ * table: it inlines each mapping as its path (`{{output}}` mapped to
+ * `output.output` reads `{{output.output}}`) and names it back on save.
+ */
+const ARRAY_THEN_PROSE_PROMPT_IN_EDITOR = ARRAY_THEN_PROSE_PROMPT.replace(
+  '{{output}}',
+  '{{output.output}}',
+);
+
 /** A genuinely multimodal message, for the opposite regression. */
 const STRUCTURED_TEXT = 'Grade the answer against the screenshot.\n\nOUTPUT:\n{{output}}';
 const STRUCTURED_IMAGE_URL = 'https://example.com/reference-screenshot.png';
 const STRUCTURED_IMAGE_DETAIL = 'low';
 
 test.describe('Online Evaluation — judge prompt round trip', { tag: ['@t2-cuj', '@area:online-evaluation'] }, () => {
-  test('An example-array-then-prose prompt survives the edit dialog and a re-save byte for byte', { tag: ['@cap:online-evaluation.edit-rule'] }, async ({
+  test('An example-array-then-prose prompt survives the editor and a re-save byte for byte', { tag: ['@cap:online-evaluation.edit-rule'] }, async ({
     project,
     backendClient,
     testNamespace,
@@ -31,8 +41,7 @@ test.describe('Online Evaluation — judge prompt round trip', { tag: ['@t2-cuj'
     const ruleName = `${testNamespace}-array-then-prose`;
 
     const ruleId = await test.step('Seed the judge rule through the API', async () => {
-      // Seeded over REST because the create dialog cannot produce this string:
-      // it only emits the canned templates, none of which opens with a bracket.
+      // Seeded over REST so the read path is tested on exactly this string.
       return backendClient.createLlmJudgeRule({
         projectId: project.id,
         name: ruleName,
@@ -56,29 +65,29 @@ test.describe('Online Evaluation — judge prompt round trip', { tag: ['@t2-cuj'
 
     const onlineEval = new OnlineEvaluationPage(page);
 
-    await test.step('The edit dialog hydrates the prompt with the trailing instruction intact', async () => {
+    await test.step('The editor hydrates the prompt with the trailing instruction intact', async () => {
       await onlineEval.goto(project.id);
       await onlineEval.waitForReady();
-      await onlineEval.openEditDialogByName(ruleName);
+      await onlineEval.openEditRulePanelByName(ruleName);
       expect(
-        await onlineEval.readPromptMessageText('user'),
-        'the dialog shows what the author typed, not a prefix of it',
-      ).toBe(ARRAY_THEN_PROSE_PROMPT);
+        await onlineEval.readPromptText(),
+        'the editor shows what the author typed, not a prefix of it',
+      ).toBe(ARRAY_THEN_PROSE_PROMPT_IN_EDITOR);
     });
 
-    await test.step('Saving the dialog unchanged persists the prompt unchanged', async () => {
-      // The read bug only became data loss here: the dialog writes back whatever
+    await test.step('Saving without touching the prompt persists it unchanged', async () => {
+      // The read bug only became data loss here: the editor writes back whatever
       // it was given, so a truncated read submitted once was a truncated prompt
-      // for good. Submitting without touching anything is exactly the gesture a
-      // user makes when they open a rule to change its sampling rate.
-      await onlineEval.submitDialog();
+      // for good. Flipping an unrelated setting is the gesture that re-sends it.
+      await onlineEval.toggleEnabled();
+      await onlineEval.submitPanel();
 
-      await onlineEval.openEditDialogByName(ruleName);
+      await onlineEval.openEditRulePanelByName(ruleName);
       expect(
-        await onlineEval.readPromptMessageText('user'),
-        'a no-op save must not shorten the prompt',
-      ).toBe(ARRAY_THEN_PROSE_PROMPT);
-      await onlineEval.cancelDialog();
+        await onlineEval.readPromptText(),
+        'a save that did not touch the prompt must not shorten it',
+      ).toBe(ARRAY_THEN_PROSE_PROMPT_IN_EDITOR);
+      await onlineEval.cancelPanel();
     });
 
     await test.step('And the server still holds it as a plain string', async () => {
@@ -103,7 +112,7 @@ test.describe('Online Evaluation — judge prompt round trip', { tag: ['@t2-cuj'
     // image part would come back as JSON text in the prompt box and the judge
     // would stop seeing the image.
     //
-    // API-level throughout: the dialog renders only the text part of a
+    // API-level throughout: the editor renders only the text part of a
     // multimodal message, so the image URL and its `detail` — the fields that
     // would be lost — are not observable in the UI at all.
     const ruleName = `${testNamespace}-structured-content`;

@@ -1,5 +1,7 @@
 package com.comet.opik.infrastructure.llm.gemini;
 
+import com.comet.opik.infrastructure.llm.GeminiMaxOutputTokens;
+import dev.langchain4j.http.client.HttpClientBuilder;
 import dev.langchain4j.model.googleai.GoogleAiGeminiChatModel;
 import dev.langchain4j.model.googleai.GoogleAiGeminiStreamingChatModel;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
@@ -10,7 +12,7 @@ import org.mapstruct.factory.Mappers;
 
 import java.time.Duration;
 
-@Mapper
+@Mapper(imports = GeminiMaxOutputTokens.class)
 interface GeminiChatModelMapper {
 
     GeminiChatModelMapper INSTANCE = Mappers.getMapper(GeminiChatModelMapper.class);
@@ -22,7 +24,7 @@ interface GeminiChatModelMapper {
     // them — matching how Gemini 2.5/3 already behaves (Gemini suppresses
     // thought parts API-side unless the client explicitly opts in).
     @Mapping(expression = "java(request.model())", target = "modelName")
-    @Mapping(expression = "java(request.maxCompletionTokens())", target = "maxOutputTokens")
+    @Mapping(expression = "java(GeminiMaxOutputTokens.firstPositive(request).orElse(null))", target = "maxOutputTokens")
     @Mapping(expression = "java(request.stop())", target = "stopSequences")
     @Mapping(expression = "java(request.temperature())", target = "temperature")
     @Mapping(expression = "java(request.topP())", target = "topP")
@@ -30,10 +32,10 @@ interface GeminiChatModelMapper {
     @Mapping(expression = "java(GeminiThinkingConfigMapper.fromCustomParameters(request.model(), request.customParameters()))", target = "thinkingConfig")
     GoogleAiGeminiChatModel toGeminiChatModel(
             @NonNull String apiKey, @NonNull ChatCompletionRequest request, @NonNull Duration timeout, int maxRetries,
-            boolean logRequests, boolean logResponses);
+            boolean logRequests, boolean logResponses, HttpClientBuilder httpClientBuilder);
 
     @Mapping(expression = "java(request.model())", target = "modelName")
-    @Mapping(expression = "java(request.maxCompletionTokens())", target = "maxOutputTokens")
+    @Mapping(expression = "java(GeminiMaxOutputTokens.firstPositive(request).orElse(null))", target = "maxOutputTokens")
     @Mapping(expression = "java(request.stop())", target = "stopSequences")
     @Mapping(expression = "java(request.temperature())", target = "temperature")
     @Mapping(expression = "java(request.topP())", target = "topP")
@@ -41,6 +43,6 @@ interface GeminiChatModelMapper {
     @Mapping(expression = "java(GeminiThinkingConfigMapper.fromCustomParameters(request.model(), request.customParameters()))", target = "thinkingConfig")
     GoogleAiGeminiStreamingChatModel toGeminiStreamingChatModel(
             @NonNull String apiKey, @NonNull ChatCompletionRequest request, @NonNull Duration timeout, int maxRetries,
-            boolean logRequests, boolean logResponses);
+            boolean logRequests, boolean logResponses, HttpClientBuilder httpClientBuilder);
 
 }

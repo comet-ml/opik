@@ -10,6 +10,7 @@ export const WorkspaceProjectUserCount: core.serialization.ObjectSchema<
 > = core.serialization.object({
     workspaceId: core.serialization.property("workspace_id", core.serialization.string().optional()),
     projectId: core.serialization.property("project_id", core.serialization.string().optional()),
+    projectName: core.serialization.property("project_name", core.serialization.string().optional()),
     user: core.serialization.string().optional(),
     count: core.serialization.number().optional(),
 });
@@ -18,6 +19,7 @@ export declare namespace WorkspaceProjectUserCount {
     export interface Raw {
         workspace_id?: string | null;
         project_id?: string | null;
+        project_name?: string | null;
         user?: string | null;
         count?: number | null;
     }

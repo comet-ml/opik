@@ -83,6 +83,7 @@ class AlertsClient:
         enabled: typing.Optional[bool] = OMIT,
         alert_type: typing.Optional[AlertWriteAlertType] = OMIT,
         metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
+        custom_fields: typing.Optional[typing.Dict[str, str]] = OMIT,
         triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
         project_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -103,6 +104,9 @@ class AlertsClient:
         alert_type : typing.Optional[AlertWriteAlertType]
 
         metadata : typing.Optional[typing.Dict[str, str]]
+
+        custom_fields : typing.Optional[typing.Dict[str, str]]
+            Optional user-defined key/value pairs, added as top-level keys of the alert's EventBridge event detail. Keys must not collide with the event's own keys.
 
         triggers : typing.Optional[typing.Sequence[AlertTriggerWrite]]
 
@@ -130,6 +134,7 @@ class AlertsClient:
             enabled=enabled,
             alert_type=alert_type,
             metadata=metadata,
+            custom_fields=custom_fields,
             triggers=triggers,
             project_id=project_id,
             request_options=request_options,
@@ -197,6 +202,7 @@ class AlertsClient:
         enabled: typing.Optional[bool] = OMIT,
         alert_type: typing.Optional[AlertWriteAlertType] = OMIT,
         metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
+        custom_fields: typing.Optional[typing.Dict[str, str]] = OMIT,
         triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
         project_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -219,6 +225,9 @@ class AlertsClient:
         alert_type : typing.Optional[AlertWriteAlertType]
 
         metadata : typing.Optional[typing.Dict[str, str]]
+
+        custom_fields : typing.Optional[typing.Dict[str, str]]
+            Optional user-defined key/value pairs, added as top-level keys of the alert's EventBridge event detail. Keys must not collide with the event's own keys.
 
         triggers : typing.Optional[typing.Sequence[AlertTriggerWrite]]
 
@@ -247,6 +256,7 @@ class AlertsClient:
             enabled=enabled,
             alert_type=alert_type,
             metadata=metadata,
+            custom_fields=custom_fields,
             triggers=triggers,
             project_id=project_id,
             request_options=request_options,
@@ -292,6 +302,7 @@ class AlertsClient:
         enabled: typing.Optional[bool] = OMIT,
         alert_type: typing.Optional[AlertWriteAlertType] = OMIT,
         metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
+        custom_fields: typing.Optional[typing.Dict[str, str]] = OMIT,
         triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
         project_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -312,6 +323,9 @@ class AlertsClient:
         alert_type : typing.Optional[AlertWriteAlertType]
 
         metadata : typing.Optional[typing.Dict[str, str]]
+
+        custom_fields : typing.Optional[typing.Dict[str, str]]
+            Optional user-defined key/value pairs, added as top-level keys of the alert's EventBridge event detail. Keys must not collide with the event's own keys.
 
         triggers : typing.Optional[typing.Sequence[AlertTriggerWrite]]
 
@@ -340,6 +354,7 @@ class AlertsClient:
             enabled=enabled,
             alert_type=alert_type,
             metadata=metadata,
+            custom_fields=custom_fields,
             triggers=triggers,
             project_id=project_id,
             request_options=request_options,
@@ -415,6 +430,7 @@ class AsyncAlertsClient:
         enabled: typing.Optional[bool] = OMIT,
         alert_type: typing.Optional[AlertWriteAlertType] = OMIT,
         metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
+        custom_fields: typing.Optional[typing.Dict[str, str]] = OMIT,
         triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
         project_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -435,6 +451,9 @@ class AsyncAlertsClient:
         alert_type : typing.Optional[AlertWriteAlertType]
 
         metadata : typing.Optional[typing.Dict[str, str]]
+
+        custom_fields : typing.Optional[typing.Dict[str, str]]
+            Optional user-defined key/value pairs, added as top-level keys of the alert's EventBridge event detail. Keys must not collide with the event's own keys.
 
         triggers : typing.Optional[typing.Sequence[AlertTriggerWrite]]
 
@@ -465,6 +484,7 @@ class AsyncAlertsClient:
             enabled=enabled,
             alert_type=alert_type,
             metadata=metadata,
+            custom_fields=custom_fields,
             triggers=triggers,
             project_id=project_id,
             request_options=request_options,
@@ -538,6 +558,7 @@ class AsyncAlertsClient:
         enabled: typing.Optional[bool] = OMIT,
         alert_type: typing.Optional[AlertWriteAlertType] = OMIT,
         metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
+        custom_fields: typing.Optional[typing.Dict[str, str]] = OMIT,
         triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
         project_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -560,6 +581,9 @@ class AsyncAlertsClient:
         alert_type : typing.Optional[AlertWriteAlertType]
 
         metadata : typing.Optional[typing.Dict[str, str]]
+
+        custom_fields : typing.Optional[typing.Dict[str, str]]
+            Optional user-defined key/value pairs, added as top-level keys of the alert's EventBridge event detail. Keys must not collide with the event's own keys.
 
         triggers : typing.Optional[typing.Sequence[AlertTriggerWrite]]
 
@@ -591,6 +615,7 @@ class AsyncAlertsClient:
             enabled=enabled,
             alert_type=alert_type,
             metadata=metadata,
+            custom_fields=custom_fields,
             triggers=triggers,
             project_id=project_id,
             request_options=request_options,
@@ -639,6 +664,7 @@ class AsyncAlertsClient:
         enabled: typing.Optional[bool] = OMIT,
         alert_type: typing.Optional[AlertWriteAlertType] = OMIT,
         metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
+        custom_fields: typing.Optional[typing.Dict[str, str]] = OMIT,
         triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
         project_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -659,6 +685,9 @@ class AsyncAlertsClient:
         alert_type : typing.Optional[AlertWriteAlertType]
 
         metadata : typing.Optional[typing.Dict[str, str]]
+
+        custom_fields : typing.Optional[typing.Dict[str, str]]
+            Optional user-defined key/value pairs, added as top-level keys of the alert's EventBridge event detail. Keys must not collide with the event's own keys.
 
         triggers : typing.Optional[typing.Sequence[AlertTriggerWrite]]
 
@@ -690,6 +719,7 @@ class AsyncAlertsClient:
             enabled=enabled,
             alert_type=alert_type,
             metadata=metadata,
+            custom_fields=custom_fields,
             triggers=triggers,
             project_id=project_id,
             request_options=request_options,

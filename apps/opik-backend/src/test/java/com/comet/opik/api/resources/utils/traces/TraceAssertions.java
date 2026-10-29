@@ -27,13 +27,13 @@ public class TraceAssertions {
     public static final String[] IGNORED_FIELDS_TRACES = {"projectId", "projectName", "createdAt",
             "lastUpdatedAt", "feedbackScores", "spanFeedbackScores", "createdBy", "lastUpdatedBy", "totalEstimatedCost",
             "spanCount", "llmSpanCount", "hasToolSpans", "duration", "comments", "threadId", "guardrailsValidations",
-            "providers", "experiment"};
+            "providers", "experiment", "annotationQueues"};
 
     public static final String[] IGNORED_FIELDS_SCORES = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy",
             "valueByAuthor", "sourceQueueId"};
 
     private static final String[] IGNORED_FIELDS_THREADS = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy",
-            "threadModelId", "feedbackScores.createdAt", "feedbackScores.lastUpdatedAt",
+            "threadModelId", "annotationQueues", "feedbackScores.createdAt", "feedbackScores.lastUpdatedAt",
             "feedbackScores.valueByAuthor", "feedbackScores.sourceQueueId"};
 
     /**
@@ -100,6 +100,8 @@ public class TraceAssertions {
         EXCLUDE_FUNCTIONS.put(Trace.TraceField.VISIBILITY_MODE, it -> it.toBuilder().visibilityMode(null).build());
         EXCLUDE_FUNCTIONS.put(Trace.TraceField.PROVIDERS, it -> it.toBuilder().providers(null).build());
         EXCLUDE_FUNCTIONS.put(Trace.TraceField.EXPERIMENT, it -> it.toBuilder().experiment(null).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.ANNOTATION_QUEUES,
+                it -> it.toBuilder().annotationQueues(null).build());
         EXCLUDE_FUNCTIONS.put(Trace.TraceField.TTFT, it -> it.toBuilder().ttft(null).build());
         EXCLUDE_FUNCTIONS.put(Trace.TraceField.SOURCE, it -> it.toBuilder().source(null).build());
         EXCLUDE_FUNCTIONS.put(Trace.TraceField.ENVIRONMENT, it -> it.toBuilder().environment(null).build());

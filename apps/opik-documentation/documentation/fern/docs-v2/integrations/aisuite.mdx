@@ -23,7 +23,7 @@ This guide explains how to integrate Opik with the aisuite Python SDK. By using 
 
 First, ensure you have both `opik` and `aisuite` packages installed:
 
-```bash
+```bash wordWrap
 pip install opik "aisuite[openai]"
 ```
 
@@ -42,13 +42,13 @@ In order to configure AISuite, you will need to have your OpenAI API Key. You ca
 
 You can set it as an environment variable:
 
-```bash
+```bash wordWrap
 export OPENAI_API_KEY="YOUR_API_KEY"
 ```
 
 Or set it programmatically:
 
-```python
+```python wordWrap
 import os
 import getpass
 
@@ -60,7 +60,7 @@ if "OPENAI_API_KEY" not in os.environ:
 
 In order to log the LLM calls to Opik, you will need to wrap the AISuite client with `track_aisuite`. When making calls with that wrapped client, all calls will be logged to Opik:
 
-```python
+```python wordWrap
 from opik.integrations.aisuite import track_aisuite
 import aisuite as ai
 
@@ -88,7 +88,7 @@ print(response.choices[0].message.content)
 
 If you have multiple steps in your LLM pipeline, you can use the `@track` decorator to log the traces for each step. If AISuite is called within one of these steps, the LLM call will be associated with that corresponding step:
 
-```python
+```python wordWrap
 from opik import track
 from opik.integrations.aisuite import track_aisuite
 import aisuite as ai

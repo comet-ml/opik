@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { JsonParam, StringParam, useQueryParam } from "use-query-params";
 import { ArrowUpRight, Loader2 } from "lucide-react";
@@ -8,11 +8,12 @@ import { Trace } from "@/types/traces";
 import { Filter } from "@/types/filters";
 import { useSMEFlow } from "../SMEFlowContext";
 import useTraceById from "@/api/traces/useTraceById";
-import { useUnifiedMedia } from "@/hooks/useUnifiedMedia";
-import { MediaProvider } from "@/shared/PrettyLLMMessage/llmMessages";
-import AttachmentsList from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/AttachmentsList";
 import TraceDetailsPanel from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
-import CodeBlock from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/CodeBlock/CodeBlock";
+import DefaultTraceView from "@/v2/pages-shared/annotation-queues/AnnotatorView/DefaultTraceView";
+import AnnotatorViewFallbackAlert from "@/v2/pages-shared/annotation-queues/AnnotatorView/AnnotatorViewFallbackAlert";
+import SandboxedAnnotatorTraceView from "@/v2/pages-shared/annotation-queues/AnnotatorView/SandboxedAnnotatorTraceView";
+import { LATEST_KIT_VERSION } from "@/shared/SandboxedView/kit/loadKit";
+import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 import { manageToolFilter } from "@/v2/pages-shared/traces/spanTypeFilter";
 import TraceIdentifier from "./TraceIdentifier";
 import { Button } from "@/ui/button";
@@ -81,6 +82,8 @@ const useTraceData = () => {
     trace,
     displayTrace,
     isLoading,
+    viewTrace: fullTrace && fullTrace.id === trace?.id ? fullTrace : trace,
+    isFullTraceLoaded: Boolean(trace?.id) && fullTrace?.id === trace?.id,
     traceId,
     spanId,
     setSpanId,
@@ -130,40 +133,53 @@ const TraceHeader: React.FC = () => {
 };
 
 const TraceContent: React.FC = () => {
-  const { trace, displayTrace, traceId, spanId, setSpanId, handleClose } =
-    useTraceData();
+  const {
+    trace,
+    displayTrace,
+    viewTrace,
+    isFullTraceLoaded,
+    traceId,
+    spanId,
+    setSpanId,
+    handleClose,
+  } = useTraceData();
 
-  const { media, transformedInput, transformedOutput } =
-    useUnifiedMedia(displayTrace);
+  const { annotationQueue } = useSMEFlow();
+  const customHtml = annotationQueue?.annotator_view?.html;
+  const kitVersion =
+    annotationQueue?.annotator_view?.kit_version ?? LATEST_KIT_VERSION;
+  const [viewFailure, setViewFailure] = useState<{
+    traceId: string;
+    message: string;
+  }>();
+  const viewError =
+    viewFailure && viewFailure.traceId === viewTrace?.id
+      ? viewFailure.message
+      : undefined;
 
   return (
     <>
-      <MediaProvider media={media}>
+      {customHtml && viewTrace && !viewError ? (
+        <SandboxedAnnotatorTraceView
+          html={customHtml}
+          kitVersion={kitVersion}
+          trace={viewTrace}
+          onError={(message, kind) => {
+            if (!isFullTraceLoaded) return;
+            setViewFailure({ traceId: viewTrace.id, message });
+            trackEvent(OpikEvent.ANNOTATION_QUEUE_VIEW_FAILED, {
+              queue_id: annotationQueue?.id,
+              trace_id: viewTrace.id,
+              kind,
+            });
+          }}
+        />
+      ) : (
         <div className="flex flex-col gap-3">
-          {displayTrace && <AttachmentsList media={media} />}
-          <CodeBlock
-            title="Input"
-            data={transformedInput}
-            prettifyConfig={{ fieldType: "input" }}
-            preserveKey="syntax-highlighter-annotation-input"
-            withSearch
-          />
-          <CodeBlock
-            title="Output"
-            data={transformedOutput}
-            prettifyConfig={{ fieldType: "output" }}
-            preserveKey="syntax-highlighter-annotation-output"
-            withSearch
-          />
-          <CodeBlock
-            title="Metadata"
-            data={displayTrace?.metadata || {}}
-            preserveKey="syntax-highlighter-annotation-metadata"
-            withSearch
-            defaultOpen={false}
-          />
+          {viewError && <AnnotatorViewFallbackAlert />}
+          {displayTrace && <DefaultTraceView trace={displayTrace} />}
         </div>
-      </MediaProvider>
+      )}
       <TraceDetailsPanel
         projectId={trace?.project_id || ""}
         traceId={traceId ?? ""}

@@ -98,7 +98,11 @@ async function expectCostToSettle(
     .toEqual({ listedCount: 1, fromList: expected, fromById: expected } satisfies CostReading);
 }
 
-test.describe(
+// Disabled (Sept 2026 cost spike): the Studio drives GEPA / Hierarchical
+// Reflective optimizers, whose trial count is bounded only by the run's
+// timeout — so one test's LLM spend is whatever the optimizer chooses to do.
+// Re-enable behind an explicit trial ceiling and a per-project spend cap.
+test.describe.skip(
   'Optimization runs — total cost',
   { tag: ['@t2-cuj', '@area:optimization-studio'] },
   () => {

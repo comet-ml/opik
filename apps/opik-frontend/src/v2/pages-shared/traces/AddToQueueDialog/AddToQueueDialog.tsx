@@ -53,6 +53,10 @@ const AddToQueueDialog: React.FunctionComponent<AddToQueueDialogProps> = ({
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(DEFAULT_SIZE);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
+  // The create dialog keeps its form state for as long as it is mounted, and this one stays mounted
+  // while the sheet opens and closes. Remounting it per open is what the queues page does, so a second
+  // "Create annotation queue" starts blank rather than on the last attempt's values.
+  const [createDialogKey, setCreateDialogKey] = useState(0);
 
   const { mutate } = useAnnotationQueueAddItemsMutation();
 
@@ -245,6 +249,7 @@ const AddToQueueDialog: React.FunctionComponent<AddToQueueDialogProps> = ({
                   onClick={() => {
                     setOpen(false);
                     setOpenDialog(true);
+                    setCreateDialogKey((key) => key + 1);
                   }}
                   disabled={noValidRows}
                 >
@@ -277,6 +282,7 @@ const AddToQueueDialog: React.FunctionComponent<AddToQueueDialogProps> = ({
         </DialogContent>
       </Dialog>
       <AddEditAnnotationQueueDialog
+        key={createDialogKey}
         open={openDialog}
         setOpen={setOpenDialog}
         onQueueCreated={onQueueCreated}

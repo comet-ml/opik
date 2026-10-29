@@ -124,6 +124,7 @@ module.exports = {
 
         /* Recoverable-waste callout colors (AI Spend) */
         "waste-bg": "var(--waste-bg)",
+        "guidance-callout-bg": "var(--guidance-callout-bg)",
         "waste-border": "var(--waste-border)",
         "waste-text": "var(--waste-text)",
 
@@ -139,6 +140,7 @@ module.exports = {
         "chart-orange": "var(--chart-orange)",
         "chart-teal": "var(--chart-teal)",
         "chart-gray-light": "var(--chart-gray-light)",
+        "chart-yellow-light": "var(--chart-yellow-light)",
         "chart-gray-dark": "var(--chart-gray-dark)",
 
         /* Accent colors */
@@ -190,6 +192,10 @@ module.exports = {
           "0%": { backgroundPosition: "200% 0" },
           "100%": { backgroundPosition: "-200% 0" },
         },
+        "view-flash": {
+          "0%": { boxShadow: "0 0 0 3px hsl(var(--primary) / 0.5)" },
+          "100%": { boxShadow: "0 0 0 3px transparent" },
+        },
         // Outward box-shadow ring (inherits the dot's currentColor) + opacity
         // fade — the "thinking" beacon, matching ollie-assist's status dot.
         "beacon-pulse": {
@@ -211,6 +217,7 @@ module.exports = {
         "caret-blink": "caret-blink 1.25s ease-out infinite",
         shimmer: "shimmer 1.8s ease-in-out infinite",
         "beacon-pulse": "beacon-pulse 1.4s ease-out infinite",
+        "view-flash": "view-flash 1.2s ease-out",
         "progress-indeterminate":
           "progress-indeterminate 1.3s ease-in-out infinite",
       },

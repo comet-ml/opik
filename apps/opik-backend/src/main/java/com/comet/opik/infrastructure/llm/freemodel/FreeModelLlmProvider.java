@@ -101,7 +101,7 @@ public class FreeModelLlmProvider implements LlmProviderService {
                 .tools(request.tools())
                 .toolChoice(request.toolChoice())
                 .parallelToolCalls(request.parallelToolCalls())
-                .reasoningEffort("minimal")
+                .reasoningEffort(FreeModelConfig.OPENAI_REASONING_MODEL_EFFORT)
                 .customParameters(request.customParameters())
                 .build();
     }

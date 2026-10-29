@@ -110,7 +110,7 @@ export const makeEndOfMinute = (value: string) => {
   return dayjs(value).endOf("minute").toISOString();
 };
 
-export const millisecondsToSeconds = (milliseconds: number) => {
+export const formatMillisecondsAsSeconds = (milliseconds: number) => {
   const precision = milliseconds > 100 ? 1 : milliseconds > 10 ? 2 : 3;
   return round(milliseconds / 1000, precision);
 };
@@ -124,7 +124,7 @@ export const formatDuration = (value?: number | null, onlySeconds = true) => {
     return "NA";
   }
 
-  const totalSeconds = millisecondsToSeconds(value);
+  const totalSeconds = formatMillisecondsAsSeconds(value);
 
   if (onlySeconds) {
     return `${totalSeconds}s`;

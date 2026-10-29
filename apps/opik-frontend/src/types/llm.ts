@@ -54,11 +54,10 @@ export enum LLM_JUDGE {
   moderation = "moderation",
   answer_relevance = "answer_relevance",
   context_precision = "context_precision",
-  structure_compliance = "structure_compliance",
+  tool_correctness = "tool_correctness",
   conversational_coherence = "conversational_coherence",
   session_completeness = "session_completeness",
   user_frustration = "user_frustration",
-  meaning_match = "meaning_match",
 }
 
 export type LLMPromptTemplate = {

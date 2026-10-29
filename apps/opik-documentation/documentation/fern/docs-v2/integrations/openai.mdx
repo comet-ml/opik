@@ -28,7 +28,7 @@ This guide explains how to integrate Opik with the OpenAI Python SDK. By using t
 
 First, ensure you have both `opik` and `openai` packages installed:
 
-```bash
+```bash wordWrap
 pip install opik openai
 ```
 
@@ -47,13 +47,13 @@ In order to configure OpenAI, you will need to have your OpenAI API Key. You can
 
 You can set it as an environment variable:
 
-```bash
+```bash wordWrap
 export OPENAI_API_KEY="YOUR_API_KEY"
 ```
 
 Or set it programmatically:
 
-```python
+```python wordWrap
 import os
 import getpass
 
@@ -65,7 +65,7 @@ if "OPENAI_API_KEY" not in os.environ:
 
 In order to log the LLM calls to Opik, you will need to wrap the OpenAI client with `track_openai`. When making calls with that wrapped client, all calls will be logged to Opik:
 
-```python
+```python wordWrap
 from opik.integrations.openai import track_openai
 from openai import OpenAI
 import os
@@ -97,7 +97,7 @@ print(completion.choices[0].message.content)
 
 If you have multiple steps in your LLM pipeline, you can use the `@track` decorator to log the traces for each step. If OpenAI is called within one of these steps, the LLM call will be associated with that corresponding step:
 
-```python
+```python wordWrap
 from opik import track
 from opik.integrations.openai import track_openai
 from openai import OpenAI
@@ -142,7 +142,7 @@ The trace can now be viewed in the UI with hierarchical spans showing the relati
 
 The OpenAI SDK is often used as a client for other OpenAI-compatible APIs (Together, OpenRouter, vLLM, DeepSeek, and many more). In that case the provider recorded on each LLM span defaults to the client's base URL host, which is not always descriptive. You can override it by passing `provider` to `track_openai`:
 
-```python
+```python wordWrap
 from opik.integrations.openai import track_openai
 from openai import OpenAI
 
@@ -155,7 +155,7 @@ client = track_openai(client, provider="deepseek")
 
 `provider` accepts any string, or one of the providers Opik recognizes for cost tracking via the `opik.LLMProvider` enum:
 
-```python
+```python wordWrap
 from opik import LLMProvider
 from opik.integrations.openai import track_openai
 
@@ -170,7 +170,7 @@ client = track_openai(client, provider=LLMProvider.ANTHROPIC)
 
 The OpenAI integration also supports Azure OpenAI Services. To use Azure OpenAI, initialize your client with Azure configuration and use it with `track_openai` just like the standard OpenAI client:
 
-```python
+```python wordWrap
 from opik.integrations.openai import track_openai
 from openai import AzureOpenAI
 
@@ -214,7 +214,7 @@ Threads in Opik are collections of traces that are grouped together using a uniq
 
 The `thread_id` can be passed to the OpenAI client as a parameter, which will be used to group all traces into a single thread.
 
-```python
+```python wordWrap
 import openai
 
 from opik.integrations.openai import track_openai
@@ -238,11 +238,42 @@ _ = wrapped_client.responses.create(
 
 More information on logging chat conversations can be found in the [Log conversations](/tracing/advanced/log_chat_conversations) section.
 
+## Decisions API
+
+The `track_openai` wrapper also tracks OpenAI's [Decisions API](https://developers.openai.com/api/docs/guides/decisions), which answers typed questions about your input with calibrated probabilities instead of free-form text. It requires `openai>=3.26.0`.
+
+```python
+from opik.integrations.openai import track_openai
+from openai import OpenAI
+
+client = track_openai(OpenAI())
+
+decision = client.decisions.create(
+    model="gpt-6-luna",
+    input="I was charged twice for my subscription this month!",
+    questions=[
+        {
+            "name": "is_complaint",
+            "type": "predicate",
+            "instructions": "Is the customer complaining?",
+        },
+        {
+            "name": "topic",
+            "type": "choice",
+            "instructions": "What is the message about?",
+            "choices": [{"value": "billing"}, {"value": "shipping"}, {"value": "other"}],
+        },
+    ],
+)
+```
+
+Each call is logged as an LLM span named `decisions_create`, with the `input` and `questions` as the span input, the returned `answers` as the span output, and the token usage.
+
 ## Video Generation (Sora)
 
 The `track_openai` wrapper also supports OpenAI's video generation API (Sora). When you generate videos, Opik automatically tracks the video creation process and logs the generated video as an attachment when you download it via the client API.
 
-```python
+```python wordWrap
 import os
 from opik import track
 from opik.integrations.openai import track_openai
@@ -288,7 +319,7 @@ The trace will show the full video generation workflow including the video creat
 <Tip>
   The `videos.retrieve` method is intentionally not tracked because the `poll` method makes many retrieve calls internally, which would create excessive noise in your traces. If you need to track retrieve calls (e.g. if you don't use `poll` and check the progress manually), you can decorate the method yourself:
 
-  ```python
+  ```python wordWrap
   tracked_client.videos.retrieve = opik.track(name="videos.retrieve")(
       tracked_client.videos.retrieve
   )
@@ -303,6 +334,7 @@ The `track_openai` wrapper supports the following OpenAI methods:
 - `openai_client.beta.chat.completions.parse()`
 - `openai_client.beta.chat.completions.stream()`
 - `openai_client.responses.create()`
+- `openai_client.decisions.create()`
 - `openai_client.videos.create()`
 - `openai_client.videos.create_and_poll()`
 - `openai_client.videos.poll()`

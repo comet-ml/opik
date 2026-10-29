@@ -23,7 +23,7 @@ title: Observability for Groq with Opik
 
 To start tracking your Groq LLM calls, you can use our [LiteLLM integration](/integrations/litellm). You'll need to have both the `opik` and `litellm` packages installed. You can install them using pip:
 
-```bash
+```bash wordWrap
 pip install opik litellm
 ```
 
@@ -48,13 +48,13 @@ In order to configure Groq, you will need to have your Groq API Key. You can cre
 
 You can set it as an environment variable:
 
-```bash
+```bash wordWrap
 export GROQ_API_KEY="YOUR_API_KEY"
 ```
 
 Or set it programmatically:
 
-```python
+```python wordWrap
 import os
 import getpass
 
@@ -66,7 +66,7 @@ if "GROQ_API_KEY" not in os.environ:
 
 In order to log the LLM calls to Opik, you will need to create the OpikLogger callback. Once the OpikLogger callback is created and added to LiteLLM, you can make calls to LiteLLM as you normally would:
 
-```python
+```python wordWrap
 from litellm.integrations.opik.opik import OpikLogger
 import litellm
 import os
@@ -98,7 +98,7 @@ print(response.choices[0].message.content)
 
 If you are using LiteLLM within a function tracked with the [`@track`](/tracing/advanced/log_traces#using-function-decorators) decorator, you will need to pass the `current_span_data` as metadata to the `litellm.completion` call:
 
-```python
+```python wordWrap
 from opik import track
 from opik.opik_context import get_current_span_data
 import litellm

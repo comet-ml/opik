@@ -21,12 +21,27 @@ def aggregate(
                     openai_responses.ResponseCompletedEvent,
                     openai_responses.ResponseErrorEvent,
                     openai_responses.ResponseIncompleteEvent,
+                    openai_responses.ResponseFailedEvent,
                 ),
             )
         ]
 
-        response = completed_event[0].response
-        return response
+        if not completed_event:
+            # The stream was abandoned before its terminal event (a `break`, a
+            # cancelled task, a client disconnect): there is no response to log.
+            LOGGER.debug(
+                "No terminal event among %d OpenAI Responses stream items, "
+                "stream output is not recorded",
+                len(items),
+            )
+            return None
+
+        for event in completed_event:
+            response = getattr(event, "response", None)
+            if response is not None:
+                return response
+
+        return None
     except Exception as exception:
         LOGGER.error(
             logging_messages.FAILED_TO_PARSE_OPENAI_STREAM_CONTENT,

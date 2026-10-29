@@ -25,7 +25,7 @@ In this guide, we will showcase how to integrate Opik with DSPy so that all the 
 
 First, ensure you have both `opik` and `dspy` installed:
 
-```bash
+```bash wordWrap
 pip install opik dspy
 ```
 
@@ -44,13 +44,13 @@ In order to configure DSPy, you will need to have your LLM provider API key. For
 
 You can set it as an environment variable:
 
-```bash
+```bash wordWrap
 export OPENAI_API_KEY="YOUR_API_KEY"
 ```
 
 Or set it programmatically:
 
-```python
+```python wordWrap
 import os
 import getpass
 
@@ -62,7 +62,7 @@ if "OPENAI_API_KEY" not in os.environ:
 
 In order to log traces to Opik, you will need to set the `opik` callback:
 
-```python
+```python wordWrap
 import dspy
 from opik.integrations.dspy.callback import OpikCallback
 

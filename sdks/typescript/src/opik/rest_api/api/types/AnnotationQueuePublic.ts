@@ -15,6 +15,7 @@ export interface AnnotationQueuePublic {
     annotatorsPerItem?: number;
     lockTimeoutSeconds?: number;
     automation?: OpikApi.AnnotationQueueAutomationPublic;
+    annotatorView?: OpikApi.AnnotationQueueAnnotatorViewPublic;
     reviewers?: OpikApi.AnnotationQueueReviewerPublic[];
     feedbackScores?: OpikApi.FeedbackScoreAveragePublic[];
     itemsCount?: number;

@@ -314,8 +314,8 @@ const OllamaProviderDetails: React.FC<OllamaProviderDetailsProps> = ({
               </FormControl>
               <FormMessage />
               <Description>
-                Comma-separated list of available models. Use &ldquo;Discover
-                Models&rdquo; to auto-populate this field.
+                Comma-separated list of models. Click &ldquo;Connect&rdquo; to
+                fill it with the models found on the instance.
               </Description>
             </FormItem>
           );

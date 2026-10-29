@@ -27,7 +27,6 @@ import com.comet.opik.utils.JsonUtils;
 import com.google.inject.AbstractModule;
 import com.redis.testcontainers.RedisContainer;
 import dev.langchain4j.data.message.AiMessage;
-import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.BeforeAll;
@@ -50,13 +49,11 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import static com.comet.opik.api.resources.utils.AuthTestUtils.mockTargetWorkspace;
+import static com.comet.opik.api.resources.utils.AutomationRuleEvaluatorTestUtils.answerEveryJudgeCall;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static java.util.stream.Collectors.toMap;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.when;
 
 /**
  * Black-box coverage for the trace-thread LLM-as-judge online scorer's agentic-tools path — the
@@ -156,8 +153,8 @@ class TraceThreadOnlineScoringAgenticToolsE2ETest {
     @Test
     void runsSizeAggregateAndScoresThread(LlmProviderFactory llmProviderFactory)
             throws Exception {
-        when(llmProviderFactory.getLanguageModel(anyString(), any()).chat(any(ChatRequest.class)))
-                .thenAnswer(invocation -> ChatResponse.builder().aiMessage(AiMessage.from(LLM_RESPONSE)).build());
+        answerEveryJudgeCall(llmProviderFactory,
+                invocation -> ChatResponse.builder().aiMessage(AiMessage.from(LLM_RESPONSE)).build());
 
         var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
         var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);

@@ -22,12 +22,12 @@ For this guide we will be evaluating the Moderation metric included in the LLM E
 > You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=eval_mod&utm_campaign=opik) for more information.
 
 
-```python
+```python wordWrap
 %pip install --upgrade --quiet opik pandas
 ```
 
 
-```python
+```python wordWrap
 import opik
 
 opik.configure(use_local=False)
@@ -38,7 +38,7 @@ opik.configure(use_local=False)
 First, we will configure the OpenAI API key and download a reference moderation dataset.
 
 
-```python
+```python wordWrap
 import os
 import getpass
 
@@ -51,7 +51,7 @@ We will be using the [OpenAI Moderation API Release dataset](https://github.com/
 Since the insert methods in the SDK deduplicates items, we can insert 50 items and if the items already exist, Opik will automatically remove them.
 
 
-```python
+```python wordWrap
 # Create dataset
 import opik
 import pandas as pd
@@ -101,7 +101,7 @@ By defining the evaluation task in this way, we will be able to understand how w
 We can use the Opik SDK to compute a moderation score for each item in the dataset:
 
 
-```python
+```python wordWrap
 from opik.evaluation.metrics import Moderation, Equals
 from opik.evaluation import evaluate
 from opik import Opik

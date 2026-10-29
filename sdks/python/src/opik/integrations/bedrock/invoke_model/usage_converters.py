@@ -25,13 +25,26 @@ def anthropic_to_bedrock_usage(anthropic_usage: Dict[str, Any]) -> Dict[str, Any
     cache_write = anthropic_usage.get("cache_creation_input_tokens", 0)
     cache_read = anthropic_usage.get("cache_read_input_tokens", 0)
 
-    return {
+    bedrock_usage = {
         "inputTokens": input_tokens,
         "outputTokens": output_tokens,
         "cacheWriteInputTokens": cache_write,
         "cacheReadInputTokens": cache_read,
         "totalTokens": input_tokens + output_tokens,
     }
+    # Claude splits cache writes by TTL; kept as Converse's cacheDetails, keyed by TTL.
+    cache_creation = anthropic_usage.get("cache_creation") or {}
+    cache_details = {
+        ttl: {"inputTokens": cache_creation[key]}
+        for ttl, key in (
+            ("5m", "ephemeral_5m_input_tokens"),
+            ("1h", "ephemeral_1h_input_tokens"),
+        )
+        if isinstance(cache_creation.get(key), int)
+    }
+    if cache_details:
+        bedrock_usage["cacheDetails"] = cache_details
+    return bedrock_usage
 
 
 def llama_to_bedrock_usage(llama_usage: Dict[str, Any]) -> Dict[str, Any]:
@@ -74,13 +87,21 @@ def openai_to_bedrock_usage(openai_usage: Dict[str, Any]) -> Dict[str, Any]:
 
 def nova_to_bedrock_usage(nova_usage: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Convert Nova-style usage (already in Bedrock format) - pass through.
-    Nova already uses Bedrock format (inputTokens, outputTokens).
+    Pass Nova usage through, since Nova already reports Bedrock format.
+
+    Every reported field is preserved, not just inputTokens and outputTokens, so
+    cache counters (cacheReadInputTokens, cacheWriteInputTokens) and any field
+    Bedrock adds later reach the span instead of being dropped here.
+
+    totalTokens stays derived from the input and output counts the caller settled
+    on, so it cannot disagree with them when the stream aggregator overrides those
+    counts from amazon-bedrock-invocationMetrics.
     """
     input_tokens = nova_usage.get("inputTokens", 0)
     output_tokens = nova_usage.get("outputTokens", 0)
 
     return {
+        **nova_usage,
         "inputTokens": input_tokens,
         "outputTokens": output_tokens,
         "totalTokens": input_tokens + output_tokens,

@@ -39,8 +39,12 @@ const DashboardContent: React.FunctionComponent = () => {
     (widgetData: DashboardWidget) => {
       if (!targetSectionId) return;
 
+      const { onAddWidgetToTemplate } = useDashboardStore.getState();
+
       if (targetWidgetId) {
         updateWidget(targetSectionId, targetWidgetId, widgetData);
+      } else if (onAddWidgetToTemplate) {
+        onAddWidgetToTemplate(targetSectionId, widgetData);
       } else {
         addWidget(targetSectionId, widgetData);
       }

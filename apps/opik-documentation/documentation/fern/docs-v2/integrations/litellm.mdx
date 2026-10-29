@@ -26,7 +26,7 @@ title: Observability for LiteLLM with Opik
 
 First, ensure you have both `opik` and `litellm` packages installed:
 
-```bash
+```bash wordWrap
 pip install opik litellm
 ```
 
@@ -45,13 +45,13 @@ In order to use LiteLLM, you will need to configure your LLM provider API keys. 
 
 You can set them as environment variables:
 
-```bash
+```bash wordWrap
 export OPENAI_API_KEY="YOUR_API_KEY"
 ```
 
 Or set them programmatically:
 
-```python
+```python wordWrap
 import os
 import getpass
 
@@ -65,7 +65,7 @@ if "OPENAI_API_KEY" not in os.environ:
 
 In order to log the LLM calls to Opik, you will need to create the OpikLogger callback. Once the OpikLogger callback is created and added to LiteLLM, you can make calls to LiteLLM as you normally would:
 
-```python
+```python wordWrap
 from litellm.integrations.opik.opik import OpikLogger
 import litellm
 import os
@@ -94,7 +94,7 @@ print(response.choices[0].message.content)
 
 If you are using LiteLLM within a function tracked with the [`@track`](/tracing/advanced/log_traces#using-function-decorators) decorator, you will need to pass the `current_span_data` as metadata to the `litellm.completion` call:
 
-```python
+```python wordWrap
 from opik import track
 from opik.opik_context import get_current_span_data
 from litellm.integrations.opik.opik import OpikLogger
@@ -132,7 +132,7 @@ chunks = list(response)
 
 In order to configure the Opik logging, you will need to update the `litellm_settings` section in the LiteLLM `config.yaml` config file:
 
-```yaml
+```yaml wordWrap
 model_list:
   - model_name: gpt-4o
     litellm_params:
@@ -143,7 +143,7 @@ litellm_settings:
 
 You can now start the LiteLLM Proxy Server and all LLM calls will be logged to Opik:
 
-```bash
+```bash wordWrap
 litellm --config config.yaml
 ```
 
@@ -151,7 +151,7 @@ litellm --config config.yaml
 
 Each API call made to the LiteLLM Proxy server will now be logged to Opik:
 
-```bash
+```bash wordWrap
 curl -X POST http://localhost:4000/v1/chat/completions -H 'Authorization: Bearer sk-1234' -H "Content-Type: application/json" -d '{
     "model": "gpt-4o",
     "messages": [

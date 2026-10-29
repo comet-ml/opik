@@ -23,15 +23,17 @@ import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
  * Behaviour of {@link ClickHouseTracesTopologyHealthCheck}: the flag↔topology assertion in both directions, plus the
- * shared timeout/cancellation contract inherited from {@link AbstractClickHouseHealthCheck}.
+ * shared timeout/abandonment contract inherited from {@link AbstractClickHouseHealthCheck}.
  *
  * <p>The mismatch cases are the point of the check, so each one asserts the actual message, not merely that the probe
  * went unhealthy: the message is the only thing an operator sees on {@code /health-check}, and it has to name the flag,
@@ -162,7 +164,7 @@ class ClickHouseTracesTopologyHealthCheckTest {
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("failureModes")
-    void check__whenQueryFails__thenUnhealthyAndCancelsQuery(String name, Exception failure) throws Exception {
+    void check__whenQueryFails__thenUnhealthyWithoutCancellingQuery(String name, Exception failure) throws Exception {
         var failingFuture = mock(CompletableFuture.class);
         when(failingFuture.get(HEALTH_CHECK_TIMEOUT.toMilliseconds(), TimeUnit.MILLISECONDS)).thenThrow(failure);
         when(clickHouseClient.queryRecords(eq(TOPOLOGY_QUERY), eq(QUERY_PARAMS), argThat(probeServerSettings())))
@@ -172,7 +174,12 @@ class ClickHouseTracesTopologyHealthCheckTest {
 
         assertThat(actualResult.isHealthy()).isFalse();
         assertThat(actualResult.getError()).isSameAs(failure);
-        verify(failingFuture).cancel(true);
+        // The probe never cancels, on any path. Where that matters is the deadline: cancelling there
+        // completes the future exceptionally and the response the client is still building is discarded
+        // unclosed, leaking its connection (OPIK-8576) - covered end-to-end by
+        // ClickHouseHealthCheckConnectionReleaseTest. This future has already failed or is still pending,
+        // so the guard here is on the call itself, keeping the rule from creeping back in.
+        verify(failingFuture, never()).cancel(anyBoolean());
     }
 
     @Test

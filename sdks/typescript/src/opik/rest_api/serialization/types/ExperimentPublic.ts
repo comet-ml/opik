@@ -49,6 +49,7 @@ export const ExperimentPublic: core.serialization.ObjectSchema<
     createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
     lastUpdatedBy: core.serialization.property("last_updated_by", core.serialization.string().optional()),
     status: ExperimentPublicStatus.optional(),
+    finishedAt: core.serialization.property("finished_at", core.serialization.date().optional()),
     experimentScores: core.serialization.property(
         "experiment_scores",
         core.serialization.list(ExperimentScorePublic).optional(),
@@ -98,6 +99,7 @@ export declare namespace ExperimentPublic {
         created_by?: string | null;
         last_updated_by?: string | null;
         status?: ExperimentPublicStatus.Raw | null;
+        finished_at?: string | null;
         experiment_scores?: ExperimentScorePublic.Raw[] | null;
         prompt_version?: PromptVersionLinkPublic.Raw | null;
         prompt_versions?: PromptVersionLinkPublic.Raw[] | null;

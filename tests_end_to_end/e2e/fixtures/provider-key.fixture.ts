@@ -10,9 +10,12 @@ import {
 } from '../core/mock-auth';
 import {
   createProviderKey,
+  deleteProviderKeyById,
   deleteProviderKeyByName,
+  findProviderKeyByProvider,
   notFoundProviderBaseUrl,
 } from '../core/provider-keys';
+import { registerUnbilledModel } from '../core/llm-model-policy';
 
 export interface OauthProviderSeed {
   providerName: string;
@@ -31,6 +34,18 @@ export interface UnreachableProviderSeed {
   providerName: string;
   /** Model name; unique per test so parallel specs never collide. */
   modelName?: string;
+}
+
+export interface ModelListProviderSeed {
+  providerName: string;
+  /**
+   * The model display names the picker should offer, in list order.
+   *
+   * Order is part of the contract: a caller asserting something about the FIRST
+   * or LAST entry of a long list needs the rendered order to be the one it
+   * asked for, not whatever the backend happened to store.
+   */
+  modelNames: readonly string[];
 }
 
 export interface FailingProviderSeed {
@@ -142,10 +157,48 @@ export interface ProviderKeysFixture {
    */
   createPermanentlyFailing(seed: FailingProviderSeed): Promise<string>;
   /**
+   * REST-seeds a Custom provider offering exactly `modelNames`, and returns
+   * them in the order the picker will render them; registered for teardown
+   * deletion.
+   *
+   * For specs about the model PICKER rather than about calling a model — a list
+   * long enough to overflow the dropdown is otherwise unreachable, because
+   * every other selection helper in the estate types a full model name into
+   * "Search model" first and so never sees more than a handful of options.
+   *
+   * Points at `UNREACHABLE_BASE_URL` for the same reason `createUnreachable`
+   * does, with the opposite intent: here nothing is ever meant to call these
+   * models, and a refused connect means a spec that accidentally ran one fails
+   * in milliseconds instead of billing. Every name is registered unbilled, so
+   * the model-policy guard lets a picker select them.
+   */
+  createWithModels(seed: ModelListProviderSeed): Promise<string[]>;
+  /**
    * Registers a provider name for teardown deletion without seeding — for tests where
    * UI creation is itself the behavior under test. Cleanup runs even when the test fails.
    */
   register(providerName: string): void;
+  /**
+   * Make sure a BUILT-IN provider (`openrouter`, `openai`, …) has a key,
+   * reusing whatever the workspace already has.
+   *
+   * Built-ins are not like the custom providers above, and the difference
+   * matters for cleanup: there is one key per provider per workspace and it
+   * carries no `provider_name`, so a spec cannot namespace itself a private
+   * one. This therefore REUSES an existing key untouched and seeds one only
+   * when none exists — and teardown deletes only a key it seeded itself.
+   * Deleting someone's real OpenRouter key on a shared workspace is not
+   * something a test run can undo.
+   *
+   * The seeded key's secret is junk, which is fine for every caller so far:
+   * `saveApiKey` performs no upstream check, so a key that is never used to
+   * make a call is indistinguishable from a real one. `models` are registered
+   * as unbilled for the same reason — a spec that CREATES a rule on one of
+   * them never invokes it.
+   *
+   * Returns whether it seeded, so a caller can say so in its own diagnostics.
+   */
+  ensureBuiltIn(provider: string, models?: readonly string[]): Promise<{ seeded: boolean }>;
 }
 
 export interface ProviderKeyFixtures {
@@ -161,10 +214,14 @@ export const test = baseTest.extend<ProviderKeyFixtures>({
   providerKeys: async ({}, use, testInfo) => {
     const registered: string[] = [];
     const forcedStatusModels: string[] = [];
+    /** Built-in keys THIS test created, and therefore the only ones it may delete. */
+    const seededBuiltInIds: string[] = [];
 
     await use({
       async createOauth({ providerName, modelNames = ['mock-model'] }) {
         registered.push(providerName);
+        // The mock gateway answers these; nothing reaches a paid API.
+        for (const m of modelNames) registerUnbilledModel(m);
         await createProviderKey({
           provider: 'custom-llm',
           provider_name: providerName,
@@ -185,6 +242,7 @@ export const test = baseTest.extend<ProviderKeyFixtures>({
       },
       async createUnreachable({ providerName, modelName = 'unreachable-model' }) {
         registered.push(providerName);
+        registerUnbilledModel(modelName);
         const model = `custom-llm/${providerName}/${modelName}`;
         await createProviderKey({
           provider: 'custom-llm',
@@ -199,6 +257,7 @@ export const test = baseTest.extend<ProviderKeyFixtures>({
       },
       async createUnresponsive({ providerName, modelName = 'unresponsive-model' }) {
         registered.push(providerName);
+        registerUnbilledModel(modelName);
         const model = `custom-llm/${providerName}/${modelName}`;
         await createProviderKey({
           provider: 'custom-llm',
@@ -213,10 +272,12 @@ export const test = baseTest.extend<ProviderKeyFixtures>({
       },
       async forceChatStatus(modelName, status) {
         forcedStatusModels.push(modelName);
+        registerUnbilledModel(modelName);
         await mockAuthForceChatStatus(modelName, status);
       },
       async createPermanentlyFailing({ providerName, modelName = 'always-404-model' }) {
         registered.push(providerName);
+        registerUnbilledModel(modelName);
         const qualifiedModel = `custom-llm/${providerName}/${modelName}`;
         await createProviderKey({
           provider: 'custom-llm',
@@ -229,8 +290,66 @@ export const test = baseTest.extend<ProviderKeyFixtures>({
         });
         return qualifiedModel;
       },
+      async createWithModels({ providerName, modelNames }) {
+        if (modelNames.length === 0) {
+          throw new Error(
+            '[provider-key fixture] createWithModels needs at least one model — ' +
+              'a provider with none renders no options at all, which is a different page',
+          );
+        }
+        registered.push(providerName);
+        for (const model of modelNames) registerUnbilledModel(model);
+        await createProviderKey({
+          provider: 'custom-llm',
+          provider_name: providerName,
+          base_url: UNREACHABLE_BASE_URL,
+          // Required whenever `auth_config` is absent, and never presented to
+          // anything: the connect is refused before a request is written.
+          api_key: 'unused-these-models-are-never-called',
+          configuration: {
+            models: modelNames.map((model) => `custom-llm/${providerName}/${model}`).join(','),
+          },
+        });
+        return [...modelNames];
+      },
       register(providerName) {
         registered.push(providerName);
+      },
+      async ensureBuiltIn(provider, models = []) {
+        for (const model of models) registerUnbilledModel(model);
+        const existing = await findProviderKeyByProvider(provider);
+        if (existing) return { seeded: false };
+        try {
+          await createProviderKey({
+            provider,
+            // Neither `provider_name` nor `base_url` is sent: a built-in provider
+            // is keyed by its provider type and calls the vendor's own endpoint,
+            // and the API rejects either field blank ("baseUrl must not be
+            // blank"). Omitted, not empty.
+            api_key: `qa-placeholder-${provider}-never-called`,
+          });
+        } catch (err) {
+          // The check above and this create are not atomic, and the config runs
+          // `fullyParallel`, so two workers can both look, both find nothing and
+          // both try to create. A built-in provider holds ONE key per workspace,
+          // so the loser of that race is refused. Losing is not a failure — the
+          // key it wanted now exists — but the loser must NOT record it as
+          // seeded, or its teardown would delete a key the winner is still
+          // using. Re-read rather than trusting the status code, so this only
+          // swallows a refusal that really did leave a usable key behind.
+          const raced = await findProviderKeyByProvider(provider);
+          if (!raced) throw err;
+          return { seeded: false };
+        }
+        const created = await findProviderKeyByProvider(provider);
+        if (!created) {
+          throw new Error(
+            `[provider-key fixture] seeded a ${provider} key but it does not list back — ` +
+              'refusing to continue, since teardown could not then remove it',
+          );
+        }
+        seededBuiltInIds.push(created.id);
+        return { seeded: true };
       },
     });
 
@@ -253,6 +372,14 @@ export const test = baseTest.extend<ProviderKeyFixtures>({
           await deleteProviderKeyByName(name);
         } catch (err) {
           console.warn(`[provider-key fixture] delete warning for ${name}:`, err);
+        }
+      }
+      // Only ids this test seeded — a pre-existing built-in key is left alone.
+      for (const id of seededBuiltInIds) {
+        try {
+          await deleteProviderKeyById(id);
+        } catch (err) {
+          console.warn(`[provider-key fixture] delete warning for built-in key ${id}:`, err);
         }
       }
     }

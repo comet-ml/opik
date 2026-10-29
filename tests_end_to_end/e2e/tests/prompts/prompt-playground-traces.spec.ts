@@ -28,7 +28,7 @@ const PROMPT_VARIANTS: PromptVariant[] = [
   },
 ];
 
-test.describe('Prompt → Playground → Traces', { tag: ['@t2-cuj', '@area:playground', '@cap:playground.verify-trace-from-run', '@cap:playground.playground-logs-sidebar', '@cap:playground.trace-messages-tab'] }, () => {
+test.describe('Prompt → Playground → Traces', { tag: ['@t2-cuj', '@llm-daily', '@area:playground', '@cap:playground.verify-trace-from-run', '@cap:playground.playground-logs-sidebar', '@cap:playground.trace-messages-tab'] }, () => {
   test.use({ viewport: { width: 1600, height: 900 } });
 
   for (const variant of PROMPT_VARIANTS) {
@@ -47,17 +47,9 @@ test.describe('Prompt → Playground → Traces', { tag: ['@t2-cuj', '@area:play
         return ensureModelAvailable(page);
       });
 
+      // No Playground visit before loading: the prompt must survive a session that has never
+      // opened the Playground.
       const playground = new PlaygroundPage(page, project.id);
-
-      // Visit the playground once so `lastActiveProjectId` is initialised in the
-      // Zustand PlaygroundStore. Without this, the store's resetPlayground()
-      // effect fires on first mount (null !== projectId) and clears the prompt
-      // map that `useLoadPlayground` set just before navigating here.
-      await test.step('Initialize Playground lastActiveProjectId', async () => {
-        await playground.goto();
-        await playground.waitForReady();
-      });
-
       const prompts = new PromptsPage(page);
 
       await test.step('Navigate to Prompts Library', async () => {

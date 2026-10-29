@@ -29,7 +29,7 @@ This guide explains how to integrate Opik with Hugging Face Datasets to convert 
 
 To use Hugging Face Datasets with Opik, you'll need to have both the `datasets` and `opik` packages installed:
 
-```bash
+```bash wordWrap
 pip install opik datasets transformers pandas tqdm huggingface_hub
 ```
 
@@ -48,13 +48,13 @@ In order to access private datasets on Hugging Face, you will need to have your 
 
 You can set it as an environment variable:
 
-```bash
+```bash wordWrap
 export HUGGINGFACE_HUB_TOKEN="YOUR_TOKEN"
 ```
 
 Or set it programmatically:
 
-```python
+```python wordWrap
 import os
 import getpass
 
@@ -69,7 +69,7 @@ os.environ["OPIK_PROJECT_NAME"] = "huggingface-datasets-integration-demo"
 
 The integration provides a utility class to convert Hugging Face datasets to Opik format:
 
-```python
+```python wordWrap
 from datasets import load_dataset, Dataset as HFDataset
 from opik import Opik
 from typing import Optional, Dict, Any, List
@@ -139,7 +139,7 @@ class HuggingFaceToOpikConverter:
 
 Here's how to convert a Hugging Face dataset to Opik format and upload it:
 
-```python
+```python wordWrap
 # Initialize the converter
 opik_client = Opik()
 converter = HuggingFaceToOpikConverter(opik_client)
@@ -168,7 +168,7 @@ print(f"✅ Converted {len(opik_data)} items to Opik format!")
 
 The converter provides a method to transform Hugging Face datasets into Opik's expected format:
 
-```python
+```python wordWrap
 def convert_to_opik_format(
     self,
     dataset: HFDataset,
@@ -229,7 +229,7 @@ def convert_to_opik_format(
 
 Use the `@track` decorator to create comprehensive traces when working with your converted datasets:
 
-```python
+```python wordWrap
 from opik import track
 
 @track
@@ -262,7 +262,7 @@ for item in opik_data[:5]:  # Evaluate first 5 items
 
 ### SQuAD (Question Answering)
 
-```python
+```python wordWrap
 # Load SQuAD dataset
 squad_dataset = converter.load_hf_dataset(
     dataset_name="squad",
@@ -283,7 +283,7 @@ squad_opik = converter.convert_to_opik_format(
 
 ### GLUE (General Language Understanding)
 
-```python
+```python wordWrap
 # Load GLUE SST-2 dataset
 sst2_dataset = converter.load_hf_dataset(
     dataset_name="glue",
@@ -305,7 +305,7 @@ sst2_opik = converter.convert_to_opik_format(
 
 ### Common Crawl (Text Classification)
 
-```python
+```python wordWrap
 # Load Common Crawl dataset
 cc_dataset = converter.load_hf_dataset(
     dataset_name="common_crawl",
@@ -336,7 +336,7 @@ Once your Hugging Face datasets are converted and uploaded to Opik, you can view
 
 Once your Hugging Face datasets are in Opik, you can evaluate your LLM applications using Opik's evaluation framework:
 
-```python
+```python wordWrap
 from opik.evaluation import evaluate
 from opik.evaluation.metrics import Hallucination
 
@@ -365,7 +365,7 @@ evaluation_results = evaluate(
 
 Make sure to set the following environment variables:
 
-```bash
+```bash wordWrap
 # Hugging Face Configuration (optional, for private datasets)
 export HUGGINGFACE_HUB_TOKEN="your-huggingface-token"
 

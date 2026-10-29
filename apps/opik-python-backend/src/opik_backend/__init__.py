@@ -86,6 +86,12 @@ def create_app(test_config=None, should_init_executor=True):
     app.register_blueprint(evaluator)
     app.register_blueprint(post_user_signup)
 
+    # Sentinel settings are checked at startup even without the RQ worker: building them needs no connection, and a
+    # misconfiguration otherwise surfaces only on the first Redis call
+    from opik_backend.utils.redis_sentinel_settings import RedisSentinelSettings, is_sentinel_enabled
+    if is_sentinel_enabled():
+        RedisSentinelSettings.from_env()
+
     # Initialize Redis connection at application startup if RQ worker enabled (non-fatal)
     from opik_backend.utils.env_utils import is_rq_worker_enabled
     if is_rq_worker_enabled():

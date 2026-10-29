@@ -72,6 +72,9 @@ _REPORTING_CODE: Set[types.CodeType] = set()
 # Opik acting on its own behalf, see `internal`.
 _INTERNAL_CODE: Set[types.CodeType] = set()
 
+# Functions marked with `@entry_point`, see `entry_point`.
+_ENTRY_POINT_CODE: Set[types.CodeType] = set()
+
 
 def _build_event_name(component: Component, path: Tuple[str, ...]) -> str:
     """
@@ -114,6 +117,19 @@ def internal(func: _F) -> _F:
     return func
 
 
+def entry_point(func: _F) -> _F:
+    """
+    Marks a whole flow as the user's own, however it was reached — the exemption
+    to `_reported_from_inside_the_sdk`, and the mirror of `internal`.
+
+    For `opik configure` handing over to `opik mcp configure`'s `run_configure`,
+    whose events would otherwise be dropped as a nested call. Exempts the
+    decorated frame only; anything below it is judged normally.
+    """
+    _ENTRY_POINT_CODE.add(func.__code__)
+    return func
+
+
 def _is_sdk_module(module: str) -> bool:
     return module == "opik" or module.startswith(_SDK_MODULE_PREFIXES)
 
@@ -149,6 +165,10 @@ def _reported_from_inside_the_sdk() -> bool:
     # Registered whether or not this particular event is reported, so that a call
     # nested inside this one recognises it either way.
     _REPORTING_CODE.add(reporter.f_code)
+
+    # Before both tests below, which a handed-over flow would fail.
+    if reporter.f_code in _ENTRY_POINT_CODE:
+        return False
 
     caller = reporter.f_back
     if caller is None:

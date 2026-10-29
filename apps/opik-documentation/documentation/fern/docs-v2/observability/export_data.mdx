@@ -17,7 +17,7 @@ The Python and TypeScript SDKs let you search and export traces, spans, and thre
 
 <Tabs>
   <Tab title="Python">
-    ```python
+    ```python wordWrap
     import opik
 
     client = opik.Opik()
@@ -36,7 +36,7 @@ The Python and TypeScript SDKs let you search and export traces, spans, and thre
     ```
   </Tab>
   <Tab title="TypeScript">
-    ```typescript
+    ```typescript wordWrap
     import { Opik } from "opik";
 
     const client = new Opik();
@@ -58,7 +58,7 @@ The Python and TypeScript SDKs let you search and export traces, spans, and thre
 
 ### Spans
 
-```python
+```python wordWrap
 import opik
 
 client = opik.Opik()
@@ -78,7 +78,7 @@ spans = client.search_spans(
 
 ### Threads
 
-```python
+```python wordWrap
 import opik
 
 client = opik.Opik()
@@ -108,7 +108,7 @@ All search methods accept a `filter_string` / `filterString` using the Opik Quer
 
 Common filter examples:
 
-```python
+```python wordWrap
 client.search_traces(filter_string='start_time >= "2024-01-01T00:00:00Z"')
 client.search_traces(filter_string='usage.total_tokens > 1000')
 client.search_traces(filter_string='metadata.model = "gpt-4o"')
@@ -128,7 +128,7 @@ That budget is small, so how you fetch matters:
 - **Filter on the server** with `filter_string` (e.g. a time window) so you only transfer the data you need.
 - **Go easy on concurrency.** Limits are shared per workspace, so parallel requests compete for the same budget and hit `429` sooner without finishing faster.
 
-```python title="✅ Do: fetch in bulk, join on the client"
+```python title="✅ Do: fetch in bulk, join on the client" wordWrap
 from collections import defaultdict
 
 traces = client.search_traces(project_name="Default project", max_results=1000000)
@@ -140,7 +140,7 @@ for span in spans:
     spans_by_trace[str(span.trace_id)].append(span)
 ```
 
-```python title="❌ Don't: one request per trace"
+```python title="❌ Don't: one request per trace" wordWrap
 traces = client.search_traces(project_name="Default project", max_results=1000000)
 
 # A request per trace: slow, and quickly hits the read rate limit.
@@ -182,13 +182,13 @@ On disk, folders and files are keyed by **ID**: data lands under `<path>/<worksp
 
 ### Export
 
-```bash
+```bash wordWrap
 opik export WORKSPACE PROJECT ITEM [NAME] [OPTIONS]
 ```
 
 `ITEM` is one of: `all`, `dataset`, `traces`, `experiment`, `prompt`
 
-```bash
+```bash wordWrap
 # Export everything in a project
 opik export my-workspace my-project all
 
@@ -208,13 +208,13 @@ opik export my-workspace my-project traces --format csv --path ./csv_data
 
 ### Import
 
-```bash
+```bash wordWrap
 opik import WORKSPACE PROJECT ITEM [NAME] [OPTIONS]
 ```
 
 `WORKSPACE` is the source workspace — used to locate the exported files under `<path>/WORKSPACE/projects/`. Use `--to-workspace` to write into a different destination workspace.
 
-```bash
+```bash wordWrap
 # Import a dataset
 opik import my-workspace my-project dataset "my-dataset"
 
@@ -259,7 +259,7 @@ status_code: 400, body: {'code': 400, 'message': 'Invalid UUID for id',
 
 you are running an older SDK, which derived the new trace ID from the exported trace's original timestamp. Check your version and upgrade:
 
-```bash
+```bash wordWrap
 opik --version
 pip install --upgrade opik
 ```
@@ -267,7 +267,7 @@ pip install --upgrade opik
 
 ### Migrating between environments
 
-```bash
+```bash wordWrap
 # Step 1: Export from source (use source credentials)
 # Writes to ./migration_data/my-workspace/projects/<project_id>/
 OPIK_API_KEY=<source_key> OPIK_URL_OVERRIDE=https://source.opik.example.com \

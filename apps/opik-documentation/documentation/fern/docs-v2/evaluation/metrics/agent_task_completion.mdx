@@ -12,7 +12,7 @@ title: Agent task completion
 
 `AgentTaskCompletionJudge` reviews an agent run (often a natural-language summary of what happened) and decides whether the high-level objective was met. It is particularly helpful for multi-step agents where success cannot be inferred from the final response alone.
 
-```python title="Did the agent finish the job?"
+```python title="Did the agent finish the job?" wordWrap
 from opik.evaluation.metrics import AgentTaskCompletionJudge
 
 metric = AgentTaskCompletionJudge()

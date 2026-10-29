@@ -14,7 +14,7 @@ The context recall metric evaluates the accuracy and relevance of an LLM's respo
 
 You can use the `ContextRecall` metric as follows:
 
-```python
+```python wordWrap
 from opik.evaluation.metrics import ContextRecall
 
 metric = ContextRecall()
@@ -35,7 +35,7 @@ Opik uses an LLM as a Judge to compute context recall, for this we have a prompt
 
 The template uses a few-shot prompting technique to compute context recall. The template is as follows:
 
-```markdown
+```markdown wordWrap
 YOU ARE AN EXPERT AI METRIC EVALUATOR SPECIALIZING IN CONTEXTUAL UNDERSTANDING AND RESPONSE ACCURACY.
 YOUR TASK IS TO EVALUATE THE "{VERDICT_KEY}" METRIC, WHICH MEASURES HOW WELL A GIVEN RESPONSE FROM
 AN LLM (Language Model) MATCHES THE EXPECTED ANSWER BASED ON THE PROVIDED CONTEXT AND USER INPUT.

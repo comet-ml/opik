@@ -168,6 +168,10 @@ class ChatContentRendererRegistry:
             video_dict = part.get("video_url", {})
             if isinstance(video_dict, dict):
                 return str(video_dict.get("url", "")).strip()
+        if part_type == "audio_url":
+            audio_dict = part.get("audio_url", {})
+            if isinstance(audio_dict, dict):
+                return str(audio_dict.get("url", "")).strip()
         return str(part)
 
     def _truncate_placeholder_value(self, value: str) -> str:

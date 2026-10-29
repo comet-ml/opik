@@ -111,20 +111,32 @@ class Streamer:
                     timeout=timeout,
                     sleep_time=0.1,
                 )
-            self._drain = True
-
-        self._batch_preprocessor.stop(flush=flush)
-        self._fallback_replay_manager.close()
 
         if flush:
+            # Replay before anything is torn down. `flush()` is what actually
+            # replays, and it can only do so while the replay manager (and the
+            # SQLite store behind it) is alive and while this streamer is not yet
+            # draining — `put()` drops everything once `_drain` is set. Tearing
+            # either of those down first meant the messages parked by a temporary
+            # server outage were deleted and then reported as a successful flush.
+            flushed = self.flush(timeout)
+
+            # Only now stop accepting work and shut the machinery down.
+            with self._lock:
+                self._drain = True
+            self._batch_preprocessor.stop(flush=False)
+            self._fallback_replay_manager.close()
             # Wait for the replay thread, consumer queue, and file uploads to
             # actually drain before releasing the caller. Consumers must keep
             # running while the queue drains, so close them at the very end.
             self._fallback_replay_manager.join(timeout)
-            flushed = self.flush(timeout)
             self._close_queue_consumers()
             return flushed
         else:
+            with self._lock:
+                self._drain = True
+            self._batch_preprocessor.stop(flush=False)
+            self._fallback_replay_manager.close()
             # Fire-and-forget: drop pending messages so the stop-signalled
             # consumers see an empty queue and exit on their own. No joins —
             # daemon threads can finish any in-flight HTTP request in the

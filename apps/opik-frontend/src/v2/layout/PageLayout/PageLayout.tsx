@@ -21,6 +21,8 @@ import {
 } from "@/constants/assistantSidebar";
 import DemoProjectBanner from "@/v2/layout/DemoProjectBanner/DemoProjectBanner";
 import McpAnnouncementBanner from "@/v2/layout/McpAnnouncementBanner/McpAnnouncementBanner";
+import NoticeBanner from "@/v2/layout/NoticeBanner/NoticeBanner";
+import { useNoticeBanner } from "@/v2/layout/NoticeBanner/useNoticeBanner";
 
 const PageLayout = () => {
   const [hostContainer, setHostContainer] = useState<HTMLDivElement | null>(
@@ -32,8 +34,12 @@ const PageLayout = () => {
   const [retentionBannerHeight, setRetentionBannerHeight] = useState(0);
   const [demoBannerHeight, setDemoBannerHeight] = useState(0);
   const [mcpBannerHeight, setMcpBannerHeight] = useState(0);
-  const bannerHeight =
-    retentionBannerHeight + demoBannerHeight + mcpBannerHeight;
+  const [noticeBannerHeight, setNoticeBannerHeight] = useState(0);
+  const noticeBanner = useNoticeBanner();
+  const noticeBannerVisible = Boolean(noticeBanner.notice);
+  const bannerHeight = noticeBannerVisible
+    ? noticeBannerHeight
+    : retentionBannerHeight + demoBannerHeight + mcpBannerHeight;
   const [showWelcomeWizard, setShowWelcomeWizard] = useState(false);
   const [assistantSidebarWidth, setAssistantSidebarWidth] = useState(() =>
     isAssistantSidebarOpen()
@@ -128,14 +134,26 @@ const PageLayout = () => {
             ref={setHostContainer}
             className="relative min-w-0 flex-1 overflow-hidden [transform:translateZ(0)]"
           >
+            <NoticeBanner
+              {...noticeBanner}
+              onChangeHeight={setNoticeBannerHeight}
+            />
+            {/* Hidden, not unmounted: these banners keep state and side effects. */}
             {RetentionBanner ? (
-              <RetentionBanner onChangeHeight={setRetentionBannerHeight} />
+              <RetentionBanner
+                onChangeHeight={setRetentionBannerHeight}
+                hidden={noticeBannerVisible}
+              />
             ) : null}
             <McpAnnouncementBanner
               onChangeHeight={setMcpBannerHeight}
               retentionBannerVisible={retentionBannerHeight > 0}
+              hidden={noticeBannerVisible}
             />
-            <DemoProjectBanner onChangeHeight={setDemoBannerHeight} />
+            <DemoProjectBanner
+              onChangeHeight={setDemoBannerHeight}
+              hidden={noticeBannerVisible}
+            />
 
             <SideBar
               expanded={expanded}

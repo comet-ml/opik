@@ -72,7 +72,7 @@ export const useExperimentsGroupsAndFilters = ({
           },
           defaultOperator: "=",
           operators: [{ label: "=", value: "=" }],
-          sortingMessage: "Last experiment created",
+          sortingMessage: "Sorted by last experiment created",
         },
         [COLUMN_METADATA_ID]: {
           keyComponent: ExperimentsPathsAutocomplete,

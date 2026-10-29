@@ -56,6 +56,43 @@ class SystemAnalyticsQueriesClient:
         _response = self._raw_client.execute_analytics_query(project_id, query=query, request_options=request_options)
         return _response.data
 
+    def execute_scoped_analytics_query(
+        self,
+        *,
+        query: str,
+        project_id: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AnalyticsQueryResponse:
+        """
+        Runs read-only SQL bounded to the caller's workspace. Supply project_id to restrict traces, spans, feedback scores and trace threads to one project, or omit it to cover the whole workspace. Experiments, experiment items and dataset items always cover the whole workspace.
+
+        Parameters
+        ----------
+        query : str
+            Read-only ClickHouse SQL. Must return exactly one column named `result` produced via toJSONString(...)
+
+        project_id : typing.Optional[str]
+            Restrict query to this project. Omit to query the whole workspace.
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AnalyticsQueryResponse
+            Query results
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.system_analytics_queries.execute_scoped_analytics_query(query='query', )
+        """
+        _response = self._raw_client.execute_scoped_analytics_query(
+            query=query, project_id=project_id, request_options=request_options
+        )
+        return _response.data
+
 
 class AsyncSystemAnalyticsQueriesClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
@@ -104,5 +141,45 @@ class AsyncSystemAnalyticsQueriesClient:
         """
         _response = await self._raw_client.execute_analytics_query(
             project_id, query=query, request_options=request_options
+        )
+        return _response.data
+
+    async def execute_scoped_analytics_query(
+        self,
+        *,
+        query: str,
+        project_id: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AnalyticsQueryResponse:
+        """
+        Runs read-only SQL bounded to the caller's workspace. Supply project_id to restrict traces, spans, feedback scores and trace threads to one project, or omit it to cover the whole workspace. Experiments, experiment items and dataset items always cover the whole workspace.
+
+        Parameters
+        ----------
+        query : str
+            Read-only ClickHouse SQL. Must return exactly one column named `result` produced via toJSONString(...)
+
+        project_id : typing.Optional[str]
+            Restrict query to this project. Omit to query the whole workspace.
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AnalyticsQueryResponse
+            Query results
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.system_analytics_queries.execute_scoped_analytics_query(query='query', )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.execute_scoped_analytics_query(
+            query=query, project_id=project_id, request_options=request_options
         )
         return _response.data

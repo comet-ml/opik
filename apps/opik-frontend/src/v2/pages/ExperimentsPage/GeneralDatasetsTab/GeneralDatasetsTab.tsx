@@ -582,7 +582,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
                   label: groupLabel,
                   value:
                     label === DELETED_ENTITY_LABEL
-                      ? "Deleted dataset"
+                      ? "Deleted item source"
                       : label || value || "Undefined",
                 };
               }),
@@ -739,6 +739,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
             sections={columnSections}
+            layout="labeled"
           ></ColumnsButton>
         </div>
       </PageBodyStickyContainer>

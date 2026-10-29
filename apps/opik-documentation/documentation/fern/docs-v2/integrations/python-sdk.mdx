@@ -22,7 +22,7 @@ setup.
 
 First, install the Opik package:
 
-```bash
+```bash wordWrap
 pip install opik
 ```
 
@@ -30,7 +30,7 @@ pip install opik
 
 Configure the SDK with your credentials, either by running `opik configure` once on the machine:
 
-```bash
+```bash wordWrap
 opik configure
 ```
 
@@ -38,7 +38,7 @@ Or by setting environment variables:
 
 <Tabs>
   <Tab title="Opik Cloud">
-    ```bash
+    ```bash wordWrap
     export OPIK_API_KEY="<YOUR_API_KEY>"
     export OPIK_WORKSPACE="<YOUR_WORKSPACE>"
     ```
@@ -46,7 +46,7 @@ Or by setting environment variables:
     You can find your API key and workspace name in the [Opik dashboard](https://www.comet.com/opik).
   </Tab>
   <Tab title="Self-hosted">
-    ```bash
+    ```bash wordWrap
     export OPIK_URL_OVERRIDE="http://localhost:5173/api"
     ```
 
@@ -61,7 +61,7 @@ Set `OPIK_PROJECT_NAME` to control which project traces are logged to; it defaul
 
 Here's a complete example that demonstrates how to instrument a chatbot application with the Opik SDK:
 
-```python
+```python wordWrap
 # Dependencies: opik
 
 import time
@@ -142,7 +142,7 @@ Created threads can be used to evaluate multi-turn conversations as described in
 Set the `type` argument to tell Opik what kind of work a span represents. The supported values are `general` (the
 default), `llm`, `tool` and `guardrail`:
 
-```python
+```python wordWrap
 @opik.track(type="tool")
 def search_weather(city: str) -> dict:
     return {"city": city, "forecast": "sunny"}
@@ -156,7 +156,7 @@ calls a model provider.
 Opik computes cost from the `model`, `provider` and `usage` fields on an `llm` span. Set them with
 `update_current_span` as in the example above, using the standard OpenAI token keys:
 
-```python
+```python wordWrap
 @opik.track(type="llm")
 def llm_call(prompt: str) -> str:
     opik_context.update_current_span(
@@ -176,7 +176,7 @@ When the code you want to trace isn't a function you can decorate — a block in
 call — use the `start_as_current_span` context manager instead. It creates the parent trace if one isn't already
 active:
 
-```python
+```python wordWrap
 import opik
 
 with opik.start_as_current_span(name="retrieve_documents", type="tool") as span:
@@ -191,7 +191,7 @@ The SDK batches and sends data in the background, so a short-lived script can ex
 Call `opik.flush_tracker()` before the process ends, as in the example above, or pass `flush=True` to `@opik.track` on
 your entrypoint function:
 
-```python
+```python wordWrap
 @opik.track(flush=True)
 def main():
     ...

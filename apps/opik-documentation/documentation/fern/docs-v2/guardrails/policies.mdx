@@ -56,7 +56,7 @@ A policy has a name, an optional description, an execution mode, and the guards 
 
 Build a guardrail from stored policies with `Guardrail.from_stored_policies`, then call `validate` exactly as you would with a guardrail defined in code:
 
-```python
+```python wordWrap
 from opik.guardrails import Guardrail
 from opik import exceptions
 
@@ -70,7 +70,7 @@ except exceptions.GuardrailValidationFailed as e:
 
 Pass several names to combine policies. Their guards are checked together as one set, and the guardrail fails if any single guard fails:
 
-```python
+```python wordWrap
 guardrail = Guardrail.from_stored_policies(
     names=["no-contact-information", "support-tone"],
 )
@@ -78,7 +78,7 @@ guardrail = Guardrail.from_stored_policies(
 
 Policies set to **Always** are included automatically, so a workspace-wide rule applies even to an application that names nothing:
 
-```python
+```python wordWrap
 # Runs every "Always" policy in the workspace
 guardrail = Guardrail.from_stored_policies()
 ```

@@ -3,7 +3,9 @@ package com.comet.opik.api.resources.v1.events;
 import com.comet.opik.api.Source;
 import com.comet.opik.api.ThreadTimestamps;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.events.TracesCreated;
+import com.comet.opik.api.events.TracesUpdated;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.domain.threads.TraceThreadService;
@@ -31,10 +33,12 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
@@ -408,6 +412,85 @@ class TraceThreadListenerTest {
 
             var captured = captureThreadInfo(projectId);
             assertThat(captured.get(threadId).firstTraceEnvironment()).isNull();
+        }
+    }
+
+    @Nested
+    class TracesUpdatedTests {
+
+        @Test
+        void registersThreadFromEventWhenUpdateSetsThreadId() {
+            var threadId = randomThreadId();
+            var earliestTraceId = idGenerator.generateId();
+            var laterTraceId = idGenerator.generateId();
+            var event = updatedEvent(threadId, Map.of(earliestTraceId, projectId, laterTraceId, projectId));
+            var traceUpdate = event.traceUpdate();
+
+            when(traceThreadService.processTraceThreads(any(), eq(projectId))).thenReturn(Mono.empty());
+
+            listener.onTracesUpdated(event);
+
+            var threadInfo = captureThreadInfo(projectId);
+
+            assertThat(threadInfo).containsOnlyKeys(threadId);
+            var timestamps = threadInfo.get(threadId);
+            assertThat(timestamps.firstTraceId()).isEqualTo(earliestTraceId);
+            assertThat(timestamps.firstTraceSource()).isEqualTo(traceUpdate.source());
+            assertThat(timestamps.firstTraceEnvironment()).isEqualTo(traceUpdate.environment());
+            assertThat(timestamps.maxLastUpdatedAt()).isCloseTo(Instant.now(), within(5, ChronoUnit.SECONDS));
+        }
+
+        @ParameterizedTest
+        @NullAndEmptySource
+        @ValueSource(strings = {" "})
+        void doesNotRegisterWhenThreadIdIsBlank(String threadId) {
+            var traceId = idGenerator.generateId();
+
+            listener.onTracesUpdated(updatedEvent(threadId, Map.of(traceId, projectId)));
+
+            verifyNoInteractions(traceThreadService);
+        }
+
+        @Test
+        void registersThreadPerProjectWithItsOwnEarliestTraceOnBatchUpdate() {
+            var threadId = randomThreadId();
+            var otherProjectId = idGenerator.generateId();
+            var projectTraceId = idGenerator.generateId();
+            var otherProjectTraceId = idGenerator.generateId();
+            var event = updatedEvent(threadId, Map.of(projectTraceId, projectId, otherProjectTraceId, otherProjectId));
+
+            when(traceThreadService.processTraceThreads(any(), any())).thenReturn(Mono.empty());
+
+            listener.onTracesUpdated(event);
+
+            assertThat(captureThreadInfo(projectId).get(threadId).firstTraceId()).isEqualTo(projectTraceId);
+            assertThat(captureThreadInfo(otherProjectId).get(threadId).firstTraceId())
+                    .isEqualTo(otherProjectTraceId);
+        }
+
+        @Test
+        void fallsBackToProjectIdsWhenTraceMappingIsAbsent() {
+            var threadId = randomThreadId();
+            var traceId = idGenerator.generateId();
+            var traceUpdate = podamFactory.manufacturePojo(TraceUpdate.class).toBuilder()
+                    .threadId(threadId)
+                    .build();
+            var event = new TracesUpdated(Set.of(projectId), Set.of(traceId), workspaceId, userName, traceUpdate);
+
+            when(traceThreadService.processTraceThreads(any(), eq(projectId))).thenReturn(Mono.empty());
+
+            listener.onTracesUpdated(event);
+
+            assertThat(captureThreadInfo(projectId).get(threadId).firstTraceId()).isEqualTo(traceId);
+        }
+
+        private TracesUpdated updatedEvent(String threadId, Map<UUID, UUID> traceIdToProjectId) {
+            var traceUpdate = podamFactory.manufacturePojo(TraceUpdate.class).toBuilder()
+                    .threadId(threadId)
+                    .build();
+
+            return new TracesUpdated(Set.copyOf(traceIdToProjectId.values()), traceIdToProjectId.keySet(),
+                    workspaceId, userName, traceUpdate, null, traceIdToProjectId);
         }
     }
 

@@ -14,22 +14,18 @@ The Meaning Match metric evaluates whether an LLM's output semantically matches 
 
 ## How to use the Meaning Match metric
 
-The Meaning Match metric is available as an **LLM-as-a-Judge** metric in automation rules. You can use it to automatically evaluate traces in your project by creating a new rule.
+You can run Meaning Match as an **LLM-as-a-Judge** [online evaluation rule](/production/online-evaluation/rules) to score the traces in your project.
 
 ### Creating a rule with Meaning Match
 
-1. Navigate to your project in Opik
-2. Click on **"Rules"** in the sidebar
-3. Click **"Create new rule"**
-4. Select **"LLM-as-judge"** as the metric type
-5. Choose **"Meaning Match"** from the prompt dropdown
-6. Configure the variable mapping:
-   - **input**: The original question or prompt
-   - **ground_truth**: The expected correct answer
-   - **output**: The LLM's generated response
-7. Select your preferred LLM model for evaluation
-8. Configure sampling rate and filters as needed
-9. Click **"Create rule"**
+1. Open your project and select **Online evaluation** in the sidebar
+2. Click **Evaluator** > **LLM-as-a-Judge**
+3. Name the evaluator **Meaning Match**. The name is also the score name.
+4. Paste the [Meaning Match prompt](#meaning-match-prompt) into the prompt editor
+5. Point `{{input}}`, `{{ground_truth}}` and `{{output}}` at the trace fields that hold them. Type `{{` to pick a field, for example `{{metadata.ground_truth}}`. Paths must start with `input`, `output` or `metadata`.
+6. Keep the main score type as **Boolean**
+7. Select your judge model, and set filters and the sampling rate as needed
+8. Click **Create evaluator**
 
 ## Understanding the scores
 
@@ -63,7 +59,7 @@ The Meaning Match metric follows these rules when evaluating responses:
 
 ## Meaning Match Prompt
 
-Opik uses an LLM as a Judge to evaluate semantic equivalence. By default, the evaluation uses the model you select when creating the rule. The prompt template used for evaluation is:
+Use the prompt below in your rule. The judge runs on the model you select in the rule.
 
 ```
 You are an expert semantic equivalence judge. Your task is to decide whether the OUTPUT conveys the same essential answer as the GROUND_TRUTH, regardless of phrasing or formatting.

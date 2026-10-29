@@ -29,7 +29,7 @@ The pod enters `CrashLoopBackOff` and self-heals on its own once the operator re
 
 To enable the cold tier, set `clickhouse.tieredStorage.enabled: true` and provide the cold bucket configuration under `clickhouse.tieredStorage`:
 
-```yaml
+```yaml wordWrap
 clickhouse:
   tieredStorage:
     enabled: true
@@ -41,7 +41,7 @@ clickhouse:
 
 The migration job runs automatically whenever the cold tier is enabled. It is controlled by:
 
-```yaml
+```yaml wordWrap
 clickhouse:
   tieredStorage:
     coldTierMigration:
@@ -51,7 +51,7 @@ clickhouse:
 <Note>
 `coldTierMigration.enabled` defaults to `true`, so upgrading a release that **already** has `clickhouse.tieredStorage.enabled: true` activates this job on the next upgrade without any action on your part. It only does work when the cold tier is enabled, and is a no-op when every replica already has the cache volume — so it is safe to leave on across upgrades, though it does add a post-upgrade hook to the release. Because it only bounces the operator (never deletes ClickHouse StatefulSets, pods, or data), it is safe on an existing release. To opt out **without** disabling the cold tier:
 
-```yaml
+```yaml wordWrap
 clickhouse:
   tieredStorage:
     coldTierMigration:

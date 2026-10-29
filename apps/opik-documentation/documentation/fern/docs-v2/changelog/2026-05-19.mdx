@@ -10,7 +10,7 @@
 - **Prompt metadata injected into traces** — when you fetch a prompt inside an `@track` context, the prompt ID and commit are automatically recorded in the trace metadata so you know which version was used at inference time
 - **TypeScript SDK** — the same caching and metadata injection are available in the TypeScript client
 
-```python
+```python wordWrap
 # Cached after the first call — no extra latency on subsequent invocations
 prompt = client.get_prompt("my-system-prompt")
 

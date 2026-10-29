@@ -366,8 +366,27 @@ public class ExperimentService {
                 });
     }
 
+    /**
+     * Same as {@link #getById(UUID)} - including the {@code NotFoundException} on a missing id and the
+     * dataset / project / prompt enrichment - but without the aggregations, whose cost grows with the number
+     * of items in the experiment. For callers that read only the experiment's own fields.
+     */
+    @WithSpan
+    public Mono<Experiment> getMetadataById(@NonNull UUID id) {
+        log.info("Getting experiment metadata by id '{}'", id);
+        return enrichExperiment(experimentDAO.getMetadataById(id),
+                "Not found experiment with id '%s'".formatted(id))
+                .doOnEach(signal -> {
+                    if (signal.isOnNext()) {
+                        var experiment = signal.get();
+                        triggerLazyAggregationIfNeeded(experiment.id(), experiment.status(),
+                                signal.getContextView());
+                    }
+                });
+    }
+
     private void triggerLazyAggregationIfNeeded(UUID experimentId, ExperimentStatus status, ContextView ctx) {
-        if (status != ExperimentStatus.COMPLETED && status != ExperimentStatus.CANCELLED) {
+        if (status == null || !status.isTerminal()) {
             return;
         }
 
@@ -754,6 +773,17 @@ public class ExperimentService {
                                 });
                     });
         });
+    }
+
+    /**
+     * Records that the experiment has stopped producing items, unless that is already recorded. Every delivery
+     * that sees its run drain asks for this, and each write rewrites the row, moves {@code finished_at} and
+     * re-aggregates the experiment, so only the first one writes.
+     */
+    public Mono<Void> stampFinished(@NonNull UUID id) {
+        return experimentDAO.getMetadataById(id)
+                .filter(experiment -> experiment.finishedAt() == null)
+                .flatMap(unstamped -> update(id, ExperimentUpdate.builder().finished(true).build()));
     }
 
     public Mono<Void> batchUpdate(@NonNull ExperimentBatchUpdate batchUpdate) {

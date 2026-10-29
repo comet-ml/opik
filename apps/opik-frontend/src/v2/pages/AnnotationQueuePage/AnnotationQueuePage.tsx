@@ -7,6 +7,7 @@ import useAnnotationQueueById from "@/api/annotation-queues/useAnnotationQueueBy
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
 import { useAnnotationQueueIdFromURL } from "@/v2/pages/AnnotationQueuePage/useAnnotationQueueIdFromURL";
 import DateTag from "@/shared/DateTag/DateTag";
+import { Tag } from "@/ui/tag";
 import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
 import NavigationTag from "@/shared/NavigationTag";
 import TraceLogsSidebarButton from "@/v2/pages-shared/traces/TraceLogsSidebar/TraceLogsSidebarButton";
@@ -144,6 +145,11 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
           )}
           {annotationQueue && (
             <AnnotationQueueProgressTag annotationQueue={annotationQueue} />
+          )}
+          {annotationQueue?.annotator_view?.html && (
+            <Tag variant="orange" size="md">
+              Custom annotator view
+            </Tag>
           )}
         </div>
         <FeedbackScoresList scores={allocatedFeedbackScores} />

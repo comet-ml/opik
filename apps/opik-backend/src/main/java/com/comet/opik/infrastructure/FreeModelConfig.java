@@ -29,6 +29,9 @@ public class FreeModelConfig {
      */
     public static final double OPENAI_REASONING_MODEL_MIN_TEMPERATURE = 1.0;
 
+    // The lowest level gpt-5-nano takes: it has no "none".
+    public static final String OPENAI_REASONING_MODEL_EFFORT = "minimal";
+
     /**
      * Whether the free model provider is enabled in configuration.
      * Note: Use {@link #isEnabled()} to check if the provider is actually usable,

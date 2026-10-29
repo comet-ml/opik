@@ -97,8 +97,15 @@ public class AgentInsightsAutoFirstRunJob extends Job {
     public Mono<Void> runSweep(Instant periodEnd, int maxPerRun) {
         Instant windowStart = periodEnd.minus(WINDOW);
 
-        return Mono.fromCallable(agentInsightsJobService::findAwaitingFirstRun)
+        // Reaped first, so a run that died without reporting is picked up again by this same sweep.
+        return Mono.fromRunnable(agentInsightsJobService::reapTimedOutAutoFirstRuns)
                 .subscribeOn(Schedulers.boundedElastic())
+                .onErrorResume(e -> {
+                    log.error("Failed to reap timed-out automatic Agent Insights runs", e);
+                    return Mono.empty();
+                })
+                .then(Mono.fromCallable(agentInsightsJobService::findAwaitingFirstRun)
+                        .subscribeOn(Schedulers.boundedElastic()))
                 .flatMap(awaiting -> {
                     if (awaiting.isEmpty()) {
                         return Mono.empty();

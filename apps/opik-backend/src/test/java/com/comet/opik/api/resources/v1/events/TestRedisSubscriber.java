@@ -7,6 +7,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RedissonReactiveClient;
 import reactor.core.publisher.Mono;
 
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
@@ -24,6 +26,8 @@ public class TestRedisSubscriber extends BaseRedisSubscriber<String> {
     private final AtomicInteger successMessageCount = new AtomicInteger(0);
     @Getter
     private final AtomicInteger failedMessageCount = new AtomicInteger(0);
+    @Getter
+    private final List<String> retiredMessages = new CopyOnWriteArrayList<>();
 
     private final Function<String, Mono<Void>> processor;
 
@@ -40,6 +44,11 @@ public class TestRedisSubscriber extends BaseRedisSubscriber<String> {
         return processor.apply(message)
                 .doOnSuccess(unused -> successMessageCount.incrementAndGet())
                 .doOnError(throwable -> failedMessageCount.incrementAndGet());
+    }
+
+    @Override
+    protected Mono<Void> onRetired(String message, Throwable error) {
+        return Mono.fromRunnable(() -> retiredMessages.add(message));
     }
 
     /**

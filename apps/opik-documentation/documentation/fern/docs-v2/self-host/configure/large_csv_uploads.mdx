@@ -24,17 +24,17 @@ CSV upload supports:
 
 Large file uploads require more time to transfer. Increase the server idle timeout:
 
-```bash
+```bash wordWrap
 SERVER_IDLE_TIMEOUT: 10m
 ```
 
-The default timeout is 30 seconds, which is insufficient for large file uploads. We recommend setting it to 10 minutes for files up to 2GB.
+The default timeout is 1 minute, which is insufficient for large file uploads. We recommend setting it to 10 minutes for files up to 2GB.
 
 ### 2. Configure Nginx (Kubernetes/Helm Deployments)
 
 If you're using the Helm chart deployment, add the following configuration to your `values.yaml`:
 
-```yaml
+```yaml wordWrap
 component:
   frontend:
     # Increase client body size limit to 2GB
@@ -59,8 +59,8 @@ The backend service temporarily buffers uploaded CSV files to disk before proces
 
 You can optionally configure the batch size for CSV processing:
 
-```bash
-BATCH_OPERATIONS_DATASETS_CSV_BATCH_SIZE: 1000
+```bash wordWrap
+BATCH_OPERATIONS_CSV_BATCH_SIZE: 1000
 ```
 
 The default batch size is 1000 rows per batch. Adjust this based on your:
@@ -76,12 +76,12 @@ For Docker Compose deployments, the configuration is slightly different:
 
 Add the environment variables to the backend service:
 
-```yaml
+```yaml wordWrap
 services:
   backend:
     environment:
       - SERVER_IDLE_TIMEOUT=10m
-      - BATCH_OPERATIONS_DATASETS_CSV_BATCH_SIZE=1000
+      - BATCH_OPERATIONS_CSV_BATCH_SIZE=1000
 ```
 
 ### 2. Update Nginx Configuration
@@ -92,13 +92,13 @@ The nginx configuration files already include the 2GB limit for local deployment
 
 Here's a complete example for Helm chart deployments:
 
-```yaml
+```yaml wordWrap
 # values.yaml
 component:
   backend:
     env:
       SERVER_IDLE_TIMEOUT: "10m"
-      BATCH_OPERATIONS_DATASETS_CSV_BATCH_SIZE: "1000"
+      BATCH_OPERATIONS_CSV_BATCH_SIZE: "1000"
     
     # Ensure adequate disk space
     persistence:
@@ -117,7 +117,7 @@ component:
 
 Then upgrade your Helm release:
 
-```bash
+```bash wordWrap
 helm upgrade opik opik/opik -n opik -f values.yaml
 ```
 
@@ -129,7 +129,7 @@ After applying the configuration:
 2. **Test with a small CSV** first (< 100MB) to verify the feature works
 3. **Monitor logs** during upload to ensure proper processing:
 
-```bash
+```bash wordWrap
 # Kubernetes
 kubectl logs -n opik deployment/opik-backend -f | grep CSV
 
@@ -176,7 +176,7 @@ CSV processing completed for dataset 'xxx', total items: 'xxx'
 **Problem**: Backend service crashes or restarts during processing
 
 **Solution**:
-1. Reduce `BATCH_OPERATIONS_DATASETS_CSV_BATCH_SIZE` to process smaller batches
+1. Reduce `BATCH_OPERATIONS_CSV_BATCH_SIZE` to process smaller batches
 2. Increase backend service memory limits
 3. Process smaller CSV files or split large files into multiple uploads
 

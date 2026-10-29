@@ -12,4 +12,6 @@ import type * as OpikApi from "../../../../index.js";
 export interface AgentInsightsIssueUpdate {
     projectId: string;
     status: OpikApi.AgentInsightsIssueUpdateStatus;
+    /** Why the issue is closed as not useful. Stored only with status closed; any other status clears it */
+    closeNote?: string;
 }

@@ -2,11 +2,14 @@ package com.comet.opik.api;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonValue;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -35,6 +38,7 @@ public record TraceThread(
         Map<String, Long> usage,
         List<Comment> comments,
         Set<String> tags,
+        @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Annotation queues this thread is currently an item of") List<AnnotationQueueReference> annotationQueues,
         Instant lastUpdatedAt,
         String lastUpdatedBy,
         String createdBy,
@@ -52,6 +56,21 @@ public record TraceThread(
         public static TraceThreadPage empty(int page, List<String> sortableBy) {
             return new TraceThreadPage(page, 0, 0, List.of(), sortableBy);
         }
+    }
+
+    /**
+     * Enrichment fields the threads list lets clients opt out of via {@code exclude}. Only fields whose SQL is
+     * gated by the flag are listed, so excluding a name here really skips its join.
+     */
+    @RequiredArgsConstructor
+    @Getter
+    public enum TraceThreadField {
+
+        ANNOTATION_QUEUES("annotation_queues"),
+        ;
+
+        @JsonValue
+        private final String value;
     }
 
 }

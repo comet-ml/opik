@@ -1,183 +1,172 @@
-import { useCallback, useMemo, useRef } from "react";
-import asyncLib from "async";
+import { useCallback, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { getExperimentById } from "@/api/datasets/useExperimentById";
 
-import { COMPARE_EXPERIMENTS_KEY, PROJECTS_KEY } from "@/api/api";
-import { getCompareExperimentsList } from "@/api/datasets/useCompareExperimentsList";
-import {
-  ASSERTION_POLL_INTERVAL_MS,
-  COMPARE_EXPERIMENTS_MAX_PAGE_SIZE,
-  EXPERIMENT_POLL_INTERVAL_MS,
-} from "@/constants/experiments";
-import {
-  DatasetItem,
-  DATASET_TYPE,
-  EVALUATION_METHOD,
-  ExperimentsCompare,
-} from "@/types/datasets";
-import { isExperimentTerminal } from "@/lib/experiments";
-import { createCompletionAnnouncer } from "@/lib/playground";
-import { isItemScored } from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/useTestSuitePromptResults";
+import { DATASET_TYPE, EVALUATION_METHOD } from "@/types/datasets";
+import { processFilters, transformDataColumnFilters } from "@/lib/filters";
 import { LogExperiment } from "@/types/playground";
 import useRunExperimentExecution from "@/api/playground/useRunExperimentExecution";
+import useBackendRunCancellation from "@/v2/pages/PlaygroundPage/useBackendRunCancellation";
+import useClientSideRun from "@/v2/pages/PlaygroundPage/useClientSideRun";
+import useRunWatcher from "@/v2/pages/PlaygroundPage/useRunWatcher";
+import useRunResume from "@/v2/pages/PlaygroundPage/useRunResume";
 import usePlaygroundStore, {
   getExperimentNameForPrompt,
   getExperimentNamesForPrompts,
   usePromptIds,
   usePromptMap,
   useResetOutputMap,
+  useClearPromptOutputStale,
   useSelectedRuleIds,
   useSetCreatedExperiments,
+  useSetRunTotalItemsForPrompts,
+  useSetIsRunInFlight,
   useClearCreatedExperiments,
   useIsRunning,
   useSetAllRunning,
-  useClearRunningMap,
+  useSettleRun,
   useSetPromptRunning,
   useSetProgress,
   useSetProgressPhase,
   useResetProgress,
-  useUpdateOutputTraceId,
+  useForgetExperimentForPrompt,
   useDatasetType,
+  useDatasetFilters,
   useSetExperimentByPromptId,
+  useClearStopAwaitingRun,
+  useClearWatchLapsed,
 } from "@/store/PlaygroundStore";
 
 import { useToast } from "@/ui/use-toast";
-import { usePermissions } from "@/contexts/PermissionsContext";
-import {
-  LogProcessorArgs,
-  TraceMapping,
-  buildLogProcessor,
-} from "@/api/playground/createLogPlaygroundProcessor";
-import usePromptDatasetItemCombination, {
-  DatasetItemPromptCombination,
-} from "@/v2/pages/PlaygroundPage/usePromptDatasetItemCombination";
-import useRunCompletionToast from "@/v2/pages/PlaygroundPage/useRunCompletionToast";
-
-const DEFAULT_MAX_CONCURRENT_REQUESTS = 5;
-const MAX_POLL_DURATION_MS = 5 * 60 * 1000; // 5 minutes
-
-interface PollScope {
-  scopedPromptIds?: string[];
-  pollKeySuffix?: string;
-  announceExperiments?: LogExperiment[];
-}
+import useOpenAiPipelineMode from "@/hooks/useOpenAiPipelineMode";
 
 interface UseActionButtonActionsArguments {
-  datasetItems: DatasetItem[];
   workspaceName: string;
   datasetName: string | null;
   datasetVersionId?: string;
   datasetId?: string;
   versionHash?: string;
   projectName?: string;
+  projectId?: string | null;
 }
 
+// datasetType is persisted and can outlive the dataset it was set for (for
+// example after switching projects). The backend run path silently returns
+// without a dataset, so a stale type alone must not route runs there.
+export const isTestSuiteRun = (
+  datasetId: string | undefined,
+  datasetType: DATASET_TYPE | null,
+) => !!datasetId && datasetType === DATASET_TYPE.TEST_SUITE;
+
 const useActionButtonActions = ({
-  datasetItems,
   workspaceName,
   datasetName,
   datasetVersionId,
   datasetId,
   versionHash,
   projectName,
+  projectId,
 }: UseActionButtonActionsArguments) => {
   const queryClient = useQueryClient();
 
   const { toast } = useToast();
 
-  const {
-    permissions: { canLogTraceSpanThread, canCreateExperiments },
-  } = usePermissions();
-
   const isRunning = useIsRunning();
   const setAllRunning = useSetAllRunning();
-  const clearRunningMap = useClearRunningMap();
+  const settleRun = useSettleRun();
   const setPromptRunning = useSetPromptRunning();
-  const isToStopRef = useRef(false);
   const setCreatedExperiments = useSetCreatedExperiments();
+  const setRunTotalItemsForPrompts = useSetRunTotalItemsForPrompts();
+  const setIsRunInFlight = useSetIsRunInFlight();
   const clearCreatedExperiments = useClearCreatedExperiments();
   const promptIds = usePromptIds();
   const promptMap = usePromptMap();
   const selectedRuleIds = useSelectedRuleIds();
   const datasetType = useDatasetType();
+  const datasetFilters = useDatasetFilters();
   const setExperimentByPromptId = useSetExperimentByPromptId();
-  const abortControllersRef = useRef(
-    new Map<string, { controller: AbortController; promptId: string }>(),
-  );
   const runExperimentExecution = useRunExperimentExecution();
-  const announceRunComplete = useRunCompletionToast(datasetId);
-  const announcePendingRef = useRef(false);
-  const scopedAnnounceRef = useRef(new Set<string>());
+  const openAiPipelineMode = useOpenAiPipelineMode(workspaceName);
 
-  const isTestSuite = datasetType === DATASET_TYPE.TEST_SUITE;
+  const isTestSuite = isTestSuiteRun(datasetId, datasetType);
+  const evaluationMethod = isTestSuite
+    ? EVALUATION_METHOD.TEST_SUITE
+    : EVALUATION_METHOD.DATASET;
 
-  // Get the minimum maxConcurrentRequests from all prompts
-  const maxConcurrentRequests = useMemo(() => {
-    const prompts = Object.values(promptMap);
-    if (prompts.length === 0) return DEFAULT_MAX_CONCURRENT_REQUESTS;
+  // Keyed on the id alone: the name arrives from its own request, and falling back to the browser
+  // while that is in flight would quietly give one run different semantics from the next.
+  const isBackendRun = !!datasetId;
 
-    const concurrencyValues = prompts
-      .map((p) => p.configs.maxConcurrentRequests)
-      .filter((val) => val !== undefined && val !== null) as number[];
+  const {
+    refreshRunViews,
+    releaseRunInFlight,
+    cancelBackendRun,
+    applyQueuedStop,
+  } = useBackendRunCancellation(isBackendRun);
 
-    if (concurrencyValues.length === 0) return DEFAULT_MAX_CONCURRENT_REQUESTS;
+  const clearStopAwaitingRun = useClearStopAwaitingRun();
+  const clearWatchLapsed = useClearWatchLapsed();
 
-    // Use the minimum value across all prompts (most conservative)
-    return Math.min(...concurrencyValues);
-  }, [promptMap]);
+  const {
+    pollExperimentCompletion,
+    stopPolling,
+    stopWatching,
+    stopAll,
+    stopSingle,
+    markWatchStarted,
+    expectScopedAnnouncement,
+    addAbortController,
+    deleteAbortController,
+    clearAbortControllers,
+  } = useRunWatcher({
+    workspaceName,
+    isTestSuite,
+    isBackendRun,
+    datasetId,
+    cancelBackendRun,
+    releaseRunInFlight,
+    refreshRunViews,
+  });
 
-  // Get the maximum throttling from all prompts (most conservative)
-  const throttlingSeconds = useMemo(() => {
-    const prompts = Object.values(promptMap);
-    if (prompts.length === 0) return 0;
+  const { checkAgain } = useRunResume({
+    datasetId,
+    pollExperimentCompletion,
+    stopPolling,
+    refreshRunViews,
+  });
 
-    const throttlingValues = prompts
-      .map((p) => p.configs.throttling)
-      .filter((val) => val !== undefined && val !== null) as number[];
+  const reportDatasetNotReady = useCallback(() => {
+    toast({
+      title: "Error",
+      description: "The dataset is still loading, try again in a moment",
+      variant: "destructive",
+    });
+  }, [toast]);
 
-    if (throttlingValues.length === 0) return 0;
-
-    // Use the maximum value across all prompts (most conservative)
-    return Math.max(...throttlingValues);
-  }, [promptMap]);
+  const datasetItemFilters = useMemo(
+    () => processFilters(transformDataColumnFilters(datasetFilters)).filters,
+    [datasetFilters],
+  );
 
   const resetOutputMap = useResetOutputMap();
-  const updateOutputTraceId = useUpdateOutputTraceId();
+  const clearPromptOutputStale = useClearPromptOutputStale();
   const setProgress = useSetProgress();
   const setProgressPhase = useSetProgressPhase();
   const resetProgress = useResetProgress();
+  const forgetExperimentForPrompt = useForgetExperimentForPrompt();
 
   const resetState = useCallback(() => {
     resetOutputMap();
-    abortControllersRef.current.clear();
-    clearRunningMap();
+    stopPolling();
+    settleRun();
     clearCreatedExperiments();
     resetProgress();
-  }, [resetOutputMap, clearCreatedExperiments, clearRunningMap, resetProgress]);
-
-  const stopAll = useCallback(() => {
-    announcePendingRef.current = false;
-    scopedAnnounceRef.current.clear();
-    clearRunningMap();
-    isToStopRef.current = true;
-    abortControllersRef.current.forEach(({ controller }) => controller.abort());
-    abortControllersRef.current.clear();
-  }, [clearRunningMap]);
-
-  const stopSingle = useCallback(
-    (promptId: string) => {
-      scopedAnnounceRef.current.delete(promptId);
-      setPromptRunning(promptId, false);
-      for (const [key, entry] of abortControllersRef.current.entries()) {
-        if (entry.promptId === promptId) {
-          entry.controller.abort();
-          abortControllersRef.current.delete(key);
-        }
-      }
-    },
-    [setPromptRunning],
-  );
+  }, [
+    resetOutputMap,
+    stopPolling,
+    clearCreatedExperiments,
+    settleRun,
+    resetProgress,
+  ]);
 
   const storeExperiments = useCallback(
     (experiments: LogExperiment[]) => {
@@ -186,379 +175,24 @@ const useActionButtonActions = ({
     [setCreatedExperiments],
   );
 
-  const logProcessorHandlers: LogProcessorArgs = useMemo(() => {
-    return {
-      onAddExperimentRegistry: (experiments, experimentPromptMap) => {
-        // Only store experiments when all have been created
-        if (experiments.length === promptIds.length) {
-          storeExperiments(experiments);
-          setExperimentByPromptId(experimentPromptMap);
-          queryClient.invalidateQueries({
-            queryKey: ["experiments"],
-          });
-        }
-      },
-      onError: (e) => {
-        toast({
-          title: "Error",
-          variant: "destructive",
-          description: e.message,
-        });
-      },
-      onCreateTraces: (traces, mappings: TraceMapping[]) => {
-        // Store trace IDs in the output map
-        mappings.forEach((mapping) => {
-          updateOutputTraceId(
-            mapping.promptId,
-            mapping.datasetItemId || "",
-            mapping.traceId,
-          );
-        });
-
-        queryClient.invalidateQueries({
-          queryKey: [PROJECTS_KEY],
-        });
-      },
-      onExperimentItemsComplete: () => {
-        // Invalidate experiments to refresh the experiments list
-        queryClient.invalidateQueries({
-          queryKey: ["experiments"],
-        });
-      },
-    };
-  }, [
-    queryClient,
-    promptIds.length,
-    storeExperiments,
-    setExperimentByPromptId,
-    toast,
-    updateOutputTraceId,
-  ]);
-
-  const addAbortController = useCallback(
-    (key: string, value: AbortController, promptId: string) => {
-      abortControllersRef.current.set(key, { controller: value, promptId });
-    },
-    [],
-  );
-
-  const deleteAbortController = useCallback(
-    (key: string) => abortControllersRef.current.delete(key),
-    [],
-  );
-
-  const { createCombinations, processCombination } =
-    usePromptDatasetItemCombination({
-      workspaceName,
-      datasetItems,
-      datasetName,
-      datasetVersionId,
-      selectedRuleIds,
-      addAbortController,
-      deleteAbortController,
-      throttlingSeconds,
-    });
-
-  const handlePollTimeout = useCallback(
-    (description: string) => {
-      announcePendingRef.current = false;
-      clearRunningMap();
-      isToStopRef.current = false;
-      resetProgress();
-      queryClient.invalidateQueries({ queryKey: ["experiments"] });
-      queryClient.invalidateQueries({ queryKey: [COMPARE_EXPERIMENTS_KEY] });
-      toast({ title: "Timeout", description, variant: "destructive" });
-    },
-    [clearRunningMap, resetProgress, queryClient, toast],
-  );
-
-  const finishPollScope = useCallback(
-    (scope?: PollScope) => {
-      if (scope?.scopedPromptIds) {
-        scope.scopedPromptIds.forEach((id) => setPromptRunning(id, false));
-      } else {
-        clearRunningMap();
-        isToStopRef.current = false;
-      }
-    },
-    [clearRunningMap, setPromptRunning],
-  );
-
-  const handlePollError = useCallback(
-    (
-      error: unknown,
-      scope: PollScope | undefined,
-      description: string,
-      onUnscopedCleanup?: () => void,
-    ) => {
-      const isScoped = !!scope?.scopedPromptIds;
-      finishPollScope(scope);
-      if (!isScoped) {
-        onUnscopedCleanup?.();
-      }
-      if ((error as Error)?.name !== "AbortError") {
-        toast({
-          title: "Error",
-          description,
-          variant: "destructive",
-        });
-      }
-    },
-    [finishPollScope, toast],
-  );
-
-  // TODO: OPIK-5724 — for datasets >20k items, replace with a dedicated BE count endpoint
-  const pollAssertionEvaluation = useCallback(
-    async (
-      experimentIds: string[],
-      curDatasetId: string,
-      scope?: PollScope,
-    ) => {
-      const startTime = Date.now();
-      const pollKey = `poll-assertion${scope?.pollKeySuffix ?? ""}`;
-      const isScoped = !!scope?.scopedPromptIds;
-
-      const poll = async () => {
-        if (!isScoped && isToStopRef.current) return;
-
-        if (Date.now() - startTime > MAX_POLL_DURATION_MS) {
-          if (isScoped) {
-            finishPollScope(scope);
-            toast({
-              title: "Timeout",
-              description:
-                "Assertion evaluation polling timed out after 5 minutes",
-              variant: "destructive",
-            });
-          } else {
-            handlePollTimeout(
-              "Assertion evaluation polling timed out after 5 minutes",
-            );
-          }
-          return;
-        }
-
-        try {
-          const controller = new AbortController();
-          abortControllersRef.current.set(pollKey, {
-            controller,
-            promptId: scope?.scopedPromptIds?.[0] ?? "",
-          });
-
-          const [data, ...experimentResults] = await Promise.all([
-            getCompareExperimentsList(
-              { signal: controller.signal },
-              {
-                workspaceName,
-                datasetId: curDatasetId,
-                experimentsIds: experimentIds,
-                truncate: true,
-                size: COMPARE_EXPERIMENTS_MAX_PAGE_SIZE,
-                page: 1,
-              },
-            ),
-            ...experimentIds.map((id) =>
-              getExperimentById(
-                { signal: controller.signal },
-                { experimentId: id },
-              ),
-            ),
-          ]);
-
-          const experimentsFinished = experimentResults.every((exp) =>
-            isExperimentTerminal(exp?.status),
-          );
-
-          const rows: ExperimentsCompare[] = data?.content ?? [];
-
-          let scoredItems = 0;
-          let totalExperimentItems = 0;
-
-          for (const row of rows) {
-            const experimentItems = row.experiment_items ?? [];
-            const noEvaluators = (row.evaluators?.length ?? 0) === 0;
-
-            for (const ei of experimentItems) {
-              totalExperimentItems++;
-              if (noEvaluators || isItemScored(ei)) {
-                scoredItems++;
-              }
-            }
-          }
-
-          if (!isScoped && totalExperimentItems > 0) {
-            setProgress(scoredItems, totalExperimentItems);
-          }
-
-          if (experimentsFinished) {
-            if (!isScoped) {
-              setProgress(totalExperimentItems, totalExperimentItems);
-              setTimeout(() => resetProgress(), 3000);
-            }
-            finishPollScope(scope);
-            const scopedId = scope?.scopedPromptIds?.[0];
-            if (!scopedId || scopedAnnounceRef.current.delete(scopedId)) {
-              announceRunComplete(scope?.announceExperiments ?? []);
-            }
-            queryClient.invalidateQueries({ queryKey: ["experiments"] });
-            queryClient.invalidateQueries({
-              queryKey: [COMPARE_EXPERIMENTS_KEY],
-            });
-            return;
-          }
-
-          queryClient.invalidateQueries({
-            queryKey: [COMPARE_EXPERIMENTS_KEY],
-          });
-          setTimeout(poll, ASSERTION_POLL_INTERVAL_MS);
-        } catch (error) {
-          handlePollError(
-            error,
-            scope,
-            "Failed to poll assertion evaluation status",
-            resetProgress,
-          );
-        }
-      };
-
-      poll();
-    },
-    [
-      workspaceName,
-      setProgress,
-      resetProgress,
-      handlePollTimeout,
-      announceRunComplete,
-      finishPollScope,
-      queryClient,
-      toast,
-      handlePollError,
-    ],
-  );
-
-  const pollExperimentCompletion = useCallback(
-    async (
-      experimentIds: string[],
-      totalItems: number,
-      curDatasetId: string,
-      scope?: PollScope,
-    ) => {
-      const startTime = Date.now();
-      const pollKey = `poll-experiment${scope?.pollKeySuffix ?? ""}`;
-      const isScoped = !!scope?.scopedPromptIds;
-
-      const poll = async () => {
-        if (!isScoped && isToStopRef.current) return;
-
-        if (Date.now() - startTime > MAX_POLL_DURATION_MS) {
-          if (isScoped) {
-            finishPollScope(scope);
-            toast({
-              title: "Timeout",
-              description:
-                "Experiment completion polling timed out after 5 minutes",
-              variant: "destructive",
-            });
-          } else {
-            handlePollTimeout(
-              "Experiment completion polling timed out after 5 minutes",
-            );
-          }
-          return;
-        }
-
-        try {
-          const controller = new AbortController();
-          abortControllersRef.current.set(pollKey, {
-            controller,
-            promptId: scope?.scopedPromptIds?.[0] ?? "",
-          });
-          const results = await Promise.all(
-            experimentIds.map((id) =>
-              getExperimentById(
-                { signal: controller.signal },
-                {
-                  experimentId: id,
-                },
-              ),
-            ),
-          );
-
-          const totalTraces = results.reduce(
-            (sum, exp) => sum + (exp?.trace_count ?? 0),
-            0,
-          );
-          if (!isScoped) {
-            setProgress(Math.min(totalTraces, totalItems), totalItems);
-          }
-
-          const allExperimentsFinished = results.every((exp) =>
-            isExperimentTerminal(exp?.status),
-          );
-
-          if (allExperimentsFinished) {
-            // Assertions already done — skip Step 2, finish immediately
-            if (!isScoped) {
-              setProgress(totalItems, totalItems);
-              setTimeout(() => resetProgress(), 3000);
-            }
-            finishPollScope(scope);
-            const scopedId = scope?.scopedPromptIds?.[0];
-            if (!scopedId || scopedAnnounceRef.current.delete(scopedId)) {
-              announceRunComplete(scope?.announceExperiments ?? []);
-            }
-            queryClient.invalidateQueries({ queryKey: ["experiments"] });
-            queryClient.invalidateQueries({
-              queryKey: [COMPARE_EXPERIMENTS_KEY],
-            });
-            return;
-          }
-
-          const allTracesCollected = totalTraces >= totalItems;
-          if (allTracesCollected) {
-            if (!isScoped) {
-              setProgress(totalItems, totalItems);
-              setProgressPhase("evaluating");
-              setProgress(0, totalItems);
-            }
-            queryClient.invalidateQueries({ queryKey: ["experiments"] });
-            pollAssertionEvaluation(experimentIds, curDatasetId, scope);
-            return;
-          }
-
-          queryClient.invalidateQueries({ queryKey: ["experiments"] });
-          setTimeout(poll, EXPERIMENT_POLL_INTERVAL_MS);
-        } catch (error) {
-          handlePollError(
-            error,
-            scope,
-            "Failed to poll experiment completion status",
-          );
-        }
-      };
-
-      setTimeout(poll, EXPERIMENT_POLL_INTERVAL_MS);
-    },
-    [
-      setProgress,
-      setProgressPhase,
-      resetProgress,
-      finishPollScope,
-      announceRunComplete,
-      handlePollTimeout,
-      queryClient,
-      pollAssertionEvaluation,
-      toast,
-      handlePollError,
-    ],
-  );
+  const { runAllViaFrontend, runSingleViaFrontend } = useClientSideRun({
+    workspaceName,
+    projectName,
+    resetState,
+    markWatchStarted,
+    addAbortController,
+    deleteAbortController,
+    clearAbortControllers,
+  });
 
   const runAllViaBackend = useCallback(async () => {
-    if (!datasetName || !datasetId) return;
+    if (!datasetId) return;
+    if (!datasetName) return reportDatasetNotReady();
 
     resetState();
-    isToStopRef.current = false;
+    markWatchStarted();
     setAllRunning(true);
+    setProgressPhase("running");
 
     try {
       const prompts = promptIds.map((id) => promptMap[id]);
@@ -572,7 +206,11 @@ const useActionButtonActions = ({
         versionHash,
         prompts,
         projectName,
+        projectId,
         experimentNames,
+        openAiPipelineMode,
+        selectedRuleIds,
+        filters: datasetItemFilters,
       });
 
       // Build experiment-to-prompt mapping from BE response
@@ -585,208 +223,110 @@ const useActionButtonActions = ({
           name: experimentNames[promptId],
           datasetName,
           datasetVersionId,
-          evaluationMethod: EVALUATION_METHOD.TEST_SUITE,
+          evaluationMethod,
         };
       });
 
       storeExperiments(experiments);
       setExperimentByPromptId(experimentPromptMap);
-      setProgressPhase("running");
+
+      response.experiments.forEach((exp) => {
+        const promptId = promptIds[exp.prompt_index];
+        if (promptId) {
+          setRunTotalItemsForPrompts([promptId], exp.total_items);
+        }
+      });
+
+      if (applyQueuedStop(promptIds)) {
+        resetProgress();
+        return;
+      }
+
+      setIsRunInFlight(true);
       setProgress(0, response.total_items);
 
       queryClient.invalidateQueries({ queryKey: ["experiments"] });
 
       // Poll for completion instead of immediately finishing
-      const experimentIds = response.experiments.map((e) => e.experiment_id);
-      pollExperimentCompletion(experimentIds, response.total_items, datasetId, {
-        announceExperiments: experiments,
-      });
+      pollExperimentCompletion(
+        Object.fromEntries(
+          response.experiments.map((e) => [e.experiment_id, e.total_items]),
+        ),
+        datasetId,
+        { announceExperiments: experiments },
+      );
     } catch {
-      clearRunningMap();
-      isToStopRef.current = false;
+      settleRun();
+      resetProgress();
+      markWatchStarted();
     }
   }, [
+    applyQueuedStop,
+    markWatchStarted,
     datasetName,
     datasetId,
     datasetVersionId,
     versionHash,
     resetState,
     setAllRunning,
-    clearRunningMap,
+    settleRun,
     promptIds,
     promptMap,
     runExperimentExecution,
+    openAiPipelineMode,
     storeExperiments,
     setExperimentByPromptId,
     setProgress,
     setProgressPhase,
+    resetProgress,
+    setRunTotalItemsForPrompts,
+    setIsRunInFlight,
     queryClient,
     projectName,
+    projectId,
     pollExperimentCompletion,
-  ]);
-
-  const runAllViaFrontend = useCallback(async () => {
-    resetState();
-    isToStopRef.current = false;
-    announcePendingRef.current = true;
-    setAllRunning(true);
-
-    const runExperiments: LogExperiment[] = [];
-    const announcer = createCompletionAnnouncer(promptIds.length, () => {
-      if (!announcePendingRef.current) return;
-      announcePendingRef.current = false;
-      announceRunComplete(runExperiments);
-    });
-
-    const logProcessor = buildLogProcessor({
-      datasetName,
-      canLogTraceSpanThread,
-      canCreateExperiments,
-      args: {
-        ...logProcessorHandlers,
-        projectName,
-        onAddExperimentRegistry: (experiments, map) => {
-          runExperiments.splice(0, runExperiments.length, ...experiments);
-          logProcessorHandlers.onAddExperimentRegistry?.(experiments, map);
-          announcer.experimentsRegistered(experiments.length);
-        },
-      },
-    });
-
-    const combinations = createCombinations();
-    const totalCombinations = combinations.length;
-
-    // Initialize progress tracking
-    setProgress(0, totalCombinations);
-
-    let completedCount = 0;
-
-    asyncLib.mapLimit(
-      combinations,
-      maxConcurrentRequests,
-      async (combination: DatasetItemPromptCombination) => {
-        await processCombination(combination, logProcessor);
-
-        // Update progress after each combination completes
-        completedCount += 1;
-        setProgress(completedCount, totalCombinations);
-      },
-      () => {
-        // Signal that all logs have been sent
-        logProcessor.finishLogging();
-
-        clearRunningMap();
-        isToStopRef.current = false;
-        abortControllersRef.current.clear();
-        announcer.loggingFinished();
-      },
-    );
-  }, [
-    resetState,
-    setAllRunning,
-    clearRunningMap,
-    announceRunComplete,
-    createCombinations,
-    processCombination,
-    logProcessorHandlers,
-    maxConcurrentRequests,
-    setProgress,
-    projectName,
-    datasetName,
-    canLogTraceSpanThread,
-    canCreateExperiments,
-    promptIds.length,
+    reportDatasetNotReady,
+    selectedRuleIds,
+    datasetItemFilters,
+    evaluationMethod,
   ]);
 
   const runAll = useCallback(async () => {
-    if (isTestSuite) {
+    if (isBackendRun) {
       return runAllViaBackend();
     }
     return runAllViaFrontend();
-  }, [isTestSuite, runAllViaBackend, runAllViaFrontend]);
-
-  const runSingleViaFrontend = useCallback(
-    async (promptId: string) => {
-      const prompt = usePlaygroundStore.getState().promptMap[promptId];
-      if (!prompt) return;
-
-      setPromptRunning(promptId, true);
-      scopedAnnounceRef.current.add(promptId);
-
-      const singleRunExperiments: LogExperiment[] = [];
-      const announcer = createCompletionAnnouncer(1, () => {
-        if (!scopedAnnounceRef.current.delete(promptId)) return;
-        announceRunComplete(singleRunExperiments);
-      });
-
-      const logProcessor = buildLogProcessor({
-        datasetName,
-        canLogTraceSpanThread,
-        canCreateExperiments,
-        args: {
-          ...logProcessorHandlers,
-          projectName,
-          onAddExperimentRegistry: (experiments, map) => {
-            singleRunExperiments.splice(
-              0,
-              singleRunExperiments.length,
-              ...experiments,
-            );
-            logProcessorHandlers.onAddExperimentRegistry?.(experiments, map);
-            announcer.experimentsRegistered(experiments.length);
-          },
-        },
-      });
-
-      const experimentName = getExperimentNameForPrompt(promptId);
-      const combinations: DatasetItemPromptCombination[] =
-        datasetItems.length > 0
-          ? datasetItems.map((di) => ({
-              datasetItem: di,
-              prompt,
-              experimentName,
-            }))
-          : [{ prompt, experimentName }];
-
-      try {
-        await new Promise<void>((resolve) => {
-          asyncLib.mapLimit(
-            combinations,
-            maxConcurrentRequests,
-            async (combination: DatasetItemPromptCombination) => {
-              await processCombination(combination, logProcessor);
-            },
-            () => resolve(),
-          );
-        });
-      } finally {
-        logProcessor.finishLogging();
-        setPromptRunning(promptId, false);
-        announcer.loggingFinished();
-      }
-    },
-    [
-      datasetItems,
-      maxConcurrentRequests,
-      setPromptRunning,
-      announceRunComplete,
-      logProcessorHandlers,
-      processCombination,
-      projectName,
-      datasetName,
-      canLogTraceSpanThread,
-      canCreateExperiments,
-    ],
-  );
+  }, [isBackendRun, runAllViaBackend, runAllViaFrontend]);
 
   const runSingleViaBackend = useCallback(
     async (promptId: string) => {
-      if (!datasetName || !datasetId) return;
+      if (!datasetId) return;
+      if (!datasetName) return reportDatasetNotReady();
       const prompt = usePlaygroundStore.getState().promptMap[promptId];
       if (!prompt) return;
 
       setPromptRunning(promptId, true);
-      scopedAnnounceRef.current.add(promptId);
+      expectScopedAnnouncement(promptId);
+      // Until /execute answers, this prompt's previous experiment is the only id on hand, and a
+      // stop pressed now would cancel that finished run instead of queueing for this one.
+      const previousExperimentId =
+        usePlaygroundStore.getState().experimentByPromptId?.[promptId];
+      forgetExperimentForPrompt(promptId);
+      // A fresh run is one this tab follows again, whatever happened to the last one.
+      clearWatchLapsed([promptId]);
+
+      // A launch that never started replaces nothing, so the last run stays on screen. Without
+      // this the cell empties for good: the mapping it reads is persisted, so a reload keeps the
+      // blank rather than restoring it.
+      const keepShowingThePreviousRun = () => {
+        if (!previousExperimentId) return;
+        const current =
+          usePlaygroundStore.getState().experimentByPromptId ?? {};
+        setExperimentByPromptId({
+          ...current,
+          [promptId]: previousExperimentId,
+        });
+      };
 
       const experimentName = getExperimentNameForPrompt(prompt.id);
 
@@ -798,16 +338,18 @@ const useActionButtonActions = ({
           versionHash,
           prompts: [prompt],
           projectName,
+          projectId,
           experimentNames: { [prompt.id]: experimentName },
+          openAiPipelineMode,
+          selectedRuleIds,
+          filters: datasetItemFilters,
         });
 
         const experiment = response.experiments[0];
         if (!experiment) {
           setPromptRunning(promptId, false);
-          return;
-        }
-
-        if (!usePlaygroundStore.getState().isRunningMap[promptId]) {
+          clearStopAwaitingRun([promptId]);
+          keepShowingThePreviousRun();
           return;
         }
 
@@ -817,12 +359,22 @@ const useActionButtonActions = ({
           ...existing,
           [promptId]: experiment.experiment_id,
         });
+        setRunTotalItemsForPrompts([promptId], experiment.total_items);
+        clearPromptOutputStale(promptId);
+
+        // Record the id before deciding whether to watch: a run stopped mid-launch still exists on
+        // the server, and cancelling it needs the id the stop could not reach.
+        if (applyQueuedStop([promptId])) return;
+        if (!usePlaygroundStore.getState().isRunningMap[promptId]) {
+          return;
+        }
+
+        setIsRunInFlight(true);
 
         queryClient.invalidateQueries({ queryKey: ["experiments"] });
 
         pollExperimentCompletion(
-          [experiment.experiment_id],
-          response.total_items,
+          { [experiment.experiment_id]: experiment.total_items },
           datasetId,
           {
             scopedPromptIds: [promptId],
@@ -833,13 +385,15 @@ const useActionButtonActions = ({
                 name: experimentName,
                 datasetName,
                 datasetVersionId,
-                evaluationMethod: EVALUATION_METHOD.TEST_SUITE,
+                evaluationMethod,
               },
             ],
           },
         );
       } catch {
         setPromptRunning(promptId, false);
+        clearStopAwaitingRun([promptId]);
+        keepShowingThePreviousRun();
       }
     },
     [
@@ -848,30 +402,47 @@ const useActionButtonActions = ({
       datasetVersionId,
       versionHash,
       projectName,
+      projectId,
       runExperimentExecution,
+      openAiPipelineMode,
       setPromptRunning,
       setExperimentByPromptId,
+      setRunTotalItemsForPrompts,
+      clearPromptOutputStale,
+      setIsRunInFlight,
       queryClient,
       pollExperimentCompletion,
+      reportDatasetNotReady,
+      selectedRuleIds,
+      datasetItemFilters,
+      evaluationMethod,
+      applyQueuedStop,
+      expectScopedAnnouncement,
+      forgetExperimentForPrompt,
+      clearStopAwaitingRun,
+      clearWatchLapsed,
     ],
   );
 
   const runSingle = useCallback(
     async (promptId: string) => {
-      if (isTestSuite) {
+      if (isBackendRun) {
         return runSingleViaBackend(promptId);
       }
       return runSingleViaFrontend(promptId);
     },
-    [isTestSuite, runSingleViaBackend, runSingleViaFrontend],
+    [isBackendRun, runSingleViaBackend, runSingleViaFrontend],
   );
 
+  // Picks a server-side run back up
   return {
     isRunning,
     runAll,
     runSingle,
     stopAll,
+    stopWatching,
     stopSingle,
+    checkAgain,
   };
 };
 

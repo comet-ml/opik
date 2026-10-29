@@ -25,7 +25,7 @@ For this guide we will use a simple example that logs guardrails validation step
 
 First, ensure you have both `opik` and `guardrails-ai` installed:
 
-```bash
+```bash wordWrap
 pip install opik guardrails-ai
 ```
 
@@ -44,13 +44,13 @@ In order to use Guardrails AI, you will need to configure the OpenAI API Key. If
 
 You can set it as an environment variable:
 
-```bash
+```bash wordWrap
 export OPENAI_API_KEY="YOUR_API_KEY"
 ```
 
 Or set it programmatically:
 
-```python
+```python wordWrap
 import os
 import getpass
 
@@ -60,7 +60,7 @@ if "OPENAI_API_KEY" not in os.environ:
 
 We will also need to install the guardrails check for politeness from the Guardrails Hub:
 
-```bash
+```bash wordWrap
 guardrails hub install hub://guardrails/politeness_check
 ```
 
@@ -68,7 +68,7 @@ guardrails hub install hub://guardrails/politeness_check
 
 In order to log traces to Opik, you will need to call the track the Guard object with `track_guardrails` function.
 
-```python
+```python wordWrap
 from guardrails import Guard, OnFailAction
 from guardrails.hub import PolitenessCheck
 

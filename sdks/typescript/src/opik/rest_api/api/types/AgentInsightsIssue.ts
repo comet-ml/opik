@@ -27,6 +27,12 @@ export interface AgentInsightsIssue {
     lastSeen?: string;
     /** COUNT(DISTINCT report_day) in the requested window */
     daysReported?: number;
+    /** The team's reason for closing the issue as not useful; set only while status is closed */
+    closeNote?: string;
+    /** Who last changed the status */
+    statusChangedBy?: string;
+    /** When the status was last changed */
+    statusChangedAt?: Date;
     createdBy?: string;
     createdAt?: Date;
     lastUpdatedBy?: string;

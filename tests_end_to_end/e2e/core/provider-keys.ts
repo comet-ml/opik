@@ -33,6 +33,36 @@ export interface ProviderKeyRef {
   provider_name?: string;
   base_url?: string;
   auth_config?: ProviderAuthConfig;
+  /**
+   * The provider's own settings, as stored. `models` is a COMMA-SEPARATED
+   * string of fully-qualified ids (`custom-llm/<provider>/<model>`), not an
+   * array — see `providerModelNames` for reading it as a list.
+   */
+  configuration?: { models?: string };
+}
+
+/**
+ * The model display names a Custom provider offers, in stored order.
+ *
+ * For a spec to prove its own seed landed before it opens a browser: a model
+ * picker asserted over a provider that silently kept fewer models than the test
+ * asked for is a test that cannot fail, and it reads as coverage forever.
+ *
+ * The stored value is one comma-separated string of qualified ids; the picker
+ * renders only the model segment, so that is what comes back here — the names a
+ * caller can match against what is on screen.
+ */
+export async function providerModelNames(providerName: string): Promise<string[]> {
+  const key = await findProviderKeyByName(providerName);
+  if (!key) throw new Error(`providerModelNames: no provider key named '${providerName}'`);
+  const models = key.configuration?.models;
+  if (typeof models !== 'string' || models.trim() === '') {
+    throw new Error(
+      `providerModelNames: provider '${providerName}' stored no models — ` +
+        `configuration was ${JSON.stringify(key.configuration)}`,
+    );
+  }
+  return models.split(',').map((id) => id.trim().split('/').pop() ?? '');
 }
 
 function restHeaders(): Record<string, string> {
@@ -54,6 +84,36 @@ export async function findProviderKeyByName(providerName: string): Promise<Provi
   if (!response.ok) throw new Error(`list provider keys returned ${response.status}`);
   const body = (await response.json()) as { content: ProviderKeyRef[] };
   return body.content.find((key) => key.provider_name === providerName) ?? null;
+}
+
+/**
+ * Find a key for a BUILT-IN provider (`openrouter`, `openai`, …), which is
+ * addressed by its provider type rather than by a name.
+ *
+ * `findProviderKeyByName` cannot see these at all: a built-in provider has no
+ * `provider_name`, because there is only ever one key per provider per
+ * workspace. That also makes it un-namespaceable — a spec cannot give itself a
+ * private one — so a caller that needs a built-in key must REUSE whatever the
+ * workspace already has and delete only a key it seeded itself. Clobbering a
+ * real key on a shared workspace is not recoverable from a test run.
+ */
+export async function findProviderKeyByProvider(provider: string): Promise<ProviderKeyRef | null> {
+  const response = await fetch(endpoint(), { headers: restHeaders() });
+  if (!response.ok) throw new Error(`list provider keys returned ${response.status}`);
+  const body = (await response.json()) as { content: ProviderKeyRef[] };
+  return body.content.find((key) => key.provider === provider) ?? null;
+}
+
+/** Delete one provider key by id — for built-ins, which have no name to look up. */
+export async function deleteProviderKeyById(id: string): Promise<void> {
+  const response = await fetch(endpoint('/delete'), {
+    method: 'POST',
+    headers: restHeaders(),
+    body: JSON.stringify({ ids: [id] }),
+  });
+  if (!response.ok) {
+    throw new Error(`delete provider key returned ${response.status}`);
+  }
 }
 
 /**
@@ -88,8 +148,14 @@ export const notFoundProviderBaseUrl = `${backendSelfUrl}/qa-no-such-llm-endpoin
 
 export async function createProviderKey(payload: {
   provider: string;
-  provider_name: string;
-  base_url: string;
+  /**
+   * Required for the provider types that compose their key from it (custom,
+   * bedrock, ollama); omitted for a built-in provider, which has exactly one
+   * row per workspace and no name of its own.
+   */
+  provider_name?: string;
+  /** Omitted for a built-in provider, which the backend routes itself. */
+  base_url?: string;
   /**
    * Static bearer, for providers that are not in OAuth2 token-auth mode. The
    * endpoint requires one whenever `auth_config` is absent, so a static-auth
@@ -107,6 +173,57 @@ export async function createProviderKey(payload: {
   if (!response.ok) {
     throw new Error(`create provider key returned ${response.status}: ${await response.text()}`);
   }
+}
+
+/**
+ * The provider TYPES (`openai`, `gemini`, …) the workspace already has a key
+ * for, built-in ones included — unlike `findProviderKeyByName`, which matches
+ * the user-defined `provider_name` only custom providers carry.
+ */
+export async function listConfiguredProviderTypes(): Promise<string[]> {
+  const response = await fetch(endpoint(), { headers: restHeaders() });
+  if (!response.ok) throw new Error(`list provider keys returned ${response.status}`);
+  const body = (await response.json()) as { content: ProviderKeyRef[] };
+  return body.content.map((key) => key.provider);
+}
+
+/**
+ * Make sure a BUILT-IN provider (`openai`, `anthropic`, `gemini`, `vertex-ai`)
+ * has a key on the workspace, and report whether one had to be added.
+ *
+ * Strictly additive, and that is load-bearing in both directions:
+ *
+ *  - It never overwrites. A built-in provider is ONE row per workspace, so
+ *    writing over an existing key would destroy a real credential another spec
+ *    (or a human) depends on.
+ *  - It never deletes, and neither should its caller. Because there is only one
+ *    row per provider, a fixture that removed its own key would pull the
+ *    provider out from under any spec running in parallel that needs the same
+ *    one. This is why `ConfigurationPage.ensureProviderConfigured` has no
+ *    teardown either.
+ *
+ * `apiKey` is used only when the provider is absent. Pass a real key from the
+ * environment when the runner has one; a placeholder is acceptable only for
+ * specs that never let a request reach the provider, and the caller owns that
+ * judgement (see the `modelRegistryProviders` fixture for the trade-off a
+ * placeholder leaves behind).
+ */
+export async function ensureBuiltInProviderKey(
+  provider: string,
+  apiKey: string,
+): Promise<{ added: boolean }> {
+  if ((await listConfiguredProviderTypes()).includes(provider)) return { added: false };
+  try {
+    // Only `provider` and `api_key`: a built-in provider carries no name of
+    // its own and no base URL, and sending empty ones would store them.
+    await createProviderKey({ provider, api_key: apiKey });
+  } catch (err) {
+    // A parallel worker may have created it between the read and this write.
+    // The endpoint refuses the duplicate, which is the outcome we wanted.
+    if (!(await listConfiguredProviderTypes()).includes(provider)) throw err;
+    return { added: false };
+  }
+  return { added: true };
 }
 
 export async function deleteProviderKeyByName(providerName: string): Promise<void> {

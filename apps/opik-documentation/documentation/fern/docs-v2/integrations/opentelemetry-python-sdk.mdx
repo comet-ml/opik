@@ -17,7 +17,7 @@ This guide shows you how to directly instrument your Python applications with th
 
 First, install the required OpenTelemetry packages:
 
-```bash
+```bash wordWrap
 pip install opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp
 ```
 
@@ -25,7 +25,7 @@ pip install opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp
 
 Here's a complete example that demonstrates how to instrument a chatbot application with OpenTelemetry and send the traces to Opik:
 
-```python
+```python wordWrap
 # Dependencies: opentelemetry-exporter-otlp
 
 import os
@@ -143,7 +143,7 @@ If a service instrumented with OpenTelemetry is invoked by another service that 
 
 `distributed_trace.attach_to_parent` only sets the Opik attributes on the *boundary* span. Children created inside that span via `start_as_current_span` inherit OTel context but not those attributes — without extra wiring they end up orphaned in a synthetic Opik trace. Register `OpikSpanProcessor` on the same `TracerProvider` as your OTLP exporter to propagate the Opik IDs down the entire attached subtree:
 
-```python
+```python wordWrap
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
@@ -172,7 +172,7 @@ Spans that match none of these are left untouched, so OpenTelemetry-only traces 
 
 When an OpenTelemetry-instrumented library (for example logfire / PydanticAI) emits spans from inside an `@track`-decorated function, there is no boundary span and no `baggage` to inherit from — `@track` keeps its own context, not an OpenTelemetry one. With `OpikSpanProcessor` registered, those spans are attached to the active `@track` span automatically, producing a single trace instead of a separate synthetic one. No `attach_to_parent` call or header propagation is needed:
 
-```python
+```python wordWrap
 import opik
 from opentelemetry import trace
 

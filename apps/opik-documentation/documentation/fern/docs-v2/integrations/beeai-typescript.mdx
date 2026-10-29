@@ -25,13 +25,13 @@ To use the BeeAI integration with Opik, you will need to have BeeAI and the requ
 
 #### Option 1: Using npm
 
-```bash
+```bash wordWrap
 npm install beeai-framework@0.1.13 @ai-sdk/openai @arizeai/openinference-instrumentation-beeai @opentelemetry/sdk-node dotenv
 ```
 
 #### Option 2: Using yarn
 
-```bash
+```bash wordWrap
 yarn add beeai-framework@0.1.13 @ai-sdk/openai @arizeai/openinference-instrumentation-beeai @opentelemetry/sdk-node dotenv
 ```
 
@@ -116,7 +116,7 @@ Minimal valid input:
         </Tip>
     </Tab>
     <Tab value="Self-hosted instance" title="Self-hosted instance">
-        ```bash
+        ```bash wordWrap
         # Your LLM API key
         export OPENAI_API_KEY="your-openai-api-key"
 
@@ -132,7 +132,7 @@ Minimal valid input:
 
 Set up OpenTelemetry instrumentation for BeeAI:
 
-```typescript
+```typescript wordWrap
 import "dotenv/config";
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";

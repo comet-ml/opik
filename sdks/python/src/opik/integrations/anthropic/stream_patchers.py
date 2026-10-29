@@ -240,9 +240,11 @@ def patch_sync_message_stream_manager(
         def wrapper(
             self: anthropic.MessageStream,
         ) -> Iterator[anthropic.MessageStreamEvent]:
+            has_received_event = False
             try:
                 error_info: Optional[ErrorInfoDict] = None
                 for item in dunder_iter_func(self):
+                    has_received_event = True
                     yield item
             except Exception as exception:
                 LOGGER.debug(
@@ -256,7 +258,9 @@ def patch_sync_message_stream_manager(
                 if hasattr(self, "opik_tracked_instance"):
                     delattr(self, "opik_tracked_instance")
                     accumulated_output = (
-                        self.get_final_message() if error_info is None else None
+                        self.current_message_snapshot
+                        if error_info is None and has_received_event
+                        else None
                     )
                     finally_callback(
                         output=accumulated_output,
@@ -326,9 +330,11 @@ def patch_async_message_stream_manager(
         async def wrapper(
             self: anthropic.AsyncMessageStream,
         ) -> AsyncIterator[anthropic.MessageStreamEvent]:
+            has_received_event = False
             try:
                 error_info: Optional[ErrorInfoDict] = None
                 async for item in dunder_aiter_func(self):
+                    has_received_event = True
                     yield item
             except Exception as exception:
                 LOGGER.debug(
@@ -342,7 +348,9 @@ def patch_async_message_stream_manager(
                 if hasattr(self, "opik_tracked_instance"):
                     delattr(self, "opik_tracked_instance")
                     accumulated_output = (
-                        await self.get_final_message() if error_info is None else None
+                        self.current_message_snapshot
+                        if error_info is None and has_received_event
+                        else None
                     )
                     finally_callback(
                         output=accumulated_output,
@@ -412,9 +420,11 @@ def patch_sync_beta_message_stream_manager(
         def wrapper(
             self: BetaMessageStream,
         ) -> Iterator[Any]:
+            has_received_event = False
             try:
                 error_info: Optional[ErrorInfoDict] = None
                 for item in dunder_iter_func(self):
+                    has_received_event = True
                     yield item
             except Exception as exception:
                 LOGGER.debug(
@@ -427,7 +437,9 @@ def patch_sync_beta_message_stream_manager(
                 if hasattr(self, "opik_tracked_instance"):
                     delattr(self, "opik_tracked_instance")
                     accumulated_output = (
-                        self.get_final_message() if error_info is None else None
+                        self.current_message_snapshot
+                        if error_info is None and has_received_event
+                        else None
                     )
                     finally_callback(
                         output=accumulated_output,
@@ -492,9 +504,11 @@ def patch_async_beta_message_stream_manager(
         async def wrapper(
             self: BetaAsyncMessageStream,
         ) -> AsyncIterator[Any]:
+            has_received_event = False
             try:
                 error_info: Optional[ErrorInfoDict] = None
                 async for item in dunder_aiter_func(self):
+                    has_received_event = True
                     yield item
             except Exception as exception:
                 LOGGER.debug(
@@ -507,7 +521,9 @@ def patch_async_beta_message_stream_manager(
                 if hasattr(self, "opik_tracked_instance"):
                     delattr(self, "opik_tracked_instance")
                     accumulated_output = (
-                        await self.get_final_message() if error_info is None else None
+                        self.current_message_snapshot
+                        if error_info is None and has_received_event
+                        else None
                     )
                     finally_callback(
                         output=accumulated_output,

@@ -1540,7 +1540,7 @@ export class TracesClient {
         request: OpikApi.GetTraceStatsRequest = {},
         requestOptions?: TracesClient.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.ProjectStatsPublic>> {
-        const { projectId, projectName, filters, search, fromTime, toTime } = request;
+        const { projectId, projectName, filters, search, fromTime, toTime, annotationQueueId } = request;
         const _queryParams: Record<string, unknown> = {
             project_id: projectId,
             project_name: projectName,
@@ -1548,6 +1548,7 @@ export class TracesClient {
             search,
             from_time: fromTime?.toISOString(),
             to_time: toTime?.toISOString(),
+            annotation_queue_id: annotationQueueId,
         };
         const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
             this._options?.headers,
@@ -1972,6 +1973,7 @@ export class TracesClient {
             stripAttachments,
             filters,
             sorting,
+            exclude,
             search,
             fromTime,
             toTime,
@@ -1986,6 +1988,7 @@ export class TracesClient {
             strip_attachments: stripAttachments,
             filters,
             sorting,
+            exclude,
             search,
             from_time: fromTime?.toISOString(),
             to_time: toTime?.toISOString(),

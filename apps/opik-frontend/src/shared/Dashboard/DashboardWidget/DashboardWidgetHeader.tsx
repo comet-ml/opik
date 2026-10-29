@@ -12,6 +12,10 @@ type DashboardWidgetHeaderProps = {
   dragHandle?: React.ReactNode;
   className?: string;
   readOnly?: boolean;
+  // Shown right after the title, e.g. a badge marking where the widget came from.
+  titleAdornment?: React.ReactNode;
+  // Status before the actions, e.g. when the data was computed; shown on header hover so the title gets the room.
+  meta?: React.ReactNode;
 };
 
 const DashboardWidgetHeader: React.FunctionComponent<
@@ -25,6 +29,8 @@ const DashboardWidgetHeader: React.FunctionComponent<
   dragHandle,
   className,
   readOnly,
+  titleAdornment,
+  meta,
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -38,7 +44,7 @@ const DashboardWidgetHeader: React.FunctionComponent<
   return (
     <div
       className={cn(
-        "relative flex flex-col gap-0.5 rounded px-2 pb-0.5",
+        "group/header relative flex flex-col gap-0.5 rounded px-2 pb-0.5",
         showDragHandle ? "pt-1" : "pt-2",
         className,
       )}
@@ -66,6 +72,7 @@ const DashboardWidgetHeader: React.FunctionComponent<
             <div className="truncate text-xs font-medium text-foreground">
               {title}
             </div>
+            {titleAdornment}
             {infoMessage && (
               <TooltipWrapper content={infoMessage}>
                 <Info className="size-3 shrink-0 text-light-slate" />
@@ -78,6 +85,16 @@ const DashboardWidgetHeader: React.FunctionComponent<
             </div>
           )}
         </div>
+        {meta && (
+          <div
+            className={cn(
+              "shrink-0 items-center gap-1",
+              menuOpen ? "flex" : "hidden group-hover/header:flex",
+            )}
+          >
+            {meta}
+          </div>
+        )}
         {actionsWithHandler && (
           <div
             className={cn(

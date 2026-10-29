@@ -30,24 +30,24 @@ Before running the demo application, ensure you have the following installed:
 ### Installation
 
 #### 1. Clone the Repository
-```bash
+```bash wordWrap
 git clone git@github.com:comet-ml/opik-springai-demo.git
 cd opik-springai-demo
 ```
 
 #### 2. Verify Java Installation
-```bash
+```bash wordWrap
 java --version
 ```
 Ensure you have Java 21 or higher installed.
 
 #### 3. Verify Maven Installation
-```bash
+```bash wordWrap
 mvn --version
 ```
 
 #### 4. Install Dependencies
-```bash
+```bash wordWrap
 mvn clean install
 ```
 
@@ -113,7 +113,7 @@ Configure your environment variables based on your Opik deployment:
     If you are self-hosting Opik, you will need to set the following environment
     variables:
 
-    ```bash
+    ```bash wordWrap
     export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
     ```
 
@@ -121,7 +121,7 @@ Configure your environment variables based on your Opik deployment:
         To log the traces to a specific project, you can add the `projectName`
         parameter to the `OTEL_EXPORTER_OTLP_HEADERS` environment variable:
 
-        ```bash
+        ```bash wordWrap
         export OTEL_EXPORTER_OTLP_HEADERS='projectName=<your-project-name>'
         ```
 
@@ -134,7 +134,7 @@ Configure your environment variables based on your Opik deployment:
 
 Set up OpenTelemetry instrumentation for Spring AI in your `application.yaml`:
 
-```yaml
+```yaml wordWrap
 spring:
   application:
     name: spring-ai-opik-demo
@@ -170,7 +170,7 @@ otel:
 
 Your Spring AI code will now automatically send traces to Opik:
 
-```java
+```java wordWrap
 import io.micrometer.tracing.Span;
 import io.micrometer.tracing.Tracer;
 import org.springframework.ai.chat.client.ChatClient;
@@ -244,7 +244,7 @@ After cloning the [OPIK SpringAI starter](https://github.com/comet-ml/opik-sprin
 you can run the demo application using one of the following methods:
 
 ### Method 1: Using Maven Spring Boot Plugin
-```bash
+```bash wordWrap
 export OTEL_EXPORTER_OTLP_HEADERS='Comet-Workspace=default,projectName=otel-springai-test' \
 export OPENAI_API_KEY=sk-proj-your-api-key \
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
@@ -252,7 +252,7 @@ mvn spring-boot:run
 ```
 
 ### Method 2: Using JAR File
-```bash
+```bash wordWrap
 mvn clean package
 
 export OTEL_EXPORTER_OTLP_HEADERS='Comet-Workspace=default,projectName=otel-springai-test' \
@@ -262,7 +262,7 @@ java -jar target/spring-ai-demo-opik-0.0.1-SNAPSHOT.jar
 ```
 
 ### Method 3: Development Mode with Auto-reload
-```bash
+```bash wordWrap
 export OTEL_EXPORTER_OTLP_HEADERS='Comet-Workspace=default,projectName=otel-springai-test' \
 export OPENAI_API_KEY=sk-proj-your-api-key \
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
@@ -275,13 +275,13 @@ The application will start on `http://localhost:8085`
 
 After that you can send a request to the application endpoints to interact with the chatbot:
 
-```bash
+```bash wordWrap
 curl --get --data-urlencode "question=How to integrate Spring AI with OpenAI for building chatbots?" http://localhost:8085/api/chat/ask-me
 ```
 
 Or POST request to the `/api/chat/ask-enhanced` endpoint with TAGS and METADATA in the body:
 
-```bash
+```bash wordWrap
 curl -X POST \
   -H "Content-Type: application/json" \
   -d '{

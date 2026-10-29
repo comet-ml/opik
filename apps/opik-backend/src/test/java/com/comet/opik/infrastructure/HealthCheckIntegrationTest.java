@@ -9,15 +9,18 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import com.comet.opik.api.resources.utils.TestUtils;
+import com.comet.opik.api.resources.utils.resources.HealthCheckResourceClient;
+import com.comet.opik.api.resources.utils.resources.HealthCheckResourceClient.HealthCheckResponse;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.redis.testcontainers.RedisContainer;
-import jakarta.ws.rs.core.GenericType;
-import lombok.Builder;
+import io.dropwizard.testing.DropwizardTestSupport;
 import org.apache.hc.core5.http.HttpStatus;
 import org.awaitility.Awaitility;
+import org.eclipse.jetty.server.ServerConnector;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
@@ -32,6 +35,7 @@ import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
@@ -44,9 +48,6 @@ class HealthCheckIntegrationTest {
 
     private static final String READY = "READY";
     private static final String ALIVE = "ALIVE";
-
-    private static final GenericType<List<HealthCheckResponse>> HEALTH_CHECK_LIST_GENERIC_TYPE = new GenericType<>() {
-    };
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer();
@@ -76,7 +77,8 @@ class HealthCheckIntegrationTest {
     /**
      * Default test-config: {@code serviceToggles.ollieEnabled} off. Covers the standard
      * health check HTTP surface (per-check + aggregate {@code all}). Opik-owned checks
-     * (clickhouse, mysql, redis, clickhouse-readonly-freeform-sql) are asserted individually;
+     * (clickhouse, mysql, redis, clickhouse-readonly-freeform-sql, clickhouse-readonly-freeform-extended-sql)
+     * are asserted individually;
      * Dropwizard-provided checks (db, deadlocks) only appear in the aggregate row.
      */
     @Nested
@@ -89,11 +91,13 @@ class HealthCheckIntegrationTest {
 
         private ClientSupport client;
         private String baseURI;
+        private HealthCheckResourceClient healthCheckClient;
 
         @BeforeAll
         void setUpAll(ClientSupport client) {
             this.client = client;
             this.baseURI = TestUtils.getBaseUrl(client);
+            this.healthCheckClient = new HealthCheckResourceClient(client, baseURI);
             ClientSupportUtils.config(client);
         }
 
@@ -104,6 +108,11 @@ class HealthCheckIntegrationTest {
             // freeform-SQL issue never gates overall readiness.
             var clickhouseFreeformSqlResponse = HealthCheckResponse.builder()
                     .name("clickhouse-readonly-freeform-sql").healthy(true).critical(false).type(READY).build();
+            // Same shape as the probe above, and healthy here for the same reason: config-test leaves
+            // customCharts.enabled off, so it reports healthy without touching ClickHouse.
+            var clickhouseFreeformExtendedSqlResponse = HealthCheckResponse.builder()
+                    .name("clickhouse-readonly-freeform-extended-sql").healthy(true).critical(false).type(READY)
+                    .build();
             // Toggle off in config-test (databaseAnalytics.clusterHealthCheckEnabled / coldStorageDiskHealthCheckEnabled)
             // → healthy without touching ClickHouse. Critical when enabled, so listed critical here.
             var clickhouseClusterResponse = HealthCheckResponse.builder()
@@ -137,6 +146,7 @@ class HealthCheckIntegrationTest {
             var all = List.of(
                     clickHouseResponse,
                     clickhouseFreeformSqlResponse,
+                    clickhouseFreeformExtendedSqlResponse,
                     clickhouseClusterResponse,
                     clickhouseColdStorageDiskResponse,
                     clickhouseTracesTopologyResponse,
@@ -151,6 +161,8 @@ class HealthCheckIntegrationTest {
                     arguments("mysql", List.of(mysqlResponse)),
                     arguments("redis", List.of(redisResponse)),
                     arguments("clickhouse-readonly-freeform-sql", List.of(clickhouseFreeformSqlResponse)),
+                    arguments("clickhouse-readonly-freeform-extended-sql",
+                            List.of(clickhouseFreeformExtendedSqlResponse)),
                     arguments("clickhouse-cluster", List.of(clickhouseClusterResponse)),
                     arguments("clickhouse-cold-storage-disk", List.of(clickhouseColdStorageDiskResponse)),
                     arguments("clickhouse-traces-topology", List.of(clickhouseTracesTopologyResponse)),
@@ -162,7 +174,7 @@ class HealthCheckIntegrationTest {
         @ParameterizedTest(name = "healthCheckOk - {0}")
         @MethodSource
         void healthCheckOk(String name, List<HealthCheckResponse> expectedResponse) {
-            callHealthCheckAndAwaitAssertResponse(client, baseURI, name, expectedResponse);
+            healthCheckClient.awaitHealthCheck(name, expectedResponse);
         }
     }
 
@@ -177,6 +189,59 @@ class HealthCheckIntegrationTest {
      * is rejected with {@code Code: 164. DB::Exception: Cannot modify 'max_execution_time'
      * setting in readonly mode. (READONLY)}.
      */
+    /** The ports the app's Jetty server listens on, one per connector. */
+    private static List<Integer> listeningPorts(DropwizardTestSupport<?> support) {
+        return Arrays.stream(support.getEnvironment().getApplicationContext().getServer().getConnectors())
+                .map(connector -> ((ServerConnector) connector).getLocalPort())
+                .toList();
+    }
+
+    /** By default the admin server runs beside the application, on its own port. */
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @ExtendWith(DropwizardAppExtensionProvider.class)
+    class AdminServerEnabled {
+
+        @RegisterApp
+        private final TestDropwizardAppExtension app = newApp(List.of());
+
+        @Test
+        @DisplayName("the admin server answers on its own port")
+        void theAdminServerAnswers(ClientSupport client, DropwizardTestSupport<?> support) {
+            var expectedPorts = List.of(client.getPort(), client.getAdminPort());
+
+            try (var response = client.targetAdmin("ping").request().get()) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+                assertThat(response.readEntity(String.class).trim()).isEqualTo("pong");
+            }
+            assertThat(listeningPorts(support)).containsExactlyInAnyOrderElementsOf(expectedPorts);
+        }
+    }
+
+    /** With adminServer.enabled false, the application port is the only one listening; its health check answers. */
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @ExtendWith(DropwizardAppExtensionProvider.class)
+    class AdminServerDisabled {
+
+        @RegisterApp
+        private final TestDropwizardAppExtension app = newApp(
+                List.of(new CustomConfig("adminServer.enabled", "false")));
+
+        @Test
+        @DisplayName("nothing listens on an admin port, and the application's health check still answers")
+        void onlyTheApplicationListens(ClientSupport client, DropwizardTestSupport<?> support) {
+            ClientSupportUtils.config(client);
+            var healthCheckClient = new HealthCheckResourceClient(client, TestUtils.getBaseUrl(client));
+            var expectedPorts = List.of(client.getPort());
+            var expectedMysql = List.of(HealthCheckResponse.builder()
+                    .name("mysql").healthy(true).critical(true).type(READY).build());
+
+            healthCheckClient.awaitHealthCheck("mysql", expectedMysql);
+            assertThat(listeningPorts(support)).isEqualTo(expectedPorts);
+        }
+    }
+
     @Nested
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     @ExtendWith(DropwizardAppExtensionProvider.class)
@@ -188,11 +253,13 @@ class HealthCheckIntegrationTest {
 
         private ClientSupport client;
         private String baseURI;
+        private HealthCheckResourceClient healthCheckClient;
 
         @BeforeAll
         void setUpAll(ClientSupport client) {
             this.client = client;
             this.baseURI = TestUtils.getBaseUrl(client);
+            this.healthCheckClient = new HealthCheckResourceClient(client, baseURI);
             ClientSupportUtils.config(client);
         }
 
@@ -201,8 +268,7 @@ class HealthCheckIntegrationTest {
             var expected = HealthCheckResponse.builder()
                     .name("clickhouse-readonly-freeform-sql").healthy(true).critical(false).type(READY).build();
 
-            callHealthCheckAndAwaitAssertResponse(
-                    client, baseURI, "clickhouse-readonly-freeform-sql", List.of(expected));
+            healthCheckClient.awaitHealthCheck("clickhouse-readonly-freeform-sql", List.of(expected));
         }
     }
 
@@ -232,11 +298,13 @@ class HealthCheckIntegrationTest {
 
         private ClientSupport client;
         private String baseURI;
+        private HealthCheckResourceClient healthCheckClient;
 
         @BeforeAll
         void setUpAll(ClientSupport client) {
             this.client = client;
             this.baseURI = TestUtils.getBaseUrl(client);
+            this.healthCheckClient = new HealthCheckResourceClient(client, baseURI);
             ClientSupportUtils.config(client);
         }
 
@@ -256,7 +324,8 @@ class HealthCheckIntegrationTest {
 
             Awaitility.await()
                     .atMost(5, TimeUnit.SECONDS)
-                    .untilAsserted(() -> assertResponse(readHealthCheck(client, baseURI, name), List.of(expected)));
+                    .untilAsserted(() -> assertThat(healthCheckClient.readHealthCheck(name))
+                            .containsExactlyInAnyOrderElementsOf(List.of(expected)));
         }
     }
 
@@ -286,11 +355,13 @@ class HealthCheckIntegrationTest {
 
         private ClientSupport client;
         private String baseURI;
+        private HealthCheckResourceClient healthCheckClient;
 
         @BeforeAll
         void setUpAll(ClientSupport client) {
             this.client = client;
             this.baseURI = TestUtils.getBaseUrl(client);
+            this.healthCheckClient = new HealthCheckResourceClient(client, baseURI);
             ClientSupportUtils.config(client);
         }
 
@@ -301,8 +372,8 @@ class HealthCheckIntegrationTest {
 
             Awaitility.await()
                     .atMost(5, TimeUnit.SECONDS)
-                    .untilAsserted(() -> assertResponse(
-                            readHealthCheck(client, baseURI, "clickhouse-traces-topology"), List.of(expected)));
+                    .untilAsserted(() -> assertThat(healthCheckClient.readHealthCheck("clickhouse-traces-topology"))
+                            .containsExactlyInAnyOrderElementsOf(List.of(expected)));
         }
 
         /**
@@ -352,11 +423,13 @@ class HealthCheckIntegrationTest {
 
         private ClientSupport client;
         private String baseURI;
+        private HealthCheckResourceClient healthCheckClient;
 
         @BeforeAll
         void setUpAll(ClientSupport client) {
             this.client = client;
             this.baseURI = TestUtils.getBaseUrl(client);
+            this.healthCheckClient = new HealthCheckResourceClient(client, baseURI);
             ClientSupportUtils.config(client);
         }
 
@@ -367,8 +440,8 @@ class HealthCheckIntegrationTest {
 
             Awaitility.await()
                     .atMost(5, TimeUnit.SECONDS)
-                    .untilAsserted(() -> assertResponse(
-                            readHealthCheck(client, baseURI, "clickhouse-spans-topology"), List.of(expected)));
+                    .untilAsserted(() -> assertThat(healthCheckClient.readHealthCheck("clickhouse-spans-topology"))
+                            .containsExactlyInAnyOrderElementsOf(List.of(expected)));
         }
 
         /**
@@ -406,8 +479,8 @@ class HealthCheckIntegrationTest {
 
             Awaitility.await()
                     .atMost(5, TimeUnit.SECONDS)
-                    .untilAsserted(() -> assertResponse(
-                            readHealthCheck(client, baseURI, "clickhouse-traces-topology"), List.of(expected)));
+                    .untilAsserted(() -> assertThat(healthCheckClient.readHealthCheck("clickhouse-traces-topology"))
+                            .containsExactlyInAnyOrderElementsOf(List.of(expected)));
         }
 
         /**
@@ -427,52 +500,5 @@ class HealthCheckIntegrationTest {
                         }
                     });
         }
-    }
-
-    @Builder
-    private record HealthCheckResponse(String name, boolean healthy, boolean critical, String type) {
-    }
-
-    /**
-     * Polls {@code /health-check?name=...} until the response matches {@code expected}. Required
-     * because Dropwizard's health endpoint returns cached state from the periodic scheduler; the
-     * test ClickHouse/MySQL/Redis containers (and the read-only ClickHouse user under
-     * Agent Insights) take a probe cycle or two after app start to be reflected. The aggressive
-     * schedule in {@code config-test.yml} (100 ms interval, single-attempt thresholds) keeps the
-     * window short, so a broken probe never satisfies the assertion before the timeout.
-     */
-    private void callHealthCheckAndAwaitAssertResponse(ClientSupport client, String baseURI, String name,
-            List<HealthCheckResponse> expected) {
-        Awaitility.await()
-                .atMost(5, TimeUnit.SECONDS)
-                .untilAsserted(() -> {
-                    var actual = callHealthCheckAndAssertOk(client, baseURI, name);
-                    assertResponse(actual, expected);
-                });
-    }
-
-    private List<HealthCheckResponse> callHealthCheckAndAssertOk(ClientSupport client, String baseURI, String name) {
-        try (var response = client.target("%s/health-check?name=%s".formatted(baseURI, name))
-                .request()
-                .get()) {
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
-            return response.readEntity(HEALTH_CHECK_LIST_GENERIC_TYPE);
-        }
-    }
-
-    /**
-     * Reads the health check body without asserting the HTTP status: an unhealthy {@code critical}
-     * check makes the endpoint return a non-OK status while still carrying the JSON results.
-     */
-    private List<HealthCheckResponse> readHealthCheck(ClientSupport client, String baseURI, String name) {
-        try (var response = client.target("%s/health-check?name=%s".formatted(baseURI, name))
-                .request()
-                .get()) {
-            return response.readEntity(HEALTH_CHECK_LIST_GENERIC_TYPE);
-        }
-    }
-
-    private void assertResponse(List<HealthCheckResponse> actual, List<HealthCheckResponse> expected) {
-        assertThat(actual).containsExactlyInAnyOrderElementsOf(expected);
     }
 }

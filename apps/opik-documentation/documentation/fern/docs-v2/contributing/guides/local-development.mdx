@@ -31,12 +31,12 @@ Choose the approach that best fits your development needs:
 
 - **Docker** and **Docker Compose** - For running infrastructure services
 - **Java 25** and **Maven** - For backend development
-- **Node.js 18+** and **npm** - For frontend development
+- **Node.js 24+** and **npm** - For frontend development
 - **Python 3.10+** and **pip** - For SDK development
 
 ### Verify Installation
 
-```bash
+```bash wordWrap
 # Check Docker
 docker --version
 docker compose version
@@ -69,7 +69,7 @@ The `opik.sh` script manages Docker Compose profiles to start different combinat
 
 #### Starting Opik in Docker
 
-```bash
+```bash wordWrap
 # Build and start all services (recommended for first time)
 ./opik.sh --build
 
@@ -85,7 +85,7 @@ The `opik.sh` script manages Docker Compose profiles to start different combinat
 
 #### Available Profiles
 
-```bash
+```bash wordWrap
 # Infrastructure only (MySQL, Redis, ClickHouse, ZooKeeper, MinIO)
 ./opik.sh --infra --port-mapping
 
@@ -101,7 +101,7 @@ The `opik.sh` script manages Docker Compose profiles to start different combinat
 
 #### Managing Docker Services
 
-```bash
+```bash wordWrap
 # Check service health
 ./opik.sh --verify
 
@@ -137,7 +137,7 @@ The `dev-runner.sh` script:
 
 #### Starting Development Environment
 
-```bash
+```bash wordWrap
 # Full restart (stop, build, start) - DEFAULT
 scripts/dev-runner.sh
 
@@ -159,7 +159,7 @@ scripts/dev-runner.sh --logs
 
 #### Debug Mode
 
-```bash
+```bash wordWrap
 # Enable verbose logging
 scripts/dev-runner.sh --restart --debug
 
@@ -201,13 +201,13 @@ Port assignments are shown when the environment starts. With multi-worktree supp
 
 After starting, configure the SDK to use your local instance:
 
-```bash
+```bash wordWrap
 opik configure --use_local
 ```
 
 **IMPORTANT**: You must manually edit `~/.opik.config` to remove `/api` from the URL:
 
-```ini
+```ini wordWrap
 [opik]
 # Change from:
 url_override = http://localhost:8080/api/
@@ -218,7 +218,7 @@ workspace = default
 ```
 
 Or use environment variables:
-```bash
+```bash wordWrap
 export OPIK_URL_OVERRIDE='http://localhost:8080'
 export OPIK_WORKSPACE='default'
 ```
@@ -242,7 +242,7 @@ The frontend in Docker proxies API calls to your local backend process.
 
 #### Starting BE-Only Mode
 
-```bash
+```bash wordWrap
 # Full restart (stop, build backend, start)
 scripts/dev-runner.sh --be-only-restart
 
@@ -280,13 +280,13 @@ scripts/dev-runner.sh --be-only-verify
 
 Configure SDK without the manual edit requirement:
 
-```bash
+```bash wordWrap
 opik configure --use_local
 # Use URL: http://localhost:5173
 ```
 
 Or with environment variables:
-```bash
+```bash wordWrap
 export OPIK_URL_OVERRIDE='http://localhost:5173/api'
 export OPIK_WORKSPACE='default'
 ```
@@ -295,7 +295,7 @@ export OPIK_WORKSPACE='default'
 
 **Best for**: SDK development, integration testing, or when you need just the databases.
 
-```bash
+```bash wordWrap
 # Start only infrastructure services
 ./opik.sh --infra --port-mapping
 
@@ -342,7 +342,7 @@ The port offset (0-99) is deterministically calculated from an MD5 hash of your 
 
 ### Running Multiple Worktrees
 
-```bash
+```bash wordWrap
 # Terminal 1: Main branch
 cd ~/opik
 scripts/dev-runner.sh --restart
@@ -358,7 +358,7 @@ scripts/dev-runner.sh --restart
 
 If you need specific ports (e.g., to use standard ports or avoid conflicts):
 
-```bash
+```bash wordWrap
 # Use standard ports (offset 0)
 OPIK_PORT_OFFSET=0 scripts/dev-runner.sh --restart
 
@@ -370,7 +370,7 @@ OPIK_PORT_OFFSET=10 scripts/dev-runner.sh --restart
 
 The script automatically checks for port conflicts before starting:
 
-```bash
+```bash wordWrap
 # If ports are in use, you'll see:
 [ERROR] Port 8122 (Backend) is already in use
 
@@ -397,14 +397,14 @@ Containers are prefixed with the worktree project name:
 
 Configure the SDK to use your worktree's backend port (shown when the environment starts):
 
-```bash
+```bash wordWrap
 # Configure SDK (use the backend port shown at startup)
 export OPIK_URL_OVERRIDE='http://localhost:8080'  # or your worktree's port
 export OPIK_WORKSPACE='default'
 ```
 
 Or edit `~/.opik.config`:
-```ini
+```ini wordWrap
 [opik]
 url_override = http://localhost:8122
 workspace = default
@@ -416,7 +416,7 @@ All scripts have PowerShell equivalents for Windows developers.
 
 ### Docker Mode (Windows)
 
-```powershell
+```powershell wordWrap
 # Build and start all services
 .\opik.ps1 --build
 
@@ -432,7 +432,7 @@ All scripts have PowerShell equivalents for Windows developers.
 
 ### Local Process Mode (Windows)
 
-```powershell
+```powershell wordWrap
 # Full restart
 scripts\dev-runner.ps1
 
@@ -460,7 +460,7 @@ scripts\dev-runner.ps1 --restart --debug
 
 ### Building Components
 
-```bash
+```bash wordWrap
 # Build backend only
 scripts/dev-runner.sh --build-be
 
@@ -476,7 +476,7 @@ scripts/dev-runner.sh --lint-fe
 
 ### Database Migrations
 
-```bash
+```bash wordWrap
 # Run migrations only
 scripts/dev-runner.sh --migrate
 
@@ -489,7 +489,7 @@ scripts/dev-runner.sh --migrate
 
 If migrations fail, you may need to clean up:
 
-```bash
+```bash wordWrap
 # Stop all services
 scripts/dev-runner.sh --stop  # or ./opik.sh --stop
 
@@ -502,7 +502,7 @@ scripts/dev-runner.sh --restart
 
 ### Viewing Logs
 
-```bash
+```bash wordWrap
 # Show recent logs (last 20 lines)
 scripts/dev-runner.sh --logs
 
@@ -517,7 +517,7 @@ Get-Content -Wait $env:TEMP\opik-frontend.log
 
 ### Working with Docker Services
 
-```bash
+```bash wordWrap
 # View all Opik containers
 docker ps --filter "name=opik-"
 
@@ -538,7 +538,7 @@ docker restart opik-backend-1
 
 ### Services Won't Start
 
-```bash
+```bash wordWrap
 # Check Docker is running
 docker info
 
@@ -555,14 +555,14 @@ Get-NetTCPConnection -LocalPort 8080
 
 <Tip>
 If you have port conflicts from another worktree, you can override the port offset:
-```bash
+```bash wordWrap
 OPIK_PORT_OFFSET=0 scripts/dev-runner.sh --restart
 ```
 </Tip>
 
 ### Build Failures
 
-```bash
+```bash wordWrap
 # Clean backend build
 cd apps/opik-backend
 mvn clean
@@ -578,7 +578,7 @@ npm run lint
 
 ### Database Connection Issues
 
-```bash
+```bash wordWrap
 # Check MySQL is accessible
 docker exec -it opik-mysql-1 mysql -u root -p
 
@@ -591,7 +591,7 @@ echo 'SELECT version()' | curl -H 'X-ClickHouse-User: opik' -H 'X-ClickHouse-Key
 
 ### Process Management Issues
 
-```bash
+```bash wordWrap
 # Kill stuck backend process
 pkill -f "opik-backend.*jar"
 
@@ -605,7 +605,7 @@ Get-Process | Where-Object {$_.Path -like "*opik-frontend*"} | Stop-Process -For
 
 ### Clean Slate Restart
 
-```bash
+```bash wordWrap
 # Complete cleanup and restart
 scripts/dev-runner.sh --stop
 ./opik.sh --clean  # WARNING: Deletes Opik data
@@ -616,7 +616,7 @@ scripts/dev-runner.sh --restart
 
 ### Backend Feature Development
 
-```bash
+```bash wordWrap
 # 1. Start BE-only mode (fastest for backend work)
 scripts/dev-runner.sh --be-only-restart
 
@@ -631,7 +631,7 @@ scripts/dev-runner.sh --be-only-start
 
 ### Frontend Feature Development
 
-```bash
+```bash wordWrap
 # 1. Start local process mode
 scripts/dev-runner.sh --restart
 
@@ -643,7 +643,7 @@ scripts/dev-runner.sh --restart
 
 ### Full Stack Feature Development
 
-```bash
+```bash wordWrap
 # 1. Start local process mode
 scripts/dev-runner.sh --restart
 
@@ -659,7 +659,7 @@ scripts/dev-runner.sh --build-be
 
 ### SDK Development
 
-```bash
+```bash wordWrap
 # 1. Start infrastructure only
 ./opik.sh --infra --port-mapping
 
@@ -679,7 +679,7 @@ pytest tests/e2e
 
 ### Integration Testing
 
-```bash
+```bash wordWrap
 # 1. Start full Docker stack
 ./opik.sh --build
 
@@ -702,18 +702,18 @@ pytest tests/
 ## Best Practices
 
 1. **Always run linters before committing**:
-   ```bash
+   ```bash wordWrap
    scripts/dev-runner.sh --lint-be
    scripts/dev-runner.sh --lint-fe
    ```
 
 2. **Test migrations locally** before committing:
-   ```bash
+   ```bash wordWrap
    scripts/dev-runner.sh --migrate
    ```
 
 3. **Clean up regularly** to free disk space:
-   ```bash
+   ```bash wordWrap
    # Clean up Opik Docker resources (WARNING: DATA LOSS - removes Opik databases)
    ./opik.sh --clean  # Removes Opik containers and volumes
    
@@ -722,12 +722,12 @@ pytest tests/
    ```
 
 4. **Use debug mode for troubleshooting**:
-   ```bash
+   ```bash wordWrap
    scripts/dev-runner.sh --restart --debug
    ```
 
 5. **Check service status before reporting issues**:
-   ```bash
+   ```bash wordWrap
    scripts/dev-runner.sh --verify
    ./opik.sh --verify
    ```
@@ -738,7 +738,7 @@ Opik provides AI coding rules and configurations for editors like Cursor, Codex,
 
 ### Setup
 
-```bash
+```bash wordWrap
 # For Cursor users - creates .cursor symlink to .agents/
 make cursor
 
@@ -769,7 +769,7 @@ make claude
 
 Install pre-commit hooks to automatically run linting before commits:
 
-```bash
+```bash wordWrap
 # Install hooks
 make hooks
 

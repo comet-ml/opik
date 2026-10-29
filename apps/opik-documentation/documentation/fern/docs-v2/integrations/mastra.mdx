@@ -23,7 +23,7 @@ Mastra's primary advantage is its built-in telemetry support that automatically 
 
 If you don't have a Mastra project yet, you can create one using the Mastra CLI:
 
-```bash
+```bash wordWrap
 npx create-mastra
 cd your-mastra-project
 ```
@@ -32,7 +32,7 @@ cd your-mastra-project
 
 Install the necessary dependencies for Mastra observability:
 
-```bash
+```bash wordWrap
 npm install @mastra/observability @mastra/otel
 ```
 
@@ -64,7 +64,7 @@ Create or update your `.env` file with the following variables:
         ```
     </Tab>
     <Tab value="Self-hosted instance" title="Self-hosted instance">
-        ```bash
+        ```bash wordWrap
         # Your LLM API key
         OPENAI_API_KEY=<YOUR_OPENAI_API_KEY>
 
@@ -80,7 +80,7 @@ Create an agent in your project. For example, create a file `src/mastra/index.ts
 
 <Tabs>
     <Tab value="Opik Cloud" title="Opik Cloud">
-        ```typescript
+        ```typescript wordWrap
         import { Mastra } from "@mastra/core/mastra";
         import { Observability } from "@mastra/observability";
         import { OtelExporter } from "@mastra/otel";
@@ -136,7 +136,7 @@ Create an agent in your project. For example, create a file `src/mastra/index.ts
         ```
     </Tab>
     <Tab value="Enterprise deployment" title="Enterprise deployment">
-        ```typescript
+        ```typescript wordWrap
         import { Mastra } from "@mastra/core/mastra";
         import { Observability } from "@mastra/observability";
         import { OtelExporter } from "@mastra/otel";
@@ -192,7 +192,7 @@ Create an agent in your project. For example, create a file `src/mastra/index.ts
         ```
     </Tab>
     <Tab value="Self-hosted instance" title="Self-hosted instance">
-        ```typescript
+        ```typescript wordWrap
         import { Mastra } from "@mastra/core/mastra";
         import { Observability } from "@mastra/observability";
         import { OtelExporter } from "@mastra/otel";
@@ -249,7 +249,7 @@ Create an agent in your project. For example, create a file `src/mastra/index.ts
 
 Start the Mastra development server:
 
-```bash
+```bash wordWrap
 npm run dev
 ```
 

@@ -24,7 +24,7 @@ Opik supports logging agent graphs for the following frameworks:
 You can log the agent execution graph by specifying the `graph` parameter in the
 [OpikTracer](https://www.comet.com/docs/opik/python-sdk-reference/integrations/langchain/OpikTracer.html) callback:
 
-```python
+```python wordWrap
 from opik.integrations.langchain import OpikTracer
 
 opik_tracer = OpikTracer(graph=app.get_graph(xray=True))
@@ -57,7 +57,7 @@ For more complex multi-agent architectures, the automatic graph visualization be
 You can also log the agent graph definition manually by logging the agent graph definition as a
 mermaid graph definition in the metadata of the trace:
 
-```python
+```python wordWrap
 import opik
 from opik import opik_context
 

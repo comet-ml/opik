@@ -1,8 +1,8 @@
-"""An arrow-key multi-select prompt, built on stdlib key reading and ``rich``.
+"""An arrow-key single-select prompt, built on stdlib key reading and ``rich``.
 
-Typing ``1,3`` from a numbered menu works, but it makes the user do the mapping
-from label to number and offers no feedback until they hit Enter. A checkbox list
-they move through with the arrow keys shows the current state at all times.
+Typing ``1`` at a numbered menu works, but it offers no feedback until Enter. A
+list the user moves through with the arrow keys shows what is about to be taken
+at all times — and still answers to the number, so the old way in still works.
 
 Hand-rolled deliberately: the alternative is adding ``prompt_toolkit`` (via
 ``questionary`` or similar) to the core SDK's dependency list, which is a large
@@ -19,7 +19,7 @@ import functools
 import os
 import select
 import sys
-from typing import Callable, Iterable, List, Optional, Sequence, Set, Tuple
+from typing import Callable, Optional, Sequence, Tuple
 
 import rich.console
 import rich.live
@@ -47,15 +47,11 @@ _READ_CHUNK = 8
 _PARTIAL_ESCAPES = (b"\x1b", b"\x1b[")
 
 CURSOR = "❯"
-CHECKED = "◉"
-UNCHECKED = "◯"
 
 # Normalised key tokens produced by the readers below.
 UP = "up"
 DOWN = "down"
-TOGGLE = "toggle"
 ACCEPT = "accept"
-TOGGLE_ALL = "toggle-all"
 CANCEL = "cancel"
 
 
@@ -64,11 +60,6 @@ class Choice:
     key: str
     label: str
     hint: str = ""
-    #: A row that stands for something other than itself — "All", "none of these
-    #: is my client". Select-all skips them: ticking a row labelled "my client is
-    #: not listed" is not a meaningful part of "all of them", and doing it made
-    #: the `a` key resolve to that row and install nothing.
-    synthetic: bool = False
 
 
 def is_supported() -> bool:
@@ -76,78 +67,6 @@ def is_supported() -> bool:
     if not (sys.stdin.isatty() and sys.stdout.isatty()):
         return False
     return _key_reader() is not None
-
-
-def multiselect(
-    title: str,
-    choices: Sequence[Choice],
-    preselected: Optional[Iterable[str]] = None,
-    read_key: Optional[Callable[[], str]] = None,
-) -> Optional[List[str]]:
-    """Let the user tick a subset of ``choices``.
-
-    Returns the selected keys in the order they were offered, or ``None`` if the
-    user cancelled (Escape or Ctrl-C) — which is distinct from an empty list,
-    meaning "I deliberately chose nothing".
-
-    With nothing ticked, Enter takes the row under the cursor. A checkbox list
-    with a cursor on it reads as a radio list to plenty of people, so "move to
-    Claude Code, press Enter" has to mean Claude Code — it previously confirmed
-    the whole pre-ticked set and wrote into three tools' configs at once. Ticking
-    anything switches to the subset the user built, and the footer names whichever
-    of the two Enter is about to do.
-
-    ``read_key`` is injectable so the interaction can be tested without a tty.
-    """
-    if len(choices) == 0:
-        return []
-
-    reader = read_key or _key_reader()
-    if reader is None:
-        return None
-
-    selected: Set[str] = set(preselected or ())
-    real_keys = _real_keys(choices)
-    cursor = 0
-
-    with rich.live.Live(
-        _render(title, choices, selected, cursor),
-        console=console,
-        auto_refresh=False,
-        transient=False,
-    ) as live:
-        while True:
-            key = reader()
-
-            if key == CANCEL:
-                return None
-            if key == ACCEPT:
-                break
-            if key == UP:
-                cursor = (cursor - 1) % len(choices)
-            elif key == DOWN:
-                cursor = (cursor + 1) % len(choices)
-            elif key == TOGGLE:
-                choice_key = choices[cursor].key
-                selected.symmetric_difference_update({choice_key})
-            elif key == TOGGLE_ALL:
-                # Which rows are ticked, not how many. Counting made a mixed
-                # selection — the `All` row plus two of three clients — look
-                # identical to a full one, so `a` emptied the list instead of
-                # filling it and Enter then fell back to whatever the cursor
-                # happened to sit on. Assigning rather than adding keeps the
-                # answer to `a` exactly the real rows: a synthetic row that
-                # stands for the whole list has no business also being in it.
-                if real_keys.issubset(selected):
-                    selected.clear()
-                else:
-                    selected = set(real_keys)
-
-            live.update(_render(title, choices, selected, cursor), refresh=True)
-
-    if len(selected) == 0:
-        return [choices[cursor].key]
-    return [choice.key for choice in choices if choice.key in selected]
 
 
 def choose_one(
@@ -225,56 +144,6 @@ def _render_one(
             f"({choices[cursor].label})",
             style="dim",
         ),
-    )
-
-
-def _real_keys(choices: Sequence[Choice]) -> Set[str]:
-    """The rows that stand for themselves — what "all" and `a` are about."""
-    return {choice.key for choice in choices if not choice.synthetic}
-
-
-def _footer(choices: Sequence[Choice], selected: Set[str], cursor: int) -> str:
-    """Spell out what Enter will take, so it is never guessed at."""
-    real_keys = _real_keys(choices)
-    if len(selected) == 0:
-        target = choices[cursor].label
-    elif real_keys.issubset(selected):
-        # The test `a` uses. Counting against every row instead meant a list
-        # carrying an `All` row could never reach this branch, so selecting
-        # everything still read as "3 selected".
-        target = "all"
-    else:
-        target = f"{len(selected)} selected"
-    return f"  ↑↓ move · space select · a all · enter confirm ({target})"
-
-
-def _render(
-    title: str, choices: Sequence[Choice], selected: Set[str], cursor: int
-) -> console_module.Group:
-    # Title and footer are rendered outside the grid: as grid rows their text
-    # sizes the label column, pushing every hint far to the right.
-    grid = table.Table.grid(padding=(0, 2))
-    grid.add_column(no_wrap=True)  # cursor
-    grid.add_column(no_wrap=True)  # checkbox
-    grid.add_column(no_wrap=True)  # label
-    grid.add_column(overflow="fold")  # hint
-
-    for index, choice in enumerate(choices):
-        is_current = index == cursor
-        is_selected = choice.key in selected
-        grid.add_row(
-            text.Text(CURSOR if is_current else " ", style="cyan"),
-            text.Text(
-                CHECKED if is_selected else UNCHECKED,
-                style="green" if is_selected else "dim",
-            ),
-            text.Text(choice.label, style="bold" if is_current else ""),
-            text.Text(choice.hint, style="dim"),
-        )
-    return console_module.Group(
-        text.Text(title, style="bold"),
-        grid,
-        text.Text(_footer(choices, selected, cursor), style="dim"),
     )
 
 
@@ -424,10 +293,6 @@ _WINDOWS_ARROWS = {"H": UP, "P": DOWN}
 def _normalise(char: str) -> str:
     if char in ("\r", "\n"):
         return ACCEPT
-    if char == " ":
-        return TOGGLE
-    if char in ("a", "A"):
-        return TOGGLE_ALL
     if char in ("\x03", "\x1b", "q"):
         return CANCEL
     if char == "k":
@@ -435,8 +300,7 @@ def _normalise(char: str) -> str:
     if char == "j":
         return DOWN
     # Digits pass through as themselves, for :func:`choose_one`'s number
-    # shortcuts. `multiselect` ignores them, as it ignores any other key it has
-    # no meaning for.
+    # shortcuts.
     if char.isdigit():
         return char
     return ""

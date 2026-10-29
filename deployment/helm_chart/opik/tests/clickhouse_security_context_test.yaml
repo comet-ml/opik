@@ -1,0 +1,32 @@
+suite: clickhouse container securityContext
+
+# The pod runs as uid 101, so clusters that forbid privilege escalation refuse any container
+# here without an explicit allowPrivilegeEscalation: false. The defaults must carry it.
+
+templates:
+  - templates/clickhouseinstallation.yaml
+
+tests:
+  - it: disallows privilege escalation on the clickhouse container by default
+    asserts:
+      - equal:
+          path: spec.templates.podTemplates[0].spec.containers[0].name
+          value: clickhouse
+      - equal:
+          path: spec.templates.podTemplates[0].spec.containers[0].securityContext
+          value:
+            allowPrivilegeEscalation: false
+
+  - it: disallows privilege escalation on the clickhouse-backup sidecar by default
+    set:
+      clickhouse:
+        backupServer:
+          enabled: true
+    asserts:
+      - equal:
+          path: spec.templates.podTemplates[0].spec.containers[1].name
+          value: clickhouse-backup
+      - equal:
+          path: spec.templates.podTemplates[0].spec.containers[1].securityContext
+          value:
+            allowPrivilegeEscalation: false

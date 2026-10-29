@@ -65,6 +65,12 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({ alert }) => {
             value,
           }))
         : [],
+      customFields: alert?.custom_fields
+        ? Object.entries(alert.custom_fields).map(([key, value]) => ({
+            key,
+            value,
+          }))
+        : [],
       triggers: alertTriggersToFormTriggers(alert?.triggers ?? []),
     },
   });
@@ -86,6 +92,12 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({ alert }) => {
             : undefined,
         }),
       },
+      custom_fields:
+        formData.customFields.length > 0
+          ? Object.fromEntries(
+              formData.customFields.map(({ key, value }) => [key, value]),
+            )
+          : undefined,
       webhook: {
         url: formData.url.trim(),
         secret_token: formData.secretToken || undefined,

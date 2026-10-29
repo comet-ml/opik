@@ -39,7 +39,6 @@ import com.comet.opik.podam.PodamFactoryUtils;
 import com.google.inject.AbstractModule;
 import com.redis.testcontainers.RedisContainer;
 import dev.langchain4j.data.message.AiMessage;
-import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -70,13 +69,11 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
 
+import static com.comet.opik.api.resources.utils.AutomationRuleEvaluatorTestUtils.answerEveryJudgeCall;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.when;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Manual Evaluation Resource Test")
@@ -192,9 +189,7 @@ class ManualEvaluationResourceTest {
                 ManualEvaluationEntityType entityType, LlmProviderFactory llmProviderFactory) {
             // Given - Mock LLM response
             var chatResponse = ChatResponse.builder().aiMessage(AiMessage.from(VALID_AI_MSG_TXT)).build();
-            when(llmProviderFactory.getLanguageModel(anyString(), any())
-                    .chat(any(ChatRequest.class)))
-                    .thenAnswer(invocationOnMock -> chatResponse);
+            answerEveryJudgeCall(llmProviderFactory, invocationOnMock -> chatResponse);
 
             var projectName = "project-" + RandomStringUtils.randomAlphanumeric(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
@@ -278,9 +273,7 @@ class ManualEvaluationResourceTest {
                 LlmProviderFactory llmProviderFactory) {
             // Given - Mock LLM response
             var chatResponse = ChatResponse.builder().aiMessage(AiMessage.from(VALID_AI_MSG_TXT)).build();
-            when(llmProviderFactory.getLanguageModel(anyString(), any())
-                    .chat(any(ChatRequest.class)))
-                    .thenAnswer(invocationOnMock -> chatResponse);
+            answerEveryJudgeCall(llmProviderFactory, invocationOnMock -> chatResponse);
 
             var projectName = "project-" + RandomStringUtils.randomAlphanumeric(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
@@ -502,9 +495,7 @@ class ManualEvaluationResourceTest {
         void shouldHandleTraceEvaluationWithLlmAsJudgeRule(LlmProviderFactory llmProviderFactory) {
             // Given - Mock LLM response
             var chatResponse = ChatResponse.builder().aiMessage(AiMessage.from(VALID_AI_MSG_TXT)).build();
-            when(llmProviderFactory.getLanguageModel(anyString(), any())
-                    .chat(any(ChatRequest.class)))
-                    .thenAnswer(invocationOnMock -> chatResponse);
+            answerEveryJudgeCall(llmProviderFactory, invocationOnMock -> chatResponse);
 
             var projectName = "project-" + RandomStringUtils.randomAlphanumeric(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
@@ -545,9 +536,7 @@ class ManualEvaluationResourceTest {
         void shouldHandleThreadEvaluationWithUserDefinedMetricPythonRule(LlmProviderFactory llmProviderFactory) {
             // Given - Mock LLM response (not used but required for evaluator creation)
             var chatResponse = ChatResponse.builder().aiMessage(AiMessage.from(VALID_AI_MSG_TXT)).build();
-            when(llmProviderFactory.getLanguageModel(anyString(), any())
-                    .chat(any(ChatRequest.class)))
-                    .thenAnswer(invocationOnMock -> chatResponse);
+            answerEveryJudgeCall(llmProviderFactory, invocationOnMock -> chatResponse);
 
             var projectName = "project-" + RandomStringUtils.randomAlphanumeric(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
@@ -588,9 +577,7 @@ class ManualEvaluationResourceTest {
         void shouldHandleTraceEvaluationWithSpanLevelLlmAsJudgeRule(LlmProviderFactory llmProviderFactory) {
             // Given - Mock LLM response
             var chatResponse = ChatResponse.builder().aiMessage(AiMessage.from(VALID_AI_MSG_TXT)).build();
-            when(llmProviderFactory.getLanguageModel(anyString(), any())
-                    .chat(any(ChatRequest.class)))
-                    .thenAnswer(invocationOnMock -> chatResponse);
+            answerEveryJudgeCall(llmProviderFactory, invocationOnMock -> chatResponse);
 
             var projectName = "project-" + RandomStringUtils.randomAlphanumeric(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
@@ -649,9 +636,7 @@ class ManualEvaluationResourceTest {
         void shouldHandleMixedRuleTypes(LlmProviderFactory llmProviderFactory) {
             // Given - Mock LLM response
             var chatResponse = ChatResponse.builder().aiMessage(AiMessage.from(VALID_AI_MSG_TXT)).build();
-            when(llmProviderFactory.getLanguageModel(anyString(), any())
-                    .chat(any(ChatRequest.class)))
-                    .thenAnswer(invocationOnMock -> chatResponse);
+            answerEveryJudgeCall(llmProviderFactory, invocationOnMock -> chatResponse);
 
             var projectName = "project-" + RandomStringUtils.randomAlphanumeric(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);

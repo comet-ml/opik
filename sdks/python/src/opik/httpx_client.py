@@ -6,12 +6,16 @@ import os
 import urllib.parse
 import json as jsonlib
 
-from . import exceptions, hooks, package_version
+from . import environment, exceptions, hooks, package_version
 import platform
 
 LOGGER = logging.getLogger(__name__)
 
 DEPRECATION_HEADER = "X-Opik-Deprecation"
+
+# Lets an installation count its distinct SDK clients. Carries a hash, see
+# `environment.get_client_identifier`.
+CLIENT_ID_HEADER = "X-Opik-Client-Id"
 
 
 CABundlePath = str
@@ -90,6 +94,7 @@ def _prepare_headers(
         "X-OPIK-DEBUG-SDK-VERSION": package_version.VERSION,
         "X-OPIK-DEBUG-PY-VERSION": platform.python_version(),
         "Accept-Encoding": "gzip",
+        CLIENT_ID_HEADER: environment.get_client_identifier(),
     }
 
     if workspace is not None:

@@ -554,7 +554,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
      *
      * <p><b>{@code optimization_tagged_costs}</b> prunes the spans scan on {@code project_id} because
      * {@code trace_id} is only the third primary-key column. That project set comes from
-     * {@code optimization_final} rather than from {@code optimization_tagged_traces}: ClickHouse substitutes
+     * {@code optimization_scope} rather than from {@code optimization_tagged_traces}: ClickHouse substitutes
      * CTEs textually, so naming the trace CTE there would re-run its scan. Reading {@code optimizations} is
      * cheap by comparison, and a superset of the candidate projects is all a prefix prune needs; the
      * authoritative filter is the {@code trace_id IN} beside it.
@@ -564,9 +564,15 @@ class OptimizationDAOImpl implements OptimizationDAO {
      * has an experiment, and its final {@code ifNull} yields a non-nullable zero when nothing is
      * attributed, matching {@code FIND}, where {@code sum()} over an empty group returns 0 rather than
      * NULL. The {@code ifNull} covers both {@code join_use_nulls} modes.
+     *
+     * <p>The page is cut in {@code optimization_final}, not on the outer select, in both projections. Every
+     * downstream CTE is keyed per optimization, so the result is the same, but paging late made them run for
+     * every optimization in scope: a project with ~2.2k runs read ~93M rows and took ~30 s for a 100-row page.
+     * The tagged-cost project bounds are the exception and read the unpaged {@code optimization_scope}: a run's
+     * tagged trace stored in another run's project must not depend on whether that run is on the same page.
      */
     private static final String FIND = """
-            WITH optimization_final AS (
+            WITH optimization_scope AS (
                 SELECT
                     *
                 FROM (
@@ -585,6 +591,11 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 <if(dataset_deleted)>AND dataset_deleted = :dataset_deleted<endif>
                 <if(studio_only)>AND studio_config != ''<endif>
                 <if(filters)>AND <filters><endif>
+            ), optimization_final AS (
+                SELECT *
+                FROM optimization_scope
+                ORDER BY id DESC
+                <if(limit)> LIMIT :limit <endif> <if(offset)> OFFSET :offset <endif>
             ), experiments_final AS (
                 SELECT
                     id,
@@ -697,6 +708,20 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     ) AS experiment_scores
                 FROM experiment_scores_parsed
                 GROUP BY experiment_id
+            ), experiment_trace_projects AS (
+                SELECT DISTINCT project_id
+                FROM traces
+                WHERE workspace_id = :workspace_id
+                AND id IN (SELECT trace_id FROM experiment_items_final)
+                <if(traces_partitioned)>
+                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT toYYYYMMDD(toDate32(trace_id_at) - toIntervalDay(toDayOfWeek(trace_id_at, 1)))
+                    FROM (
+                        SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS trace_id_at
+                        FROM experiment_items_final
+                    )
+                )
+                <endif>
             ), experiment_durations AS (
                 SELECT
                     ei.experiment_id,
@@ -713,7 +738,16 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     FROM traces
                     WHERE workspace_id = :workspace_id
                     AND id IN (SELECT trace_id FROM experiment_items_final)
-                    AND project_id IN (SELECT DISTINCT project_id FROM traces WHERE workspace_id = :workspace_id AND id IN (SELECT trace_id FROM experiment_items_final))
+                    AND project_id IN (SELECT project_id FROM experiment_trace_projects)
+                    <if(traces_partitioned)>
+                    AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                        SELECT toYYYYMMDD(toDate32(trace_id_at) - toIntervalDay(toDayOfWeek(trace_id_at, 1)))
+                        FROM (
+                            SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS trace_id_at
+                            FROM experiment_items_final
+                        )
+                    )
+                    <endif>
                     ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY workspace_id, project_id, id
                 ) AS t ON ei.trace_id = t.id
@@ -724,7 +758,8 @@ class OptimizationDAOImpl implements OptimizationDAO {
                         FROM spans
                         WHERE workspace_id = :workspace_id
                         AND trace_id IN (SELECT trace_id FROM experiment_items_final)
-                        AND project_id IN (SELECT DISTINCT project_id FROM traces WHERE workspace_id = :workspace_id AND id IN (SELECT trace_id FROM experiment_items_final))
+                        <if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT id_week FROM span_weeks WHERE workspace_id = :workspace_id AND trace_id IN (SELECT trace_id FROM experiment_items_final))<endif>
+                        AND project_id IN (SELECT project_id FROM experiment_trace_projects)
                         ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                         LIMIT 1 BY workspace_id, project_id, id
                     )
@@ -870,7 +905,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     SELECT id AS trace_id, project_id, tags
                     FROM traces
                     WHERE workspace_id = :workspace_id
-                    AND project_id IN (SELECT project_id FROM optimization_final WHERE notEmpty(project_id))
+                    AND project_id IN (SELECT project_id FROM optimization_scope WHERE notEmpty(project_id))
                     <if(traces_partitioned)>AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                         >= (
                             SELECT subtractWeeks(
@@ -900,8 +935,9 @@ class OptimizationDAOImpl implements OptimizationDAO {
                         SELECT workspace_id, project_id, trace_id, id, total_estimated_cost, last_updated_at
                         FROM spans
                         WHERE workspace_id = :workspace_id
-                        AND project_id IN (SELECT project_id FROM optimization_final WHERE notEmpty(project_id))
+                        AND project_id IN (SELECT project_id FROM optimization_scope WHERE notEmpty(project_id))
                         AND trace_id IN (SELECT trace_id FROM optimization_tagged_traces)
+                        <if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT id_week FROM span_weeks WHERE workspace_id = :workspace_id AND trace_id IN (SELECT trace_id FROM optimization_tagged_traces))<endif>
                         ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                         LIMIT 1 BY workspace_id, project_id, id
                     )
@@ -947,7 +983,6 @@ class OptimizationDAOImpl implements OptimizationDAO {
             LEFT JOIN optimization_costs AS oc ON o.id = oc.optimization_id
             GROUP BY o.*
             ORDER BY o.id DESC
-            <if(limit)> LIMIT :limit <endif> <if(offset)> OFFSET :offset <endif>
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -999,7 +1034,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
      * before that column existed.
      */
     private static final String FIND_WITHOUT_EXPERIMENTS = """
-            WITH optimization_final AS (
+            WITH optimization_scope AS (
                 SELECT
                     *
                 FROM (
@@ -1018,6 +1053,11 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 <if(dataset_deleted)>AND dataset_deleted = :dataset_deleted<endif>
                 <if(studio_only)>AND studio_config != ''<endif>
                 <if(filters)>AND <filters><endif>
+            ), optimization_final AS (
+                SELECT *
+                FROM optimization_scope
+                ORDER BY id DESC
+                <if(limit)> LIMIT :limit <endif> <if(offset)> OFFSET :offset <endif>
             ), optimization_tagged_traces AS (
                 SELECT DISTINCT
                     tag AS optimization_id_str,
@@ -1026,7 +1066,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     SELECT id AS trace_id, project_id, tags
                     FROM traces
                     WHERE workspace_id = :workspace_id
-                    AND project_id IN (SELECT project_id FROM optimization_final WHERE notEmpty(project_id))
+                    AND project_id IN (SELECT project_id FROM optimization_scope WHERE notEmpty(project_id))
                     <if(traces_partitioned)>AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                         >= (
                             SELECT subtractWeeks(
@@ -1051,8 +1091,9 @@ class OptimizationDAOImpl implements OptimizationDAO {
                         SELECT workspace_id, project_id, trace_id, id, total_estimated_cost, last_updated_at
                         FROM spans
                         WHERE workspace_id = :workspace_id
-                        AND project_id IN (SELECT project_id FROM optimization_final WHERE notEmpty(project_id))
+                        AND project_id IN (SELECT project_id FROM optimization_scope WHERE notEmpty(project_id))
                         AND trace_id IN (SELECT trace_id FROM optimization_tagged_traces)
+                        <if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT id_week FROM span_weeks WHERE workspace_id = :workspace_id AND trace_id IN (SELECT trace_id FROM optimization_tagged_traces))<endif>
                         ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                         LIMIT 1 BY workspace_id, project_id, id
                     )
@@ -1076,7 +1117,6 @@ class OptimizationDAOImpl implements OptimizationDAO {
             FROM optimization_final AS o
             LEFT JOIN optimization_costs AS oc ON o.id = oc.optimization_id
             ORDER BY o.id DESC
-            <if(limit)> LIMIT :limit <endif> <if(offset)> OFFSET :offset <endif>
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -1237,6 +1277,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                             userName, "optimization_id=%s".formatted(id));
                     template.add("id", id.toString());
                     addTracesPartitionedFlag(template);
+                    addSpanWeeksBound(template);
 
                     var statement = connection.createStatement(template.render())
                             .bind("entity_type", EntityType.TRACE.getType())
@@ -1408,6 +1449,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
 
                     bindTemplateParams(template, searchCriteria);
                     addTracesPartitionedFlag(template);
+                    addSpanWeeksBound(template);
 
                     template.add("limit", size);
                     template.add("offset", offset);
@@ -1475,10 +1517,23 @@ class OptimizationDAOImpl implements OptimizationDAO {
      * is live: the EXCHANGE that makes those columns non-nullable is the same one that puts the partitioned successor
      * behind the name, so {@code TraceDAO#deleteBatch} already reads it as "the target is weekly partitioned". The
      * name says only its first duty and is deliberately not renamed - the env var is exposed.
+     * <p>
+     * It gates {@code FIND}'s experiment-path {@code traces} reads too (OPIK-8343), for the same reason and on the
+     * same flag. Those matter to this statement more than their own cost suggests: a query's partition count is the
+     * union over its accesses, and it is paid as planning before any pruning happens, so an unbounded read anywhere
+     * in {@code FIND} left the whole statement enumerating every partition however well the tagged scan pruned -
+     * which is why {@code FIND_WITHOUT_EXPERIMENTS}, having no experiment path, was the only shape this DAO's own
+     * bound moved.
      */
     private void addTracesPartitionedFlag(ST template) {
         if (configuration.getDatabaseAnalyticsDataModel().traceColumnsNonNullable()) {
             template.add("traces_partitioned", true);
+        }
+    }
+
+    private void addSpanWeeksBound(ST template) {
+        if (configuration.getDatabaseAnalyticsDataModel().spanWeeksReadBounded()) {
+            template.add("span_weeks_bound", true);
         }
     }
 

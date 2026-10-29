@@ -5,6 +5,7 @@ import * as yaml from 'js-yaml';
 import { test, expect } from '@e2e/fixtures';
 import { PlaygroundPage } from '@e2e/pom/playground.page';
 import { ConfigurationPage, type ProviderName } from '@e2e/pom/configuration.page';
+import { registerUnbilledModel } from '@e2e/core/llm-model-policy';
 
 interface ModelEntry {
   name: string;
@@ -58,6 +59,10 @@ const enabled = Object.values(config.providers).flatMap((p) =>
  *   3. Runs a simple prompt + model-options tweak via the Playground.
  *   4. Asserts a non-empty, non-error response came back.
  */
+// The matrix's mock-gateway entries answer on localhost, so they cannot bill:
+// declare them before any of them reaches the model guard.
+for (const name of ['mock-model-static', 'mock-model-oauth']) registerUnbilledModel(name);
+
 test.describe('Playground — provider sanity', { tag: ['@provider-sanity', '@area:playground', '@cap:playground.select-model-provider'] }, () => {
   for (const { provider, model } of enabled) {
     test(`${provider.display_name} ${model.name} returns a completion`, async ({

@@ -11,11 +11,13 @@ export const AgentInsightsIssueUpdate: core.serialization.Schema<
 > = core.serialization.object({
     projectId: core.serialization.property("project_id", core.serialization.string()),
     status: AgentInsightsIssueUpdateStatus,
+    closeNote: core.serialization.property("close_note", core.serialization.string().optional()),
 });
 
 export declare namespace AgentInsightsIssueUpdate {
     export interface Raw {
         project_id: string;
         status: AgentInsightsIssueUpdateStatus.Raw;
+        close_note?: string | null;
     }
 }

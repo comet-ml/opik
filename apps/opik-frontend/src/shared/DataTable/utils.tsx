@@ -8,7 +8,7 @@ import {
   Row,
   Table,
 } from "@tanstack/react-table";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import isString from "lodash/isString";
 import get from "lodash/get";
 
@@ -470,9 +470,9 @@ export const generateGroupedRowCellDef = <TData, TValue>(
               }}
             >
               {row.getIsExpanded() ? (
-                <ChevronUp className="mr-1 size-4 shrink-0" />
-              ) : (
                 <ChevronDown className="mr-1 size-4 shrink-0" />
+              ) : (
+                <ChevronRight className="mr-1 size-4 shrink-0" />
               )}
               {label && (
                 <>

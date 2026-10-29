@@ -143,7 +143,7 @@ export const DEFAULT_COLUMNS: ColumnData<Optimization>[] = [
 export const FILTER_COLUMNS: ColumnData<Optimization>[] = [
   {
     id: COLUMN_DATASET_ID,
-    label: "Test suite",
+    label: ITEM_SOURCE_LABEL,
     type: COLUMN_TYPE.string,
     disposable: true,
   },

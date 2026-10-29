@@ -10,6 +10,9 @@ from ..opik_factory import make_opik_client
 from ..schemas import (
     NestedTraceCreate,
     NestedTraceResponse,
+    StreamReadResult,
+    StreamReadsRequest,
+    StreamReadsResponse,
     TraceCreate,
     TraceResponse,
 )
@@ -217,3 +220,76 @@ def create_nested_trace(
         project_id=str(found.project_id),
         span_count=len(body.spans),
     )
+
+
+@router.post("/stream-reads", response_model=StreamReadsResponse, status_code=200)
+def stream_reads(
+    body: StreamReadsRequest,
+    x_opik_api_key: str | None = Header(default=None),
+) -> StreamReadsResponse:
+    """Several multi-page `search_traces` / `search_spans` reads, reduced to ids.
+
+    This route exists for one argument: `max_batch_size`. It is what makes
+    `read_and_parse_full_stream`'s pagination cheap to provoke — the cursor is
+    now the last id the BACKEND sent rather than the last one that parsed
+    (opik#8411), and every other call the estate makes through that function asks
+    for fewer rows than a single page holds, so the arithmetic has never run.
+    Crossing a page boundary by shrinking the page instead of by seeding tens of
+    thousands of rows keeps the assertion exact and the seed small.
+
+    Reads only. Nothing here writes, so the shapes are free to be replayed in any
+    order and the caller can compare them to each other and to a direct REST
+    enumeration.
+
+    `wait_for_at_least` is deliberately NOT passed: a read that blocks until the
+    population is visible would mask a short read as a slow one, which is the
+    exact failure under test. The caller is responsible for having established
+    visibility first — the fixtures here do it over REST before any of this runs.
+
+    Ids are returned in the order the SDK assembled them, and duplicates are
+    preserved rather than collapsed: a re-served page is a duplicate and that is
+    a finding, not noise to clean up on the way out.
+    """
+    client = make_opik_client(workspace=body.workspace, api_key=x_opik_api_key)
+    try:
+        traces = [
+            StreamReadResult(
+                key=shape.key,
+                ids=[
+                    str(trace.id)
+                    for trace in client.search_traces(
+                        project_name=body.project_name,
+                        max_results=shape.max_results,
+                        **(
+                            {}
+                            if shape.max_batch_size is None
+                            else {"max_batch_size": shape.max_batch_size}
+                        ),
+                    )
+                ],
+            )
+            for shape in body.trace_shapes
+        ]
+        spans = [
+            StreamReadResult(
+                key=shape.key,
+                ids=[
+                    str(span.id)
+                    for span in client.search_spans(
+                        project_name=body.project_name,
+                        max_results=shape.max_results,
+                        **(
+                            {}
+                            if shape.max_batch_size is None
+                            else {"max_batch_size": shape.max_batch_size}
+                        ),
+                    )
+                ],
+            )
+            for shape in body.span_shapes
+        ]
+    finally:
+        client.end(flush=False)
+        atexit.unregister(client.end)
+
+    return StreamReadsResponse(traces=traces, spans=spans)

@@ -27,7 +27,7 @@ differ.
 
 ## What this harness has to do that the traces one did not
 
-Four populations exist here that the traces harness had no counterpart for, and **each one leaves a specific part of the
+Five populations exist here that the traces harness had no counterpart for, and **each one leaves a specific part of the
 spans cutover untested if you skip it**. None appears by chance in a short rehearsal.
 
 | flag | population | what it exercises | what goes untested without it |
@@ -36,6 +36,7 @@ spans cutover untested if you skip it**. None appears by chance in a short rehea
 | `--non-v7-ids` | UUIDv4 ids → `UUIDv7ToDateTime` returns 1970-01-01 | the **far-PAST** end of that spread (the epoch week) | a bug handling only the far-future direction passes |
 | `--parent-poison` | `parent_span_id = leftPad('', 40, '*')` (40 chars) | the copy's **length guard** on a `FixedString(36)` destination | the guard is untested, and its failure mode is `TOO_LARGE_STRING_SIZE` aborting a whole window |
 | `--split-parents` | one span id, two parents, **one** `last_updated_at` | the spans-only **version tie** | `verify.sh` never has to report INCONCLUSIVE for the reason unique to this table |
+| `--ceiling-ids` | UUIDv7 ids past the 2300-01-01 `DateTime64` ceiling, where `id_at` saturates | `estimate.sh` audit 3, and the deletion replay's **unbounded fallback** (OPIK-8607) | audit 3 is never seen to fire, and the one branch that makes a replay unrunnable on a large estate is never produced |
 
 And one structural difference that shapes every script: **a span has no standalone delete**. Every span delete is the
 cascade of a *trace* delete (`SpanService.deleteByTraceIds`), which is why `delete_traffic.py` deletes traces, why
@@ -75,6 +76,23 @@ export CLICKHOUSE_CLIENT_DOCKER_OPTS=--network=host   # (b) only: reach the host
 
 ClickHouse connection defaults (user/password/db all `opik`, host `localhost:8123`) match `--port-mapping`; override via
 `OPIK_CH_HOST` / `OPIK_CH_PORT` / `OPIK_CH_USER` / `OPIK_CH_PASSWORD` / `OPIK_CH_DATABASE` if yours differ.
+
+> **In a git worktree every port above is offset, and so is the compose project name.** `opik.sh` derives both from the
+> worktree (`scripts/worktree-utils.sh`), which is what lets several checkouts run side by side — but it means
+> `localhost:8123`, `localhost:9000`, `localhost:5173` and `opik-opik-*` are all wrong there, silently: the seeder
+> connects to whichever stack owns the default port, which may be another worktree's. Read the real values back before
+> anything else, and note the **driver scripts do not honor `CLICKHOUSE_PORT`** (clickhouse-client ignores it), so the
+> native port has to be passed as `--port` on every `$RUNBOOK/scripts/*.sh` invocation below:
+>
+> ```bash
+> PROJECT=$(docker compose ls --format json | python3 -c "import json,sys;print([p['Name'] for p in json.load(sys.stdin) if p['Name'].startswith('opik-')][0])")
+> docker ps --filter "name=$PROJECT" --format '{{.Names}}\t{{.Ports}}'   # read CH http/native, and the frontend port
+> export OPIK_CH_PORT=<clickhouse 8123 ->  host port>   CH_PORT=<clickhouse 9000 -> host port>
+> export OPIK_URL_OVERRIDE=http://localhost:<frontend host port>/api/
+> ```
+>
+> The `recreate_backend()` snippet below likewise needs `-p "$PROJECT"` and `${PROJECT}-backend-1` rather than the
+> hard-coded `opik-opik`.
 
 ### Changing backend config mid-rehearsal
 

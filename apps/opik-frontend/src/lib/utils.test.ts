@@ -4,6 +4,9 @@ import {
   isStringMarkdown,
   removeUndefinedKeys,
   isLooseEqual,
+  getJSONPaths,
+  buildJSONPath,
+  JSON_PATH_FORMAT,
 } from "./utils";
 
 describe("isStringMarkdown", () => {
@@ -407,5 +410,116 @@ describe("getSelectAllCheckedState", () => {
 
   it("returns true when selectedCount exceeds totalCount", () => {
     expect(getSelectAllCheckedState(7, 5)).toBe(true);
+  });
+});
+
+describe("getJSONPaths", () => {
+  const bracket = (node: object, root = "", intermediate = false) =>
+    getJSONPaths(node, root, [], intermediate, JSON_PATH_FORMAT.bracket);
+
+  it("joins keys with dots in the default format", () => {
+    expect(
+      getJSONPaths({ a: { b: 1 }, "a.b": 2, items: [{ id: 1 }] }, "metadata"),
+    ).toEqual(["metadata.a.b", "metadata.a.b", "metadata.items[0].id"]);
+  });
+
+  it("writes a leading index without brackets when there is no root", () => {
+    expect(getJSONPaths([{ model: "x", m: [1] }], "", [], true)).toEqual([
+      "0",
+      "0.model",
+      "0.m",
+      "0.m[0]",
+    ]);
+  });
+
+  it("matches the default format when no key needs quoting", () => {
+    const node = { a: { b: 1 }, items: [{ id: 1 }], tags: ["x"] };
+    expect(bracket(node, "metadata")).toEqual(getJSONPaths(node, "metadata"));
+  });
+
+  it("bracket-quotes dotted keys and keeps the root separator", () => {
+    expect(
+      bracket(
+        { "deepl.request.target_language": "ES", ctx: { "user.id": "u" } },
+        "metadata",
+      ),
+    ).toEqual([
+      'metadata.["deepl.request.target_language"]',
+      'metadata.["ctx"]["user.id"]',
+    ]);
+  });
+
+  it("keeps a flat dotted key and a nested object with the same text apart", () => {
+    expect(bracket({ a: { b: 1 }, "a.b": 2 }, "metadata")).toEqual([
+      "metadata.a.b",
+      'metadata.["a.b"]',
+    ]);
+  });
+
+  it("emits intermediate nodes without a root when asked", () => {
+    expect(bracket({ ctx: { "a.b": 1 } }, "", true)).toEqual([
+      "ctx",
+      '["ctx"]["a.b"]',
+    ]);
+  });
+});
+
+describe("buildJSONPath", () => {
+  it("uses dot notation when no key needs quoting", () => {
+    expect(
+      buildJSONPath(
+        [{ key: "a" }, { index: 0 }, { key: "b" }],
+        JSON_PATH_FORMAT.bracket,
+        "metadata",
+      ),
+    ).toBe("metadata.a[0].b");
+  });
+
+  it("bracket-quotes every key when any key has path syntax, keeping the root dot", () => {
+    expect(
+      buildJSONPath(
+        [{ key: "ctx" }, { key: "a.b" }, { index: 1 }],
+        JSON_PATH_FORMAT.bracket,
+        "metadata",
+      ),
+    ).toBe('metadata.["ctx"]["a.b"][1]');
+  });
+
+  it("keeps the root separator before a leading index in a quoted path", () => {
+    expect(
+      buildJSONPath(
+        [{ index: 0 }, { key: "a.b" }],
+        JSON_PATH_FORMAT.bracket,
+        "input",
+      ),
+    ).toBe('input.[0]["a.b"]');
+  });
+
+  it("omits the root separator before a leading index", () => {
+    expect(
+      buildJSONPath(
+        [{ index: 0 }, { key: "a" }],
+        JSON_PATH_FORMAT.bracket,
+        "metadata",
+      ),
+    ).toBe("metadata[0].a");
+  });
+
+  it("never quotes in dot format", () => {
+    expect(
+      buildJSONPath([{ key: "a.b" }], JSON_PATH_FORMAT.dot, "metadata"),
+    ).toBe("metadata.a.b");
+  });
+
+  it("escapes backslashes and leaves apostrophes as-is", () => {
+    expect(
+      buildJSONPath([{ key: "it's.a\\b" }], JSON_PATH_FORMAT.bracket),
+    ).toBe('["it\'s.a\\\\b"]');
+  });
+
+  it("escapes double quotes", () => {
+    expect(
+      buildJSONPath([{ key: 'say "hi".x' }], JSON_PATH_FORMAT.bracket),
+    ).toBe('["say \\"hi\\".x"]');
   });
 });

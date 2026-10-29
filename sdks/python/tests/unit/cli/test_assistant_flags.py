@@ -96,7 +96,9 @@ def ran(monkeypatch):
                 return_value=configure_cli.interactive_helpers.DeploymentType.CLOUD,
             ),
             mock.patch.object(
-                cli_assistants.install_view, "render_skill_pack", return_value=True
+                cli_assistants.install_view.RichInstallView,
+                "skill_pack",
+                return_value=True,
             ),
         ):
             result = CliRunner().invoke(cli, ["configure", *flags])
@@ -136,7 +138,9 @@ class TestExplicitRequestsRunWithoutATerminal:
     """A named flag is the request, so it works where there is nobody to ask."""
 
     def test_install_mcp__registers(self, ran):
-        assert ran("--install-mcp") == [MCP]
+        # The pack comes with the AI-client step now rather than being asked
+        # about after it, so requesting the server requests both.
+        assert ran("--install-mcp") == [MCP, SKILLS]
 
     def test_both_flags__do_both(self, ran):
         assert ran("--install-mcp", "--install-skills") == [MCP, SKILLS]
@@ -177,13 +181,7 @@ class TestSkipIsExplainedHonestly:
 
 
 class TestThePickerIsReallyExercised:
-    """End-to-end through the real installer and picker, not a fabricated Outcome.
-
-    Every other test here stubs `assistants.setup` or `setup_mcp_server`, so a
-    broken picker or a lost `InstallReport.declined` would pass unnoticed —
-    which is exactly how select-all came to resolve to "my client is not
-    listed" and install nothing.
-    """
+    """Through the real installer and picker, which the stubbed tests cannot cover."""
 
     @staticmethod
     def _pick(keys, detected=("claude-code", "cursor")):
@@ -245,7 +243,9 @@ class TestThePickerIsReallyExercised:
                 "detected_host_keys",
                 return_value=list(detected),
             ),
-            mock.patch.object(assistants.click, "confirm", return_value=False),
+            # `click.confirm` itself: `assistants` no longer imports click, having
+            # nothing left to ask.
+            mock.patch("click.confirm", return_value=False),
         ):
             outcome = assistants.setup(
                 PARAMS,
@@ -254,23 +254,17 @@ class TestThePickerIsReallyExercised:
             )
         return outcome, installed
 
-    def test_select_all__registers_every_client(self):
-        """`a` must not resolve to a synthetic row and install nothing."""
+    def test_one_answer_only__no_key_registers_a_second_client(self):
+        """A key the picker has no meaning for stays inert: it takes one client."""
         from opik.cli import selector
 
-        outcome, installed = self._pick([selector.TOGGLE_ALL, selector.ACCEPT])
+        outcome, installed = self._pick(["", selector.ACCEPT])
 
-        assert sorted(installed) == ["claude-code", "cursor"]
-        assert outcome.clients == 2
-        assert outcome.mcp_declined is False
+        assert installed == ["claude-code"]
+        assert outcome.clients == 1
 
     def test_enter_on_the_first_row__registers_that_client_alone(self):
-        """`All` sits under the clients, so a bare Enter is not select-all.
-
-        With nothing ticked the picker takes the highlighted row, and that is
-        now the first client. Registering every client is a row the user has to
-        move to, which is the conservative reading of an ambiguous Enter.
-        """
+        """Enter takes the highlighted row, which starts on the first client."""
         from opik.cli import selector
 
         outcome, installed = self._pick([selector.ACCEPT])
@@ -278,14 +272,14 @@ class TestThePickerIsReallyExercised:
         assert installed == ["claude-code"]
         assert outcome.clients == 1
 
-    def test_enter_on_the_all_row__registers_every_client(self):
+    def test_moving_past_the_clients__lands_on_the_manual_row(self):
+        """The row under the clients is the way out, not a summary of them."""
         from opik.cli import selector
 
-        # Past both clients, onto the `All` row.
         outcome, installed = self._pick([selector.DOWN, selector.DOWN, selector.ACCEPT])
 
-        assert sorted(installed) == ["claude-code", "cursor"]
-        assert outcome.clients == 2
+        assert installed == []
+        assert outcome.clients == 0
 
     def test_cancelling__registers_nothing_and_propagates_declined(self):
         from opik.cli import selector
@@ -295,14 +289,23 @@ class TestThePickerIsReallyExercised:
         assert installed == []
         assert outcome.clients == 0
         assert outcome.mcp_declined is True, "InstallReport.declined must survive"
+        assert outcome.cancelled is True, "Ctrl-C is not an answer, it is stop"
+
+    def test_cancelling__does_not_install_the_skill_pack(self):
+        """Ctrl-C ends the whole step, so a cancelled run writes no pack."""
+        from opik.cli import selector
+
+        outcome, installed = self._pick([selector.CANCEL])
+
+        assert installed == []
+        assert outcome.skills is False
+        assert outcome.skills_decision == "cancelled"
 
     def test_choosing_one__registers_only_that_one(self):
         from opik.cli import selector
 
-        # Down one row from the first client, tick it: the second client.
-        outcome, installed = self._pick(
-            [selector.DOWN, selector.TOGGLE, selector.ACCEPT]
-        )
+        # Down one row from the first client, then take it: the second client.
+        outcome, installed = self._pick([selector.DOWN, selector.ACCEPT])
 
         assert installed == ["cursor"]
         assert outcome.registered_clients == ("cursor",)

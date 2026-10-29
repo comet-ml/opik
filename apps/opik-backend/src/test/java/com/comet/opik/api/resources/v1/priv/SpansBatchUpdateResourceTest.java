@@ -50,6 +50,7 @@ import java.math.BigDecimal;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -266,6 +267,31 @@ class SpansBatchUpdateResourceTest {
                 assertThat(actualResponse.hasEntity()).isTrue();
                 var error = actualResponse.readEntity(ErrorMessage.class);
                 assertThat(error.errors()).anySatisfy(msg -> assertThat(msg).contains("ids"));
+            }
+        }
+
+        @Test
+        @DisplayName("when batch update with a null ID, then return 422")
+        void batchUpdate__whenNullId__thenReturn422() {
+            var ids = new HashSet<UUID>();
+            ids.add(generator.generate());
+            ids.add(null);
+
+            var batchUpdate = SpanBatchUpdate.builder()
+                    .ids(ids)
+                    .update(SpanUpdate.builder()
+                            .projectName(DEFAULT_PROJECT)
+                            .traceId(traceId)
+                            .tags(Set.of("tag"))
+                            .build())
+                    .mergeTags(true)
+                    .build();
+
+            try (var actualResponse = spanResourceClient.callBatchUpdateSpans(batchUpdate, API_KEY, TEST_WORKSPACE)) {
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
+                assertThat(actualResponse.hasEntity()).isTrue();
+                var expectedError = new ErrorMessage(List.of("ids[].<iterable element> must not be null"));
+                assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(expectedError);
             }
         }
 

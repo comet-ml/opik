@@ -1,4 +1,5 @@
 import React from "react";
+import isUndefined from "lodash/isUndefined";
 import { type LucideIcon } from "lucide-react";
 
 import ResourceLink, {
@@ -10,7 +11,8 @@ import { Filter } from "@/types/filters";
 
 type NavigationTagProps = {
   id: string;
-  name: string;
+  // Undefined renders the resource's deleted state.
+  name?: string;
   resource: RESOURCE_TYPE;
   search?: Record<string, string | number | string[] | Filter[]>;
   tooltipContent?: string | false;
@@ -36,7 +38,9 @@ const NavigationTag: React.FunctionComponent<NavigationTagProps> = ({
   icon,
 }) => {
   const resourceLabel = RESOURCE_MAP[resource].label;
-  const defaultTooltipContent = `Go to ${resourceLabel}: ${name}`;
+  const defaultTooltipContent = isUndefined(name)
+    ? ""
+    : `Go to ${resourceLabel}: ${name}`;
 
   return (
     <ResourceLink

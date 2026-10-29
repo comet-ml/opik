@@ -44,7 +44,7 @@ Opik provides comprehensive integration with ADK, automatically logging traces f
 
 First, ensure you have both `opik` and `google-adk` installed:
 
-```bash
+```bash wordWrap
 pip install opik google-adk
 ```
 
@@ -63,13 +63,13 @@ In order to configure Google ADK, you will need to have your LLM provider API ke
 
 You can set it as an environment variable:
 
-```bash
+```bash wordWrap
 export OPENAI_API_KEY="YOUR_API_KEY"
 ```
 
 Or set it programmatically:
 
-```python
+```python wordWrap
 import os
 import getpass
 
@@ -81,7 +81,7 @@ if "OPENAI_API_KEY" not in os.environ:
 
 The recommended way to track ADK agents is using [`track_adk_agent_recursive`](https://www.comet.com/docs/opik/python-sdk-reference/integrations/adk/track_adk_agent_recursive.html) and [`OpikTracer`](https://www.comet.com/docs/opik/python-sdk-reference/integrations/adk/OpikTracer.html), which automatically instruments your entire agent hierarchy with a single function call. This approach is ideal for both single agents and complex multi-agent setups:
 
-```python
+```python wordWrap
 import datetime
 from zoneinfo import ZoneInfo
 
@@ -166,7 +166,7 @@ This approach automatically handles:
 
 For a fine-grained control over which callbacks to instrument, you can manually configure the [`OpikTracer`](https://www.comet.com/docs/opik/python-sdk-reference/integrations/adk/OpikTracer.html) callbacks. This approach gives you explicit control but requires more setup code:
 
-```python
+```python wordWrap
 # Configure Opik tracer (same as before)
 opik_tracer = OpikTracer(
     name="basic-weather-agent",
@@ -204,7 +204,7 @@ For most use cases, we recommend using `track_adk_agent_recursive` (shown in Exa
 
 This example demonstrates a complex multi-agent setup where we have specialized agents for different tasks. Using `track_adk_agent_recursive`, you can instrument the entire hierarchy with a single function call:
 
-```python
+```python wordWrap
 def get_detailed_weather(city: str) -> dict:
     """Get detailed weather information including forecast."""
     weather_data = {
@@ -396,7 +396,7 @@ This advanced example shows how to combine Opik's `@opik.track` decorator with A
 
 You can use `track_adk_agent_recursive` together with `@opik.track` decorators on your tool functions for maximum visibility:
 
-```python
+```python wordWrap
 from opik import track
 
 @track(name="weather_data_processing", tags=["data-processing", "weather"])
@@ -520,7 +520,7 @@ You can both invoke your agent from inside another tracked function and call tra
 
 The Opik integration automatically handles ADK sessions and maps them to Opik threads for conversational applications:
 
-```python
+```python wordWrap
 from opik.integrations.adk import OpikTracer
 from google.adk import sessions as adk_sessions, runners as adk_runners
 
@@ -574,7 +574,7 @@ Error information is automatically logged to spans and traces, making it easy to
 
 When using `Runner.run_async`, make sure to process all events completely, even after finding the final response (when `event.is_final_response()` is `True`). If you exit the loop too early, OpikTracer won't log the final response and your trace will be incomplete. Don't use code that stops processing events prematurely:
 
-```python
+```python wordWrap
 async for event in runner.run_async(user_id=user_id, session_id=session_id, new_message=content):
     if event.is_final_response():
         ...
@@ -593,7 +593,7 @@ There is an upstream discussion about how to best solve this source of confusion
 
 The `OpikTracer` object has a `flush` method that ensures all traces are logged to the Opik platform before you exit a script:
 
-```python
+```python wordWrap
 from opik.integrations.adk import OpikTracer
 
 opik_tracer = OpikTracer()
@@ -609,7 +609,7 @@ opik_tracer.flush()
 The `OpikTracer` can be used together with the [Opik prompt library](/development/prompt-library/getting-started)
 to easily access your existing prompts or create new ones, and then associate them with traces or spans within an ADK agent flow.
 
-```python
+```python wordWrap
 import datetime
 import uuid
 from typing import Iterator, Optional

@@ -4,7 +4,6 @@ import {
   convertOptimizationVariableFormat,
   restorePromptVariableFormat,
   checkIsTestSuite,
-  getOptimizationDefaultConfigByProvider,
   extractKwargsKeysFromPython,
   extractRequiredScoreParams,
   extractMetricNameFromCode,
@@ -15,12 +14,6 @@ import {
   EXPERIMENT_TYPE,
   EVALUATION_METHOD,
 } from "@/types/datasets";
-import {
-  COMPOSED_PROVIDER_TYPE,
-  LLMAnthropicConfigsType,
-  PROVIDER_MODEL_TYPE,
-  PROVIDER_TYPE,
-} from "@/types/providers";
 
 const makeExperiment = (overrides: Partial<Experiment> = {}): Experiment => ({
   id: "exp-1",
@@ -995,26 +988,6 @@ describe("extractKwargsKeysFromPython — unknown-column detection", () => {
     const referenced = extractKwargsKeysFromPython(code);
     const missing = referenced.filter((key) => !datasetVariables.includes(key));
     expect(missing).toEqual([]);
-  });
-});
-
-describe("getOptimizationDefaultConfigByProvider — Anthropic", () => {
-  it("seeds temperature for models that accept sampling params", () => {
-    const config = getOptimizationDefaultConfigByProvider(
-      PROVIDER_TYPE.ANTHROPIC as COMPOSED_PROVIDER_TYPE,
-      PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6,
-    ) as LLMAnthropicConfigsType;
-
-    expect(config.temperature).toBe(0);
-  });
-
-  it("omits temperature for Claude Opus 4.7", () => {
-    const config = getOptimizationDefaultConfigByProvider(
-      PROVIDER_TYPE.ANTHROPIC as COMPOSED_PROVIDER_TYPE,
-      PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
-    ) as LLMAnthropicConfigsType;
-
-    expect(config.temperature).toBeUndefined();
   });
 });
 

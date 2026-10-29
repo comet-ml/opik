@@ -75,6 +75,26 @@ export class DashboardsPage {
   }
 
   /**
+   * Opens the widget config dialog from the header's "Add widget" control.
+   *
+   * When Ollie is available the control is a menu trigger, and the dialog only
+   * opens from its "Pick a chart" item; otherwise it opens the dialog directly.
+   */
+  private async openAddWidgetDialog(): Promise<Locator> {
+    return test.step('Open the Add widget dialog', async () => {
+      await this.page.getByRole('button', { name: 'Add widget' }).first().click();
+      const dialog = this.page.getByRole('dialog');
+      const pickAChart = this.page.getByRole('menuitem', { name: 'Pick a chart' });
+      await dialog.or(pickAChart).first().waitFor({ state: 'visible' });
+      if (await pickAChart.isVisible()) {
+        await pickAChart.click();
+      }
+      await dialog.waitFor({ state: 'visible' });
+      return dialog;
+    });
+  }
+
+  /**
    * Adds a Time series widget scoped to the whole workspace.
    *
    * Ticking "All projects in the workspace" is what points the widget at
@@ -85,9 +105,7 @@ export class DashboardsPage {
    */
   async addWorkspaceSpanTokenUsageWidget(): Promise<void> {
     await test.step('Add a workspace-scoped Span token usage widget', async () => {
-      await this.page.getByRole('button', { name: 'Add widget' }).first().click();
-      const dialog = this.page.getByRole('dialog');
-      await dialog.waitFor({ state: 'visible' });
+      const dialog = await this.openAddWidgetDialog();
 
       await dialog.getByRole('checkbox', { name: 'All projects in the workspace' }).click();
       await dialog
@@ -123,9 +141,7 @@ export class DashboardsPage {
    */
   async addProjectSpanTokenUsageWidget(projectName: string): Promise<void> {
     await test.step(`Add a Span token usage widget scoped to "${projectName}"`, async () => {
-      await this.page.getByRole('button', { name: 'Add widget' }).first().click();
-      const dialog = this.page.getByRole('dialog');
-      await dialog.waitFor({ state: 'visible' });
+      const dialog = await this.openAddWidgetDialog();
 
       await dialog.getByRole('button', { name: 'Select projects' }).click();
       const projectPopover = this.page.locator('[data-radix-popper-content-wrapper]');

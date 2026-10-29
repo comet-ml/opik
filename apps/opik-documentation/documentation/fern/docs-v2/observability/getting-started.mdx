@@ -35,9 +35,11 @@ tracing manually with the SDK.
 
     <Steps>
       <Step title="Install the Opik skill">
-        ```bash
-        npx skills add comet-ml/opik-skills
+        ```bash wordWrap
+        uvx opik mcp configure
         ```
+
+        It installs the Opik skills and connects the Opik MCP server. It needs [`uv`](https://docs.astral.sh/uv/).
       </Step>
       <Step title="Run the integration">
         Ask your coding agent to instrument your code:
@@ -56,14 +58,14 @@ tracing manually with the SDK.
 
     <Steps>
       <Step title="Install Opik">
-        ```bash
+        ```bash wordWrap
         pip install opik
         ```
       </Step>
       <Step title="Set your environment variables">
         <Tabs>
           <Tab title="Opik Cloud">
-            ```bash
+            ```bash wordWrap
             export OPIK_API_KEY="<YOUR_API_KEY>"
             export OPIK_WORKSPACE="<YOUR_WORKSPACE>"
             ```
@@ -71,7 +73,7 @@ tracing manually with the SDK.
             You can find your API key and workspace name in the [Opik dashboard](https://www.comet.com/opik).
           </Tab>
           <Tab title="Self-hosted">
-            ```bash
+            ```bash wordWrap
             export OPIK_URL_OVERRIDE="http://localhost:5173/api"
             ```
 
@@ -82,7 +84,7 @@ tracing manually with the SDK.
       <Step title="Connect your repository">
         Run this command in the repository you want Ollie to work in:
 
-        ```bash
+        ```bash wordWrap
         opik connect --project "<YOUR_PROJECT_NAME>"
         ```
 
@@ -113,7 +115,7 @@ tracing manually with the SDK.
     (TypeScript) to manually instrument your code:
 
     <CodeBlocks>
-      ```python title="Python"
+      ```python title="Python" wordWrap
       import opik
 
       opik.configure()
@@ -131,28 +133,26 @@ tracing manually with the SDK.
           return response
       ```
 
-      ```ts title="Typescript"
-      import { Opik } from "opik";
+      ```ts title="Typescript" wordWrap
+      import { track } from "opik";
 
-      const client = new Opik();
-
-      const myLlmCall = client.track({
-        name: "my_llm_call",
-        fn: async (userMessage: string) => {
+      const myLlmCall = track(
+        { name: "my_llm_call" },
+        async (userMessage: string) => {
           // Your LLM call here
           const response = await callLlm(userMessage);
           return response;
-        },
-      });
+        }
+      );
 
-      const myAgent = client.track({
-        name: "my-agent",
-        fn: async (userMessage: string) => {
+      const myAgent = track(
+        { name: "my-agent" },
+        async (userMessage: string) => {
           const context = await retrieveContext(userMessage);
           const response = await myLlmCall(userMessage);
           return response;
-        },
-      });
+        }
+      );
       ```
     </CodeBlocks>
   </Tab>

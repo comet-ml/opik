@@ -127,7 +127,7 @@ class TraceJsonRowMapperTest {
     }
 
     @Test
-    @DisplayName("writes exactly the columns BATCH_INSERT lists, no more and no fewer")
+    @DisplayName("writes exactly the trace table's columns, no more and no fewer")
     void writesExactlyTheExpectedColumns() {
         // The whole-object assertion for a row mapper: comparing every value would restate the mapper,
         // but the column SET is what breaks silently -- a dropped column reads back as a default and a

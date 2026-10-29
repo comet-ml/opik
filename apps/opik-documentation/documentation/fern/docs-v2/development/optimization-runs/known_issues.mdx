@@ -15,7 +15,7 @@ title: Known Issues
     If `pyrate-limiter` 4.x is installed you may see `TypeError: Limiter.__init__() got an unexpected keyword argument 'raise_when_fail'`. That version dropped the legacy flag our optimizer still passes.
 
     **Workaround**: pin `pyrate-limiter` to a 3.x release:
-    ```bash
+    ```bash wordWrap
     pip install "pyrate-limiter>=3.0.0,<4.0.0"
     ```
 
@@ -26,7 +26,7 @@ title: Known Issues
     `convert_tqdm_to_rich.<locals>._tqdm_to_track() missing 1 required positional argument: 'iterable'` comes from `tqdm` >= 4.71 changing the wrapper signature we rely on.
 
     **Workaround**: pin `tqdm` to 4.70.0:
-    ```bash
+    ```bash wordWrap
     pip install tqdm==4.70.0
     ```
 
@@ -37,7 +37,7 @@ title: Known Issues
     `PydanticSerializationUnexpectedValue` is emitted when LiteLLM serializes `Message` objects with fewer fields than the schema (an upstream change in LiteLLM/Pydantic v2). We suppress the warning because the payload is still valid.
 
     **Workaround**: avoid the affected LiteLLM builds:
-    ```bash
+    ```bash wordWrap
     pip install --upgrade "litellm<1.81.1"
     ```
 
@@ -48,7 +48,7 @@ title: Known Issues
     `litellm.InternalServerError: OpenAIException - Connection error.` has been reproducible against LiteLLM `1.81.*`. These releases can break the OpenAI evaluation flow inside Opik Optimizer.
  
     **Workaround**:
-    ```bash
+    ```bash wordWrap
     pip install --upgrade "litellm<1.81.0"
     ```
 
@@ -63,7 +63,7 @@ title: Known Issues
     This error occurs when you pass an incorrect type to the optimizer's `optimize_prompt()` method.
 
     **Solution**: Ensure you're using the `ChatPrompt` class to define your prompt:
-    ```python
+    ```python wordWrap
     from opik_optimizer import ChatPrompt
 
     prompt = ChatPrompt(
@@ -80,7 +80,7 @@ title: Known Issues
     This error occurs when the dataset passed to the optimizer is not a proper `Dataset` object.
 
     **Solution**: Use the `Dataset` class to create your dataset:
-    ```python
+    ```python wordWrap
     import opik
 
     client = opik.Opik()
@@ -98,7 +98,7 @@ title: Known Issues
     This error occurs when the metric parameter is not callable or doesn't have the correct signature.
 
     **Solution**: Ensure your metric is a function that takes `dataset_item` and `llm_output` as arguments and returns a `ScoreResult`:
-    ```python
+    ```python wordWrap
     from opik.evaluation.metrics import ScoreResult
 
     def my_metric(dataset_item, llm_output):
@@ -116,7 +116,7 @@ title: Known Issues
     This error occurs when your prompt template contains placeholders (e.g., `{variable}`) that don't match your dataset fields.
 
     **Solution**: Ensure all placeholders in your prompt match the keys in your dataset:
-    ```python
+    ```python wordWrap
     # Prompt with {question} placeholder
     prompt = ChatPrompt(
         user="Answer: {question}",
@@ -136,7 +136,7 @@ title: Known Issues
     This error occurs when trying to use the `GepaOptimizer` without the required `gepa` package installed.
 
     **Solution**: Install the gepa package:
-    ```bash
+    ```bash wordWrap
     pip install gepa
     ```
   </Accordion>
@@ -145,7 +145,7 @@ title: Known Issues
     This error typically occurs when the LLM provider API key is not configured in your environment.
 
     **Solution**: Set the appropriate environment variable for your LLM provider:
-    ```bash
+    ```bash wordWrap
     # For OpenAI
     export OPENAI_API_KEY="your-api-key"
 

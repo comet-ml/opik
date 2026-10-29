@@ -53,7 +53,7 @@ When an item's associated data spans multiple projects, it is assigned to the **
   <Tab title="Docker Compose">
     Add to a `docker-compose.override.yml` in your `deployment/docker-compose` directory:
 
-    ```yaml
+    ```yaml wordWrap
     services:
       backend:
         environment:
@@ -62,14 +62,14 @@ When an item's associated data spans multiple projects, it is assigned to the **
 
     Apply:
 
-    ```bash
+    ```bash wordWrap
     docker compose -f deployment/docker-compose/docker-compose.yml up -d backend
     ```
   </Tab>
   <Tab title="Kubernetes / Helm">
     Add to your Helm values file:
 
-    ```yaml
+    ```yaml wordWrap
     component:
       backend:
         env:
@@ -78,7 +78,7 @@ When an item's associated data spans multiple projects, it is assigned to the **
 
     Apply:
 
-    ```bash
+    ```bash wordWrap
     helm upgrade opik opik/opik -n opik -f values.yaml
     ```
   </Tab>
@@ -88,13 +88,13 @@ When an item's associated data spans multiple projects, it is assigned to the **
 
 <Tabs>
   <Tab title="Docker Compose">
-    ```bash
+    ```bash wordWrap
     docker compose -f deployment/docker-compose/docker-compose.yml logs -f backend \
       | grep -i "experiment.*migration"
     ```
   </Tab>
   <Tab title="Kubernetes / Helm">
-    ```bash
+    ```bash wordWrap
     kubectl logs -n opik deployment/opik-backend -f | grep -i "experiment.*migration"
     ```
   </Tab>
@@ -116,26 +116,26 @@ Enable both once Step 1 is complete. They are independent of each other and can 
 
 <Tabs>
   <Tab title="Docker Compose">
-    ```yaml
+    ```yaml wordWrap
     services:
       backend:
         environment:
           - DATASET_PROJECT_MIGRATION_ENABLED=true
           - PROMPT_PROJECT_MIGRATION_ENABLED=true
     ```
-    ```bash
+    ```bash wordWrap
     docker compose -f deployment/docker-compose/docker-compose.yml up -d backend
     ```
   </Tab>
   <Tab title="Kubernetes / Helm">
-    ```yaml
+    ```yaml wordWrap
     component:
       backend:
         env:
           DATASET_PROJECT_MIGRATION_ENABLED: "true"
           PROMPT_PROJECT_MIGRATION_ENABLED: "true"
     ```
-    ```bash
+    ```bash wordWrap
     helm upgrade opik opik/opik -n opik -f values.yaml
     ```
   </Tab>
@@ -156,24 +156,24 @@ Enable only after both Step 1 and Step 2 are complete. Optimizations infer their
 
 <Tabs>
   <Tab title="Docker Compose">
-    ```yaml
+    ```yaml wordWrap
     services:
       backend:
         environment:
           - OPTIMIZATION_PROJECT_MIGRATION_ENABLED=true
     ```
-    ```bash
+    ```bash wordWrap
     docker compose -f deployment/docker-compose/docker-compose.yml up -d backend
     ```
   </Tab>
   <Tab title="Kubernetes / Helm">
-    ```yaml
+    ```yaml wordWrap
     component:
       backend:
         env:
           OPTIMIZATION_PROJECT_MIGRATION_ENABLED: "true"
     ```
-    ```bash
+    ```bash wordWrap
     helm upgrade opik opik/opik -n opik -f values.yaml
     ```
   </Tab>
@@ -193,26 +193,26 @@ These jobs inspect project references already stored in their own rows and have 
 
 <Tabs>
   <Tab title="Docker Compose">
-    ```yaml
+    ```yaml wordWrap
     services:
       backend:
         environment:
           - AUTOMATION_RULE_PROJECT_MIGRATION_ENABLED=true
           - ALERT_PROJECT_MIGRATION_ENABLED=true
     ```
-    ```bash
+    ```bash wordWrap
     docker compose -f deployment/docker-compose/docker-compose.yml up -d backend
     ```
   </Tab>
   <Tab title="Kubernetes / Helm">
-    ```yaml
+    ```yaml wordWrap
     component:
       backend:
         env:
           AUTOMATION_RULE_PROJECT_MIGRATION_ENABLED: "true"
           ALERT_PROJECT_MIGRATION_ENABLED: "true"
     ```
-    ```bash
+    ```bash wordWrap
     helm upgrade opik opik/opik -n opik -f values.yaml
     ```
   </Tab>
@@ -233,33 +233,33 @@ Once all six jobs have reported their completion signals and been disabled, run 
 
 **ClickHouse — orphan experiments** (should be 0):
 
-```sql
+```sql wordWrap
 SELECT countIf(project_id = '') AS orphan_experiments
 FROM experiments FINAL;
 ```
 
 **MySQL — orphan datasets** (should be 0):
 
-```sql
+```sql wordWrap
 SELECT COUNT(*) FROM datasets WHERE project_id IS NULL OR project_id = '';
 ```
 
 **MySQL — orphan prompts** (should be 0):
 
-```sql
+```sql wordWrap
 SELECT COUNT(*) FROM prompts WHERE project_id IS NULL;
 ```
 
 **ClickHouse — orphan optimizations** (should be 0):
 
-```sql
+```sql wordWrap
 SELECT countIf(project_id = '') AS orphan_optimizations
 FROM optimizations FINAL;
 ```
 
 **MySQL — multi-project automation rules** (should be 0):
 
-```sql
+```sql wordWrap
 SELECT COUNT(*) FROM (
   SELECT rule_id FROM automation_rule_projects
   GROUP BY workspace_id, rule_id HAVING COUNT(project_id) > 1
@@ -268,7 +268,7 @@ SELECT COUNT(*) FROM (
 
 **MySQL — orphan alerts** (should be 0):
 
-```sql
+```sql wordWrap
 SELECT COUNT(*) FROM alerts WHERE project_id IS NULL;
 ```
 

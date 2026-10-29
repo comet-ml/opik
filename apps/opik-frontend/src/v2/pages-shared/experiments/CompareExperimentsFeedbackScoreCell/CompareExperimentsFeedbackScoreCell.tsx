@@ -110,7 +110,7 @@ const CompareExperimentsFeedbackScoreCellContent = ({
               <MessageSquareMore className="size-3.5 shrink-0 text-light-slate" />
             </FeedbackScoreReasonTooltip>
           ) : (
-            <span className="w-full min-w-0 overflow-y-auto break-words text-xs text-muted-foreground">
+            <span className="w-full min-w-0 overflow-y-auto whitespace-pre-line break-words text-xs text-muted-foreground">
               {reasons.map((r) => r.reason).join(", ")}
             </span>
           ))}

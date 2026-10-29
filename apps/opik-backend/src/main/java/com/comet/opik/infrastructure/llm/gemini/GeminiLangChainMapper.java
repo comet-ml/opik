@@ -3,7 +3,9 @@ package com.comet.opik.infrastructure.llm.gemini;
 import com.comet.opik.domain.llm.langchain4j.OpikContent;
 import com.comet.opik.domain.llm.langchain4j.OpikUserMessage;
 import com.comet.opik.infrastructure.llm.LlmProviderLangChainMapper;
+import com.comet.opik.infrastructure.llm.MediaContentUtils;
 import com.comet.opik.infrastructure.llm.VideoMimeTypeUtils;
+import com.comet.opik.infrastructure.net.LoggableUrl;
 import dev.langchain4j.data.image.Image;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.Content;
@@ -37,28 +39,31 @@ public interface GeminiLangChainMapper {
     /**
      * Map messages for Gemini, converting VIDEO_URL to ImageContent.
      */
-    default List<ChatMessage> mapMessagesForGemini(@NonNull ChatCompletionRequest request) {
+    default List<ChatMessage> mapMessagesForGemini(@NonNull ChatCompletionRequest request,
+            @NonNull VideoMimeTypeUtils videoMimeTypeUtils) {
         return request.messages().stream()
-                .map(this::toChatMessageForGemini)
+                .map(message -> toChatMessageForGemini(message, videoMimeTypeUtils))
                 .toList();
     }
 
     /**
      * Convert Message to ChatMessage, with Gemini-specific handling for OpikUserMessage.
      */
-    default ChatMessage toChatMessageForGemini(@NonNull Message message) {
+    default ChatMessage toChatMessageForGemini(@NonNull Message message,
+            @NonNull VideoMimeTypeUtils videoMimeTypeUtils) {
         // Handle OpikUserMessage specially for Gemini
         if (message instanceof OpikUserMessage opikUserMessage) {
-            return convertOpikUserMessageForGemini(opikUserMessage);
+            return convertOpikUserMessageForGemini(opikUserMessage, videoMimeTypeUtils);
         }
         // For other messages, use the standard mapper
-        return LlmProviderLangChainMapper.INSTANCE.toChatMessage(message);
+        return LlmProviderLangChainMapper.INSTANCE.toChatMessage(message, videoMimeTypeUtils);
     }
 
     /**
      * Convert OpikUserMessage to UserMessage with VIDEO_URL -> ImageContent conversion.
      */
-    default UserMessage convertOpikUserMessageForGemini(OpikUserMessage opikUserMessage) {
+    default UserMessage convertOpikUserMessageForGemini(OpikUserMessage opikUserMessage,
+            VideoMimeTypeUtils videoMimeTypeUtils) {
         if (opikUserMessage.content() instanceof String stringContent) {
             if (stringContent == null || stringContent.isBlank()) {
                 throw new BadRequestException("Message content cannot be null or empty");
@@ -69,7 +74,7 @@ public interface GeminiLangChainMapper {
             List<Content> publicApiContents = new ArrayList<>();
             for (Object item : contentList) {
                 if (item instanceof OpikContent opikContent) {
-                    publicApiContents.add(convertOpikContentForGemini(opikContent));
+                    publicApiContents.add(convertOpikContentForGemini(opikContent, videoMimeTypeUtils));
                 }
             }
             return UserMessage.from(publicApiContents);
@@ -81,12 +86,12 @@ public interface GeminiLangChainMapper {
      * Convert OpikContent to public API Content for Gemini.
      * Gemini treats videos as images, so VIDEO_URL is converted to ImageContent.
      */
-    default Content convertOpikContentForGemini(OpikContent opikContent) {
+    default Content convertOpikContentForGemini(OpikContent opikContent, VideoMimeTypeUtils videoMimeTypeUtils) {
         return switch (opikContent.type()) {
             case TEXT -> TextContent.from(opikContent.text());
             case IMAGE_URL -> {
                 if (opikContent.imageUrl() != null) {
-                    yield ImageContent.from(opikContent.imageUrl().getUrl());
+                    yield MediaContentUtils.toImageContent(opikContent.imageUrl().getUrl());
                 }
                 throw new BadRequestException("Image URL is null");
             }
@@ -94,6 +99,10 @@ public interface GeminiLangChainMapper {
                 // Gemini treats videos as images - convert VIDEO_URL to ImageContent
                 if (opikContent.videoUrl() != null) {
                     String videoUrl = opikContent.videoUrl().url();
+                    var dataUri = MediaContentUtils.parseBase64DataUri(videoUrl);
+                    if (dataUri.isPresent()) {
+                        yield ImageContent.from(dataUri.get().base64Data(), dataUri.get().mimeType());
+                    }
                     var imageBuilder = Image.builder()
                             .url(URI.create(videoUrl));
 
@@ -103,13 +112,13 @@ public interface GeminiLangChainMapper {
                     // Only detect MIME type if not provided AND URL has no file extension
                     // (LangChain4j can detect MIME type from extensions automatically)
                     if (mimeType == null && !VideoMimeTypeUtils.hasVideoFileExtension(videoUrl)) {
-                        mimeType = VideoMimeTypeUtils.detectMimeTypeFromHttpHead(videoUrl);
+                        mimeType = videoMimeTypeUtils.detectMimeTypeFromHttpHead(videoUrl);
                     }
 
                     if (mimeType != null) {
                         imageBuilder.mimeType(mimeType);
                         log.debug("Set mimeType '{}' for video URL: '{}'", mimeType,
-                                videoUrl.substring(0, Math.min(60, videoUrl.length())));
+                                LoggableUrl.of(videoUrl));
                     }
                     yield ImageContent.from(imageBuilder.build());
                 }

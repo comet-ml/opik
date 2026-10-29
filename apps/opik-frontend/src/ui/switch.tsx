@@ -12,6 +12,7 @@ const switchVariants = cva(
         default: "h-6 w-11",
         sm: "h-5 w-9",
         xs: "h-4 w-7",
+        "2xs": "h-3 w-5",
       },
     },
     defaultVariants: {
@@ -29,6 +30,8 @@ const switchThumbVariants = cva(
           "size-5 data-[state=checked]:translate-x-5 data-[state=unchecked]:translate-x-0",
         sm: "size-4 data-[state=checked]:translate-x-4 data-[state=unchecked]:translate-x-0",
         xs: "size-3 data-[state=checked]:translate-x-3 data-[state=unchecked]:translate-x-0",
+        "2xs":
+          "size-2 data-[state=checked]:translate-x-2 data-[state=unchecked]:translate-x-0",
       },
     },
     defaultVariants: {

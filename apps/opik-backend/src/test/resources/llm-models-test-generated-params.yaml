@@ -1,0 +1,6 @@
+anthropic:
+  - id: "claude-sonnet-4-6"
+    params:
+      temperature: {accepted: false}
+      effort: {levels: [low]}
+  - id: "claude-not-yet-synced"

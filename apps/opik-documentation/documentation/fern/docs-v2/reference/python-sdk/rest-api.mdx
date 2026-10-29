@@ -19,7 +19,7 @@ The Opik Python SDK includes a complete REST API client that provides direct acc
 
 The REST client is accessible through any Opik instance:
 
-```python
+```python wordWrap
 import opik
 
 # Initialize Opik client
@@ -73,7 +73,7 @@ The REST API is organized into functional client modules:
 
 ### Working with Traces
 
-```python
+```python wordWrap
 # Get a specific trace by ID
 trace = client.rest_client.traces.get_trace_by_id("trace-id")
 
@@ -99,7 +99,7 @@ client.rest_client.traces.add_trace_feedback_score(
 
 ### Managing Datasets
 
-```python
+```python wordWrap
 # List all datasets with pagination
 datasets = client.rest_client.datasets.find_datasets(
     page=0,
@@ -128,7 +128,7 @@ client.rest_client.datasets.create_or_update_dataset_items(
 
 ### Running Experiments
 
-```python
+```python wordWrap
 # Create an experiment linked to a dataset
 experiment = client.rest_client.experiments.create_experiment(
     name="model-comparison",
@@ -153,7 +153,7 @@ client.rest_client.experiments.create_experiment_items(
 
 Most list operations return paginated responses with a consistent structure:
 
-```python
+```python wordWrap
 # Example paginated response
 response = client.rest_client.datasets.find_datasets(page=0, size=10)
 
@@ -168,7 +168,7 @@ page_size = response.size      # Items per page
 
 The REST API raises specific exceptions for different error conditions:
 
-```python
+```python wordWrap
 from opik.rest_api.core.api_error import ApiError
 
 try:

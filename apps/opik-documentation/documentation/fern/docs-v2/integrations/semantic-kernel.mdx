@@ -19,7 +19,7 @@ Learn more about Semantic Kernel in the [official documentation](https://learn.m
 
 To use the Semantic Kernel integration with Opik, you will need to have Semantic Kernel and the required OpenTelemetry packages installed:
 
-```bash
+```bash wordWrap
 pip install semantic-kernel opentelemetry-exporter-otlp-proto-http
 ```
 
@@ -77,7 +77,7 @@ Configure your environment variables based on your Opik deployment:
     If you are self-hosting Opik, you will need to set the following environment
     variables:
 
-    ```bash
+    ```bash wordWrap
     export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
     ```
 
@@ -85,7 +85,7 @@ Configure your environment variables based on your Opik deployment:
         To log the traces to a specific project, you can add the `projectName`
         parameter to the `OTEL_EXPORTER_OTLP_HEADERS` environment variable:
 
-        ```bash
+        ```bash wordWrap
         export OTEL_EXPORTER_OTLP_HEADERS='projectName=<your-project-name>'
         ```
 
@@ -109,7 +109,7 @@ For more details, see [Microsoft's Semantic Kernel Environment Variables documen
 
 Semantic Kernel has built-in OpenTelemetry support. Enable telemetry and configure the OTLP exporter:
 
-```python
+```python wordWrap
 import asyncio
 import os
 

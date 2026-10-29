@@ -2,8 +2,8 @@
 description: Start here to integrate Opik into your Cohere-based genai application
   for end-to-end LLM observability, unit testing, and optimization.
 headline: Cohere
-og:description: Learn to integrate Opik with Cohere using OpenAI SDK for efficient
-  tracking and evaluation of your API calls in Opik projects.
+og:description: Trace Cohere calls with Opik using track_cohere. Log prompts, responses,
+  token usage and streaming for Command models.
 og:site_name: Opik Documentation
 og:title: Integrate Cohere Models with Opik for Enhanced Tracking
 title: Observability for Cohere with Opik
@@ -11,37 +11,160 @@ title: Observability for Cohere with Opik
 
 [Cohere](https://cohere.com/) provides state-of-the-art large language models that excel at text generation, summarization, classification, and retrieval-augmented generation.
 
-This guide explains how to integrate Opik with Cohere using the OpenAI SDK Compatibility API. By using the `track_openai` method provided by opik with Cohere's compatibility endpoint, you can easily track and evaluate your Cohere API calls within your Opik projects as Opik will automatically log the input prompt, model used, token usage, and response generated.
+Wrap your Cohere client with `track_cohere` and every `chat()` and `chat_stream()` call is logged to Opik with its messages, response, model and token usage. The async client works out of the box.
+
+Cohere's native API is not OpenAI-shaped — `chat()` takes keyword-only arguments and streaming is a separate `chat_stream()` method returning a union of events — so if your code uses the Cohere SDK, use `track_cohere` rather than `track_openai` against the compatibility endpoint.
+
+## Account Setup
+
+[Comet](https://www.comet.com/site?from=llm&utm_source=opik&utm_medium=colab&utm_content=cohere&utm_campaign=opik) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=cohere&utm_campaign=opik) and grab your API Key.
+
+> You can also run the Opik platform locally, see the [installation guide](/self-host/overview) for more information.
 
 ## Getting Started
 
+### Installation
+
+```bash
+pip install opik cohere
+```
+
 ### Configuring Opik
+
+Run `opik configure` and follow the prompts. See the [Python SDK Configuration guide](/tracing/advanced/sdk_configuration) for other options, such as configuring Opik in code or with environment variables.
+
+### Configuring Cohere
+
+Set your Cohere API key as an environment variable:
+
+```bash
+export CO_API_KEY="YOUR_API_KEY"
+```
+
+## Logging LLM calls
+
+Create a Cohere client, wrap it with `track_cohere`, and use it as usual:
+
+```python
+import cohere
+from opik.integrations.cohere import track_cohere
+
+client = track_cohere(cohere.ClientV2())
+
+response = client.chat(
+    model="command-r-plus",
+    messages=[{"role": "user", "content": "Why is the sky blue?"}],
+)
+
+print(response.message.content[0].text)
+```
+
+## Advanced Usage
+
+### Using with the `@track` decorator
+
+Calls made with a tracked client inside a function decorated with [`@track`](/tracing/advanced/log_traces#using-function-decorators) are nested under that function's trace:
+
+```python
+import cohere
+from opik import track
+from opik.integrations.cohere import track_cohere
+
+client = track_cohere(cohere.ClientV2())
+
+
+@track
+def generate_story(prompt: str) -> str:
+    response = client.chat(
+        model="command-r-plus",
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return response.message.content[0].text
+
+
+generate_story("Write a short story about Opik.")
+```
+
+### Streaming
+
+Cohere streams through a separate `chat_stream()` method. The span is ended once the stream is fully consumed, and the events are aggregated into a single logged response:
+
+```python
+stream = client.chat_stream(
+    model="command-r-plus",
+    messages=[{"role": "user", "content": "Why is the sky blue?"}],
+)
+
+for event in stream:
+    if event.type == "content-delta":
+        print(event.delta.message.content.text, end="")
+```
+
+### Async client
+
+`track_cohere` works with `cohere.AsyncClientV2` as well, for both `chat()` and `chat_stream()`:
+
+```python
+import asyncio
+
+import cohere
+from opik.integrations.cohere import track_cohere
+
+async_client = track_cohere(cohere.AsyncClientV2())
+
+
+async def main():
+    response = await async_client.chat(
+        model="command-r-plus",
+        messages=[{"role": "user", "content": "Why is the sky blue?"}],
+    )
+    print(response.message.content[0].text)
+
+
+asyncio.run(main())
+```
+
+## Cost Tracking
+
+Opik records the token usage Cohere returns on each call. Cohere reports `tokens.input_tokens` and `tokens.output_tokens`, which the integration maps onto Opik's `prompt_tokens` / `completion_tokens` names.
+
+## Supported Methods
+
+`track_cohere` logs `chat()` and `chat_stream()` on both `cohere.ClientV2` and `cohere.AsyncClientV2`. Other methods, such as `embed()` and `rerank()`, aren't logged; to trace them, call them inside a function decorated with [`@track`](/tracing/advanced/log_traces#using-function-decorators).
+
+## Using Cohere through the OpenAI compatibility API
+
+If your code calls Cohere through the OpenAI SDK against Cohere's compatibility endpoint, keep that code and use `track_openai` as described below.
+
+### Getting started with the compatibility API
+
+#### Configuring Opik
 
 To start tracking your Cohere LLM calls, you'll need to have both `opik` and `openai` packages installed. You can install them using pip:
 
-```bash
+```bash wordWrap
 pip install opik openai
 ```
 
 In addition, you can configure Opik using the `opik configure` command which will prompt you for the correct local server address or if you are using the Cloud platform your API key:
 
-```bash
+```bash wordWrap
 opik configure
 ```
 
-### Configuring Cohere
+#### Configuring Cohere
 
 You'll need to set your Cohere API key as an environment variable:
 
-```bash
+```bash wordWrap
 export COHERE_API_KEY="YOUR_API_KEY"
 ```
 
-## Tracking Cohere API calls
+### Tracking Cohere API calls through the compatibility API
 
 Leverage the OpenAI Compatibility API by replacing the base URL with Cohere's endpoint when initializing the client:
 
-```python
+```python wordWrap
 import os
 from opik.integrations.openai import track_openai
 from openai import OpenAI
@@ -72,11 +195,11 @@ The `track_openai` will automatically track and log the API call, including the 
   <img src="/img/tracing/cohere_integration.png" />
 </Frame>
 
-## Using Cohere within a tracked function
+### Using the compatibility API within a tracked function
 
 If you are using Cohere within a function tracked with the [`@track`](/tracing/advanced/log_traces#using-function-decorators) decorator, you can use the tracked client as normal:
 
-```python
+```python wordWrap
 from opik import track
 from opik.integrations.openai import track_openai
 from openai import OpenAI
@@ -122,7 +245,7 @@ generate_opik_story()
   <img src="/img/tracing/cohere_trace_decorator.png" />
 </Frame>
 
-## Supported Cohere models
+### Supported Cohere models
 
 The `track_openai` wrapper with Cohere's compatibility API supports the following Cohere models:
 
@@ -132,7 +255,7 @@ The `track_openai` wrapper with Cohere's compatibility API supports the followin
 - `command-light` - Command Light model
 - `command` - Command model
 
-## Supported OpenAI methods
+### Supported OpenAI methods
 
 The `track_openai` wrapper supports the following OpenAI methods when used with Cohere:
 

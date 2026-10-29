@@ -12,6 +12,10 @@ export const AnnotationQueueAutomation: core.serialization.ObjectSchema<
     enabled: core.serialization.boolean().optional(),
     conditions: Conditions.optional(),
     maxItemsInQueue: core.serialization.property("max_items_in_queue", core.serialization.number().optional()),
+    clearMaxItemsInQueue: core.serialization.property(
+        "clear_max_items_in_queue",
+        core.serialization.boolean().optional(),
+    ),
 });
 
 export declare namespace AnnotationQueueAutomation {
@@ -19,5 +23,6 @@ export declare namespace AnnotationQueueAutomation {
         enabled?: boolean | null;
         conditions?: Conditions.Raw | null;
         max_items_in_queue?: number | null;
+        clear_max_items_in_queue?: boolean | null;
     }
 }

@@ -94,7 +94,7 @@ class OtelProviderCostPipelineTest {
                 Arguments.of("az.ai.openai (pre-rename spelling)", "gen_ai.system", "az.ai.openai", "gpt-4o",
                         null, "azure"),
                 Arguments.of("mistral_ai", "gen_ai.system", "mistral_ai", "mistral-large-latest", null, "mistral"),
-                Arguments.of("x_ai", "gen_ai.system", "x_ai", "grok-3", null, "xai"),
+                Arguments.of("x_ai", "gen_ai.system", "x_ai", "grok-4.3", null, "xai"),
 
                 // --- Same resolution via the current attribute that replaced gen_ai.system ---
                 Arguments.of("gen_ai.provider.name gcp.vertex_ai", "gen_ai.provider.name", "gcp.vertex_ai",
@@ -103,6 +103,10 @@ class OtelProviderCostPipelineTest {
                         "anthropic.claude-3-5-sonnet-20241022-v2:0", null, "bedrock"),
                 Arguments.of("gen_ai.provider.name gcp.gen_ai + vertex host", "gen_ai.provider.name", "gcp.gen_ai",
                         "gemini-2.5-flash", "us-central1-aiplatform.googleapis.com", "google_vertexai"),
+
+                // --- #7772: kept as the reported API host, priced under the provider it names ---
+                Arguments.of("api.cerebras.ai", "gen_ai.system", "api.cerebras.ai", "llama-3.3-70b", null,
+                        "api.cerebras.ai"),
 
                 // --- Canonical values already in the price vocabulary must survive untouched ---
                 Arguments.of("openai passes through", "gen_ai.system", "openai", "gpt-4o", null, "openai"),

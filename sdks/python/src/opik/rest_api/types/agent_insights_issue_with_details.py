@@ -19,6 +19,21 @@ class AgentInsightsIssueWithDetails(UniversalBaseModel):
     status: typing.Optional[AgentInsightsIssueWithDetailsStatus] = None
     severity: typing.Optional[AgentInsightsIssueWithDetailsSeverity] = None
     traces_query: typing.Optional[str] = None
+    close_note: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    The team's reason for closing the issue as not useful; set only while status is closed
+    """
+
+    status_changed_by: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    Who last changed the status
+    """
+
+    status_changed_at: typing.Optional[dt.datetime] = pydantic.Field(default=None)
+    """
+    When the status was last changed
+    """
+
     created_by: typing.Optional[str] = None
     created_at: typing.Optional[dt.datetime] = None
     last_updated_by: typing.Optional[str] = None

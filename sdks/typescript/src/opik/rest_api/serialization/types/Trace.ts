@@ -3,6 +3,7 @@
 import type * as OpikApi from "../../api/index.js";
 import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
+import { AnnotationQueueReference } from "./AnnotationQueueReference.js";
 import { Comment } from "./Comment.js";
 import { ErrorInfo } from "./ErrorInfo.js";
 import { ExperimentItemReference } from "./ExperimentItemReference.js";
@@ -49,6 +50,10 @@ export const Trace: core.serialization.ObjectSchema<serializers.Trace.Raw, OpikA
     hasToolSpans: core.serialization.property("has_tool_spans", core.serialization.boolean().optional()),
     providers: core.serialization.list(core.serialization.string()).optional(),
     experiment: ExperimentItemReference.optional(),
+    annotationQueues: core.serialization.property(
+        "annotation_queues",
+        core.serialization.list(AnnotationQueueReference).optional(),
+    ),
     source: TraceSource.optional(),
     environment: core.serialization.string().optional(),
 });
@@ -85,6 +90,7 @@ export declare namespace Trace {
         has_tool_spans?: boolean | null;
         providers?: string[] | null;
         experiment?: ExperimentItemReference.Raw | null;
+        annotation_queues?: AnnotationQueueReference.Raw[] | null;
         source?: TraceSource.Raw | null;
         environment?: string | null;
     }

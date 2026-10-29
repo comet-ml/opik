@@ -13,10 +13,8 @@ import { OnlineEvaluationPage } from '@e2e/pom/online-evaluation.page';
  * fallback, which is why they are separate rules rather than one representative
  * string.
  *
- * The estate structurally cannot produce these through the UI: the create-rule
- * dialog only emits the canned templates and whatever a test types into them,
- * and no template opens with a bracket. That is why this spec seeds through the
- * REST boundary rather than driving the dialog.
+ * Seeded through the REST boundary: what is under test is how the listing
+ * reads them back, not how they were authored.
  */
 interface JsonLookingPrompt {
   /** Used in the rule name and in every failure message. */

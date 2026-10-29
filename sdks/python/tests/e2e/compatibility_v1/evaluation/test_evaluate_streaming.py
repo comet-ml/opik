@@ -62,9 +62,9 @@ def test_streaming_starts_evaluation_before_complete_download(
     # Store original read_and_parse_stream function
     original_read_and_parse_stream = rest_stream_parser.read_and_parse_stream
 
-    def tracked_read_and_parse_stream(stream, item_class, nb_samples=None):
+    def tracked_read_and_parse_stream(stream, item_class, nb_samples=None, **kwargs):
         """Wrapper that tracks when items are yielded from the stream."""
-        items = original_read_and_parse_stream(stream, item_class, nb_samples)
+        items = original_read_and_parse_stream(stream, item_class, nb_samples, **kwargs)
         tracked_items = []
         for item in items:
             with events_lock:

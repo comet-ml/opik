@@ -13,6 +13,8 @@ import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.llm.customllm.AuthTokenException;
 import com.comet.opik.infrastructure.llm.customllm.AuthTokenProvider;
+import com.comet.opik.infrastructure.llm.customllm.ProviderBaseUrlGuard;
+import com.comet.opik.infrastructure.net.DestinationGuardException;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -22,6 +24,8 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.ListUtils;
+import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
@@ -32,6 +36,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -64,10 +69,14 @@ public interface LlmProviderApiKeyService {
 class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
 
     private static final String PROVIDER_API_KEY_ALREADY_EXISTS = "Api key for this provider already exists";
+    private static final String TOKEN_URL_REFUSED = "the auth_config token_url was refused: it must be a valid https URL"
+            + " that resolves to a public address (self-hosted deployments with internal auth services can set"
+            + " LLM_PROVIDER_TOKEN_AUTH_DESTINATION_GUARD=relaxed)";
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull TransactionTemplate template;
     private final @NonNull OpikConfiguration configuration;
     private final @NonNull AuthTokenProvider authTokenProvider;
+    private final @NonNull ProviderBaseUrlGuard providerBaseUrlGuard;
 
     @Override
     public ProviderApiKey find(@NonNull UUID id, @NonNull String workspaceId) {
@@ -127,6 +136,14 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
     @Override
     public ProviderApiKey saveApiKey(@NonNull ProviderApiKey providerApiKey, @NonNull String userName,
             @NonNull String workspaceId) {
+        // the free provider always comes from operator config, so a stored row is never used
+        if (providerApiKey.provider() == LlmProvider.OPIK_FREE) {
+            throw new BadRequestException("provider is built in and can't be saved, provider '%s'"
+                    .formatted(LlmProvider.OPIK_FREE.getValue()));
+        }
+        validateHeaders(providerApiKey.headers());
+        validateDestinations(providerApiKey.baseUrl(), providerApiKey.provider(),
+                providerApiKey.authConfig() == null ? null : providerApiKey.authConfig().value());
         UUID apiKeyId = idGenerator.generateId();
 
         // For non-custom providers, explicitly set providerName to null (ignore user input)
@@ -169,6 +186,11 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
             @NonNull String userName,
             @NonNull String workspaceId) {
 
+        // 404 before any destination lookup; validation resolves DNS, so it stays outside the write transaction
+        var stored = find(id, workspaceId);
+        validateHeaders(providerApiKeyUpdate.headers());
+        validateDestinations(providerApiKeyUpdate.baseUrl(), stored.provider(), providerApiKeyUpdate.authConfig());
+
         template.inTransaction(WRITE, handle -> {
 
             var repository = handle.attach(LlmProviderApiKeyDAO.class);
@@ -176,6 +198,7 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
             ProviderApiKey providerApiKey = repository.fetch(id, workspaceId)
                     .orElseThrow(this::createNotFoundError);
 
+            validateCredentialsResubmittedOnUrlChange(providerApiKeyUpdate, providerApiKey);
             var authConfigUpdate = resolveAuthConfigUpdate(providerApiKeyUpdate, providerApiKey);
 
             repository.update(providerApiKey.id(),
@@ -211,7 +234,7 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
         ProviderApiKey storedProvider = request.providerId() != null
                 ? find(request.providerId(), workspaceId)
                 : null;
-        if (storedProvider != null && !storedProvider.provider().supportsDynamicTokenAuth()) {
+        if (storedProvider != null && !storedProvider.provider().routesThroughCustomLlmClient()) {
             throw new BadRequestException(
                     "auth_config is only supported for custom LLM, Bedrock, and Ollama providers");
         }
@@ -248,7 +271,7 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
         if (incoming.isEmpty()) {
             return new AuthConfigUpdate(update, true, null);
         }
-        if (!stored.provider().supportsDynamicTokenAuth()) {
+        if (!stored.provider().routesThroughCustomLlmClient()) {
             throw new BadRequestException(
                     "auth_config is only supported for custom LLM, Bedrock, and Ollama providers");
         }
@@ -266,6 +289,68 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
                 ? update.toBuilder().apiKey(EncryptionUtils.encrypt("")).build()
                 : update;
         return new AuthConfigUpdate(effectiveUpdate, false, merged);
+    }
+
+    private void validateDestinations(String baseUrl, LlmProvider provider, ProviderAuthConfig authConfig) {
+        providerBaseUrlGuard.validate(baseUrl, provider);
+        if (authConfig != null && StringUtils.isNotBlank(authConfig.tokenUrl())) {
+            try {
+                authTokenProvider.validateTokenUrl(authConfig.tokenUrl());
+            } catch (DestinationGuardException exception) {
+                // no exception detail anywhere: it describes a user-supplied URL and how our network resolves it
+                log.warn("Refused auth_config token_url");
+                throw new BadRequestException(TOKEN_URL_REFUSED);
+            }
+        }
+    }
+
+    /**
+     * Stored credentials must not follow a base_url change: the new destination requires the caller
+     * to resubmit them.
+     */
+    private void validateCredentialsResubmittedOnUrlChange(ProviderApiKeyUpdate update, ProviderApiKey stored) {
+        if (update.baseUrl() == null || Objects.equals(update.baseUrl(), stored.baseUrl())) {
+            return;
+        }
+        ProviderAuthConfig incoming = update.authConfig();
+        boolean clearsAuthConfig = incoming != null && incoming.isEmpty();
+        boolean newAuthConfig = incoming != null && !clearsAuthConfig
+                && ListUtils.emptyIfNull(incoming.credentials()).stream()
+                        .noneMatch(credential -> ProviderAuthConfig.SECRET_SENTINEL.equals(credential.value()));
+        // a new auth_config clears the stored static key (see resolveAuthConfigUpdate)
+        boolean storedApiKeyKept = update.apiKey() == null && !newAuthConfig
+                && stored.apiKey() != null && StringUtils.isNotBlank(EncryptionUtils.decrypt(stored.apiKey()));
+        boolean storedAuthConfigKept = stored.authConfig() != null && !newAuthConfig && !clearsAuthConfig;
+        // custom headers can carry credentials too, so they must be resent (or cleared with an empty map)
+        boolean storedHeadersKept = update.headers() == null && MapUtils.isNotEmpty(stored.headers());
+        if (storedApiKeyKept || storedAuthConfigKept || storedHeadersKept) {
+            throw new BadRequestException("""
+                    changing base_url requires resubmitting the provider credentials (api_key or auth_config) and \
+                    headers""");
+        }
+    }
+
+    /**
+     * Each header needs a name and a value, and names differ in more than case, as HTTP compares them ignoring it.
+     * Messages name the header, never its value.
+     */
+    private void validateHeaders(Map<String, String> headers) {
+        if (MapUtils.isEmpty(headers)) {
+            return;
+        }
+        var names = new TreeSet<String>(String.CASE_INSENSITIVE_ORDER);
+        headers.forEach((name, value) -> {
+            if (StringUtils.isBlank(name)) {
+                throw new BadRequestException("header names must not be blank");
+            }
+            if (value == null) {
+                throw new BadRequestException("header value must not be null, header '%s'".formatted(name));
+            }
+            if (!names.add(name)) {
+                throw new BadRequestException(
+                        "header names must differ in more than case, header '%s'".formatted(name));
+            }
+        });
     }
 
     private void validateNoStaticKeyConflict(String encryptedApiKey, boolean authConfigPresent) {

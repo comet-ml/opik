@@ -37,6 +37,7 @@ interface ExclusiveSamplingParamsProps {
   temperatureDefault: number;
   topPDefault: number;
   temperatureMin?: number;
+  temperatureMax?: number;
   onChange: (configs: { temperature?: number; topP?: number }) => void;
   /**
    * False where the surface cannot store a Top P, which leaves temperature as the only option and
@@ -61,6 +62,7 @@ const ExclusiveSamplingParams = ({
   temperatureDefault,
   topPDefault,
   temperatureMin = 0,
+  temperatureMax = 1,
   onChange,
   offerChoice = true,
 }: ExclusiveSamplingParamsProps) => {
@@ -143,7 +145,7 @@ const ExclusiveSamplingParams = ({
             onChange={handleTemperatureChange}
             id="temperature"
             min={temperatureMin}
-            max={1}
+            max={temperatureMax}
             step={0.01}
             defaultValue={temperatureDefault}
             label="Temperature"

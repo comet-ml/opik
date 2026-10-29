@@ -1,8 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import api, { DATASETS_REST_ENDPOINT } from "@/api/api";
-import { AxiosError } from "axios";
-import { useToast } from "@/ui/use-toast";
-import { getApiErrorMessage } from "@/lib/api-error";
 import { JsonUploadFormat } from "@/types/datasets";
 
 type UseDatasetItemsFromJsonMutationParams = {
@@ -13,7 +10,6 @@ type UseDatasetItemsFromJsonMutationParams = {
 
 const useDatasetItemsFromJsonMutation = () => {
   const queryClient = useQueryClient();
-  const { toast } = useToast();
 
   return useMutation({
     mutationFn: async ({
@@ -36,13 +32,6 @@ const useDatasetItemsFromJsonMutation = () => {
       return {
         queryKey: ["dataset-items", { datasetId: params.datasetId }],
       };
-    },
-    onError: (error: AxiosError) => {
-      toast({
-        title: "Error",
-        description: getApiErrorMessage(error),
-        variant: "destructive",
-      });
     },
     onSettled: (data, error, variables, context) => {
       if (context) {

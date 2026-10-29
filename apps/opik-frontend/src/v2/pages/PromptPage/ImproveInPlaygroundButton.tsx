@@ -2,10 +2,7 @@ import React, { useCallback, useMemo, useState } from "react";
 import { Wand2 } from "lucide-react";
 
 import { PromptWithLatestVersion, PromptVersion } from "@/types/prompts";
-import {
-  COMPOSED_PROVIDER_TYPE,
-  LLMPromptConfigsType,
-} from "@/types/providers";
+import { COMPOSED_PROVIDER_TYPE } from "@/types/providers";
 import { MessageContent } from "@/types/llm";
 import { Button } from "@/ui/button";
 import { useToast } from "@/ui/use-toast";
@@ -20,8 +17,6 @@ type ImproveInPlaygroundButtonProps = {
   prompt?: PromptWithLatestVersion;
   activeVersion?: PromptVersion;
 };
-
-const EMPTY_CONFIGS: LLMPromptConfigsType = {};
 
 const ImproveInPlaygroundButton: React.FC<ImproveInPlaygroundButtonProps> = ({
   prompt,
@@ -95,7 +90,6 @@ const ImproveInPlaygroundButton: React.FC<ImproveInPlaygroundButtonProps> = ({
         originalPrompt={originalPrompt}
         model=""
         provider={"" as COMPOSED_PROVIDER_TYPE}
-        configs={EMPTY_CONFIGS}
         workspaceName={workspaceName}
         onAccept={handleAccept}
       />

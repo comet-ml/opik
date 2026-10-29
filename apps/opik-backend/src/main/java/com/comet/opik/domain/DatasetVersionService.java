@@ -167,6 +167,8 @@ public interface DatasetVersionService {
      */
     DatasetVersion getVersionByName(UUID datasetId, String versionName);
 
+    DatasetVersion getVersionByHash(UUID datasetId, String versionHash);
+
     /**
      * Gets multiple versions by their IDs.
      *
@@ -341,6 +343,20 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
             return dao.findByVersionName(datasetId, versionName, workspaceId)
                     .orElseThrow(() -> new NotFoundException(
                             "Version '%s' not found for dataset '%s'".formatted(versionName, datasetId)));
+        });
+    }
+
+    @Override
+    public DatasetVersion getVersionByHash(@NonNull UUID datasetId, @NonNull String versionHash) {
+        log.info("Getting version by hash '{}' for dataset '{}'", versionHash, datasetId);
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        return template.inTransaction(READ_ONLY, handle -> {
+            var dao = handle.attach(DatasetVersionDAO.class);
+            return dao.findByHash(datasetId, versionHash, workspaceId)
+                    .orElseThrow(() -> new NotFoundException(
+                            ERROR_VERSION_NOT_FOUND.formatted(versionHash, datasetId)));
         });
     }
 

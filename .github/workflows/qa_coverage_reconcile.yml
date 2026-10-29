@@ -34,6 +34,12 @@ concurrency:
 
 permissions:
   contents: read
+env:
+  # Retry transient PyPI/network failures longer before failing the build.
+  PIP_RETRIES: 8
+  PIP_DEFAULT_TIMEOUT: 30
+  UV_HTTP_TIMEOUT: 30
+  UV_HTTP_RETRIES: 8
 
 jobs:
 
@@ -56,7 +62,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v7
         with:
-          node-version: '20'
+          node-version: '26'
 
       - name: Install PyYAML
         run: pip install --quiet pyyaml

@@ -25,7 +25,7 @@ This guide explains how to log your voice agent to Opik. You will trace every ca
 
 Install the `opik` and `twilio-agent-connect` packages:
 
-```bash
+```bash wordWrap
 pip install opik twilio-agent-connect
 ```
 
@@ -44,7 +44,7 @@ Twilio Agent Connect calls your handler once for every caller turn. Add the `@op
 
 Set `thread_id` to the conversation id so that every turn of the same phone call is grouped into a single Opik thread:
 
-```python title="agent.py"
+```python title="agent.py" wordWrap
 import opik
 from opik import opik_context
 from tac import TAC, TACConfig
@@ -80,7 +80,7 @@ That is the whole tracing setup. One caller turn is one trace, and one phone cal
 
 You can also log useful call details as metadata:
 
-```python
+```python wordWrap
 opik_context.update_current_trace(
     thread_id=context.conversation_id,
     metadata={
@@ -96,7 +96,7 @@ A voice agent usually does several things before it answers: it looks up the cal
 
 Use the `type` argument to tell Opik what kind of step it is. Opik shows `llm` and `tool` spans differently, and `llm` spans are where token usage and cost appear.
 
-```python title="agent.py"
+```python title="agent.py" wordWrap
 @opik.track(name="knowledge-search", type="general")
 def search_knowledge_base(query: str) -> list[str]:
     return my_vector_store.search(query)
@@ -126,7 +126,7 @@ async def handle_message_ready(message, context, memory) -> str:
 
 Inside a tracked function, use `update_current_span` to record anything the arguments and return value do not already capture:
 
-```python
+```python wordWrap
 from opik import opik_context
 
 
@@ -150,7 +150,7 @@ def search_knowledge_base(query: str) -> list[str]:
 
 If you call an LLM provider directly, use the matching Opik integration instead of writing your own `llm` span. Token usage, cost and model parameters are then logged for you, and the spans still nest under the current turn:
 
-```python title="agent.py"
+```python title="agent.py" wordWrap
 from opik.integrations.openai import track_openai
 from openai import OpenAI
 
@@ -174,7 +174,7 @@ See the [OpenAI](/integrations/openai), [Anthropic](/integrations/anthropic) and
 
 A phone call is a live, unattended channel, so it is a good place to check what the caller says and what the agent is about to say. Opik guardrails run in the same request, and each check appears on the turn's trace with its own pass or fail result.
 
-```python title="agent.py"
+```python title="agent.py" wordWrap
 from opik import exceptions
 from opik.guardrails import Guardrail, PII, PromptInjection
 
@@ -203,7 +203,7 @@ Your handler receives text, because Twilio performs the speech-to-text and text-
 
 Twilio Agent Connect lets you run code when an inbound call arrives. Use that hook to start a recording, and tell Twilio where to notify you when the audio is ready:
 
-```python title="recording.py"
+```python title="recording.py" wordWrap
 from twilio.rest import Client
 from tac.models.voice import TwiMLOptions, TwiMLRequest
 
@@ -227,7 +227,7 @@ voice_channel.on_inbound_call_twiml(start_recording)
 
 When the call ends, Twilio calls your webhook with a link to the audio. Download it and attach it to a trace in the same thread:
 
-```python title="recording.py"
+```python title="recording.py" wordWrap
 import httpx
 import opik
 from opik import Attachment

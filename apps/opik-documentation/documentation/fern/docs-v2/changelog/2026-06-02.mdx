@@ -7,16 +7,12 @@ The Prompt Library is now part of the Opik 2.0 UI, accessible from the project s
 - **Prompt Library in the sidebar** — the Prompt Library is now a top-level section in every project in the new Opik 2.0 interface
 - **Fetch by environment** — `client.get_prompt(name, environment="production")` returns the version currently tagged as production; `version` and `environment` are mutually exclusive and passing both raises a clear error
 - **Assign environments** — `client.set_prompt_environments(name, ["production", "staging"])` replaces the full environment set on a version; the same environment is automatically moved away from whatever version previously held it
-- **Tag at creation** — `client.create_prompt(name, content="...", environments=["staging"])` and `client.create_chat_prompt(...)` accept `environments` directly
-- **TypeScript parity** — `setPromptEnvironments`, `getPrompt({ environment })`, and `createPrompt({ environments })` mirror the Python API
+- **TypeScript parity** — `setPromptEnvironments` and `getPrompt({ environment })` mirror the Python API
 - **Sequential version numbers** — prompt versions now show as `v1`, `v2`, `v3` in the UI and API instead of raw commit hashes
 - **Environment badges everywhere** — assigned environments appear next to every version reference in the prompt library, history timeline, diff view, and Playground
 - **Terminology update** — "commit" has been replaced with "version" throughout the prompt UI
 
-```python
-# Tag a version at creation time
-prompt = client.create_prompt("system-prompt", content="...", environments=["staging"])
-
+```python wordWrap
 # Retrieve by environment — no hard-coded version number needed
 production_prompt = client.get_prompt("system-prompt", environment="production")
 

@@ -4,6 +4,7 @@ from typing import Dict, Any, List
 import pytest
 
 import opik
+from opik import synchronization
 from opik.evaluation import metrics
 from opik.evaluation import test_result
 from opik.evaluation.metrics import score_result
@@ -32,6 +33,11 @@ def test_experiment_scoring_functions__standard_deviation__computed_and_logged(
             },
         ]
     )
+    # The items become readable shortly after the insert returns; evaluating sooner can
+    # score only some of them.
+    assert synchronization.until(
+        lambda: len(dataset.get_items()) == 3, max_try_seconds=10
+    ), "The 3 dataset items were not readable in time"
 
     def task(item: Dict[str, Any]):
         # Return correct answers for France and Germany, wrong answer for Poland

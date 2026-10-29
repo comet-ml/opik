@@ -18,6 +18,8 @@ interface ButtonWithDropdownTriggerProps
     > {
   children: React.ReactNode;
   onPrimaryClick?: () => void;
+  // Extra classes for the chevron half (e.g. a design's fixed size or divider).
+  triggerClassName?: string;
 }
 
 // Dropdown trigger styles by variant (darker background when open)
@@ -51,6 +53,7 @@ const ButtonWithDropdownTrigger = React.forwardRef<
       children,
       onPrimaryClick,
       disabled,
+      triggerClassName,
     },
     ref,
   ) => {
@@ -82,6 +85,7 @@ const ButtonWithDropdownTrigger = React.forwardRef<
               dropdownTriggerSizeStyles[
                 size as keyof typeof dropdownTriggerSizeStyles
               ],
+              triggerClassName,
             )}
             aria-label="Show more options"
           >

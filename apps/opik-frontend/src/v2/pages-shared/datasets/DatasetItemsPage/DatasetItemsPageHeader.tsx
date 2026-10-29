@@ -1,4 +1,6 @@
 import React from "react";
+import { useRouter } from "@tanstack/react-router";
+import { StringParam, useQueryParam } from "use-query-params";
 import {
   Check,
   CheckCheck,
@@ -28,6 +30,10 @@ import {
   TooltipTrigger,
 } from "@/ui/tooltip";
 import { Dataset } from "@/types/datasets";
+import {
+  COMPARE_EXPERIMENTS_ROUTE,
+  parseExperimentReturnHref,
+} from "./parseExperimentReturnHref";
 
 interface DatasetItemsPageHeaderProps {
   dataset: Dataset | undefined;
@@ -66,6 +72,10 @@ const DatasetItemsPageHeader: React.FunctionComponent<
   onAddItem,
   onExpand,
 }) => {
+  const router = useRouter();
+  const [from] = useQueryParam("from", StringParam);
+  const experimentReturn = parseExperimentReturnHref(from, router.basepath);
+
   const datasetTags = dataset?.tags ?? [];
   const showTags = canEditDatasets || datasetTags.length > 0;
 
@@ -75,14 +85,23 @@ const DatasetItemsPageHeader: React.FunctionComponent<
     <div className="mb-4">
       <div className="mb-4 flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
-          <BackButton
-            to={
-              isTestSuite
-                ? "/$workspaceName/projects/$projectId/test-suites"
-                : "/$workspaceName/projects/$projectId/datasets"
-            }
-            tooltip={isTestSuite ? "Back to test suites" : "Back to datasets"}
-          />
+          {experimentReturn ? (
+            <BackButton
+              to={COMPARE_EXPERIMENTS_ROUTE}
+              params={experimentReturn.params}
+              search={router.options.parseSearch(experimentReturn.searchStr)}
+              tooltip="Back to experiment"
+            />
+          ) : (
+            <BackButton
+              to={
+                isTestSuite
+                  ? "/$workspaceName/projects/$projectId/test-suites"
+                  : "/$workspaceName/projects/$projectId/datasets"
+              }
+              tooltip={isTestSuite ? "Back to test suites" : "Back to datasets"}
+            />
+          )}
           {hasDraft && (
             <Tag variant="orange" size="md">
               Draft

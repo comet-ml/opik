@@ -119,12 +119,14 @@ export interface ExperimentOutputColumn {
   types: DYNAMIC_COLUMN_TYPE[];
 }
 
+// The backend keeps the link to a deleted prompt but omits its name, commit
+// and version number.
 export interface ExperimentPromptVersion {
   id: string;
-  commit: string;
+  commit?: string;
   version_number?: string;
   prompt_id: string;
-  prompt_name: string;
+  prompt_name?: string;
 }
 
 export enum EXPERIMENT_TYPE {
@@ -138,6 +140,7 @@ export enum EXPERIMENT_STATUS {
   COMPLETED = "completed",
   CANCELLED = "cancelled",
   RUNNING = "running",
+  FAILED = "failed",
 }
 
 export enum EVALUATION_METHOD {
@@ -178,6 +181,7 @@ export interface Experiment {
   assertion_scores?: AssertionScoreAverage[];
   created_at: string;
   last_updated_at: string;
+  finished_at?: string | null;
   comments?: CommentItems;
 }
 

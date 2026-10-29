@@ -96,6 +96,7 @@ class RawAlertsClient:
         enabled: typing.Optional[bool] = OMIT,
         alert_type: typing.Optional[AlertWriteAlertType] = OMIT,
         metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
+        custom_fields: typing.Optional[typing.Dict[str, str]] = OMIT,
         triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
         project_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -116,6 +117,9 @@ class RawAlertsClient:
         alert_type : typing.Optional[AlertWriteAlertType]
 
         metadata : typing.Optional[typing.Dict[str, str]]
+
+        custom_fields : typing.Optional[typing.Dict[str, str]]
+            Optional user-defined key/value pairs, added as top-level keys of the alert's EventBridge event detail. Keys must not collide with the event's own keys.
 
         triggers : typing.Optional[typing.Sequence[AlertTriggerWrite]]
 
@@ -138,6 +142,7 @@ class RawAlertsClient:
                 "enabled": enabled,
                 "alert_type": alert_type,
                 "metadata": metadata,
+                "custom_fields": custom_fields,
                 "webhook": convert_and_respect_annotation_metadata(
                     object_=webhook, annotation=WebhookWrite, direction="write"
                 ),
@@ -300,6 +305,7 @@ class RawAlertsClient:
         enabled: typing.Optional[bool] = OMIT,
         alert_type: typing.Optional[AlertWriteAlertType] = OMIT,
         metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
+        custom_fields: typing.Optional[typing.Dict[str, str]] = OMIT,
         triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
         project_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -323,6 +329,9 @@ class RawAlertsClient:
 
         metadata : typing.Optional[typing.Dict[str, str]]
 
+        custom_fields : typing.Optional[typing.Dict[str, str]]
+            Optional user-defined key/value pairs, added as top-level keys of the alert's EventBridge event detail. Keys must not collide with the event's own keys.
+
         triggers : typing.Optional[typing.Sequence[AlertTriggerWrite]]
 
         project_id : typing.Optional[str]
@@ -344,6 +353,7 @@ class RawAlertsClient:
                 "enabled": enabled,
                 "alert_type": alert_type,
                 "metadata": metadata,
+                "custom_fields": custom_fields,
                 "webhook": convert_and_respect_annotation_metadata(
                     object_=webhook, annotation=WebhookWrite, direction="write"
                 ),
@@ -452,6 +462,7 @@ class RawAlertsClient:
         enabled: typing.Optional[bool] = OMIT,
         alert_type: typing.Optional[AlertWriteAlertType] = OMIT,
         metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
+        custom_fields: typing.Optional[typing.Dict[str, str]] = OMIT,
         triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
         project_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -472,6 +483,9 @@ class RawAlertsClient:
         alert_type : typing.Optional[AlertWriteAlertType]
 
         metadata : typing.Optional[typing.Dict[str, str]]
+
+        custom_fields : typing.Optional[typing.Dict[str, str]]
+            Optional user-defined key/value pairs, added as top-level keys of the alert's EventBridge event detail. Keys must not collide with the event's own keys.
 
         triggers : typing.Optional[typing.Sequence[AlertTriggerWrite]]
 
@@ -495,6 +509,7 @@ class RawAlertsClient:
                 "enabled": enabled,
                 "alert_type": alert_type,
                 "metadata": metadata,
+                "custom_fields": custom_fields,
                 "webhook": convert_and_respect_annotation_metadata(
                     object_=webhook, annotation=WebhookWrite, direction="write"
                 ),
@@ -605,6 +620,7 @@ class AsyncRawAlertsClient:
         enabled: typing.Optional[bool] = OMIT,
         alert_type: typing.Optional[AlertWriteAlertType] = OMIT,
         metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
+        custom_fields: typing.Optional[typing.Dict[str, str]] = OMIT,
         triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
         project_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -625,6 +641,9 @@ class AsyncRawAlertsClient:
         alert_type : typing.Optional[AlertWriteAlertType]
 
         metadata : typing.Optional[typing.Dict[str, str]]
+
+        custom_fields : typing.Optional[typing.Dict[str, str]]
+            Optional user-defined key/value pairs, added as top-level keys of the alert's EventBridge event detail. Keys must not collide with the event's own keys.
 
         triggers : typing.Optional[typing.Sequence[AlertTriggerWrite]]
 
@@ -647,6 +666,7 @@ class AsyncRawAlertsClient:
                 "enabled": enabled,
                 "alert_type": alert_type,
                 "metadata": metadata,
+                "custom_fields": custom_fields,
                 "webhook": convert_and_respect_annotation_metadata(
                     object_=webhook, annotation=WebhookWrite, direction="write"
                 ),
@@ -809,6 +829,7 @@ class AsyncRawAlertsClient:
         enabled: typing.Optional[bool] = OMIT,
         alert_type: typing.Optional[AlertWriteAlertType] = OMIT,
         metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
+        custom_fields: typing.Optional[typing.Dict[str, str]] = OMIT,
         triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
         project_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -832,6 +853,9 @@ class AsyncRawAlertsClient:
 
         metadata : typing.Optional[typing.Dict[str, str]]
 
+        custom_fields : typing.Optional[typing.Dict[str, str]]
+            Optional user-defined key/value pairs, added as top-level keys of the alert's EventBridge event detail. Keys must not collide with the event's own keys.
+
         triggers : typing.Optional[typing.Sequence[AlertTriggerWrite]]
 
         project_id : typing.Optional[str]
@@ -853,6 +877,7 @@ class AsyncRawAlertsClient:
                 "enabled": enabled,
                 "alert_type": alert_type,
                 "metadata": metadata,
+                "custom_fields": custom_fields,
                 "webhook": convert_and_respect_annotation_metadata(
                     object_=webhook, annotation=WebhookWrite, direction="write"
                 ),
@@ -961,6 +986,7 @@ class AsyncRawAlertsClient:
         enabled: typing.Optional[bool] = OMIT,
         alert_type: typing.Optional[AlertWriteAlertType] = OMIT,
         metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
+        custom_fields: typing.Optional[typing.Dict[str, str]] = OMIT,
         triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
         project_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -981,6 +1007,9 @@ class AsyncRawAlertsClient:
         alert_type : typing.Optional[AlertWriteAlertType]
 
         metadata : typing.Optional[typing.Dict[str, str]]
+
+        custom_fields : typing.Optional[typing.Dict[str, str]]
+            Optional user-defined key/value pairs, added as top-level keys of the alert's EventBridge event detail. Keys must not collide with the event's own keys.
 
         triggers : typing.Optional[typing.Sequence[AlertTriggerWrite]]
 
@@ -1004,6 +1033,7 @@ class AsyncRawAlertsClient:
                 "enabled": enabled,
                 "alert_type": alert_type,
                 "metadata": metadata,
+                "custom_fields": custom_fields,
                 "webhook": convert_and_respect_annotation_metadata(
                     object_=webhook, annotation=WebhookWrite, direction="write"
                 ),

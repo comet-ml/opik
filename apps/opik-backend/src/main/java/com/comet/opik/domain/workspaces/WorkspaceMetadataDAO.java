@@ -1,13 +1,14 @@
 package com.comet.opik.domain.workspaces;
 
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.WorkspaceSettings;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.ConnectionFactory;
 import jakarta.inject.Inject;
-import jakarta.inject.Named;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import reactor.core.publisher.Mono;
 
 import java.util.Optional;
@@ -21,8 +22,13 @@ interface WorkspaceMetadataDAO {
 }
 
 @Singleton
+@RequiredArgsConstructor(onConstructor_ = @Inject)
 class WorkspaceMetadataDAOImpl implements WorkspaceMetadataDAO {
 
+    /**
+     * Under {@code spanWeeksReadBounded}, both {@code spans} reads are bound to the weeks {@code span_weeks} holds for
+     * the project, so they skip the partitions without a span of the project.
+     */
     private static final String CALCULATE_METADATA = """
             WITH
                 query_result AS (
@@ -37,6 +43,9 @@ class WorkspaceMetadataDAOImpl implements WorkspaceMetadataDAO {
                         FROM spans
                         WHERE workspace_id = :workspace_id
                         AND project_id = :project_id
+                        <if(project_span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                            SELECT DISTINCT id_week FROM span_weeks
+                            WHERE workspace_id = :workspace_id AND project_id = :project_id)<endif>
                         ORDER BY (workspace_id, project_id, trace_id, id) DESC
                         LIMIT 1000
                     )
@@ -47,23 +56,15 @@ class WorkspaceMetadataDAOImpl implements WorkspaceMetadataDAO {
             			FROM spans
             			WHERE workspace_id = :workspace_id
             			AND project_id = :project_id
-            	),
-                table_size AS (
-                    SELECT
-                        SUM(data_uncompressed_bytes) AS total_compressed_size
-                    FROM system.parts
-                    WHERE database = :database_name
-                    AND table = 'spans'
-                    AND active
-                )
+            			<if(project_span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+            			    SELECT DISTINCT id_week FROM span_weeks
+            			    WHERE workspace_id = :workspace_id AND project_id = :project_id)<endif>
+            	)
 
             SELECT
                 round((query_result.query_size * total_spans.total_count) / 1e9, 2) AS size_gb_,
-                if(isNaN(size_gb_), 0, size_gb_) AS size_gb,
-                round(table_size.total_compressed_size / 1e9, 2) AS total_table_size_gb_,
-                if(isNaN(total_table_size_gb_), 0, total_table_size_gb_) AS total_table_size_gb,
-                round((size_gb / total_table_size_gb) * 100, 2) AS percentage_of_table
-            FROM query_result, table_size, total_spans;
+                if(isNaN(size_gb_), 0, size_gb_) AS size_gb
+            FROM query_result, total_spans;
             """;
 
     private static final String CALCULATE_EXPERIMENT_METADATA = """
@@ -76,35 +77,25 @@ class WorkspaceMetadataDAOImpl implements WorkspaceMetadataDAO {
             <if(dataset_id)>AND e.dataset_id = :dataset_id<endif>
             """;
 
-    private final ConnectionFactory connectionFactory;
-    private final String databaseName;
-    private final WorkspaceSettings workspaceSettings;
-
-    @Inject
-    public WorkspaceMetadataDAOImpl(
-            @NonNull ConnectionFactory connectionFactory,
-            @NonNull @Named("Database Analytics Database Name") String databaseName,
-            @NonNull WorkspaceSettings workspaceSettings) {
-        this.connectionFactory = connectionFactory;
-        this.databaseName = databaseName;
-        this.workspaceSettings = workspaceSettings;
-    }
+    private final @NonNull ConnectionFactory connectionFactory;
+    private final @NonNull WorkspaceSettings workspaceSettings;
+    private final @NonNull OpikConfiguration configuration;
 
     @Override
     public Mono<ScopeMetadata> getProjectMetadata(@NonNull String workspaceId, @NonNull UUID projectId) {
+        var template = TemplateUtils.newST(CALCULATE_METADATA);
+        if (configuration.getDatabaseAnalyticsDataModel().spanWeeksReadBounded()) {
+            template.add("project_span_weeks_bound", true);
+        }
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
-                    var statement = connection.createStatement(CALCULATE_METADATA)
+                    var statement = connection.createStatement(template.render())
                             .bind("workspace_id", workspaceId)
-                            .bind("database_name", databaseName)
                             .bind("project_id", projectId);
                     return statement.execute();
                 })
                 .flatMap(result -> result.map((row, rowMetadata) -> ScopeMetadata.builder()
                         .sizeGb(Optional.ofNullable(row.get("size_gb", Double.class)).orElse(0.0))
-                        .totalTableSizeGb(Optional.ofNullable(row.get("total_table_size_gb", Double.class)).orElse(0.0))
-                        .percentageOfTable(
-                                Optional.ofNullable(row.get("percentage_of_table", Double.class)).orElse(0.0))
                         .limitSizeGb(workspaceSettings.maxProjectSizeToAllowSorting())
                         .build()))
                 .single(ScopeMetadata.builder()

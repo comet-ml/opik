@@ -33,7 +33,7 @@ Before integrating Opik with Langflow, ensure you have:
 
 Install both Langflow and Opik in the same environment:
 
-```bash
+```bash wordWrap
 pip install langflow opik
 ```
 
@@ -45,7 +45,7 @@ Configure Opik to connect to your Opik instance. Run the following command in th
 
 <Tabs>
     <Tab value="Opik Cloud" title="Opik Cloud">
-        ```bash
+        ```bash wordWrap
         opik configure
         ```
         
@@ -54,7 +54,7 @@ Configure Opik to connect to your Opik instance. Run the following command in th
     <Tab value="Enterprise deployment" title="Enterprise deployment">
         Set the following environment variables before running `opik configure`:
         
-        ```bash
+        ```bash wordWrap
         export OPIK_URL_OVERRIDE="https://<comet-deployment-url>/opik/api"
         opik configure
         ```
@@ -62,7 +62,7 @@ Configure Opik to connect to your Opik instance. Run the following command in th
         You'll be prompted to enter your Opik API key. Replace `<comet-deployment-url>` with your enterprise deployment URL.
     </Tab>
     <Tab value="Self-hosted instance" title="Self-hosted instance">
-        ```bash
+        ```bash wordWrap
         opik configure --use_local
         ```
         
@@ -76,7 +76,7 @@ The configuration will be saved to `~/.opik.config` and used automatically by La
 
 Once Opik is configured, start Langflow in the same terminal or environment:
 
-```bash
+```bash wordWrap
 langflow run
 ```
 
@@ -112,7 +112,7 @@ Each trace includes:
 
 By default, Langflow traces are logged to the "Default Project" in Opik. You can specify a custom project name by setting the `OPIK_PROJECT_NAME` environment variable before starting Langflow:
 
-```bash
+```bash wordWrap
 export OPIK_PROJECT_NAME="my-langflow-project"
 langflow run
 ```
@@ -127,7 +127,7 @@ To disable the Opik integration, you can:
 
 1. Remove the `~/.opik.config` file
 2. Or unset the Opik environment variables:
-   ```bash
+   ```bash wordWrap
    unset OPIK_API_KEY
    unset OPIK_URL_OVERRIDE
    unset OPIK_WORKSPACE
@@ -142,7 +142,7 @@ Then restart Langflow.
 If your traces aren't appearing in Opik:
 
 1. **Verify Opik configuration**:
-   ```bash
+   ```bash wordWrap
    cat ~/.opik.config
    ```
    Ensure the API key and URL are correct.
@@ -150,7 +150,7 @@ If your traces aren't appearing in Opik:
 2. **Check Langflow logs**: Look for any Opik-related errors in the Langflow console output.
 
 3. **Test Opik connection**: Run a simple Python script to verify your Opik configuration:
-   ```python
+   ```python wordWrap
    import opik
    client = opik.Opik()
    client.auth_check()
@@ -158,7 +158,7 @@ If your traces aren't appearing in Opik:
    ```
 
 4. **Verify Opik SDK installation**: Ensure the Opik SDK is installed in the same environment as Langflow:
-   ```bash
+   ```bash wordWrap
    pip list | grep opik
    ```
 
@@ -169,7 +169,7 @@ If Langflow isn't detecting your Opik configuration:
 1. Ensure you ran `opik configure` in the same terminal/environment where you start Langflow
 2. Check that the `~/.opik.config` file exists and contains valid configuration
 3. Try setting environment variables explicitly:
-   ```bash
+   ```bash wordWrap
    export OPIK_API_KEY="your-api-key"
    export OPIK_WORKSPACE="default"
    langflow run

@@ -15,12 +15,37 @@ have stored quite happily. Erring the other way costs nothing: the backend deser
 and drops what it considers failed.
 """
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 
 def has_usable_score(scores: List[Dict[str, Any]]) -> bool:
     """Whether at least one of these score results is one the backend can store."""
     return any(_is_usable(score) for score in scores)
+
+
+def rejection_reason(response: Any) -> Optional[str]:
+    """Why ``evaluator.execute_evaluator_python`` would reject this response.
+
+    Returns ``None`` when the response is servable. The labels are the same ones
+    used for the execution-outcome telemetry, so the counter cannot disagree with
+    the HTTP layer: ``error_payload`` (the metric returned an error), ``no_scores``
+    (no ``scores`` list, an empty one, or a null/non-list value), and
+    ``no_usable_score`` (scores are present but none can be stored).
+    """
+    if not isinstance(response, dict):
+        return "unparsable_result"
+
+    if "error" in response:
+        return "error_payload"
+
+    scores = response.get("scores")
+    if not isinstance(scores, list) or len(scores) == 0:
+        return "no_scores"
+
+    if not has_usable_score(scores):
+        return "no_usable_score"
+
+    return None
 
 
 def _is_usable(score: Any) -> bool:

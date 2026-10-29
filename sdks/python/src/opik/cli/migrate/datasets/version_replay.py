@@ -607,6 +607,10 @@ def _stream_version_items_raw(
         read_source=_fetch_page,
         parsed_item_class=dataset_item_public.DatasetItemPublic,
         max_results=sys.maxsize,
+        # A short read here becomes deletions in _compute_delta: an item this run
+        # failed to parse would be replayed as deleted from the target even though
+        # it is still there. Fail instead.
+        strict=True,
     )
 
 

@@ -2,8 +2,9 @@ package com.comet.opik.api.resources.utils;
 
 import com.codahale.metrics.MetricRegistry;
 import com.comet.opik.TestConfigUtils;
+import com.comet.opik.infrastructure.http.DestinationGuardJerseyClientBuilder;
 import com.comet.opik.infrastructure.http.HttpModule;
-import io.dropwizard.client.JerseyClientBuilder;
+import com.comet.opik.infrastructure.http.MatrixParameterRequestFilter;
 import jakarta.ws.rs.client.Client;
 import lombok.Getter;
 import lombok.experimental.Accessors;
@@ -28,6 +29,10 @@ public class TestHttpClientUtils {
     public static final String PROJECT_NAME_NOT_FOUND_MESSAGE = "Project name: %s not found";
     public static final io.dropwizard.jersey.errors.ErrorMessage NO_API_KEY_RESPONSE = new io.dropwizard.jersey.errors.ErrorMessage(
             401, MISSING_API_KEY);
+    public static final io.dropwizard.jersey.errors.ErrorMessage NOT_FOUND_RESPONSE = new io.dropwizard.jersey.errors.ErrorMessage(
+            404, "HTTP 404 Not Found");
+    public static final io.dropwizard.jersey.errors.ErrorMessage MATRIX_PARAMETERS_RESPONSE = new io.dropwizard.jersey.errors.ErrorMessage(
+            404, MatrixParameterRequestFilter.MATRIX_PARAMETERS_NOT_SUPPORTED_MESSAGE);
 
     /**
      * Returns a static {@link Client} for direct unit tests that construct services manually
@@ -43,18 +48,27 @@ public class TestHttpClientUtils {
      */
     @Getter
     @Accessors(fluent = true)
-    private final Client client = newClient();
+    private final Client client = newClient(false);
 
-    private Client newClient() {
+    /**
+     * As {@link #client()}, but decompressing responses as the production client does: config-test.yml turns gzip off,
+     * while the production default leaves it on.
+     */
+    @Getter
+    @Accessors(fluent = true)
+    private final Client gzipClient = newClient(true);
+
+    private Client newClient(boolean gzipEnabled) {
         try {
             var jerseyConfig = TestConfigUtils.loadConfigTest().getJerseyClient();
+            jerseyConfig.setGzipEnabled(gzipEnabled);
             var executor = new ThreadPoolExecutor(
                     jerseyConfig.getMinThreads(),
                     jerseyConfig.getMaxThreads(),
                     60L, TimeUnit.SECONDS,
                     new ArrayBlockingQueue<>(jerseyConfig.getWorkQueueSize()),
                     newThreadFactory());
-            var jerseyClientBuilder = new JerseyClientBuilder(new MetricRegistry())
+            var jerseyClientBuilder = new DestinationGuardJerseyClientBuilder(new MetricRegistry())
                     .using(executor);
             return HttpModule.buildClient(jerseyClientBuilder, jerseyConfig);
         } catch (Exception exception) {

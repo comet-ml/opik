@@ -258,7 +258,7 @@ export const useExperimentsTableConfig = <
               countAggregationKey: "experiment_count",
               explainer: {
                 id: "group-experiments",
-                description: `Some experiments reference a dataset that has been deleted`,
+                description: `Some experiments reference an item source that has been deleted`,
               },
             },
           } as ColumnData<T>;

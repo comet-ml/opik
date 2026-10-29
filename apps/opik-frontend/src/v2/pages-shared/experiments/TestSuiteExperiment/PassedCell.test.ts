@@ -45,13 +45,15 @@ describe("getStatusFromExperimentItems", () => {
   });
 
   describe("items without assertions", () => {
-    it("returns SKIPPED with 'no assertions' reason when items have no status", () => {
+    it("returns SKIPPED with a 'no assertion results' reason when items have no status", () => {
       const row = makeRow({
         experiment_items: [makeItem({ id: "i1" })],
       });
       const result = getStatusFromExperimentItems(row);
       expect(result.status).toBe(RunStatus.SKIPPED);
-      expect(result.reason).toBe("No assertions defined");
+      expect(result.reason).toBe(
+        "No assertion results for this item. Either no assertions apply to it, or they haven't been scored.",
+      );
     });
   });
 
@@ -221,11 +223,13 @@ describe("getStatusInfoForExperiment", () => {
   });
 
   describe("item without assertions", () => {
-    it("returns SKIPPED with 'no assertions' reason when item has no status", () => {
+    it("returns SKIPPED with a 'no assertion results' reason when item has no status", () => {
       const item = makeItem({ id: "i1" });
       const result = getStatusInfoForExperiment(makeRow(), "exp-1", item);
       expect(result.status).toBe(RunStatus.SKIPPED);
-      expect(result.reason).toBe("No assertions defined");
+      expect(result.reason).toBe(
+        "No assertion results for this item. Either no assertions apply to it, or they haven't been scored.",
+      );
     });
   });
 

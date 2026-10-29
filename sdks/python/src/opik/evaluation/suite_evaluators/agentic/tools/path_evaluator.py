@@ -5,6 +5,8 @@ doc §5.3 for the canonical grammar. The supported forms are:
 
     .                       root
     .foo / .foo.bar         dotted field access
+    .["a-b"] / ["a-b"]      quoted field access, for keys the dotted form
+                            cannot express (see path_format.field_step)
     .foo[3] / .foo[-1]      array index (negative allowed)
     .foo[0:5]               array slice (Python-style, bounds optional)
     .foo[]                  iterate array → multi-result
@@ -24,6 +26,8 @@ Predicates inside `select(...)`:
     <pred> or <pred>
     ( <pred> )
 
+String literals in predicates use JSON string syntax and escaping.
+
 Anything outside this grammar produces a `PathError` with `reason` set;
 callers (the `scan` tool) translate that into a structured error
 response so the model can retry within the prompt-taught grammar.
@@ -35,8 +39,11 @@ Both raise `PathLimitError` with a descriptive message.
 """
 
 import dataclasses
+import json
 import re
 from typing import Any, Iterable, Iterator, List, Optional, Union
+
+from .. import path_format
 
 DEFAULT_MAX_DEPTH = 200
 DEFAULT_MAX_RESULTS = 10_000
@@ -51,7 +58,8 @@ def normalize_expression(expression: str) -> str:
     """Auto-prepend a leading `.` when the caller omits it.
 
     Every valid expression in the SDK's constrained jq dialect begins
-    with `.` (root, field access) or `..` (recursive descent). Models
+    with `.` (root, field access) or `..` (recursive descent), except
+    bracket-quoted root keys emitted by `path_format`. Models
     sometimes drop the leading dot — `dataset_item` instead of
     `.dataset_item` — typically when they pasted a field name from a
     `read` payload. Silently rewriting to `.<name>` avoids the
@@ -66,7 +74,9 @@ def normalize_expression(expression: str) -> str:
     if not stripped:
         return expression
     first = stripped[0]
-    if first.isalpha() or first == "_":
+    # Bare identifiers and bracket-quoted keys may omit the leading dot.
+    # Bare indexes, slices, and iterators must stay invalid at the root.
+    if first.isalpha() or first == "_" or re.match(r'\[\s*"', stripped) is not None:
         return "." + expression
     return expression
 
@@ -215,7 +225,10 @@ _TOKEN_RE = re.compile(
     re.VERBOSE,
 )
 
-_KEYWORDS = {"and", "or", "not", "select", "strings", "true", "false", "null"}
+# Read the reserved words from the grammar's own source of truth so the two
+# sides of the format cannot drift apart again -- a key the parser lexes as a
+# keyword has to be bracket-quoted by the renderer.
+_KEYWORDS = path_format.RESERVED_KEYWORDS
 
 
 @dataclasses.dataclass
@@ -338,6 +351,12 @@ class _Parser:
         # `[]` — iterate.
         if self._accept("RBRACKET") is not None:
             return Iterate()
+        # `["quoted-key"]` — field access for keys the dotted form cannot
+        # express; this is the form `path_format.field_step` renders.
+        quoted = self._accept("STRING")
+        if quoted is not None:
+            self._expect("RBRACKET")
+            return Field(name=_unquote(quoted.value))
         # `[ INTEGER ]` or `[ INTEGER? : INTEGER? ]`.
         start: Optional[int] = None
         stop: Optional[int] = None
@@ -354,8 +373,8 @@ class _Parser:
         if first_int is None:
             tok = self._peek()
             raise PathError(
-                f"Expected integer, slice, or ']' at position {tok.pos}, "
-                f"got {tok.value!r}"
+                f"Expected integer, slice, quoted key, or ']' at position "
+                f"{tok.pos}, got {tok.value!r}"
             )
         self._expect("RBRACKET")
         return Index(idx=start or 0)
@@ -434,9 +453,13 @@ class _Parser:
 
 
 def _unquote(quoted: str) -> str:
-    # Strip enclosing quotes, then unescape `\"` and `\\`.
-    body = quoted[1:-1]
-    return body.encode("utf-8").decode("unicode_escape")
+    try:
+        value = json.loads(quoted)
+    except json.JSONDecodeError as error:
+        raise PathError(f"Invalid quoted string: {error.msg}") from error
+    if not isinstance(value, str):
+        raise PathError("Expected a quoted string")
+    return value
 
 
 def parse(expression: str) -> PathExpr:

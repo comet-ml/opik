@@ -307,7 +307,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
         Args:
             model: The model to use for generating the template
-            prompt: The base prompts to modify
+            prompts: The base prompts to modify
             few_shot_examples: List of example pairs with input and output fields
             allowed_roles: Optional set of allowed message roles (e.g., {"system", "user"}).
                 Note: Role constraints are NOT applied here to preserve placeholder-bearing messages.

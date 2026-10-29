@@ -9,7 +9,7 @@ title: Evaluate your agent
 ---
 
 <Tip>
-  In Opik 2.0, Experiments and Evaluation Suites are project-scoped. Make sure to specify a `project_name` when creating datasets and running experiments.
+  In Opik 2.0, Experiments and Evaluation Suites are project-scoped. Make sure to specify a `project_name` when creating datasets. In the Python SDK, `evaluate()` logs its traces to the dataset's project.
 </Tip>
 
 Evaluating your LLM application allows you to have confidence in the performance of your LLM application. In this guide, we will walk through the process of evaluating complex applications like LLM chains or agents.
@@ -31,7 +31,7 @@ full visibility into each evaluation run. In the example below we will use a com
 `track` decorator and the `track_openai` function to trace the LLM application.
 
 <CodeBlocks>
-    ```python title="Python" language="python"
+    ```python title="Python" language="python" wordWrap
     from opik import track
     from opik.integrations.openai import track_openai
     import openai
@@ -65,7 +65,7 @@ dictionary with keys that match the parameters expected by the metrics you are u
 this example we can define the evaluation task as follows:
 
 <CodeBlocks>
-```typescript title="TypeScript" language="typescript"
+```typescript title="TypeScript" language="typescript" wordWrap
 import { EvaluationTask } from "opik";
 import { OpenAI } from "openai";
 
@@ -93,7 +93,7 @@ const llmTask: EvaluationTask<DatasetItem> = async (datasetItem) => {
 
 ````
 
-```python title="Python" language="python"
+```python title="Python" language="python" wordWrap
 def evaluation_task(x):
     return {
         "output": your_llm_application(x['user_question'])
@@ -116,7 +116,7 @@ If you have already created a Dataset, you can use the get or create dataset met
 fetch it.
 
 <CodeBlocks>
-    ```typescript title="TypeScript" language="typescript"
+    ```typescript title="TypeScript" language="typescript" wordWrap
     import { Opik } from "opik";
 
     const client = new Opik();
@@ -136,7 +136,7 @@ fetch it.
     ]);
     ```
 
-    ```python title="Python" language="python"
+    ```python title="Python" language="python" wordWrap
     from opik import Opik
 
     client = Opik()
@@ -167,14 +167,14 @@ Opik provides a set of built-in evaluation metrics that you can choose from. The
 In the same evaluation experiment, you can use multiple metrics to evaluate your application:
 
 <CodeBlocks>
-```typescript title="TypeScript" language="typescript"
+```typescript title="TypeScript" language="typescript" wordWrap
 import { ExactMatch } from "opik";
 
 const exact_match_metric = new ExactMatch();
 
 ````
 
-```python title="Python" language="python"
+```python title="Python" language="python" wordWrap
 from opik.evaluation.metrics import Hallucination
 
 hallucination_metric = Hallucination()
@@ -193,7 +193,7 @@ Now that we have the task we want to evaluate, the dataset to evaluate on, and t
 we want to evaluate with, we can run the evaluation:
 
 <CodeBlocks>
-    ```typescript title="TypeScript" language="typescript" maxLines=1000
+    ```typescript title="TypeScript" language="typescript" maxLines=1000 wordWrap
     import { EvaluationTask, Opik, ExactMatch, evaluate } from "opik";
     import { OpenAI } from "openai";
 
@@ -249,7 +249,7 @@ we want to evaluate with, we can run the evaluation:
     console.log(`Total test cases: ${result.testResults.length}`);
     ```
 
-    ```python title="Python" language="python" maxLines=1000
+    ```python title="Python" language="python" maxLines=1000 wordWrap
     import opik
     from opik import Opik, track
     from opik.evaluation import evaluate
@@ -293,7 +293,6 @@ we want to evaluate with, we can run the evaluation:
         dataset=dataset,
         task=evaluation_task,
         scoring_metrics=[hallucination_metric],
-        project_name="my-project",
         experiment_config={
             "model": MODEL
         }
@@ -350,7 +349,7 @@ above, if the scoring method expects `input` as an argument, you can map the `us
 the `input` key as follows:
 
 <CodeBlocks>
-```typescript title="TypeScript" language="typescript"
+```typescript title="TypeScript" language="typescript" wordWrap
 evaluation = evaluate({
     dataset,
     task: evaluation_task,
@@ -359,7 +358,7 @@ evaluation = evaluate({
 })
 ```
 
-```python title="Python" language="python"
+```python title="Python" language="python" wordWrap
 evaluation = evaluate(
     dataset=dataset,
     task=evaluation_task,
@@ -377,7 +376,7 @@ The [Opik prompt library](/development/prompt-library/getting-started) can be us
 When creating an Experiment, you can link the Experiment to a specific prompt version:
 
 <CodeBlocks>
-    ```typescript title="TypeScript" language="typescript"
+    ```typescript title="TypeScript" language="typescript" wordWrap
     import { Opik, evaluate, evaluatePrompt } from 'opik';
     import { Hallucination } from 'opik';
 
@@ -403,7 +402,7 @@ When creating an Experiment, you can link the Experiment to a specific prompt ve
     });
     ```
 
-    ```python title="Python" language="python"
+    ```python title="Python" language="python" wordWrap
     import opik
 
     # Create a prompt
@@ -419,7 +418,6 @@ When creating an Experiment, you can link the Experiment to a specific prompt ve
         task=evaluation_task,
         scoring_metrics=[hallucination_metric],
         prompts=[prompt],
-        project_name="my-project",
     )
     ```
 
@@ -433,10 +431,12 @@ The experiment will now be linked to the prompt allowing you to view all experim
 
 ### Logging traces to a specific project
 
-You can use the `project_name` parameter of the `evaluate` function to log evaluation traces to a specific project:
+In the Python SDK, evaluation traces are logged to the project of the dataset you evaluate. Set the project when you create the dataset. The `project_name` parameter of `evaluate()` is deprecated: it is ignored (with a warning) when the dataset has a project, and every dataset created through the SDK has one.
+
+In the TypeScript SDK, use the `projectName` option of `evaluate`:
 
 <CodeBlocks>
-    ```typescript title="TypeScript" language="typescript"
+    ```typescript title="TypeScript" language="typescript" wordWrap
     const evaluation = await evaluate({
         dataset,
         task: evaluation_task,
@@ -445,12 +445,16 @@ You can use the `project_name` parameter of the `evaluate` function to log evalu
     })
     ```
 
-    ```python title="Python" language="python"
+    ```python title="Python" language="python" wordWrap
+    dataset = client.get_or_create_dataset(
+        name="Example dataset",
+        project_name="hallucination-detection",
+    )
+
     evaluation = evaluate(
         dataset=dataset,
         task=evaluation_task,
         scoring_metrics=[hallucination_metric],
-        project_name="hallucination-detection",
     )
     ```
 
@@ -461,7 +465,7 @@ You can use the `project_name` parameter of the `evaluate` function to log evalu
 You can use the `nb_samples` parameter to specify the number of samples to use for the evaluation. This is useful if you only want to evaluate a subset of the dataset.
 
 <CodeBlocks>
-    ```typescript title="TypeScript" language="typescript"
+    ```typescript title="TypeScript" language="typescript" wordWrap
     const evaluation = await evaluate({
         dataset,
         task: evaluation_task,
@@ -470,7 +474,7 @@ You can use the `nb_samples` parameter to specify the number of samples to use f
     })
     ```
 
-    ```python title="Python" language="python"
+    ```python title="Python" language="python" wordWrap
     evaluation = evaluate(
         experiment_name="My experiment",
         dataset=dataset,
@@ -487,7 +491,7 @@ You can use the `nb_samples` parameter to specify the number of samples to use f
 You can evaluate only a subset of your dataset items by using the `dataset_filter_string` parameter. This is useful when you want to run experiments on specific categories of data or test particular scenarios:
 
 <CodeBlocks>
-    ```python title="Python" language="python"
+    ```python title="Python" language="python" wordWrap
     from opik.evaluation import evaluate
 
     # Evaluate only items with specific tags
@@ -534,7 +538,7 @@ This is useful if you want to sample the dataset differently than the default sa
 For example, you can use the `RandomDatasetSampler` to sample the dataset randomly:
 
 <CodeBlocks>
-    ```python title="Python" language="python"
+    ```python title="Python" language="python" wordWrap
     from opik.evaluation import samplers
 
     evaluation = evaluate(
@@ -553,7 +557,7 @@ In the example above, the evaluation will sample 10 random items from the datase
 Also, you can implement your own dataset sampler by extending the `BaseDatasetSampler` and overriding the `sample` method.
 
 <CodeBlocks>
-    ```python title="Python" language="python"
+    ```python title="Python" language="python" wordWrap
     import re
     from typing import List
 
@@ -592,7 +596,7 @@ The `evaluate` function returns an `EvaluationResult` object that contains the e
 You can create aggregated statistics for each metric by calling its `aggregate_evaluation_scores` method:
 
 <CodeBlocks>
-```python title="Python" language="python"
+```python title="Python" language="python" wordWrap
     evaluation = evaluate(
         experiment_name="My experiment",
         dataset=dataset,
@@ -619,7 +623,7 @@ In addition to per-item metrics, you can compute experiment-level aggregate metr
 Experiment scores are computed after all test results are collected. You define experiment score functions that take a list of `TestResult` objects and return a list of `ScoreResult` objects representing aggregate metrics.
 
 <CodeBlocks>
-```python title="Python" language="python"
+```python title="Python" language="python" wordWrap
 from typing import List
 from opik.evaluation import evaluate, test_result
 from opik.evaluation.metrics import Hallucination, score_result
@@ -668,7 +672,7 @@ Experiment scores are displayed in the Opik UI in the experiments table alongsid
 You can define multiple experiment score functions to compute different aggregate metrics:
 
 <CodeBlocks>
-```python title="Python" language="python"
+```python title="Python" language="python" wordWrap
 from typing import List
 from opik.evaluation import evaluate, test_result
 from opik.evaluation.metrics import Equals, score_result
@@ -733,7 +737,7 @@ Input should be a valid dictionary [type=dict_type, input_value='<coroutine obje
 As it might not always be possible to convert all your LLM logic to not rely on async logic,
 we recommend using `asyncio.run` within the evaluation task:
 
-```python
+```python wordWrap
 import asyncio
 
 async def your_llm_application(input: str) -> str:
@@ -752,7 +756,7 @@ This should solve the issue and allow you to run the evaluation.
 <Tip>
 If you are running in a Jupyter notebook, you will need to add the following line to the top of your notebook:
 
-```python
+```python wordWrap
 import nest_asyncio
 nest_asyncio.apply()
 ```
@@ -767,7 +771,7 @@ otherwise you might get the error `RuntimeError: asyncio.run() cannot be called 
 
 If you run into any issues, you can disable the multi-threading in the SDK by setting `task_threads` to 1:
 
-```python
+```python wordWrap
 evaluation = evaluate(
     dataset=dataset,
     task=evaluation_task,
@@ -789,7 +793,7 @@ Since `evaluate` calls the task as `task(x)` for each dataset item, the recommen
 
 Using a wrapper function:
 
-```python
+```python wordWrap
 # Extra dependencies you want to provide to the task
 MODEL = "gpt-4o"
 IMAGE_TYPE = "thumbnail"
@@ -842,7 +846,7 @@ There are two types of scoring functions you can use:
 Plain scoring functions receive dataset inputs and task outputs, making them ideal for evaluating the final results of your LLM application:
 
 <CodeBlocks>
-```python title="Python" language="python"
+```python title="Python" language="python" wordWrap
 from typing import Dict, Any
 from opik.evaluation.metrics import score_result
 
@@ -878,7 +882,7 @@ def custom_equals_scorer(
 You can use your custom scoring functions alongside built-in metrics:
 
 <CodeBlocks>
-```python title="Python" language="python"
+```python title="Python" language="python" wordWrap
 from opik import evaluate
 from opik.evaluation.metrics import Hallucination
 
@@ -932,7 +936,7 @@ Task span functions are particularly useful for evaluating:
 Task span scoring functions accept a `task_span` parameter which is a [`SpanModel`](https://www.comet.com/docs/opik/python-sdk-reference/message_processing_emulation/SpanModel.html) object:
 
 <CodeBlocks>
-```python title="Python" language="python"
+```python title="Python" language="python" wordWrap
 from typing import Any
 from opik.evaluation.metrics import score_result
 from opik.message_processing.emulation.models import SpanModel
@@ -993,7 +997,7 @@ def task_name_scorer(
 You can also create scoring functions that use both dataset inputs/outputs AND task span information:
 
 <CodeBlocks>
-```python title="Python" language="python"
+```python title="Python" language="python" wordWrap
 def comprehensive_scorer(
     dataset_item: Dict[str, Any],
     task_outputs: Dict[str, Any],
@@ -1035,7 +1039,7 @@ def comprehensive_scorer(
 Task span scoring functions work seamlessly with the evaluation framework:
 
 <CodeBlocks>
-```python title="Python" language="python"
+```python title="Python" language="python" wordWrap
 from opik import track
 
 @track  # Enable span collection for task span metrics
@@ -1081,7 +1085,7 @@ Task span metrics are particularly useful for evaluating:
 To create a task span evaluation metric, define a metric class that accepts a `task_span` parameter in its `score` method. The `task_span` parameter is a [`SpanModel`](https://www.comet.com/docs/opik/python-sdk-reference/message_processing_emulation/SpanModel.html) object that contains detailed information about the task execution:
 
 <CodeBlocks>
-```python title="Python" language="python"
+```python title="Python" language="python" wordWrap
 from typing import Any, Optional
 from opik.evaluation.metrics import BaseMetric, score_result
 from opik.message_processing.emulation.models import SpanModel
@@ -1119,7 +1123,7 @@ duration = (task_span.end_time - task_span.start_time).total_seconds()
 Task span metrics work alongside regular evaluation metrics and are automatically detected by the evaluation engine:
 
 <CodeBlocks>
-```python title="Python" language="python"
+```python title="Python" language="python" wordWrap
 from opik import evaluate
 from opik.evaluation.metrics import Equals
 
@@ -1154,7 +1158,7 @@ Task spans can contain nested spans representing sub-operations. You can analyze
 Here's an example of a tracked function that produces nested spans:
 
 <CodeBlocks>
-```python title="Python" language="python"
+```python title="Python" language="python" wordWrap
 from opik import track
 from opik.integrations.openai import track_openai
 import openai
@@ -1218,7 +1222,7 @@ return response.choices[0].message.content
 When you call `research_topic("artificial intelligence")`, Opik will create a hierarchy of spans:
 
 <CodeBlocks>
-```python title="Python" language="python"
+```python title="Python" language="python" wordWrap
 SpanModel(id='0199f2c5-4097-7139-8e20-ce93d10ca3b0',
           start_time=datetime.datetime(2025, 10, 17, 15, 23, 57, 462154, tzinfo=TzInfo(UTC)),
           name='research_topic',
@@ -1780,7 +1784,7 @@ SpanModel(id='0199f2c5-4097-7139-8e20-ce93d10ca3b0',
 You can then analyze this complete execution hierarchy using task span metrics:
 
 <CodeBlocks>
-```python title="Python" language="python"
+```python title="Python" language="python" wordWrap
 class HierarchyAnalysisMetric(BaseMetric):
     def _analyze_hierarchy_recursively(self, span: SpanModel, hierarchy_stats: dict = None) -> dict:
         """Recursively analyze span hierarchy across the entire span tree."""
@@ -1878,7 +1882,7 @@ For the `SpanModel`'s hierarchy given above the `HierarchyAnalysisMetric` metric
 You can validate a task span metric without running a full evaluation by recording spans locally. The SDK provides a context manager that captures all spans/traces created in the block and exposes them in-memory:
 
 <CodeBlocks>
-```python title="Python" language="python"
+```python title="Python" language="python" wordWrap
 import opik
 from opik import track
 from opik.evaluation.metrics import score_result
@@ -1942,7 +1946,7 @@ You can access all the experiments logged to the platform from the SDK with the
 `get experiment by name` methods:
 
 <CodeBlocks>
-    ```typescript title="TypeScript" language="typescript"
+    ```typescript title="TypeScript" language="typescript" wordWrap
     import { Opik } from "opik";
 
     const client = new Opik({
@@ -1958,7 +1962,7 @@ You can access all the experiments logged to the platform from the SDK with the
     console.log(items);
     ```
 
-    ```python title="Python" language="python"
+    ```python title="Python" language="python" wordWrap
     import opik
 
     # Get the experiment

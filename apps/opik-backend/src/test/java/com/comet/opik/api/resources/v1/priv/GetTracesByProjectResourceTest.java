@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.AnnotationQueue;
+import com.comet.opik.api.AnnotationQueueReference;
 import com.comet.opik.api.Comment;
 import com.comet.opik.api.ErrorInfo;
 import com.comet.opik.api.ExperimentItem;
@@ -9,6 +10,7 @@ import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem.FeedbackScore
 import com.comet.opik.api.Guardrail;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.Span;
+import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.Trace.TracePage;
 import com.comet.opik.api.TraceSearchStreamRequest;
@@ -72,6 +74,7 @@ import org.apache.http.HttpStatus;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
@@ -1009,10 +1012,270 @@ class GetTracesByProjectResourceTest {
                     filters, Map.of());
         }
 
-        @ParameterizedTest
-        @MethodSource("getFilterTestArguments")
-        void whenFilterAnnotationQueueIdContains__thenReturnTracesFiltered(String endpoint,
-                TracePageTestAssertion testAssertion) {
+        /** Queue ids of the fixture: trace 0 is in queue A, trace 1 in queue B, trace 2 in a deleted queue. */
+        private record QueueFixture(String projectName, List<Trace> traces, UUID queueA, UUID queueB,
+                UUID deletedQueue) {
+        }
+
+        private QueueFixture createQueueFixture(String apiKey, String workspaceName) {
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
+                            .projectName(project.name())
+                            .visibilityMode(VisibilityMode.DEFAULT)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            // One span per trace, so the stats and the page-keyed enrichment have something to compute
+            spanResourceClient.batchCreateSpans(traces.stream()
+                    .map(trace -> factory.manufacturePojo(Span.class).toBuilder()
+                            .usage(null)
+                            .totalEstimatedCost(null)
+                            .projectName(project.name())
+                            .traceId(trace.id())
+                            .type(SpanType.general)
+                            .build())
+                    .toList(), apiKey, workspaceName);
+
+            var queueA = prepareAnnotationQueue(projectId);
+            var queueB = prepareAnnotationQueue(projectId);
+            var deletedQueue = prepareAnnotationQueue(projectId);
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(queueA, queueB, deletedQueue)), apiKey, workspaceName,
+                    HttpStatus.SC_NO_CONTENT);
+            annotationQueuesResourceClient.addItemsToAnnotationQueue(
+                    queueA.id(), Set.of(traces.get(0).id()), apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+            annotationQueuesResourceClient.addItemsToAnnotationQueue(
+                    queueB.id(), Set.of(traces.get(1).id()), apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+            annotationQueuesResourceClient.addItemsToAnnotationQueue(
+                    deletedQueue.id(), Set.of(traces.get(2).id()), apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+            // Deleting a queue leaves its items behind: they must no longer count as queue membership
+            annotationQueuesResourceClient.deleteAnnotationQueueBatch(
+                    Set.of(deletedQueue.id()), apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+
+            var tracesWithSpans = traces.stream()
+                    .map(trace -> trace.toBuilder().spanCount(1).build())
+                    .toList();
+            return new QueueFixture(project.name(), tracesWithSpans, queueA.id(), queueB.id(), deletedQueue.id());
+        }
+
+        private static TraceFilter queueFilter(Operator operator, String value) {
+            return TraceFilter.builder()
+                    .field(TraceField.ANNOTATION_QUEUE_IDS)
+                    .operator(operator)
+                    .value(value)
+                    .build();
+        }
+
+        private <T> void assertQueueSelection(TracePageTestAssertion<T, Trace> testAssertion, QueueFixture fixture,
+                Set<Integer> expectedIndexes, List<TraceFilter> filters, Map<String, String> queryParams,
+                String apiKey, String workspaceName) {
+            var expected = IntStream.range(0, fixture.traces().size())
+                    .filter(expectedIndexes::contains)
+                    .mapToObj(fixture.traces()::get)
+                    .toList();
+            var unexpected = IntStream.range(0, fixture.traces().size())
+                    .filter(i -> !expectedIndexes.contains(i))
+                    .mapToObj(fixture.traces()::get)
+                    .toList();
+
+            var values = testAssertion.transformTestParams(fixture.traces(), expected.reversed(), unexpected);
+
+            testAssertion.assertTest(fixture.projectName(), null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(), values.all(), filters, queryParams);
+        }
+
+        private Stream<Arguments> annotationQueueIdsFilterArguments() {
+            Function<QueueFixture, Set<Integer>> unqueued = fixture -> IntStream.range(2, fixture.traces().size())
+                    .boxed()
+                    .collect(Collectors.toSet());
+            Function<QueueFixture, Set<Integer>> allButFirst = fixture -> IntStream
+                    .range(1, fixture.traces().size())
+                    .boxed()
+                    .collect(Collectors.toSet());
+            var cases = Stream.of(
+                    arguments("contains queue A",
+                            (Function<QueueFixture, List<TraceFilter>>) f -> List.of(
+                                    queueFilter(Operator.CONTAINS, f.queueA().toString())),
+                            (Function<QueueFixture, Set<Integer>>) f -> Set.of(0)),
+                    // Trailing digits: ids generated in the same millisecond share the leading ones
+                    arguments("contains part of queue A's id in another case",
+                            (Function<QueueFixture, List<TraceFilter>>) f -> List.of(
+                                    queueFilter(Operator.CONTAINS,
+                                            f.queueA().toString().substring(24).toUpperCase())),
+                            (Function<QueueFixture, Set<Integer>>) f -> Set.of(0)),
+                    arguments("= queue A",
+                            (Function<QueueFixture, List<TraceFilter>>) f -> List.of(
+                                    queueFilter(Operator.EQUAL, f.queueA().toString())),
+                            (Function<QueueFixture, Set<Integer>>) f -> Set.of(0)),
+                    arguments("not contains queue A",
+                            (Function<QueueFixture, List<TraceFilter>>) f -> List.of(
+                                    queueFilter(Operator.NOT_CONTAINS, f.queueA().toString())),
+                            allButFirst),
+                    arguments("!= queue A",
+                            (Function<QueueFixture, List<TraceFilter>>) f -> List.of(
+                                    queueFilter(Operator.NOT_EQUAL, f.queueA().toString())),
+                            allButFirst),
+                    arguments("is not empty, ignoring the deleted queue",
+                            (Function<QueueFixture, List<TraceFilter>>) f -> List.of(
+                                    queueFilter(Operator.IS_NOT_EMPTY, "")),
+                            (Function<QueueFixture, Set<Integer>>) f -> Set.of(0, 1)),
+                    arguments("is empty, counting the deleted queue's items as unqueued",
+                            (Function<QueueFixture, List<TraceFilter>>) f -> List.of(
+                                    queueFilter(Operator.IS_EMPTY, "")),
+                            unqueued),
+                    arguments("is not empty and != queue B",
+                            (Function<QueueFixture, List<TraceFilter>>) f -> List.of(
+                                    queueFilter(Operator.IS_NOT_EMPTY, ""),
+                                    queueFilter(Operator.NOT_EQUAL, f.queueB().toString())),
+                            (Function<QueueFixture, Set<Integer>>) f -> Set.of(0)),
+                    arguments("= the deleted queue",
+                            (Function<QueueFixture, List<TraceFilter>>) f -> List.of(
+                                    queueFilter(Operator.EQUAL, f.deletedQueue().toString())),
+                            (Function<QueueFixture, Set<Integer>>) f -> Set.of()))
+                    .toList();
+            return getFilterTestArguments()
+                    .flatMap(endpoint -> cases.stream()
+                            .map(queueCase -> arguments(endpoint.get()[0], queueCase.get()[0], queueCase.get()[1],
+                                    queueCase.get()[2], endpoint.get()[1])));
+        }
+
+        @ParameterizedTest(name = "{0}: {1}")
+        @MethodSource("annotationQueueIdsFilterArguments")
+        void whenFilterAnnotationQueueIds__thenReturnTracesFiltered(String endpoint, String description,
+                Function<QueueFixture, List<TraceFilter>> getFilters,
+                Function<QueueFixture, Set<Integer>> getExpectedIndexes,
+                TracePageTestAssertion<?, Trace> testAssertion) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var fixture = createQueueFixture(apiKey, workspaceName);
+
+            assertQueueSelection(testAssertion, fixture, getExpectedIndexes.apply(fixture), getFilters.apply(fixture),
+                    Map.of(), apiKey, workspaceName);
+        }
+
+        private Stream<Arguments> annotationQueueIdParamArguments() {
+            var visibility = TraceFilter.builder()
+                    .field(TraceField.VISIBILITY_MODE)
+                    .operator(Operator.EQUAL)
+                    .value(VisibilityMode.DEFAULT.getValue())
+                    .build();
+            var cases = Stream.of(
+                    arguments("queue A",
+                            (Function<QueueFixture, UUID>) QueueFixture::queueA,
+                            (Function<QueueFixture, List<TraceFilter>>) f -> List.of(),
+                            Set.of(0)),
+                    arguments("queue A with the filters the queue page used to send",
+                            (Function<QueueFixture, UUID>) QueueFixture::queueA,
+                            (Function<QueueFixture, List<TraceFilter>>) f -> List.of(
+                                    queueFilter(Operator.CONTAINS, f.queueA().toString()), visibility),
+                            Set.of(0)),
+                    arguments("queue A with a queue filter widening the memberships",
+                            (Function<QueueFixture, UUID>) QueueFixture::queueA,
+                            (Function<QueueFixture, List<TraceFilter>>) f -> List.of(
+                                    queueFilter(Operator.NOT_EQUAL, f.queueB().toString())),
+                            Set.of(0)),
+                    arguments("the deleted queue",
+                            (Function<QueueFixture, UUID>) QueueFixture::deletedQueue,
+                            (Function<QueueFixture, List<TraceFilter>>) f -> List.of(),
+                            Set.<Integer>of()))
+                    .toList();
+            // The stream endpoint takes no queue id
+            return getFilterTestArguments()
+                    .filter(endpoint -> !"/traces/search".equals(endpoint.get()[0]))
+                    .flatMap(endpoint -> cases.stream()
+                            .map(queueCase -> arguments(endpoint.get()[0], queueCase.get()[0], queueCase.get()[1],
+                                    queueCase.get()[2], queueCase.get()[3], endpoint.get()[1])));
+        }
+
+        @ParameterizedTest(name = "{0}: {1}")
+        @MethodSource("annotationQueueIdParamArguments")
+        void whenAnnotationQueueIdParam__thenReturnQueueTraces(String endpoint, String description,
+                Function<QueueFixture, UUID> getQueueId,
+                Function<QueueFixture, List<TraceFilter>> getFilters,
+                Set<Integer> expectedIndexes,
+                TracePageTestAssertion<?, Trace> testAssertion) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var fixture = createQueueFixture(apiKey, workspaceName);
+
+            assertQueueSelection(testAssertion, fixture, expectedIndexes, getFilters.apply(fixture),
+                    Map.of("annotation_queue_id", getQueueId.apply(fixture).toString()), apiKey, workspaceName);
+        }
+
+        @Test
+        @DisplayName("When sorting a queue's traces by a feedback score, should return only the queue's traces in score order")
+        void whenAnnotationQueueIdParamAndSortByFeedbackScore__thenReturnQueueTracesSorted() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
+                            .projectName(project.name())
+                            .build())
+                    .toList();
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            var queue = prepareAnnotationQueue(projectId);
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(queue)), apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+            annotationQueuesResourceClient.addItemsToAnnotationQueue(queue.id(),
+                    Set.of(traces.get(0).id(), traces.get(1).id(), traces.get(2).id()), apiKey, workspaceName,
+                    HttpStatus.SC_NO_CONTENT);
+
+            // The trace outside the queue gets the highest score: it must not leak into the sorted page
+            var scoreName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var scores = List.of(1, 3, 2, 9);
+            traceResourceClient.feedbackScores(IntStream.range(0, scores.size())
+                    .<FeedbackScoreBatchItem>mapToObj(i -> factory.manufacturePojo(FeedbackScoreBatchItem.class)
+                            .toBuilder()
+                            .id(traces.get(i).id())
+                            .projectName(project.name())
+                            .name(scoreName)
+                            .value(BigDecimal.valueOf(scores.get(i)))
+                            // Scored from the queue: with the queue id, only the queue's own annotations count
+                            .sourceQueueId(queue.id())
+                            .build())
+                    .toList(), apiKey, workspaceName);
+
+            var actualPage = traceResourceClient.getTraces(project.name(), null, apiKey, workspaceName, List.of(),
+                    List.of(SortingField.builder()
+                            .field(SortableFields.FEEDBACK_SCORES.replace("*", scoreName))
+                            .direction(Direction.DESC)
+                            .build()),
+                    10, Map.of("annotation_queue_id", queue.id().toString()));
+
+            assertThat(actualPage.total()).isEqualTo(3);
+            assertThat(actualPage.content()).extracting(Trace::id)
+                    .containsExactly(traces.get(1).id(), traces.get(2).id(), traces.get(0).id());
+        }
+
+        private AnnotationQueue prepareAnnotationQueue(UUID projectId) {
+            return factory.manufacturePojo(AnnotationQueue.class)
+                    .toBuilder()
+                    .projectId(projectId)
+                    .scope(AnnotationQueue.AnnotationScope.TRACE)
+                    .build();
+        }
+
+        @Test
+        @DisplayName("When traces are items of annotation queues, should return the queues sorted by name, omit them when excluded, and drop them once removed")
+        void findTraces__whenTracesAreAnnotationQueueItems__thenReturnAnnotationQueues() {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -1027,67 +1290,68 @@ class GetTracesByProjectResourceTest {
                     .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(project.name())
                             .build())
-                    .collect(Collectors.toCollection(ArrayList::new));
+                    .toList();
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
 
-            // Create spans for stats endpoint
-            var spans = traces.stream()
-                    .flatMap(trace -> IntStream.range(0, 1)
-                            .mapToObj(i -> factory.manufacturePojo(Span.class).toBuilder()
-                                    .usage(null)
-                                    .totalEstimatedCost(null)
-                                    .projectName(project.name())
-                                    .traceId(trace.id())
-                                    .type(SpanType.general)
-                                    .build()))
-                    .toList();
-            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+            var inBoth = traces.get(0);
+            var inOne = traces.get(1);
+            var inNone = traces.get(2);
 
-            // Update trace objects with span count for stats calculation
-            var updatedTraces = traces.stream()
-                    .map(trace -> trace.toBuilder().spanCount(1).build())
-                    .collect(Collectors.toCollection(ArrayList::new));
-
-            var expectedTraces = List.of(updatedTraces.getFirst());
-            var unexpectedTraces = List.of(createTrace().toBuilder()
-                    .projectId(null)
-                    .projectName(project.name())
-                    .build());
-
-            traceResourceClient.batchCreateTraces(unexpectedTraces, apiKey, workspaceName);
-
-            // Create annotation queue with items
-            var queue1 = prepareAnnotationQueue(projectId);
-            var queue2 = prepareAnnotationQueue(projectId);
+            var queueA = prepareAnnotationQueue(projectId).toBuilder().name("Queue-A").build();
+            var queueB = prepareAnnotationQueue(projectId).toBuilder().name("Queue-B").build();
+            var threadQueue = prepareAnnotationQueue(projectId).toBuilder()
+                    .scope(AnnotationQueue.AnnotationScope.THREAD)
+                    .build();
             annotationQueuesResourceClient.createAnnotationQueueBatch(
-                    new LinkedHashSet<>(List.of(queue1, queue2)), apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
-
-            annotationQueuesResourceClient.addItemsToAnnotationQueue(
-                    queue1.id(), Set.of(updatedTraces.getFirst().id()), apiKey, workspaceName,
+                    new LinkedHashSet<>(List.of(queueA, queueB, threadQueue)), apiKey, workspaceName,
                     HttpStatus.SC_NO_CONTENT);
+
             annotationQueuesResourceClient.addItemsToAnnotationQueue(
-                    queue2.id(), Set.of(updatedTraces.get(1).id()), apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+                    queueB.id(), Set.of(inBoth.id(), inOne.id()), apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+            annotationQueuesResourceClient.addItemsToAnnotationQueue(
+                    queueA.id(), Set.of(inBoth.id()), apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+            // Thread-scoped queues must never surface on traces, even if they hold the same id
+            annotationQueuesResourceClient.addItemsToAnnotationQueue(
+                    threadQueue.id(), Set.of(inBoth.id()), apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
 
-            var filters = List.of(TraceFilter.builder()
-                    .field(TraceField.ANNOTATION_QUEUE_IDS)
-                    .operator(Operator.CONTAINS)
-                    .value(queue1.id().toString())
-                    .build());
+            var refA = new AnnotationQueueReference(queueA.id(), queueA.name());
+            var refB = new AnnotationQueueReference(queueB.id(), queueB.name());
 
-            var values = testAssertion.transformTestParams(updatedTraces, expectedTraces, unexpectedTraces);
+            var actualById = getTracesById(project.name(), apiKey, workspaceName, traces.size(), Map.of());
+            assertThat(actualById.get(inBoth.id()).annotationQueues()).containsExactly(refA, refB);
+            assertThat(actualById.get(inOne.id()).annotationQueues()).containsExactly(refB);
+            assertThat(actualById.get(inNone.id()).annotationQueues()).isNull();
 
-            testAssertion.assertTest(project.name(), null, apiKey, workspaceName, values.expected(),
-                    values.unexpected(),
-                    values.all(),
-                    filters, Map.of());
+            assertThat(traceResourceClient.getById(inBoth.id(), workspaceName, apiKey).annotationQueues())
+                    .containsExactly(refA, refB);
+            assertThat(traceResourceClient.getById(inNone.id(), workspaceName, apiKey).annotationQueues())
+                    .isNull();
+
+            var excluded = getTracesById(project.name(), apiKey, workspaceName, traces.size(),
+                    Map.of("exclude", toURLEncodedQueryParam(List.of(Trace.TraceField.ANNOTATION_QUEUES))));
+            assertThat(excluded.values()).allSatisfy(trace -> assertThat(trace.annotationQueues()).isNull());
+
+            annotationQueuesResourceClient.removeItemsFromAnnotationQueue(
+                    queueB.id(), Set.of(inOne.id()), apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+
+            var afterRemoval = getTracesById(project.name(), apiKey, workspaceName, traces.size(), Map.of());
+            assertThat(afterRemoval.get(inBoth.id()).annotationQueues()).containsExactly(refA, refB);
+            assertThat(afterRemoval.get(inOne.id()).annotationQueues()).isNull();
+
+            // Deleting a queue leaves its item rows behind; they must not resurface as a nameless queue
+            annotationQueuesResourceClient.deleteAnnotationQueueBatch(Set.of(queueA.id()), apiKey, workspaceName,
+                    HttpStatus.SC_NO_CONTENT);
+
+            var afterQueueDeletion = getTracesById(project.name(), apiKey, workspaceName, traces.size(), Map.of());
+            assertThat(afterQueueDeletion.get(inBoth.id()).annotationQueues()).containsExactly(refB);
         }
 
-        private AnnotationQueue prepareAnnotationQueue(UUID projectId) {
-            return factory.manufacturePojo(AnnotationQueue.class)
-                    .toBuilder()
-                    .projectId(projectId)
-                    .scope(AnnotationQueue.AnnotationScope.TRACE)
-                    .build();
+        private Map<UUID, Trace> getTracesById(String projectName, String apiKey, String workspaceName, int size,
+                Map<String, String> queryParams) {
+            var page = traceResourceClient.getTraces(projectName, null, apiKey, workspaceName, List.of(), null,
+                    size, queryParams);
+            assertThat(page.content()).hasSize(size);
+            return page.content().stream().collect(toMap(Trace::id, Function.identity()));
         }
 
         @ParameterizedTest
@@ -5111,6 +5375,210 @@ class GetTracesByProjectResourceTest {
             var returnedTrace = actualPage.content().getFirst();
             assertThat(returnedTrace.name()).isEqualTo("AAA-updated-name");
             assertThat(returnedTrace.input()).isEqualTo(updatedInput);
+        }
+
+        @Test
+        void getTracesByProject__whenSpanUpdated__thenAggregatesUseLatestSpanVersionOnly() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var scenario = createTraceWithUpdatedSpan(projectName, apiKey, workspaceName);
+
+            var actualPage = traceResourceClient.getTraces(
+                    projectName, null, apiKey, workspaceName, List.of(), List.of(), 10, Map.of());
+
+            TraceAssertions.assertTraces(actualPage.content(), List.of(scenario.expectedTrace()), USER);
+            assertLatestSpanVersionAggregates(actualPage.content().getFirst(), scenario.latestSpan());
+        }
+
+        @Test
+        void getTracesByProject__whenSpanReinsertedWithDifferentParent__thenAggregatesCountItOnce() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var trace = createTrace().toBuilder()
+                    .projectName(projectName)
+                    .build();
+            traceResourceClient.createTrace(trace, apiKey, workspaceName);
+
+            // Batch create skips the parent-mismatch check, so both versions land. The live sorting key still
+            // holds parent_span_id: FINAL keeps both rows and sums them, the id dedup keeps only the latest.
+            var staleSpan = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .traceId(trace.id())
+                    .parentSpanId(idGenerator.generateId())
+                    .type(SpanType.llm)
+                    .provider(RandomStringUtils.secure().nextAlphanumeric(10))
+                    .usage(randomUsage())
+                    .totalEstimatedCost(randomCost(0, 1))
+                    .lastUpdatedAt(Instant.now().minus(1, ChronoUnit.MINUTES))
+                    .feedbackScores(null)
+                    .comments(null)
+                    .build();
+            var latestSpan = staleSpan.toBuilder()
+                    .parentSpanId(idGenerator.generateId())
+                    .provider(RandomStringUtils.secure().nextAlphanumeric(10))
+                    .usage(randomUsage())
+                    .totalEstimatedCost(randomCost(1, 2))
+                    .lastUpdatedAt(Instant.now())
+                    .build();
+            spanResourceClient.batchCreateSpans(List.of(staleSpan), apiKey, workspaceName);
+            spanResourceClient.batchCreateSpans(List.of(latestSpan), apiKey, workspaceName);
+
+            var actualPage = traceResourceClient.getTraces(
+                    projectName, null, apiKey, workspaceName, List.of(), List.of(), 10, Map.of());
+
+            var expectedTrace = trace.toBuilder()
+                    .usage(toLongUsage(latestSpan.usage()))
+                    .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(trace.startTime(),
+                            trace.endTime()))
+                    .build();
+            TraceAssertions.assertTraces(actualPage.content(), List.of(expectedTrace), USER);
+            assertLatestSpanVersionAggregates(actualPage.content().getFirst(), latestSpan);
+        }
+
+        private Stream<Arguments> searchStreamSpanUpdateFilters() {
+            return Stream.of(
+                    // No aggregate filter: aggregates are keyed on the page ids
+                    arguments(Named.of("no filter", (Function<SpanUpdateScenario, List<TraceFilter>>) s -> List.of())),
+                    // Aggregate filters select the page, so the other spans_deduped branches run
+                    arguments(Named.of("cost above the stale version",
+                            (Function<SpanUpdateScenario, List<TraceFilter>>) s -> List
+                                    .of(costFilter(Operator.GREATER_THAN, s)))));
+        }
+
+        /** Between the stale and the latest cost, so only one of the two versions can satisfy it. */
+        private TraceFilter costFilter(Operator operator, SpanUpdateScenario scenario) {
+            var midpoint = scenario.staleCost().add(scenario.latestSpan().totalEstimatedCost())
+                    .divide(BigDecimal.TWO, RoundingMode.HALF_UP);
+            return TraceFilter.builder()
+                    .field(TraceField.TOTAL_ESTIMATED_COST)
+                    .operator(operator)
+                    .value(midpoint.toPlainString())
+                    .build();
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("searchStreamSpanUpdateFilters")
+        void searchTracesStream__whenSpanUpdated__thenAggregatesUseLatestSpanVersionOnly(
+                Function<SpanUpdateScenario, List<TraceFilter>> filters) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var scenario = createTraceWithUpdatedSpan(projectName, apiKey, workspaceName);
+
+            var actualTraces = traceResourceClient.getStreamAndAssertContent(apiKey, workspaceName,
+                    TraceSearchStreamRequest.builder()
+                            .projectName(projectName)
+                            .filters(filters.apply(scenario))
+                            .truncate(false)
+                            .build());
+
+            TraceAssertions.assertTraces(actualTraces, List.of(scenario.expectedTrace()), USER);
+            assertLatestSpanVersionAggregates(actualTraces.getFirst(), scenario.latestSpan());
+        }
+
+        @Test
+        void searchTracesStream__whenFilterMatchesStaleSpanVersionOnly__thenReturnNoTraces() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var scenario = createTraceWithUpdatedSpan(projectName, apiKey, workspaceName);
+
+            // Only the stale version's cost is below the midpoint
+            var actualTraces = traceResourceClient.getStreamAndAssertContent(apiKey, workspaceName,
+                    TraceSearchStreamRequest.builder()
+                            .projectName(projectName)
+                            .filters(List.of(costFilter(Operator.LESS_THAN, scenario)))
+                            .build());
+
+            assertThat(actualTraces).isEmpty();
+        }
+
+        /** A trace whose one span was updated: the latest version is what the aggregates must reflect. */
+        private record SpanUpdateScenario(Trace expectedTrace, Span latestSpan, BigDecimal staleCost) {
+        }
+
+        private SpanUpdateScenario createTraceWithUpdatedSpan(String projectName, String apiKey,
+                String workspaceName) {
+            var trace = createTrace().toBuilder()
+                    .projectName(projectName)
+                    .build();
+            traceResourceClient.createTrace(trace, apiKey, workspaceName);
+
+            // Stale cost below the latest by construction, so a cost filter can tell the two versions apart
+            var staleCost = randomCost(0, 1);
+            var span = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .traceId(trace.id())
+                    .parentSpanId(null)
+                    .type(SpanType.llm)
+                    .provider(RandomStringUtils.secure().nextAlphanumeric(10))
+                    .usage(randomUsage())
+                    .totalEstimatedCost(staleCost)
+                    .feedbackScores(null)
+                    .comments(null)
+                    .build();
+            spanResourceClient.createSpan(span, apiKey, workspaceName);
+
+            // The update writes a second row version; the aggregates must dedup it without FINAL
+            var latestSpan = span.toBuilder()
+                    .provider(RandomStringUtils.secure().nextAlphanumeric(10))
+                    .usage(randomUsage())
+                    .totalEstimatedCost(staleCost.add(randomCost(1, 2)))
+                    .build();
+            spanResourceClient.updateSpan(span.id(), SpanUpdate.builder()
+                    .projectName(projectName)
+                    .traceId(trace.id())
+                    .provider(latestSpan.provider())
+                    .usage(latestSpan.usage())
+                    .totalEstimatedCost(latestSpan.totalEstimatedCost())
+                    .build(), apiKey, workspaceName);
+
+            var expectedTrace = trace.toBuilder()
+                    .usage(toLongUsage(latestSpan.usage()))
+                    .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(trace.startTime(),
+                            trace.endTime()))
+                    .build();
+            return new SpanUpdateScenario(expectedTrace, latestSpan, staleCost);
+        }
+
+        private Map<String, Integer> randomUsage() {
+            return Map.of(RandomStringUtils.secure().nextAlphanumeric(10), RandomUtils.secure().randomInt(1, 10_000));
+        }
+
+        private BigDecimal randomCost(double fromInclusive, double toExclusive) {
+            return BigDecimal.valueOf(RandomUtils.secure().randomDouble(fromInclusive, toExclusive))
+                    .setScale(6, RoundingMode.HALF_UP)
+                    .max(new BigDecimal("0.000001"));
+        }
+
+        private Map<String, Long> toLongUsage(Map<String, Integer> usage) {
+            return usage.entrySet().stream().collect(toMap(Map.Entry::getKey, e -> e.getValue().longValue()));
+        }
+
+        private void assertLatestSpanVersionAggregates(Trace actual, Span latestSpan) {
+            assertThat(actual.usage()).isEqualTo(toLongUsage(latestSpan.usage()));
+            assertThat(actual.totalEstimatedCost()).isEqualByComparingTo(latestSpan.totalEstimatedCost());
+            assertThat(actual.spanCount()).isEqualTo(1);
+            assertThat(actual.llmSpanCount()).isEqualTo(1);
+            assertThat(actual.providers()).containsExactly(latestSpan.provider());
         }
 
         @ParameterizedTest

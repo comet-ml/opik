@@ -74,4 +74,5 @@ This repository is a multi-module Opik codebase. Main areas:
 
 ## Generated Files
 - `apps/opik-backend/src/main/resources/model_prices_and_context_window.json` and `apps/opik-frontend/src/data/model_prices_and_context_window.json` are generated artifacts.
+- `apps/opik-backend/src/main/resources/model_prices_openrouter.json` and `apps/opik-frontend/src/data/model_prices_openrouter.json` are generated from OpenRouter's model list by `scripts/update_openrouter_model_prices.py`.
 - Do not edit these files directly; updates should come from the repository updater automation.

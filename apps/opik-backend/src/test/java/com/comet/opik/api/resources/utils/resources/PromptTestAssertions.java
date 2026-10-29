@@ -26,6 +26,17 @@ public class PromptTestAssertions {
             "projectName"};
 
     /**
+     * Fields of a created prompt version that the server sets, for comparing it with the version in the request.
+     */
+    public static final String[] PROMPT_VERSION_SERVER_SET_FIELDS = {
+            "promptId",
+            "versionNumber",
+            "variables",
+            "templateStructure",
+            "createdAt",
+            "createdBy"};
+
+    /**
      * Asserts that {@code actual} matches {@code expected} via recursive comparison ignoring
      * {@link #PROMPT_IGNORED_FIELDS}, plus per-field equality on every one of those ignored
      * fields so coverage stays tight. {@code lastUpdatedAt} stays inside the recursive

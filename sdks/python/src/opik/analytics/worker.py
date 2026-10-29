@@ -85,7 +85,15 @@ class Worker(threading.Thread):
         self._stopped = threading.Event()
 
     def enqueue(self, event: Event) -> bool:
-        """False when the queue was full and the event was dropped."""
+        """False when the queue was full and the event was dropped.
+
+        Merges in the run context, the event's own values winning on a
+        collision. Read here rather than at send time, because the context
+        changes mid-run and must describe the event as it was when queued.
+        """
+        event = event._replace(
+            properties={**environment_details.run_context(), **event.properties}
+        )
         try:
             self._queue.put_nowait(event)
             return True

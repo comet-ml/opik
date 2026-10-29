@@ -6,3 +6,4 @@ export { ExperimentItemsBatch } from "./ExperimentItemsBatch.js";
 export { ExperimentItemsDelete } from "./ExperimentItemsDelete.js";
 export { ExperimentStreamRequestPublic } from "./ExperimentStreamRequestPublic.js";
 export { ExperimentWrite } from "./ExperimentWrite.js";
+export { IdsHolder } from "./IdsHolder.js";

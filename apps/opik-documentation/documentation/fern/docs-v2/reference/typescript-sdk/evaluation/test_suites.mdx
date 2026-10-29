@@ -25,7 +25,7 @@ For a walkthrough of building suites via Ollie, the UI, or the SDK, see [Buildin
 
 The TypeScript SDK provides several methods to create and manage test suites through the `OpikClient` class.
 
-```typescript
+```typescript wordWrap
 import { Opik } from "opik";
 
 const opik = new Opik();
@@ -64,7 +64,7 @@ await opik.deleteTestSuite("customer-support-qa", "my-project");
 
 ## Working with Test Suite Items
 
-```typescript
+```typescript wordWrap
 // Insert items — item-level assertions/execution policy are optional
 // and add to (not replace) the suite-level ones
 await suite.insert([
@@ -100,7 +100,7 @@ await suite.clear();
 
 ### Updating a single item's assertions or execution policy
 
-```typescript
+```typescript wordWrap
 await suite.updateItemAssertions("item-1", [
   "The response cites a specific step from the provided context",
 ]);
@@ -125,7 +125,7 @@ Execution policies control how many times each item is run and how many of those
 - An **item** passes if `runsPassed >= passThreshold`
 - The suite's **pass rate** is the ratio of passed items to total items
 
-```typescript
+```typescript wordWrap
 // Read the suite-level defaults
 const assertions = await suite.getGlobalAssertions();
 const policy = await suite.getGlobalExecutionPolicy();
@@ -144,7 +144,7 @@ await suite.updateTestSettings({
 
 `runTests` is the primary entry point for executing a suite: it runs your task against every item, scores results using the suite's configured assertions, and returns pass/fail results.
 
-```typescript
+```typescript wordWrap
 import { runTests } from "opik";
 
 const result = await runTests({
@@ -168,7 +168,7 @@ Each run creates a separate experiment in Opik, so you can compare multiple runs
 
 Like datasets, test suites are versioned. See [Datasets](/reference/typescript-sdk/evaluation/datasets) for the general versioning model — the same `DatasetVersion`-style methods are available on `TestSuite`:
 
-```typescript
+```typescript wordWrap
 const currentVersion = await suite.getCurrentVersionName();
 const versionInfo = await suite.getVersionInfo();
 const v2 = await suite.getVersionView("v2");
@@ -390,7 +390,7 @@ Shorthand for `updateItem(itemId, { executionPolicy })`.
 
 The primary entry point for running a test suite.
 
-```typescript
+```typescript wordWrap
 async function runTests(options: RunTestsOptions): Promise<TestSuiteResult>;
 ```
 
@@ -413,7 +413,7 @@ async function runTests(options: RunTestsOptions): Promise<TestSuiteResult>;
 
 The lower-level function `runTests` is built on. Runs a test suite using the evaluators and execution policy stored in the suite's dataset version metadata, and returns the raw `EvaluationResult` rather than a suite-shaped `TestSuiteResult`.
 
-```typescript
+```typescript wordWrap
 async function evaluateTestSuite(
   options: EvaluateTestSuiteOptions
 ): Promise<EvaluationResult>;
@@ -429,7 +429,7 @@ async function evaluateTestSuite(
 
 Result of running a test suite. Returned by `runTests`.
 
-```typescript
+```typescript wordWrap
 class TestSuiteResult {
   readonly allItemsPassed: boolean;
   readonly itemsPassed: number;
@@ -455,7 +455,7 @@ class TestSuiteResult {
 
 Result for a single test suite item, keyed by `datasetItemId` in `TestSuiteResult.itemResults`.
 
-```typescript
+```typescript wordWrap
 type ItemResult = {
   datasetItemId: string;
   passed: boolean;
@@ -474,7 +474,7 @@ type ItemResult = {
 
 Represents an experiment run against a test suite. Extends `Experiment` (see [Experiments](/reference/typescript-sdk/evaluation/experiments)) with the aggregate assertion statistics the backend populates only for test suite experiments (`undefined` for regular dataset experiments).
 
-```typescript
+```typescript wordWrap
 class TestSuiteExperiment extends Experiment {
   readonly passRate?: number;
   readonly passedCount?: number;
@@ -485,7 +485,7 @@ class TestSuiteExperiment extends Experiment {
 
 ### CreateTestSuiteOptions
 
-```typescript
+```typescript wordWrap
 interface CreateTestSuiteOptions {
   name: string;
   description?: string;
@@ -498,7 +498,7 @@ interface CreateTestSuiteOptions {
 
 ### ExecutionPolicy
 
-```typescript
+```typescript wordWrap
 interface ExecutionPolicy {
   runsPerItem?: number;
   passThreshold?: number;

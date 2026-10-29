@@ -10,6 +10,8 @@ import com.comet.opik.api.DatasetVersionUpdate;
 import com.comet.opik.domain.DatasetVersionService;
 import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.auth.RequiredPermissions;
+import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.fasterxml.jackson.annotation.JsonView;
 import io.swagger.v3.oas.annotations.Operation;
@@ -96,6 +98,26 @@ public class DatasetVersionsResource {
         DatasetVersion version = versionService.getVersionByName(datasetId, request.versionName());
         log.info("Found version '{}' for dataset '{}' on workspace '{}'", request.versionName(), datasetId,
                 workspaceId);
+
+        return Response.ok(version).build();
+    }
+
+    @GET
+    @Path("/hash/{versionHash}")
+    @Operation(operationId = "getDatasetVersionByHash", summary = "Get dataset version by hash", description = "Get a specific version by its version hash", responses = {
+            @ApiResponse(responseCode = "200", description = "Dataset version", content = @Content(schema = @Schema(implementation = DatasetVersion.class))),
+            @ApiResponse(responseCode = "404", description = "Version not found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
+    })
+    @JsonView(DatasetVersion.View.Public.class)
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_VIEW)
+    public Response getVersionByHash(@PathParam("versionHash") String versionHash) {
+        featureFlags.checkDatasetVersioningEnabled();
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Getting version '{}' for dataset '{}' on workspace '{}'", versionHash, datasetId, workspaceId);
+        DatasetVersion version = versionService.getVersionByHash(datasetId, versionHash);
+        log.info("Found version '{}' for dataset '{}' on workspace '{}'", versionHash, datasetId, workspaceId);
 
         return Response.ok(version).build();
     }

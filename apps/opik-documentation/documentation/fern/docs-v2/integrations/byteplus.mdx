@@ -17,7 +17,7 @@ This guide explains how to integrate Opik with BytePlus using the OpenAI SDK. By
 
 First, ensure you have both `opik` and `openai` packages installed:
 
-```bash
+```bash wordWrap
 pip install opik openai
 ```
 
@@ -25,7 +25,7 @@ You'll also need a BytePlus API key. Find a guide on creating your BytePlus API 
 
 ## Tracking BytePlus API calls
 
-```python
+```python wordWrap
 from opik.integrations.openai import track_openai
 from openai import OpenAI
 
@@ -54,7 +54,7 @@ print(response.choices[0].message.content)
 
 You can combine the tracked client with Opik's `@track` decorator for comprehensive tracing:
 
-```python
+```python wordWrap
 from opik import track
 from opik.integrations.openai import track_openai
 from openai import OpenAI

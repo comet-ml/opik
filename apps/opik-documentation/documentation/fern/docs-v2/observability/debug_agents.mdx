@@ -18,7 +18,7 @@ Ollie is more than a chatbot — it has tools that let it act on your workspace 
 
 - **Read and analyze traces** — Ollie reads full span trees including inputs, outputs, latencies, token counts, and feedback scores. It can drill into individual spans, compare traces side by side, and search across your project for patterns.
 - **Search your workspace** — Traces, threads, datasets, experiments, and prompts are all queryable. Ollie can aggregate data, find outliers, and surface trends you'd otherwise need to query manually.
-- **Read and edit your code** — When you connect your repository with [`opik connect`](/development/agent-playground), Ollie gains secure, read-only access to your source files. It can propose edits that you review and approve before anything changes on disk.
+- **Read and edit your code** — When you connect your repository with [`opik connect`](/development/agent-playground), Ollie can read your source files and propose edits. Nothing changes on disk until you review and approve each edit.
 - **Run your agent** — With `opik connect` active, Ollie can rerun your agent using inputs from a failing trace to verify a fix in real time. New traces stream back into Opik automatically.
 - **Manage test suites** — Ollie can add traces as test cases to test suites, define assertions, trigger evaluation runs, and summarize pass/fail results.
 - **Navigate the Opik UI** — Ollie can link you directly to traces, experiments, datasets, and prompts it references during a conversation.

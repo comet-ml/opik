@@ -15,6 +15,11 @@ class AlertWrite(UniversalBaseModel):
     enabled: typing.Optional[bool] = None
     alert_type: typing.Optional[AlertWriteAlertType] = None
     metadata: typing.Optional[typing.Dict[str, str]] = None
+    custom_fields: typing.Optional[typing.Dict[str, str]] = pydantic.Field(default=None)
+    """
+    Optional user-defined key/value pairs, added as top-level keys of the alert's EventBridge event detail. Keys must not collide with the event's own keys.
+    """
+
     webhook: WebhookWrite
     triggers: typing.Optional[typing.List[AlertTriggerWrite]] = None
     project_id: typing.Optional[str] = pydantic.Field(default=None)

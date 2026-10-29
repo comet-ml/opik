@@ -1004,6 +1004,7 @@ class TracesClient:
         search: typing.Optional[str] = None,
         from_time: typing.Optional[dt.datetime] = None,
         to_time: typing.Optional[dt.datetime] = None,
+        annotation_queue_id: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> ProjectStatsPublic:
         """
@@ -1022,6 +1023,8 @@ class TracesClient:
         from_time : typing.Optional[dt.datetime]
 
         to_time : typing.Optional[dt.datetime]
+
+        annotation_queue_id : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1044,6 +1047,7 @@ class TracesClient:
             search=search,
             from_time=from_time,
             to_time=to_time,
+            annotation_queue_id=annotation_queue_id,
             request_options=request_options,
         )
         return _response.data
@@ -1215,6 +1219,7 @@ class TracesClient:
         strip_attachments: typing.Optional[bool] = None,
         filters: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
+        exclude: typing.Optional[str] = None,
         search: typing.Optional[str] = None,
         from_time: typing.Optional[dt.datetime] = None,
         to_time: typing.Optional[dt.datetime] = None,
@@ -1241,6 +1246,8 @@ class TracesClient:
         filters : typing.Optional[str]
 
         sorting : typing.Optional[str]
+
+        exclude : typing.Optional[str]
 
         search : typing.Optional[str]
 
@@ -1273,6 +1280,7 @@ class TracesClient:
             strip_attachments=strip_attachments,
             filters=filters,
             sorting=sorting,
+            exclude=exclude,
             search=search,
             from_time=from_time,
             to_time=to_time,
@@ -2773,6 +2781,7 @@ class AsyncTracesClient:
         search: typing.Optional[str] = None,
         from_time: typing.Optional[dt.datetime] = None,
         to_time: typing.Optional[dt.datetime] = None,
+        annotation_queue_id: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> ProjectStatsPublic:
         """
@@ -2791,6 +2800,8 @@ class AsyncTracesClient:
         from_time : typing.Optional[dt.datetime]
 
         to_time : typing.Optional[dt.datetime]
+
+        annotation_queue_id : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2816,6 +2827,7 @@ class AsyncTracesClient:
             search=search,
             from_time=from_time,
             to_time=to_time,
+            annotation_queue_id=annotation_queue_id,
             request_options=request_options,
         )
         return _response.data
@@ -2999,6 +3011,7 @@ class AsyncTracesClient:
         strip_attachments: typing.Optional[bool] = None,
         filters: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
+        exclude: typing.Optional[str] = None,
         search: typing.Optional[str] = None,
         from_time: typing.Optional[dt.datetime] = None,
         to_time: typing.Optional[dt.datetime] = None,
@@ -3025,6 +3038,8 @@ class AsyncTracesClient:
         filters : typing.Optional[str]
 
         sorting : typing.Optional[str]
+
+        exclude : typing.Optional[str]
 
         search : typing.Optional[str]
 
@@ -3060,6 +3075,7 @@ class AsyncTracesClient:
             strip_attachments=strip_attachments,
             filters=filters,
             sorting=sorting,
+            exclude=exclude,
             search=search,
             from_time=from_time,
             to_time=to_time,

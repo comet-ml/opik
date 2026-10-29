@@ -18,6 +18,10 @@ import com.comet.opik.api.retention.RetentionPeriod;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.TraceDAO;
+import com.comet.opik.domain.ailabels.AiLabel;
+import com.comet.opik.domain.ailabels.AiLabelStatus;
+import com.comet.opik.domain.ailabels.AiLabelStatusDAO;
+import com.comet.opik.domain.ailabels.AiLabelsDAO;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
@@ -40,6 +44,7 @@ import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.dropwizard.guice.test.jupiter.param.Jit;
+import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.time.DayOfWeek;
 import java.time.Duration;
@@ -49,11 +54,13 @@ import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -117,11 +124,14 @@ class RetentionPolicyServiceTest {
     private RetentionEstimationService estimationService;
     private TransactionTemplateAsync templateAsync;
     private IdGenerator idGenerator;
+    private AiLabelsDAO aiLabelsDAO;
+    private AiLabelStatusDAO aiLabelStatusDAO;
 
     @BeforeAll
     void beforeAll(ClientSupport client, @Jit RetentionPolicyService retentionPolicyService,
             @Jit RetentionCatchUpService catchUpService, @Jit RetentionEstimationService estimationService,
-            TransactionTemplateAsync templateAsync, IdGenerator idGenerator) {
+            TransactionTemplateAsync templateAsync, IdGenerator idGenerator, @Jit AiLabelsDAO aiLabelsDAO,
+            @Jit AiLabelStatusDAO aiLabelStatusDAO) {
         var baseURI = TestUtils.getBaseUrl(client);
         ClientSupportUtils.config(client);
 
@@ -130,6 +140,8 @@ class RetentionPolicyServiceTest {
         this.catchUpService = catchUpService;
         this.templateAsync = templateAsync;
         this.idGenerator = idGenerator;
+        this.aiLabelsDAO = aiLabelsDAO;
+        this.aiLabelStatusDAO = aiLabelStatusDAO;
         this.retentionClient = new RetentionRuleResourceClient(client, baseURI);
         this.traceClient = new TraceResourceClient(client, baseURI);
         this.spanClient = new SpanResourceClient(client, baseURI);
@@ -626,6 +638,8 @@ class RetentionPolicyServiceTest {
 
             waitForRows("traces", WS_SMALL, 3);
             waitForRows("spans", WS_SMALL, 11);
+            insertAiLabels(WS_SMALL, oldTraceId1);
+            insertAiLabels(WS_SMALL, recentTraceId);
 
             // Create rule with applyToPast=true — saved as pending estimation (no velocity/cursor yet)
             var rule = retentionClient.buildWorkspaceRule(RetentionPeriod.SHORT_14D)
@@ -649,6 +663,8 @@ class RetentionPolicyServiceTest {
             assertThat(countRowsById("traces", recentTraceId)).isEqualTo(1);
             assertThat(countRowsById("traces", oldTraceId1)).isZero();
             assertThat(countRowsById("traces", oldTraceId2)).isZero();
+            assertAiLabelRows(WS_SMALL, oldTraceId1, 0);
+            assertAiLabelRows(WS_SMALL, recentTraceId, 1);
 
             // Catch-up should be marked done
             var updated = retentionClient.get(created.id(), WS_SMALL_API_KEY, WS_SMALL_NAME, 200);
@@ -656,6 +672,95 @@ class RetentionPolicyServiceTest {
             assertThat(updated.catchUpCursor()).isNull();
         }
 
+    }
+
+    @Nested
+    @DisplayName("ai-labels follow their traces' retention")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class AiLabelsRetention {
+
+        @Test
+        @DisplayName("A retention cycle deletes the ai-labels of the traces it deletes, and keeps the rest")
+        void retentionCycleDeletesAiLabelsOfDeletedTraces() {
+            var wsName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var wsId = UUID.randomUUID().toString();
+            AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, wsName, wsId, USER);
+            retentionClient.createAndGet(retentionClient.buildWorkspaceRule(RetentionPeriod.BASE_60D).build(),
+                    API_KEY, wsName);
+
+            Instant now = Instant.now();
+            var oldTraceId = idGenerator.generateId(now.minus(61, ChronoUnit.DAYS));
+            var recentTraceId = idGenerator.generateId(now.minus(30, ChronoUnit.DAYS));
+            createTestTrace(oldTraceId, API_KEY, wsName);
+            createTestTrace(recentTraceId, API_KEY, wsName);
+            waitForRows("traces", wsId, 2);
+            insertAiLabels(wsId, oldTraceId);
+            insertAiLabels(wsId, recentTraceId);
+            // The same old trace id in a workspace without a rule.
+            var otherWsId = UUID.randomUUID().toString();
+            insertAiLabels(otherWsId, oldTraceId);
+
+            // Derive the fraction this random workspace falls into (48 = retention.executionsPerDay), as WeekBoundary.
+            var fraction = Math.min((int) (Long.parseLong(wsId.substring(0, 8), 16) / ((0xFFFFFFFFL + 1) / 48)), 47);
+            retentionPolicyService.executeRetentionCycle(fraction, now).block();
+
+            assertThat(countRowsById("traces", oldTraceId)).isZero();
+            assertAiLabelRows(wsId, oldTraceId, 0);
+            assertAiLabelRows(wsId, recentTraceId, 1);
+            assertAiLabelRows(otherWsId, oldTraceId, 1);
+        }
+
+        /**
+         * applyToPast=false: each workspace deletes only from its rule's creation up to the cutoff. The API stamps a
+         * rule's creation as now, so the rules are backdated in MySQL to put their floors before the cutoff.
+         */
+        @Test
+        @DisplayName("A bounded retention cycle deletes ai-labels from each workspace's own floor up to the cutoff")
+        void boundedRetentionCycleHonorsEachWorkspaceFloor(TransactionTemplate template) {
+            Instant now = Instant.now();
+            var cutoff = LocalDate.ofInstant(now, ZoneOffset.UTC).minusDays(RetentionPeriod.BASE_60D.getDays())
+                    .atStartOfDay(ZoneOffset.UTC).toInstant();
+            // One id prefix, so all three workspaces fall into the same fraction and one cycle covers them.
+            var wsLowFloor = UUID.randomUUID().toString();
+            var wsHighFloor = wsLowFloor.substring(0, 8) + UUID.randomUUID().toString().substring(8);
+            var wsWithoutRule = wsLowFloor.substring(0, 8) + UUID.randomUUID().toString().substring(8);
+            // Both floors sit inside the 3-day sliding window, so the rule's creation is what bounds each one.
+            createBoundedRule(wsLowFloor, cutoff.minus(2, ChronoUnit.DAYS), template);
+            createBoundedRule(wsHighFloor, cutoff.minus(1, ChronoUnit.DAYS), template);
+
+            var deletedAboveLowFloor = idGenerator.generateId(cutoff.minus(36, ChronoUnit.HOURS));
+            var keptAfterCutoff = idGenerator.generateId(cutoff.plus(1, ChronoUnit.HOURS));
+            var keptBelowHighFloor = idGenerator.generateId(cutoff.minus(36, ChronoUnit.HOURS));
+            var deletedAboveHighFloor = idGenerator.generateId(cutoff.minus(12, ChronoUnit.HOURS));
+            var keptWithoutRule = idGenerator.generateId(cutoff.minus(12, ChronoUnit.HOURS));
+            insertAiLabels(wsLowFloor, deletedAboveLowFloor);
+            insertAiLabels(wsLowFloor, keptAfterCutoff);
+            insertAiLabels(wsHighFloor, keptBelowHighFloor);
+            insertAiLabels(wsHighFloor, deletedAboveHighFloor);
+            insertAiLabels(wsWithoutRule, keptWithoutRule);
+
+            var fraction = Math.min(
+                    (int) (Long.parseLong(wsLowFloor.substring(0, 8), 16) / ((0xFFFFFFFFL + 1) / 48)), 47);
+            retentionPolicyService.executeRetentionCycle(fraction, now).block();
+
+            assertAiLabelRows(wsLowFloor, deletedAboveLowFloor, 0);
+            assertAiLabelRows(wsLowFloor, keptAfterCutoff, 1);
+            assertAiLabelRows(wsHighFloor, keptBelowHighFloor, 1);
+            assertAiLabelRows(wsHighFloor, deletedAboveHighFloor, 0);
+            assertAiLabelRows(wsWithoutRule, keptWithoutRule, 1);
+        }
+
+        private void createBoundedRule(String wsId, Instant createdAt, TransactionTemplate template) {
+            var wsName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, wsName, wsId, USER);
+            var ruleId = retentionClient.create(retentionClient.buildWorkspaceRule(RetentionPeriod.BASE_60D)
+                    .applyToPast(false).build(), API_KEY, wsName);
+            template.inTransaction(WRITE, handle -> handle
+                    .createUpdate("UPDATE retention_rules SET created_at = :created_at WHERE id = :id")
+                    .bind("created_at", createdAt)
+                    .bind("id", ruleId.toString())
+                    .execute());
+        }
     }
 
     /**
@@ -748,6 +853,52 @@ class RetentionPolicyServiceTest {
                 .projectName(PROJECT_NAME)
                 .startTime(Instant.now())
                 .build(), apiKey, wsName);
+    }
+
+    private void insertAiLabels(String workspaceId, UUID traceId) {
+        var projectId = UUID.randomUUID();
+        aiLabelStatusDAO.insert(List.of(AiLabelStatus.builder()
+                .workspaceId(workspaceId)
+                .projectId(projectId)
+                .task("summary")
+                .traceId(traceId)
+                .traceCreatedAt(Instant.now())
+                .taskVersion(1)
+                .rendererVersion(1)
+                .status(AiLabelStatus.Status.DONE)
+                .retryable(false)
+                .attempt(1)
+                .errorCode("")
+                .jobId("job")
+                .compactionLevel("none")
+                .build())).block();
+        aiLabelsDAO.insert(List.of(AiLabel.builder()
+                .workspaceId(workspaceId)
+                .projectId(projectId)
+                .task("summary")
+                .traceId(traceId)
+                .key(AiLabel.OUTPUT_KEY)
+                .taskVersion(1)
+                .answerType(AiLabel.AnswerType.OUTPUT)
+                .probabilities(Map.of())
+                .legend(Map.of())
+                .output("{}")
+                .build())).block();
+    }
+
+    private void assertAiLabelRows(String workspaceId, UUID traceId, long expected) {
+        for (var table : List.of("ai_labels", "ai_label_status")) {
+            var actual = templateAsync.nonTransaction(connection -> Mono
+                    .from(connection.createStatement(
+                            "SELECT count() AS cnt FROM %s WHERE workspace_id = :workspace_id AND trace_id = :trace_id"
+                                    .formatted(table))
+                            .bind("workspace_id", workspaceId)
+                            .bind("trace_id", traceId.toString())
+                            .execute())
+                    .flatMap(result -> Mono.from(result.map((row, _) -> row.get("cnt", Long.class)))))
+                    .block();
+            assertThat(actual).as("rows in %s for trace %s", table, traceId).isEqualTo(expected);
+        }
     }
 
     // -- ClickHouse read helpers for verification --

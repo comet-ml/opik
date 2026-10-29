@@ -21,6 +21,7 @@ import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.structuredoutput.ToolCallingStrategy;
 import com.comet.opik.domain.threads.TraceThreadService;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
+import com.comet.opik.infrastructure.llm.LlmModelRegistryTestUtils;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -152,7 +153,8 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
         Mockito.lenient().when(onlineScoringConfig.getAgenticToolsThresholdTokens()).thenReturn(50_000);
         Mockito.lenient().when(onlineScoringConfig.getAgenticToolsMaxPreloadMb()).thenReturn(64);
 
-        agenticScoringService = new AgenticScoringServiceImpl(onlineScoringConfig, toolRegistry);
+        agenticScoringService = new AgenticScoringServiceImpl(onlineScoringConfig, toolRegistry,
+                LlmModelRegistryTestUtils.bundledRegistry());
 
         scorer = new OnlineScoringTraceThreadLlmAsJudgeScorer(
                 onlineScoringConfig,

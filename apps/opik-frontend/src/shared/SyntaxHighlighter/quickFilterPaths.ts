@@ -1,4 +1,5 @@
 import { SyntaxNode, Tree } from "@lezer/common";
+import { buildJSONPath, JSON_PATH_FORMAT, JSONPathPart } from "@/lib/utils";
 
 export type QuickFilterMode = "json" | "yaml";
 
@@ -38,21 +39,6 @@ const unquote = (raw: string): string => {
   return s;
 };
 
-// Known limitation (matches the filter autocomplete's getJSONPaths): keys that
-// literally contain "." or "[]" produce a dotted path indistinguishable from a
-// nested/indexed one, so such a key maps to the wrong filter target.
-const buildPath = (parts: Array<{ key?: string; index?: number }>): string => {
-  let out = "";
-  for (const part of parts) {
-    if (part.key !== undefined) {
-      out += out ? `.${part.key}` : part.key;
-    } else {
-      out += `[${part.index}]`;
-    }
-  }
-  return out;
-};
-
 // Lezer exposes punctuation tokens ("[", "]", "{", "}", ",", ":") as named
 // children, so they must be skipped when computing an element's index.
 const PUNCTUATION = new Set(["[", "]", "{", "}", ",", ":"]);
@@ -81,7 +67,7 @@ const namedIndex = (
 };
 
 const jsonPath = (node: SyntaxNode, doc: string): string | null => {
-  const parts: Array<{ key?: string; index?: number }> = [];
+  const parts: JSONPathPart[] = [];
   let cur: SyntaxNode | null = node;
   while (cur) {
     const parent: SyntaxNode | null = cur.parent;
@@ -97,11 +83,11 @@ const jsonPath = (node: SyntaxNode, doc: string): string | null => {
     }
     cur = parent;
   }
-  return parts.length ? buildPath(parts) : null;
+  return parts.length ? buildJSONPath(parts, JSON_PATH_FORMAT.bracket) : null;
 };
 
 const yamlPath = (node: SyntaxNode, doc: string): string | null => {
-  const parts: Array<{ key?: string; index?: number }> = [];
+  const parts: JSONPathPart[] = [];
   let cur: SyntaxNode | null = node;
   while (cur) {
     const parent: SyntaxNode | null = cur.parent;
@@ -121,7 +107,7 @@ const yamlPath = (node: SyntaxNode, doc: string): string | null => {
     }
     cur = parent;
   }
-  return parts.length ? buildPath(parts) : null;
+  return parts.length ? buildJSONPath(parts, JSON_PATH_FORMAT.bracket) : null;
 };
 
 export const collectQuickFilterTargets = (

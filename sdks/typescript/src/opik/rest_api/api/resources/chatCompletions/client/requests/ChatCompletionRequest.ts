@@ -30,6 +30,8 @@ export interface ChatCompletionRequest {
     metadata?: Record<string, string>;
     reasoningEffort?: string;
     serviceTier?: string;
+    promptCacheKey?: string;
+    promptCacheOptions?: OpikApi.PromptCacheOptions;
     logprobs?: boolean;
     topLogprobs?: number;
     functions?: OpikApi.Function[];

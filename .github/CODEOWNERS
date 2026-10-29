@@ -25,6 +25,8 @@
 /apps/opik-backend/src/main/java/com/comet/opik/infrastructure/llm/*/*ModelName.java @comet-ml/comet-qa @comet-ml/comet-opik-devs
 /apps/opik-backend/src/main/resources/llm-models-default.yaml @comet-ml/comet-qa @comet-ml/comet-opik-devs
 /apps/opik-backend/src/main/resources/model_prices_and_context_window.json @comet-ml/comet-qa @comet-ml/comet-opik-devs
+/apps/opik-backend/src/main/resources/model_prices_openrouter.json @comet-ml/comet-qa @comet-ml/comet-opik-devs
 /apps/opik-frontend/src/constants/providerModels.ts @comet-ml/comet-qa @comet-ml/comet-opik-devs
 /apps/opik-frontend/src/data/model_prices_and_context_window.json @comet-ml/comet-qa @comet-ml/comet-opik-devs
+/apps/opik-frontend/src/data/model_prices_openrouter.json @comet-ml/comet-qa @comet-ml/comet-opik-devs
 /apps/opik-frontend/src/types/providers.ts @comet-ml/comet-qa @comet-ml/comet-opik-devs

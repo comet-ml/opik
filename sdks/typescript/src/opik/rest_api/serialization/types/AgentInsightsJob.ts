@@ -12,10 +12,23 @@ export const AgentInsightsJob: core.serialization.ObjectSchema<
     id: core.serialization.string().optional(),
     projectId: core.serialization.property("project_id", core.serialization.string().optional()),
     status: AgentInsightsJobStatus.optional(),
+    autoFirstRunEnrolled: core.serialization.property(
+        "auto_first_run_enrolled",
+        core.serialization.boolean().optional(),
+    ),
+    autoFirstRunAt: core.serialization.property("auto_first_run_at", core.serialization.date().optional()),
     lastScanAt: core.serialization.property("last_scan_at", core.serialization.date().optional()),
     lastFailureReason: core.serialization.property("last_failure_reason", core.serialization.string().optional()),
     lastFailureDetail: core.serialization.property("last_failure_detail", core.serialization.string().optional()),
     lastFailedAt: core.serialization.property("last_failed_at", core.serialization.date().optional()),
+    guidance: core.serialization.string().optional(),
+    guidanceUpdatedBy: core.serialization.property("guidance_updated_by", core.serialization.string().optional()),
+    guidanceUpdatedAt: core.serialization.property("guidance_updated_at", core.serialization.date().optional()),
+    guidanceVersion: core.serialization.property("guidance_version", core.serialization.number().optional()),
+    resultsGuidanceVersion: core.serialization.property(
+        "results_guidance_version",
+        core.serialization.number().optional(),
+    ),
     createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
     createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
     lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
@@ -27,10 +40,17 @@ export declare namespace AgentInsightsJob {
         id?: string | null;
         project_id?: string | null;
         status?: AgentInsightsJobStatus.Raw | null;
+        auto_first_run_enrolled?: boolean | null;
+        auto_first_run_at?: string | null;
         last_scan_at?: string | null;
         last_failure_reason?: string | null;
         last_failure_detail?: string | null;
         last_failed_at?: string | null;
+        guidance?: string | null;
+        guidance_updated_by?: string | null;
+        guidance_updated_at?: string | null;
+        guidance_version?: number | null;
+        results_guidance_version?: number | null;
         created_at?: string | null;
         created_by?: string | null;
         last_updated_at?: string | null;

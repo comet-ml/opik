@@ -1,19 +1,36 @@
 package com.comet.opik.utils;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import java.io.FileNotFoundException;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class JsonUtilsTest {
+
+    private static final TypeReference<Map<String, Object>> MAP_TYPE_REFERENCE = new TypeReference<>() {
+    };
+
+    @Test
+    void readJsonFileThrowsFileNotFoundNamingAMissingResource() {
+        var fileName = "missing-%s.json".formatted(RandomStringUtils.secure().nextAlphanumeric(32));
+        var expectedMessage = "Resource not found: '%s'".formatted(fileName);
+
+        assertThatThrownBy(() -> JsonUtils.readJsonFile(fileName, MAP_TYPE_REFERENCE))
+                .isExactlyInstanceOf(FileNotFoundException.class)
+                .hasMessage(expectedMessage);
+    }
 
     private static JsonNode node(String json) {
         return JsonUtils.getJsonNodeFromString(json);

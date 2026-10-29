@@ -101,7 +101,6 @@ const ProjectMetricsBreakdownSection: React.FC<
             field === BREAKDOWN_FIELD.METADATA
               ? breakdown.metadataKey
               : undefined,
-          aggregateTotal: true,
         });
       }
     },

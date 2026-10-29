@@ -48,6 +48,8 @@ public record AnnotationQueue(
                 AnnotationQueue.View.Write.class}) @Nullable @Min(1) @Max(3600) Integer lockTimeoutSeconds,
         @JsonView({AnnotationQueue.View.Public.class,
                 AnnotationQueue.View.Write.class}) @Nullable @Valid AnnotationQueueAutomation automation,
+        @JsonView({AnnotationQueue.View.Public.class,
+                AnnotationQueue.View.Write.class}) @Nullable @Valid AnnotationQueueAnnotatorView annotatorView,
         @JsonView({
                 AnnotationQueue.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable List<AnnotationQueueReviewer> reviewers,
         @JsonView({

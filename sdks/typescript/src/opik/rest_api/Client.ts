@@ -2,6 +2,7 @@
 
 import { AgentConfigsClient } from "./api/resources/agentConfigs/client/Client.js";
 import { AgentInsightsClient } from "./api/resources/agentInsights/client/Client.js";
+import { AgentInsightsEnrollmentClient } from "./api/resources/agentInsightsEnrollment/client/Client.js";
 import { AgentInsightsJobsClient } from "./api/resources/agentInsightsJobs/client/Client.js";
 import { AlertsClient } from "./api/resources/alerts/client/Client.js";
 import { AnnotationQueuesClient } from "./api/resources/annotationQueues/client/Client.js";
@@ -10,6 +11,7 @@ import { AttachmentsClient } from "./api/resources/attachments/client/Client.js"
 import { AutomationRuleEvaluatorsClient } from "./api/resources/automationRuleEvaluators/client/Client.js";
 import { ChatCompletionsClient } from "./api/resources/chatCompletions/client/Client.js";
 import { CheckClient } from "./api/resources/check/client/Client.js";
+import { DashboardSavedQueriesClient } from "./api/resources/dashboardSavedQueries/client/Client.js";
 import { DashboardsClient } from "./api/resources/dashboards/client/Client.js";
 import { DatasetsClient } from "./api/resources/datasets/client/Client.js";
 import { EnvironmentsClient } from "./api/resources/environments/client/Client.js";
@@ -58,7 +60,9 @@ export declare namespace OpikApiClient {
 export class OpikApiClient {
     protected readonly _options: NormalizedClientOptions<OpikApiClient.Options>;
     protected _mcpOAuth: McpOAuthClient | undefined;
+    protected _agentInsightsEnrollment: AgentInsightsEnrollmentClient | undefined;
     protected _systemAnalyticsQueries: SystemAnalyticsQueriesClient | undefined;
+    protected _dashboardSavedQueries: DashboardSavedQueriesClient | undefined;
     protected _systemUsage: SystemUsageClient | undefined;
     protected _agentConfigs: AgentConfigsClient | undefined;
     protected _agentInsightsJobs: AgentInsightsJobsClient | undefined;
@@ -107,8 +111,16 @@ export class OpikApiClient {
         return (this._mcpOAuth ??= new McpOAuthClient(this._options));
     }
 
+    public get agentInsightsEnrollment(): AgentInsightsEnrollmentClient {
+        return (this._agentInsightsEnrollment ??= new AgentInsightsEnrollmentClient(this._options));
+    }
+
     public get systemAnalyticsQueries(): SystemAnalyticsQueriesClient {
         return (this._systemAnalyticsQueries ??= new SystemAnalyticsQueriesClient(this._options));
+    }
+
+    public get dashboardSavedQueries(): DashboardSavedQueriesClient {
+        return (this._dashboardSavedQueries ??= new DashboardSavedQueriesClient(this._options));
     }
 
     public get systemUsage(): SystemUsageClient {

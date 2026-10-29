@@ -12,7 +12,7 @@ title: LLM Juries
 
 `LLMJuriesJudge` averages the results of multiple judge metrics to deliver a single ensemble score. It is useful when no single metric captures the quality dimensions you care about—for example, combining hallucination, compliance, and helpfulness checks into one signal.
 
-```python title="Ensembling judges"
+```python title="Ensembling judges" wordWrap
 from opik.evaluation.metrics import (
     LLMJuriesJudge,
     Hallucination,

@@ -21,6 +21,7 @@ import com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest
 import com.comet.opik.domain.threads.TraceThreadService;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
+import com.comet.opik.infrastructure.llm.LlmModelRegistryTestUtils;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -133,7 +134,8 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
 
         // Real AgenticScoringServiceImpl (not a mock) so the bounded span preload runs for real over the
         // stubbed spanService.getByTraceIds Flux — toggle-on tests exercise the actual preload path.
-        var agenticScoringService = new AgenticScoringServiceImpl(onlineScoringConfig, new ToolRegistry(Set.of()));
+        var agenticScoringService = new AgenticScoringServiceImpl(onlineScoringConfig, new ToolRegistry(Set.of()),
+                LlmModelRegistryTestUtils.bundledRegistry());
 
         scorer = new OnlineScoringTraceThreadUserDefinedMetricPythonScorer(
                 onlineScoringConfig,

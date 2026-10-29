@@ -81,6 +81,20 @@ export class PromptsPage {
   }
 
   /**
+   * The "Versions" cell of one prompt's row — the library's own rendering of
+   * `version_count`, and the number a user reads to see whether a save grew the
+   * prompt's history (opik#8923).
+   *
+   * Addressed by `data-cell-id` (`<rowId>_<columnId>`, stamped by the shared
+   * `DataTable`) rather than by column position: the Versions column sits third
+   * by default but column order here is user-configurable and persisted, so an
+   * `:nth-child` would read a different column the moment anyone reorders them.
+   */
+  promptVersionCountCell(promptId: string): Locator {
+    return this.page.locator(`td[data-cell-id="${promptId}_version_count"]`);
+  }
+
+  /**
    * Unlike the sibling pages, the confirm heading interpolates the prompt
    * name ("Delete <name>") while the button stays a fixed "Delete prompt".
    */
