@@ -1016,6 +1016,13 @@ export const OPENAI_PIPELINE_MODE_VALUES = [
 
 export type OpenAiPipelineMode = (typeof OPENAI_PIPELINE_MODE_VALUES)[number];
 
+export const BEDROCK_API_VALUES = [
+  "chat_completions",
+  "anthropic_messages",
+] as const;
+
+export type BedrockApi = (typeof BEDROCK_API_VALUES)[number];
+
 export interface ProviderKeyConfiguration {
   location?: string;
   models?: string;
@@ -1030,6 +1037,7 @@ export interface ProviderKeyConfiguration {
   /** OpenAI (OPIK-6833): which OpenAI pipeline to route through. Backend parses case-insensitively
    * and falls back to chat_completions_api on unknown values. */
   openai_pipeline_mode?: OpenAiPipelineMode;
+  bedrock_api?: BedrockApi;
 }
 
 /** Read-back sentinel for secret credential values: the backend never returns a stored secret,

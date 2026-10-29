@@ -103,7 +103,7 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
      * conditional, applied when the provider needs request mutation (its configuration keys, a {@code {model}}
      * placeholder or token auth).
      */
-    private HttpClientBuilder newHttpClientBuilder(LlmProviderClientApiConfig config) {
+    HttpClientBuilder newHttpClientBuilder(LlmProviderClientApiConfig config) {
         // innermost, so it sees the URL after InterceptingHttpClient's mutations
         var guardedBuilder = new DestinationGuardHttpClientBuilder(httpClientBuilders.builder(), providerBaseUrlGuard);
 

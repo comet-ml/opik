@@ -230,7 +230,12 @@ Step 4: Create and Download the Key
 
 #### Amazon Bedrock
 
-Amazon Bedrock provides access to foundation models from leading AI companies like AI21 Labs, Anthropic, Cohere, Meta, Mistral AI, Stability AI, and Amazon through AWS. Opik connects to Bedrock using the [OpenAI Chat Completions API](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-chat-completions.html). Only models that support this API format will work with the Opik Playground. Check the [supported models documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-chat-completions.html#inference-chat-completions-supported-models) to verify compatibility before configuring.
+Amazon Bedrock provides access to foundation models from leading AI companies like AI21 Labs, Anthropic, Cohere, Meta, Mistral AI, Stability AI, and Amazon through AWS. Each Bedrock provider in Opik sends its requests through one of two APIs, chosen with the **API** field:
+
+- **Chat Completions (OpenAI-compatible)**: the [OpenAI Chat Completions API](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-chat-completions.html), for models such as gpt-oss, Mistral and Qwen. Check the [supported models documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-chat-completions.html#inference-chat-completions-supported-models) before configuring.
+- **Anthropic Messages (Claude)**: the [Anthropic Messages API](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-messages-api.html), for Claude models. Bedrock does not serve Claude through Chat Completions, so Claude models need this option.
+
+To use both kinds of models, add one Bedrock provider for each API.
 
 ##### Prerequisites
 
@@ -251,17 +256,20 @@ Before configuring Bedrock in Opik, ensure you have:
 3. Select **"Bedrock"** from the provider dropdown
 4. Fill in the configuration:
    - **Provider name**: A unique identifier for this provider instance (e.g., "Bedrock us-east-1")
-   - **URL**: Your Bedrock endpoint URL (see format below)
+   - **API**: **Chat Completions** or **Anthropic Messages** (see above)
+   - **URL**: Your Bedrock endpoint URL for that API (see format below)
    - **Authentication**: Your AWS Bedrock API key (see [AWS documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/getting-started-api-keys.html) for setup instructions), or OAuth2 client credentials if your gateway issues short-lived tokens (see [OAuth2 Client Credentials Authentication](#oauth2-client-credentials-authentication) below)
-   - **Models list**: Comma-separated list of models you want to use (e.g., `us.anthropic.claude-sonnet-4-6,us.meta.llama3-2-3b-instruct-v1:0`)
+   - **Models list**: Comma-separated list of models you want to use (e.g., `openai.gpt-oss-20b-1:0,qwen.qwen3-32b-v1:0` for Chat Completions, or `eu.anthropic.claude-haiku-4-5,global.anthropic.claude-sonnet-5` for Anthropic Messages)
    - **Custom headers** (optional): Add any additional HTTP headers required by your configuration
 5. Click **Add configuration** to save
 
 ##### Bedrock URL Format by Region
 
-Bedrock endpoints follow this pattern: `https://bedrock-runtime.<region>.amazonaws.com/openai/v1`
+For **Chat Completions**, Bedrock endpoints follow this pattern: `https://bedrock-runtime.<region>.amazonaws.com/openai/v1`
 
-**Examples by Region:**
+For **Anthropic Messages**, use `https://bedrock-runtime.<region>.amazonaws.com/anthropic`, or `https://bedrock-mantle.<region>.api.aws/anthropic` for the bedrock-mantle endpoint. Opik also accepts these URLs ending in `/v1` or `/v1/messages`. Model IDs can carry a cross-Region inference profile prefix, such as `eu.`, `us.` or `global.`.
+
+**Chat Completions examples by Region:**
 
 - **US East 1**: `https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1`
 - **US West 2**: `https://bedrock-runtime.us-west-2.amazonaws.com/openai/v1`
