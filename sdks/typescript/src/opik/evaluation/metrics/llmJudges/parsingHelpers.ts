@@ -5,8 +5,9 @@ import { JSONParsingError } from "../errors";
  * Extracts and parses JSON content from a string.
  *
  * This function attempts to parse the content as JSON. If direct parsing fails,
- * it tries to extract JSON by finding the first `{` and last `}` characters,
- * which handles cases where the LLM wraps JSON in additional text.
+ * it falls back to scanning every `{` candidate and letting `JSON.parse`
+ * decide each one, which handles cases where the LLM wraps JSON in
+ * additional text.
  *
  * When the extracted text holds several complete JSON objects, they are only
  * accepted when every object parses to the same value (compared on the parsed
@@ -34,7 +35,7 @@ export function extractJsonContentOrRaise(content: string): unknown {
   try {
     return JSON.parse(content);
   } catch {
-    // Try to extract JSON from text by finding first { and last }
+    // Fall back to scanning every `{` candidate; JSON.parse decides each one
     return extractPresumablyJsonDictOrRaise(content);
   }
 }
