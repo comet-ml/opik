@@ -346,6 +346,7 @@ class TestRunSimulation:
     def test_run_simulation_with_project_name__llm_simulated_user__completion_traces_logged_to_that_project(
         self, fake_backend, monkeypatch
     ):
+        monkeypatch.setenv("OPIK_ENABLE_LITELLM_MODELS_MONITORING", "true")
         project_name = generate_project_name("simulation")
 
         # A plain function, not a MagicMock: the litellm tracker skips callables
