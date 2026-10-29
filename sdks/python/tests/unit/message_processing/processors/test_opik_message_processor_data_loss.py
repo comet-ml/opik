@@ -1,8 +1,8 @@
 """Unit tests for terminal-drop (data-loss) recording in OpikMessageProcessor.
 
 Verifies that messages abandoned after a non-recoverable error are recorded in
-the DataLossTracker, while transient/retried states (429 with usable headers)
-and successful sends are not.
+the DataLossTracker, while transient/retried states (429 with a usable
+RateLimit-Reset or Retry-After header) and successful sends are not.
 """
 
 from unittest import mock
@@ -114,6 +114,43 @@ def test_process__429_with_usable_headers__retried_not_recorded(
             processor.process(_spans_batch_message())
 
     assert _recorded(tracker) == []
+
+
+@pytest.mark.parametrize(
+    "headers",
+    [{"Retry-After": "0"}, {"retry-after": "0"}],
+    ids=["standard_name", "lower_case_name"],
+)
+def test_process__429_with_retry_after_only__requeued_with_minimum_delay_not_recorded(
+    processor, rest_client, tracker, headers
+):
+    rest_client.spans.create_spans.side_effect = rest_api_core.ApiError(
+        status_code=429, headers=headers
+    )
+
+    with pytest.raises(exceptions.OpikCloudRequestsRateLimited) as exc_info:
+        processor.process(_spans_batch_message())
+
+    assert exc_info.value.retry_after == 1.0
+    assert _recorded(tracker) == []
+
+
+@pytest.mark.parametrize(
+    "headers", [None, {}, {"Retry-After": "soon"}], ids=["none", "empty", "garbage"]
+)
+def test_process__429_without_usable_headers__recorded_as_client_error_data_loss(
+    processor, rest_client, tracker, headers
+):
+    rest_client.spans.create_spans.side_effect = rest_api_core.ApiError(
+        status_code=429, headers=headers
+    )
+
+    processor.process(_spans_batch_message(item_count=2))
+
+    failure = _recorded(tracker)[0]
+    assert failure.reason == data_loss.FailureReason.HTTP_CLIENT_ERROR
+    assert failure.status_code == 429
+    assert failure.item_count == 2
 
 
 def test_process__successful_send__nothing_recorded(processor, tracker):
