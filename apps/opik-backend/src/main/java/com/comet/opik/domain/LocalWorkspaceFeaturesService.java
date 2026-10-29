@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.infrastructure.auth.RequestContext;
+import jakarta.ws.rs.core.HttpHeaders;
 import lombok.NonNull;
 
 /**
@@ -10,7 +11,8 @@ import lombok.NonNull;
 public class LocalWorkspaceFeaturesService implements WorkspaceFeaturesService {
 
     @Override
-    public boolean isEnabled(@NonNull RequestContext caller, @NonNull WorkspaceFeature feature) {
+    public boolean isEnabled(@NonNull RequestContext caller, @NonNull HttpHeaders request,
+            @NonNull WorkspaceFeature feature) {
         return true;
     }
 }
