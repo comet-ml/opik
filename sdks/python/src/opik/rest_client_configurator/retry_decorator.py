@@ -1,13 +1,11 @@
 import tenacity
 import httpx
 
+from opik.rate_limit import rate_limit
 from opik.rest_api.core import api_error as rest_api_error
 
 
 RETRYABLE_STATUS_CODES = [429, 500, 502, 503, 504]
-
-# Upper bound on how long we will sleep when honouring a Retry-After header.
-_MAX_RETRY_AFTER_SECONDS = 60.0
 
 
 def _allowed_to_retry(exception: Exception) -> bool:
@@ -32,8 +30,8 @@ def _wait_duration(retry_state: tenacity.RetryCallState) -> float:
     """Return how long to wait before the next attempt.
 
     For 429 responses, honour the server's ``Retry-After`` header when present
-    (capped at ``_MAX_RETRY_AFTER_SECONDS``).  Fall back to exponential backoff
-    for all other cases.
+    (capped at ``rate_limit.MAX_RETRY_AFTER_SECONDS``).  Fall back to exponential
+    backoff for all other cases.
     """
     exc = retry_state.outcome.exception() if retry_state.outcome else None
     if isinstance(exc, rest_api_error.ApiError) and exc.status_code == 429:
@@ -42,7 +40,7 @@ def _wait_duration(retry_state: tenacity.RetryCallState) -> float:
         if raw is not None:
             try:
                 seconds = float(raw)
-                if 0 <= seconds <= _MAX_RETRY_AFTER_SECONDS:
+                if 0 <= seconds <= rate_limit.MAX_RETRY_AFTER_SECONDS:
                     return seconds
             except (ValueError, TypeError):
                 pass

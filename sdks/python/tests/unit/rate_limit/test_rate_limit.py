@@ -28,8 +28,17 @@ from opik.rate_limit import rate_limit
         ),
         ({"foo": "bar"}, None),
         ({"RateLimit-Reset": "-10"}, None),
+        ({"RateLimit-Reset": "soon"}, None),
+        ({"RateLimit-Reset": "1.5"}, None),
     ],
-    ids=["standard_name", "lower_case_name", "no_rate_limit", "negative_rate_limit"],
+    ids=[
+        "standard_name",
+        "lower_case_name",
+        "no_rate_limit",
+        "negative_rate_limit",
+        "unparseable",
+        "not_an_integer",
+    ],
 )
 def test_parse_rate_limit(rate_limit_dict, expected):
     parsed = rate_limit.parse_rate_limit(rate_limit_dict)
@@ -43,6 +52,7 @@ def test_parse_rate_limit(rate_limit_dict, expected):
         ({"retry-after": "2.5"}, 2.5),
         ({"Retry-After": "0"}, rate_limit.MIN_RETRY_AFTER_SECONDS),
         ({"Retry-After": "-3"}, rate_limit.MIN_RETRY_AFTER_SECONDS),
+        ({"Retry-After": "99999999999"}, rate_limit.MAX_RETRY_AFTER_SECONDS),
         ({}, None),
         ({"Retry-After": "soon"}, None),
         ({"Retry-After": "nan"}, None),
@@ -53,6 +63,7 @@ def test_parse_rate_limit(rate_limit_dict, expected):
         "lower_case_name",
         "zero_raised_to_minimum",
         "negative_raised_to_minimum",
+        "huge_lowered_to_maximum",
         "missing",
         "unparseable",
         "nan",
@@ -72,7 +83,7 @@ def test_parse_retry_after__http_date__seconds_until_that_date():
         {"Retry-After": email.utils.format_datetime(retry_at, usegmt=True)}
     )
 
-    assert 25 <= parsed <= 30
+    assert 10 < parsed <= 30
 
 
 def test_parse_retry_after__http_date_with_unknown_zone__read_as_utc():
@@ -84,4 +95,14 @@ def test_parse_retry_after__http_date_with_unknown_zone__read_as_utc():
         {"Retry-After": email.utils.format_datetime(retry_at.replace(tzinfo=None))}
     )
 
-    assert 25 <= parsed <= 30
+    assert 10 < parsed <= 30
+
+
+def test_parse_retry_after__http_date_far_in_the_future__lowered_to_maximum():
+    retry_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)
+
+    parsed = rate_limit.parse_retry_after(
+        {"Retry-After": email.utils.format_datetime(retry_at, usegmt=True)}
+    )
+
+    assert parsed == rate_limit.MAX_RETRY_AFTER_SECONDS

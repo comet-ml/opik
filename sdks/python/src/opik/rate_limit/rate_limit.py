@@ -6,6 +6,9 @@ from typing import Any, Dict, Optional
 
 # A `Retry-After: 0` would otherwise turn into a tight resend loop.
 MIN_RETRY_AFTER_SECONDS = 1.0
+# Upper bound on how long a Retry-After is honoured, both by the REST client's
+# retries and by the message queue, which pauses all deliveries until then.
+MAX_RETRY_AFTER_SECONDS = 60.0
 
 
 @dataclasses.dataclass
@@ -18,9 +21,12 @@ class CloudRateLimit:
 
 
 def parse_rate_limit(rate_limit_response: Dict[str, Any]) -> Optional[CloudRateLimit]:
-    rate_limit_reset_time = int(rate_limit_response.get("RateLimit-Reset", 0))
-    if rate_limit_reset_time == 0:
-        rate_limit_reset_time = int(rate_limit_response.get("ratelimit-reset", 0))
+    try:
+        rate_limit_reset_time = int(rate_limit_response.get("RateLimit-Reset", 0))
+        if rate_limit_reset_time == 0:
+            rate_limit_reset_time = int(rate_limit_response.get("ratelimit-reset", 0))
+    except (TypeError, ValueError):
+        return None
 
     if rate_limit_reset_time > 0:
         return CloudRateLimit(
@@ -33,8 +39,8 @@ def parse_rate_limit(rate_limit_response: Dict[str, Any]) -> Optional[CloudRateL
 
 def parse_retry_after(headers: Dict[str, Any]) -> Optional[float]:
     """Seconds to wait according to a standard ``Retry-After`` header, given either
-    as delta-seconds or as an HTTP date. Returns None if the header is absent or
-    unparseable."""
+    as delta-seconds or as an HTTP date, kept between MIN_RETRY_AFTER_SECONDS and
+    MAX_RETRY_AFTER_SECONDS. Returns None if the header is absent or unparseable."""
     value = headers.get("Retry-After", headers.get("retry-after"))
     if value is None:
         return None
@@ -56,4 +62,4 @@ def parse_retry_after(headers: Dict[str, Any]) -> Optional[float]:
     if not math.isfinite(seconds):
         return None
 
-    return max(seconds, MIN_RETRY_AFTER_SECONDS)
+    return min(max(seconds, MIN_RETRY_AFTER_SECONDS), MAX_RETRY_AFTER_SECONDS)

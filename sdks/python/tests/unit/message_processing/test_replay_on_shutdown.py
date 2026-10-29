@@ -239,6 +239,31 @@ class TestShutdownWhileServerLooksUnreachable:
         assert result.dropped_messages == 0
         assert _delivered(processor) == PARKED_TRACE_IDS
 
+    def test_flush__server_back_before_next_scheduled_ping__parked_messages_replayed(
+        self, build_stack
+    ):
+        st, rm, processor, _ = build_stack(server_is_back=True)
+        _park_failed(rm)
+
+        flushed = st.flush(timeout=5)
+        time.sleep(0.3)
+
+        assert flushed is True
+        assert _delivered(processor) == PARKED_TRACE_IDS
+
+    def test_close_flush__parked_messages_cannot_be_counted__not_reported_as_flushed(
+        self, build_stack
+    ):
+        st, rm, _, _ = build_stack(server_is_back=False)
+        _park_failed(rm)
+
+        with mock.patch.object(
+            rm, "failed_messages", side_effect=RuntimeError("store unreadable")
+        ):
+            flushed = st.close(timeout=5, flush=True)
+
+        assert flushed is False
+
 
 def test_opik_end__server_unreachable__parked_messages_reported_as_dropped(
     fake_file_upload_manager,
