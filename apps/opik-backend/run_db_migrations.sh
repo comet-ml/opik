@@ -6,8 +6,7 @@ echo "Current directory is: $(pwd)"
 echo "OPIK_VERSION=$OPIK_VERSION"
 
 # The two migrations are independent: run both even if the first fails, then fail if either did.
-# `a && b` under `set -e` skips b when a fails and the script still falls through to the success
-# message and exits 0, so the init container passes against databases that were not migrated.
+# `|| status=$?` absorbs only these two exit codes, so `set -e` still guards the rest of the script.
 state_status=0
 analytics_status=0
 java -jar opik-backend-"$OPIK_VERSION".jar db migrate config.yml || state_status=$?
