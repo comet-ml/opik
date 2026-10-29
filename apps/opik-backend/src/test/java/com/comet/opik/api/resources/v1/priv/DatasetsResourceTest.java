@@ -86,6 +86,7 @@ import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
+import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -131,6 +132,8 @@ import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
@@ -272,6 +275,7 @@ class DatasetsResourceTest {
     private OptimizationResourceClient optimizationResourceClient;
     private ProjectResourceClient projectResourceClient;
     private ExperimentAggregatesService experimentAggregatesService;
+    private TransactionTemplateAsync clickHouseTemplate;
 
     @BeforeAll
     void setUpAll(ClientSupport client, TransactionTemplate mySqlTemplate, Injector injector) {
@@ -292,6 +296,7 @@ class DatasetsResourceTest {
         optimizationResourceClient = new OptimizationResourceClient(client, baseURI, factory);
         projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
         experimentAggregatesService = injector.getInstance(ExperimentAggregatesService.class);
+        clickHouseTemplate = injector.getInstance(TransactionTemplateAsync.class);
     }
 
     @AfterAll
@@ -8940,12 +8945,14 @@ class DatasetsResourceTest {
 
         private String apiKey;
         private String workspaceName;
+        private String workspaceId;
 
         @BeforeAll
         void setUp() {
             apiKey = UUID.randomUUID().toString();
             workspaceName = UUID.randomUUID().toString();
-            mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+            workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
         }
 
         private Dataset createDatasetWithItems(List<DatasetItem> items) {
@@ -9069,6 +9076,70 @@ class DatasetsResourceTest {
 
             assertThat(actualPage.content()).isEmpty();
             assertThat(actualPage.total()).isZero();
+        }
+
+        @Test
+        @DisplayName("when filtering by item id, then experiment items are read by dataset item id")
+        void findWhenItemIdFilterThenExperimentItemsReadByDatasetItemId() {
+            var targetItem = DatasetResourceClient.buildDatasetItem(factory);
+            var otherItem = DatasetResourceClient.buildDatasetItem(factory);
+            var dataset = createDatasetWithItems(List.of(targetItem, otherItem));
+            var experimentId = createExperiment(dataset);
+            createAndAssert(new ExperimentItemsBatch(Set.of(
+                    buildExperimentItem(experimentId, targetItem.id()),
+                    buildExperimentItem(experimentId, otherItem.id()))), apiKey, workspaceName);
+
+            getPage(dataset.id(), null, idFilter(targetItem.id()));
+
+            // Without the item filter in the primary key condition, every experiment item, trace and score of every
+            // experiment on the dataset is read to return one item, so the read grows with the dataset's history.
+            for (var queryName : List.of("get_dataset_item_versions_with_experiment_items",
+                    "count_dataset_item_versions_with_experiment_items")) {
+                var conditions = experimentItemsKeyConditions(explainIndexes(statementFor(queryName)));
+                assertThat(conditions).as(queryName).isNotEmpty()
+                        .allSatisfy(condition -> assertThat(condition).contains("dataset_item_id in"));
+            }
+        }
+
+        private List<String> experimentItemsKeyConditions(List<String> plan) {
+            var conditions = new ArrayList<String>();
+            for (int i = 0; i < plan.size(); i++) {
+                if (!plan.get(i).contains("ReadFromMergeTree") || !plan.get(i).contains(".experiment_items)")) {
+                    continue;
+                }
+                var primaryKey = plan.subList(i + 1, plan.size()).stream()
+                        .dropWhile(line -> !line.strip().equals("PrimaryKey"))
+                        .filter(line -> line.contains("Condition:"))
+                        .findFirst();
+                conditions.add(primaryKey.orElse("no primary key condition"));
+            }
+            return conditions;
+        }
+
+        private String statementFor(String queryName) {
+            var logCommentPrefix = "%s:%s:".formatted(queryName, workspaceId);
+            return Awaitility.await()
+                    .atMost(Duration.ofSeconds(30))
+                    .pollInterval(Duration.ofMillis(500))
+                    .until(() -> clickHouseTemplate.nonTransaction(connection -> Mono
+                            .from(connection.createStatement("SYSTEM FLUSH LOGS").execute())
+                            .flatMap(result -> Mono.from(result.getRowsUpdated()))
+                            .then(Mono.from(connection.createStatement("""
+                                    SELECT query FROM system.query_log
+                                    WHERE startsWith(log_comment, :prefix) AND type = 'QueryFinish'
+                                    ORDER BY event_time_microseconds DESC
+                                    LIMIT 1
+                                    """).bind("prefix", logCommentPrefix).execute()))
+                            .flatMap(result -> Mono.from(result.map((row, ignored) -> row.get(0, String.class)))))
+                            .block(), Objects::nonNull);
+        }
+
+        private List<String> explainIndexes(String statement) {
+            return clickHouseTemplate.nonTransaction(connection -> Flux
+                    .from(connection.createStatement("EXPLAIN indexes = 1 " + statement).execute())
+                    .flatMap(result -> result.map((row, ignored) -> row.get(0, String.class)))
+                    .collectList())
+                    .block();
         }
 
         Stream<Arguments> findWhenInvalidParams() {
