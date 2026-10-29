@@ -15,6 +15,15 @@ def extract_thread_model_id_cursor(thread: trace_thread.TraceThread) -> Optional
     return thread.thread_model_id
 
 
+def extract_thread_model_id_cursor_from_raw(raw: dict) -> Optional[str]:
+    # Raw-record counterpart of extract_thread_model_id_cursor, for pages whose
+    # records all fail validation: the stream reader still reports the last
+    # decoded record, and its thread_model_id is the backend position in the
+    # right domain. The raw record `id` must not be used instead: it is a
+    # different key than the one the endpoint pages by.
+    return raw.get("thread_model_id") if isinstance(raw, dict) else None
+
+
 def search_spans_with_filters(
     rest_client: rest_api_client.OpikApi,
     trace_id: Optional[str],
@@ -124,6 +133,7 @@ def search_threads_with_filters(
         max_results=max_results,
         parsed_item_class=trace_thread.TraceThread,
         cursor_extractor=extract_thread_model_id_cursor,
+        raw_cursor_extractor=extract_thread_model_id_cursor_from_raw,
         max_endpoint_batch_size=max_batch_size,
     )
     return threads
