@@ -5,6 +5,7 @@ import {
   AUTH_SEND_AS_VALUES,
   OPENAI_PIPELINE_MODE_VALUES,
   OpenAiPipelineMode,
+  OPENROUTER_REGION_VALUES,
   PROVIDER_TYPE,
 } from "@/types/providers";
 import {
@@ -106,6 +107,7 @@ export const CloudAIProviderDetailsFormSchema = z
     // OpenAI-only: which pipeline the backend routes the request through. Schema-level optional
     // because non-OpenAI cloud providers ignore it. The dialog defaults to chat_completions_api.
     openaiPipelineMode: z.enum(OPENAI_PIPELINE_MODE_VALUES).optional(),
+    openRouterRegion: z.enum(OPENROUTER_REGION_VALUES).optional(),
     // Only offered (and sent) for PROVIDERS_WITH_HEADERS; ignored for other cloud providers.
     headers: headersArraySchema,
   })

@@ -29,6 +29,7 @@ import { ProviderAuthConfig } from "@/types/providers";
 import {
   convertCustomProviderModels,
   DEFAULT_OPENAI_PIPELINE_MODE,
+  OPENROUTER_REGION_BASE_URLS,
 } from "@/lib/provider";
 import { useProviderOptions } from "@/hooks/useProviderOptions";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
@@ -74,6 +75,7 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
       providerName: "",
       headers: [],
       openaiPipelineMode: DEFAULT_OPENAI_PIPELINE_MODE,
+      openRouterRegion: "global",
     } as AIProviderFormType,
   });
 
@@ -183,6 +185,18 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
           openai_pipeline_mode:
             data.openaiPipelineMode ?? DEFAULT_OPENAI_PIPELINE_MODE,
         };
+      }
+
+      if (
+        data.provider === PROVIDER_TYPE.OPEN_ROUTER &&
+        "openRouterRegion" in data &&
+        data.openRouterRegion
+      ) {
+        const regionBaseUrl =
+          OPENROUTER_REGION_BASE_URLS[data.openRouterRegion];
+        if (regionBaseUrl) {
+          providerKeyData.base_url = regionBaseUrl;
+        }
       }
 
       // Static headers for built-in providers that apply them (OpenAI, OpenRouter)
