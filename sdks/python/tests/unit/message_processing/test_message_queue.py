@@ -50,6 +50,19 @@ def test_message_queue_put_back__bounded_queue_full__newest_evicted_and_reported
     assert evicted == ["c"]
 
 
+def test_message_queue_put__zero_length_queue__new_message_evicted_and_reported():
+    queue: message_queue.MessageQueue[str] = message_queue.MessageQueue(max_length=0)
+    evicted = []
+    queue.set_eviction_callback(evicted.append)
+
+    queue.put("a")
+    queue.put_back("b")
+
+    assert evicted == ["a", "b"]
+    assert queue.size() == 0
+    assert queue.all_tasks_done() is True
+
+
 def test_message_queue_task_done__fresh_queue__reports_all_tasks_done():
     queue: message_queue.MessageQueue[str] = message_queue.MessageQueue()
     assert queue.all_tasks_done() is True

@@ -50,7 +50,8 @@ class MessageQueue(Generic[T]):
             if len(self._deque) > before:
                 self._unfinished_tasks += 1
             else:
-                evicted = oldest
+                # A zero-length queue discards the new message itself.
+                evicted = oldest if oldest is not None else message
             self._cond.notify()
         self._report_evicted(evicted)
 
@@ -71,7 +72,7 @@ class MessageQueue(Generic[T]):
             newest = self._deque[0] if before > 0 else None
             self._deque.append(message)
             if len(self._deque) == before:
-                evicted = newest
+                evicted = newest if newest is not None else message
                 if self._unfinished_tasks > 0:
                     self._unfinished_tasks -= 1
                     if self._unfinished_tasks == 0:
