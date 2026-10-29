@@ -2166,6 +2166,12 @@ class FindTraceThreadsResourceTest {
 
             assertThreadPage(null, projectId, expectedThreads, List.of(), Map.of("search", term), API_KEY,
                     TEST_WORKSPACE);
+            // A cost sort can't take the page pushdown, so this page runs the full list query
+            assertThreadPage(null, projectId, expectedThreads, List.of(), Map.of("search", term), API_KEY,
+                    TEST_WORKSPACE, List.of(SortingField.builder()
+                            .field(SortableFields.TOTAL_ESTIMATED_COST)
+                            .direction(Direction.DESC)
+                            .build()));
             var actualStats = traceResourceClient.getTraceThreadStats(null, projectId, API_KEY, TEST_WORKSPACE,
                     List.of(), Map.of("search", term));
             TraceAssertions.assertStats(actualStats.stats(), expectedStats);
