@@ -5,6 +5,8 @@ import {
   PROVIDER_MODEL_TYPE,
   OPENAI_PIPELINE_MODE_VALUES,
   OpenAiPipelineMode,
+  BEDROCK_API_VALUES,
+  BedrockApi,
 } from "@/types/providers";
 import {
   CUSTOM_PROVIDER_MODEL_PREFIX,
@@ -141,4 +143,15 @@ export const normalizeOpenAiPipelineMode = (
   return (OPENAI_PIPELINE_MODE_VALUES as readonly string[]).includes(lowered)
     ? (lowered as OpenAiPipelineMode)
     : DEFAULT_OPENAI_PIPELINE_MODE;
+};
+
+export const DEFAULT_BEDROCK_API: BedrockApi = "chat_completions";
+
+export const normalizeBedrockApi = (
+  value: string | undefined | null,
+): BedrockApi => {
+  const lowered = value?.toLowerCase();
+  return (BEDROCK_API_VALUES as readonly string[]).includes(lowered ?? "")
+    ? (lowered as BedrockApi)
+    : DEFAULT_BEDROCK_API;
 };
