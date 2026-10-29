@@ -30,7 +30,7 @@ const URL_PLACEHOLDERS: Record<BedrockApi, string> = {
 const MODELS_EXAMPLES: Record<BedrockApi, string> = {
   chat_completions: "openai.gpt-oss-20b-1:0,mistral.ministral-3-3b-instruct",
   anthropic_messages:
-    "us.anthropic.claude-haiku-4-5,global.anthropic.claude-sonnet-5",
+    "us.anthropic.claude-haiku-5-5,global.anthropic.claude-sonnet-5",
 };
 
 type BedrockProviderDetailsProps = {

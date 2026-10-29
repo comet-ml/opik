@@ -259,7 +259,7 @@ Before configuring Bedrock in Opik, ensure you have:
    - **API**: **Chat Completions** or **Anthropic Messages** (see above)
    - **URL**: Your Bedrock endpoint URL for that API (see format below)
    - **Authentication**: Your AWS Bedrock API key (see [AWS documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/getting-started-api-keys.html) for setup instructions), or OAuth2 client credentials if your gateway issues short-lived tokens (see [OAuth2 Client Credentials Authentication](#oauth2-client-credentials-authentication) below)
-   - **Models list**: Comma-separated list of models you want to use (e.g., `openai.gpt-oss-20b-1:0,qwen.qwen3-32b-v1:0` for Chat Completions, or `eu.anthropic.claude-haiku-4-5,global.anthropic.claude-sonnet-5` for Anthropic Messages)
+   - **Models list**: Comma-separated list of models you want to use (e.g., `openai.gpt-oss-20b-1:0,qwen.qwen3-32b-v1:0` for Chat Completions, or `eu.anthropic.claude-haiku-5-5,global.anthropic.claude-sonnet-5` for Anthropic Messages)
    - **Custom headers** (optional): Add any additional HTTP headers required by your configuration
 5. Click **Add configuration** to save
 
@@ -267,7 +267,7 @@ Before configuring Bedrock in Opik, ensure you have:
 
 For **Chat Completions**, Bedrock endpoints follow this pattern: `https://bedrock-runtime.<region>.amazonaws.com/openai/v1`
 
-For **Anthropic Messages**, use `https://bedrock-runtime.<region>.amazonaws.com/anthropic`, or `https://bedrock-mantle.<region>.api.aws/anthropic` for the bedrock-mantle endpoint. Opik also accepts these URLs ending in `/v1` or `/v1/messages`. Model IDs can carry a cross-Region inference profile prefix, such as `eu.`, `us.` or `global.`.
+For **Anthropic Messages**, use `https://bedrock-runtime.<region>.amazonaws.com/anthropic`, or `https://bedrock-mantle.<region>.api.aws/anthropic` for the bedrock-mantle endpoint. Opik also accepts these URLs ending in `/v1` or `/v1/messages`. Model IDs can carry a cross-Region inference profile prefix, such as `eu.`, `us.` or `global.`. Older Claude models keep their dated IDs, such as `us.anthropic.claude-haiku-4-5-20251001-v1:0`.
 
 **Chat Completions examples by Region:**
 
