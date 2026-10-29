@@ -18,7 +18,7 @@ export type RuleDefaultModel = {
 };
 
 export const useCalculateRuleDefaultModel = () => {
-  const { calculateModelProvider, calculateDefaultModel } =
+  const { calculateModelProvider, calculateDefaultModel, isDropdownModel } =
     useLLMProviderModelsData();
 
   return useCallback(
@@ -31,7 +31,10 @@ export const useCalculateRuleDefaultModel = () => {
         lastPicked,
         preferredProvider,
       );
-      if (lastPickedProvider && setupProviders.includes(lastPickedProvider)) {
+      if (
+        setupProviders.includes(lastPickedProvider) &&
+        isDropdownModel(lastPicked, lastPickedProvider)
+      ) {
         return lastPicked;
       }
 
@@ -43,7 +46,7 @@ export const useCalculateRuleDefaultModel = () => {
         ] ?? calculateDefaultModel("", setupProviders, composedProvider)
       );
     },
-    [calculateModelProvider, calculateDefaultModel],
+    [calculateModelProvider, calculateDefaultModel, isDropdownModel],
   );
 };
 
