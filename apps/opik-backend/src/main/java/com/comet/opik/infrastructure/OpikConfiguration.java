@@ -225,6 +225,9 @@ public class OpikConfiguration extends JobConfiguration {
     private AiLabelsConfig aiLabels = new AiLabelsConfig();
 
     @Valid @NotNull @JsonProperty
+    private WorkspaceFeaturesConfig workspaceFeatures = new WorkspaceFeaturesConfig();
+
+    @Valid @NotNull @JsonProperty
     private AdminServerConfig adminServer;
 
     @JsonIgnore
