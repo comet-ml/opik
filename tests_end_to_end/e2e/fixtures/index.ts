@@ -1,4 +1,4 @@
-export { test, expect } from './studio-unlisted-model-runs.fixture';
+export { test, expect } from './queue-form-seed.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -610,3 +610,4 @@ export type {
   StudioUnlistedModelRunsFixtures,
 } from './studio-unlisted-model-runs.fixture';
 export { SAVED_TEMPERATURE } from './studio-unlisted-model-runs.fixture';
+export type { QueueFormSeedRef, QueueFormSeedFixtures } from './queue-form-seed.fixture';

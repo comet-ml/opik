@@ -1433,6 +1433,14 @@ export interface AnnotationQueueWrite {
   projectId: string;
   name: string;
   scope: 'trace' | 'thread';
+  /**
+   * The annotator-facing instructions the create/edit sheet's Instructions
+   * field writes. Omitted from the request entirely when not given rather than
+   * sent as `''`: the server drops the key from the read-back of a queue
+   * carrying none, so "never set" and "set to blank" are distinguishable
+   * states and a seed must be able to produce either.
+   */
+  instructions?: string;
   feedbackDefinitionNames?: string[];
   automation?: {
     enabled: boolean;
@@ -7487,6 +7495,61 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       }
     },
 
+    /**
+     * The fields the create/edit queue dialog writes, read straight off
+     * `GET /v1/private/annotation-queues/{id}`.
+     *
+     * A sibling of {@link getAnnotationQueue} rather than more fields on it:
+     * that one answers "does this queue exist and how far along is it", which
+     * is what the listing and scoring specs ask, and it reads through the typed
+     * SDK. This answers "is this queue configured the way the form said", which
+     * needs `project_id`, `scope` and `instructions` — none of which the pinned
+     * SDK's queue type declares, so a read through the typed client would drop
+     * them and present a queue that stored nothing exactly like one that stored
+     * everything (the same reason `getAnnotationQueueAutomation` uses
+     * `rawFetch`).
+     *
+     * `instructions` is `null` only when the key is genuinely absent or stored
+     * as null, never defaulted to `''`: "the dialog saved no instructions" and
+     * "the dialog saved an empty string" are different answers, and a
+     * round-trip assertion over the value the form typed must not be satisfied
+     * by the one a defaulting read invented.
+     */
+    async getAnnotationQueueForm(id: string): Promise<{
+      name: string;
+      projectId: string;
+      scope: string;
+      instructions: string | null;
+    }> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/annotation-queues/${id}`,
+      );
+      if (status !== 200) {
+        throw new Error(
+          `getAnnotationQueueForm('${id}'): expected 200, got ${status}: ${message}`,
+        );
+      }
+      const raw = json as {
+        name?: unknown;
+        project_id?: unknown;
+        scope?: unknown;
+        instructions?: unknown;
+      } | null;
+      if (typeof raw?.name !== 'string' || typeof raw.project_id !== 'string') {
+        throw new Error(
+          `getAnnotationQueueForm('${id}'): the queue answered no string name/project_id ` +
+            `(got name=${typeof raw?.name}, project_id=${typeof raw?.project_id}).`,
+        );
+      }
+      return {
+        name: raw.name,
+        projectId: raw.project_id,
+        scope: typeof raw.scope === 'string' ? raw.scope : '',
+        instructions: typeof raw.instructions === 'string' ? raw.instructions : null,
+      };
+    },
+
     async deleteAnnotationQueue(id: string): Promise<void> {
       try {
         await opik.api.annotationQueues.deleteAnnotationQueueBatch({ ids: [id] });
@@ -7512,6 +7575,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
           project_id: queue.projectId,
           name: queue.name,
           scope: queue.scope,
+          ...(queue.instructions === undefined ? {} : { instructions: queue.instructions }),
           ...(queue.feedbackDefinitionNames
             ? { feedback_definition_names: queue.feedbackDefinitionNames }
             : {}),
