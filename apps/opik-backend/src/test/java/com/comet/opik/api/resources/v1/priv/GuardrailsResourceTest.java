@@ -256,13 +256,17 @@ public class GuardrailsResourceTest {
                 Arguments.of("a null check", GuardrailsValidationRequest.builder()
                         .text("some text")
                         .validations(Arrays.asList(promptInjection(), null))
-                        .build(), "validations[1].<list element> must not be null"));
+                        .build(), "validations[1].<list element> must not be null"),
+                // A JSON tree, so the explicit null reaches the server rather than being dropped by the client.
+                Arguments.of("an explicit null config", JsonUtils.getJsonNodeFromString(
+                        "{\"text\":\"some text\",\"validations\":[{\"type\":\"PROMPT_INJECTION\",\"config\":null}]}"),
+                        "validations[0].config must not be null"));
     }
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("invalidValidationRequests")
     @DisplayName("invalid guardrail validation requests are rejected")
-    void validate__whenRequestIsInvalid__thenUnprocessable(String scenario, GuardrailsValidationRequest request,
+    void validate__whenRequestIsInvalid__thenUnprocessable(String scenario, Object request,
             String expectedError) {
         try (var response = guardrailsResourceClient.validate(request, API_KEY, TEST_WORKSPACE)) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);

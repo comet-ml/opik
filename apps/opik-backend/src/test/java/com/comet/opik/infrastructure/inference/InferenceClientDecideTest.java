@@ -15,6 +15,8 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -174,6 +176,34 @@ class InferenceClientDecideTest {
     }
 
     @Test
+    void requestWithoutAServiceDeadlineLeavesItToTheService() {
+        wireMock.server().stubFor(post(urlEqualTo(PATH)).willReturn(okJson(SUCCESS_BODY)));
+        var withoutDeadline = DecideRequest.builder()
+                .orgId("workspace-1")
+                .state(TextNode.valueOf("some text"))
+                .questions(noulQuestion())
+                .lane(DecideRequest.REALTIME_LANE)
+                .cache(true)
+                .build();
+
+        client.decide(withoutDeadline, Instant.now().plusSeconds(5)).block();
+
+        var body = json(wireMock.server().findAll(postRequestedFor(urlEqualTo(PATH))).get(0));
+        assertThat(body.has("deadline_ms")).isFalse();
+        assertThat(InferenceContract.validateEndpoint(InferenceContract.DECIDE, "request", body)).isEmpty();
+    }
+
+    @ParameterizedTest
+    @ValueSource(longs = {0, -1})
+    void nonPositiveServiceDeadlineFailsWithoutACall(long deadlineMs) {
+        var request = request(noulQuestion()).toBuilder().deadlineMs(deadlineMs).build();
+
+        assertThatThrownBy(() -> client.decide(request, Instant.now().plusSeconds(5)))
+                .isInstanceOf(IllegalArgumentException.class);
+        wireMock.server().verify(0, postRequestedFor(urlEqualTo(PATH)));
+    }
+
+    @Test
     void deadlineAlreadyPassedFailsWithoutACall() {
         assertThatThrownBy(() -> client.decide(request(noulQuestion()), Instant.now().minusSeconds(1)).block())
                 .isInstanceOfSatisfying(InferenceException.class,
@@ -187,7 +217,7 @@ class InferenceClientDecideTest {
                 .state(TextNode.valueOf("some text"))
                 .questions(questions)
                 .lane(DecideRequest.REALTIME_LANE)
-                .deadlineMs(750)
+                .deadlineMs(750L)
                 .cache(true)
                 .build();
     }

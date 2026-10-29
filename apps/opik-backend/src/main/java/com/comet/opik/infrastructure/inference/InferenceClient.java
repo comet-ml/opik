@@ -120,9 +120,9 @@ public class InferenceClient {
     }
 
     /**
-     * One synchronous decide call: every question answered about the same state. {@code request.deadlineMs()} is the
-     * time the service may spend; {@code deadline} bounds the client, retries included, and should leave room for one
-     * retry on top of the service's.
+     * One synchronous decide call: every question answered about the same state. {@code request.deadlineMs()}, when
+     * set, is the time the service may spend; {@code deadline} bounds the client, retries included, and should leave
+     * room for one retry on top of the service's.
      */
     public Mono<DecideResponse> decide(@NonNull DecideRequest request, @NonNull Instant deadline) {
         Preconditions.checkArgument(!request.questions().isEmpty()
@@ -130,6 +130,8 @@ public class InferenceClient {
                 "a decide call takes 1 to '%s' questions, questions '%s'", DecideRequest.MAX_QUESTIONS,
                 request.questions().size());
         request.questions().values().forEach(Question::validate);
+        Preconditions.checkArgument(request.deadlineMs() == null || request.deadlineMs() > 0,
+                "a decide deadline must be positive when set, deadlineMs '%s'", request.deadlineMs());
         return Mono.defer(() -> {
             var withId = request.requestId() == null ? request.toBuilder().requestId(newRequestId()).build() : request;
             return execute(Call.<DecideResponse>builder()
