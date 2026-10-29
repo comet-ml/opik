@@ -221,8 +221,9 @@ class ThreadDAOImpl implements ThreadDAO {
      * Every reference to traces_final_ids goes through the same scalar subquery,
      * {@code groupArray((id, thread_id, id_week))}, and every reference to page_trace_ids through
      * {@code groupArray((id, id_week))}: ClickHouse caches each, so a set is computed once per query, whereas
-     * {@code IN (SELECT id FROM traces_final_ids)} re-reads it at each reference. With a search that set scans every window trace's input and output, and the
-     * uncached thread_id lookup in trace_threads_final ran that scan four times per stats call.
+     * {@code IN (SELECT id FROM traces_final_ids)} re-reads it at each reference. With a search that set scans every
+     * window trace's input and output, and the uncached thread_id lookup in trace_threads_final ran that scan four times
+     * per stats call.
      * <p>
      * The search matches each trace's latest version outside FINAL: a key-only {@code max(last_updated_at)} pass picks
      * the version, the ilike reads only those rows, and the FINAL read keeps the matching ids. Under FINAL the ilike ran
