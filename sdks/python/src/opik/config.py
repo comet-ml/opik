@@ -429,13 +429,10 @@ class OpikConfig(pydantic_settings.BaseSettings):
     @pydantic.field_validator("api_key", mode="before")
     @classmethod
     def _normalize_api_key(cls, value: Optional[str]) -> Optional[str]:
-        """Treat a blank API key as missing, whatever source it came from.
+        """Treat a blank API key as missing.
 
-        A blank value usually comes from an accidentally exported empty
-        environment variable (for example `set OPIK_API_KEY=` on Windows).
-        Keeping it would make the key look configured while the SDK sends
-        an empty Authorization header, so normalize it at the root instead
-        of checking for blankness at every place the key is read.
+        A blank value would look configured while the SDK sends an empty
+        Authorization header, so normalize it at the root.
         """
         if value is None:
             return None
