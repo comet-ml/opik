@@ -19,7 +19,7 @@ public record DecideRequest(
         @NonNull JsonNode state,
         @NonNull Map<String, Question> questions,
         @NonNull String lane,
-        long deadlineMs,
+        Long deadlineMs,
         boolean cache) {
 
     public static final String REALTIME_LANE = "realtime";
