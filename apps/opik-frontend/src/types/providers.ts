@@ -83,6 +83,7 @@ export enum PROVIDER_MODEL_TYPE {
   GPT_6_LUNA = "gpt-6-luna",
   GPT_6_SOL = "gpt-6-sol",
   GPT_6_1_SOL = "gpt-6.1-sol",
+  GPT_6_1_TERRA = "gpt-6.1-terra",
   GPT_IMAGE_1 = "gpt-image-1",
   GPT_IMAGE_1_MINI = "gpt-image-1-mini",
   GPT_IMAGE_1_5 = "gpt-image-1.5",
@@ -103,7 +104,6 @@ export enum PROVIDER_MODEL_TYPE {
   GPT_O3_PRO = "o3-pro",
   GPT_O4_MINI = "o4-mini",
   GPT_O4_MINI_DEEP_RESEARCH = "o4-mini-deep-research",
-  GPT_6_1_TERRA = "gpt-6.1-terra",
 
   //  <----- anthropic
   CLAUDE_SONNET_3_7 = "claude-3-7-sonnet-20250219",
@@ -689,6 +689,7 @@ export enum PROVIDER_MODEL_TYPE {
   OPENROUTER_HUNTER_ALPHA = "openrouter/hunter-alpha",
   OPENROUTER_OWL_ALPHA = "openrouter/owl-alpha",
   OPENROUTER_PARETO_CODE = "openrouter/pareto-code",
+  PARTICLE_AI_PARTICLE_1 = "particle-ai/particle-1",
   PERCEPTRON_PERCEPTRON_MK1 = "perceptron/perceptron-mk1",
   PERCEPTRON_PERCEPTRON_MK1_5 = "perceptron/perceptron-mk1.5",
   PERPLEXITY_SONAR = "perplexity/sonar",
