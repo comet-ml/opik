@@ -1945,6 +1945,9 @@ serviceToggles:
   # Description: Whether or not Guardrails feature is enabled
   guardrailsEnabled: ${TOGGLE_GUARDRAILS_ENABLED:-"false"}
   # Default: false
+  # Description: Whether or not the backend runs guardrails itself: the checks on opik-inference (POST /v1/private/guardrails/v2/validations) and the guardrail policies API
+  guardrailsValidationsEnabled: ${TOGGLE_GUARDRAILS_VALIDATIONS_ENABLED:-"false"}
+  # Default: false
   # Description: Whether or not to enable the trace thread Python evaluator
   traceThreadPythonEvaluatorEnabled: ${TOGGLE_TRACE_THREAD_PYTHON_EVALUATOR_ENABLED:-"true"}
   # Default: false

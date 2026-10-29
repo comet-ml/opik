@@ -105,7 +105,15 @@ class RequiredPermissionsCoverageArchTest {
             // nothing; its gate is not a workspace role but the organization's guardrails enablement, behind a
             // backend toggle. Any member of an enabled workspace may call it, as any member may log the traces the
             // checks belong to.
-            "GuardrailsResource.validateGuardrails");
+            "GuardrailsResource.validateGuardrails",
+            // Guardrail policies: any workspace member creates and edits them, as the design decided; there is no
+            // guardrails role. The gate is the serviceToggles.guardrailsValidationsEnabled toggle, and the
+            // organization's guardrails enablement once guardrails are wired in. retrieve is read-shaped: the SDK
+            // loads the policies a guardrail checks with the API key of whoever runs the agent.
+            "GuardrailPoliciesResource.createGuardrailPolicy",
+            "GuardrailPoliciesResource.updateGuardrailPolicy",
+            "GuardrailPoliciesResource.deleteGuardrailPoliciesBatch",
+            "GuardrailPoliciesResource.retrieveGuardrailPolicies");
 
     /**
      * How many unannotated mutating endpoints existed when this rule landed. A fact about history, so it only
