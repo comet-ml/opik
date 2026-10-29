@@ -109,7 +109,11 @@ def read_and_parse_full_stream(
         dropped_records_total += dropped_records["count"]
         cursor_before_page = cursor
         if page_last_id["id"] is not None:
-            cursor = extract_cursor(result[-1]) if cursor_extractor is not None and len(result) > 0 else page_last_id["id"]
+            cursor = (
+                extract_cursor(result[-1])
+                if cursor_extractor is not None and len(result) > 0
+                else page_last_id["id"]
+            )
         elif len(result) > 0:
             # No line on this page decoded to an object with an id; fall back to
             # the last record that parsed so the read still advances.
@@ -169,7 +173,17 @@ def read_and_parse_full_stream(
         # signal that the stream is exhausted: a full page ending without an
         # advancing cursor means the returned list may be truncated, so log it
         # instead of stopping silently.
-        next_cursor = extract_cursor(result[-1]) if len(result) > 0 else None
+        # Compare the cursor this page actually advanced to (`cursor`), not
+        # the last parsed record: after a fully unreadable page, result[-1]
+        # is still the previous page's last parsed record, so deriving the
+        # cursor from it falsely reports a repeat and abandons the pages
+        # behind the unreadable one. With a custom extractor, `cursor`
+        # already holds the extracted value after a page with parsed records.
+        next_cursor = (
+            cursor
+            if cursor_extractor is None
+            else (extract_cursor(result[-1]) if len(result) > 0 else None)
+        )
         if next_cursor is None or next_cursor == last_retrieved_id:
             if len(parsed_items) == current_batch_size:
                 reason = (
