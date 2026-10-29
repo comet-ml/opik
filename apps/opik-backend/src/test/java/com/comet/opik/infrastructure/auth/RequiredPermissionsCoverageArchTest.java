@@ -101,10 +101,10 @@ class RequiredPermissionsCoverageArchTest {
             // a permission to ask the question would be circular — and would change a 204 into a 403 that means
             // the opposite of what the caller asked.
             "AuthenticationResource.checkAccess",
-            // Guardrail policies answer 501 until they are implemented. Then any workspace member creates and edits
-            // them, as the design decided; there is no guardrails role. The gate will be a backend toggle and the
-            // organization's guardrails enablement. retrieve is read-shaped: the SDK loads the policies a guardrail
-            // checks with the API key of whoever runs the agent.
+            // Guardrail policies: any workspace member creates and edits them, as the design decided; there is no
+            // guardrails role. The gate is the serviceToggles.guardrailsValidationsEnabled toggle, and the
+            // organization's guardrails enablement once guardrails are wired in. retrieve is read-shaped: the SDK
+            // loads the policies a guardrail checks with the API key of whoever runs the agent.
             "GuardrailPoliciesResource.createGuardrailPolicy",
             "GuardrailPoliciesResource.updateGuardrailPolicy",
             "GuardrailPoliciesResource.deleteGuardrailPoliciesBatch",
