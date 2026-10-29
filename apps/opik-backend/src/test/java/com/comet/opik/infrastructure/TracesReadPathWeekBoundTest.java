@@ -6,12 +6,16 @@ import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceBatchUpdate;
+import com.comet.opik.api.TraceThread;
+import com.comet.opik.api.TraceThreadStatus;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
+import com.comet.opik.api.resources.utils.DurationUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
+import com.comet.opik.api.resources.utils.StatsUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
@@ -33,6 +37,7 @@ import com.comet.opik.utils.WeeklyPartitions;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.redis.testcontainers.RedisContainer;
 import io.r2dbc.spi.Statement;
+import lombok.Builder;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
 import org.apache.http.HttpStatus;
@@ -66,6 +71,7 @@ import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -75,6 +81,7 @@ import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
 import static com.comet.opik.api.resources.utils.AuthTestUtils.mockTargetWorkspace;
+import static com.comet.opik.api.resources.utils.FilterTestUtils.threadIdFilter;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
@@ -86,13 +93,18 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
  * ({@code get_trace_details_by_id}) and trace comments ({@code get_project_id_from_trace}), the existence probe a
  * PATCH is routed by ({@code get_partial_trace_by_id}), and the stored-row read every trace write merges with
  * ({@code insert_trace}, {@code partial_insert_trace}, {@code update_trace} and {@code bulk_update_traces}). Also the
- * project existence probe, which reads recent weeks first and all of them only when that finds nothing.
+ * project existence probe, which reads recent weeks first and all of them only when that finds nothing. And the
+ * {@code ThreadDAO} reads that load a thread's traces by the ids they first resolved for it, bounded to the stored weeks
+ * of those ids: the thread list's page and trace-set prefilter, the thread search stream, the thread stats and the
+ * thread by id.
  *
  * <p>Driven through the endpoints that reach them — {@code GET /v1/private/traces/{id}},
  * {@code POST /v1/private/traces}, {@code PATCH /v1/private/traces/{id}}, {@code PATCH /v1/private/traces/batch},
  * {@code GET /v1/private/traces/exists}, {@code POST /v1/private/traces/{id}/comments},
- * {@code GET /v1/session/redirect/projects} and {@code POST /v1/private/datasets/items} — so what is asserted is what
- * a client sees. {@code get_start_times_by_trace_ids} runs in the cost-intelligence listener that a PATCH carrying a
+ * {@code GET /v1/session/redirect/projects}, {@code POST /v1/private/datasets/items},
+ * {@code GET /v1/private/traces/threads}, {@code GET /v1/private/traces/threads/stats},
+ * {@code POST /v1/private/traces/threads/search} and {@code POST /v1/private/traces/threads/retrieve} — so what is
+ * asserted is what a client sees. {@code get_start_times_by_trace_ids} runs in the cost-intelligence listener that a PATCH carrying a
  * {@code cipx} identity triggers.
  *
  * <p><b>Every trace here is created through the ingestion endpoint, far-future ids included.</b> Ingestion rejects a
@@ -112,12 +124,15 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
  * {@link TracesLocalV2PartitioningTest}; asserting them here again would only couple this suite to the SQL text.
  * The project existence probe's id lower bound is the exception: on this unpartitioned table it is the half of its
  * bound that does the work, through the sort key, so {@code EXPLAIN indexes = 1} shows that the primary key uses it.
+ * The thread reads are checked on rows only: their week sets come from the stored {@code id_at} inside the statement,
+ * so the text names {@code id_at} with or without them, and their pruning is {@link TracesSearchPartitionPruningTest}'s.
  *
  * <p>Runs on whatever estate the migrations produce, with no topology of its own. Today that is the legacy
  * {@code traces}, whose 32-bit {@code id_at} wraps a far-future timestamp — the harder direction, since a set
  * derived only from the successor's {@code DateTime64} would match zero rows for such an id. It is the row resolving
  * here, not a pinned week value, that shows the right week is in the set. That partitions are actually pruned is
- * {@link TracesReadPathPartitionPruningTest}'s job, on the partitioned successor.
+ * {@link TracesReadPathPartitionPruningTest}'s job, on the partitioned successor, and the thread reads'
+ * {@link TracesSearchPartitionPruningTest}'s.
  *
  * <p>A dedicated, non-reused ClickHouse carrying {@code clickhouse-fast-log-flush.xml}, so the statement reads poll
  * {@code system.query_log} rather than forcing a server-wide {@code SYSTEM FLUSH LOGS} that races the rows it is
@@ -455,6 +470,45 @@ class TracesReadPathWeekBoundTest {
         getAndAssert(expectedTrace);
     }
 
+    /** With no filter the list keeps the page pushdown; a thread id filter turns on the trace-set prefilter. */
+    private Stream<Arguments> threadReadReturnsAThreadAcrossEras() {
+        return Stream.of(
+                arguments(Named.<Function<EraThread, List<TraceThread>>>of("thread list page",
+                        thread -> traceResourceClient.getTraceThreads(thread.projectId(), null, API_KEY,
+                                WORKSPACE_NAME, null, null, Map.of()).content())),
+                arguments(Named.<Function<EraThread, List<TraceThread>>>of("thread list filtered by thread id",
+                        thread -> traceResourceClient.getTraceThreads(thread.projectId(), null, API_KEY,
+                                WORKSPACE_NAME, threadIdFilter(thread.expected().id()), null, Map.of()).content())),
+                arguments(Named.<Function<EraThread, List<TraceThread>>>of("thread search stream",
+                        thread -> traceResourceClient.searchTraceThreadsStream(null, thread.projectId(), API_KEY,
+                                WORKSPACE_NAME, threadIdFilter(thread.expected().id())))),
+                arguments(Named.<Function<EraThread, List<TraceThread>>>of("thread by id",
+                        thread -> List.of(traceResourceClient.getTraceThread(thread.expected().id(),
+                                thread.projectId(), API_KEY, WORKSPACE_NAME)))));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource
+    void threadReadReturnsAThreadAcrossEras(Function<EraThread, List<TraceThread>> read) {
+        var thread = createEraThread();
+
+        var actualThreads = read.apply(thread);
+
+        var expectedThreads = List.of(thread.expected());
+        TraceAssertions.assertThreads(expectedThreads, actualThreads);
+    }
+
+    @Test
+    void threadStatsCountAThreadAcrossEras() {
+        var thread = createEraThread();
+
+        var actualStats = traceResourceClient.getTraceThreadStats(null, thread.projectId(), API_KEY, WORKSPACE_NAME,
+                threadIdFilter(thread.expected().id()), Map.of()).stats();
+
+        var expectedStats = StatsUtils.getProjectThreadStatItems(thread.traces(), List.of(), null);
+        TraceAssertions.assertStats(actualStats, expectedStats);
+    }
+
     private Stream<Arguments> farFutureEras() {
         return Stream.of(
                 arguments(Named.of("far future", farFutureIdAt())),
@@ -725,5 +779,66 @@ class TracesReadPathWeekBoundTest {
             return Mono.from(statement.execute())
                     .flatMap(result -> Mono.from(result.map((row, _) -> row.get(0, String.class))));
         }).block();
+    }
+
+    /**
+     * Created through the ingestion endpoint like every trace here. The far-future trace ends last, so it alone gives
+     * the thread its last message and end time: a week set that missed its wrapped week would drop both.
+     */
+    private EraThread createEraThread() {
+        var projectName = randomName("project");
+        var threadId = randomName("thread");
+        var environment = randomName("env");
+        // Random spans to the microsecond, laid out back from now so the past trace starts the thread and the
+        // far-future one ends it. Not round milliseconds: the stats comparison treats round durations sharing their
+        // leading digits as equal, and could then miss a thread that lost its far-future trace.
+        var farFutureEnd = Instant.now().truncatedTo(ChronoUnit.MICROS);
+        var farFutureStart = farFutureEnd.minus(randomSpanMicros(), ChronoUnit.MICROS);
+        var pastEnd = farFutureStart.minus(randomSpanMicros(), ChronoUnit.MICROS);
+        var pastStart = pastEnd.minus(randomSpanMicros(), ChronoUnit.MICROS);
+        var past = newTrace(idAt(pastIdAt())).toBuilder()
+                .projectName(projectName)
+                .threadId(threadId)
+                .environment(environment)
+                .startTime(pastStart)
+                .endTime(pastEnd)
+                .build();
+        var farFuture = newTrace(idAt(farFutureIdAt())).toBuilder()
+                .projectName(projectName)
+                .threadId(threadId)
+                .environment(environment)
+                .startTime(farFutureStart)
+                .endTime(farFutureEnd)
+                .build();
+        var traces = List.of(past, farFuture);
+        traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
+        var projectId = projectIdOf(past);
+        return EraThread.builder()
+                .projectId(projectId)
+                .traces(traces)
+                .expected(TraceThread.builder()
+                        .id(threadId)
+                        .projectId(projectId)
+                        .firstMessage(past.input())
+                        .lastMessage(farFuture.output())
+                        .startTime(past.startTime())
+                        .endTime(farFuture.endTime())
+                        .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(past.startTime(),
+                                farFuture.endTime()))
+                        .numberOfMessages(2L * traces.size())
+                        .status(TraceThreadStatus.ACTIVE)
+                        .environment(environment)
+                        .build())
+                .build();
+    }
+
+    /** Between a millisecond and a second. */
+    private static long randomSpanMicros() {
+        return RandomUtils.secure().randomLong(1_000, 1_000_000);
+    }
+
+    /** A thread with a trace in a past week and one in a far-future week, and what its reads must return. */
+    @Builder(toBuilder = true)
+    private record EraThread(UUID projectId, List<Trace> traces, TraceThread expected) {
     }
 }
