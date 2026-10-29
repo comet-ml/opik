@@ -225,17 +225,17 @@ public class GuardrailsResourceTest {
     }
 
     @Test
-    @DisplayName("guardrail validations answer 501 until they are implemented")
-    void validate__whenRequestIsValid__thenNotImplemented() {
+    @DisplayName("guardrail validations are forbidden while the backend does not run guardrails")
+    void validate__whenGuardrailsAreOff__thenForbidden() {
         var request = GuardrailsValidationRequest.builder()
                 .text("some text")
                 .validations(List.of(promptInjection()))
                 .build();
 
         try (var response = guardrailsResourceClient.validate(request, API_KEY, TEST_WORKSPACE)) {
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_IMPLEMENTED);
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
             assertThat(response.readEntity(ErrorMessage.class).getMessage())
-                    .isEqualTo("Guardrail checks are not available yet");
+                    .isEqualTo("Guardrails validation service is not enabled");
         }
     }
 

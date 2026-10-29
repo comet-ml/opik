@@ -77,11 +77,6 @@ class GuardrailPolicyServiceImpl implements GuardrailPolicyService {
     static final String RESTRICTED_TOPICS = "restricted_topics";
     private static final Set<GuardrailType> SUPPORTED_TYPES = EnumSet.of(GuardrailType.PII, GuardrailType.TOPIC,
             GuardrailType.PROMPT_INJECTION);
-    /** The personal data classes the guardrail checks can detect. */
-    private static final Set<String> PII_CLASSES = Set.of("CREDIT_CARD", "PHONE_NUMBER", "EMAIL_ADDRESS",
-            "IBAN_CODE", "IP_ADDRESS", "NRP", "LOCATION", "PERSON", "CRYPTO", "MEDICAL_LICENSE", "URL");
-    /** Every topic question adds this option itself, so a topic with the same name would make its answer ambiguous. */
-    private static final String NONE_OF_THESE = "none of these";
     private static final String POLICY_NOT_FOUND = "Guardrail policy not found";
     private static final String POLICY_ALREADY_EXISTS = "Guardrail policy already exists";
 
@@ -262,7 +257,7 @@ class GuardrailPolicyServiceImpl implements GuardrailPolicyService {
         if (rule.type() == GuardrailType.PII) {
             var entities = normalizedUniqueStrings(index, config, "entities");
             entities.stream()
-                    .filter(entity -> !PII_CLASSES.contains(entity))
+                    .filter(entity -> !GuardrailQuestions.PII_DESCRIPTIONS.containsKey(entity))
                     .findFirst()
                     .ifPresent(entity -> {
                         throw new BadRequestException("rules[%d].config.entities contains the unsupported class '%s'"
@@ -278,10 +273,10 @@ class GuardrailPolicyServiceImpl implements GuardrailPolicyService {
             }
             // Topics are compared ignoring case, as the model reads them.
             var restrictedKeys = restricted.stream()
-                    .map(GuardrailPolicyServiceImpl::topicKey)
+                    .map(GuardrailQuestions::topicKey)
                     .collect(Collectors.toSet());
             allowed.stream()
-                    .filter(topic -> restrictedKeys.contains(topicKey(topic)))
+                    .filter(topic -> restrictedKeys.contains(GuardrailQuestions.topicKey(topic)))
                     .findFirst()
                     .ifPresent(topic -> {
                         throw new BadRequestException("rules[%d].config has '%s' in both %s and %s"
@@ -313,14 +308,14 @@ class GuardrailPolicyServiceImpl implements GuardrailPolicyService {
                     .formatted(index, field, MAX_TOPIC_LENGTH));
         }
         // The check adds this option itself; a topic with the same name would make its answer ambiguous.
-        if (topics.stream().anyMatch(NONE_OF_THESE::equalsIgnoreCase)) {
+        if (topics.stream().anyMatch(GuardrailQuestions.NONE_OF_THESE::equalsIgnoreCase)) {
             throw new BadRequestException("rules[%d].config.%s cannot contain '%s'"
-                    .formatted(index, field, NONE_OF_THESE));
+                    .formatted(index, field, GuardrailQuestions.NONE_OF_THESE));
         }
         // Case variants would be separate options of one choice question and split its probability.
         var topicKeys = new HashSet<String>();
         topics.stream()
-                .filter(topic -> !topicKeys.add(topicKey(topic)))
+                .filter(topic -> !topicKeys.add(GuardrailQuestions.topicKey(topic)))
                 .findFirst()
                 .ifPresent(topic -> {
                     throw new BadRequestException("rules[%d].config.%s contains '%s' more than once, ignoring case"
@@ -349,14 +344,4 @@ class GuardrailPolicyServiceImpl implements GuardrailPolicyService {
         return values;
     }
 
-    /**
-     * Equal exactly when equalsIgnoreCase matches the topics: it compares each character upper-cased, then
-     * lower-cased, which a whole-string toLowerCase does not reproduce ('ı' and 'I', 'İ' and 'i').
-     */
-    private static String topicKey(String topic) {
-        return topic.codePoints()
-                .map(codePoint -> Character.toLowerCase(Character.toUpperCase(codePoint)))
-                .collect(StringBuilder::new, StringBuilder::appendCodePoint, StringBuilder::append)
-                .toString();
-    }
 }

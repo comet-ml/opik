@@ -9,7 +9,7 @@ import com.comet.opik.api.GuardrailPolicy.GuardrailPolicyRetrieveResponse;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.sorting.SortingFactoryGuardrailPolicies;
 import com.comet.opik.domain.GuardrailPolicyService;
-import com.comet.opik.infrastructure.FeatureFlags;
+import com.comet.opik.domain.GuardrailsAccess;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.fasterxml.jackson.annotation.JsonView;
@@ -57,7 +57,7 @@ public class GuardrailPoliciesResource {
 
     private final @NonNull GuardrailPolicyService service;
     private final @NonNull Provider<RequestContext> requestContext;
-    private final @NonNull FeatureFlags featureFlags;
+    private final @NonNull GuardrailsAccess guardrailsAccess;
     private final @NonNull SortingFactoryGuardrailPolicies sortingFactory;
 
     @POST
@@ -65,13 +65,15 @@ public class GuardrailPoliciesResource {
             @ApiResponse(responseCode = "201", description = "Created", headers = {
                     @Header(name = "Location", required = true, example = "${basePath}/v1/private/guardrails/policies/{id}", schema = @Schema(implementation = String.class))}),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "403", description = "Guardrails are not enabled for this deployment, or not enabled for the workspace's organization", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "409", description = "A policy with this name already exists", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
-            @ApiResponse(responseCode = "422", description = "Unprocessable Content", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
+            @ApiResponse(responseCode = "422", description = "Unprocessable Content", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "429", description = "Too many requests", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     @RateLimited
     public Response createGuardrailPolicy(
             @RequestBody(content = @Content(schema = @Schema(implementation = GuardrailPolicy.class))) @JsonView(GuardrailPolicy.View.Write.class) @NotNull @Valid GuardrailPolicy policy,
             @Context UriInfo uriInfo) {
-        featureFlags.checkGuardrailsValidationsEnabled();
+        guardrailsAccess.check();
 
         log.info("Creating guardrail policy with name '{}' in workspace '{}'", policy.name(),
                 requestContext.get().getWorkspaceId());
@@ -84,24 +86,26 @@ public class GuardrailPoliciesResource {
     @Path("/{id}")
     @Operation(operationId = "getGuardrailPolicyById", summary = "Get guardrail policy by id", description = "Get guardrail policy by id", responses = {
             @ApiResponse(responseCode = "200", description = "Guardrail policy", content = @Content(schema = @Schema(implementation = GuardrailPolicy.class))),
+            @ApiResponse(responseCode = "403", description = "Guardrails are not enabled for this deployment, or not enabled for the workspace's organization", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "404", description = "Guardrail policy not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     @JsonView(GuardrailPolicy.View.Public.class)
     public Response getGuardrailPolicyById(@PathParam("id") UUID id) {
-        featureFlags.checkGuardrailsValidationsEnabled();
+        guardrailsAccess.check();
 
         return Response.ok(service.findById(id)).build();
     }
 
     @GET
     @Operation(operationId = "findGuardrailPolicies", summary = "Find guardrail policies", description = "Find guardrail policies in a workspace", responses = {
-            @ApiResponse(responseCode = "200", description = "Guardrail policy page", content = @Content(schema = @Schema(implementation = GuardrailPolicyPage.class)))})
+            @ApiResponse(responseCode = "200", description = "Guardrail policy page", content = @Content(schema = @Schema(implementation = GuardrailPolicyPage.class))),
+            @ApiResponse(responseCode = "403", description = "Guardrails are not enabled for this deployment, or not enabled for the workspace's organization", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     @JsonView(GuardrailPolicy.View.Public.class)
     public Response findGuardrailPolicies(
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
             @QueryParam("name") @Schema(description = "Filter policies by name (partial match, case insensitive)") String name,
             @QueryParam("sorting") String sorting) {
-        featureFlags.checkGuardrailsValidationsEnabled();
+        guardrailsAccess.check();
 
         var sortingFields = sortingFactory.newSorting(sorting);
         return Response.ok(service.find(page, size, name, sortingFields)).build();
@@ -112,13 +116,15 @@ public class GuardrailPoliciesResource {
     @Operation(operationId = "updateGuardrailPolicy", summary = "Update guardrail policy", description = "Replace a guardrail policy, rules included: a rule left out of the request is removed", responses = {
             @ApiResponse(responseCode = "204", description = "No Content"),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "403", description = "Guardrails are not enabled for this deployment, or not enabled for the workspace's organization", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "404", description = "Guardrail policy not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "409", description = "A policy with this name already exists", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
-            @ApiResponse(responseCode = "422", description = "Unprocessable Content", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
+            @ApiResponse(responseCode = "422", description = "Unprocessable Content", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "429", description = "Too many requests", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     @RateLimited
     public Response updateGuardrailPolicy(@PathParam("id") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = GuardrailPolicy.class))) @JsonView(GuardrailPolicy.View.Write.class) @NotNull @Valid GuardrailPolicy policy) {
-        featureFlags.checkGuardrailsValidationsEnabled();
+        guardrailsAccess.check();
 
         log.info("Updating guardrail policy with id '{}' in workspace '{}'", id, requestContext.get().getWorkspaceId());
         service.update(id, policy);
@@ -128,10 +134,11 @@ public class GuardrailPoliciesResource {
     @POST
     @Path("/delete")
     @Operation(operationId = "deleteGuardrailPoliciesBatch", summary = "Delete guardrail policies", description = "Delete guardrail policies and their rules", responses = {
-            @ApiResponse(responseCode = "204", description = "No Content")})
+            @ApiResponse(responseCode = "204", description = "No Content"),
+            @ApiResponse(responseCode = "403", description = "Guardrails are not enabled for this deployment, or not enabled for the workspace's organization", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     public Response deleteGuardrailPoliciesBatch(
             @NotNull @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @Valid BatchDelete batchDelete) {
-        featureFlags.checkGuardrailsValidationsEnabled();
+        guardrailsAccess.check();
 
         log.info("Deleting '{}' guardrail policies in workspace '{}'", batchDelete.ids().size(),
                 requestContext.get().getWorkspaceId());
@@ -143,11 +150,12 @@ public class GuardrailPoliciesResource {
     @Path("/retrieve")
     @Operation(operationId = "retrieveGuardrailPolicies", summary = "Retrieve guardrail policies by name", description = "Return the named policies plus every global policy of the workspace, ordered by name. Fails when a named policy does not exist", responses = {
             @ApiResponse(responseCode = "200", description = "Guardrail policies", content = @Content(schema = @Schema(implementation = GuardrailPolicyRetrieveResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Guardrails are not enabled for this deployment, or not enabled for the workspace's organization", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "404", description = "A named policy does not exist", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     @JsonView(GuardrailPolicy.View.Public.class)
     public Response retrieveGuardrailPolicies(
             @RequestBody(content = @Content(schema = @Schema(implementation = GuardrailPolicyRetrieve.class))) @NotNull @Valid GuardrailPolicyRetrieve retrieve) {
-        featureFlags.checkGuardrailsValidationsEnabled();
+        guardrailsAccess.check();
 
         var names = Optional.ofNullable(retrieve.names()).orElse(Set.of());
         return Response.ok(new GuardrailPolicyRetrieveResponse(service.retrieve(names))).build();
