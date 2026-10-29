@@ -114,7 +114,7 @@ class OpikADKOtelTracer:
         # start_as_current_span, so the Opik trace/span has to be opened here
         # and closed when ADK ends the returned span.
         if (
-            name in self._ADK_INTERNAL_SPAN_NAME_SKIP_LIST
+            self._skips_opik_bookkeeping(name, attributes)
             or _ENTERING_INNER_START_AS_CURRENT_SPAN.get()
         ):
             return self._inner_start_span(
@@ -163,7 +163,7 @@ class OpikADKOtelTracer:
         set_status_on_exception: bool = True,
         end_on_exit: bool = True,
     ) -> Iterator["opentelemetry.trace.Span"]:
-        if name in self._ADK_INTERNAL_SPAN_NAME_SKIP_LIST:
+        if self._skips_opik_bookkeeping(name, attributes):
             # Skip Opik bookkeeping for ADK-internal spans but still delegate
             # to the original tracer so OTel exporters see them.
             with self._inner_start_as_current_span(
@@ -221,6 +221,22 @@ class OpikADKOtelTracer:
                 span_to_close_in_finally_block,
                 exited_normally,
             )
+
+    def _skips_opik_bookkeeping(
+        self, name: str, attributes: opentelemetry.trace.types.Attributes
+    ) -> bool:
+        if name in self._ADK_INTERNAL_SPAN_NAME_SKIP_LIST:
+            return True
+
+        # google-adk >= 2.13.0 replaces `invocation` with the runner's own
+        # `invoke_workflow {root}` span. Tracking it would make it the trace and
+        # push the root agent one level down, so it is skipped like `invocation`.
+        # Only nested workflows carry `gen_ai.workflow.nested`.
+        return (
+            attributes is not None
+            and attributes.get("gen_ai.operation.name") == "invoke_workflow"
+            and not attributes.get("gen_ai.workflow.nested")
+        )
 
     def _start_opik_span_or_trace(
         self, name: str
