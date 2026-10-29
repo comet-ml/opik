@@ -119,7 +119,6 @@ class Streamer:
             # draining — `put()` drops everything once `_drain` is set. Tearing
             # either of those down first meant the messages parked by a temporary
             # server outage were deleted and then reported as a successful flush.
-            self._fallback_replay_manager.refresh_server_connection()
             flushed = self.flush(timeout)
             # Whatever is still parked dies with the store, so it is data loss.
             undelivered = self._record_undelivered_messages()
@@ -134,6 +133,7 @@ class Streamer:
             # running while the queue drains, so close them at the very end.
             self._fallback_replay_manager.join(timeout)
             self._close_queue_consumers()
+            # An uncounted store (None) may have held messages, so not a success.
             return flushed and undelivered == 0
         else:
             with self._lock:
@@ -199,6 +199,7 @@ class Streamer:
 
         self._batch_preprocessor.flush()
 
+        self._fallback_replay_manager.refresh_server_connection()
         if self._fallback_replay_manager.has_server_connection:
             # do replay only if we have a connection to the server
             self._fallback_replay_manager.flush()
@@ -228,8 +229,11 @@ class Streamer:
 
         return flushed
 
-    def _record_undelivered_messages(self) -> int:
+    def _record_undelivered_messages(self) -> Optional[int]:
+        """Returns the number of parked messages recorded as dropped, or None if
+        they could not all be counted."""
         undelivered = 0
+        counted = True
         try:
             for message in self._fallback_replay_manager.failed_messages():
                 self._data_loss_tracker.record(
@@ -241,6 +245,7 @@ class Streamer:
                 )
                 undelivered += 1
         except Exception as ex:
+            counted = False
             LOGGER.error(
                 "Failed to count messages left undelivered at shutdown: %s",
                 ex,
@@ -253,7 +258,7 @@ class Streamer:
                 "unreachable and were dropped at shutdown.",
                 undelivered,
             )
-        return undelivered
+        return undelivered if counted else None
 
     def _on_message_evicted(self, message: messages.BaseMessage) -> None:
         _logging.log_once_at_level(
