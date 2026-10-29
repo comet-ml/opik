@@ -45,7 +45,7 @@ const DashboardWidgetPreviewHeader: React.FunctionComponent<
           defaultValue={generatedTitle}
           onChange={handleTitleChange}
           isTitle
-          className="min-w-0 flex-1"
+          className="min-w-0"
         />
         {infoMessage && (
           <TooltipWrapper content={infoMessage}>

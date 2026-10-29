@@ -54,6 +54,8 @@ class ProjectMetricsServiceTest {
         entries.add(entry("small-a", first, "0.100000000000000001"));
         entries.add(entry("small-b", second, "0.3"));
         entries.add(entry("small-b", first, "0.200000000000000002"));
+        entries.add(ProjectMetricsDAO.Entry.builder().name("cost").groupName("small-b").time(third)
+                .value(null).build());
         results.add(ProjectMetricResponse.Results.<Number>builder().name("__others__")
                 .data(List.of(point(first, "0.300000000000000003"), point(second, "0.3"), point(third, "0.4")))
                 .build());

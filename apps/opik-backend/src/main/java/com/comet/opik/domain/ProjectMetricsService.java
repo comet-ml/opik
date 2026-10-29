@@ -145,31 +145,30 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
 
         // Add "Others" group if there are remaining groups beyond the limit
         if (!otherGroups.isEmpty()) {
-            List<ProjectMetricsDAO.Entry> othersEntries = otherGroups.stream()
-                    .flatMap(group -> entriesByGroup.get(group).stream())
-                    .map(entry -> ProjectMetricsDAO.Entry.builder()
-                            .name(entry.name())
-                            .time(entry.time())
-                            .value(entry.value())
-                            .groupName(BreakdownQueryBuilder.OTHERS_GROUP_NAME)
-                            .build())
-                    .toList();
+            var overflowEntries = otherGroups.stream()
+                    .flatMap(group -> entriesByGroup.get(group).stream());
+            List<ProjectMetricsDAO.Entry> othersEntries;
             if (metricType == MetricType.SPAN_COST || metricType == MetricType.COST) {
                 // Cost is additive. Keep one exact decimal sum per bucket, ordered by time.
-                // Other metrics (for example quantiles and feedback averages) need their own aggregation rules.
                 Map<Instant, BigDecimal> costsByTime = new TreeMap<>();
-                othersEntries.forEach(entry -> costsByTime.merge(entry.time(), switch (entry.value()) {
-                    case null -> BigDecimal.ZERO;
-                    case BigDecimal decimal -> decimal;
-                    default -> new BigDecimal(entry.value().toString());
-                },
+                overflowEntries.forEach(entry -> costsByTime.merge(entry.time(),
+                        entry.value() == null ? BigDecimal.ZERO : (BigDecimal) entry.value(),
                         BigDecimal::add));
-                String name = othersEntries.getFirst().name();
+                String name = entriesByGroup.get(otherGroups.getFirst()).getFirst().name();
                 othersEntries = costsByTime.entrySet().stream()
                         .map(entry -> ProjectMetricsDAO.Entry.builder()
                                 .name(name)
                                 .time(entry.getKey())
                                 .value(entry.getValue())
+                                .groupName(BreakdownQueryBuilder.OTHERS_GROUP_NAME)
+                                .build())
+                        .toList();
+            } else {
+                othersEntries = overflowEntries
+                        .map(entry -> ProjectMetricsDAO.Entry.builder()
+                                .name(entry.name())
+                                .time(entry.time())
+                                .value(entry.value())
                                 .groupName(BreakdownQueryBuilder.OTHERS_GROUP_NAME)
                                 .build())
                         .toList();

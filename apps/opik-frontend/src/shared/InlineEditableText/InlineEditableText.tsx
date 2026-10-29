@@ -10,7 +10,6 @@ type InlineEditableTextProps = {
   onChange: (value: string) => void;
   className?: string;
   isTitle?: boolean;
-  rightIcon?: React.ReactNode;
   alwaysShowEditIcon?: boolean;
 };
 
@@ -21,7 +20,6 @@ const InlineEditableText: React.FunctionComponent<InlineEditableTextProps> = ({
   onChange,
   className,
   isTitle = false,
-  rightIcon,
   alwaysShowEditIcon = false,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
@@ -184,9 +182,6 @@ const InlineEditableText: React.FunctionComponent<InlineEditableTextProps> = ({
           >
             {displayValue}
           </span>
-          {rightIcon && (
-            <div className="flex shrink-0 items-center">{rightIcon}</div>
-          )}
         </div>
         <div
           className={cn(

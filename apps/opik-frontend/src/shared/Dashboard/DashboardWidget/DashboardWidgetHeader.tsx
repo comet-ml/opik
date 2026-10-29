@@ -75,7 +75,13 @@ const DashboardWidgetHeader: React.FunctionComponent<
             {titleAdornment}
             {infoMessage && (
               <TooltipWrapper content={infoMessage}>
-                <Info className="size-3 shrink-0 text-light-slate" />
+                <button
+                  type="button"
+                  aria-label="Widget information"
+                  className="shrink-0"
+                >
+                  <Info className="size-3 text-light-slate" />
+                </button>
               </TooltipWrapper>
             )}
           </div>
