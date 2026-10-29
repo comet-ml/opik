@@ -364,7 +364,6 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
 
     const storedProvider = providerKey ?? calculatedProviderKey;
 
-    // Always sent for OpenRouter: an empty string moves the provider back to the default URL.
     const openRouterBaseUrl = isOpenRouter
       ? getOpenRouterBaseUrl(
           form.getValues("openRouterRegion") ?? DEFAULT_OPENROUTER_REGION,
