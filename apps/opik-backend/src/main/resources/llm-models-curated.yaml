@@ -127,6 +127,12 @@ models:
         accepted: true
         levels: [medium, high, xhigh]
         default: medium
+  - id: gpt-5.2-codex
+    params:
+      effort:
+        accepted: true
+        levels: [low, medium, high, xhigh]
+        default: medium
   - id: gpt-5.3-codex
     params:
       effort:
@@ -262,7 +268,21 @@ models:
     params: {effort: {accepted: false}}
   - id: o1-preview-2024-09-12
     params: {effort: {accepted: false}}
+  - id: o1-pro
+    params: {effort: {accepted: false}}
   - id: o3-pro
+    params: {effort: {accepted: false}}
+  - id: o3-deep-research
+    params: {effort: {accepted: false}}
+  - id: o4-mini-deep-research
+    params: {effort: {accepted: false}}
+  - id: gpt-5-codex
+    params: {effort: {accepted: false}}
+  - id: gpt-5.1-codex
+    params: {effort: {accepted: false}}
+  - id: gpt-5.1-codex-max
+    params: {effort: {accepted: false}}
+  - id: gpt-5.1-codex-mini
     params: {effort: {accepted: false}}
   anthropic:
   # claude-opus-5-5, claude-sonnet-5-5 and claude-fable-5-1 answer a forced tool_choice (any or tool) with
@@ -305,6 +325,10 @@ models:
     params:
       thinksByDefault: false
       effort: {accepted: false}
+  - id: claude-mythos-preview
+    params:
+      effort:
+        levels: [low, medium, high, max]
   - id: claude-3-7-sonnet-20250219
     profile: anthropic-sampling
     params:
@@ -441,6 +465,13 @@ models:
         default: high
   - {id: gemini-3.1-flash-image, profile: gemini-no-sampling}
   - {id: gemini-3.1-flash-lite-image, profile: gemini-no-sampling}
+  - id: gemini-3.1-flash-lite-preview
+    profile: gemini-no-sampling
+    params:
+      effort:
+        accepted: true
+        levels: [none, minimal, low, medium, high]
+        default: none
   - {id: gemini-3.1-flash-tts-preview, profile: gemini-no-sampling}
   - {id: gemini-3.8-flash-lite-tts, profile: gemini-no-sampling}
   - {id: gemini-3.8-flash-tts, profile: gemini-no-sampling}

@@ -14,8 +14,9 @@ params the backend serves (GET /v1/private/llm/models) and calls the model throu
   effort X    once per effort level the catalog offers
 
 OpenAI models are called on Chat Completions and again on the Responses API, since a route can refuse what the
-model takes; a model whose params name an only_route is called on that route alone. When the plain call fails, the
-rest of that model's calls on that route are skipped. A provider error that names a setting is a rejected claim, and
+model takes; a model whose params name an only_route is called on that route alone, and one whose only_route names
+none of its routes is a failure in the report and is not called. When the plain call fails, the rest of that model's
+calls on that route are skipped. A provider error that names a setting is a rejected claim, and
 the call goes again without it, so one wrong value does not hide the others. Report-only: a failure is a result for
 a person to read, not an error. The exit code is non-zero only when the check itself could not run.
 
@@ -251,20 +252,12 @@ def find_models_to_check(
         for model_id, (row, curated_row) in _rows_by_id(head_registry, head_curated, provider).items():
             model = _merged_row(row, curated_row)
             before = base_rows.get(model_id)
-            # Gaining onlyRoute only takes routes away and changes no request the backend sends, so it alone is no
-            # reason to call a model again. Losing or changing it opens a route the check hasn't called, and a value
-            # that names no route has to reach plan_probes, which rejects it.
-            gained_only_route = (
-                before is not None
-                and _only_route(*before) is None
-                and _only_route(row, curated_row) in route_names(provider)
-            )
             if before is None:
                 reason = "new"
             elif _call_fields(_merged_row(*before)) != _call_fields(model):
                 reason = "changed"
-            elif _params_inputs(base_curated, provider, *before, gained_only_route) != _params_inputs(
-                head_curated, provider, row, curated_row, gained_only_route
+            elif _params_inputs(base_curated, provider, *before) != _params_inputs(
+                head_curated, provider, row, curated_row
             ):
                 reason = "params"
             else:
@@ -296,9 +289,7 @@ def _merged_row(row: dict | None, curated_row: dict | None) -> dict:
     return {**(row or {}), **{k: v for k, v in (curated_row or {}).items() if k != "params"}}
 
 
-def _params_inputs(
-    curated: dict, provider: str, row: dict | None, curated_row: dict | None, without_only_route: bool = False
-) -> tuple:
+def _params_inputs(curated: dict, provider: str, row: dict | None, curated_row: dict | None) -> tuple:
     # Every input the backend folds into a model's params, compared as a whole rather than merged here: a second
     # copy of the merge would be one more place for the rules to drift.
     defaults = curated["defaults"].get(provider) or {}
@@ -306,18 +297,11 @@ def _params_inputs(
     names = [defaults.get("profile"), defaults.get("reasoningProfile") if reasoning else None]
     names += [(row or {}).get("profile"), (curated_row or {}).get("profile")]
     profiles = tuple((name, json.dumps(curated["profiles"].get(name), sort_keys=True)) for name in names if name)
-    params = [(row or {}).get("params"), (curated_row or {}).get("params")]
-    if without_only_route:
-        params = [{k: v for k, v in p.items() if k != "onlyRoute"} if isinstance(p, dict) else p for p in params]
-    return (*(json.dumps(p, sort_keys=True) for p in params), profiles)
-
-
-def _only_route(row: dict | None, curated_row: dict | None) -> str | None:
-    for source in (curated_row, row):
-        params = (source or {}).get("params")
-        if isinstance(params, dict) and params.get("onlyRoute") is not None:
-            return params["onlyRoute"]
-    return None
+    return (
+        json.dumps((row or {}).get("params"), sort_keys=True),
+        json.dumps((curated_row or {}).get("params"), sort_keys=True),
+        profiles,
+    )
 
 
 def _call_fields(model: dict) -> tuple:
@@ -345,16 +329,20 @@ def smoke_models(head: dict[str, list[dict]], retired: dict[str, set[str]]) -> l
     for provider, candidates in SMOKE_MODELS.items():
         for model_id in candidates:
             row = next((m for m in head.get(provider, []) if m["id"] == model_id), None)
-            model = row and ModelToCheck(provider, model_id, request_model_name(row), "smoke")
-            if model and not is_retired(model, retired):
+            if row is None:
+                continue
+            model = ModelToCheck(provider, model_id, request_model_name(row), "smoke")
+            if not is_retired(model, retired):
                 to_check.append(model)
                 break
     return to_check
 
 
-def retired_models() -> dict[str, set[str]]:
-    # Read the way the sync reads them, so the check and the picker agree on which models are gone.
-    return build_deprecated_by_provider(load_model_prices())
+def retired_models(ref: str | None) -> dict[str, set[str]]:
+    # Read the way the sync reads them, at the ref the catalog comes from, so the check and the picker agree on
+    # which models are gone.
+    prices = load_model_prices() if ref is None else load_model_prices(lambda path: read_at_ref(ref, path))
+    return build_deprecated_by_provider(prices)
 
 
 def is_retired(model: ModelToCheck, retired: dict[str, set[str]]) -> bool:
@@ -367,18 +355,18 @@ def route_names(provider: str) -> list[str]:
     return [route or CHAT_COMPLETIONS_ROUTE for route in ROUTES.get(provider, (None,))]
 
 
+def unknown_only_route(model: ModelToCheck, params: dict | None) -> str | None:
+    only_route = (params or {}).get("only_route")
+    return None if only_route is None or only_route in route_names(model.provider) else only_route
+
+
 def plan_probes(model: ModelToCheck, params: dict | None) -> list[Probe]:
     if not params:
         return [Probe(model, None, "plain", {"max_completion_tokens": MAX_COMPLETION_TOKENS}, ())]
     probes = []
-    routes = ROUTES.get(model.provider, (None,))
     only_route = params.get("only_route")
-    if only_route is not None and only_route not in route_names(model.provider):
-        raise ValueError(
-            f"{model.provider}/{model.model_id} has only_route {only_route!r}, which names none of its routes"
-        )
-    for route in routes:
-        if only_route is not None and (route or CHAT_COMPLETIONS_ROUTE) != only_route:
+    for route in ROUTES.get(model.provider, (None,)):
+        if only_route in route_names(model.provider) and (route or CHAT_COMPLETIONS_ROUTE) != only_route:
             continue
         route_params = params if route is None else (params.get("routes") or {}).get(route, params)
         probes += _route_probes(model, route, route_params)
@@ -684,7 +672,10 @@ def render_report(
             "",
             "### Other failures",
             "",
-            "A failure that names no setting the call tested, or a provider error that retries did not clear.",
+            (
+                "A failure that names no setting the call tested, a provider error that retries did not clear, or an "
+                "`only_route` that names none of the model's routes (that model is not called)."
+            ),
             "",
             "| Provider | Model | Route | Call | Why | Result | Note |",
             "| --- | --- | --- | --- | --- | --- | --- |",
@@ -732,19 +723,21 @@ def _headline(results: list[CheckResult], unexercised: list[UnexercisedChange], 
     calls = sum(r.calls for r in results)
     planned = [r for r in results if r.result == "would call"]
     not_checked = [r for r in results if r.result == "not checked"]
+    failed = {r.probe.model for r in results if r.result == "fail"}
+    failures = f"; failures on {_models(len(failed))}" if failed else ""
     if calls:
-        failed = {r.probe.model for r in results if r.result == "fail"}
         rejected = sum(len(r.rejections) for r in results)
         passed = sum(1 for r in results if r.result == "pass")
         made = sum(1 for r in results if r.result in ("pass", "fail", "unclear"))
         headline = f"{passed} of {made} checks passed ({_calls(calls)})"
         if rejected:
             headline += f", {rejected} rejected {'setting' if rejected == 1 else 'settings'}"
-        if failed:
-            headline += f"; failures on {_models(len(failed))}"
-        return headline
+        return headline + failures
     if planned:
-        return f"Dry run: {_calls(len(planned))} planned for {_models(len({r.probe.model for r in planned}))}"
+        planned_models = _models(len({r.probe.model for r in planned}))
+        return f"Dry run: {_calls(len(planned))} planned for {planned_models}{failures}"
+    if failed:
+        return f"Nothing called{failures}"
     if mode == "smoke" or not not_checked:
         if unexercised:
             return "Nothing called: no model is new or changed in a field this check exercises"
@@ -841,7 +834,7 @@ def plan(
 
 
 def run(args: argparse.Namespace) -> int:
-    retired = retired_models()
+    retired = retired_models(args.head_ref)
     to_check, unexercised, mode = plan(args, retired)
     keys = {p: os.environ.get(env, "") for p, env in PROVIDER_KEY_ENV.items()}
     secrets = [k for k in keys.values() if k]
@@ -858,13 +851,19 @@ def run(args: argparse.Namespace) -> int:
     queues = {}
     for model in sorted(to_check, key=lambda m: REASON_PRIORITY.get(m.reason, len(REASON_PRIORITY))):
         served = catalog.get(model.provider, {}).get(model.model_id)
-        probes = plan_probes(model, (served or {}).get("params"))
+        params = (served or {}).get("params")
+        probes = plan_probes(model, params)
+        bad_route = unknown_only_route(model, params)
         if mode != "asked" and is_retired(model, retired):
             results += [CheckResult(p, "not checked", None, RETIRED_NOTE) for p in probes]
         elif served is None:
             results += [CheckResult(p, "not checked", None, "the backend doesn't list this model") for p in probes]
         elif mode == "changes" and not served.get("label"):
             results += [CheckResult(p, "not checked", None, NOT_IN_PICKER_NOTE) for p in probes]
+        elif bad_route is not None:
+            routes = ", ".join(route_names(model.provider))
+            note = f"not called: its only_route {bad_route!r} is none of its routes ({routes})"
+            results.append(CheckResult(probes[0], "fail", None, note))
         elif not keys.get(model.provider):
             results += [CheckResult(p, "not checked", None, "no CI key") for p in probes]
         else:

@@ -37,6 +37,7 @@ import json
 import os
 import re
 import sys
+from collections.abc import Callable
 from datetime import date
 from pathlib import Path
 from typing import NamedTuple
@@ -606,11 +607,10 @@ def fetch_gemini_models(api_key: str) -> list[tuple[str, str]]:
     return sorted(set(results))
 
 
-def load_model_prices() -> dict:
+def load_model_prices(read_text: Callable[[Path], str] | None = None) -> dict:
     prices = {}
     for path in (MODEL_PRICES_JSON, OPENROUTER_MODEL_PRICES_JSON):
-        with open(REPO_ROOT / path, encoding="utf-8") as f:
-            prices.update(json.load(f))
+        prices.update(json.loads(read_text(path) if read_text else (REPO_ROOT / path).read_text(encoding="utf-8")))
     return prices
 
 

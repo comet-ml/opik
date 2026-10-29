@@ -96,10 +96,10 @@ class LlmModelsResourceTest {
                                 .effort(new EffortParam(true, List.of("low", "high"), "high"))
                                 .samplingExclusive(true)
                                 .thinksByDefault(false)
-                                .onlyRoute("some_route")
+                                .onlyRoute(ModelParams.RESPONSES_API_ROUTE)
                                 .routes(Map.of("some_route", ModelParams.builder()
                                         .stop(new FlagParam(false))
-                                        .onlyRoute("some_route")
+                                        .onlyRoute(ModelParams.RESPONSES_API_ROUTE)
                                         .build()))
                                 .build())
                         .build())));
@@ -125,8 +125,8 @@ class LlmModelsResourceTest {
                                   "effort": {"accepted": true, "levels": ["low", "high"], "default": "high"},
                                   "sampling_exclusive": true,
                                   "thinks_by_default": false,
-                                  "only_route": "some_route",
-                                  "routes": {"some_route": {"stop": {"accepted": false}, "only_route": "some_route"}}
+                                  "only_route": "responses_api",
+                                  "routes": {"some_route": {"stop": {"accepted": false}, "only_route": "responses_api"}}
                                 }
                               }]
                             }"""));

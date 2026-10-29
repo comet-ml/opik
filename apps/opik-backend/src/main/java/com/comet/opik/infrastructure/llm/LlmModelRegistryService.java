@@ -63,6 +63,7 @@ public class LlmModelRegistryService {
     private volatile Map<String, List<ModelEntry>> lastGoodRemote;
     private final Set<String> reportedAwaitingSyncRows = ConcurrentHashMap.newKeySet();
     private final Set<String> reportedUnknownProfiles = ConcurrentHashMap.newKeySet();
+    private final Set<String> reportedUnknownOnlyRoutes = ConcurrentHashMap.newKeySet();
     // Kept across reloads because the curated files ship with the release; the reasoning flag, which a reload can
     // change, is part of the key. Bounded because the effort check asks with whatever model name a request carries.
     private final LoadingCache<CuratedParamsKey, Optional<ModelParams>> curatedParams = CacheBuilder.newBuilder()
@@ -228,6 +229,25 @@ public class LlmModelRegistryService {
             if (!unknown.isEmpty()) {
                 throw new IllegalStateException(
                         "The curated model catalog names params profiles it doesn't define: " + unknown);
+            }
+            return this;
+        }
+
+        CuratedCatalog requireKnownOnlyRoutes() {
+            var unknown = Stream.concat(
+                    profiles.values().stream(),
+                    models.values().stream()
+                            .filter(Objects::nonNull)
+                            .flatMap(List::stream)
+                            .filter(Objects::nonNull)
+                            .map(ModelEntry::params))
+                    .filter(Objects::nonNull)
+                    .flatMap(ModelParams::unknownOnlyRoutes)
+                    .distinct()
+                    .toList();
+            if (!unknown.isEmpty()) {
+                throw new IllegalStateException("The curated model catalog names an onlyRoute that isn't one of "
+                        + ModelParams.ROUTE_NAMES + ": " + unknown);
             }
             return this;
         }
@@ -424,12 +444,39 @@ public class LlmModelRegistryService {
             return CuratedCatalog.EMPTY;
         }
         return readClasspathYaml(resourceName, new TypeReference<CuratedCatalog>() {
-        }).requireKnownProfiles();
+        }).requireKnownProfiles().requireKnownOnlyRoutes();
     }
 
     private Map<String, List<ModelEntry>> foldLayerProfiles(Map<String, List<ModelEntry>> layer) {
         reportUnknownProfiles(layer);
-        return catalog.foldProfiles(layer);
+        return catalog.foldProfiles(dropUnknownOnlyRoutes(layer));
+    }
+
+    // Data like an unknown profile, so only the value goes, not the layer: the CDN copy is also read by older
+    // backends, and one route name they don't know must not cost them every other update.
+    private Map<String, List<ModelEntry>> dropUnknownOnlyRoutes(Map<String, List<ModelEntry>> layer) {
+        var result = new LinkedHashMap<String, List<ModelEntry>>(layer.size());
+        layer.forEach((provider, rows) -> result.put(provider, rows == null
+                ? null
+                : rows.stream().map(row -> withoutUnknownOnlyRoutes(provider, row)).toList()));
+        return result;
+    }
+
+    private ModelEntry withoutUnknownOnlyRoutes(String provider, ModelEntry row) {
+        if (row == null || row.params() == null) {
+            return row;
+        }
+        var unknown = row.params().unknownOnlyRoutes().distinct().toList();
+        if (unknown.isEmpty()) {
+            return row;
+        }
+        var message = "Unknown onlyRoute {} for model '{}' of provider '{}', skipping it";
+        if (reportedUnknownOnlyRoutes.add(provider + "/" + row.id() + "/" + unknown)) {
+            log.warn(message, unknown, row.id(), provider);
+        } else {
+            log.debug(message, unknown, row.id(), provider);
+        }
+        return row.toBuilder().params(row.params().withoutUnknownOnlyRoutes()).build();
     }
 
     // A generated layer or the local override is data, so a profile it names wrongly is skipped rather than
