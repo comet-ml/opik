@@ -122,6 +122,23 @@ test.describe(
             kitVersion: 1,
             summary: 'QA: the trace question and answer as two cards',
           });
+          // Polled for the reason the markup test's read-back is (see there):
+          // the PATCH answers 204 over an eventually-consistent write, so a
+          // single read straight after it can still serve the queue's previous
+          // view. The claims are unchanged — byte-for-byte html and the kit
+          // version — and both are asserted on the same read below.
+          await expect
+            .poll(
+              async () =>
+                (await backendClient.getAnnotationQueueAnnotatorView(annotatorViewQueue.queueId))
+                  ?.html,
+              {
+                message: 'the queue stored the view, with its html round-tripping byte for byte',
+                timeout: 30_000,
+                intervals: [500, 1_000, 2_000],
+              },
+            )
+            .toBe(WORKING_VIEW);
           const stored = await backendClient.getAnnotationQueueAnnotatorView(
             annotatorViewQueue.queueId,
           );
@@ -204,14 +221,23 @@ test.describe(
             html: NEVER_MOUNTS_VIEW,
             kitVersion: 1,
           });
-          const stored = await backendClient.getAnnotationQueueAnnotatorView(
-            annotatorViewQueue.queueId,
-          );
           // Asserted, because the whole test rests on the queue really carrying
           // a view: a PATCH the backend had rejected would leave the default
           // view on screen for the ordinary reason, and every assertion below
-          // would pass having tested nothing.
-          expect(stored?.html, 'the broken view was stored').toBe(NEVER_MOUNTS_VIEW);
+          // would pass having tested nothing. Polled rather than read once
+          // because the write is eventually consistent — see the markup test.
+          await expect
+            .poll(
+              async () =>
+                (await backendClient.getAnnotationQueueAnnotatorView(annotatorViewQueue.queueId))
+                  ?.html,
+              {
+                message: 'the broken view was stored',
+                timeout: 30_000,
+                intervals: [500, 1_000, 2_000],
+              },
+            )
+            .toBe(NEVER_MOUNTS_VIEW);
         });
 
         await test.step('Open the SME flow', async () => {
@@ -279,10 +305,26 @@ test.describe(
             html: INJECTING_VIEW,
             kitVersion: 1,
           });
-          expect(
-            (await backendClient.getAnnotationQueueAnnotatorView(annotatorViewQueue.queueId))?.html,
-            'the markup-writing view was stored — the backend does not vet the html, the frame does',
-          ).toBe(INJECTING_VIEW);
+          // Polled, not read once: the PATCH answers 204 over an
+          // eventually-consistent write, and on a cloud deployment the read
+          // straight after it has been seen to still serve the SAFE view this
+          // test stored a moment earlier — which fails with a diff between two
+          // of this test's own strings and reads like a product bug. The claim
+          // is unchanged and still exact: the html the frame is handed is the
+          // markup-writing one verbatim, because the backend does not vet it.
+          await expect
+            .poll(
+              async () =>
+                (await backendClient.getAnnotationQueueAnnotatorView(annotatorViewQueue.queueId))
+                  ?.html,
+              {
+                message:
+                  'the markup-writing view was stored — the backend does not vet the html, the frame does',
+                timeout: 30_000,
+                intervals: [500, 1_000, 2_000],
+              },
+            )
+            .toBe(INJECTING_VIEW);
         });
 
         await test.step('The write is refused and the view is replaced', async () => {
@@ -346,10 +388,21 @@ test.describe(
           await backendClient.setAnnotationQueueAnnotatorView(annotatorViewQueue.queueId, {
             html: '',
           });
-          expect(
-            await backendClient.getAnnotationQueueAnnotatorView(annotatorViewQueue.queueId),
-            'the queue reads back with no annotator view at all',
-          ).toBeNull();
+          // Polled for the same reason as the stores above: the clearing PATCH
+          // is eventually consistent, so the read straight after it can still
+          // serve the working view this test had just put there. `toBeNull` is
+          // the claim either way — a queue storing `{html: ""}` never satisfies
+          // it however long it is waited for.
+          await expect
+            .poll(
+              () => backendClient.getAnnotationQueueAnnotatorView(annotatorViewQueue.queueId),
+              {
+                message: 'the queue reads back with no annotator view at all',
+                timeout: 30_000,
+                intervals: [500, 1_000, 2_000],
+              },
+            )
+            .toBeNull();
         });
 
         await test.step('The queue page drops the tag', async () => {

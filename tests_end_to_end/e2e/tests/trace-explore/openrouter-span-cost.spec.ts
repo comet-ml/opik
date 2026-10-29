@@ -406,6 +406,23 @@ test.describe(
           return opened;
         });
 
+        await test.step('The span tree holds every span this test walks', async () => {
+          // `waitForFullyLoaded` waits for the trace's own header, not for the
+          // span tree behind it — that is a separate query, and under parallel
+          // load on a cloud deployment it has been seen to still be in flight
+          // when the first `selectSpan` fires. The click then burns the 15s
+          // `actionTimeout` on a node that was about to appear, and the failure
+          // reads as "the span is missing" rather than "the tree had not
+          // rendered". Waited for explicitly, so a tree that genuinely never
+          // lists a seeded span fails here with that named.
+          for (const seed of prefixed) {
+            await expect(
+              panel.spanTreeNode(seed.name),
+              `the tree lists '${seed.name}' exactly once`,
+            ).toHaveCount(1, { timeout: 30_000 });
+          }
+        });
+
         await test.step('Each priced span shows its own resolved cost against its own model', async () => {
           for (const seed of prefixed) {
             await panel.selectSpan(seed.name);

@@ -65,6 +65,22 @@ const RUN_COMPLETE_TEXT = /Run complete/;
 const PLAYGROUND_STORE_KEY = 'PLAYGROUND_STATE';
 
 /**
+ * One CodeMirror message editor's text, with the placeholder stripped.
+ *
+ * The placeholder is a real DOM node inside `.cm-content`, so an empty editor's
+ * `textContent` is its prompt text rather than `''` — which is why this cannot
+ * be a plain `innerText` read. Shared with {@link PlaygroundPage.messageBodies}
+ * so "what the editor holds" means one thing across the POM.
+ */
+async function readEditorBody(editor: Locator): Promise<string> {
+  return editor.evaluate((node) => {
+    const clone = node.cloneNode(true) as HTMLElement;
+    clone.querySelectorAll('.cm-placeholder').forEach((placeholder) => placeholder.remove());
+    return (clone.textContent ?? '').trim();
+  });
+}
+
+/**
  * One persisted Playground prompt, reduced to the fields that decide whether a
  * remount re-applies a library template over the user's own edits.
  *
@@ -2645,9 +2661,10 @@ export class PlaygroundPage {
   /** Edit the content of the User message in variant 0 directly in the Playground editor. */
   async editUserMessage(newContent: string): Promise<void> {
     return test.step('edit the user message in Playground', async () => {
-      const editor = this.variantMessage(0, 'user').locator('.cm-content').first();
-      await editor.click();
-      await editor.fill(newContent);
+      // Delegated rather than repeating the click-and-fill: this is an edit
+      // OVER existing text, which is exactly the case `fillMessageBody` clears
+      // for — see the note there on CodeMirror appending instead of replacing.
+      await this.fillMessageBody(this.variantMessage(0, 'user'), newContent);
     });
   }
 
@@ -3453,7 +3470,23 @@ export class PlaygroundPage {
     // fill() on the role=textbox works for simple strings; pressSequentially is
     // safer for multi-line / templated input.
     const editor = messageRow.locator('.cm-content').first();
-    await editor.click();
+
+    // Emptied first, and the emptying is retried until it holds.
+    // `fill()` on a contenteditable selects all and inserts, which is one
+    // transaction CodeMirror can lose: if the card re-renders between the
+    // selection and the insert — as it does while a dataset run is in flight —
+    // the new text is APPENDED to the old instead of replacing it, and the
+    // caller is left with both prompts concatenated. Clearing as its own step
+    // makes that recoverable, and "the editor is empty" is a check with no
+    // whitespace or multi-line ambiguity, unlike comparing against `text`
+    // itself.
+    await expect(async () => {
+      await editor.click({ timeout: 2_000 });
+      await editor.press('ControlOrMeta+a', { timeout: 2_000 });
+      await editor.press('Delete', { timeout: 2_000 });
+      expect(await readEditorBody(editor), 'the message editor is empty before typing').toBe('');
+    }).toPass({ timeout: 15_000 });
+
     await editor.fill(text);
   }
 }

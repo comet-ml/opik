@@ -87,6 +87,22 @@ export const test = baseTest.extend<AnnotatorViewQueueFixtures>({
         );
       }
 
+      // The create answers 201 over an eventually-consistent write, so the
+      // queue is not necessarily readable by the time the next call runs: on a
+      // cloud deployment under parallel load, `addAnnotationQueueItems`
+      // immediately after a 201 has been seen to answer
+      // `404 Annotation queue not found`. Polled on the queue's own read rather
+      // than slept on, and polled BEFORE the add so the failure — if the create
+      // really did not take — names the create instead of surfacing as a 404
+      // from the add, which reads like a wrong id.
+      await expect
+        .poll(async () => (await backendClient.getAnnotationQueue(queueId))?.id ?? null, {
+          message: `the queue ${queueName} must be readable before items are added to it`,
+          timeout: QUEUE_ITEM_VISIBLE_TIMEOUT_MS,
+          intervals: [500, 1_000, 2_000],
+        })
+        .toBe(queueId);
+
       await backendClient.addAnnotationQueueItems(queueId, [traceId]);
 
       // The add is a 204 over an eventually-consistent write. Polled on the
