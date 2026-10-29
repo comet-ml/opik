@@ -908,10 +908,37 @@ export class PlaygroundPage {
     );
   }
 
-  /** The same reading for the dataset-grid failure tags. */
+  /**
+   * The same reading for the dataset-grid failure tags — but EFFECTIVE, as the
+   * product of the tag's own opacity and every ancestor's up to the cell.
+   *
+   * The grid dims differently from the single-prompt panel, and reading the
+   * tag's own computed opacity here measured the wrong node. opik#9166
+   * (OPIK-7789) replaced `PlaygroundOutputCell`'s three per-element `stale`
+   * props with ONE `opacity-50` on the body wrapper, and stopped passing
+   * `stale` to `PlaygroundOutputError` at all; `PlaygroundPromptOutput` still
+   * passes it, which is why {@link promptOutputErrorOpacities} is unaffected.
+   * CSS `opacity` does not inherit, so after that change the tag resolves to 1
+   * inside a wrapper the browser is compositing at 0.5 — dimmed on screen, and
+   * read as undimmed here.
+   *
+   * Composing the chain is what the docblock above already claims to assert:
+   * what the USER sees dimmed, wherever the class happens to sit. Scoped to the
+   * cell so page-level chrome cannot contribute, and still 1 for a fresh cell,
+   * which is the baseline every caller takes first.
+   */
   async outputErrorOpacities(): Promise<number[]> {
     return this.outputErrorTags().evaluateAll((els) =>
-      els.map((e) => Number(window.getComputedStyle(e).opacity)),
+      els.map((el) => {
+        let effective = 1;
+        let node: HTMLElement | null = el as HTMLElement;
+        while (node) {
+          effective *= Number(window.getComputedStyle(node).opacity);
+          if (node.matches('td[data-cell-id]')) break;
+          node = node.parentElement;
+        }
+        return effective;
+      }),
     );
   }
 

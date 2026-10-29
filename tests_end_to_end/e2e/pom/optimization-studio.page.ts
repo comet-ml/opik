@@ -13,6 +13,13 @@ export type OptimizerName = 'GEPA optimizer' | 'Hierarchical Reflective';
 const escapeForRegExp = (literal: string): string =>
   literal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+/**
+ * How long the new-run form is given to mount its model picker and seed a model
+ * into it — see {@link OptimizationStudioPage.waitForModelResolved} for why this
+ * is not the default `expect` timeout.
+ */
+const MODEL_RESOLVE_TIMEOUT_MS = 30_000;
+
 export interface StudioRunConfig {
   /** Name of a dataset already associated with the project (shown in the picker). */
   datasetName: string;
@@ -552,14 +559,36 @@ export class OptimizationStudioPage {
    * model" until a model is set, so a non-placeholder trigger means
    * `providersReady` has turned true and `convertOptimizationStudioToFormData`
    * has seeded a real one.
+   *
+   * Two waits, not one, and the split is the point. `NewRunSidebar` is an
+   * always-mounted shell: `newRunPanel()` resolves the moment the panel opens,
+   * but while `isRerunFetching` is true the body is a `Loader` and the picker
+   * does not exist at all. A single `not.toHaveText` over both phases reports
+   * the first as "element(s) not found", which reads like a selector that never
+   * matched — the one failure this POM's selectors are most often blamed for.
+   * So the mount is waited for under its own message first.
+   *
+   * The budget is `MODEL_RESOLVE_TIMEOUT_MS` rather than the 10s default
+   * `expect` timeout because the chain behind it is three or four serial reads
+   * — the rerun fetch, the provider keys, `GET /llm/models`, and on a rerun the
+   * dataset get-or-create — and under parallel load against one deployment that
+   * does not fit in 10s. Observed losing it on the second of four sequential
+   * reruns in one test at four workers, while the same test passes in isolation
+   * in ~8s per rerun. Three times the observed cost, not an open-ended wait: a
+   * form that genuinely never resolves still fails here, with the phase named.
    */
   async waitForModelResolved(): Promise<string> {
     return test.step('Wait for the form to resolve a prompt model', async () => {
       const picker = this.modelPickerTrigger();
       await expect(
         picker,
+        'the new-run form mounts its model picker — until the rerun fetch settles ' +
+          'the panel body is a Loader and the picker is absent',
+      ).toBeVisible({ timeout: MODEL_RESOLVE_TIMEOUT_MS });
+      await expect(
+        picker,
         'the form resolves a prompt model once the provider keys and the registry answer',
-      ).not.toHaveText('Select an LLM model');
+      ).not.toHaveText('Select an LLM model', { timeout: MODEL_RESOLVE_TIMEOUT_MS });
       return ((await picker.textContent()) ?? '').trim();
     });
   }
