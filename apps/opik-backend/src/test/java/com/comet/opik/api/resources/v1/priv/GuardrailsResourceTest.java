@@ -1,6 +1,9 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.GuardrailType;
 import com.comet.opik.api.GuardrailsValidation;
+import com.comet.opik.api.GuardrailsValidationRequest;
+import com.comet.opik.api.GuardrailsValidationRequest.ValidationDescriptor;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
@@ -23,13 +26,19 @@ import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.comet.opik.utils.JsonUtils;
 import com.redis.testcontainers.RedisContainer;
+import io.dropwizard.jersey.errors.ErrorMessage;
+import org.apache.http.HttpStatus;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -38,6 +47,8 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -211,6 +222,60 @@ public class GuardrailsResourceTest {
 
         assertThat(actualStats).isNotNull();
         assertThat(actualStats.stats()).contains(expected);
+    }
+
+    @Test
+    @DisplayName("guardrail validations answer 501 until they are implemented")
+    void validate__whenRequestIsValid__thenNotImplemented() {
+        var request = GuardrailsValidationRequest.builder()
+                .text("some text")
+                .validations(List.of(promptInjection()))
+                .build();
+
+        try (var response = guardrailsResourceClient.validate(request, API_KEY, TEST_WORKSPACE)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_IMPLEMENTED);
+            assertThat(response.readEntity(ErrorMessage.class).getMessage())
+                    .isEqualTo("Guardrail checks are not available yet");
+        }
+    }
+
+    static Stream<Arguments> invalidValidationRequests() {
+        return Stream.of(
+                Arguments.of("blank text", GuardrailsValidationRequest.builder()
+                        .text("  ")
+                        .validations(List.of(promptInjection()))
+                        .build(), "text must not be blank"),
+                Arguments.of("no checks", GuardrailsValidationRequest.builder()
+                        .text("some text")
+                        .validations(List.of())
+                        .build(), "validations size must be between 1 and 32"),
+                Arguments.of("more than 32 checks", GuardrailsValidationRequest.builder()
+                        .text("some text")
+                        .validations(Collections.nCopies(33, promptInjection()))
+                        .build(), "validations size must be between 1 and 32"),
+                Arguments.of("a null check", GuardrailsValidationRequest.builder()
+                        .text("some text")
+                        .validations(Arrays.asList(promptInjection(), null))
+                        .build(), "validations[1].<list element> must not be null"));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("invalidValidationRequests")
+    @DisplayName("invalid guardrail validation requests are rejected")
+    void validate__whenRequestIsInvalid__thenUnprocessable(String scenario, GuardrailsValidationRequest request,
+            String expectedError) {
+        try (var response = guardrailsResourceClient.validate(request, API_KEY, TEST_WORKSPACE)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+            assertThat(response.readEntity(com.comet.opik.api.error.ErrorMessage.class).errors())
+                    .containsExactly(expectedError);
+        }
+    }
+
+    private static ValidationDescriptor promptInjection() {
+        return ValidationDescriptor.builder()
+                .type(GuardrailType.PROMPT_INJECTION)
+                .config(JsonUtils.getJsonNodeFromString("{}"))
+                .build();
     }
 
     private void assertGuardrailValidations(List<GuardrailsValidation> expected, List<GuardrailsValidation> actual) {
