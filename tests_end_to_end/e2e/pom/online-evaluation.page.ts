@@ -13,6 +13,19 @@ export interface CreateRuleLLMJudgeFields {
   template: 'Hallucination' | 'Moderation' | 'Answer relevance' | 'Tool correctness';
   /** Model display name as shown in the model picker (e.g. "Claude Haiku 4.5"). */
   modelDisplayName: string;
+  /**
+   * The provider group to pick `modelDisplayName` out of, when the name alone
+   * is ambiguous.
+   *
+   * Needed because two providers legitimately offer the same model under the
+   * same display label — "Gemini 3 Flash Preview" is both `gemini-3-flash-preview`
+   * and `vertex_ai/gemini-3-flash-preview` — and because an OpenRouter id
+   * ("openai/gpt-5-nano") is only offered under the OpenRouter group, where the
+   * `openai/` stem makes a group-blind search read as the native OpenAI row.
+   * Omitted, the search is group-blind, which is what every existing caller
+   * wants.
+   */
+  providerGroup?: string;
 }
 
 export interface CreateRulePythonEqualsFields {
@@ -1020,7 +1033,11 @@ export class OnlineEvaluationPage {
       await this.waitForPanelOpen();
       await this.applyJudgeTemplate(fields.template);
       await this.nameInput.fill(fields.name);
-      await this.selectJudgeModel(fields.modelDisplayName);
+      if (fields.providerGroup === undefined) {
+        await this.selectJudgeModel(fields.modelDisplayName);
+      } else {
+        await this.selectJudgeModelFromProvider(fields.providerGroup, fields.modelDisplayName);
+      }
     });
   }
 
