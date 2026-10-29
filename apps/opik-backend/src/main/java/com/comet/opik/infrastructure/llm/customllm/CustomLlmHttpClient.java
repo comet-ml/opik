@@ -346,8 +346,8 @@ class CustomLlmHttpClient implements HttpClient {
     }
 
     /**
-     * A string request body written straight to the wire, so no encoded copy is held, and written again whenever
-     * OkHttp resends the request. It has no media type: the request's own Content-Type header is sent as is.
+     * A string request body written straight to the wire, so no encoded copy is held. It has no media type: the
+     * request's own Content-Type header is sent as is.
      */
     @RequiredArgsConstructor
     private static class StringRequestBody extends RequestBody {

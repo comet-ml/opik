@@ -884,10 +884,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "openai/gpt-4",
     },
     {
-      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4_TURBO,
-      label: "openai/gpt-4-turbo",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4_1,
       label: "openai/gpt-4.1",
     },
@@ -1080,36 +1076,12 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "openai/gpt-oss-safeguard-20b",
     },
     {
-      value: PROVIDER_MODEL_TYPE.OPENAI_O1,
-      label: "openai/o1",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.OPENAI_O1_PRO,
-      label: "openai/o1-pro",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.OPENAI_O3,
       label: "openai/o3",
     },
     {
-      value: PROVIDER_MODEL_TYPE.OPENAI_O3_MINI,
-      label: "openai/o3-mini",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.OPENAI_O3_MINI_HIGH,
-      label: "openai/o3-mini-high",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.OPENAI_O3_PRO,
       label: "openai/o3-pro",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.OPENAI_O4_MINI,
-      label: "openai/o4-mini",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.OPENAI_O4_MINI_HIGH,
-      label: "openai/o4-mini-high",
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENROUTER_AUTO,
@@ -1130,6 +1102,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.OPENROUTER_PARETO_CODE,
       label: "openrouter/pareto-code",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.PARTICLE_AI_PARTICLE_1,
+      label: "particle-ai/particle-1",
     },
     {
       value: PROVIDER_MODEL_TYPE.PERCEPTRON_PERCEPTRON_MK1,
@@ -1246,10 +1222,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_NEXT_80B_A3B_INSTRUCT,
       label: "qwen/qwen3-next-80b-a3b-instruct",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_NEXT_80B_A3B_THINKING,
-      label: "qwen/qwen3-next-80b-a3b-thinking",
     },
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_VL_235B_A22B_INSTRUCT,

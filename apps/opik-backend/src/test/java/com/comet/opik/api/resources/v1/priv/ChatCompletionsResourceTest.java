@@ -713,6 +713,47 @@ class ChatCompletionsResourceTest {
         }
 
         /**
+         * A provider that resets the connection once it took the request may have acted on it. A transport failure is
+         * transient, so ChatCompletionService's retry budget sends the request again, but the HTTP client never does
+         * on its own: the provider sees one request per attempt, the first one sent on the connection the previous
+         * call left pooled, and one for the stream, which isn't retried.
+         */
+        @ParameterizedTest(name = "maxRetries={0}")
+        @ValueSource(ints = {1, 2})
+        @DisplayName("a connection reset after the request is sent costs one provider call per attempt")
+        void aConnectionResetCostsOneProviderCallPerAttempt(int maxRetries) {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            mockTargetWorkspace(workspaceName, UUID.randomUUID().toString());
+            createCustomProvider(workspaceName);
+            WIRE_MOCK.server().stubFor(post(urlPathMatching(CHAT_COMPLETIONS_REGEX)).willReturn(okJson(SUCCESS_BODY)));
+            var request = ChatCompletionRequest.builder().stream(false).model(MODEL).addUserMessage("ping").build();
+            var streamed = ChatCompletionRequest.builder().stream(true).model(MODEL).addUserMessage("ping").build();
+            var expectedError = new ErrorMessage(HttpStatus.SC_INTERNAL_SERVER_ERROR,
+                    UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
+            var expectedProviderCalls = List.of(1, maxRetries + 2, maxRetries + 3);
+            var actualProviderCalls = new ArrayList<Integer>();
+
+            withRetryBudget(maxRetries, () -> {
+                chatCompletionsClient.create(API_KEY, workspaceName, request);
+                actualProviderCalls.add(providerCalls());
+                WIRE_MOCK.server().stubFor(post(urlPathMatching(CHAT_COMPLETIONS_REGEX))
+                        .willReturn(aResponse().withFault(Fault.CONNECTION_RESET_BY_PEER)));
+
+                var actualError = chatCompletionsClient.create(API_KEY, workspaceName, request,
+                        HttpStatus.SC_INTERNAL_SERVER_ERROR);
+                actualProviderCalls.add(providerCalls());
+                var actualStreamedErrors = chatCompletionsClient.createAndGetStreamedError(API_KEY, workspaceName,
+                        streamed);
+                actualProviderCalls.add(providerCalls());
+
+                assertThat(actualError).isEqualTo(expectedError);
+                assertThat(actualStreamedErrors).containsExactly(expectedError);
+            });
+
+            assertThat(actualProviderCalls).isEqualTo(expectedProviderCalls);
+        }
+
+        /**
          * A provider's header values are sent, but never logged: not when the provider is saved or updated, nor when
          * it's called.
          */
