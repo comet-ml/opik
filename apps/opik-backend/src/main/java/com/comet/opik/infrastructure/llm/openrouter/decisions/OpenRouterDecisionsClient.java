@@ -17,7 +17,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Mono;
 
+import java.net.URI;
 import java.time.Duration;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -27,9 +29,11 @@ import java.util.Set;
  * such as TypeSafe Jev. Those models aren't reachable through chat completions, so there is no LangChain4j
  * client for them.
  *
- * <p>Requests always go to the configured {@code openRouterDecisionsUrl}, never to the {@code baseUrl} of the
- * workspace's OpenRouter provider: that base URL points at {@code /api/v1}, and the Decisions API lives outside
- * it, so a workspace that routes OpenRouter chat traffic through a proxy still calls Jev on openrouter.ai.
+ * <p>Requests go to the configured {@code openRouterDecisionsUrl}, not to the {@code baseUrl} of the workspace's
+ * OpenRouter provider: that base URL points at {@code /api/v1}, and the Decisions API lives outside it, so a
+ * workspace that routes OpenRouter chat traffic through a proxy still calls Jev on openrouter.ai. The exception is
+ * a regional base URL such as {@code https://eu.openrouter.ai/api/v1}: the request then goes to the same path on
+ * that regional host, so in-region routing also covers decisions models.
  *
  * <p>Errors carry the upstream status: 4xx as {@link ClientErrorException}, 5xx as {@link ServerErrorException}
  * and anything else (e.g. a redirect from a misconfigured URL) as {@link WebApplicationException}, so the
@@ -47,6 +51,7 @@ public class OpenRouterDecisionsClient {
     private static final int DEFAULT_MAX_ATTEMPTS = 3;
     private static final Duration MAX_BACKOFF = Duration.ofSeconds(10);
     private static final int MAX_ERROR_MESSAGE_LENGTH = 512;
+    private static final String OPENROUTER_SUBDOMAIN_SUFFIX = ".openrouter.ai";
 
     /**
      * Retried in-process on top of the 503/504 that {@link RetriableHttpClient} already retries: rate limit, bad
@@ -66,7 +71,8 @@ public class OpenRouterDecisionsClient {
     public Mono<DecisionsResponse> decide(@NonNull DecisionsRequest request,
             @NonNull LlmProviderClientApiConfig config) {
         var httpRequest = RetriableHttpClient.Request.<DecisionsResponse>builder()
-                .requestFunction(httpClient -> httpClient.target(llmProviderClientConfig.getOpenRouterDecisionsUrl()))
+                .requestFunction(httpClient -> httpClient.target(
+                        decisionsUrl(llmProviderClientConfig.getOpenRouterDecisionsUrl(), config.baseUrl())))
                 .requestCustomizer(builder -> {
                     Optional.ofNullable(config.headers()).orElse(Map.of()).forEach(builder::header);
                     builder.header(HttpHeaders.AUTHORIZATION, "Bearer " + config.apiKey());
@@ -83,6 +89,22 @@ public class OpenRouterDecisionsClient {
                 .responseFunction(this::processResponse)
                 .build();
         return client.executePostWithRetry(httpRequest);
+    }
+
+    static String decisionsUrl(@NonNull String configuredUrl, String baseUrl) {
+        if (StringUtils.isBlank(baseUrl)) {
+            return configuredUrl;
+        }
+        String host;
+        try {
+            host = URI.create(baseUrl.trim()).getHost();
+        } catch (IllegalArgumentException invalidBaseUrl) {
+            return configuredUrl;
+        }
+        if (host == null || !host.toLowerCase(Locale.ROOT).endsWith(OPENROUTER_SUBDOMAIN_SUFFIX)) {
+            return configuredUrl;
+        }
+        return "https://%s%s".formatted(host.toLowerCase(Locale.ROOT), URI.create(configuredUrl).getPath());
     }
 
     private DecisionsResponse processResponse(Response response) {

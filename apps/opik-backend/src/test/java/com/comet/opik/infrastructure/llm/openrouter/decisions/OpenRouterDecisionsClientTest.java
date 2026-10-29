@@ -18,6 +18,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.LinkedHashMap;
@@ -183,6 +184,20 @@ class OpenRouterDecisionsClientTest {
         var response = decisionsClient.decide(request(), apiConfig(Map.of())).block();
 
         assertThat(response.answers()).containsKeys("answer_relevant", "answer_correct");
+    }
+
+    @ParameterizedTest
+    @CsvSource(nullValues = "null", value = {
+            "null, https://openrouter.ai/api/alpha/decisions",
+            "'', https://openrouter.ai/api/alpha/decisions",
+            "https://openrouter.ai/api/v1, https://openrouter.ai/api/alpha/decisions",
+            "https://my-proxy.example.com/openrouter/v1, https://openrouter.ai/api/alpha/decisions",
+            "not a url, https://openrouter.ai/api/alpha/decisions",
+            "https://eu.openrouter.ai/api/v1, https://eu.openrouter.ai/api/alpha/decisions",
+            "https://US.openrouter.ai/api/v1/, https://us.openrouter.ai/api/alpha/decisions"})
+    void decisionsUrlFollowsRegionalBaseUrlOnly(String baseUrl, String expected) {
+        assertThat(OpenRouterDecisionsClient.decisionsUrl("https://openrouter.ai/api/alpha/decisions", baseUrl))
+                .isEqualTo(expected);
     }
 
     private DecisionsRequest request() {
