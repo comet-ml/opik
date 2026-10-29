@@ -30,5 +30,12 @@ public record GuardrailsValidationRequest(
     public record ValidationDescriptor(
             @NotNull GuardrailType type,
             @Schema(implementation = JsonNode.class, ref = "JsonNode", description = "User settings only: PII entities (each supported class at most once), or allowed_topics and restricted_topics (at least one; each up to 254 distinct labels of up to 256 characters, not 'none of these', and no topic in both). Thresholds are set by the server and rejected here.") @NotNull JsonNode config) {
+
+        public ValidationDescriptor {
+            // Jackson reads an explicit "config": null as a NullNode, which @NotNull would let through.
+            if (config != null && config.isNull()) {
+                config = null;
+            }
+        }
     }
 }
