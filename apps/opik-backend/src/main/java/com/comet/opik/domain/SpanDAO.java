@@ -2527,7 +2527,24 @@ public class SpanDAO {
     public Mono<Span> getById(@NonNull UUID id) {
         log.info("Getting span by id '{}'", id);
         return getByIds(Set.of(id))
-                .singleOrEmpty();
+                .collectList()
+                .flatMap(spans -> Mono.deferContextual(ctx -> Mono.justOrEmpty(
+                        latestOrLogFanOut(spans, id, ctx.getOrDefault(RequestContext.WORKSPACE_ID, "unknown")))));
+    }
+
+    /**
+     * Reduce the rows returned for a single span id to at most one {@link Span}. The by-ids query dedups per
+     * {@code (workspace_id, project_id, id)}, so a span id written under more than one project returns one row per
+     * project; a strict single-item reducer throws {@code IndexOutOfBoundsException} ("Source emitted more than one
+     * item"), which surfaces as a 500. The latest write wins, as it does within a project, and the fan-out is logged
+     * so the duplication stays visible.
+     */
+    private static Optional<Span> latestOrLogFanOut(List<Span> spans, UUID id, String workspaceId) {
+        if (spans.size() > 1) {
+            log.warn("Span get-by-id resolved to multiple rows, returning the latest. workspaceId '{}', spanId '{}'",
+                    workspaceId, id);
+        }
+        return spans.stream().max(Comparator.comparing(Span::lastUpdatedAt));
     }
 
     @WithSpan
