@@ -4,6 +4,7 @@ import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.ws.rs.ForbiddenException;
+import jakarta.ws.rs.core.HttpHeaders;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
@@ -16,11 +17,13 @@ class GuardrailsAccessTest {
 
     private final WorkspaceFeaturesService workspaceFeatures = Mockito.mock(WorkspaceFeaturesService.class);
     private final RequestContext requestContext = RequestContext.builder().workspaceId("workspace-id").build();
+    private final HttpHeaders requestHeaders = Mockito.mock(HttpHeaders.class);
 
     private GuardrailsAccess access(boolean toggleEnabled) {
         var configuration = new OpikConfiguration();
         configuration.getServiceToggles().setGuardrailsValidationsEnabled(toggleEnabled);
-        return new GuardrailsAccess(new FeatureFlags(configuration), () -> requestContext, workspaceFeatures);
+        return new GuardrailsAccess(new FeatureFlags(configuration), () -> requestContext, () -> requestHeaders,
+                workspaceFeatures);
     }
 
     @Test
@@ -33,7 +36,7 @@ class GuardrailsAccessTest {
 
     @Test
     void organizationWithoutGuardrailsIsForbidden() {
-        when(workspaceFeatures.isEnabled(requestContext, WorkspaceFeature.GUARDRAILS)).thenReturn(false);
+        when(workspaceFeatures.isEnabled(requestContext, requestHeaders, WorkspaceFeature.GUARDRAILS)).thenReturn(false);
 
         assertThatThrownBy(() -> access(true).check())
                 .isInstanceOf(ForbiddenException.class)
@@ -42,7 +45,7 @@ class GuardrailsAccessTest {
 
     @Test
     void enabledToggleAndOrganizationPass() {
-        when(workspaceFeatures.isEnabled(requestContext, WorkspaceFeature.GUARDRAILS)).thenReturn(true);
+        when(workspaceFeatures.isEnabled(requestContext, requestHeaders, WorkspaceFeature.GUARDRAILS)).thenReturn(true);
 
         assertThatCode(() -> access(true).check()).doesNotThrowAnyException();
     }

@@ -6,6 +6,7 @@ import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.ForbiddenException;
+import jakarta.ws.rs.core.HttpHeaders;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 
@@ -22,6 +23,7 @@ public class GuardrailsAccess {
 
     private final @NonNull FeatureFlags featureFlags;
     private final @NonNull Provider<RequestContext> requestContext;
+    private final @NonNull Provider<HttpHeaders> requestHeaders;
     private final @NonNull WorkspaceFeaturesService workspaceFeaturesService;
 
     /**
@@ -29,7 +31,8 @@ public class GuardrailsAccess {
      */
     public void check() {
         featureFlags.checkGuardrailsValidationsEnabled();
-        if (!workspaceFeaturesService.isEnabled(requestContext.get(), WorkspaceFeature.GUARDRAILS)) {
+        if (!workspaceFeaturesService.isEnabled(requestContext.get(), requestHeaders.get(),
+                WorkspaceFeature.GUARDRAILS)) {
             throw new ForbiddenException(NOT_ENABLED_MESSAGE);
         }
     }
