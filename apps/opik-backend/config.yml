@@ -2613,3 +2613,19 @@ aiLabels:
     #  Description: Per sweep query on the shared ClickHouse; a trip skips that bucket for the tick. Lengthens the leader
     #  lease when over readTimeout
     maxExecutionTime: ${AI_LABELS_SWEEP_MAX_EXECUTION_TIME:-50s}
+
+# Guardrail checks the backend runs on opik-inference (url and credential: aiLabels.inference). Thresholds are
+# server-side only; the validations endpoint rejects a threshold sent by the caller.
+guardrails:
+  # Default: 0.5
+  # Description: A PII check fails when any selected class scores at or above this
+  piiThreshold: ${GUARDRAILS_PII_THRESHOLD:-0.5}
+  # Default: 0.3
+  # Description: A topic counts as matched when its probability is at or above this
+  topicThreshold: ${GUARDRAILS_TOPIC_THRESHOLD:-0.3}
+  # Default: 0.4
+  # Description: A prompt injection check fails when the probability is at or above this
+  promptInjectionThreshold: ${GUARDRAILS_PROMPT_INJECTION_THRESHOLD:-0.4}
+  # Default: 1s
+  # Description: Time the decision service may spend on one check (sent as deadline_ms); the realtime lane allows up to 5s
+  deadline: ${GUARDRAILS_INFERENCE_DEADLINE:-1s}
