@@ -19,18 +19,21 @@ import AuthConfigSection from "./AuthConfigSection";
 const BEDROCK_API_OPTIONS: DropdownOption<BedrockApi>[] = [
   { value: "chat_completions", label: "Chat Completions (OpenAI-compatible)" },
   { value: "anthropic_messages", label: "Anthropic Messages (Claude)" },
+  { value: "converse", label: "Converse (Amazon Nova and others)" },
 ];
 
 const URL_PLACEHOLDERS: Record<BedrockApi, string> = {
   chat_completions: "https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1",
   anthropic_messages:
     "https://bedrock-runtime.us-east-1.amazonaws.com/anthropic",
+  converse: "https://bedrock-runtime.us-east-1.amazonaws.com",
 };
 
 const MODELS_EXAMPLES: Record<BedrockApi, string> = {
   chat_completions: "openai.gpt-oss-20b-1:0,mistral.ministral-3-3b-instruct",
   anthropic_messages:
     "us.anthropic.claude-haiku-5-5,global.anthropic.claude-sonnet-5",
+  converse: "us.amazon.nova-pro-v1:0,us.amazon.nova-2-lite-v1:0",
 };
 
 type BedrockProviderDetailsProps = {
@@ -93,8 +96,9 @@ const BedrockProviderDetails: React.FC<BedrockProviderDetailsProps> = ({
               />
             </FormControl>
             <Description>
-              Bedrock serves Claude only through Anthropic Messages. Use Chat
-              Completions for OpenAI-compatible models such as gpt-oss.
+              Bedrock serves Claude only through Anthropic Messages and Amazon
+              Nova only through Converse. Use Chat Completions for
+              OpenAI-compatible models such as gpt-oss.
             </Description>
             <FormMessage />
           </FormItem>

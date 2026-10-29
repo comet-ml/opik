@@ -150,4 +150,27 @@ describe("adding a Bedrock provider from the playground setup dialog", () => {
       bedrock_api: "anthropic_messages",
     });
   });
+
+  it("saves Converse and suggests the plain region URL when the user picks it", async () => {
+    startBedrockSetup();
+    fireEvent.keyDown(bedrockApiSelect(), { key: "Enter" });
+    fireEvent.keyDown(
+      screen.getByRole("option", { name: "Converse (Amazon Nova and others)" }),
+      { key: "Enter" },
+    );
+    fireEvent.change(
+      screen.getByPlaceholderText(
+        "https://bedrock-runtime.us-east-1.amazonaws.com",
+      ),
+      {
+        target: { value: "https://bedrock-runtime.eu-west-1.amazonaws.com" },
+      },
+    );
+
+    expect(bedrockApiSelect()).toHaveTextContent("Converse");
+    expect(await savedConfiguration()).toEqual({
+      models: "custom-llm/bedrock-eu/eu.anthropic.claude-haiku-5-5",
+      bedrock_api: "converse",
+    });
+  });
 });

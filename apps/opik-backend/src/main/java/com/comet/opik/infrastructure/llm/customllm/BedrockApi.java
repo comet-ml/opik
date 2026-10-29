@@ -11,12 +11,14 @@ import java.util.Optional;
 
 /**
  * The API a Bedrock provider sends its requests through. Bedrock serves Claude only through the Anthropic Messages
- * API, not through Chat Completions, so a Claude model needs a provider set to {@link #ANTHROPIC_MESSAGES}.
+ * API and Amazon Nova only through Converse, neither through Chat Completions, so their models need a provider set to
+ * {@link #ANTHROPIC_MESSAGES} or {@link #CONVERSE}.
  */
 @Slf4j
 enum BedrockApi {
     CHAT_COMPLETIONS,
-    ANTHROPIC_MESSAGES;
+    ANTHROPIC_MESSAGES,
+    CONVERSE;
 
     static final String CONFIG_KEY = "bedrock_api";
 
@@ -50,5 +52,15 @@ enum BedrockApi {
         var base = StringUtils.stripEnd(url.trim(), "/");
         base = StringUtils.removeEnd(base, MESSAGES_PATH);
         return base.endsWith(VERSION_PATH) ? base : base + VERSION_PATH;
+    }
+
+    static String converseBaseUrl(@NonNull String url) {
+        return StringUtils.stripEnd(url.trim(), "/");
+    }
+
+    static String modelId(@NonNull String model, String providerName) {
+        return CustomLlmModelNameChecker.isCustomLlmModel(model)
+                ? CustomLlmModelNameChecker.extractModelName(model, providerName)
+                : model;
     }
 }

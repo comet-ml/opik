@@ -9,7 +9,9 @@ import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmServiceProvider;
 import com.comet.opik.infrastructure.llm.antropic.AnthropicClientGenerator;
 import com.comet.opik.infrastructure.llm.antropic.LlmProviderAnthropic;
+import com.fasterxml.jackson.databind.JsonNode;
 import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.chat.request.ChatRequestParameters;
 import jakarta.inject.Named;
 import lombok.NonNull;
 import org.apache.commons.lang3.StringUtils;
@@ -22,7 +24,8 @@ import java.util.Optional;
  * Service provider for OpenAI-compatible LLM providers.
  * This includes both Custom LLM and Bedrock providers, which share the same
  * OpenAI-compatible API format and client implementation. A Bedrock provider set to
- * {@link BedrockApi#ANTHROPIC_MESSAGES} goes through the Anthropic client instead.
+ * {@link BedrockApi#ANTHROPIC_MESSAGES} goes through the Anthropic client instead, and one set to
+ * {@link BedrockApi#CONVERSE} through {@link BedrockConverseClient}.
  */
 class OpenAICompatibleServiceProvider implements LlmServiceProvider {
 
@@ -49,6 +52,9 @@ class OpenAICompatibleServiceProvider implements LlmServiceProvider {
 
     @Override
     public LlmProviderService getService(@NonNull LlmProviderClientApiConfig config) {
+        if (BedrockApi.of(config) == BedrockApi.CONVERSE) {
+            return new BedrockConverseProvider(newConverseClient(config), providerName(config));
+        }
         if (BedrockApi.of(config) == BedrockApi.ANTHROPIC_MESSAGES) {
             var messagesConfig = toAnthropicMessagesConfig(config);
             var client = anthropicClientGenerator.newClient(messagesConfig,
@@ -65,24 +71,45 @@ class OpenAICompatibleServiceProvider implements LlmServiceProvider {
     @Override
     public ChatModel getLanguageModel(LlmProviderClientApiConfig config,
             LlmAsJudgeModelParameters modelParameters) {
+        if (BedrockApi.of(config) == BedrockApi.CONVERSE) {
+            var modelId = BedrockApi.modelId(modelParameters.name(), providerName(config));
+            return new BedrockConverseChatModel(newConverseClient(config), modelId,
+                    ChatRequestParameters.builder()
+                            .modelName(modelId)
+                            .temperature(modelParameters.temperature())
+                            .maxOutputTokens(maxTokens(modelParameters.customParameters()))
+                            .build());
+        }
         if (BedrockApi.of(config) == BedrockApi.ANTHROPIC_MESSAGES) {
             var messagesConfig = toAnthropicMessagesConfig(config);
-            var bedrockModelParameters = CustomLlmModelNameChecker.isCustomLlmModel(modelParameters.name())
-                    ? modelParameters.toBuilder()
-                            .name(CustomLlmModelNameChecker.extractModelName(modelParameters.name(),
-                                    providerName(config)))
-                            .build()
-                    : modelParameters;
+            var bedrockModelParameters = modelParameters.toBuilder()
+                    .name(BedrockApi.modelId(modelParameters.name(), providerName(config)))
+                    .build();
             return anthropicClientGenerator.newChatModel(messagesConfig, bedrockModelParameters,
                     clientGenerator.newHttpClientBuilder(messagesConfig));
         }
         return clientGenerator.generateChat(config, modelParameters);
     }
 
-    private static LlmProviderClientApiConfig toAnthropicMessagesConfig(LlmProviderClientApiConfig config) {
+    private BedrockConverseClient newConverseClient(LlmProviderClientApiConfig config) {
+        return new BedrockConverseClient(clientGenerator.newHttpClient(config),
+                BedrockApi.converseBaseUrl(requireBaseUrl(config)), config.apiKey());
+    }
+
+    private static Integer maxTokens(JsonNode customParameters) {
+        var maxTokens = customParameters == null ? null : customParameters.get("max_tokens");
+        return maxTokens != null && maxTokens.canConvertToInt() && maxTokens.asInt() > 0 ? maxTokens.asInt() : null;
+    }
+
+    private static String requireBaseUrl(LlmProviderClientApiConfig config) {
         if (StringUtils.isBlank(config.baseUrl())) {
             throw new IllegalArgumentException("custom provider client not configured properly, missing url");
         }
+        return config.baseUrl();
+    }
+
+    private static LlmProviderClientApiConfig toAnthropicMessagesConfig(LlmProviderClientApiConfig config) {
+        requireBaseUrl(config);
         var builder = config.toBuilder().baseUrl(BedrockApi.messagesBaseUrl(config.baseUrl()));
         if (config.authConfig() == null) {
             return builder.build();

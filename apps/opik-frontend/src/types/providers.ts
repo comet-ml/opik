@@ -1019,6 +1019,7 @@ export type OpenAiPipelineMode = (typeof OPENAI_PIPELINE_MODE_VALUES)[number];
 export const BEDROCK_API_VALUES = [
   "chat_completions",
   "anthropic_messages",
+  "converse",
 ] as const;
 
 export type BedrockApi = (typeof BEDROCK_API_VALUES)[number];

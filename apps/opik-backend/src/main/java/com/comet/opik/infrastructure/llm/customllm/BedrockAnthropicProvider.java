@@ -45,12 +45,9 @@ class BedrockAnthropicProvider implements LlmProviderService {
     // The playground's token slider allows 0, which Anthropic rejects; without a positive limit the Anthropic mapper
     // applies its default.
     private ChatCompletionRequest toBedrockRequest(ChatCompletionRequest request) {
-        var model = CustomLlmModelNameChecker.isCustomLlmModel(request.model())
-                ? CustomLlmModelNameChecker.extractModelName(request.model(), providerName)
-                : request.model();
         return ChatCompletionRequest.builder()
                 .from(request)
-                .model(model)
+                .model(BedrockApi.modelId(request.model(), providerName))
                 .maxCompletionTokens(ObjectUtils.firstNonNull(
                         positiveOrNull(request.maxCompletionTokens()), positiveOrNull(request.maxTokens())))
                 .maxTokens(null)

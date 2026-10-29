@@ -6,6 +6,7 @@ import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
 import com.comet.opik.infrastructure.llm.ProviderHeadersHttpClient;
+import dev.langchain4j.http.client.HttpClient;
 import dev.langchain4j.http.client.HttpClientBuilder;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.openai.internal.OpenAiClient;
@@ -84,6 +85,15 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
         // Pass custom parameters directly to constructor since builder inheritance
         // doesn't allow us to chain our custom methods cleanly
         return new OpikOpenAiChatModel(builder, modelParameters.customParameters());
+    }
+
+    HttpClient newHttpClient(@NonNull LlmProviderClientApiConfig config) {
+        var builder = newHttpClientBuilder(config);
+        Optional.ofNullable(llmProviderClientConfig.getConnectTimeout())
+                .ifPresent(connectTimeout -> builder.connectTimeout(connectTimeout.toJavaDuration()));
+        Optional.ofNullable(llmProviderClientConfig.getReadTimeout())
+                .ifPresent(readTimeout -> builder.readTimeout(readTimeout.toJavaDuration()));
+        return builder.build();
     }
 
     @Override
