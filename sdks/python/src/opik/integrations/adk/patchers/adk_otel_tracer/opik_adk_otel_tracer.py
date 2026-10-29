@@ -1,5 +1,6 @@
 import contextlib
 import contextvars
+import functools
 import logging
 from typing import (
     Any,
@@ -38,6 +39,31 @@ _ENTERING_INNER_START_AS_CURRENT_SPAN: contextvars.ContextVar[bool] = (
         "opik_adk_entering_inner_start_as_current_span", default=False
     )
 )
+
+# The runner wraps its root agent in `invocation` or, on google-adk >= 2.13.0,
+# `invoke_workflow {agent}`. In the runner that AgentTool starts, that span has
+# `gen_ai.workflow.nested` like a nested Workflow node, so only the call site
+# tells them apart.
+_ENTERING_RECORD_INVOCATION: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    "opik_adk_entering_record_invocation", default=False
+)
+
+
+def skip_opik_bookkeeping_for_runner_spans(
+    record_invocation: Callable[..., ContextManager[Any]],
+) -> Callable[..., ContextManager[Any]]:
+    @functools.wraps(record_invocation)
+    @contextlib.contextmanager
+    def wrapper(*args: Any, **kwargs: Any) -> Iterator[Any]:
+        with contextlib.ExitStack() as exit_stack:
+            token = _ENTERING_RECORD_INVOCATION.set(True)
+            try:
+                value = exit_stack.enter_context(record_invocation(*args, **kwargs))
+            finally:
+                _ENTERING_RECORD_INVOCATION.reset(token)
+            yield value
+
+    return wrapper
 
 
 class OpikADKOtelTracer:
@@ -225,7 +251,10 @@ class OpikADKOtelTracer:
     def _skips_opik_bookkeeping(
         self, name: str, attributes: opentelemetry.trace.types.Attributes
     ) -> bool:
-        if name in self._ADK_INTERNAL_SPAN_NAME_SKIP_LIST:
+        if (
+            name in self._ADK_INTERNAL_SPAN_NAME_SKIP_LIST
+            or _ENTERING_RECORD_INVOCATION.get()
+        ):
             return True
 
         # google-adk >= 2.13.0 replaces `invocation` with the runner's own
