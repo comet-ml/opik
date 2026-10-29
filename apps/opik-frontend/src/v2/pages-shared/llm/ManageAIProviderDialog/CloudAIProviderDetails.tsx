@@ -3,8 +3,10 @@ import { UseFormReturn } from "react-hook-form";
 import { Button } from "@/ui/button";
 import { Label } from "@/ui/label";
 import { OpenRouterRegion, PROVIDER_TYPE } from "@/types/providers";
+import { DEFAULT_OPENROUTER_REGION } from "@/lib/provider";
 import { PROVIDER_OPTION_TYPE, PROVIDERS } from "@/constants/providers";
 import EyeInput from "@/shared/EyeInput/EyeInput";
+import { Input } from "@/ui/input";
 import SelectBox from "@/shared/SelectBox/SelectBox";
 import {
   AIProviderFormType,
@@ -31,6 +33,7 @@ const OPENROUTER_REGION_OPTIONS: DropdownOption<OpenRouterRegion>[] = [
   { value: "global", label: "Global (default)" },
   { value: "us", label: "United States" },
   { value: "eu", label: "European Union" },
+  { value: "custom", label: "Custom" },
 ];
 
 const CloudAIProviderDetails: React.FC<CloudAIProviderDetailsProps> = ({
@@ -41,6 +44,8 @@ const CloudAIProviderDetails: React.FC<CloudAIProviderDetailsProps> = ({
   const apiKeyLabel = `${providerName}API Key`;
   const isOpenAi = provider === PROVIDER_TYPE.OPEN_AI;
   const isOpenRouter = provider === PROVIDER_TYPE.OPEN_ROUTER;
+  const isCustomOpenRouterUrl =
+    isOpenRouter && form.watch("openRouterRegion") === "custom";
 
   return (
     <div className="flex flex-col gap-2 pb-4">
@@ -124,7 +129,7 @@ const CloudAIProviderDetails: React.FC<CloudAIProviderDetailsProps> = ({
               <FormControl>
                 <SelectBox
                   id="openRouterRegion"
-                  value={field.value ?? "global"}
+                  value={field.value ?? DEFAULT_OPENROUTER_REGION}
                   onChange={(value: OpenRouterRegion) => field.onChange(value)}
                   options={OPENROUTER_REGION_OPTIONS}
                   placeholder="Select a region"
@@ -133,6 +138,35 @@ const CloudAIProviderDetails: React.FC<CloudAIProviderDetailsProps> = ({
               <FormMessage />
             </FormItem>
           )}
+        />
+      )}
+      {isCustomOpenRouterUrl && (
+        <FormField
+          control={form.control}
+          name="openRouterBaseUrl"
+          render={({ field, formState }) => {
+            const validationErrors = get(formState.errors, [
+              "openRouterBaseUrl",
+            ]);
+
+            return (
+              <FormItem className="mt-2">
+                <Label htmlFor="openRouterBaseUrl">Base URL</Label>
+                <FormControl>
+                  <Input
+                    id="openRouterBaseUrl"
+                    placeholder="https://openrouter-proxy.example.com/api/v1"
+                    value={field.value ?? ""}
+                    onChange={(e) => field.onChange(e.target.value)}
+                    className={cn({
+                      "border-destructive": Boolean(validationErrors?.message),
+                    })}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            );
+          }}
         />
       )}
       {supportsProviderHeaders(provider) && (

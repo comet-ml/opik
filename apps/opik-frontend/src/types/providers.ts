@@ -1016,7 +1016,12 @@ export const OPENAI_PIPELINE_MODE_VALUES = [
 
 export type OpenAiPipelineMode = (typeof OPENAI_PIPELINE_MODE_VALUES)[number];
 
-export const OPENROUTER_REGION_VALUES = ["global", "us", "eu"] as const;
+export const OPENROUTER_REGION_VALUES = [
+  "global",
+  "us",
+  "eu",
+  "custom",
+] as const;
 
 export type OpenRouterRegion = (typeof OPENROUTER_REGION_VALUES)[number];
 

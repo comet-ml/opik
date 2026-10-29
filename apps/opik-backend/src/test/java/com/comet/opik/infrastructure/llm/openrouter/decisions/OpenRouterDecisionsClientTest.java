@@ -8,6 +8,7 @@ import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.utils.RetryUtils;
 import com.github.tomakehurst.wiremock.stubbing.Scenario;
 import io.dropwizard.util.Duration;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.ServerErrorException;
 import jakarta.ws.rs.WebApplicationException;
@@ -57,7 +58,7 @@ class OpenRouterDecisionsClientTest {
     void setUpAll() {
         wireMock = WireMockUtils.startWireMock();
         var config = new LlmProviderClientConfig();
-        config.setOpenRouterDecisionsUrl(wireMock.runtimeInfo().getHttpBaseUrl() + PATH);
+        config.setOpenRouterUrl(wireMock.runtimeInfo().getHttpBaseUrl() + "/api/v1");
         config.setMaxAttempts(MAX_ATTEMPTS);
         config.setDelayMillis(1);
         config.setConnectTimeout(Duration.seconds(5));
@@ -186,18 +187,43 @@ class OpenRouterDecisionsClientTest {
         assertThat(response.answers()).containsKeys("answer_relevant", "answer_correct");
     }
 
+    @Test
+    void providerBaseUrlReplacesTheConfiguredUrl() {
+        var proxyPath = "/proxy/alpha/decisions";
+        wireMock.server().stubFor(post(urlEqualTo(proxyPath))
+                .willReturn(aResponse().withStatus(200).withHeader("Content-Type", "application/json")
+                        .withBody(SUCCESS_BODY)));
+        var config = LlmProviderClientApiConfig.builder()
+                .apiKey(apiKey)
+                .baseUrl(wireMock.runtimeInfo().getHttpBaseUrl() + "/proxy/v1/")
+                .build();
+
+        decisionsClient.decide(request(), config).block();
+
+        wireMock.server().verify(1, postRequestedFor(urlEqualTo(proxyPath)));
+        wireMock.server().verify(0, postRequestedFor(urlEqualTo(PATH)));
+    }
+
+    @Test
+    void baseUrlWithoutV1FailsWithoutCallingAnyHost() {
+        var config = LlmProviderClientApiConfig.builder()
+                .apiKey(apiKey)
+                .baseUrl(wireMock.runtimeInfo().getHttpBaseUrl() + "/proxy")
+                .build();
+
+        assertThatThrownBy(() -> decisionsClient.decide(request(), config).block())
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("must end with '/v1'");
+        assertThat(wireMock.server().getAllServeEvents()).isEmpty();
+    }
+
     @ParameterizedTest
-    @CsvSource(nullValues = "null", value = {
-            "null, https://openrouter.ai/api/alpha/decisions",
-            "'', https://openrouter.ai/api/alpha/decisions",
+    @CsvSource({
             "https://openrouter.ai/api/v1, https://openrouter.ai/api/alpha/decisions",
-            "https://my-proxy.example.com/openrouter/v1, https://openrouter.ai/api/alpha/decisions",
-            "not a url, https://openrouter.ai/api/alpha/decisions",
-            "https://eu.openrouter.ai/api/v1, https://eu.openrouter.ai/api/alpha/decisions",
-            "https://US.openrouter.ai/api/v1/, https://us.openrouter.ai/api/alpha/decisions"})
-    void decisionsUrlFollowsRegionalBaseUrlOnly(String baseUrl, String expected) {
-        assertThat(OpenRouterDecisionsClient.decisionsUrl("https://openrouter.ai/api/alpha/decisions", baseUrl))
-                .isEqualTo(expected);
+            "https://eu.openrouter.ai/api/v1/, https://eu.openrouter.ai/api/alpha/decisions",
+            "https://my-proxy.example.com/openrouter/v1, https://my-proxy.example.com/openrouter/alpha/decisions"})
+    void decisionsUrlReplacesTheTrailingV1(String openRouterUrl, String expected) {
+        assertThat(OpenRouterDecisionsClient.decisionsUrl(openRouterUrl)).isEqualTo(expected);
     }
 
     private DecisionsRequest request() {

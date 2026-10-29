@@ -29,7 +29,8 @@ import { ProviderAuthConfig } from "@/types/providers";
 import {
   convertCustomProviderModels,
   DEFAULT_OPENAI_PIPELINE_MODE,
-  OPENROUTER_REGION_BASE_URLS,
+  DEFAULT_OPENROUTER_REGION,
+  getOpenRouterBaseUrl,
 } from "@/lib/provider";
 import { useProviderOptions } from "@/hooks/useProviderOptions";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
@@ -75,7 +76,8 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
       providerName: "",
       headers: [],
       openaiPipelineMode: DEFAULT_OPENAI_PIPELINE_MODE,
-      openRouterRegion: "global",
+      openRouterRegion: DEFAULT_OPENROUTER_REGION,
+      openRouterBaseUrl: "",
     } as AIProviderFormType,
   });
 
@@ -189,13 +191,14 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
 
       if (
         data.provider === PROVIDER_TYPE.OPEN_ROUTER &&
-        "openRouterRegion" in data &&
-        data.openRouterRegion
+        "openRouterRegion" in data
       ) {
-        const regionBaseUrl =
-          OPENROUTER_REGION_BASE_URLS[data.openRouterRegion];
-        if (regionBaseUrl) {
-          providerKeyData.base_url = regionBaseUrl;
+        const openRouterBaseUrl = getOpenRouterBaseUrl(
+          data.openRouterRegion ?? DEFAULT_OPENROUTER_REGION,
+          data.openRouterBaseUrl,
+        );
+        if (openRouterBaseUrl) {
+          providerKeyData.base_url = openRouterBaseUrl;
         }
       }
 
