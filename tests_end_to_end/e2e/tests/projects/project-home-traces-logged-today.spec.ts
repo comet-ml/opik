@@ -148,7 +148,13 @@ test.describe('Project home — Recent activity', { tag: ['@area:projects'] }, (
             url.pathname.endsWith(`/projects/${project.id}/logs`) &&
             url.searchParams.get('logsType') === 'traces',
         );
-        await logs.waitForReady();
+        // The explicit timeout `LogsPage.waitForReady` asks every
+        // freshly-seeded project to pass. The first row cannot paint until the
+        // listing AND the count query have both answered over a project the
+        // write path is still catching up with, and on staging under parallel
+        // load that took longer than the 15s default — observed as this step
+        // timing out on 2.2.133 while the same spec passed serially.
+        await logs.waitForReady({ timeout: 60_000 });
 
         const rowIds = await logs.readRowIdsOnPage();
         expect([...rowIds].sort()).toEqual(expectedCounted);

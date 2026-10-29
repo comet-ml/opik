@@ -340,18 +340,60 @@ export class SmeFlowPage {
     return this.page.getByTestId(`annotate-score-row-${definitionName}`);
   }
 
-  /** Set the numeric value in a named annotate score row. */
-  async setScore(definitionName: string, value: number): Promise<void> {
+  /**
+   * Set the numeric value in a named annotate score row, and resolve once the
+   * flow's own write for it has been ANSWERED.
+   *
+   * The save is a 1s-debounced mutation (`useAnnotationPersistence`) that the
+   * blur flushes the input into, and nothing on screen marks it as sent. So a
+   * caller that only filled and blurred had no way to tell "the browser never
+   * issued the PUT" from "the server has not caught up yet" — both read as an
+   * empty `feedback_scores` array on whatever the caller polls next.
+   *
+   * That ambiguity is not hypothetical: on staging 2.2.133 under four parallel
+   * workers the score poll timed out after 60s having seen no scores at all,
+   * and the page snapshot showed the SME route had dropped into its OWN
+   * transient failure state ("Items failed to load", with a Retry) — the
+   * route's items query had errored under load and taken the score input down
+   * with it before the debounce could fire. Read through the poll alone that
+   * looked like a backend that would not store a score.
+   *
+   * Waiting on the request is what separates the two: the PUT is observed
+   * leaving and coming back 2xx, so anything the caller polls for afterwards
+   * is genuinely the backend catching up, and a save that was never issued
+   * fails here instead. The subscription is armed before the fill, because the
+   * debounce can elapse while the blur is still in flight.
+   *
+   * `traceId` is required rather than inferred: a queue's viewer has one item
+   * on screen but the page has written scores for its siblings too, and a
+   * path-blind match would be satisfied by whichever PUT answered first.
+   */
+  async setScore(definitionName: string, value: number, traceId: string): Promise<void> {
     return test.step(`Set ${definitionName} to ${value} in the SME view`, async () => {
       const row = this.scoreRow(definitionName);
       await expect(row, `exactly one "${definitionName}" score row`).toHaveCount(1);
       const input = row.getByTestId('annotate-score-input');
+
+      const written = this.page.waitForResponse(
+        (response) =>
+          response.request().method() === 'PUT' &&
+          new URL(response.url()).pathname.endsWith(
+            `/v1/private/traces/${traceId}/feedback-scores`,
+          ),
+        // Generous, and deliberately longer than the debounce by an order of
+        // magnitude: what is being waited on is a shared cloud workspace
+        // answering a write, not a timer.
+        { timeout: 60_000 },
+      );
       await input.fill(String(value));
-      // The SME flow saves on a 1s debounce (`useAnnotationPersistence`), and a
-      // blur is what flushes the input itself. The caller still has to wait on
-      // the server — `backendClient.pollTraceForFeedbackScore` — because the
-      // write is a mutation this does not await.
+      // The blur is what flushes the input itself into the debounced save.
       await input.blur();
+
+      const response = await written;
+      expect(
+        response.ok(),
+        `the SME flow's score write was accepted (got ${response.status()})`,
+      ).toBe(true);
     });
   }
 

@@ -183,7 +183,7 @@ test.describe(
             // reached through the same Next control, is this spec's.
             const score = stop === 1 ? null : SCORES[stop === 0 ? 0 : 1];
             if (score !== null) {
-              await sme.setScore(scoreName, score);
+              await sme.setScore(scoreName, score, currentId);
               const landed = await backendClient.pollTraceForFeedbackScore(currentId, scoreName, {
                 timeoutMs: SCORE_VISIBLE_TIMEOUT_MS,
               });
