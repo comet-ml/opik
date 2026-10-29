@@ -1,4 +1,4 @@
-export { test, expect } from './image-model-token-cost-spans.fixture';
+export { test, expect } from './studio-unlisted-model-runs.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -599,3 +599,14 @@ export type {
   ImageModelTokenCostSpansRef,
   ImageModelTokenCostSpansFixtures,
 } from './image-model-token-cost-spans.fixture';
+export type {
+  UnlistedRegistryModelRef,
+  UnlistedRegistryModelFixtures,
+} from './unlisted-registry-model.fixture';
+export { UNLISTED_MODEL_PROVIDER } from './unlisted-registry-model.fixture';
+export type {
+  StudioUnlistedRunRef,
+  StudioUnlistedModelRunsRef,
+  StudioUnlistedModelRunsFixtures,
+} from './studio-unlisted-model-runs.fixture';
+export { SAVED_TEMPERATURE } from './studio-unlisted-model-runs.fixture';

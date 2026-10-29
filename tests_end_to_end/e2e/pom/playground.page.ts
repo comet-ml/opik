@@ -77,6 +77,15 @@ export interface StoredChatPrompt {
   loadedChatPromptId?: string;
   loadedChatPromptVersionId?: string;
   appliedChatPromptVersionId?: string;
+  /**
+   * The model the card runs on, as `PlaygroundPromptType` persists it. Optional
+   * for the same reason as the keys above: the store writes `""` for "nothing
+   * picked yet", and a blob an older build wrote may carry no key at all — both
+   * of which are states a hydration spec has to be able to tell from an id.
+   */
+  model?: string;
+  /** The composed provider the card's model belongs to, e.g. `openrouter`. */
+  provider?: string;
   messages: Array<{ role: string; content: string }>;
 }
 
@@ -2504,6 +2513,121 @@ export class PlaygroundPage {
       );
       expect(written.state.appliedChatPromptVersionsBackfilled).toBe(planted.backfilled);
     });
+  }
+
+  /**
+   * Overwrite the persisted prompt's MODEL and provider, and prove the write
+   * landed.
+   *
+   * PRECONDITION, the same one `plantStoredPrompt` carries: call this from a
+   * page the Playground is NOT mounted on (the Prompt library, say). The store
+   * persists on every change, so a plant made while the Playground is live
+   * races the app's own next write.
+   *
+   * Written directly rather than selected through the picker because the state
+   * under test is a model the picker DOES NOT OFFER — a config written before a
+   * provider-model sync dropped that row's label. There is no gesture in this
+   * build that reaches it, so the blob is the only way to express it; the blob
+   * is edited in place for the same reason `plantStoredPrompt` does it, so the
+   * planted state keeps the exact shape this build writes.
+   *
+   * Only the two keys are touched. Everything else the card holds — its
+   * messages, its configs, any loaded library version — is left exactly as the
+   * app wrote it, so what the spec then observes is a model change and nothing
+   * else.
+   */
+  async plantStoredModel(planted: { model: string; provider: string }): Promise<void> {
+    return test.step(`plant the persisted model "${planted.model}"`, async () => {
+      const written = await this.page.evaluate(
+        ({ key, seed }) => {
+          const raw = window.localStorage.getItem(key);
+          if (!raw) throw new Error(`${key} is not in localStorage yet`);
+          const blob = JSON.parse(raw);
+          const map = blob.state?.promptMap ?? {};
+          const ids = Object.keys(map);
+          if (ids.length !== 1) {
+            throw new Error(`${key} holds ${ids.length} prompts, expected exactly 1`);
+          }
+          map[ids[0]].model = seed.model;
+          map[ids[0]].provider = seed.provider;
+          window.localStorage.setItem(key, JSON.stringify(blob));
+          return JSON.parse(window.localStorage.getItem(key)!);
+        },
+        { key: PLAYGROUND_STORE_KEY, seed: planted },
+      );
+
+      // The plant is the whole precondition of every assertion that follows, so
+      // it is read back rather than taken on trust: a blob that silently failed
+      // to change would leave a test that cannot fail.
+      const prompt = Object.values(
+        written.state.promptMap as Record<string, StoredChatPrompt>,
+      )[0];
+      expect(prompt.model, 'the planted model landed in PLAYGROUND_STATE').toBe(planted.model);
+      expect(prompt.provider, 'and so did its provider').toBe(planted.provider);
+    });
+  }
+
+  /**
+   * The model and provider the persisted Playground prompt currently holds.
+   *
+   * Exactly one prompt, asserted rather than indexed — the same guarantee
+   * {@link readStoredPrompt} makes, for the same reason: a second card in the
+   * map would mean the read is reporting one the assertions never touched.
+   *
+   * Neither field is defaulted. A card that lost its model writes `""`, and one
+   * written by an older build may carry no key at all; both are failures a
+   * hydration spec must be able to name, and `?? ''` would merge them into the
+   * ordinary case.
+   */
+  async readStoredModel(): Promise<{ model?: string; provider?: string }> {
+    return test.step('read the persisted Playground model', async () => {
+      const prompt = await this.readStoredPrompt();
+      return { model: prompt.model, provider: prompt.provider };
+    });
+  }
+
+  /**
+   * Variant `index`'s model picker trigger.
+   *
+   * Exposed as a Locator, where {@link selectedModelLabel} reads it once: a
+   * spec asserting what the picker hydrated to needs `toHaveText`'s retry,
+   * because the trigger holds no model at all until the provider-keys and
+   * registry queries settle — so a one-shot read races the mount and would
+   * compare against the placeholder.
+   */
+  modelPickerTrigger(index = 0): Locator {
+    return this.modelPicker(index);
+  }
+
+  /**
+   * Type `term` into the open picker's "Search model" box, without pinning how
+   * many options come back.
+   *
+   * The counted {@link filterModelOptions} is the right call when a spec seeded
+   * the models it is filtering for. This one is for the opposite question —
+   * whether the list offers a given id at all — where the total depends on
+   * every provider the workspace holds and pinning it would make the spec fail
+   * for a reason that is not its subject. The caller asserts on
+   * {@link modelOption} instead, which is exact about the one id it cares about.
+   */
+  async searchModelOptions(term: string): Promise<void> {
+    return test.step(`search the model list for "${term}"`, async () => {
+      await this.page.getByRole('listbox').getByPlaceholder('Search model').fill(term);
+    });
+  }
+
+  /**
+   * The open picker's option whose label is EXACTLY `label`.
+   *
+   * Exact, because the ids this is asked about are prefixes of each other —
+   * `openai/o3-mini` of `openai/o3-mini-high`, and on OpenRouter the label IS
+   * the id — so a substring match would report an option that is a different
+   * model. Returned as a Locator so a caller can assert either count 1 (the
+   * list offers it) or count 0 (it does not), which are the two halves of the
+   * same claim.
+   */
+  modelOption(label: string): Locator {
+    return this.page.getByRole('listbox').getByRole('option', { name: label, exact: true });
   }
 
   private async readStoredState(): Promise<{
