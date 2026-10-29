@@ -408,6 +408,9 @@ navigation:
           - page: Concepts
             path: ./docs-v2/evaluation/concepts.mdx
             slug: concepts
+          - page: Annotation Queues
+            path: ./docs-v2/evaluation/annotation_queues.mdx
+            slug: annotation_queues
           - section: Advanced
             slug: /advanced
             contents:
@@ -429,9 +432,6 @@ navigation:
               - page: Evaluate multi-turn agents
                 path: ./docs-v2/evaluation/advanced/evaluate_multi_turn_agents.mdx
                 slug: evaluate_multi_turn_agents
-              - page: Annotation Queues
-                path: ./docs-v2/evaluation/advanced/annotation_queues.mdx
-                slug: annotation_queues
               - page: Manually logging experiments
                 path: ./docs-v2/evaluation/advanced/log_experiments_with_rest_api.mdx
                 slug: log_experiments_with_rest_api
@@ -1824,7 +1824,7 @@ redirects:
 
   # Evaluation guides moved under /evaluation/advanced.
   - source: "/docs/opik/v1/evaluation/annotation_queues"
-    destination: "/docs/opik/evaluation/advanced/annotation_queues"
+    destination: "/docs/opik/evaluation/annotation_queues"
     permanent: true
   - source: "/docs/opik/v1/evaluation/evaluate_agent_trajectory"
     destination: "/docs/opik/evaluation/advanced/evaluate_agent_trajectory"
@@ -2049,8 +2049,8 @@ redirects:
     destination: "/docs/opik/development/optimization-runs/quickstart"
     permanent: true
 
-  - source: "/docs/opik/evaluation/annotation_queues"
-    destination: "/docs/opik/evaluation/advanced/annotation_queues"
+  - source: "/docs/opik/evaluation/advanced/annotation_queues"
+    destination: "/docs/opik/evaluation/annotation_queues"
     permanent: true
   - source: "/docs/opik/evaluation/evaluate_agent_trajectory"
     destination: "/docs/opik/evaluation/advanced/evaluate_agent_trajectory"
