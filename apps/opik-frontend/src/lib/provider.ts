@@ -7,6 +7,7 @@ import {
   OpenAiPipelineMode,
   BEDROCK_API_VALUES,
   BedrockApi,
+  OpenRouterRegion,
 } from "@/types/providers";
 import {
   CUSTOM_PROVIDER_MODEL_PREFIX,
@@ -177,4 +178,20 @@ export const bedrockUrlForApi = (url: string, api: BedrockApi): string => {
   return BEDROCK_RUNTIME_HOST_REGEX.test(parsed.hostname)
     ? `${parsed.origin}${BEDROCK_RUNTIME_PATHS[api]}${parsed.search}`
     : url;
+};
+
+// "global" sends no base_url, so the deployment's LLM_PROVIDER_OPENROUTER_URL applies.
+export const OPENROUTER_REGION_BASE_URLS: Record<OpenRouterRegion, string> = {
+  global: "",
+  us: "https://us.openrouter.ai/api/v1",
+  eu: "https://eu.openrouter.ai/api/v1",
+};
+
+export const openRouterRegionFromBaseUrl = (
+  baseUrl: string | undefined | null,
+): OpenRouterRegion => {
+  const normalized = (baseUrl ?? "").trim().replace(/\/+$/, "");
+  if (normalized === OPENROUTER_REGION_BASE_URLS.us) return "us";
+  if (normalized === OPENROUTER_REGION_BASE_URLS.eu) return "eu";
+  return "global";
 };

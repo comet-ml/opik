@@ -2,7 +2,7 @@ import React from "react";
 import { UseFormReturn } from "react-hook-form";
 import { Button } from "@/ui/button";
 import { Label } from "@/ui/label";
-import { PROVIDER_TYPE } from "@/types/providers";
+import { OpenRouterRegion, PROVIDER_TYPE } from "@/types/providers";
 import { PROVIDER_OPTION_TYPE, PROVIDERS } from "@/constants/providers";
 import EyeInput from "@/shared/EyeInput/EyeInput";
 import SelectBox from "@/shared/SelectBox/SelectBox";
@@ -27,6 +27,12 @@ const PIPELINE_MODE_OPTIONS: DropdownOption<OpenAiPipelineMode>[] = [
   { value: "responses_api", label: "Responses API" },
 ];
 
+const OPENROUTER_REGION_OPTIONS: DropdownOption<OpenRouterRegion>[] = [
+  { value: "global", label: "Global (default)" },
+  { value: "us", label: "United States" },
+  { value: "eu", label: "European Union" },
+];
+
 const CloudAIProviderDetails: React.FC<CloudAIProviderDetailsProps> = ({
   provider,
   form,
@@ -34,6 +40,7 @@ const CloudAIProviderDetails: React.FC<CloudAIProviderDetailsProps> = ({
   const providerName = (provider && PROVIDERS[provider]?.label + " ") || "";
   const apiKeyLabel = `${providerName}API Key`;
   const isOpenAi = provider === PROVIDER_TYPE.OPEN_AI;
+  const isOpenRouter = provider === PROVIDER_TYPE.OPEN_ROUTER;
 
   return (
     <div className="flex flex-col gap-2 pb-4">
@@ -101,6 +108,41 @@ const CloudAIProviderDetails: React.FC<CloudAIProviderDetailsProps> = ({
                 Use Chat Completions unless you need Max reasoning effort, which
                 only the Responses API offers. The Responses API sends text only
                 (no images or audio) and ignores frequency and presence penalty.
+              </span>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      )}
+      {isOpenRouter && (
+        <FormField
+          control={form.control}
+          name="openRouterRegion"
+          render={({ field }) => (
+            <FormItem className="mt-2">
+              <Label htmlFor="openRouterRegion">Region</Label>
+              <FormControl>
+                <SelectBox
+                  id="openRouterRegion"
+                  value={field.value ?? "global"}
+                  onChange={(value: OpenRouterRegion) => field.onChange(value)}
+                  options={OPENROUTER_REGION_OPTIONS}
+                  placeholder="Select a region"
+                />
+              </FormControl>
+              <span className="comet-body-s mt-1 text-light-slate">
+                United States and European Union keep requests in that region.
+                They need an OpenRouter Business or Enterprise plan, and only
+                some models are available.{" "}
+                <Button variant="link" size="sm" asChild className="px-0">
+                  <a
+                    href="https://openrouter.ai/docs/guides/features/in-region-routing"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Learn more
+                  </a>
+                </Button>
               </span>
               <FormMessage />
             </FormItem>

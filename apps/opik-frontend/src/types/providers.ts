@@ -1025,6 +1025,10 @@ export const BEDROCK_API_VALUES = [
 
 export type BedrockApi = (typeof BEDROCK_API_VALUES)[number];
 
+export const OPENROUTER_REGION_VALUES = ["global", "us", "eu"] as const;
+
+export type OpenRouterRegion = (typeof OPENROUTER_REGION_VALUES)[number];
+
 export interface ProviderKeyConfiguration {
   location?: string;
   models?: string;
@@ -1085,7 +1089,7 @@ export interface BaseProviderKey {
 
 export interface StandardProviderObject extends BaseProviderKey {
   provider: Exclude<PROVIDER_TYPE, PROVIDER_TYPE.CUSTOM | PROVIDER_TYPE.OLLAMA>;
-  base_url?: never;
+  base_url?: string;
   provider_name?: never;
 }
 
