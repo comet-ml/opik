@@ -37,7 +37,8 @@ import {
   convertCustomProviderModels,
   buildComposedProviderKey,
   normalizeBedrockApi,
-  OPENROUTER_REGION_BASE_URLS,
+  DEFAULT_OPENROUTER_REGION,
+  getOpenRouterBaseUrl,
   openRouterRegionFromBaseUrl,
 } from "@/lib/provider";
 import { useProviderOptions } from "@/hooks/useProviderOptions";
@@ -165,6 +166,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
       ),
       bedrockApi: normalizeBedrockApi(providerKey?.configuration?.bedrock_api),
       openRouterRegion: openRouterRegionFromBaseUrl(providerKey?.base_url),
+      openRouterBaseUrl: providerKey?.base_url ?? "",
       ...authConfigToFormValues(providerKey?.auth_config),
     } as AIProviderFormType,
   });
@@ -210,7 +212,8 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
       suppressDefaultAuth: false,
       openaiPipelineMode: DEFAULT_OPENAI_PIPELINE_MODE,
       bedrockApi: normalizeBedrockApi(undefined),
-      openRouterRegion: "global",
+      openRouterRegion: DEFAULT_OPENROUTER_REGION,
+      openRouterBaseUrl: "",
       ...EMPTY_AUTH_FORM_VALUES,
     });
     setStep("select");
@@ -280,6 +283,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
         "openRouterRegion",
         openRouterRegionFromBaseUrl(providerData?.base_url),
       );
+      form.setValue("openRouterBaseUrl", providerData?.base_url ?? "");
 
       const authFormValues = authConfigToFormValues(providerData?.auth_config);
       form.setValue("authMode", authFormValues.authMode);
@@ -376,14 +380,13 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
 
     const storedProvider = providerKey ?? calculatedProviderKey;
 
-    // Sent only when the region changes: a base_url change makes the backend require the
-    // credentials again, and an empty string moves the provider back to the default URL.
-    const openRouterRegion = form.getValues("openRouterRegion") ?? "global";
-    const openRouterBaseUrl =
-      isOpenRouter &&
-      openRouterRegion !== openRouterRegionFromBaseUrl(storedProvider?.base_url)
-        ? OPENROUTER_REGION_BASE_URLS[openRouterRegion]
-        : undefined;
+    // Always sent for OpenRouter: an empty string moves the provider back to the default URL.
+    const openRouterBaseUrl = isOpenRouter
+      ? getOpenRouterBaseUrl(
+          form.getValues("openRouterRegion") ?? DEFAULT_OPENROUTER_REGION,
+          form.getValues("openRouterBaseUrl"),
+        )
+      : undefined;
     const baseUrl = isCustomLike ? url : openRouterBaseUrl;
     const authConfig = isCustomLike
       ? // the isCustomLike guard means the union's custom member (which carries the

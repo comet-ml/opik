@@ -1025,7 +1025,12 @@ export const BEDROCK_API_VALUES = [
 
 export type BedrockApi = (typeof BEDROCK_API_VALUES)[number];
 
-export const OPENROUTER_REGION_VALUES = ["global", "us", "eu"] as const;
+export const OPENROUTER_REGION_VALUES = [
+  "global",
+  "us",
+  "eu",
+  "custom",
+] as const;
 
 export type OpenRouterRegion = (typeof OPENROUTER_REGION_VALUES)[number];
 

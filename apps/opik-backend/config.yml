@@ -1734,13 +1734,9 @@ llmProviderClient:
     # Description: Anthropic API version https://docs.anthropic.com/en/api/versioning
     version: ${LLM_PROVIDER_ANTHROPIC_VERSION:-'2023-06-01'}
   # Default: https://openrouter.ai/api/v1
-  # Description: OpenRouter API URL
+  # Description: OpenRouter API URL, used when a workspace's OpenRouter provider has no base URL. Decisions models
+  #   such as TypeSafe Jev call the same URL with the trailing /v1 replaced by /alpha/decisions
   openRouterUrl: ${LLM_PROVIDER_OPENROUTER_URL:-https://openrouter.ai/api/v1}
-  # Default: https://openrouter.ai/api/alpha/decisions
-  # Description: OpenRouter Decisions API URL, used by decisions models such as TypeSafe Jev. It lives outside
-  #   /api/v1, so it can't be derived from openRouterUrl. Also used when a workspace's OpenRouter provider sets a
-  #   custom base URL: that URL only applies to chat models
-  openRouterDecisionsUrl: ${LLM_PROVIDER_OPENROUTER_DECISIONS_URL:-https://openrouter.ai/api/alpha/decisions}
 
   vertexAIClient:
     # Default: https://www.googleapis.com/auth/cloud-platform
