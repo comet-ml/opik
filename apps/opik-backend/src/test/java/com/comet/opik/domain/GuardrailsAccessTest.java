@@ -36,7 +36,8 @@ class GuardrailsAccessTest {
 
     @Test
     void organizationWithoutGuardrailsIsForbidden() {
-        when(workspaceFeatures.isEnabled(requestContext, requestHeaders, WorkspaceFeature.GUARDRAILS)).thenReturn(false);
+        when(workspaceFeatures.isEnabled(requestContext, requestHeaders, WorkspaceFeature.GUARDRAILS))
+                .thenReturn(false);
 
         assertThatThrownBy(() -> access(true).check())
                 .isInstanceOf(ForbiddenException.class)

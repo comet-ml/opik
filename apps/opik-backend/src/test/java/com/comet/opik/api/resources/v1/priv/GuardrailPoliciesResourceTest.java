@@ -54,6 +54,7 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
+import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
@@ -326,6 +327,31 @@ class GuardrailPoliciesResourceTest {
         }
         try (var response = request(workspace, "/delete").post(Entity.json(new BatchDelete(Set.of(randomUUID()))))) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+        }
+    }
+
+    @Test
+    @DisplayName("a browser session is checked with its own session cookie")
+    void sessionCallerIsCheckedWithItsSessionCookie() {
+        var sessionToken = randomUUID().toString();
+        var workspaceName = randomUUID().toString();
+        // AuthTestUtils' session stub answers without a workspace name, which the platform does return.
+        wireMock.server().stubFor(post(urlPathEqualTo("/opik/auth-session"))
+                .withCookie(SESSION_COOKIE, equalTo(sessionToken))
+                .willReturn(okJson(AuthTestUtils.newWorkspaceAuthResponse(USER, randomUUID().toString(),
+                        workspaceName, null))));
+        wireMock.server().stubFor(post(urlPathEqualTo("/opik/workspace-features-session"))
+                .withCookie(SESSION_COOKIE, equalTo(sessionToken))
+                .withRequestBody(matchingJsonPath("$.workspaceName", equalTo(workspaceName)))
+                .willReturn(okJson("{\"workspaceName\":\"%s\",\"features\":{\"guardrails\":true}}"
+                        .formatted(workspaceName))));
+
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .request()
+                .cookie(SESSION_COOKIE, sessionToken)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
         }
     }
 
