@@ -91,7 +91,7 @@ describe("extractJsonContentOrRaise", () => {
       const invalidJson = "not json at all";
 
       expect(() => extractJsonContentOrRaise(invalidJson)).toThrow(
-        JSONParsingError
+        JSONParsingError,
       );
     });
 
@@ -99,7 +99,7 @@ describe("extractJsonContentOrRaise", () => {
       const malformedJson = '{"score": 0.8, "reason": unclosed string}';
 
       expect(() => extractJsonContentOrRaise(malformedJson)).toThrow(
-        JSONParsingError
+        JSONParsingError,
       );
     });
 
@@ -107,7 +107,7 @@ describe("extractJsonContentOrRaise", () => {
       const noBraces = "score: 0.8, reason: no braces";
 
       expect(() => extractJsonContentOrRaise(noBraces)).toThrow(
-        JSONParsingError
+        JSONParsingError,
       );
     });
 
@@ -115,7 +115,7 @@ describe("extractJsonContentOrRaise", () => {
       const onlyOpening = '{"score": 0.8';
 
       expect(() => extractJsonContentOrRaise(onlyOpening)).toThrow(
-        JSONParsingError
+        JSONParsingError,
       );
     });
 
@@ -123,7 +123,7 @@ describe("extractJsonContentOrRaise", () => {
       const onlyClosing = '"score": 0.8}';
 
       expect(() => extractJsonContentOrRaise(onlyClosing)).toThrow(
-        JSONParsingError
+        JSONParsingError,
       );
     });
 
@@ -136,7 +136,7 @@ describe("extractJsonContentOrRaise", () => {
       } catch (error) {
         expect(error).toBeInstanceOf(JSONParsingError);
         expect((error as JSONParsingError).message).toContain(
-          "Failed to extract JSON"
+          "Failed to extract JSON",
         );
       }
     });
@@ -177,7 +177,57 @@ describe("extractJsonContentOrRaise", () => {
 
       // Multiple separate JSON objects cannot be parsed as a single JSON
       expect(() => extractJsonContentOrRaise(multipleObjects)).toThrow(
-        JSONParsingError
+        JSONParsingError,
+      );
+    });
+
+    it("should parse a repeated identical JSON object", () => {
+      const repeatedObject =
+        '{"score": 0.8, "reason": "Good"}\n{"score": 0.8, "reason": "Good"}';
+      const result = extractJsonContentOrRaise(repeatedObject);
+
+      expect(result).toEqual({
+        score: 0.8,
+        reason: "Good",
+      });
+    });
+
+    it("should parse a repeated identical JSON object with different key order", () => {
+      const repeatedObject =
+        '{"score": 0.8, "reason": "Good"}\n{"reason": "Good", "score": 0.8}';
+      const result = extractJsonContentOrRaise(repeatedObject);
+
+      expect(result).toEqual({
+        score: 0.8,
+        reason: "Good",
+      });
+    });
+
+    it("should parse a repeated identical JSON object wrapped in prose", () => {
+      const repeatedObject =
+        'Result:\n{"score": 0.8, "reason": "Good"}\n{"score": 0.8, "reason": "Good"}';
+      const result = extractJsonContentOrRaise(repeatedObject);
+
+      expect(result).toEqual({
+        score: 0.8,
+        reason: "Good",
+      });
+    });
+
+    it("should throw error when repeated JSON objects differ", () => {
+      const differingObjects =
+        '{"score": 0.8, "reason": "Good"}\n{"score": 0.2, "reason": "Dup"}';
+
+      expect(() => extractJsonContentOrRaise(differingObjects)).toThrow(
+        JSONParsingError,
+      );
+    });
+
+    it("should keep true and 1 distinct when comparing repeated objects", () => {
+      const differingObjects = '{"flag": true}\n{"flag": 1}';
+
+      expect(() => extractJsonContentOrRaise(differingObjects)).toThrow(
+        JSONParsingError,
       );
     });
   });
