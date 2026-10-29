@@ -32,11 +32,6 @@ import java.util.Set;
  * such as TypeSafe Jev. Those models aren't reachable through chat completions, so there is no LangChain4j
  * client for them.
  *
- * <p>Requests go to the OpenRouter URL of the workspace's provider, its {@code baseUrl} or else the configured
- * {@code openRouterUrl}, with the trailing {@code /v1} replaced by {@code /alpha/decisions}: chat and decisions calls
- * then reach the same host, regional endpoints and proxies included. A URL without that suffix fails the call with a
- * 400 rather than falling back to another host.
- *
  * <p>Errors carry the upstream status: 4xx as {@link ClientErrorException}, 5xx as {@link ServerErrorException}
  * and anything else (e.g. a redirect from a misconfigured URL) as {@link WebApplicationException}, so the
  * online-scoring consumer drops permanent failures (bad request, missing credits) and redelivers transient ones.
@@ -86,7 +81,6 @@ public class OpenRouterDecisionsClient {
         var httpRequest = RetriableHttpClient.Request.<DecisionsResponse>builder()
                 .requestFunction(httpClient -> httpClient.target(decisionsUrl))
                 .requestCustomizer(builder -> {
-                    // the caller validated the base URL; this checks each address connected to
                     builder.property(ClientProperties.FOLLOW_REDIRECTS, false)
                             .property(DestinationGuardDnsResolver.PROPERTY, providerBaseUrlGuard.destinationGuard());
                     Optional.ofNullable(config.headers()).orElse(Map.of()).forEach(builder::header);
