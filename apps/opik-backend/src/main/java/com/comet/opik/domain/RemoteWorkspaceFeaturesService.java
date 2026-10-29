@@ -1,7 +1,8 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.Visibility;
+import com.comet.opik.domain.mcpoauth.McpOAuthTokenUtils;
 import com.comet.opik.infrastructure.AuthenticationConfig;
-import com.comet.opik.infrastructure.auth.PlatformCredential;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.ws.rs.client.Client;
@@ -21,14 +22,15 @@ import java.net.URI;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.OAUTH_USERNAME_HEADER;
 
 /**
- * Asks the platform's workspace features API on the caller's behalf, with the credential the caller authenticated
- * with, and caches each answer per workspace. Enablement belongs to the workspace's organization, not to the caller,
- * and the caller's access to the workspace is already settled by the time an endpoint asks.
+ * Asks the platform's workspace features API on the caller's behalf, with the credential the request carries, and
+ * caches each answer per workspace. Enablement belongs to the workspace's organization, not to the caller, and the
+ * caller's access to the workspace is already settled by the time an endpoint asks.
  * <p>
  * A lookup that fails reads as not enabled and is not cached, so an outage withholds a feature rather than grants
  * it, and the next request asks again. The cache is best effort: when it cannot answer, or holds a value this
@@ -53,6 +55,7 @@ public class RemoteWorkspaceFeaturesService implements WorkspaceFeaturesService 
     private final @NonNull AuthenticationConfig.UrlConfig reactServiceUrl;
     private final @NonNull RedissonReactiveClient redissonClient;
     private final @NonNull Duration cacheTtl;
+    private final boolean mcpOAuthEnabled;
     private final AtomicLong lastCacheWarningNanos = new AtomicLong(
             System.nanoTime() - CACHE_WARNING_INTERVAL.toNanos());
 
@@ -65,10 +68,10 @@ public class RemoteWorkspaceFeaturesService implements WorkspaceFeaturesService 
     }
 
     @Override
-    public boolean isEnabled(@NonNull RequestContext caller, @NonNull WorkspaceFeature feature) {
-        var credential = caller.getPlatformCredential();
-        // A device token or a public read was not authenticated by the platform, so there is nobody to ask for.
-        if (credential == null || StringUtils.isAnyBlank(caller.getWorkspaceId(), caller.getWorkspaceName())) {
+    public boolean isEnabled(@NonNull RequestContext caller, @NonNull HttpHeaders request,
+            @NonNull WorkspaceFeature feature) {
+        var featuresRequest = requestFor(caller, request);
+        if (featuresRequest.isEmpty() || StringUtils.isAnyBlank(caller.getWorkspaceId(), caller.getWorkspaceName())) {
             return false;
         }
 
@@ -80,7 +83,7 @@ public class RemoteWorkspaceFeaturesService implements WorkspaceFeaturesService 
 
         boolean enabled;
         try {
-            enabled = lookUp(caller.getWorkspaceName(), credential, feature);
+            enabled = lookUp(caller.getWorkspaceName(), featuresRequest.get(), feature);
         } catch (RuntimeException lookupFailed) {
             log.warn("Could not resolve feature '{}' for workspaceId '{}', treating it as not enabled",
                     feature.getValue(), caller.getWorkspaceId(), lookupFailed);
@@ -139,9 +142,9 @@ public class RemoteWorkspaceFeaturesService implements WorkspaceFeaturesService 
         }
     }
 
-    private boolean lookUp(String workspaceName, PlatformCredential credential, WorkspaceFeature feature) {
+    private boolean lookUp(String workspaceName, Invocation.Builder featuresRequest, WorkspaceFeature feature) {
         var body = Entity.json(new WorkspaceFeaturesRequest(workspaceName, List.of(feature.getValue())));
-        try (var response = requestFor(credential).post(body)) {
+        try (var response = featuresRequest.post(body)) {
             if (response.getStatusInfo().getFamily() != Response.Status.Family.SUCCESSFUL) {
                 throw new IllegalStateException(
                         "the platform answered the workspace features call with status '%d'"
@@ -152,15 +155,28 @@ public class RemoteWorkspaceFeaturesService implements WorkspaceFeaturesService 
         }
     }
 
-    private Invocation.Builder requestFor(PlatformCredential credential) {
-        return switch (credential.type()) {
-            case API_KEY -> featuresRequest("workspace-features")
-                    .header(HttpHeaders.AUTHORIZATION, credential.value());
-            case SESSION -> featuresRequest("workspace-features-session")
-                    .cookie(RequestContext.SESSION_COOKIE, credential.value());
-            case OAUTH_USER -> featuresRequest("workspace-features-by-username")
-                    .header(OAUTH_USERNAME_HEADER, credential.value());
-        };
+    /**
+     * Picks the credential in the order AuthFilter does, so the platform is asked with the one that authenticated
+     * the request. Empty when the platform did not authenticate it: a device token or a public read.
+     */
+    private Optional<Invocation.Builder> requestFor(RequestContext caller, HttpHeaders request) {
+        if (caller.getCipxDeviceId() != null || caller.getVisibility() == Visibility.PUBLIC) {
+            return Optional.empty();
+        }
+        var authorization = request.getHeaderString(HttpHeaders.AUTHORIZATION);
+        if (mcpOAuthEnabled && McpOAuthTokenUtils.isMcpOAuthToken(authorization)) {
+            return Optional.of(featuresRequest("workspace-features-by-username")
+                    .header(OAUTH_USERNAME_HEADER, caller.getUserName()));
+        }
+        var session = request.getCookies().get(RequestContext.SESSION_COOKIE);
+        if (session != null) {
+            return Optional.of(featuresRequest("workspace-features-session")
+                    .cookie(RequestContext.SESSION_COOKIE, session.getValue()));
+        }
+        if (StringUtils.isBlank(authorization)) {
+            return Optional.empty();
+        }
+        return Optional.of(featuresRequest("workspace-features").header(HttpHeaders.AUTHORIZATION, authorization));
     }
 
     private Invocation.Builder featuresRequest(String path) {
