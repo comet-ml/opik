@@ -133,6 +133,7 @@ class ThreadsClient:
             # The endpoint's cursor is compared against `thread_model_id`
             # (a UUID), not the caller-supplied thread `id`.
             cursor_extractor=search_helpers.extract_thread_model_id_cursor,
+            raw_cursor_extractor=search_helpers.extract_thread_model_id_cursor_from_raw,
         )
         return threads
 
