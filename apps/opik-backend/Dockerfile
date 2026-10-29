@@ -1,4 +1,4 @@
-FROM maven:3.10.0-amazoncorretto-25-al2023@sha256:d96c6ff2e7a3258e6f0c447340d2284a3404917bb8c5f01c8660cc4066bd382c AS build
+FROM maven:3.10.0-amazoncorretto-25-al2023@sha256:d7d573505beedea8e0de13c485973ea474994f9aa58f7158a966e829855c7363 AS build
 
 WORKDIR /opt/opik-backend
 
@@ -25,7 +25,7 @@ RUN mvn versions:set -DnewVersion=${OPIK_VERSION} && \
 # Plain AL2023 pinned to a dated release, not the amazoncorretto image: AL2023 locks yum to the base image's
 # release, so OS fixes only arrive with a newer one. Renovate moves the date forward weekly, and each date has
 # a fixed package set.
-FROM public.ecr.aws/amazonlinux/amazonlinux:2023.12.20261026.1@sha256:8272aee6146a36222baaf71d72ab6799770957414ac63b1e940cec58c9197188
+FROM public.ecr.aws/amazonlinux/amazonlinux:2023.12.20261028.0@sha256:d9c9967b3d895c4c423f54b6562fbf5d18a5b68f5df54908c29e88cba4efcc04
 
 # Same as the amazoncorretto:25-al2023 image, whose four Corretto packages are installed below.
 ENV LANG=C.UTF-8 \
