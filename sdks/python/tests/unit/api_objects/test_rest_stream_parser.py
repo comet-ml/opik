@@ -558,6 +558,84 @@ def test_read_and_parse_full_stream__page_of_unreadable_records_does_not_end_the
     assert source.requested == [(2, None), (2, "r05"), (2, "r03"), (2, "r01")]
 
 
+def _traced_span(span_id, trace_id):
+    return {**_span_record(span_id), "trace_id": trace_id}
+
+
+def _untraced_span(span_id, trace_id):
+    # Decodes to an object with an id but fails validation (no start_time),
+    # the way a backend/SDK skew record looks: the backend's position moved,
+    # but no parsed item carries the cursor domain forward.
+    return {**_record_without_start_time(span_id), "trace_id": trace_id}
+
+
+def test_read_and_parse_full_stream__custom_extractor__unreadable_page_does_not_end_the_read():
+    # Same shape as the default-extractor case above, but the cursor domain is
+    # trace_id, not id: after a fully unreadable page, the last parsed record
+    # still belongs to the previous page, so deriving the cursor from it would
+    # falsely report a repeat and abandon the pages behind. The raw record's
+    # trace_id advances the read instead; the raw record id must not be used,
+    # it pages by the wrong key.
+    source = _PagedSource(
+        pages=[
+            _ndjson(
+                _traced_span("span-a", "trace-a"),
+                _traced_span("span-b", "trace-b"),
+            ),
+            _ndjson(
+                _untraced_span("bad-1", "trace-bad-1"),
+                _untraced_span("bad-2", "trace-bad-2"),
+            ),
+            _ndjson(_traced_span("span-c", "trace-c")),
+        ]
+    )
+
+    spans = rest_stream_parser.read_and_parse_full_stream(
+        read_source=source,
+        parsed_item_class=rest_api_types.SpanPublic,
+        max_results=None,
+        max_endpoint_batch_size=2,
+        cursor_extractor=lambda span: span.trace_id,
+        raw_cursor_extractor=lambda raw: raw.get("trace_id"),
+    )
+
+    assert [span.id for span in spans] == ["span-a", "span-b", "span-c"]
+    assert source.requested == [
+        (2, None),
+        (2, "trace-b"),
+        (2, "trace-bad-2"),
+    ]
+
+
+def test_read_and_parse_full_stream__custom_extractor__unreadable_page_stops_without_raw_extractor():
+    # Without a raw extractor there is no in-domain value to advance with, so
+    # the read must stop at the unreadable page rather than loop on it.
+    source = _PagedSource(
+        pages=[
+            _ndjson(
+                _traced_span("span-a", "trace-a"),
+                _traced_span("span-b", "trace-b"),
+            ),
+            _ndjson(
+                _untraced_span("bad-1", "trace-bad-1"),
+                _untraced_span("bad-2", "trace-bad-2"),
+            ),
+            _ndjson(_traced_span("span-c", "trace-c")),
+        ]
+    )
+
+    spans = rest_stream_parser.read_and_parse_full_stream(
+        read_source=source,
+        parsed_item_class=rest_api_types.SpanPublic,
+        max_results=None,
+        max_endpoint_batch_size=2,
+        cursor_extractor=lambda span: span.trace_id,
+    )
+
+    assert [span.id for span in spans] == ["span-a", "span-b"]
+    assert source.requested == [(2, None), (2, "trace-b")]
+
+
 def test_read_and_parse_full_stream__strict_raises_on_a_page_without_usable_records(
     caplog,
 ):
