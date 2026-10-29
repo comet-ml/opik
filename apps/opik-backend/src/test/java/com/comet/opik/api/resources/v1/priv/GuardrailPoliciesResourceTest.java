@@ -55,6 +55,11 @@ import java.util.stream.Stream;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
+import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
+import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
+import static com.github.tomakehurst.wiremock.client.WireMock.post;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static java.util.UUID.randomUUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -90,7 +95,12 @@ class GuardrailPoliciesResourceTest {
                 .redisUrl(REDIS.getRedisURI())
                 .customConfigs(List.of(
                         new TestDropwizardAppExtensionUtils.CustomConfig("serviceToggles.guardrailsValidationsEnabled",
-                                "true")))
+                                "true"),
+                        // Required with the toggle on; the policy endpoints never call opik-inference.
+                        new TestDropwizardAppExtensionUtils.CustomConfig("aiLabels.inference.url",
+                                wireMock.runtimeInfo().getHttpBaseUrl()),
+                        new TestDropwizardAppExtensionUtils.CustomConfig("aiLabels.inference.credential",
+                                randomUUID().toString())))
                 .build());
     }
 
@@ -113,9 +123,18 @@ class GuardrailPoliciesResourceTest {
     }
 
     private Workspace newWorkspace() {
+        return newWorkspace(true);
+    }
+
+    private Workspace newWorkspace(boolean guardrailsEnabled) {
         var workspace = new Workspace(randomUUID().toString(), randomUUID().toString());
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), workspace.apiKey(), workspace.name(),
                 randomUUID().toString(), USER);
+        wireMock.server().stubFor(post(urlPathEqualTo("/opik/workspace-features"))
+                .withHeader(HttpHeaders.AUTHORIZATION, equalTo(workspace.apiKey()))
+                .withRequestBody(matchingJsonPath("$.workspaceName", equalTo(workspace.name())))
+                .willReturn(okJson("{\"workspaceName\":\"%s\",\"features\":{\"guardrails\":%s}}"
+                        .formatted(workspace.name(), guardrailsEnabled))));
         return workspace;
     }
 
@@ -281,6 +300,33 @@ class GuardrailPoliciesResourceTest {
             assertThat(response.readEntity(ErrorMessage.class).getMessage()).isEqualTo(message);
         }
         assertThat(find(workspace, null, null, 1, 10).total()).isZero();
+    }
+
+    @Test
+    @DisplayName("a workspace whose organization does not have guardrails gets 403 on every endpoint")
+    void organizationWithoutGuardrailsIsForbidden() {
+        var workspace = newWorkspace(false);
+
+        try (var response = request(workspace, "").post(Entity.json(piiPolicy("policy")))) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            assertThat(response.readEntity(ErrorMessage.class).getMessage())
+                    .isEqualTo("Guardrails is available on the Enterprise plan");
+        }
+        try (var response = request(workspace, "").get()) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+        }
+        try (var response = request(workspace, "/retrieve").post(Entity.json(new GuardrailPolicyRetrieve(Set.of())))) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+        }
+        try (var response = request(workspace, "/" + randomUUID()).get()) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+        }
+        try (var response = request(workspace, "/" + randomUUID()).put(Entity.json(piiPolicy("policy")))) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+        }
+        try (var response = request(workspace, "/delete").post(Entity.json(new BatchDelete(Set.of(randomUUID()))))) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+        }
     }
 
     @Test
