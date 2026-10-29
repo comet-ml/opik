@@ -157,3 +157,29 @@ class TestFewShotBayesianOptimizerOptuna:
         assert [trial.state for trial in studies[0].trials] == [
             optuna.trial.TrialState.COMPLETE
         ]
+
+
+@pytest.mark.parametrize(
+    "template",
+    [
+        # Seen live from gpt-4o on an image dataset: the prompt's messages, no answer.
+        '{"p": [{"role": "user", "content": [{"type": "text", "text": "{question}"}]}]}',
+        "Q: {question}",
+        "Some examples follow.",
+    ],
+)
+def test_example_template_without_the_answer_falls_back_to_a_plain_one(
+    template: str,
+) -> None:
+    from opik_optimizer.algorithms.few_shot_bayesian_optimizer.few_shot_bayesian_optimizer import (
+        _usable_example_template,
+    )
+
+    fields = ["id", "image", "question", "label"]
+    assert (
+        _usable_example_template(template, fields)
+        == "image: {image}\nquestion: {question}\nlabel: {label}"
+    )
+    assert _usable_example_template("Q: {question}\nA: {label}", fields) == (
+        "Q: {question}\nA: {label}"
+    )

@@ -1,4 +1,4 @@
-from ...utils.feedback import sanitize_feedback
+from ...utils.feedback import is_label_field, sanitize_feedback
 from ...utils.prompt_editing import apply_text_edits, describe_text_segments
 
 from ...core.reasoning import render_case_message, ReasoningEvidence, EvidenceCase
@@ -436,7 +436,9 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
             new_prompts[prompt_name] = new_prompt
 
-        return new_prompts, str(response_content.template)
+        return new_prompts, _usable_example_template(
+            str(response_content.template), user_message["example_fields"]
+        )
 
     def _suggest_example_index(
         self,
@@ -1108,3 +1110,23 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             result_prompts[key] = new_prompt
 
         return result_prompts
+
+
+def _usable_example_template(template: str, fields: list[str]) -> str:
+    """The model's example template, or a plain one when it would teach nothing.
+
+    A template that copies the prompt's messages, or leaves out the answer, shows the
+    task model a demonstration without the expected output.
+    """
+    used = [field for field in fields if f"{{{field}}}" in template]
+    has_answer = any(is_label_field(field) for field in fields if field != "id")
+    if (
+        used
+        and '"role"' not in template
+        and (not has_answer or any(is_label_field(field) for field in used))
+    ):
+        return template
+    logger.warning("Few-shot example template unusable, using a plain one: %r", template)
+    inputs = [f for f in fields if f != "id" and not is_label_field(f)]
+    answers = [f for f in fields if f != "id" and is_label_field(f)]
+    return "\n".join(f"{field}: {{{field}}}" for field in inputs + answers)
