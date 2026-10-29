@@ -226,8 +226,8 @@ const traces = await client.searchTraces({
 await queue.addTraces(traces);
 
 // For a single trace, wrap it in an array
-const singleTraceResponse = await client.api.traces.getTraceById("trace-id");
-await queue.addTraces([singleTraceResponse.data]);
+const singleTrace = await client.api.traces.getTraceById("trace-id");
+await queue.addTraces([singleTrace]);
 ```
 
 </CodeBlocks>
@@ -363,14 +363,14 @@ const tracesQueues = await client.getTracesAnnotationQueues({
   projectName: "Trailhead Support Agent",
 });
 for (const q of tracesQueues) {
-  console.log(q.name, await q.getItemsCount());
+  console.log(q.name);
 }
 
 const threadsQueues = await client.getThreadsAnnotationQueues({
   projectName: "Trailhead Support Agent",
 });
 for (const q of threadsQueues) {
-  console.log(q.name, await q.getItemsCount());
+  console.log(q.name);
 }
 
 await queue.delete();
