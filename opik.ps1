@@ -1,4 +1,4 @@
-# opik.ps1
+﻿# opik.ps1
 
 [CmdletBinding()]
 param (
