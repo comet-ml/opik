@@ -36,6 +36,7 @@ import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescrip
 import {
   convertCustomProviderModels,
   buildComposedProviderKey,
+  normalizeBedrockApi,
 } from "@/lib/provider";
 import { useProviderOptions } from "@/hooks/useProviderOptions";
 import ProviderSelectionStep from "@/v2/pages-shared/llm/SetupProviderDialog/ProviderSelectionStep";
@@ -149,6 +150,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
       openaiPipelineMode: normalizeOpenAiPipelineMode(
         providerKey?.configuration?.openai_pipeline_mode,
       ),
+      bedrockApi: normalizeBedrockApi(providerKey?.configuration?.bedrock_api),
       ...authConfigToFormValues(providerKey?.auth_config),
     } as AIProviderFormType,
   });
@@ -199,6 +201,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
       authHeaderName: "",
       suppressDefaultAuth: false,
       openaiPipelineMode: DEFAULT_OPENAI_PIPELINE_MODE,
+      bedrockApi: normalizeBedrockApi(undefined),
       ...EMPTY_AUTH_FORM_VALUES,
     });
     setStep("select");
@@ -258,6 +261,10 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
         normalizeOpenAiPipelineMode(
           providerData?.configuration?.openai_pipeline_mode,
         ),
+      );
+      form.setValue(
+        "bedrockApi",
+        normalizeBedrockApi(providerData?.configuration?.bedrock_api),
       );
 
       const authFormValues = authConfigToFormValues(providerData?.auth_config);
@@ -325,6 +332,9 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
     const openaiPipelineModeValue = isOpenAi
       ? form.getValues("openaiPipelineMode")!
       : undefined;
+    const bedrockApiValue = isBedrock
+      ? normalizeBedrockApi(form.getValues("bedrockApi"))
+      : undefined;
 
     const configuration =
       isVertex || isCustomLike || isOpenAi
@@ -335,6 +345,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
             auth_header_name: authHeaderNameValue,
             suppress_default_auth: suppressDefaultAuthValue,
             openai_pipeline_mode: openaiPipelineModeValue,
+            bedrock_api: bedrockApiValue,
           }
         : undefined;
 
