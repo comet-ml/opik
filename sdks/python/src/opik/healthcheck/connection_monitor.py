@@ -112,15 +112,19 @@ class OpikConnectionMonitor:
         next_beat = self.last_beat + self.ping_interval
         now = time.time()
         if next_beat <= now:
-            result = self._probe.check_connection(timeout=self._check_timeout)
-            self.last_beat = time.time()
-            return self._on_ping_result(
-                result.is_healthy, failure_reason=result.error_message
-            )
+            return self.ping()
         elif self.has_server_connection:
             return ConnectionStatus.connection_ok
         else:
             return ConnectionStatus.connection_failed
+
+    def ping(self) -> ConnectionStatus:
+        """Probes the server now, regardless of the ping interval."""
+        result = self._probe.check_connection(timeout=self._check_timeout)
+        self.last_beat = time.time()
+        return self._on_ping_result(
+            result.is_healthy, failure_reason=result.error_message
+        )
 
     def _on_ping_result(
         self, success: bool, failure_reason: Optional[str]

@@ -4,7 +4,7 @@ from unittest.mock import sentinel
 
 import pytest
 
-from opik.message_processing import messages
+from opik.message_processing import data_loss, messages
 from opik.message_processing import streamer_constructors
 from ...testlib import fake_message_factory
 
@@ -166,3 +166,37 @@ def test_streamer__trace__batching_enabled__messages_that_support_batching_are_p
     assert tested.flush(1.1) is True
 
     mock_message_processor.process.assert_called_once()
+
+
+def test_streamer__bounded_queue_overflows__evicted_messages_recorded_as_dropped(
+    fake_file_upload_manager, fake_replay_manager
+):
+    tracker = data_loss.DataLossTracker()
+    # No consumers, so nothing drains the 2-slot queue and every put past the
+    # second one evicts a message.
+    tested = streamer_constructors.construct_streamer(
+        message_processor=mock.Mock(),
+        n_consumers=0,
+        use_batching=False,
+        use_attachment_extraction=False,
+        file_uploader=fake_file_upload_manager,
+        max_queue_size=2,
+        fallback_replay_manager=fake_replay_manager,
+        data_loss_tracker=tracker,
+    )
+    try:
+        for message in fake_message_factory.fake_create_trace_message_batch(
+            count=5, approximate_trace_size=fake_message_factory.ONE_KILOBYTE
+        ):
+            tested.put(message)
+
+        dropped_messages, dropped_items, failures = tracker.drops_since((0, 0))
+
+        assert dropped_messages == 3
+        assert dropped_items == 3
+        assert {failure.reason for failure in failures} == {
+            data_loss.FailureReason.QUEUE_OVERFLOW
+        }
+        assert tested.queue_size() == 2
+    finally:
+        tested.close(flush=False)

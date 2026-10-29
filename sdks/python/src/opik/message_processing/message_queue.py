@@ -1,7 +1,7 @@
 import collections
 from queue import Empty
 import threading
-from typing import TypeVar, Optional, Generic
+from typing import Callable, Generic, Optional, TypeVar
 
 T = TypeVar("T")
 
@@ -13,7 +13,8 @@ class MessageQueue(Generic[T]):
     It supports optional maximum length limiting and blocking retrieval with timeout.
 
     Once a bounded length queue is full, when new items are added, a corresponding number
-    of items are discarded from the opposite end.
+    of items are discarded from the opposite end and passed to the eviction callback,
+    if one is set.
 
     Args:
         max_length (Optional[int]): Maximum number of messages the queue can hold.
@@ -30,18 +31,28 @@ class MessageQueue(Generic[T]):
         self._deque: collections.deque[T] = collections.deque(maxlen=max_length)
         self._cond = threading.Condition()
         self._unfinished_tasks = 0
+        self._eviction_callback: Optional[Callable[[T], None]] = None
         self.max_size = max_length
 
+    def set_eviction_callback(self, callback: Callable[[T], None]) -> None:
+        """Sets the callback invoked with each message discarded by a full queue."""
+        self._eviction_callback = callback
+
     def put(self, message: T) -> None:
+        evicted = None
         with self._cond:
             before = len(self._deque)
+            oldest = self._deque[-1] if before > 0 else None
             self._deque.appendleft(message)
             # When the deque is at maxlen, appendleft silently evicts from the
             # other end. Only count a new in-flight task when the queue actually
             # grew — otherwise the displaced message's task carries over.
             if len(self._deque) > before:
                 self._unfinished_tasks += 1
+            else:
+                evicted = oldest
             self._cond.notify()
+        self._report_evicted(evicted)
 
     def put_back(self, message: T) -> None:
         # Re-enqueuing a previously-popped message (rate-limit retry / deferred
@@ -54,14 +65,19 @@ class MessageQueue(Generic[T]):
         # and will now never see `task_done()`. Detect that case and
         # decrement so `join()` / `all_tasks_done()` don't stall on a
         # phantom task.
+        evicted = None
         with self._cond:
             before = len(self._deque)
+            newest = self._deque[0] if before > 0 else None
             self._deque.append(message)
-            if len(self._deque) == before and self._unfinished_tasks > 0:
-                self._unfinished_tasks -= 1
-                if self._unfinished_tasks == 0:
-                    self._cond.notify_all()
+            if len(self._deque) == before:
+                evicted = newest
+                if self._unfinished_tasks > 0:
+                    self._unfinished_tasks -= 1
+                    if self._unfinished_tasks == 0:
+                        self._cond.notify_all()
             self._cond.notify()
+        self._report_evicted(evicted)
 
     def get(self, timeout: float) -> T:
         with self._cond:
@@ -112,14 +128,13 @@ class MessageQueue(Generic[T]):
             self._unfinished_tasks = 0
             self._cond.notify_all()
 
-    def accept_put_without_discarding(self) -> bool:
-        if self.max_size is None:
-            return True
-        with self._cond:
-            return len(self._deque) < self.max_size
-
     def size(self) -> int:
         return len(self._deque)
+
+    def _report_evicted(self, evicted: Optional[T]) -> None:
+        # Called outside the lock so the callback can log or record freely.
+        if evicted is not None and self._eviction_callback is not None:
+            self._eviction_callback(evicted)
 
     def __len__(self) -> int:
         return len(self._deque)
