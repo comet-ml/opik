@@ -39,9 +39,9 @@ Then set:
   A few scores with clear descriptions get better labels than a long list.
 - **Annotators per item**: how many people must score an item before it is done. Keep 1 for a fast pass. Use 2 or
   more when you need agreement between experts, for example to align a judge.
-- **Lock timeout**: when an annotator opens an item, it stays reserved for them for this time, so two people do
-  not label the same item at once. After that, another annotator can take it. Raise it when items take long to
-  review.
+- **Lock timeout**: how long an annotator's review slot stays reserved. When it expires, another annotator can
+  take that slot. If the queue requires multiple annotators per item, they can review the same item at once using
+  separate slots. Raise the timeout when items take longer to review.
 - **Automation**: add traces or threads to the queue when their scores match conditions, for example
   `policy_judge < 0.5`. See [Add items to the queue](#add-items-to-the-queue).
 
@@ -155,10 +155,8 @@ MCP server or in the UI.
 <AccordionGroup>
 <Accordion title="Create a queue">
 
-<Tabs>
-    <Tab value="Python" title="Python">
-
-```python wordWrap
+<CodeBlocks>
+```python title="Python" wordWrap
 import opik
 
 client = opik.Opik()
@@ -173,10 +171,7 @@ queue = client.create_traces_annotation_queue(
 print(f"Created queue: {queue.name} (ID: {queue.id})")
 ```
 
-    </Tab>
-    <Tab value="TypeScript" title="TypeScript">
-
-```typescript wordWrap
+```typescript title="TypeScript" wordWrap
 import { Opik } from "opik";
 
 const client = new Opik();
@@ -191,16 +186,13 @@ const queue = await client.createTracesAnnotationQueue({
 console.log(`Created queue: ${queue.name} (ID: ${queue.id})`);
 ```
 
-    </Tab>
-</Tabs>
+</CodeBlocks>
 
 </Accordion>
 <Accordion title="Add traces to a queue">
 
-<Tabs>
-    <Tab value="Python" title="Python">
-
-```python wordWrap
+<CodeBlocks>
+```python title="Python" wordWrap
 import opik
 
 client = opik.Opik()
@@ -219,10 +211,7 @@ single_trace = client.get_trace_content("trace-id")
 queue.add_traces([single_trace])
 ```
 
-    </Tab>
-    <Tab value="TypeScript" title="TypeScript">
-
-```typescript wordWrap
+```typescript title="TypeScript" wordWrap
 import { Opik } from "opik";
 
 const client = new Opik();
@@ -241,18 +230,15 @@ const singleTraceResponse = await client.api.traces.getTraceById("trace-id");
 await queue.addTraces([singleTraceResponse.data]);
 ```
 
-    </Tab>
-</Tabs>
+</CodeBlocks>
 
 </Accordion>
 <Accordion title="Read queue items">
 
 `get_items()` returns the traces (or threads, for a thread queue) in a queue.
 
-<Tabs>
-    <Tab value="Python" title="Python">
-
-```python wordWrap
+<CodeBlocks>
+```python title="Python" wordWrap
 import opik
 
 client = opik.Opik()
@@ -266,10 +252,7 @@ thread_queue = client.get_threads_annotation_queue("thread-queue-id")
 threads = thread_queue.get_items()
 ```
 
-    </Tab>
-    <Tab value="TypeScript" title="TypeScript">
-
-```typescript wordWrap
+```typescript title="TypeScript" wordWrap
 import { Opik } from "opik";
 
 const client = new Opik();
@@ -284,16 +267,13 @@ const threadQueue = await client.getThreadsAnnotationQueue("thread-queue-id");
 const threads = await threadQueue.getItems();
 ```
 
-    </Tab>
-</Tabs>
+</CodeBlocks>
 
 </Accordion>
 <Accordion title="Work with thread queues">
 
-<Tabs>
-    <Tab value="Python" title="Python">
-
-```python wordWrap
+<CodeBlocks>
+```python title="Python" wordWrap
 import opik
 
 client = opik.Opik()
@@ -312,10 +292,7 @@ threads = threads_client.search_threads(
 thread_queue.add_threads(threads)
 ```
 
-    </Tab>
-    <Tab value="TypeScript" title="TypeScript">
-
-```typescript wordWrap
+```typescript title="TypeScript" wordWrap
 import { Opik } from "opik";
 
 const client = new Opik();
@@ -333,16 +310,13 @@ const threads = await client.searchThreads({
 await threadQueue.addThreads(threads);
 ```
 
-    </Tab>
-</Tabs>
+</CodeBlocks>
 
 </Accordion>
 <Accordion title="Update, list and delete queues">
 
-<Tabs>
-    <Tab value="Python" title="Python">
-
-```python wordWrap
+<CodeBlocks>
+```python title="Python" wordWrap
 import opik
 
 client = opik.Opik()
@@ -367,10 +341,7 @@ for q in client.get_threads_annotation_queues(project_name="Trailhead Support Ag
 queue.delete()
 ```
 
-    </Tab>
-    <Tab value="TypeScript" title="TypeScript">
-
-```typescript wordWrap
+```typescript title="TypeScript" wordWrap
 import { Opik } from "opik";
 
 const client = new Opik();
@@ -405,8 +376,7 @@ for (const q of threadsQueues) {
 await queue.delete();
 ```
 
-    </Tab>
-</Tabs>
+</CodeBlocks>
 
 </Accordion>
 </AccordionGroup>
