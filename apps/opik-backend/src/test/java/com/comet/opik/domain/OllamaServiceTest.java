@@ -1,8 +1,15 @@
 package com.comet.opik.domain;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.classic.spi.ThrowableProxyUtil;
+import ch.qos.logback.core.read.ListAppender;
 import com.comet.opik.api.OllamaConnectionTestResponse;
 import com.comet.opik.api.OllamaModel;
 import com.comet.opik.api.resources.utils.TestHttpClientUtils;
+import com.comet.opik.infrastructure.llm.customllm.ProviderBaseUrlGuard;
+import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -14,6 +21,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
 import java.util.List;
@@ -41,7 +49,11 @@ class OllamaServiceTest {
         baseUrl = "http://localhost:" + wireMockServer.port();
         var httpClient = TestHttpClientUtils.client();
 
-        ollamaService = new OllamaService(httpClient);
+        // the mock server is on loopback, which strict mode refuses
+        ollamaService = new OllamaService(httpClient, ProviderBaseUrlGuard.builder()
+                .mode(DestinationGuard.Mode.RELAXED)
+                .scheme(DestinationGuard.Scheme.PLAINTEXT_OR_TLS)
+                .build());
     }
 
     @AfterAll
@@ -87,16 +99,119 @@ class OllamaServiceTest {
         wireMockServer.stubFor(get(urlEqualTo("/api/version"))
                 .willReturn(aResponse()
                         .withStatus(404)));
+        var expectedResponse = OllamaConnectionTestResponse.builder()
+                .connected(false)
+                .errorMessage("Failed to connect to Ollama: HTTP 404")
+                .build();
 
         // When
-        OllamaConnectionTestResponse response = ollamaService.testConnection(baseUrl, null).block();
+        OllamaConnectionTestResponse actualResponse = ollamaService.testConnection(baseUrl, null).block();
 
-        // Then
-        assertThat(response).isNotNull();
-        assertThat(response.connected()).isFalse();
-        assertThat(response.version()).isNull();
-        assertThat(response.errorMessage()).contains("Failed to connect to Ollama at");
-        assertThat(response.errorMessage()).contains("HTTP 404");
+        // Then: the URL the caller gave is not echoed back
+        assertThat(actualResponse).isEqualTo(expectedResponse);
+    }
+
+    /** The service's log events while {@code call} runs, debug included. */
+    private static List<ILoggingEvent> eventsOf(Runnable call) {
+        var logger = (Logger) LoggerFactory.getLogger(OllamaService.class);
+        var appender = new ListAppender<ILoggingEvent>();
+        var previousLevel = logger.getLevel();
+        appender.start();
+        logger.addAppender(appender);
+        logger.setLevel(Level.DEBUG);
+        try {
+            call.run();
+        } finally {
+            logger.detachAppender(appender);
+            logger.setLevel(previousLevel);
+        }
+        return List.copyOf(appender.list);
+    }
+
+    private static List<String> logsOf(Runnable call) {
+        return eventsOf(call).stream().map(ILoggingEvent::getFormattedMessage).toList();
+    }
+
+    /** Each event as logged: its message, then its throwable's class, message and causes, stack included. */
+    private static List<String> renderedEventsOf(Runnable call) {
+        return eventsOf(call).stream()
+                .map(event -> event.getThrowableProxy() == null
+                        ? event.getFormattedMessage()
+                        : "%s%n%s".formatted(event.getFormattedMessage(),
+                                ThrowableProxyUtil.asString(event.getThrowableProxy())))
+                .toList();
+    }
+
+    @Test
+    @DisplayName("A connection test logs the URL without its path, query or fragment, port kept")
+    void testConnection__logsUrlWithoutQueryOrFragment() {
+        var secret = RandomStringUtils.secure().nextAlphanumeric(16);
+        var url = "http://localhost:%d/?token=%s#%s".formatted(wireMockServer.port(), secret, secret);
+        var expectedMessages = List.of(
+                "Testing Ollama connection at: 'http://localhost:%d'".formatted(wireMockServer.port()),
+                "Failed to connect to Ollama at 'http://localhost:%d': HTTP '404'".formatted(wireMockServer.port()));
+
+        var actualMessages = logsOf(() -> ollamaService.testConnection(url, null).block());
+
+        assertThat(actualMessages).isEqualTo(expectedMessages);
+    }
+
+    /** The HTTP client refuses a URL with userinfo before any request, so only the URL logged first carries it. */
+    @Test
+    @DisplayName("A connection test logs the URL without its userinfo")
+    void testConnection__logsUrlWithoutUserinfo() {
+        var username = "user-%s".formatted(RandomStringUtils.secure().nextAlphanumeric(16));
+        var password = RandomStringUtils.secure().nextAlphanumeric(16);
+        var url = "http://%s:%s@localhost:%d/".formatted(username, password, wireMockServer.port());
+        var expectedMessages = List.of(
+                "Testing Ollama connection at: 'http://localhost:%d'".formatted(wireMockServer.port()),
+                "Failed to connect to Ollama");
+
+        var actualEvents = renderedEventsOf(() -> ollamaService.testConnection(url, null).block());
+
+        assertThat(actualEvents).hasSize(expectedMessages.size());
+        for (int i = 0; i < expectedMessages.size(); i++) {
+            assertThat(actualEvents.get(i)).startsWith(expectedMessages.get(i))
+                    .doesNotContain(username)
+                    .doesNotContain(password);
+        }
+    }
+
+    @Test
+    @DisplayName("Listing models logs the URL without its path, query or fragment, port kept")
+    void listModels__logsUrlWithoutQueryOrFragment() {
+        var secret = RandomStringUtils.secure().nextAlphanumeric(16);
+        var url = "http://localhost:%d/?token=%s#%s".formatted(wireMockServer.port(), secret, secret);
+        var expectedMessages = List.of(
+                "Fetching models from Ollama instance at: 'http://localhost:%d'".formatted(wireMockServer.port()),
+                "Failed to fetch models from Ollama at 'http://localhost:%d': HTTP '404'"
+                        .formatted(wireMockServer.port()));
+
+        var actualMessages = logsOf(() -> ollamaService.listModels(url, null).block());
+
+        assertThat(actualMessages).isEqualTo(expectedMessages);
+    }
+
+    /** As for the connection test, the client refuses the URL before any request. */
+    @Test
+    @DisplayName("Listing models logs the URL without its userinfo")
+    void listModels__logsUrlWithoutUserinfo() {
+        var username = "user-%s".formatted(RandomStringUtils.secure().nextAlphanumeric(16));
+        var password = RandomStringUtils.secure().nextAlphanumeric(16);
+        var url = "http://%s:%s@localhost:%d/".formatted(username, password, wireMockServer.port());
+        var expectedMessages = List.of(
+                "Fetching models from Ollama instance at: 'http://localhost:%d'"
+                        .formatted(wireMockServer.port()),
+                "Failed to fetch models from Ollama");
+
+        var actualEvents = renderedEventsOf(() -> ollamaService.listModels(url, null).block());
+
+        assertThat(actualEvents).hasSize(expectedMessages.size());
+        for (int i = 0; i < expectedMessages.size(); i++) {
+            assertThat(actualEvents.get(i)).startsWith(expectedMessages.get(i))
+                    .doesNotContain(username)
+                    .doesNotContain(password);
+        }
     }
 
     @Test

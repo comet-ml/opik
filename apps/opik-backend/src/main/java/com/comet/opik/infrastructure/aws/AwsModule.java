@@ -6,6 +6,7 @@ import com.comet.opik.infrastructure.S3Config;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.google.inject.Provides;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.client.Client;
 import lombok.NonNull;
 import org.apache.commons.lang3.StringUtils;
 import ru.vyarus.dropwizard.guice.module.support.DropwizardAwareModule;
@@ -85,14 +86,14 @@ public class AwsModule extends DropwizardAwareModule<OpikConfiguration> {
     @Provides
     @Singleton
     public Optional<EventBridgeClient> eventBridgeClient(@Config("serviceToggles") ServiceTogglesConfig toggles,
-            @Config("alertsEventBridge") AlertsEventBridgeConfig config) {
+            @Config("alertsEventBridge") AlertsEventBridgeConfig config, @NonNull Client client) {
         if (!toggles.isEventBridgeAlertsEnabled()) {
             return Optional.empty();
         }
 
         // Retries are bounded by the publisher, which also retries throttled entries of partial failures
         var builder = EventBridgeClient.builder()
-                .credentialsProvider(eventBridgeCredentialsProvider(config))
+                .credentialsProvider(eventBridgeCredentialsProvider(config, client))
                 .overrideConfiguration(override -> override.retryStrategy(AwsRetryStrategy.doNotRetry())
                         .apiCallAttemptTimeout(EVENT_BRIDGE_CALL_ATTEMPT_TIMEOUT)
                         // Backstop: bounds the whole call, including signing and credential resolution that happen
@@ -112,10 +113,11 @@ public class AwsModule extends DropwizardAwareModule<OpikConfiguration> {
      * chain reads AWS_ACCESS_KEY_ID before web identity, so a deployment with static S3 keys there (e.g. MinIO) would
      * sign PutEvents with them and never assume the role it was given for EventBridge.
      */
-    static AwsCredentialsProvider eventBridgeCredentialsProvider(@NonNull AlertsEventBridgeConfig config) {
+    static AwsCredentialsProvider eventBridgeCredentialsProvider(@NonNull AlertsEventBridgeConfig config,
+            @NonNull Client client) {
         if (StringUtils.isNotBlank(config.getCustomerCredentialsEndpoint())) {
             return new CustomerCredentialsProvider(config.getCustomerCredentialsEndpoint(),
-                    CUSTOMER_CREDENTIALS_TIMEOUT);
+                    CUSTOMER_CREDENTIALS_TIMEOUT, client);
         }
 
         return AwsCredentialsProviderChain.builder()

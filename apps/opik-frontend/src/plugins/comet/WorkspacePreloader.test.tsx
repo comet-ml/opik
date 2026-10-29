@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { ORGANIZATION_ROLE_TYPE, Workspace } from "./types";
@@ -88,6 +88,63 @@ describe("WorkspacePreloader", () => {
     render(<WorkspacePreloader>app</WorkspacePreloader>);
 
     expect(screen.getByText("navigate:team-b")).toBeInTheDocument();
+  });
+
+  describe("for a user who must verify their email", () => {
+    const originalLocation = window.location;
+    const origin = "http://localhost";
+
+    const givenLocation = (search = "") =>
+      Object.defineProperty(window, "location", {
+        value: { href: "", origin, search },
+        writable: true,
+      });
+
+    beforeEach(() => {
+      window.localStorage.clear();
+      hooks.useUser.mockReturnValue({
+        isLoading: false,
+        data: {
+          loggedIn: true,
+          emailVerificationRequired: true,
+          apiKeys: [],
+          userName: "new-user",
+          email: "new-user@example.com",
+          gitHub: false,
+          defaultWorkspace: "new-user",
+          suspended: false,
+        },
+      });
+      givenWorkspaces([workspace("new-user", true)]);
+      // the default workspace's landing page renders the app before workspaces load
+      route.workspaceName = "new-user";
+      route.pathname = "/new-user/get-started";
+    });
+
+    afterEach(() => {
+      Object.defineProperty(window, "location", {
+        value: originalLocation,
+        writable: true,
+      });
+    });
+
+    it("sends them to Comet's verification page, even from a landing page", () => {
+      givenLocation();
+
+      render(<WorkspacePreloader>app</WorkspacePreloader>);
+
+      expect(window.location.href).toContain("email-verification");
+      expect(screen.queryByText("app")).not.toBeInTheDocument();
+    });
+
+    it("keeps an MCP install to resume after verifying", () => {
+      const returnTo = `${origin}/opik/api/v1/oauth/authorize?client_id=mcp`;
+      givenLocation(`?returnTo=${encodeURIComponent(returnTo)}`);
+
+      render(<WorkspacePreloader>app</WorkspacePreloader>);
+
+      expect(window.localStorage.getItem("mcpOAuthRedirectURL")).toBe(returnTo);
+    });
   });
 
   it("still opens the AI Spend pages", () => {

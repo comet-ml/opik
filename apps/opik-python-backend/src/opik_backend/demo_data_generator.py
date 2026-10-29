@@ -874,20 +874,19 @@ def create_demo_test_suite_and_experiments(base_url: str, workspace_name, comet_
                 _use_batching=True,
             )
 
-            # Step 1 — evaluation suite (renamed to "test suite" on main, but this
-            # codepath uses the 1.10.56 SDK naming for evaluation suites).
+            # Step 1 — test suite.
             suite_name = "Customer support regression suite"
-            suite = client.get_or_create_evaluation_suite(
+            suite = client.get_or_create_test_suite(
                 name=suite_name,
                 description="Demo regression tests for the support agent.",
-                assertions=[demo_test_suite_global_assertion],
+                global_assertions=[demo_test_suite_global_assertion],
                 project_name=project_name,
             )
             if suite.get_items():
-                logger.info("Evaluation suite '%s' already populated, skipping", suite_name)
+                logger.info("Test suite '%s' already populated, skipping", suite_name)
                 return
 
-            suite.add_items([
+            suite.insert([
                 {
                     "data": {"question": template["question"]},
                     "assertions": template["assertions"],
@@ -899,7 +898,7 @@ def create_demo_test_suite_and_experiments(base_url: str, workspace_name, comet_
             # After insert, map back: question text → backend-assigned item id.
             inserted_items = suite.get_items()
             item_id_by_question = {item["data"]["question"]: item["id"] for item in inserted_items}
-            logger.info("Inserted %d evaluation suite items for workspace %s",
+            logger.info("Inserted %d test suite items for workspace %s",
                         len(inserted_items), workspace_name)
 
             # Step 2a — create the support agent system prompt with two commits.
@@ -941,7 +940,7 @@ def create_demo_test_suite_and_experiments(base_url: str, workspace_name, comet_
                 tag_agent_config_env(base_url, workspace_name, comet_api_key, project_id, bp["env"], bp_name)
 
             # Step 3 — experiments + traces + scores.
-            suite_dataset_name = suite.dataset.name
+            suite_dataset_name = suite.name
             now = datetime.datetime.now()
 
             for exp_cfg in demo_test_suite_experiments:

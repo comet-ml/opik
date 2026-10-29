@@ -15,9 +15,12 @@ import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.redis.testcontainers.RedisContainer;
+import io.dropwizard.testing.DropwizardTestSupport;
 import org.apache.hc.core5.http.HttpStatus;
 import org.awaitility.Awaitility;
+import org.eclipse.jetty.server.ServerConnector;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
@@ -32,6 +35,7 @@ import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
@@ -185,6 +189,59 @@ class HealthCheckIntegrationTest {
      * is rejected with {@code Code: 164. DB::Exception: Cannot modify 'max_execution_time'
      * setting in readonly mode. (READONLY)}.
      */
+    /** The ports the app's Jetty server listens on, one per connector. */
+    private static List<Integer> listeningPorts(DropwizardTestSupport<?> support) {
+        return Arrays.stream(support.getEnvironment().getApplicationContext().getServer().getConnectors())
+                .map(connector -> ((ServerConnector) connector).getLocalPort())
+                .toList();
+    }
+
+    /** By default the admin server runs beside the application, on its own port. */
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @ExtendWith(DropwizardAppExtensionProvider.class)
+    class AdminServerEnabled {
+
+        @RegisterApp
+        private final TestDropwizardAppExtension app = newApp(List.of());
+
+        @Test
+        @DisplayName("the admin server answers on its own port")
+        void theAdminServerAnswers(ClientSupport client, DropwizardTestSupport<?> support) {
+            var expectedPorts = List.of(client.getPort(), client.getAdminPort());
+
+            try (var response = client.targetAdmin("ping").request().get()) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+                assertThat(response.readEntity(String.class).trim()).isEqualTo("pong");
+            }
+            assertThat(listeningPorts(support)).containsExactlyInAnyOrderElementsOf(expectedPorts);
+        }
+    }
+
+    /** With adminServer.enabled false, the application port is the only one listening; its health check answers. */
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @ExtendWith(DropwizardAppExtensionProvider.class)
+    class AdminServerDisabled {
+
+        @RegisterApp
+        private final TestDropwizardAppExtension app = newApp(
+                List.of(new CustomConfig("adminServer.enabled", "false")));
+
+        @Test
+        @DisplayName("nothing listens on an admin port, and the application's health check still answers")
+        void onlyTheApplicationListens(ClientSupport client, DropwizardTestSupport<?> support) {
+            ClientSupportUtils.config(client);
+            var healthCheckClient = new HealthCheckResourceClient(client, TestUtils.getBaseUrl(client));
+            var expectedPorts = List.of(client.getPort());
+            var expectedMysql = List.of(HealthCheckResponse.builder()
+                    .name("mysql").healthy(true).critical(true).type(READY).build());
+
+            healthCheckClient.awaitHealthCheck("mysql", expectedMysql);
+            assertThat(listeningPorts(support)).isEqualTo(expectedPorts);
+        }
+    }
+
     @Nested
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     @ExtendWith(DropwizardAppExtensionProvider.class)

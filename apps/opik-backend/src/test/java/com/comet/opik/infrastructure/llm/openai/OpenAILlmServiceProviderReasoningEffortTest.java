@@ -1,8 +1,8 @@
 package com.comet.opik.infrastructure.llm.openai;
 
+import com.comet.opik.TestConfigUtils;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.LlmProviderService;
-import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmTestClients;
 import com.comet.opik.utils.JsonUtils;
@@ -78,12 +78,14 @@ class OpenAILlmServiceProviderReasoningEffortTest {
 
     @BeforeEach
     void setUp() {
-        openAi = new WireMockServer(0);
+        openAi = LlmTestClients.newLoopbackWireMock();
         openAi.start();
         stubChatCompletions();
         stubResponses();
         serviceProvider = new OpenAILlmServiceProvider(
-                new OpenAIClientGenerator(new LlmProviderClientConfig(), LlmTestClients.RESPONSES_API_HTTP_CLIENT),
+                new OpenAIClientGenerator(TestConfigUtils.loadConfigTest().getLlmProviderClient(),
+                        LlmTestClients.RESPONSES_API_HTTP_CLIENT,
+                        LlmTestClients.LLM_HTTP_CLIENT_BUILDERS),
                 Mockito.mock(LlmProviderFactory.class));
     }
 
@@ -202,7 +204,7 @@ class OpenAILlmServiceProviderReasoningEffortTest {
     private LlmProviderService serviceFor(Map<String, String> configuration) {
         return serviceProvider.getService(LlmProviderClientApiConfig.builder()
                 .apiKey("test-key")
-                .baseUrl(openAi.baseUrl())
+                .baseUrl(LlmTestClients.baseUrlOf(openAi))
                 .configuration(configuration)
                 .build());
     }

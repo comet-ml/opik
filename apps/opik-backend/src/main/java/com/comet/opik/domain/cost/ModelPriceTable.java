@@ -4,6 +4,7 @@ import com.comet.opik.api.ModelCostData;
 import com.comet.opik.domain.token_usage.model.SpanUsage;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -14,13 +15,16 @@ import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.function.BiFunction;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -41,9 +45,18 @@ public class ModelPriceTable {
     /** The rows of a price file, keyed by model name. */
     public static final TypeReference<Map<String, ModelCostData>> MODEL_COSTS_TYPE_REFERENCE = new TypeReference<>() {
     };
+    private static final TypeReference<Map<String, JsonNode>> PRICE_ROWS_TYPE_REFERENCE = new TypeReference<>() {
+    };
     private static final String BEDROCK_PROVIDER = "bedrock";
     // The price file's sample_spec entry documents its fields instead of pricing a model.
     private static final String SAMPLE_SPEC_ENTRY = "sample_spec";
+    // A token rate of one prompt-size tier, e.g. cache_creation_input_token_cost_above_1hr_above_200k_tokens. The name
+    // ends at "_tokens": service-tier variants (*_above_272k_tokens_priority) aren't billed. The threshold is parsed
+    // while the class loads, so it's capped at six digits: a malformed key can't overflow an int or stop the prices
+    // from loading, and PriceFileTest reports it instead.
+    static final Pattern PROMPT_TIER_RATE = Pattern.compile("(input_cost_per_token|output_cost_per_token"
+            + "|cache_creation_input_token_cost_above_1hr|cache_creation_input_token_cost|cache_read_input_token_cost)"
+            + "_above_(\\d{1,6})(k?)_tokens");
 
     static {
         modelProviderPrices = Collections.unmodifiableMap(parseModelPrices());
@@ -69,9 +82,12 @@ public class ModelPriceTable {
             if (runtimeKey == null) {
                 return;
             }
-            ModelPrice price = buildModelPrice(modelCost);
+            ModelPrice price = buildModelPrice(modelName, modelCost);
             if (price != null) {
-                parsedModelPrices.put(runtimeKey, price);
+                // Per-image rows such as 1024-x-1024/gpt-image-1.5 share their model's key: a row that prices no token
+                // never replaces one that does.
+                parsedModelPrices.merge(runtimeKey, price,
+                        (kept, row) -> hasTokenPrices(kept) && !hasTokenPrices(row) ? kept : row);
             }
         });
 
@@ -97,7 +113,7 @@ public class ModelPriceTable {
     /** Both files are bundled, so one that can't be read or holds no model is a broken build, not a state to run in. */
     private static Map<String, ModelCostData> readPriceFile(String file) {
         try {
-            var modelCosts = JsonUtils.readJsonFile(file, MODEL_COSTS_TYPE_REFERENCE);
+            var modelCosts = toModelCosts(file, JsonUtils.readJsonFile(file, PRICE_ROWS_TYPE_REFERENCE));
             if (modelCosts.isEmpty()) {
                 throw new IllegalStateException("No entries found in model prices file '%s'".formatted(file));
             }
@@ -113,13 +129,33 @@ public class ModelPriceTable {
      */
     private static Map<String, ModelCostData> readOverrides() {
         try {
-            Map<String, ModelCostData> overrides = JsonUtils.readJsonFile(MODEL_PRICES_OVERRIDES_FILE,
-                    MODEL_COSTS_TYPE_REFERENCE);
-            return overrides == null ? Map.of() : overrides;
+            return toModelCosts(MODEL_PRICES_OVERRIDES_FILE,
+                    JsonUtils.readJsonFile(MODEL_PRICES_OVERRIDES_FILE, PRICE_ROWS_TYPE_REFERENCE));
         } catch (IOException | NullPointerException e) {
             log.warn("No model price overrides loaded ('{}'): '{}'", MODEL_PRICES_OVERRIDES_FILE, e.getMessage());
             return Map.of();
         }
+    }
+
+    /**
+     * The prices load with this class, which span ingestion uses, so a row that doesn't read as a price skips its own
+     * model only instead of every price, or every span.
+     */
+    static Map<String, ModelCostData> toModelCosts(String file, Map<String, JsonNode> rows) {
+        var modelCosts = new LinkedHashMap<String, ModelCostData>();
+        rows.forEach((modelName, row) -> {
+            // A null row reads as a null price instead of failing to read.
+            if (!row.isObject()) {
+                log.warn("Skipping model '{}' of '{}', whose row isn't an object: '{}'", modelName, file, row);
+                return;
+            }
+            try {
+                modelCosts.put(modelName, JsonUtils.treeToValue(row, ModelCostData.class));
+            } catch (UncheckedIOException exception) {
+                log.warn("Skipping model '{}' of '{}', which doesn't read as a price", modelName, file, exception);
+            }
+        });
+        return modelCosts;
     }
 
     /**
@@ -181,7 +217,7 @@ public class ModelPriceTable {
                     modelName, override.litellmProvider());
             return;
         }
-        ModelPrice price = buildModelPrice(override);
+        ModelPrice price = buildModelPrice(modelName, override);
         if (price != null) {
             prices.put(runtimeKey, price);
         }
@@ -198,6 +234,16 @@ public class ModelPriceTable {
             return null;
         }
         return createModelProviderKey(parseModelName(modelName), provider);
+    }
+
+    // A rate that isn't a number skips its model only, for the reason toModelCosts skips a row.
+    static ModelPrice buildModelPrice(String modelName, ModelCostData modelCost) {
+        try {
+            return buildModelPrice(modelCost);
+        } catch (NumberFormatException exception) {
+            log.warn("Skipping model '{}', a rate of which isn't a number", modelName, exception);
+            return null;
+        }
     }
 
     private static ModelPrice buildModelPrice(ModelCostData modelCost) {
@@ -231,24 +277,7 @@ public class ModelPriceTable {
         BigDecimal outputReasoningTokenPrice = Optional.ofNullable(modelCost.outputCostPerReasoningToken())
                 .map(BigDecimal::new)
                 .orElse(BigDecimal.ZERO);
-        // Whole-prompt tiers: LiteLLM's above_{128k,200k,272k}_tokens rates replace the base
-        // rate wholesale once the prompt strictly exceeds the threshold. Only include a tier
-        // when at least one of its rates is non-zero; that keeps the tier list empty for the
-        // ~99% of models with no tier fields configured. Sorted DESCENDING so the effective
-        // helpers on ModelPrice pick the highest applicable tier without extra bookkeeping.
-        // Reachable models today: OpenRouter's Qwen3 and ByteDance Seed rows at 128K, Gemini 2.5 Pro /
-        // Claude Sonnet 4.5 at 200K, GPT-5.4 and GPT-5.5 (openai and azure) at 272K.
-        List<ModelPrice.PromptTier> promptTiers = new ArrayList<>();
-        addTierIfPresent(promptTiers, ModelPrice.TIER_THRESHOLD_272K,
-                modelCost.inputCostPerTokenAbove272kTokens(), modelCost.outputCostPerTokenAbove272kTokens(),
-                null, null);
-        addTierIfPresent(promptTiers, ModelPrice.TIER_THRESHOLD_200K,
-                modelCost.inputCostPerTokenAbove200kTokens(), modelCost.outputCostPerTokenAbove200kTokens(),
-                modelCost.cacheCreationInputTokenCostAbove200kTokens(),
-                modelCost.cacheReadInputTokenCostAbove200kTokens());
-        addTierIfPresent(promptTiers, ModelPrice.TIER_THRESHOLD_128K,
-                modelCost.inputCostPerTokenAbove128kTokens(), modelCost.outputCostPerTokenAbove128kTokens(),
-                null, null);
+        List<ModelPrice.PromptTier> promptTiers = promptTiers(modelCost.otherFields());
 
         ModelMode mode = ModelMode.fromValue(modelCost.mode());
 
@@ -270,36 +299,47 @@ public class ModelPriceTable {
                 .outputAudioTokenPrice(outputAudioTokenPrice)
                 .outputReasoningTokenPrice(outputReasoningTokenPrice)
                 .calculator(calculator)
-                .promptTiers(List.copyOf(promptTiers))
+                .promptTiers(promptTiers)
                 .build();
     }
 
     /**
-     * Append one {@link ModelPrice.PromptTier} to {@code tiers} when at least one of the
-     * per-rate JSON strings is non-null and parses to a positive amount. Nulls (rate not
-     * published for this tier — e.g. LiteLLM does not carry cache rates at 128K/272K) are
-     * treated as ZERO by the tier record and skipped by the effective-price helpers.
+     * Whole-prompt tiers: LiteLLM's {@code <rate>_above_<N>k_tokens} rates replace the base rate wholesale once the
+     * prompt strictly exceeds the threshold, at whatever thresholds the price file uses. A tier is kept when one of
+     * its rates is positive, and the list is sorted DESCENDING so the effective helpers on ModelPrice pick the highest
+     * applicable tier. A rate the matched tier doesn't publish falls back to the next lower tier that does, then to the
+     * base rate ({@link ModelPrice}'s rule), while LiteLLM takes the tier from the input rates alone and falls back to
+     * the base rate. The two agree on every model of today's price files; PriceFileTest follows LiteLLM's rule, so a
+     * model where they'd differ fails it, and the rule is chosen then.
      */
-    private static void addTierIfPresent(List<ModelPrice.PromptTier> tiers, int threshold,
-            String inputPrice, String outputPrice,
-            String cacheCreationInputTokenPrice, String cacheReadInputTokenPrice) {
-        BigDecimal in = parseTierRate(inputPrice);
-        BigDecimal out = parseTierRate(outputPrice);
-        BigDecimal cc = parseTierRate(cacheCreationInputTokenPrice);
-        BigDecimal cr = parseTierRate(cacheReadInputTokenPrice);
-        if (isPositive(in) || isPositive(out) || isPositive(cc) || isPositive(cr)) {
-            tiers.add(ModelPrice.PromptTier.builder()
-                    .threshold(threshold)
-                    .inputPrice(in)
-                    .outputPrice(out)
-                    .cacheCreationInputTokenPrice(cc)
-                    .cacheReadInputTokenPrice(cr)
-                    .build());
-        }
-    }
-
-    private static BigDecimal parseTierRate(String raw) {
-        return Optional.ofNullable(raw).map(BigDecimal::new).orElse(BigDecimal.ZERO);
+    private static List<ModelPrice.PromptTier> promptTiers(Map<String, JsonNode> fields) {
+        var ratesByThreshold = new TreeMap<Integer, Map<String, BigDecimal>>(Comparator.reverseOrder());
+        fields.forEach((name, value) -> {
+            var matcher = PROMPT_TIER_RATE.matcher(name);
+            // A rate written as a string reads like a base rate, and one that isn't a number skips the model the same
+            // way.
+            if (!matcher.matches() || !(value.isNumber() || value.isTextual())) {
+                return;
+            }
+            BigDecimal rate = value.isNumber() ? value.decimalValue() : new BigDecimal(value.textValue());
+            if (rate.signum() > 0) {
+                int threshold = Integer.parseInt(matcher.group(2)) * (matcher.group(3).isEmpty() ? 1 : 1000);
+                ratesByThreshold.computeIfAbsent(threshold, unused -> new HashMap<>()).put(matcher.group(1), rate);
+            }
+        });
+        return ratesByThreshold.entrySet().stream()
+                .map(tier -> ModelPrice.PromptTier.builder()
+                        .threshold(tier.getKey())
+                        .inputPrice(tier.getValue().getOrDefault("input_cost_per_token", BigDecimal.ZERO))
+                        .outputPrice(tier.getValue().getOrDefault("output_cost_per_token", BigDecimal.ZERO))
+                        .cacheCreationInputTokenPrice(
+                                tier.getValue().getOrDefault("cache_creation_input_token_cost", BigDecimal.ZERO))
+                        .cacheReadInputTokenPrice(
+                                tier.getValue().getOrDefault("cache_read_input_token_cost", BigDecimal.ZERO))
+                        .cacheCreationInputTokenPriceAbove1hr(tier.getValue()
+                                .getOrDefault("cache_creation_input_token_cost_above_1hr", BigDecimal.ZERO))
+                        .build())
+                .toList();
     }
 
     static String parseModelName(String modelName) {
@@ -347,6 +387,11 @@ public class ModelPriceTable {
 
     private static boolean isPositive(BigDecimal value) {
         return Optional.ofNullable(value).map(v -> v.compareTo(BigDecimal.ZERO) > 0).orElse(false);
+    }
+
+    private static boolean hasTokenPrices(ModelPrice price) {
+        return isPositive(price.inputPrice()) || isPositive(price.outputPrice())
+                || isPositive(price.cacheCreationInputTokenPrice()) || isPositive(price.cacheReadInputTokenPrice());
     }
 
     @RequiredArgsConstructor

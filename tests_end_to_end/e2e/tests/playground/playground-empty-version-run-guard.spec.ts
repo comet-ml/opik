@@ -100,7 +100,7 @@ test.describe(
       await playground.goto();
       await playground.waitForReady();
       await playground.configureVariant(0, { userPrompt: '{{input}}', modelDisplayName });
-      await playground.duplicateLastVariant();
+      await playground.duplicateVariant(0);
       await playground.clickRunExperiment();
       await playground.selectRunExperimentSource({ mode, entityName: source.name });
       await expect(playground.loadedSourcePill()).toContainText(source.name);

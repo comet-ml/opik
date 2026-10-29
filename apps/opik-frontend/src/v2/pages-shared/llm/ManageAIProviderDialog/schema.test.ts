@@ -71,28 +71,35 @@ describe("CloudAIProviderDetailsFormSchema headers", () => {
     },
   );
 
-  it("requires both key and value and unique keys", () => {
+  it("rejects a value without a name and names that differ only in case", () => {
     const result = CloudAIProviderDetailsFormSchema.safeParse(
       cloudForm(PROVIDER_TYPE.OPEN_ROUTER, [
-        header("", "orphan value"),
-        header("X-OpenRouter-Title", ""),
-        header("X-Dup", "a"),
-        header("X-Dup", "b"),
+        header("  ", "orphan value"),
+        header("X-Team", "a"),
+        header(" x-team ", "b"),
       ]),
     );
 
-    expect(issueMessages(result)).toEqual([
-      "Header key is required",
-      "Header value is required",
-      "Header key must be unique",
+    expect(result.success).toBe(false);
+    expect(result.error?.issues).toEqual([
+      expect.objectContaining({
+        message: "Header key is required",
+        path: ["headers", 0, "key"],
+      }),
+      expect.objectContaining({
+        message: "Header key must be unique, ignoring case",
+        path: ["headers", 2, "key"],
+      }),
     ]);
   });
 
-  it("keeps uniqueness case-sensitive so stored case-variant keys stay editable", () => {
+  it("accepts empty values and skips empty rows, as the backend does", () => {
     const result = CloudAIProviderDetailsFormSchema.safeParse(
       cloudForm(PROVIDER_TYPE.OPEN_ROUTER, [
-        header("X-Title", "a"),
-        header("x-title", "b"),
+        header("X-Empty", ""),
+        header("X-Blank", "  "),
+        header("", ""),
+        header("X-OpenRouter-Title", "My App"),
       ]),
     );
 
@@ -135,5 +142,26 @@ describe("createCustomProviderDetailsFormSchema headers", () => {
     });
 
     expect(result.success).toBe(true);
+  });
+
+  it("rejects a value without a name and names that differ only in case", () => {
+    const result = createCustomProviderDetailsFormSchema().safeParse({
+      provider: PROVIDER_TYPE.CUSTOM,
+      composedProviderType: "custom-llm:my-llm",
+      providerName: "my-llm",
+      apiKey: "",
+      url: "https://llm.example.com/v1",
+      models: "model-a",
+      headers: [
+        header("", "orphan value"),
+        header("X-Team", "a"),
+        header("x-team", "b"),
+      ],
+    });
+
+    expect(issueMessages(result)).toEqual([
+      "Header key is required",
+      "Header key must be unique, ignoring case",
+    ]);
   });
 });

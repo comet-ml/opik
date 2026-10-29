@@ -101,7 +101,7 @@ test.describe(
             userPrompt: '{{question}}',
             modelDisplayName,
           });
-          await playground.duplicateLastVariant();
+          await playground.duplicateVariant(0);
           await playground.configureVariant(1, {
             userPrompt: `${variantBMarker} {{question}}`,
           });

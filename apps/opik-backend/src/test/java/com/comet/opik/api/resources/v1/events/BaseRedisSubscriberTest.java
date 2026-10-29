@@ -5,6 +5,7 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.domain.llm.ChatCompletionService;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.ParamResolver;
+import com.comet.opik.domain.llm.ProviderErrorMessageValidator;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.redis.RedisStreamCodec;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -475,6 +476,7 @@ class BaseRedisSubscriberTest {
         private static RuntimeException thrownByRealScoreTrace(int status, String reason) {
             var clientConfig = mock(LlmProviderClientConfig.class);
             when(clientConfig.getMaxAttempts()).thenReturn(1);
+            when(clientConfig.getProviderErrorMessageMaxLength()).thenReturn(300);
 
             var chatModel = mock(ChatModel.class);
             when(chatModel.chat(any(ChatRequest.class)))
@@ -484,7 +486,8 @@ class BaseRedisSubscriberTest {
             when(providerFactory.getLanguageModel(anyString(), any())).thenReturn(chatModel);
 
             var service = new ChatCompletionService(clientConfig, providerFactory,
-                    new ParamResolver(providerFactory, bundledRegistry()));
+                    new ParamResolver(providerFactory, bundledRegistry()),
+                    new ProviderErrorMessageValidator(clientConfig));
             var request = ChatRequest.builder().messages(UserMessage.from("seam")).build();
             var parameters = LlmAsJudgeModelParameters.builder().name("seam-test-model").build();
 

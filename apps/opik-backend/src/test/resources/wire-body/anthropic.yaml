@@ -294,6 +294,37 @@ rows:
     request: {stream: true, temperature: 0.3}
     body: {stream: true, temperature: 0.3}
 
+  # User content in array form, chat path. Claude 3 has no vision in the model capabilities, so its parts are
+  # flattened to one text block, with the image as a placeholder.
+  - name: array text content is sent as text blocks
+    models: [legacy, claude-sonnet-4-5]
+    request:
+      messages:
+        - role: system
+          content: Be brief.
+        - role: user
+          content:
+            - type: text
+              text: Say hi.
+  - name: array content with an image is flattened to one text block for a model without vision
+    models: [legacy]
+    request:
+      messages:
+        - role: system
+          content: Be brief.
+        - role: user
+          content:
+            - type: text
+              text: Say hi.
+            - type: image_url
+              image_url: {url: 'https://example.com/cat.png'}
+    body:
+      messages:
+        - role: user
+          content:
+            - type: text
+              text: 'Say hi.<<<image>>>https://example.com/cat.png<<</image>>>'
+
   # Judge path.
   - name: a judge sends temperature to a model that takes sampling params
     path: judge

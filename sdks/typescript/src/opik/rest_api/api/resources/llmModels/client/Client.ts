@@ -8,6 +8,7 @@ import * as environments from "../../../../environments.js";
 import { handleNonStatusCodeError } from "../../../../errors/handleNonStatusCodeError.js";
 import * as errors from "../../../../errors/index.js";
 import * as serializers from "../../../../serialization/index.js";
+import type * as OpikApi from "../../../index.js";
 
 export declare namespace LlmModelsClient {
     export type Options = BaseClientOptions;
@@ -86,5 +87,75 @@ export class LlmModelsClient {
         }
 
         return handleNonStatusCodeError(_response.error, _response.rawResponse, "GET", "/v1/private/llm/models");
+    }
+
+    /**
+     * Get the params each provider's unlisted models take, keyed by provider
+     *
+     * @param {LlmModelsClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.llmModels.getLlmModelProfiles()
+     */
+    public getLlmModelProfiles(
+        requestOptions?: LlmModelsClient.RequestOptions,
+    ): core.HttpResponsePromise<Record<string, OpikApi.ModelParams>> {
+        return core.HttpResponsePromise.fromPromise(this.__getLlmModelProfiles(requestOptions));
+    }
+
+    private async __getLlmModelProfiles(
+        requestOptions?: LlmModelsClient.RequestOptions,
+    ): Promise<core.WithRawResponse<Record<string, OpikApi.ModelParams>>> {
+        const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
+            this._options?.headers,
+            mergeOnlyDefinedHeaders({
+                "Comet-Workspace": requestOptions?.workspaceName ?? this._options?.workspaceName,
+            }),
+            requestOptions?.headers,
+        );
+        const _response = await core.fetcher({
+            url: core.url.join(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "v1/private/llm/models/profiles",
+            ),
+            method: "GET",
+            headers: _headers,
+            queryParameters: requestOptions?.queryParams,
+            timeoutMs: (requestOptions?.timeoutInSeconds ?? this._options?.timeoutInSeconds ?? 60) * 1000,
+            maxRetries: requestOptions?.maxRetries ?? this._options?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+            fetchFn: this._options?.fetch,
+            logging: this._options.logging,
+        });
+        if (_response.ok) {
+            return {
+                data: serializers.llmModels.getLlmModelProfiles.Response.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    skipValidation: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+                rawResponse: _response.rawResponse,
+            });
+        }
+
+        return handleNonStatusCodeError(
+            _response.error,
+            _response.rawResponse,
+            "GET",
+            "/v1/private/llm/models/profiles",
+        );
     }
 }

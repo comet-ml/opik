@@ -1138,6 +1138,9 @@ navigation:
           - page: MCP OAuth
             path: ./docs-v2/self-host/configure/mcp-oauth.mdx
             slug: mcp-oauth
+          - page: Webhook destinations and the admin port
+            path: ./docs-v2/self-host/configure/webhooks-and-admin-port.mdx
+            slug: webhooks-and-admin-port
   - tab: reference
     layout:
       - page: Overview

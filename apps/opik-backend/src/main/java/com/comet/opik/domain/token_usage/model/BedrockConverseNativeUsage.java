@@ -3,6 +3,9 @@ package com.comet.opik.domain.token_usage.model;
 import lombok.Builder;
 import lombok.NonNull;
 
+/**
+ * @param cacheWrite1hInputTokens the part of {@code cacheWriteInputTokens} written with a 1-hour TTL.
+ */
 @Builder(toBuilder = true)
 public record BedrockConverseNativeUsage(
         @NonNull String provider,
@@ -10,6 +13,7 @@ public record BedrockConverseNativeUsage(
         long inputTokens,
         long cacheReadInputTokens,
         long cacheWriteInputTokens,
+        long cacheWrite1hInputTokens,
         long outputTokens) implements NativeUsage {
 
     @Override

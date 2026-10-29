@@ -134,6 +134,68 @@ def test_bedrock_usage__converse_cache_tokens__counted_once(
     assert usage.provider_usage.cacheWriteInputTokens == cache_creation
 
 
+TTL_SPLIT_DETAILS = {
+    "cache_read": 1000,
+    "cache_creation": 0,
+    "ephemeral_5m_input_tokens": 1000,
+    "ephemeral_1h_input_tokens": 2000,
+}
+
+
+def test_anthropic_usage__langchain_ttl_cache_writes__split_kept_by_ttl():
+    run = _run(
+        {"kwargs": {"anthropic_api_key": "fixture-value"}},
+        _usage_metadata(TTL_SPLIT_DETAILS, 4000),
+    )
+
+    usage = (
+        anthropic_usage_extractor.AnthropicUsageExtractor()
+        .get_llm_usage_info(run)
+        .usage
+    )
+
+    full_dict = usage.to_backend_compatible_full_usage_dict()
+    assert usage.provider_usage.cache_creation_input_tokens == 3000
+    assert full_dict["original_usage.cache_creation.ephemeral_5m_input_tokens"] == 1000
+    assert full_dict["original_usage.cache_creation.ephemeral_1h_input_tokens"] == 2000
+
+
+@pytest.mark.parametrize("invalid_count", [True, -100])
+def test_anthropic_usage__langchain_invalid_ttl_count__left_out_of_split(
+    invalid_count,
+):
+    details = {**TTL_SPLIT_DETAILS, "ephemeral_1h_input_tokens": invalid_count}
+    run = _run(
+        {"kwargs": {"anthropic_api_key": "fixture-value"}},
+        _usage_metadata(details, 2000),
+    )
+
+    usage = (
+        anthropic_usage_extractor.AnthropicUsageExtractor()
+        .get_llm_usage_info(run)
+        .usage
+    )
+
+    full_dict = usage.to_backend_compatible_full_usage_dict()
+    assert usage.provider_usage.cache_creation_input_tokens == 1000
+    assert full_dict["original_usage.cache_creation.ephemeral_5m_input_tokens"] == 1000
+    assert "original_usage.cache_creation.ephemeral_1h_input_tokens" not in full_dict
+
+
+@pytest.mark.parametrize("serialized", CONVERSE_SERIALIZED)
+def test_bedrock_usage__langchain_ttl_cache_writes__split_kept_by_ttl(serialized):
+    run = _run(serialized, _usage_metadata(TTL_SPLIT_DETAILS, 4000))
+
+    usage = (
+        bedrock_usage_extractor.BedrockUsageExtractor().get_llm_usage_info(run).usage
+    )
+
+    full_dict = usage.to_backend_compatible_full_usage_dict()
+    assert usage.provider_usage.cacheWriteInputTokens == 3000
+    assert full_dict["original_usage.cacheDetails.5m.inputTokens"] == 1000
+    assert full_dict["original_usage.cacheDetails.1h.inputTokens"] == 2000
+
+
 def test_bedrock_usage__legacy_chat_bedrock__input_tokens_kept():
     # invoke_model reports the uncached count in input_tokens, cache beside it.
     run = _run(
