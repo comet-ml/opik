@@ -1,7 +1,5 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.api.Visibility;
-import com.comet.opik.domain.mcpoauth.McpOAuthTokenUtils;
 import com.comet.opik.infrastructure.AuthenticationConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -24,8 +22,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
-
-import static com.comet.opik.domain.mcpoauth.OAuthConstants.OAUTH_USERNAME_HEADER;
 
 /**
  * Asks the platform's workspace features API on the caller's behalf, with the credential the request carries, and
@@ -55,7 +51,6 @@ public class RemoteWorkspaceFeaturesService implements WorkspaceFeaturesService 
     private final @NonNull AuthenticationConfig.UrlConfig reactServiceUrl;
     private final @NonNull RedissonReactiveClient redissonClient;
     private final @NonNull Duration cacheTtl;
-    private final boolean mcpOAuthEnabled;
     private final AtomicLong lastCacheWarningNanos = new AtomicLong(
             System.nanoTime() - CACHE_WARNING_INTERVAL.toNanos());
 
@@ -70,7 +65,7 @@ public class RemoteWorkspaceFeaturesService implements WorkspaceFeaturesService 
     @Override
     public boolean isEnabled(@NonNull RequestContext caller, @NonNull HttpHeaders request,
             @NonNull WorkspaceFeature feature) {
-        var featuresRequest = requestFor(caller, request);
+        var featuresRequest = requestFor(request);
         if (featuresRequest.isEmpty() || StringUtils.isAnyBlank(caller.getWorkspaceId(), caller.getWorkspaceName())) {
             return false;
         }
@@ -156,27 +151,20 @@ public class RemoteWorkspaceFeaturesService implements WorkspaceFeaturesService 
     }
 
     /**
-     * Picks the credential in the order AuthFilter does, so the platform is asked with the one that authenticated
-     * the request. Empty when the platform did not authenticate it: a device token or a public read.
+     * Picks the credential the way the platform authenticated the request: the session cookie when there is one,
+     * otherwise the API key. Any other credential is refused by the platform, so the feature reads as not enabled.
      */
-    private Optional<Invocation.Builder> requestFor(RequestContext caller, HttpHeaders request) {
-        if (caller.getCipxDeviceId() != null || caller.getVisibility() == Visibility.PUBLIC) {
-            return Optional.empty();
-        }
-        var authorization = request.getHeaderString(HttpHeaders.AUTHORIZATION);
-        if (mcpOAuthEnabled && McpOAuthTokenUtils.isMcpOAuthToken(authorization)) {
-            return Optional.of(featuresRequest("workspace-features-by-username")
-                    .header(OAUTH_USERNAME_HEADER, caller.getUserName()));
-        }
+    private Optional<Invocation.Builder> requestFor(HttpHeaders request) {
         var session = request.getCookies().get(RequestContext.SESSION_COOKIE);
         if (session != null) {
             return Optional.of(featuresRequest("workspace-features-session")
                     .cookie(RequestContext.SESSION_COOKIE, session.getValue()));
         }
-        if (StringUtils.isBlank(authorization)) {
+        var apiKey = request.getHeaderString(HttpHeaders.AUTHORIZATION);
+        if (StringUtils.isBlank(apiKey)) {
             return Optional.empty();
         }
-        return Optional.of(featuresRequest("workspace-features").header(HttpHeaders.AUTHORIZATION, authorization));
+        return Optional.of(featuresRequest("workspace-features").header(HttpHeaders.AUTHORIZATION, apiKey));
     }
 
     private Invocation.Builder featuresRequest(String path) {

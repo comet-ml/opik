@@ -1,6 +1,5 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.api.Visibility;
 import com.comet.opik.api.resources.utils.TestHttpClientUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.infrastructure.AuthenticationConfig;
@@ -23,7 +22,6 @@ import reactor.core.publisher.Mono;
 import java.time.Duration;
 import java.util.Map;
 
-import static com.comet.opik.domain.mcpoauth.OAuthConstants.OAUTH_USERNAME_HEADER;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.containing;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
@@ -45,7 +43,6 @@ class RemoteWorkspaceFeaturesServiceTest {
 
     private static final String WORKSPACE_NAME = "team-a";
     private static final String ENABLED = "{\"workspaceName\":\"team-a\",\"features\":{\"guardrails\":true}}";
-    private static final String MCP_OAUTH_HEADER = "Bearer opik_mcp_at_token-1";
 
     private WireMockUtils.WireMockRuntime wireMock;
     private AuthenticationConfig.UrlConfig platformUrl;
@@ -56,7 +53,8 @@ class RemoteWorkspaceFeaturesServiceTest {
         wireMock = WireMockUtils.startWireMock();
         platformUrl = new AuthenticationConfig.UrlConfig(wireMock.runtimeInfo().getHttpBaseUrl());
         // No cache: every call reaches the platform, so each credential path is observable.
-        service = uncachedService(true);
+        service = new RemoteWorkspaceFeaturesService(TestHttpClientUtils.client(), platformUrl,
+                Mockito.mock(RedissonReactiveClient.class), Duration.ZERO);
     }
 
     @AfterAll
@@ -101,27 +99,6 @@ class RemoteWorkspaceFeaturesServiceTest {
     }
 
     @Test
-    void oauthCallerIsAskedForByUserName() {
-        wireMock.server().stubFor(post(urlPathEqualTo("/opik/workspace-features-by-username"))
-                .withHeader(OAUTH_USERNAME_HEADER, equalTo("user-1"))
-                .willReturn(okJson(ENABLED)));
-
-        assertThat(service.isEnabled(caller(), request(MCP_OAUTH_HEADER, "session-1"), WorkspaceFeature.GUARDRAILS))
-                .isTrue();
-        wireMock.server().verify(0, postRequestedFor(urlPathEqualTo("/opik/workspace-features-session")));
-    }
-
-    @Test
-    void oauthTokenIsNotTheCredentialWhileMcpOAuthIsOff() {
-        wireMock.server().stubFor(post(urlPathEqualTo("/opik/workspace-features-session"))
-                .willReturn(okJson(ENABLED)));
-
-        assertThat(uncachedService(false).isEnabled(caller(), request(MCP_OAUTH_HEADER, "session-1"),
-                WorkspaceFeature.GUARDRAILS)).isTrue();
-        wireMock.server().verify(0, postRequestedFor(urlPathEqualTo("/opik/workspace-features-by-username")));
-    }
-
-    @Test
     void platformErrorOrUnknownFeatureReadsAsNotEnabled() {
         wireMock.server().stubFor(post(urlPathEqualTo("/opik/workspace-features"))
                 .withHeader(HttpHeaders.AUTHORIZATION, equalTo("key-500"))
@@ -135,14 +112,7 @@ class RemoteWorkspaceFeaturesServiceTest {
     }
 
     @Test
-    void callerThePlatformDidNotAuthenticateIsNotAsked() {
-        var deviceToken = caller().toBuilder().userName("device-user").cipxDeviceId("device-1").build();
-        var publicRead = caller().toBuilder().userName("Public").visibility(Visibility.PUBLIC).build();
-
-        assertThat(service.isEnabled(deviceToken, request("device-token", null), WorkspaceFeature.GUARDRAILS))
-                .isFalse();
-        assertThat(service.isEnabled(publicRead, request("invalid-key", null), WorkspaceFeature.GUARDRAILS))
-                .isFalse();
+    void requestWithoutACredentialIsNotAsked() {
         assertThat(service.isEnabled(caller(), request(null, null), WorkspaceFeature.GUARDRAILS)).isFalse();
         wireMock.server().verify(0, postRequestedFor(urlPathMatching("/opik/workspace-features.*")));
     }
@@ -212,14 +182,9 @@ class RemoteWorkspaceFeaturesServiceTest {
                 .isTrue();
     }
 
-    private RemoteWorkspaceFeaturesService uncachedService(boolean mcpOAuthEnabled) {
-        return new RemoteWorkspaceFeaturesService(TestHttpClientUtils.client(), platformUrl,
-                Mockito.mock(RedissonReactiveClient.class), Duration.ZERO, mcpOAuthEnabled);
-    }
-
     private RemoteWorkspaceFeaturesService cachedService(RedissonReactiveClient redis) {
         return new RemoteWorkspaceFeaturesService(TestHttpClientUtils.client(), platformUrl, redis,
-                Duration.ofSeconds(5), true);
+                Duration.ofSeconds(5));
     }
 
     @SuppressWarnings("unchecked")
