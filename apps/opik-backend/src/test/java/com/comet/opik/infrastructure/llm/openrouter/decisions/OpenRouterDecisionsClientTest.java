@@ -5,6 +5,8 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.RetriableHttpClient;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
+import com.comet.opik.infrastructure.llm.customllm.ProviderBaseUrlGuard;
+import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.comet.opik.utils.RetryUtils;
 import com.github.tomakehurst.wiremock.stubbing.Scenario;
 import io.dropwizard.util.Duration;
@@ -50,21 +52,26 @@ class OpenRouterDecisionsClientTest {
             {"error":{"message":"At least one question is required","code":400},"user_id":"org_1"}
             """;
 
+    private static final ProviderBaseUrlGuard RELAXED_GUARD = ProviderBaseUrlGuard.builder()
+            .mode(DestinationGuard.Mode.RELAXED)
+            .scheme(DestinationGuard.Scheme.PLAINTEXT_OR_TLS)
+            .build();
+
     private WireMockUtils.WireMockRuntime wireMock;
+    private LlmProviderClientConfig clientConfig;
     private OpenRouterDecisionsClient decisionsClient;
     private String apiKey;
 
     @BeforeAll
     void setUpAll() {
         wireMock = WireMockUtils.startWireMock();
-        var config = new LlmProviderClientConfig();
-        config.setOpenRouterUrl(wireMock.runtimeInfo().getHttpBaseUrl() + "/api/v1");
-        config.setMaxAttempts(MAX_ATTEMPTS);
-        config.setDelayMillis(1);
-        config.setConnectTimeout(Duration.seconds(5));
-        config.setReadTimeout(Duration.seconds(5));
-        decisionsClient = new OpenRouterDecisionsClient(new RetriableHttpClient(TestHttpClientUtils.client()),
-                config);
+        clientConfig = new LlmProviderClientConfig();
+        clientConfig.setOpenRouterUrl(wireMock.runtimeInfo().getHttpBaseUrl() + "/api/v1");
+        clientConfig.setMaxAttempts(MAX_ATTEMPTS);
+        clientConfig.setDelayMillis(1);
+        clientConfig.setConnectTimeout(Duration.seconds(5));
+        clientConfig.setReadTimeout(Duration.seconds(5));
+        decisionsClient = newDecisionsClient(RELAXED_GUARD);
     }
 
     @AfterAll
@@ -217,6 +224,18 @@ class OpenRouterDecisionsClientTest {
         assertThat(wireMock.server().getAllServeEvents()).isEmpty();
     }
 
+    @Test
+    void strictGuardRefusesAPrivateAddressAtConnectTime() {
+        var strictClient = newDecisionsClient(RELAXED_GUARD.toBuilder().mode(DestinationGuard.Mode.STRICT).build());
+        var config = LlmProviderClientApiConfig.builder()
+                .apiKey(apiKey)
+                .baseUrl(wireMock.runtimeInfo().getHttpBaseUrl() + "/api/v1")
+                .build();
+
+        assertThatThrownBy(() -> strictClient.decide(request(), config).block()).isNotNull();
+        assertThat(wireMock.server().getAllServeEvents()).isEmpty();
+    }
+
     @ParameterizedTest
     @CsvSource({
             "https://openrouter.ai/api/v1, https://openrouter.ai/api/alpha/decisions",
@@ -224,6 +243,11 @@ class OpenRouterDecisionsClientTest {
             "https://my-proxy.example.com/openrouter/v1, https://my-proxy.example.com/openrouter/alpha/decisions"})
     void decisionsUrlReplacesTheTrailingV1(String openRouterUrl, String expected) {
         assertThat(OpenRouterDecisionsClient.decisionsUrl(openRouterUrl)).isEqualTo(expected);
+    }
+
+    private OpenRouterDecisionsClient newDecisionsClient(ProviderBaseUrlGuard guard) {
+        return new OpenRouterDecisionsClient(new RetriableHttpClient(TestHttpClientUtils.client()), clientConfig,
+                guard);
     }
 
     private DecisionsRequest request() {

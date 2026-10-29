@@ -3,6 +3,8 @@ package com.comet.opik.infrastructure.llm.openrouter.decisions;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.RetriableHttpClient;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
+import com.comet.opik.infrastructure.llm.customllm.ProviderBaseUrlGuard;
+import com.comet.opik.infrastructure.net.DestinationGuardDnsResolver;
 import com.comet.opik.infrastructure.net.LoggableUrl;
 import com.comet.opik.utils.RetryUtils;
 import jakarta.ws.rs.BadRequestException;
@@ -17,6 +19,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.glassfish.jersey.client.ClientProperties;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
@@ -67,6 +70,7 @@ public class OpenRouterDecisionsClient {
 
     private final @NonNull RetriableHttpClient client;
     private final @NonNull LlmProviderClientConfig llmProviderClientConfig;
+    private final @NonNull ProviderBaseUrlGuard providerBaseUrlGuard;
 
     public Mono<DecisionsResponse> decide(@NonNull DecisionsRequest request,
             @NonNull LlmProviderClientApiConfig config) {
@@ -82,6 +86,9 @@ public class OpenRouterDecisionsClient {
         var httpRequest = RetriableHttpClient.Request.<DecisionsResponse>builder()
                 .requestFunction(httpClient -> httpClient.target(decisionsUrl))
                 .requestCustomizer(builder -> {
+                    // the caller validated the base URL; this checks each address connected to
+                    builder.property(ClientProperties.FOLLOW_REDIRECTS, false)
+                            .property(DestinationGuardDnsResolver.PROPERTY, providerBaseUrlGuard.destinationGuard());
                     Optional.ofNullable(config.headers()).orElse(Map.of()).forEach(builder::header);
                     builder.header(HttpHeaders.AUTHORIZATION, "Bearer " + config.apiKey());
                 })
