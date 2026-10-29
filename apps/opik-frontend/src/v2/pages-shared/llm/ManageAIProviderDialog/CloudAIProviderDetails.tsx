@@ -130,20 +130,6 @@ const CloudAIProviderDetails: React.FC<CloudAIProviderDetailsProps> = ({
                   placeholder="Select a region"
                 />
               </FormControl>
-              <span className="comet-body-s mt-1 text-light-slate">
-                United States and European Union keep requests in that region.
-                They need an OpenRouter Business or Enterprise plan, and only
-                some models are available.{" "}
-                <Button variant="link" size="sm" asChild className="px-0">
-                  <a
-                    href="https://openrouter.ai/docs/guides/features/in-region-routing"
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Learn more
-                  </a>
-                </Button>
-              </span>
               <FormMessage />
             </FormItem>
           )}
