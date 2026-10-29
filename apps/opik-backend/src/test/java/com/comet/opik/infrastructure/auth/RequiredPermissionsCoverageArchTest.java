@@ -100,7 +100,12 @@ class RequiredPermissionsCoverageArchTest {
             // already decided that by the time the handler runs, so the body only echoes the outcome. Demanding
             // a permission to ask the question would be circular — and would change a 204 into a 403 that means
             // the opposite of what the caller asked.
-            "AuthenticationResource.checkAccess");
+            "AuthenticationResource.checkAccess",
+            // Answers 501 until guardrail checks are implemented. It will run checks on the caller's text and write
+            // nothing; its gate is not a workspace role but the organization's guardrails enablement, behind a
+            // backend toggle. Any member of an enabled workspace may call it, as any member may log the traces the
+            // checks belong to.
+            "GuardrailsResource.validateGuardrails");
 
     /**
      * How many unannotated mutating endpoints existed when this rule landed. A fact about history, so it only

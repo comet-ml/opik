@@ -122,6 +122,9 @@ public class OpikConfiguration extends JobConfiguration {
     private S3Config s3Config = new S3Config();
 
     @Valid @NotNull @JsonProperty
+    private GuardrailsConfig guardrails = new GuardrailsConfig();
+
+    @Valid @NotNull @JsonProperty
     private PythonEvaluatorConfig pythonEvaluator = new PythonEvaluatorConfig();
 
     @Valid @NotNull @JsonProperty
