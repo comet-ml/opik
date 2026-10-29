@@ -147,13 +147,29 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
                     self._replay_manager.unregister_message(message.message_id)  # type: ignore
                 return
             elif exception.status_code == 429:
-                if exception.headers is not None:
-                    rate_limiter = rate_limit.parse_rate_limit(exception.headers)
-                    if rate_limiter is not None:
-                        raise exceptions.OpikCloudRequestsRateLimited(
-                            headers=exception.headers,
-                            retry_after=rate_limiter.retry_after(),
-                        )
+                headers = exception.headers or {}
+                rate_limiter = rate_limit.parse_rate_limit(headers)
+                retry_after = (
+                    rate_limiter.retry_after()
+                    if rate_limiter is not None
+                    else rate_limit.parse_retry_after(headers)
+                )
+                if retry_after is not None:
+                    raise exceptions.OpikCloudRequestsRateLimited(
+                        headers=headers,
+                        retry_after=retry_after,
+                    )
+                LOGGER.error(
+                    "Failed to process message: '%s' - rate limited (429) without a "
+                    "usable RateLimit-Reset or Retry-After header, the message is dropped.",
+                    message_type.__name__,
+                )
+                self._record_data_loss(
+                    message,
+                    data_loss.FailureReason.HTTP_CLIENT_ERROR,
+                    status_code=429,
+                    detail=str(exception),
+                )
             elif exception.status_code == 401:
                 LOGGER.error(
                     "Unauthorized message type '%s' processing request: %s",

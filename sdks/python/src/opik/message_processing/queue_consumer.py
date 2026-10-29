@@ -6,7 +6,7 @@ from typing import Optional
 
 from . import message_queue, messages
 from .processors import message_processors
-from .. import exceptions, _logging
+from .. import exceptions
 
 LOGGER = logging.getLogger(__name__)
 
@@ -78,12 +78,6 @@ class QueueConsumer(threading.Thread):
         self._processing_stopped = True
 
     def _push_message_back(self, message: messages.BaseMessage) -> None:
-        if self._message_queue.accept_put_without_discarding() is False:
-            _logging.log_once_at_level(
-                logging.WARNING,
-                "The message queue size limit has been reached. The current message has been returned to the queue, and the newest message has been discarded.",
-                logger=LOGGER,
-            )
         message.delivery_attempts += 1
         self._message_queue.put_back(message)
 

@@ -4,7 +4,7 @@ import time
 from typing import List, Optional
 
 from opik.file_upload import base_upload_manager
-from . import messages, message_queue, queue_consumer
+from . import data_loss, messages, message_queue, queue_consumer
 from .. import _logging
 from .. import synchronization
 from .preprocessing import (
@@ -26,6 +26,7 @@ class Streamer:
         batch_preprocessor: batching_preprocessor.BatchingPreprocessor,
         file_uploader: base_upload_manager.BaseFileUploadManager,
         fallback_replay_manager: replay_manager.ReplayManager,
+        data_loss_tracker: data_loss.DataLossTracker,
     ) -> None:
         self._lock = threading.RLock()
         self._message_queue = queue
@@ -34,10 +35,13 @@ class Streamer:
         self._batch_preprocessor = batch_preprocessor
         self._file_upload_manager = file_uploader
         self._fallback_replay_manager = fallback_replay_manager
+        self._data_loss_tracker = data_loss_tracker
 
         self._drain = False
 
         self._idle = True
+
+        self._message_queue.set_eviction_callback(self._on_message_evicted)
 
         self._start_queue_consumers()
         self._batch_preprocessor.start()
@@ -68,12 +72,6 @@ class Streamer:
 
                 # work with resulting message if not fully consumed by preprocessors
                 if preprocessed_message is not None:
-                    if self._message_queue.accept_put_without_discarding() is False:
-                        _logging.log_once_at_level(
-                            logging.WARNING,
-                            "The message queue size limit has been reached. The new message has been added to the queue, and the oldest message has been discarded.",
-                            logger=LOGGER,
-                        )
                     self._message_queue.put(preprocessed_message)
             except Exception as ex:
                 LOGGER.error(
@@ -97,8 +95,10 @@ class Streamer:
 
         Returns:
             Whether all data was flushed to the backend. Authoritative on a
-            ``flush=True`` close (the result of the internal ``flush(timeout)``);
-            ``False`` on ``flush=False`` (pending data is deliberately dropped).
+            ``flush=True`` close: ``False`` if the internal ``flush(timeout)``
+            timed out or messages were still parked for replay when the store was
+            torn down; ``False`` on ``flush=False`` (pending data is deliberately
+            dropped).
         """
         with self._lock:
             if self._drain:
@@ -119,7 +119,10 @@ class Streamer:
             # draining — `put()` drops everything once `_drain` is set. Tearing
             # either of those down first meant the messages parked by a temporary
             # server outage were deleted and then reported as a successful flush.
+            self._fallback_replay_manager.refresh_server_connection()
             flushed = self.flush(timeout)
+            # Whatever is still parked dies with the store, so it is data loss.
+            undelivered = self._record_undelivered_messages()
 
             # Only now stop accepting work and shut the machinery down.
             with self._lock:
@@ -131,7 +134,7 @@ class Streamer:
             # running while the queue drains, so close them at the very end.
             self._fallback_replay_manager.join(timeout)
             self._close_queue_consumers()
-            return flushed
+            return flushed and undelivered == 0
         else:
             with self._lock:
                 self._drain = True
@@ -224,6 +227,48 @@ class Streamer:
         LOGGER.debug(f"Streamer flushed completely: {flushed}")
 
         return flushed
+
+    def _record_undelivered_messages(self) -> int:
+        undelivered = 0
+        try:
+            for message in self._fallback_replay_manager.failed_messages():
+                self._data_loss_tracker.record(
+                    data_loss.FailedMessageInfo(
+                        message_type=type(message).__name__,
+                        reason=data_loss.FailureReason.UNDELIVERED_AT_SHUTDOWN,
+                        item_count=message.item_count,
+                    )
+                )
+                undelivered += 1
+        except Exception as ex:
+            LOGGER.error(
+                "Failed to count messages left undelivered at shutdown: %s",
+                ex,
+                exc_info=ex,
+            )
+
+        if undelivered > 0:
+            LOGGER.error(
+                "%d message(s) could not be delivered because the Opik server was "
+                "unreachable and were dropped at shutdown.",
+                undelivered,
+            )
+        return undelivered
+
+    def _on_message_evicted(self, message: messages.BaseMessage) -> None:
+        _logging.log_once_at_level(
+            logging.ERROR,
+            "The message queue size limit has been reached and messages are being "
+            "discarded. Discarded messages are reported by Opik.get_errors_report().",
+            logger=LOGGER,
+        )
+        self._data_loss_tracker.record(
+            data_loss.FailedMessageInfo(
+                message_type=type(message).__name__,
+                reason=data_loss.FailureReason.QUEUE_OVERFLOW,
+                item_count=message.item_count,
+            )
+        )
 
     def _all_done(self) -> bool:
         # `all_tasks_done()` is True only when every message accepted by
