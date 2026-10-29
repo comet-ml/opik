@@ -372,6 +372,8 @@ def test_threads_client_search_threads__paginates_by_thread_model_id(monkeypatch
     ]
     # Page 2 advanced past page 1's last thread_model_id (a UUID), not its `id`.
     assert requested_cursors == [None, PAGED_THREADS_JSON[1]["thread_model_id"]]
+
+
 # --- pagination must not be driven by the post-filter count ---------------
 
 
