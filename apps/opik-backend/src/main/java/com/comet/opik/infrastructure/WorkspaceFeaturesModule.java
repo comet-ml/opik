@@ -26,7 +26,6 @@ public class WorkspaceFeaturesModule extends DropwizardAwareModule<OpikConfigura
     public WorkspaceFeaturesService workspaceFeaturesService(
             @Config("authentication") AuthenticationConfig authentication,
             @Config("workspaceFeatures") WorkspaceFeaturesConfig config,
-            @Config("mcpOAuth") McpOAuthConfig mcpOAuth,
             @NonNull Client client,
             @NonNull RedissonReactiveClient redissonClient) {
 
@@ -41,6 +40,6 @@ public class WorkspaceFeaturesModule extends DropwizardAwareModule<OpikConfigura
                 "The property authentication.reactService.url must not be blank when authentication is enabled");
 
         return new RemoteWorkspaceFeaturesService(client, authentication.getReactService(), redissonClient,
-                config.getCacheTtl().toJavaDuration(), mcpOAuth.isEnabled());
+                config.getCacheTtl().toJavaDuration());
     }
 }
