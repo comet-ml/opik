@@ -29,6 +29,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -205,7 +206,10 @@ class GuardrailPolicyServiceImpl implements GuardrailPolicyService {
             var policies = new LinkedHashMap<UUID, GuardrailPolicy>();
             named.forEach(policy -> policies.put(policy.id(), policy));
             dao.findGlobal(workspaceId).forEach(policy -> policies.putIfAbsent(policy.id(), policy));
-            return List.copyOf(policies.values());
+            // Each query is in name order, but the two together are not; names are unique ignoring case.
+            return policies.values().stream()
+                    .sorted(Comparator.comparing(GuardrailPolicy::name, String.CASE_INSENSITIVE_ORDER))
+                    .toList();
         });
     }
 
