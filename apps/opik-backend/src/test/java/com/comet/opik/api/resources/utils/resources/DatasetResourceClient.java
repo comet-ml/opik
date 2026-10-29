@@ -593,6 +593,33 @@ public class DatasetResourceClient {
         }
     }
 
+    public Response callGetDatasetItemsWithExperimentItems(UUID datasetId, String experimentIds,
+            String datasetVersion, List<? extends Filter> filters, String apiKey, String workspaceName) {
+        var webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(datasetId.toString())
+                .path("items")
+                .path("experiments")
+                .path("items");
+
+        if (experimentIds != null) {
+            webTarget = webTarget.queryParam("experiment_ids", experimentIds);
+        }
+
+        if (StringUtils.isNotBlank(datasetVersion)) {
+            webTarget = webTarget.queryParam("dataset_version", datasetVersion);
+        }
+
+        if (CollectionUtils.isNotEmpty(filters)) {
+            webTarget = webTarget.queryParam("filters", toURLEncodedQueryParam(filters));
+        }
+
+        return webTarget
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+    }
+
     public ProjectStats getDatasetExperimentItemsStats(UUID datasetId, List<UUID> experimentIds,
             String apiKey, String workspaceName, List<ExperimentsComparisonFilter> filters) {
         var experimentIdsQueryParam = JsonUtils.writeValueAsString(experimentIds);
