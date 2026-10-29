@@ -3,10 +3,6 @@ package com.comet.opik.domain.llm;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 
-import javax.net.ssl.SSLHandshakeException;
-
-import java.net.SocketException;
-import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
@@ -21,8 +17,7 @@ public class ProviderFailures {
 
     /**
      * The failure's chain with every message dropped and its classes and stack frames kept, so a log still shows
-     * where a call failed. Each link names the class it stands for, a link already redacted included. A failure to
-     * reach the provider at all keeps its message too, see {@link #keepsMessage}.
+     * where a call failed. Each link names the class it stands for, a link already redacted included.
      */
     public static Throwable redacted(@NonNull Throwable throwable) {
         RedactedThrowable redacted = null;
@@ -62,34 +57,13 @@ public class ProviderFailures {
         return chain;
     }
 
-    /**
-     * Whether the link is a socket, name resolution or TLS handshake failure, whose message the JDK or OkHttp writes
-     * before anything is read from the provider, such as {@code Network is unreachable} or the address connected to.
-     * Only the JDK's own {@link UnknownHostException}: a subclass, such as the destination guard's refusal, describes
-     * how a user-supplied host resolves on our network.
-     */
-    private static boolean keepsMessage(Throwable link) {
-        return link.getMessage() != null && (link instanceof SocketException
-                || link instanceof SSLHandshakeException
-                || link.getClass() == UnknownHostException.class);
-    }
-
-    private static String redactedMessage(Throwable link) {
-        if (link instanceof RedactedThrowable redacted) {
-            return redacted.getMessage();
-        }
-        if (keepsMessage(link)) {
-            return "%s: %s".formatted(link.getClass().getName(), link.getMessage());
-        }
-        return link.getClass().getName();
-    }
-
-    /** Stands for a throwable of the class it names, without its message unless {@link #keepsMessage} keeps it. */
+    /** Stands for a throwable of the class it names, without its message. */
     static final class RedactedThrowable extends RuntimeException {
         private final String simpleName;
 
         RedactedThrowable(Throwable link, Throwable cause) {
-            super(redactedMessage(link), cause, false, true);
+            super(link instanceof RedactedThrowable redacted ? redacted.getMessage() : link.getClass().getName(),
+                    cause, false, true);
             this.simpleName = link instanceof RedactedThrowable redacted
                     ? redacted.simpleName
                     : link.getClass().getSimpleName();
