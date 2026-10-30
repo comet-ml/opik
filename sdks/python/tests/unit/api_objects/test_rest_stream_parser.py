@@ -259,6 +259,39 @@ def test_read_and_parse_full_stream__null_cursor__stops_instead_of_looping():
     assert len(threads) == 2
 
 
+def test_read_and_parse_full_stream__null_cursor_after_non_null__stops_without_duplicating():
+    # A page whose last record carries a NULL cursor after non-null ones:
+    # the NULL position must win over the last non-null cursor, or the next
+    # request re-fetches the NULL rows and returns them twice.
+    source = _PagedSource(
+        pages=[
+            _ndjson(
+                {
+                    "id": "thread_1",
+                    "thread_model_id": "0195f6f1-9da2-7630-b285-60cf5580372f",
+                    "project_id": "0195f6f1-9c82-751f-a1ad-54fec4b5c7d8",
+                },
+                {
+                    "id": "thread_2",
+                    "thread_model_id": None,
+                    "project_id": "0195f6f1-9c82-751f-a1ad-54fec4b5c7d8",
+                },
+            ),
+        ]
+    )
+
+    threads = rest_stream_parser.read_and_parse_full_stream(
+        read_source=source,
+        parsed_item_class=trace_thread_types.TraceThread,
+        max_results=None,
+        max_endpoint_batch_size=2,
+        cursor_field="thread_model_id",
+    )
+
+    assert [thread.id for thread in threads] == ["thread_1", "thread_2"]
+    assert source.requested == [(2, None)]
+
+
 def test_read_and_parse_full_stream__repeated_cursor__stops_instead_of_looping(
     spans_stream_source,
 ):
