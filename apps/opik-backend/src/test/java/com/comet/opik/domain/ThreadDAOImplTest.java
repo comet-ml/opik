@@ -9,6 +9,8 @@ import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.infrastructure.FilterUtils;
+import com.fasterxml.uuid.Generators;
+import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -29,6 +31,8 @@ import java.util.stream.Stream;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ThreadDAOImplTest {
+
+    private static final TimeBasedEpochGenerator UUID_GENERATOR = Generators.timeBasedEpochGenerator();
 
     @Test
     @DisplayName("a multi-element stream collapses to the first thread (singleOrEmpty would throw here)")
@@ -180,9 +184,9 @@ class ThreadDAOImplTest {
         @DisplayName("the list, page-ids, count and stats templates render the same latest-version search block")
         void allTemplatesRenderTheSameSearchBlock() {
             var criteria = TraceSearchCriteria.builder()
-                    .projectId(UUID.randomUUID())
-                    .uuidFromTime(UUID.randomUUID())
-                    .uuidToTime(UUID.randomUUID())
+                    .projectId(UUID_GENERATOR.generate())
+                    .uuidFromTime(UUID_GENERATOR.generate())
+                    .uuidToTime(UUID_GENERATOR.generate())
                     .searchText(RandomStringUtils.secure().nextAlphanumeric(10))
                     .build();
 

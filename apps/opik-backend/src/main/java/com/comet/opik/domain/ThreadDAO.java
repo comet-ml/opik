@@ -1970,13 +1970,14 @@ class ThreadDAOImpl implements ThreadDAO {
                             if (isPagePushdownEligible(finalTemplate, criteria)) {
                                 finalTemplate.add("page_pushdown", true);
                                 // The page's threads are the search's, and the list aggregates all their traces
-                                var pageCriteria = criteria.toBuilder().searchText(null).build();
+                                var threadAggregationCriteria = criteria.toBuilder().searchText(null).build();
                                 return findPageThreadIds(criteria, sortFields, size, offset, connection,
                                         workspaceId)
                                         .flatMap(pageThreadIds -> pageThreadIds.isEmpty()
                                                 ? Mono.just(new TraceThread.TraceThreadPage(page, 0, count, List.of(),
                                                         traceThreadSortingFactory.getSortableFields()))
-                                                : findThreadPage(finalTemplate, pageCriteria, size, page, count,
+                                                : findThreadPage(finalTemplate, threadAggregationCriteria, size, page,
+                                                        count,
                                                         connection, workspaceId, hasDynamicKeys,
                                                         statement -> statement.bind("page_thread_ids",
                                                                 pageThreadIds.toArray(String[]::new))));
