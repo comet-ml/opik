@@ -36,6 +36,9 @@ import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescrip
 import {
   convertCustomProviderModels,
   buildComposedProviderKey,
+  DEFAULT_OPENROUTER_REGION,
+  getOpenRouterBaseUrl,
+  openRouterRegionFromBaseUrl,
 } from "@/lib/provider";
 import { useProviderOptions } from "@/hooks/useProviderOptions";
 import ProviderSelectionStep from "@/v2/pages-shared/llm/SetupProviderDialog/ProviderSelectionStep";
@@ -149,6 +152,8 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
       openaiPipelineMode: normalizeOpenAiPipelineMode(
         providerKey?.configuration?.openai_pipeline_mode,
       ),
+      openRouterRegion: openRouterRegionFromBaseUrl(providerKey?.base_url),
+      openRouterBaseUrl: providerKey?.base_url ?? "",
       ...authConfigToFormValues(providerKey?.auth_config),
     } as AIProviderFormType,
   });
@@ -199,6 +204,8 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
       authHeaderName: "",
       suppressDefaultAuth: false,
       openaiPipelineMode: DEFAULT_OPENAI_PIPELINE_MODE,
+      openRouterRegion: DEFAULT_OPENROUTER_REGION,
+      openRouterBaseUrl: "",
       ...EMPTY_AUTH_FORM_VALUES,
     });
     setStep("select");
@@ -260,6 +267,12 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
         ),
       );
 
+      form.setValue(
+        "openRouterRegion",
+        openRouterRegionFromBaseUrl(providerData?.base_url),
+      );
+      form.setValue("openRouterBaseUrl", providerData?.base_url ?? "");
+
       const authFormValues = authConfigToFormValues(providerData?.auth_config);
       form.setValue("authMode", authFormValues.authMode);
       form.setValue("authTokenUrl", authFormValues.authTokenUrl);
@@ -303,6 +316,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
     const isBedrock = provider === PROVIDER_TYPE.BEDROCK;
     const isOllama = provider === PROVIDER_TYPE.OLLAMA;
     const isOpenAi = provider === PROVIDER_TYPE.OPEN_AI;
+    const isOpenRouter = provider === PROVIDER_TYPE.OPEN_ROUTER;
     const isCustomLike = isCustom || isBedrock || isOllama;
 
     const queryParamsArray = form.getValues("queryParams");
@@ -349,6 +363,14 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
         );
 
     const storedProvider = providerKey ?? calculatedProviderKey;
+
+    const openRouterBaseUrl = isOpenRouter
+      ? getOpenRouterBaseUrl(
+          form.getValues("openRouterRegion") ?? DEFAULT_OPENROUTER_REGION,
+          form.getValues("openRouterBaseUrl"),
+        )
+      : undefined;
+    const baseUrl = isCustomLike ? url : openRouterBaseUrl;
     const authConfig = isCustomLike
       ? // the isCustomLike guard means the union's custom member (which carries the
         // auth fields) is the live one; TS can't narrow a union by that boolean
@@ -369,7 +391,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
         providerKey: {
           id: providerKey?.id ?? calculatedProviderKey?.id,
           apiKey: effectiveApiKey,
-          base_url: isCustomLike ? url : undefined,
+          base_url: baseUrl,
           ...(configuration && { configuration }),
           ...(headers !== undefined && { headers }),
           ...(authConfig !== undefined && { auth_config: authConfig }),
@@ -384,7 +406,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
         providerKey: {
           apiKey: effectiveApiKey,
           provider,
-          base_url: isCustomLike ? url : undefined,
+          base_url: baseUrl,
           provider_name: isCustomLike ? providerName : undefined,
           ...(configuration && { configuration }),
           ...(headers !== undefined && { headers }),

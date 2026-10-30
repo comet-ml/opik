@@ -5,6 +5,7 @@ import {
   PROVIDER_MODEL_TYPE,
   OPENAI_PIPELINE_MODE_VALUES,
   OpenAiPipelineMode,
+  OpenRouterRegion,
 } from "@/types/providers";
 import {
   CUSTOM_PROVIDER_MODEL_PREFIX,
@@ -142,3 +143,33 @@ export const normalizeOpenAiPipelineMode = (
     ? (lowered as OpenAiPipelineMode)
     : DEFAULT_OPENAI_PIPELINE_MODE;
 };
+
+export const DEFAULT_OPENROUTER_REGION: OpenRouterRegion = "global";
+
+// "global" is an empty base_url, which makes the backend use the deployment's LLM_PROVIDER_OPENROUTER_URL.
+const OPENROUTER_REGION_BASE_URLS: Record<
+  Exclude<OpenRouterRegion, "custom">,
+  string
+> = {
+  global: "",
+  us: "https://us.openrouter.ai/api/v1",
+  eu: "https://eu.openrouter.ai/api/v1",
+};
+
+export const openRouterRegionFromBaseUrl = (
+  baseUrl: string | undefined | null,
+): OpenRouterRegion => {
+  const normalized = (baseUrl ?? "").trim().replace(/\/+$/, "");
+  if (!normalized) return "global";
+  if (normalized === OPENROUTER_REGION_BASE_URLS.us) return "us";
+  if (normalized === OPENROUTER_REGION_BASE_URLS.eu) return "eu";
+  return "custom";
+};
+
+export const getOpenRouterBaseUrl = (
+  region: OpenRouterRegion,
+  customBaseUrl: string | undefined,
+): string =>
+  region === "custom"
+    ? (customBaseUrl ?? "").trim()
+    : OPENROUTER_REGION_BASE_URLS[region];

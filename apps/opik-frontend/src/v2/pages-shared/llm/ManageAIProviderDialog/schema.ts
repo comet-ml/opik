@@ -5,6 +5,7 @@ import {
   AUTH_SEND_AS_VALUES,
   OPENAI_PIPELINE_MODE_VALUES,
   OpenAiPipelineMode,
+  OPENROUTER_REGION_VALUES,
   PROVIDER_TYPE,
 } from "@/types/providers";
 import {
@@ -106,12 +107,25 @@ export const CloudAIProviderDetailsFormSchema = z
     // OpenAI-only: which pipeline the backend routes the request through. Schema-level optional
     // because non-OpenAI cloud providers ignore it. The dialog defaults to chat_completions_api.
     openaiPipelineMode: z.enum(OPENAI_PIPELINE_MODE_VALUES).optional(),
+    openRouterRegion: z.enum(OPENROUTER_REGION_VALUES).optional(),
+    openRouterBaseUrl: z.string().optional(),
     // Only offered (and sent) for PROVIDERS_WITH_HEADERS; ignored for other cloud providers.
     headers: headersArraySchema,
   })
   .superRefine((data, ctx) => {
     if (supportsProviderHeaders(data.provider)) {
       validateHeaders(data.headers, ctx, BUILT_IN_PROVIDER_RESERVED_HEADERS);
+    }
+    if (
+      data.provider === PROVIDER_TYPE.OPEN_ROUTER &&
+      data.openRouterRegion === "custom" &&
+      !z.string().trim().url().safeParse(data.openRouterBaseUrl).success
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Base URL must be a valid URL",
+        path: ["openRouterBaseUrl"],
+      });
     }
   });
 

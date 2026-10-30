@@ -3,7 +3,11 @@ package com.comet.opik.infrastructure.llm.openrouter.decisions;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.RetriableHttpClient;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
+import com.comet.opik.infrastructure.llm.customllm.ProviderBaseUrlGuard;
+import com.comet.opik.infrastructure.net.DestinationGuardDnsResolver;
+import com.comet.opik.infrastructure.net.LoggableUrl;
 import com.comet.opik.utils.RetryUtils;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.ServerErrorException;
@@ -15,6 +19,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.glassfish.jersey.client.ClientProperties;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
@@ -26,10 +31,6 @@ import java.util.Set;
  * Client for the OpenRouter Decisions API ({@code POST /api/alpha/decisions}), which serves decisions models
  * such as TypeSafe Jev. Those models aren't reachable through chat completions, so there is no LangChain4j
  * client for them.
- *
- * <p>Requests always go to the configured {@code openRouterDecisionsUrl}, never to the {@code baseUrl} of the
- * workspace's OpenRouter provider: that base URL points at {@code /api/v1}, and the Decisions API lives outside
- * it, so a workspace that routes OpenRouter chat traffic through a proxy still calls Jev on openrouter.ai.
  *
  * <p>Errors carry the upstream status: 4xx as {@link ClientErrorException}, 5xx as {@link ServerErrorException}
  * and anything else (e.g. a redirect from a misconfigured URL) as {@link WebApplicationException}, so the
@@ -47,6 +48,8 @@ public class OpenRouterDecisionsClient {
     private static final int DEFAULT_MAX_ATTEMPTS = 3;
     private static final Duration MAX_BACKOFF = Duration.ofSeconds(10);
     private static final int MAX_ERROR_MESSAGE_LENGTH = 512;
+    private static final String CHAT_API_SUFFIX = "/v1";
+    private static final String DECISIONS_API_SUFFIX = "/alpha/decisions";
 
     /**
      * Retried in-process on top of the 503/504 that {@link RetriableHttpClient} already retries: rate limit, bad
@@ -62,12 +65,24 @@ public class OpenRouterDecisionsClient {
 
     private final @NonNull RetriableHttpClient client;
     private final @NonNull LlmProviderClientConfig llmProviderClientConfig;
+    private final @NonNull ProviderBaseUrlGuard providerBaseUrlGuard;
 
     public Mono<DecisionsResponse> decide(@NonNull DecisionsRequest request,
             @NonNull LlmProviderClientApiConfig config) {
+        var openRouterUrl = StringUtils.isNotBlank(config.baseUrl())
+                ? config.baseUrl()
+                : llmProviderClientConfig.getOpenRouterUrl();
+        String decisionsUrl;
+        try {
+            decisionsUrl = decisionsUrl(openRouterUrl);
+        } catch (BadRequestException invalidUrl) {
+            return Mono.error(invalidUrl);
+        }
         var httpRequest = RetriableHttpClient.Request.<DecisionsResponse>builder()
-                .requestFunction(httpClient -> httpClient.target(llmProviderClientConfig.getOpenRouterDecisionsUrl()))
+                .requestFunction(httpClient -> httpClient.target(decisionsUrl))
                 .requestCustomizer(builder -> {
+                    builder.property(ClientProperties.FOLLOW_REDIRECTS, false)
+                            .property(DestinationGuardDnsResolver.PROPERTY, providerBaseUrlGuard.destinationGuard());
                     Optional.ofNullable(config.headers()).orElse(Map.of()).forEach(builder::header);
                     builder.header(HttpHeaders.AUTHORIZATION, "Bearer " + config.apiKey());
                 })
@@ -83,6 +98,16 @@ public class OpenRouterDecisionsClient {
                 .responseFunction(this::processResponse)
                 .build();
         return client.executePostWithRetry(httpRequest);
+    }
+
+    static String decisionsUrl(@NonNull String openRouterUrl) {
+        var url = StringUtils.stripEnd(openRouterUrl.trim(), "/");
+        if (!url.endsWith(CHAT_API_SUFFIX)) {
+            throw new BadRequestException(
+                    "OpenRouter base URL '%s' must end with '%s' to use decisions models".formatted(
+                            LoggableUrl.of(openRouterUrl), CHAT_API_SUFFIX));
+        }
+        return StringUtils.removeEnd(url, CHAT_API_SUFFIX) + DECISIONS_API_SUFFIX;
     }
 
     private DecisionsResponse processResponse(Response response) {
