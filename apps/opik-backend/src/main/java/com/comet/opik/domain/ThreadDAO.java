@@ -467,21 +467,21 @@ class ThreadDAOImpl implements ThreadDAO {
                 GROUP BY thread_id
             ), thread_messages AS (
                 SELECT
-                    m.thread_id AS thread_id,
-                    anyIf(p.input, m.is_first) AS first_message,
-                    anyIf(p.output, NOT m.is_first) AS last_message,
-                    anyIf(p.truncated_input, m.is_first) AS truncated_first_message,
-                    anyIf(p.truncated_output, NOT m.is_first) AS truncated_last_message,
-                    anyIf(p.input_length, m.is_first) AS first_message_length,
-                    anyIf(p.output_length, NOT m.is_first) AS last_message_length,
-                    anyIf(p.truncation_threshold, m.is_first) AS first_message_truncation_threshold,
-                    anyIf(p.truncation_threshold, NOT m.is_first) AS last_message_truncation_threshold
+                    message_traces.thread_id AS thread_id,
+                    anyIf(message_payloads.input, message_traces.is_first) AS first_message,
+                    anyIf(message_payloads.output, NOT message_traces.is_first) AS last_message,
+                    anyIf(message_payloads.truncated_input, message_traces.is_first) AS truncated_first_message,
+                    anyIf(message_payloads.truncated_output, NOT message_traces.is_first) AS truncated_last_message,
+                    anyIf(message_payloads.input_length, message_traces.is_first) AS first_message_length,
+                    anyIf(message_payloads.output_length, NOT message_traces.is_first) AS last_message_length,
+                    anyIf(message_payloads.truncation_threshold, message_traces.is_first) AS first_message_truncation_threshold,
+                    anyIf(message_payloads.truncation_threshold, NOT message_traces.is_first) AS last_message_truncation_threshold
                 FROM (
                     SELECT tupleElement(message_trace, 1) AS thread_id, tupleElement(message_trace, 2) AS trace_id, tupleElement(message_trace, 3) AS is_first
                     FROM (
                         SELECT arrayJoin(arrayFlatten(arrayMap(t -> [(t.1, t.2.1, true), (t.1, t.3.1, false)], (SELECT groupArray((thread_id, first_trace, last_trace)) FROM thread_message_traces)))) AS message_trace
                     )
-                ) AS m
+                ) AS message_traces
                 INNER JOIN (
                     SELECT id, input, output, truncated_input, truncated_output, input_length, output_length, truncation_threshold
                     FROM traces
@@ -491,8 +491,8 @@ class ThreadDAOImpl implements ThreadDAO {
                       AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT arrayJoin(arrayFlatten(arrayMap(t -> [t.2.2, t.3.2], (SELECT groupArray((thread_id, first_trace, last_trace)) FROM thread_message_traces)))))
                     ORDER BY last_updated_at DESC
                     LIMIT 1 BY id
-                ) AS p ON p.id = m.trace_id
-                GROUP BY m.thread_id
+                ) AS message_payloads ON message_payloads.id = message_traces.trace_id
+                GROUP BY message_traces.thread_id
             ), trace_threads_final AS (
                 SELECT
                     workspace_id,
