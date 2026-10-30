@@ -4,7 +4,7 @@ from agents import tracing
 import logging
 
 import opik
-from opik import context_storage, tracing_runtime_config
+from opik import analytics, context_storage, tracing_runtime_config
 from opik.api_objects.span import span_data
 from opik.api_objects.trace import trace_data
 from opik.decorator import span_creation_handler, arguments_helpers
@@ -22,6 +22,7 @@ class OpikTracingProcessor(tracing.TracingProcessor):
         project_name: Optional[str] = None,
         **kwargs: Any,
     ) -> None:
+        analytics.track_event("integration", "openai_agents")
         super().__init__(**kwargs)
         # NOTE: The OpikTracingProcessor maps openai traces/spans to
         # opik traces/spans. Openai traces may be logged as opik spans.

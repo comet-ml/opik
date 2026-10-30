@@ -6,6 +6,7 @@ import together
 from opik.types import LLMProvider
 
 from . import chat_completion_chunks_aggregator, together_chat_completions_decorator
+from ... import analytics
 
 TogetherClient = TypeVar("TogetherClient", together.Together, together.AsyncTogether)
 
@@ -35,6 +36,7 @@ def track_together(
     Returns:
         The Together client with integrated Opik tracking.
     """
+    analytics.track_event("integration", "together")
     if hasattr(together_client, "opik_tracked"):
         return together_client
 
