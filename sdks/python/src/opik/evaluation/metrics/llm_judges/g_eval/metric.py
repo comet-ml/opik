@@ -30,21 +30,6 @@ def _freeze_for_cache(value: Any) -> Any:
     return value
 
 
-def _provider_kwargs(log_probs: bool) -> Dict[str, Any]:
-    provider_kwargs: Dict[str, Any] = {"response_format": GEvalScoreFormat}
-    if log_probs:
-        provider_kwargs["logprobs"] = True
-        provider_kwargs["top_logprobs"] = 20
-    return provider_kwargs
-
-
-def _refuses_log_probs(error: Exception) -> bool:
-    # LiteLLM's model map lists logprobs for some models whose API refuses them
-    # (e.g. gemini-3.5-flash-lite on Vertex AI), so the refusal is the only
-    # reliable signal.
-    return "logprob" in str(error).lower()
-
-
 class GEval(base_metric.BaseMetric):
     """
     Generalised evaluation metric that prompts an LLM to grade another LLM output.
@@ -157,12 +142,7 @@ class GEval(base_metric.BaseMetric):
                 model_name=model, track=self.track, **model_kwargs
             )
 
-        if (
-            hasattr(self._model, "supported_params")
-            and "logprobs" in self._model.supported_params
-            and "top_logprobs" in self._model.supported_params
-        ):
-            self._log_probs_supported = True
+        self._log_probs_supported = self._model.supported_features.logprobs
 
     @classmethod
     def _get_cached_chain_of_thought(
@@ -236,15 +216,13 @@ class GEval(base_metric.BaseMetric):
             input=output,
         )
 
-        if isinstance(self._model, models.LiteLLMChatModel):
-            log_probs = self._log_probs_supported
+        if self._log_probs_supported:
             try:
-                return self._score_with_provider_response(messages, log_probs)
-            except exceptions.BaseLLMError as error:
-                if not (log_probs and _refuses_log_probs(error)):
+                return self._score_with_log_probs(messages)
+            except exceptions.UnsupportedParameterError as error:
+                if error.param != "logprobs":
                     raise
                 self._log_probs_supported = False
-            return self._score_with_provider_response(messages, log_probs=False)
 
         message = self._model.generate_chat_completion(
             messages=messages, response_format=GEvalScoreFormat
@@ -252,32 +230,32 @@ class GEval(base_metric.BaseMetric):
 
         return parser.parse_model_output_string(message["content"], self.name)
 
-    def _score_with_provider_response(
-        self, messages: List[base_model.ConversationDict], log_probs: bool
+    def _score_with_log_probs(
+        self, messages: List[base_model.ConversationDict]
     ) -> score_result.ScoreResult:
         with base_model.get_provider_response(
             model_provider=self._model,
             messages=cast(List[Dict[str, Any]], list(messages)),
-            **_provider_kwargs(log_probs),
+            response_format=GEvalScoreFormat,
+            logprobs=True,
+            top_logprobs=20,
         ) as model_output:
             return parser.parse_litellm_model_output(
-                content=model_output,
-                name=self.name,
-                log_probs_supported=log_probs,
+                content=model_output, name=self.name, log_probs_supported=True
             )
 
-    async def _ascore_with_provider_response(
-        self, messages: List[base_model.ConversationDict], log_probs: bool
+    async def _ascore_with_log_probs(
+        self, messages: List[base_model.ConversationDict]
     ) -> score_result.ScoreResult:
         async with base_model.aget_provider_response(
             model_provider=self._model,
             messages=cast(List[Dict[str, Any]], list(messages)),
-            **_provider_kwargs(log_probs),
+            response_format=GEvalScoreFormat,
+            logprobs=True,
+            top_logprobs=20,
         ) as model_output:
             return parser.parse_litellm_model_output(
-                content=model_output,
-                name=self.name,
-                log_probs_supported=log_probs,
+                content=model_output, name=self.name, log_probs_supported=True
             )
 
     async def ascore(
@@ -296,15 +274,13 @@ class GEval(base_metric.BaseMetric):
             input=output,
         )
 
-        if isinstance(self._model, models.LiteLLMChatModel):
-            log_probs = self._log_probs_supported
+        if self._log_probs_supported:
             try:
-                return await self._ascore_with_provider_response(messages, log_probs)
-            except exceptions.BaseLLMError as error:
-                if not (log_probs and _refuses_log_probs(error)):
+                return await self._ascore_with_log_probs(messages)
+            except exceptions.UnsupportedParameterError as error:
+                if error.param != "logprobs":
                     raise
                 self._log_probs_supported = False
-            return await self._ascore_with_provider_response(messages, log_probs=False)
 
         message = await self._model.agenerate_chat_completion(
             messages=messages, response_format=GEvalScoreFormat

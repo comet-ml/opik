@@ -235,6 +235,12 @@ class EmptyLLMResponseError(BaseLLMError):
     """
 
 
+class UnsupportedParameterError(BaseLLMError):
+    def __init__(self, message: str, param: str) -> None:
+        super().__init__(message)
+        self.param = param
+
+
 class SearchTimeoutError(OpikException):
     """Exception raised when a search times out."""
 

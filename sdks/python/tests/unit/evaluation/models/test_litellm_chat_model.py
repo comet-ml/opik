@@ -863,6 +863,108 @@ def test_litellm_chat_model__supported_features__response_format_with_tools_refu
     assert model.supported_features.response_format_with_tools is expected
 
 
+@pytest.mark.parametrize(
+    "supported_params,expected",
+    [
+        (["logprobs", "top_logprobs"], True),
+        (["logprobs"], False),
+        (["temperature"], False),
+    ],
+)
+def test_litellm_chat_model__supported_features__logprobs_follow_the_model_map(
+    monkeypatch, supported_params, expected
+):
+    _install_litellm_stub(monkeypatch, supported_params=supported_params)
+
+    model = litellm_chat_model.LiteLLMChatModel(model_name="gpt-4o")
+
+    assert model.supported_features.logprobs is expected
+
+
+def _install_refusing_litellm_stub(monkeypatch, error_text):
+    stub = _install_litellm_stub(
+        monkeypatch, supported_params=["logprobs", "top_logprobs"]
+    )
+
+    def completion(model, messages, **kwargs):
+        raise RuntimeError(error_text)
+
+    async def acompletion(model, messages, **kwargs):
+        raise RuntimeError(error_text)
+
+    stub.completion = completion
+    stub.acompletion = acompletion
+
+
+_LOGPROBS_REFUSAL = "VertexAIException - Logprobs is not supported for this model"
+
+
+def test_litellm_chat_model__provider_refuses_sent_logprobs__unsupported_parameter_error(
+    monkeypatch,
+):
+    from opik import exceptions
+
+    _install_refusing_litellm_stub(monkeypatch, _LOGPROBS_REFUSAL)
+    model = litellm_chat_model.LiteLLMChatModel(
+        model_name="vertex_ai/gemini-3.5-flash-lite"
+    )
+
+    with pytest.raises(exceptions.UnsupportedParameterError) as exc_info:
+        model.generate_provider_response(
+            messages=[{"role": "user", "content": "hi"}],
+            logprobs=True,
+            top_logprobs=20,
+            __opik_retries=1,
+        )
+
+    assert exc_info.value.param == "logprobs"
+
+
+@pytest.mark.asyncio
+async def test_litellm_chat_model__provider_refuses_sent_logprobs_async__unsupported_parameter_error(
+    monkeypatch,
+):
+    from opik import exceptions
+
+    _install_refusing_litellm_stub(monkeypatch, _LOGPROBS_REFUSAL)
+    model = litellm_chat_model.LiteLLMChatModel(
+        model_name="vertex_ai/gemini-3.5-flash-lite"
+    )
+
+    with pytest.raises(exceptions.UnsupportedParameterError) as exc_info:
+        await model.agenerate_provider_response(
+            messages=[{"role": "user", "content": "hi"}],
+            logprobs=True,
+            top_logprobs=20,
+            __opik_retries=1,
+        )
+
+    assert exc_info.value.param == "logprobs"
+
+
+@pytest.mark.parametrize(
+    "sent_kwargs,error_text",
+    [
+        ({"logprobs": True, "top_logprobs": 20}, "RateLimitError: slow down"),
+        ({}, _LOGPROBS_REFUSAL),
+    ],
+)
+def test_litellm_chat_model__error_is_not_a_refusal_of_a_sent_param__raised_unchanged(
+    monkeypatch, sent_kwargs, error_text
+):
+    _install_refusing_litellm_stub(monkeypatch, error_text)
+    model = litellm_chat_model.LiteLLMChatModel(
+        model_name="vertex_ai/gemini-3.5-flash-lite"
+    )
+
+    with pytest.raises(RuntimeError, match=error_text):
+        model.generate_provider_response(
+            messages=[{"role": "user", "content": "hi"}],
+            __opik_retries=1,
+            **sent_kwargs,
+        )
+
+
 def test_litellm_chat_model_keeps_seed_when_provider_supports_it(monkeypatch):
     """Counterpart to the drop test: when `seed` IS in the provider's
     supported set (e.g. OpenAI), it must round-trip through to the
@@ -1322,8 +1424,8 @@ def test_geval__provider_refuses_logprobs__retried_once_without_them(monkeypatch
     def fake_get_provider_response(model_provider, messages, **kwargs):
         calls.append(kwargs)
         if kwargs.get("logprobs"):
-            raise exceptions.BaseLLMError(
-                "litellm.BadRequestError: VertexAIException - Logprobs is not supported for this model"
+            raise exceptions.UnsupportedParameterError(
+                "Logprobs is not supported for this model", param="logprobs"
             )
         yield SimpleNamespace(choices=[_GEVAL_JSON_CHOICE])
 
@@ -1369,6 +1471,33 @@ def test_geval__provider_error_not_about_logprobs__raised_without_retry(monkeypa
     assert len([call for call in calls if call.get("response_format")]) == 1
 
 
+def test_geval__provider_refuses_another_param__raised_without_retry(monkeypatch):
+    from opik import exceptions
+
+    _install_litellm_stub(
+        monkeypatch, supported_params=["logprobs", "top_logprobs", "response_format"]
+    )
+    calls = []
+
+    @contextmanager
+    def fake_get_provider_response(model_provider, messages, **kwargs):
+        calls.append(kwargs)
+        if kwargs.get("response_format"):
+            raise exceptions.UnsupportedParameterError(
+                "seed is not supported", param="seed"
+            )
+        yield SimpleNamespace(choices=[{"message": {"content": "steps"}}])
+
+    monkeypatch.setattr(base_model, "get_provider_response", fake_get_provider_response)
+    metric = g_eval.GEval(
+        task_introduction="intro", evaluation_criteria="criteria", model="gpt-4o"
+    )
+
+    with pytest.raises(exceptions.UnsupportedParameterError):
+        metric.score("{}")
+    assert len([call for call in calls if call.get("response_format")]) == 1
+
+
 @pytest.mark.asyncio
 async def test_geval__provider_refuses_logprobs_async__retried_once_without_them(
     monkeypatch,
@@ -1384,7 +1513,9 @@ async def test_geval__provider_refuses_logprobs_async__retried_once_without_them
     async def fake_aget_provider_response(model_provider, messages, **kwargs):
         calls.append(kwargs)
         if kwargs.get("logprobs"):
-            raise exceptions.BaseLLMError("Logprobs is not supported for this model")
+            raise exceptions.UnsupportedParameterError(
+                "Logprobs is not supported for this model", param="logprobs"
+            )
         yield SimpleNamespace(choices=[_GEVAL_JSON_CHOICE])
 
     monkeypatch.setattr(
@@ -1422,7 +1553,9 @@ async def test_geval__concurrent_calls_refused_logprobs__each_retried_without_th
             if len([call for call in calls if call.get("logprobs")]) == 2:
                 both_sent.set()
             await both_sent.wait()
-            raise exceptions.BaseLLMError("Logprobs is not supported for this model")
+            raise exceptions.UnsupportedParameterError(
+                "Logprobs is not supported for this model", param="logprobs"
+            )
         yield SimpleNamespace(choices=[_GEVAL_JSON_CHOICE])
 
     monkeypatch.setattr(

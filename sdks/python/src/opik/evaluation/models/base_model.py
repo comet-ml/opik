@@ -53,12 +53,14 @@ class ConversationDict(TypedDict, total=False):
     name: str
 
 
-# Every feature defaults to True so a model subclassed outside Opik, which
-# doesn't override `supported_features`, keeps getting the requests it got before.
+# Each feature defaults to what callers did before the feature existed, so a
+# model subclassed outside Opik, which doesn't override `supported_features`,
+# keeps getting the requests it got before.
 @dataclasses.dataclass(frozen=True)
 class ModelFeatures:
     reasoning_effort: bool = True
     response_format_with_tools: bool = True
+    logprobs: bool = False
 
 
 class OpikBaseModel(abc.ABC):

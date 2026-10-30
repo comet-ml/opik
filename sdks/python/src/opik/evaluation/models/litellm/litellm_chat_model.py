@@ -56,6 +56,12 @@ def _log_warning(message: str, *args: Any) -> None:
         root_logger.log(logging.WARNING, message, *args)
 
 
+def _raise_if_param_refused(error: Exception, sent_params: Dict[str, Any]) -> None:
+    param = util.refused_param(error, sent_params)
+    if param is not None:
+        raise exceptions.UnsupportedParameterError(str(error), param=param) from error
+
+
 class LiteLLMChatModel(base_model.OpikBaseModel):
     def __init__(
         self,
@@ -138,6 +144,7 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
             response_format_with_tools=util.takes_response_format_with_tools(
                 self.model_name
             ),
+            logprobs={"logprobs", "top_logprobs"} <= self.supported_params,
         )
 
     def _ensure_supported_params(self, params: Set[str]) -> None:
@@ -470,12 +477,16 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
             wait=tenacity.wait_exponential(multiplier=0.5, min=0.5, max=8.0),
         )
 
-        return retrying(
-            self._litellm_completion,
-            model=self.model_name,
-            messages=messages,
-            **all_kwargs,
-        )
+        try:
+            return retrying(
+                self._litellm_completion,
+                model=self.model_name,
+                messages=messages,
+                **all_kwargs,
+            )
+        except Exception as error:
+            _raise_if_param_refused(error, all_kwargs)
+            raise
 
     async def agenerate_string(
         self,
@@ -562,11 +573,15 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
             wait=tenacity.wait_exponential(multiplier=0.5, min=0.5, max=8.0),
         )
 
-        async for attempt in retrying:
-            with attempt:
-                return await self._litellm_acompletion(
-                    model=self.model_name, messages=messages, **all_kwargs
-                )
+        try:
+            async for attempt in retrying:
+                with attempt:
+                    return await self._litellm_acompletion(
+                        model=self.model_name, messages=messages, **all_kwargs
+                    )
+        except Exception as error:
+            _raise_if_param_refused(error, all_kwargs)
+            raise
 
         raise exceptions.BaseLLMError(
             "Async LLM completion failed without raising an exception"

@@ -319,22 +319,22 @@ class LLMJudge(base.BaseSuiteEvaluator):
         if self._seed is not None:
             model_kwargs["seed"] = self._seed
 
-        self._effective_reasoning_effort = self._reasoning_effort
-        if self._effective_reasoning_effort is None:
-            self._model = models_factory.get(
-                model_name=self._model_name, track=self.track, **model_kwargs
-            )
+        reasoning_effort = self._reasoning_effort
+        if reasoning_effort is None:
             # A model that can't reason may reject any effort, so the default
-            # only goes to the models that take one.
-            if not self._model.supported_features.reasoning_effort:
-                return
-            self._effective_reasoning_effort = llm_judge_config.DEFAULT_REASONING_EFFORT
-
+            # only goes to the models that take one. The probe is built without
+            # the kwargs so their constructor warnings print once, from the real
+            # model below.
+            plain_model = models_factory.get(
+                model_name=self._model_name, track=self.track
+            )
+            if plain_model.supported_features.reasoning_effort:
+                reasoning_effort = llm_judge_config.DEFAULT_REASONING_EFFORT
+        if reasoning_effort is not None:
+            model_kwargs["reasoning_effort"] = reasoning_effort
+        self._effective_reasoning_effort = reasoning_effort
         self._model = models_factory.get(
-            model_name=self._model_name,
-            track=self.track,
-            reasoning_effort=self._effective_reasoning_effort,
-            **model_kwargs,
+            model_name=self._model_name, track=self.track, **model_kwargs
         )
 
     def score(

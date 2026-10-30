@@ -130,6 +130,15 @@ def takes_reasoning_effort(model_name: str) -> bool:
         return False
 
 
+def refused_param(error: Exception, sent_params: Dict[str, Any]) -> Optional[str]:
+    # LiteLLM's model map lists logprobs for some models whose API refuses them
+    # (e.g. gemini-3.5-flash-lite on Vertex AI), so the refusal is the only
+    # reliable signal.
+    if sent_params.get("logprobs") and "logprob" in str(error).lower():
+        return "logprobs"
+    return None
+
+
 def takes_response_format_with_tools(model_name: str) -> bool:
     vendor_model_name = model_name.rsplit("/", 1)[-1]
     return _RESPONSE_FORMAT_WITH_TOOLS_REFUSED.match(vendor_model_name) is None

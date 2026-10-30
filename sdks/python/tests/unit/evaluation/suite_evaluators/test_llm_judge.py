@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 from opik.evaluation.models import base_model, models_factory
+from opik.evaluation.models.litellm import litellm_chat_model
 from opik.evaluation.suite_evaluators import llm_judge
 from opik.evaluation.metrics import score_result
 from opik.evaluation.suite_evaluators.llm_judge import config as llm_judge_config
@@ -189,6 +190,22 @@ class TestLLMJudgeReasoningEffort:
         llm_judge.LLMJudge(assertions=["ok"], reasoning_effort="high", track=False)
 
         assert fake_models_factory.calls == [{"reasoning_effort": "high"}]
+
+    def test_init__model_drops_the_temperature__warns_once(self, monkeypatch):
+        monkeypatch.setattr(models_factory, "_MODEL_CACHE", {})
+        log_warning = Mock()
+        monkeypatch.setattr(litellm_chat_model, "_log_warning", log_warning)
+
+        llm_judge.LLMJudge(
+            assertions=["ok"], model="gpt-5-nano", temperature=0.2, track=False
+        )
+
+        temperature_warnings = [
+            call
+            for call in log_warning.call_args_list
+            if "only supports temperature=1" in call.args[0]
+        ]
+        assert len(temperature_warnings) == 1
 
     def test_to_config__explicit_effort__stored_for_the_backend_judge(self):
         evaluator = llm_judge.LLMJudge(
