@@ -180,5 +180,71 @@ describe("extractJsonContentOrRaise", () => {
         JSONParsingError
       );
     });
+
+    it("should parse a repeated identical JSON object", () => {
+      const repeatedObject =
+        '{"score": 0.8, "reason": "Good"}\n{"score": 0.8, "reason": "Good"}';
+      const result = extractJsonContentOrRaise(repeatedObject);
+
+      expect(result).toEqual({
+        score: 0.8,
+        reason: "Good",
+      });
+    });
+
+    it("should parse a repeated identical JSON object with different key order", () => {
+      const repeatedObject =
+        '{"score": 0.8, "reason": "Good"}\n{"reason": "Good", "score": 0.8}';
+      const result = extractJsonContentOrRaise(repeatedObject);
+
+      expect(result).toEqual({
+        score: 0.8,
+        reason: "Good",
+      });
+    });
+
+    it("should parse a repeated identical JSON object wrapped in prose", () => {
+      const repeatedObject =
+        'Result:\n{"score": 0.8, "reason": "Good"}\n{"score": 0.8, "reason": "Good"}';
+      const result = extractJsonContentOrRaise(repeatedObject);
+
+      expect(result).toEqual({
+        score: 0.8,
+        reason: "Good",
+      });
+    });
+
+    it("should throw error when repeated JSON objects differ", () => {
+      const differingObjects =
+        '{"score": 0.8, "reason": "Good"}\n{"score": 0.2, "reason": "Dup"}';
+
+      expect(() => extractJsonContentOrRaise(differingObjects)).toThrow(
+        JSONParsingError,
+      );
+    });
+
+    it("should keep true and 1 distinct when comparing repeated objects", () => {
+      const differingObjects = '{"flag": true}\n{"flag": 1}';
+
+      expect(() => extractJsonContentOrRaise(differingObjects)).toThrow(
+        JSONParsingError,
+      );
+    });
+
+    it("should parse a repeated object whose strings contain braces and escaped quotes", () => {
+      const object = '{"reason": "uses {braces} and \\"quotes\\" }"}';
+
+      expect(extractJsonContentOrRaise(`${object}\n${object}`)).toEqual({
+        reason: 'uses {braces} and "quotes" }',
+      });
+    });
+
+    it("should throw when a repeated object is followed by an unterminated one", () => {
+      const content = '{"score": 0.8}\n{"score": 0.8}\n{"score": {"value": 0.2}';
+
+      expect(() => extractJsonContentOrRaise(content)).toThrow(
+        JSONParsingError,
+      );
+    });
   });
 });

@@ -23,9 +23,11 @@ import { METRIC_TYPE, OPTIMIZER_TYPE } from "@/types/optimizations";
 import { LLM_MESSAGE_ROLE } from "@/types/llm";
 import { resolveEffort } from "@/lib/modelUtils";
 import {
+  getLatestProviderModelsSnapshot,
   ModelFlags,
   resetModelRegistryStoreForTesting,
   setLatestModelFlags,
+  setLatestProviderModelsSnapshot,
 } from "@/lib/modelRegistryStore";
 
 const VALID_CODE_METRIC = `
@@ -749,7 +751,7 @@ describe("convertOptimizationStudioToFormData — OpenRouter effort on re-run", 
     },
   };
 
-  const loadRegistryLists = () =>
+  const loadRegistryLists = () => {
     setLatestModelFlags(
       new Map(
         Object.entries(REASONING_LISTS).map(([model, lists]) => [
@@ -758,6 +760,20 @@ describe("convertOptimizationStudioToFormData — OpenRouter effort on re-run", 
         ]),
       ),
     );
+    // o3-mini-high is out of OpenRouter's picker. The registry still lists it, which is how a saved run
+    // resolves to OpenRouter.
+    const snapshot = getLatestProviderModelsSnapshot();
+    setLatestProviderModelsSnapshot({
+      ...snapshot,
+      [PROVIDER_TYPE.OPEN_ROUTER]: [
+        ...(snapshot[PROVIDER_TYPE.OPEN_ROUTER] ?? []),
+        {
+          value: PROVIDER_MODEL_TYPE.OPENAI_O3_MINI_HIGH,
+          label: PROVIDER_MODEL_TYPE.OPENAI_O3_MINI_HIGH,
+        },
+      ],
+    });
+  };
 
   const savedRun = (model: string, parameters: Record<string, unknown>) =>
     ({
