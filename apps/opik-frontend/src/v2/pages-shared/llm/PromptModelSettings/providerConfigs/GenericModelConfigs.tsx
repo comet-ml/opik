@@ -52,8 +52,14 @@ const SLIDERS: Record<
   },
 };
 
-const maxOutputTokensTooltip = (min: number, reasoningNoun: string) =>
-  `The maximum number of tokens the model can generate in its response. The prompt does not count toward it. On ${reasoningNoun} models, ${reasoningNoun} tokens count toward it too, so a low limit can leave the response empty. The exact limit varies by model. The minimum is ${min}. (One token is roughly 4 characters for standard English text).`;
+const maxOutputTokensTooltip = (
+  min: number,
+  reasoningNoun: string,
+  zeroMeansNoLimit: boolean,
+) =>
+  `The maximum number of tokens the model can generate in its response. The prompt does not count toward it. On ${reasoningNoun} models, ${reasoningNoun} tokens count toward it too, so a low limit can leave the response empty. The exact limit varies by model. ${
+    zeroMeansNoLimit ? NO_OUTPUT_LIMIT_TOOLTIP : `The minimum is ${min}.`
+  } (One token is roughly 4 characters for standard English text).`;
 
 interface GenericModelConfigsProps {
   model?: string;
@@ -109,17 +115,11 @@ const GenericModelConfigs = ({
           label="Max output tokens"
           tooltip={
             <PromptModelConfigsTooltipContent
-              text={
-                noLimitAtZero
-                  ? `${maxOutputTokensTooltip(
-                      control.min,
-                      presentation.reasoningNoun,
-                    )} ${NO_OUTPUT_LIMIT_TOOLTIP}`
-                  : maxOutputTokensTooltip(
-                      control.min,
-                      presentation.reasoningNoun,
-                    )
-              }
+              text={maxOutputTokensTooltip(
+                control.min,
+                presentation.reasoningNoun,
+                noLimitAtZero,
+              )}
             />
           }
         />

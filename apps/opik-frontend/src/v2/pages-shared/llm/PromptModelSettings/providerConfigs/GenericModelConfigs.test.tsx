@@ -120,6 +120,14 @@ const renderPanel = (
   return onChange;
 };
 
+const openMaxOutputTokensTooltip = () => {
+  const label = screen.getByText("Max output tokens");
+  fireEvent.pointerMove(label.parentElement!.querySelector("svg")!, {
+    pointerType: "mouse",
+  });
+  return screen.findByRole("tooltip", {}, { timeout: 2000 });
+};
+
 describe("GenericModelConfigs", () => {
   it("draws the model's controls from its params", () => {
     renderPanel(SAMPLING_MODEL, {
@@ -137,6 +145,14 @@ describe("GenericModelConfigs", () => {
       screen.getByTestId("maxConcurrentRequests-input"),
     ).toBeInTheDocument();
     expect(screen.getByRole("combobox")).toHaveTextContent("LOW");
+  });
+
+  it("names the model's minimum in the max tokens tooltip", async () => {
+    renderPanel(SAMPLING_MODEL, { maxCompletionTokens: 4000 });
+
+    const tooltip = await openMaxOutputTokensTooltip();
+    expect(tooltip).toHaveTextContent("The minimum is 1.");
+    expect(tooltip).not.toHaveTextContent("no limit");
   });
 
   it("offers exactly the model's effort levels", () => {
@@ -423,6 +439,21 @@ describe("the catalog panel for Gemini and Vertex AI", () => {
     expect(
       sanitizeConfigForRequest(model, configs).custom_parameters,
     ).toBeUndefined();
+  });
+
+  it("explains no limit at 0 in the max tokens tooltip instead of a minimum", async () => {
+    const model = PROVIDER_MODEL_TYPE.GEMINI_3_8_FLASH;
+    renderGeminiPanel(
+      PROVIDER_TYPE.GEMINI,
+      model,
+      defaults(PROVIDER_TYPE.GEMINI, model),
+    );
+
+    const tooltip = await openMaxOutputTokensTooltip();
+    expect(tooltip).toHaveTextContent(
+      "The exact limit varies by model. Set to 0 for no limit (the provider's own default applies). (One token",
+    );
+    expect(tooltip).not.toHaveTextContent("The minimum is");
   });
 
   it("shows a stored 0 as no limit and leaves it off the request", () => {
