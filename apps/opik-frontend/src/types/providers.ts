@@ -1073,7 +1073,7 @@ export interface BaseProviderKey {
 
 export interface StandardProviderObject extends BaseProviderKey {
   provider: Exclude<PROVIDER_TYPE, PROVIDER_TYPE.CUSTOM | PROVIDER_TYPE.OLLAMA>;
-  base_url?: never;
+  base_url?: string;
   provider_name?: never;
 }
 

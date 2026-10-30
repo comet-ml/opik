@@ -333,11 +333,12 @@ describe("NewRunSidebar — re-run model resolution", () => {
 describe("NewRunSidebar — re-run with a model the catalog serves on one OpenAI API", () => {
   const RESPONSES_ONLY = PROVIDER_MODEL_TYPE.GPT_5_5_PRO;
 
-  const openAiKeyOn = (openai_pipeline_mode: string) => ({
+  const openAiKeyOn = (openai_pipeline_mode: string, base_url?: string) => ({
     content: [
       {
         ...CONFIGURED_PROVIDER_KEYS.content[0],
         configuration: { openai_pipeline_mode },
+        base_url,
       },
     ],
   });
@@ -393,6 +394,19 @@ describe("NewRunSidebar — re-run with a model the catalog serves on one OpenAI
 
     expect(content.modelName).toBe(RESPONSES_ONLY);
     expect(content.availableModels).toContain(RESPONSES_ONLY);
+    expect(content.savedModelReplacement).toBeNull();
+    expect(content.optimizerModel).toBe(RESPONSES_ONLY);
+  });
+
+  it("keeps it on a Chat Completions key with its own base_url", () => {
+    mocks.providerKeysData = openAiKeyOn(
+      "chat_completions_api",
+      "https://gateway.example.com/v1",
+    );
+
+    const content = renderRerun(RESPONSES_ONLY, RESPONSES_ONLY);
+
+    expect(content.modelName).toBe(RESPONSES_ONLY);
     expect(content.savedModelReplacement).toBeNull();
     expect(content.optimizerModel).toBe(RESPONSES_ONLY);
   });

@@ -157,8 +157,11 @@ describe("useModelOptions — a model the catalog serves on one OpenAI API", () 
   const renderOptions = (
     configuration: Record<string, string>,
     provider = PROVIDER_TYPE.OPEN_AI,
+    baseUrl?: string,
   ) => {
-    const providers = [createProvider(provider, configuration)];
+    const providers = [
+      { ...createProvider(provider, configuration), base_url: baseUrl },
+    ] as ProviderObject[];
     const providerModelsMap = { [provider]: MODELS };
     const { result } = renderHook(() =>
       useModelOptions(providers, providerModelsMap, ""),
@@ -190,6 +193,18 @@ describe("useModelOptions — a model the catalog serves on one OpenAI API", () 
       ]);
     },
   );
+
+  it("shows it on a Chat Completions key with its own base_url", () => {
+    setLatestModelParams(PARAMS);
+
+    expect(
+      renderOptions(
+        { openai_pipeline_mode: "chat_completions_api" },
+        PROVIDER_TYPE.OPEN_AI,
+        "https://gateway.example.com/v1",
+      )(),
+    ).toEqual([BOTH_APIS, RESPONSES_ONLY]);
+  });
 
   it("leaves another provider's list alone", () => {
     setLatestModelParams(PARAMS);

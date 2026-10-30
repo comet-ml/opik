@@ -70,12 +70,16 @@ export const sortProviderModels = (
 };
 
 // The backend refuses a model the catalog serves on one OpenAI API when the key is set to the other one.
+// A key with its own base_url is exempt there, as a gateway may serve the model on either API; only the
+// REST API sets one on an OpenAI key, the UI never does.
 export const isServedOnKeyApi = (
   provider: ProviderObject,
   model: string,
   modelParams: ModelParamsIndex,
 ): boolean => {
-  if (provider.provider !== PROVIDER_TYPE.OPEN_AI) return true;
+  if (provider.provider !== PROVIDER_TYPE.OPEN_AI || provider.base_url) {
+    return true;
+  }
   const onlyRoute = modelParams.get(PROVIDER_TYPE.OPEN_AI)?.get(model)
     ?.only_route;
   return (

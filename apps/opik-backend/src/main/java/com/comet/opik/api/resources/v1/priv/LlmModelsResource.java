@@ -46,7 +46,7 @@ public class LlmModelsResource {
     public Response getModels() {
         var registry = registryService.getRegistry();
         return Response.ok()
-                .entity(hasServerWideOpenAiUrl() ? withoutOpenAiOnlyRoutes(registry) : registry)
+                .entity(hasServerWideOpenAiUrl() ? clearOpenAiOnlyRoutes(registry) : registry)
                 .build();
     }
 
@@ -69,7 +69,7 @@ public class LlmModelsResource {
 
     // Behind a server-wide URL the backend skips the route check, since a gateway may serve the model on either API,
     // so the picker must not hide it either.
-    private static Map<String, List<LlmModelDefinition>> withoutOpenAiOnlyRoutes(
+    private static Map<String, List<LlmModelDefinition>> clearOpenAiOnlyRoutes(
             Map<String, List<LlmModelDefinition>> registry) {
         var served = new LinkedHashMap<>(registry);
         served.computeIfPresent(LlmProvider.OPEN_AI.getValue(), (provider, models) -> models.stream()
