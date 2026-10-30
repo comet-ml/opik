@@ -853,16 +853,16 @@ def run(args: argparse.Namespace) -> int:
         served = catalog.get(model.provider, {}).get(model.model_id)
         params = (served or {}).get("params")
         probes = plan_probes(model, params)
-        bad_route = unknown_only_route(model, params)
+        invalid_only_route = unknown_only_route(model, params)
         if mode != "asked" and is_retired(model, retired):
             results += [CheckResult(p, "not checked", None, RETIRED_NOTE) for p in probes]
         elif served is None:
             results += [CheckResult(p, "not checked", None, "the backend doesn't list this model") for p in probes]
         elif mode == "changes" and not served.get("label"):
             results += [CheckResult(p, "not checked", None, NOT_IN_PICKER_NOTE) for p in probes]
-        elif bad_route is not None:
+        elif invalid_only_route is not None:
             routes = ", ".join(route_names(model.provider))
-            note = f"not called: its only_route {bad_route!r} is none of its routes ({routes})"
+            note = f"not called: its only_route {invalid_only_route!r} is none of its routes ({routes})"
             results.append(CheckResult(probes[0], "fail", None, note))
         elif not keys.get(model.provider):
             results += [CheckResult(p, "not checked", None, "no CI key") for p in probes]

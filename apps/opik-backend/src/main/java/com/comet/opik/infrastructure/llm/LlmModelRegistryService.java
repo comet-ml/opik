@@ -470,7 +470,7 @@ public class LlmModelRegistryService {
         if (unknown.isEmpty()) {
             return row;
         }
-        var message = "Unknown onlyRoute {} for model '{}' of provider '{}', skipping it";
+        var message = "Unknown onlyRoute {} for model '{}' of provider '{}', keeping the model without a route limit";
         if (reportedUnknownOnlyRoutes.add(provider + "/" + row.id() + "/" + unknown)) {
             log.warn(message, unknown, row.id(), provider);
         } else {
