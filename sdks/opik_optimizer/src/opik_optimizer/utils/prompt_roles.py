@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, TYPE_CHECKING
 from collections.abc import Iterable
 import copy
+
+if TYPE_CHECKING:
+    pass
 
 ALLOWED_PROMPT_ROLES = {"system", "user", "assistant"}
 

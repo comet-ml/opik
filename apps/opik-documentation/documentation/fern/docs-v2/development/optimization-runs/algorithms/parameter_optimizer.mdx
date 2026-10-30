@@ -28,7 +28,7 @@ The `ParameterOptimizer` uses Bayesian optimization to tune LLM call parameters 
 
 This optimizer uses [Optuna](https://optuna.org/), a hyperparameter optimization framework, to search for the best LLM parameters:
 
-1.  **Baseline Evaluation**: First evaluates your prompt with its current parameters (or default parameters) to establish a baseline score.
+1.  **Baseline Evaluation**: First evaluates your prompt with its own `model` and `model_parameters` to establish a baseline score.
 
 2.  **Parameter Space Definition**: You define which parameters to optimize and their valid ranges using a `ParameterSearchSpace`. For example:
     - `temperature`: float between 0.0 and 2.0
@@ -65,12 +65,8 @@ The optimizer intelligently balances exploration (trying diverse parameters) wit
 
 ```python wordWrap
 from opik_optimizer import ParameterOptimizer
-from opik_optimizer.algorithms.parameter_optimizer.parameter_search_space import (
-    ParameterSearchSpace,
-)
 
 optimizer = ParameterOptimizer(
-    model="openai/gpt-4",
     default_n_trials=20,    # Number of optimization trials
     n_threads=4,            # Parallel evaluation threads
     seed=42
@@ -81,7 +77,6 @@ optimizer = ParameterOptimizer(
 
 ```python wordWrap
 optimizer = ParameterOptimizer(
-    model="openai/gpt-4",
     default_n_trials=50,        # More trials for thorough optimization
     n_threads=8,                # More parallel threads
     local_search_ratio=0.3,     # 30% of trials for local refinement
@@ -93,7 +88,6 @@ optimizer = ParameterOptimizer(
 
 The key parameters are:
 
-- `model`: The LLM used for evaluation with different parameter configurations.
 - `default_n_trials`: Default number of optimization trials (can be overridden in `optimize_parameter`).
 - `n_threads`: Number of parallel threads for evaluation (balance with API rate limits).
 - `local_search_ratio`: Ratio of trials dedicated to local search around best parameters (0.0-1.0).
@@ -101,21 +95,35 @@ The key parameters are:
 - `seed`: Random seed for reproducibility.
 - `verbose`: Logging level (0=warnings only, 1=info, 2=debug).
 
+<Note>
+  The evaluated model and its starting settings come from each `ChatPrompt` (`model` and
+  `model_parameters`); `ParameterOptimizer` makes no LLM calls of its own. Its `model` and
+  `model_parameters` constructor arguments are deprecated, ignored, and emit a `DeprecationWarning`.
+</Note>
+
+## Trial results and stopping
+
+Call `optimize_parameter()` for parameter search; `optimize_prompt()` is not a supported entrypoint
+for this optimizer. Each prompt keeps its own model and settings, and a trial overrides only the
+fields in the search space. Use `"target": "model"` explicitly when searching model choices.
+
+The returned `result.prompt` contains the winning settings. `result.details["baseline_parameters"]`
+and `result.details["optimized_model_kwargs"]` are keyed by prompt name, including for a single
+prompt. They remain available when the run returns only the baseline, such as an immediate
+perfect-score stop. `result.details["finish_reason"]` reports why the search stopped; a timeout
+reports `"timeout"`. The `timeout` argument applies separately to the global and local search phases.
+
 ## Example Usage
 
 ### Basic Example
 
 ```python wordWrap
-from opik_optimizer import ParameterOptimizer, ChatPrompt
-from opik_optimizer.algorithms.parameter_optimizer.parameter_search_space import (
-    ParameterSearchSpace,
-)
+from opik_optimizer import ChatPrompt, ParameterOptimizer, ParameterSearchSpace
 from opik.evaluation.metrics import LevenshteinRatio
 from opik_optimizer import datasets
 
 # Initialize optimizer
 optimizer = ParameterOptimizer(
-    model="openai/gpt-4o-mini",
     default_n_trials=30,
     n_threads=8,
     seed=42
@@ -128,13 +136,15 @@ dataset = datasets.hotpot(count=300)
 def levenshtein_ratio(dataset_item, llm_output):
     return LevenshteinRatio().score(reference=dataset_item["answer"], output=llm_output)
 
-# Define prompt (this stays unchanged)
+# Define prompt (its messages stay unchanged). The model and its starting
+# settings are part of the prompt; the search tunes them from there.
 prompt = ChatPrompt(
-    project_name="parameter-optimization",
     messages=[
         {"role": "system", "content": "You are a helpful assistant."},
         {"role": "user", "content": "{question}"}
-    ]
+    ],
+    model="openai/gpt-4o-mini",
+    model_parameters={"max_tokens": 256},
 )
 
 # Define parameter search space
@@ -166,8 +176,9 @@ results = optimizer.optimize_parameter(
 
 # Access results
 results.display()
-print(f"Best temperature: {results.details['optimized_parameters']['temperature']}")
-print(f"Best top_p: {results.details['optimized_parameters']['top_p']}")
+# Parameter names are prefixed with the prompt name
+print(f"Best parameters: {results.get_optimized_parameters()}")
+print(f"Best model settings: {results.get_optimized_model_kwargs()}")
 print(f"Parameter importance: {results.details['parameter_importance']}")
 ```
 
@@ -205,7 +216,8 @@ parameter_space = ParameterSearchSpace(
         {
             "name": "model",
             "distribution": "categorical",
-            "choices": ["openai/gpt-4o-mini", "openai/gpt-4o", "openai/gpt-4-turbo"]
+            "choices": ["openai/gpt-4o-mini", "openai/gpt-4o", "openai/gpt-4-turbo"],
+            "target": "model"  # Set the prompt's model instead of a model parameter
         }
     ]
 )
@@ -218,11 +230,18 @@ results = optimizer.optimize_parameter(
     dataset=dataset,
     metric=levenshtein_ratio,
     parameter_space=parameter_space,
-    n_trials=100,  # Override default_n_trials
+    max_trials=100,  # Override default_n_trials
     n_samples=150,
     sampler=optuna.samplers.TPESampler(seed=42, n_startup_trials=20)
 )
 ```
+
+<Warning>
+  LiteLLM drops parameters the evaluated model doesn't support (for example `top_p` on
+  `openai/gpt-5-nano`), so every trial varying them would score the same settings. The optimizer warns
+  before the search starts when LiteLLM reports a searched parameter as unsupported by the prompt's
+  model (or by any searched model choice).
+</Warning>
 
 ## Parameter Search Space
 
@@ -237,7 +256,7 @@ The `ParameterSearchSpace` defines which parameters to optimize and their valid 
     "low": 0.0,
     "high": 2.0,
     "step": 0.1,      # Optional: quantize to 0.1 increments
-    "log": False      # Optional: use log scale for sampling
+    "scale": "linear" # Optional: "log" samples on a log scale
 }
 ```
 
@@ -250,7 +269,7 @@ The `ParameterSearchSpace` defines which parameters to optimize and their valid 
     "low": 100,
     "high": 4000,
     "step": 100,      # Optional: sample in steps of 100
-    "log": False      # Optional: use log scale
+    "scale": "linear" # Optional: "log" samples on a log scale
 }
 ```
 
@@ -260,7 +279,8 @@ The `ParameterSearchSpace` defines which parameters to optimize and their valid 
 {
     "name": "model",
     "distribution": "categorical",
-    "choices": ["gpt-4o-mini", "gpt-4o", "claude-haiku-4-5"]
+    "choices": ["gpt-4o-mini", "gpt-4o", "claude-haiku-4-5"],
+    "target": "model"  # Without it, the value is sent as a "model" model parameter
 }
 ```
 
@@ -268,20 +288,21 @@ The `ParameterSearchSpace` defines which parameters to optimize and their valid 
 
 ```python wordWrap
 {
-    "name": "stream",
+    "name": "parallel_tool_calls",
     "distribution": "bool"
 }
 ```
 
 ### Targeting Nested Parameters
 
-You can optimize nested parameters in `model_parameters`:
+Use `target` to optimize a nested key of the prompt's `model_parameters`:
 
 ```python wordWrap
 {
-    "name": "model_parameters.response_format.type",
+    "name": "response_format_type",
     "distribution": "categorical",
-    "choices": ["text", "json_object"]
+    "choices": ["text", "json_object"],
+    "target": "response_format.type"  # Sets model_parameters["response_format"]["type"]
 }
 ```
 
@@ -289,16 +310,18 @@ You can optimize nested parameters in `model_parameters`:
 
 The ParameterOptimizer supports all models available through LiteLLM. This provides broad
 compatibility with providers like OpenAI, Azure OpenAI, Anthropic, Google, and many others,
-including locally hosted models.
+including locally hosted models. The model is set on the `ChatPrompt` being tuned.
 
 ### Configuration Example using LiteLLM model string
 
 ```python wordWrap
-optimizer = ParameterOptimizer(
-    model="openai/gpt-4o-mini",  # Using OpenAI via LiteLLM
-    default_n_trials=30,
-    n_threads=8
+prompt = ChatPrompt(
+    system="You are a helpful assistant.",
+    user="{question}",
+    model="openai/gpt-4o-mini",            # Using OpenAI via LiteLLM
+    model_parameters={"max_tokens": 512},  # Settings the search starts from
 )
+optimizer = ParameterOptimizer(default_n_trials=30, n_threads=8)
 ```
 
 ## Best Practices
@@ -334,22 +357,19 @@ optimizer = ParameterOptimizer(
    - Consider fixing low-impact parameters to reduce search space
 
 7. **Validation**
-   - **Note**: While ParameterOptimizer accepts a `validation_dataset` parameter, it doesn't improve performance due to the optimizer's internal implementation and we don't recommend using it
-   - Instead, use `evaluate_prompt()` on a held-out test dataset after optimization completes
-   - This confirms that optimized parameters generalize to unseen data
+   - Pass `validation_dataset` to `optimize_parameter()` to rank baseline and trial configurations on that dataset instead of `dataset`.
+   - Keep a separate test dataset for the final check: the validation scores influence parameter selection.
+   - Use `evaluate_prompt()` on that untouched test dataset after optimization completes.
    - Example:
      ```python wordWrap
-     # After optimization
-     from opik.evaluation import evaluate_prompt
-     
+     # After optimization: result.prompt carries the tuned model settings
      test_dataset = client.get_dataset(name="test-set")
-     test_results = evaluate_prompt(
+     test_score = optimizer.evaluate_prompt(
          prompt=result.prompt,
          dataset=test_dataset,
-         scoring_metrics=[my_metric],
-         project_name="my-project",
+         metric=my_metric,
      )
-     print(f"Test score: {test_results.mean_scores}")
+     print(f"Test score: {test_score}")
      ```
 
 ## Research and References

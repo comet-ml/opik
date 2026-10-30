@@ -13,6 +13,9 @@ from opik_optimizer import ChatPrompt
 
 RunStatus = Literal["pending", "running", "succeeded", "failed"]
 
+# Version 1 requires independent evaluation and optimizer model configuration.
+CHECKPOINT_FORMAT_VERSION = 1
+
 
 @dataclass
 class TaskState:
@@ -58,7 +61,7 @@ class BenchmarkCheckpointManager:
         optimizers: list[str],
         models: list[str],
         task_specs: list[TaskSpec],
-    ):
+    ) -> None:
         self.checkpoint_timestamp = time.time()
         self.checkpoint_folder = os.path.abspath(checkpoint_folder)
         os.makedirs(self.checkpoint_folder, exist_ok=True)
@@ -79,6 +82,7 @@ class BenchmarkCheckpointManager:
     def save(self) -> None:
         with open(self.checkpoint_file, "w") as f:
             checkpoint_dict = {
+                "format_version": CHECKPOINT_FORMAT_VERSION,
                 "run_id": self.run_id,
                 "test_mode": self.test_mode,
                 "demo_datasets": self.demo_datasets,
@@ -98,6 +102,12 @@ class BenchmarkCheckpointManager:
 
         with open(self.checkpoint_file) as f:
             checkpoint_data = json.load(f)
+            if checkpoint_data.get("format_version") != CHECKPOINT_FORMAT_VERSION:
+                raise ValueError(
+                    "Unsupported benchmark checkpoint format version. Legacy checkpoints "
+                    "may use shared evaluation/reasoning settings; start a new benchmark "
+                    "with independent model configuration."
+                )
 
             self.test_mode = checkpoint_data["test_mode"]
             self.demo_datasets = checkpoint_data["demo_datasets"]

@@ -1,20 +1,30 @@
+from ...utils.prompt_editing import describe_text_segments
+from ...utils.prompt_editing import apply_text_edits
+
+from ...core.reasoning import ReasoningEvidence
+
 import logging
+from contextlib import ExitStack
+from dataclasses import dataclass
 
 import opik
-from opik.evaluation.evaluation_result import EvaluationResult
+from opik import Dataset
+from opik.evaluation.evaluation_result import (
+    EvaluationResult,
+    EvaluationResultOnDictItems,
+)
 
 from typing import Any
 from ...core import llm_calls as _llm_calls
 from ...core import runtime
 from ...base_optimizer import BaseOptimizer
+from ...core.lineage import prompt_fingerprint
 from ...core.state import OptimizationContext, AlgorithmResult
 from ... import constants
 from ...api_objects import chat_prompt
-from ...api_objects.types import Content
 from ...api_objects.types import MetricFunction
 from ...agents import OptimizableAgent
 from ...utils.prompt_library import PromptOverrides
-from ...utils.prompt_roles import apply_role_constraints, count_disallowed_role_updates
 from ...utils.toolcalling.ops import toolcalling as toolcalling_utils
 from ...utils.toolcalling.core import segment_updates
 from ...utils.scoring import improves_over
@@ -33,18 +43,16 @@ from .ops import iteration_ops
 logger = logging.getLogger(__name__)  # Gets logger configured by setup_logging
 
 
-def _message_has_content(message: dict[str, Any]) -> bool:
-    """Return True if the message carries non-empty content."""
-    content: Content | None = message.get("content")
-    if content is None:
-        return False
-    return chat_prompt.ChatPrompt._has_non_empty_content(content)
+@dataclass(frozen=True)
+class ScoredEvaluation:
+    """A prompt's evaluation kept so root-cause analysis can reuse it."""
+
+    item_ids: frozenset[str] | None  # None: the whole dataset
+    result: EvaluationResult | EvaluationResultOnDictItems
+    traces: dict[str, Any] | None
 
 
 class HierarchicalReflectiveOptimizer(BaseOptimizer):
-    supports_tool_optimization: bool = True
-    supports_prompt_optimization: bool = True
-    supports_multimodal: bool = True
     """
     The Hierarchical Reflective Optimizer uses hierarchical root cause analysis to improve prompts
     based on failure modes identified during the evaluation process.
@@ -52,6 +60,13 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
     This algorithm uses a two-stage hierarchical approach: analyzing failures in batches and then
     synthesizing findings to identify unified failure modes. It's best suited when you have a
     complex prompt that you want to systematically refine based on understanding why it fails.
+
+    Evaluations record their traces locally (``opik.record_traces_locally``) so the
+    root-cause analysis sees each agent's steps, and the analysis reuses the best prompt's
+    evaluation when it covers the same items instead of running it again. Opik refuses nested recordings, so a custom agent or
+    metric that itself calls ``record_traces_locally`` during evaluation is not supported.
+    Recording is skipped automatically (final outputs only) when the metric needs
+    ``task_span`` or another recording is already active around ``optimize_prompt``.
 
     Args:
         model: LiteLLM model name for the optimization algorithm (reasoning and analysis)
@@ -70,14 +85,15 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             If a callable, receives the PromptLibrary instance for in-place modification.
     """
 
+    supports_tool_optimization: bool = True
+    supports_prompt_optimization: bool = True
+    supports_multimodal: bool = True
+
     DEFAULT_PROMPTS: dict[str, str] = {
         "batch_analysis_prompt": hierarchical_prompts.BATCH_ANALYSIS_PROMPT,
         "synthesis_prompt": hierarchical_prompts.SYNTHESIS_PROMPT,
         "improve_prompt_template": hierarchical_prompts.IMPROVE_PROMPT_TEMPLATE,
     }
-
-    DEFAULT_MAX_ITERATIONS = constants.HRO_DEFAULT_MAX_ITERATIONS
-    DEFAULT_CONVERGENCE_THRESHOLD = constants.HRO_DEFAULT_CONVERGENCE_THRESHOLD
 
     def __init__(
         self,
@@ -113,7 +129,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         self.batch_size = batch_size
         self.convergence_threshold = convergence_threshold
         self._iterations_completed = 0
-        self._should_stop_optimization = False  # Flag to exit all loops
+        # Latest evaluation per (prompt, dataset), for root-cause analysis to reuse.
+        self._scored: dict[tuple[str, str], ScoredEvaluation] = {}
 
         # Initialize hierarchical analyzer
         self._hierarchical_analyzer = HierarchicalRootCauseAnalyzer(
@@ -144,7 +161,9 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         }
 
     def _hierarchical_root_cause_analysis(
-        self, evaluation_result: EvaluationResult
+        self,
+        evaluation_result: EvaluationResult,
+        traces: dict[str, Any] | None = None,
     ) -> HierarchicalRootCauseAnalysis:
         """
         Perform hierarchical root cause analysis on evaluation results.
@@ -155,14 +174,79 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
 
         Args:
             evaluation_result: The evaluation result to analyze
+            traces: Trace trees recorded during the evaluation, by trace id
 
         Returns:
             HierarchicalRootCauseAnalysis containing batch analyses and overall synthesis
         """
         logger.debug("Performing hierarchical root cause analysis...")
         return self._hierarchical_analyzer.analyze(
-            evaluation_result, project_name=self.project_name
+            evaluation_result, project_name=self.project_name, traces=traces
         )
+
+    def pre_baseline(self, context: OptimizationContext) -> None:
+        # A reused optimizer must not analyse an earlier run's evaluations.
+        self._scored = {}
+        super().pre_baseline(context)
+
+    def evaluate_prompt(  # type: ignore[override]
+        self,
+        prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
+        dataset: Dataset,
+        metric: MetricFunction,
+        agent: OptimizableAgent | None = None,
+        n_threads: int | None = None,
+        verbose: int = 1,
+        dataset_item_ids: list[str] | None = None,
+        experiment_config: dict | None = None,
+        n_samples: int | float | str | None = None,
+        n_samples_strategy: str | None = None,
+        seed: int | None = None,
+        return_evaluation_result: bool = False,
+        allow_tool_use: bool | None = None,
+        use_evaluate_on_dict_items: bool | None = None,
+        experiment_type: str | None = None,
+    ) -> float | EvaluationResult | EvaluationResultOnDictItems:
+        """Evaluate as usual, keeping the result and traces of in-run evaluations."""
+        keep = return_evaluation_result
+        with ExitStack() as recording_stack:
+            recording = (
+                iteration_ops.record_traces(recording_stack, metric) if keep else None
+            )
+            result = super().evaluate_prompt(  # type: ignore[call-overload,misc]
+                prompt=prompt,
+                dataset=dataset,
+                metric=metric,
+                agent=agent,
+                n_threads=n_threads,
+                verbose=verbose,
+                dataset_item_ids=dataset_item_ids,
+                experiment_config=experiment_config,
+                n_samples=n_samples,
+                n_samples_strategy=n_samples_strategy,
+                seed=seed,
+                return_evaluation_result=return_evaluation_result,
+                allow_tool_use=allow_tool_use,
+                use_evaluate_on_dict_items=use_evaluate_on_dict_items,
+                experiment_type=experiment_type,
+            )
+            # Read before the recording closes: closing resets the local store.
+            traces = (
+                {trace.id: trace for trace in recording.trace_trees}
+                if recording is not None
+                else None
+            )
+        if keep and isinstance(result, (EvaluationResult, EvaluationResultOnDictItems)):
+            if dataset_item_ids is None and n_samples is None:
+                item_ids = None
+            else:
+                item_ids = frozenset(
+                    str(r.test_case.dataset_item_id) for r in result.test_results
+                )
+            self._scored[(prompt_fingerprint(prompt), str(dataset.id))] = (
+                ScoredEvaluation(item_ids, result, traces)
+            )
+        return result
 
     def _record_trial_score(
         self,
@@ -194,7 +278,6 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         n_samples: int | float | str | None,
         context: OptimizationContext,
         empty_score: float | None = None,
-        sampling_tag: str | None = None,
     ) -> tuple[float, EvaluationResult]:
         """Evaluate prompts, update trial state, and return score + result."""
         return self.evaluate_with_result(
@@ -204,7 +287,6 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             empty_score=empty_score,
             n_samples=n_samples,
             n_samples_strategy=context.n_samples_strategy,
-            sampling_tag=sampling_tag,
         )
 
     def _improve_prompt(
@@ -232,7 +314,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         prompts_section = ""
         for prompt_name, prompt in prompts.items():
             prompts_section += f"\n--- Prompt: {prompt_name} ---\n"
-            prompts_section += f"```\n{prompt.get_messages()}\n```\n"
+            prompts_section += f"```\n{describe_text_segments(prompt)}\n```\n"
             if optimize_tools:
                 tool_blocks = toolcalling_utils.build_tool_blocks_from_prompt(prompt)
                 if tool_blocks:
@@ -269,6 +351,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         )
 
         improve_prompt_response = _llm_calls.call_model(
+            metadata={"opik_call_type": "prompt_improvement"},
+            evidence=ReasoningEvidence(prompts=prompts),
             messages=[{"role": "user", "content": improve_prompt_prompt}],
             model=self.reasoning_model,
             seed=attempt_seed,
@@ -401,40 +485,19 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 continue
             improved_chat_prompts: dict[str, chat_prompt.ChatPrompt] = {}
             for prompt_name, improved_prompt in response_item.items():
-                raw_messages = [x.model_dump() for x in improved_prompt.messages]
-                messages_as_dicts = [
-                    message for message in raw_messages if _message_has_content(message)
-                ]
-                original = original_prompts[prompt_name]
                 allowed_roles = (
                     context.extra_params.get("optimizable_roles")
                     if context.extra_params
                     else None
                 )
-                dropped = count_disallowed_role_updates(
-                    original.get_messages(), messages_as_dicts, allowed_roles
-                )
-                if dropped:
-                    logger.debug(
-                        "HRPO candidate dropped %s update(s) for prompt '%s' due to optimize_prompt constraints.",
-                        dropped,
-                        prompt_name,
-                    )
-                messages_as_dicts = apply_role_constraints(
-                    original.get_messages(), messages_as_dicts, allowed_roles
-                )
-                candidate_prompt = chat_prompt.ChatPrompt(
-                    name=original.name,
-                    messages=messages_as_dicts,
-                    tools=best_prompts[prompt_name].tools,
-                    function_map=best_prompts[prompt_name].function_map,
-                    model=original.model,
-                    model_parameters=original.model_kwargs,
+                candidate_prompt = apply_text_edits(
+                    best_prompts[prompt_name], improved_prompt.edits, allowed_roles
                 )
                 candidate_prompt = self._apply_tool_updates_from_improvement(
                     candidate_prompt=candidate_prompt,
                     improved_prompt=improved_prompt,
                     context=context,
+                    prompt_name=prompt_name,
                 )
                 improved_chat_prompts[prompt_name] = candidate_prompt
             improved_chat_prompts_candidates.append(improved_chat_prompts)
@@ -446,6 +509,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         candidate_prompt: chat_prompt.ChatPrompt,
         improved_prompt: ImprovedPrompt,
         context: OptimizationContext,
+        prompt_name: str | None = None,
     ) -> chat_prompt.ChatPrompt:
         """Apply tool/parameter description updates from an ImprovedPrompt."""
         if not context.extra_params.get("optimize_tools"):
@@ -454,7 +518,14 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             improved_prompt.tool_descriptions or improved_prompt.parameter_descriptions
         ):
             return candidate_prompt
-        allowed_tools = set(context.extra_params.get("tool_names") or [])
+        selected_by_prompt = context.extra_params.get("tool_names_by_prompt")
+        if selected_by_prompt is not None:
+            selected = selected_by_prompt.get(prompt_name or candidate_prompt.name, [])
+            if not selected:
+                return candidate_prompt
+        else:
+            selected = context.extra_params.get("tool_names") or []
+        allowed_tools = set(selected)
         return segment_updates.apply_tool_updates_from_descriptions(
             prompt=candidate_prompt,
             tool_descriptions=improved_prompt.tool_descriptions,
@@ -484,7 +555,6 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             n_samples=n_samples,
             context=context,
             empty_score=best_score,
-            sampling_tag=fallback_id,
         )
         runtime.record_and_post_trial(
             optimizer=self,
@@ -519,7 +589,6 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             agent=agent,
             n_samples=n_samples,
             context=context,
-            sampling_tag=best_candidate_id,
         )
         runtime.record_and_post_trial(
             optimizer=self,
@@ -545,7 +614,6 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                     agent=agent,
                     n_samples=n_samples,
                     context=context,
-                    sampling_tag=candidate_id,
                 )
             )
             runtime.record_and_post_trial(
@@ -631,20 +699,9 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             logger.info(
                 f"Starting iteration {iteration} (trials: {context.trials_completed}/{max_trials})"
             )
-
-            if self._should_stop_optimization:
-                logger.info(
-                    f"Stopping optimization: reached max_trials limit ({max_trials})."
-                )
-                context.should_stop = True
-                context.finish_reason = "max_trials"
-                break
             round_handle = self.pre_round(context)
+            self._lineage.derive_from(best_prompts)
 
-            sampling_tag = self._build_sampling_tag(
-                scope="hro_root_cause",
-                round_index=iteration,
-            )
             hierarchical_analysis = iteration_ops.run_root_cause_analysis(
                 optimizer=self,
                 context=context,
@@ -653,7 +710,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 metric=metric,
                 agent=agent,
                 n_samples=minibatch_samples,
-                sampling_tag=sampling_tag,
+                round_index=iteration,
             )
 
             # Display synthesis results
@@ -702,11 +759,14 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             # Update previous score for next iteration
             previous_iteration_score = best_score
 
-        # finish_reason, stopped_early, stop_reason are handled by base class
-        # Align with context in case trial accounting updated current_best_score.
-        if context.current_best_score is not None and (
-            best_score is None or improves_over(context.current_best_score, best_score)
+        # finish_reason, stopped_early, stop_reason are handled by base class.
+        # Trial accounting tracks the best (prompt, score) pair; take it whole when
+        # it beats the local one so the returned prompt always matches the score.
+        if context.current_best_prompt is not None and (
+            context.current_best_score is not None
+            and improves_over(context.current_best_score, best_score)
         ):
+            best_prompts = context.current_best_prompt
             best_score = context.current_best_score
         history_entries = self.get_history_entries()
         for entry in history_entries:

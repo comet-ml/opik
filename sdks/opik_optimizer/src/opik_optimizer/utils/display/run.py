@@ -141,7 +141,8 @@ class OptimizationRunDisplay:
         compare_score = prev_best if isinstance(prev_best, (int, float)) else best_score
         score_text, style = format_score_progress(coerced_score, compare_score)
 
-        info = display_info or self._build_evaluation_display_info(context)
+        # Callers pass extras (e.g. prev_best_score), not the dataset fields.
+        info = {**self._build_evaluation_display_info(context), **(display_info or {})}
         display_terminal.display_evaluation_progress(
             prefix=prefix,
             score_text=score_text,
@@ -164,7 +165,6 @@ class OptimizationRunDisplay:
             and context.evaluation_dataset is context.validation_dataset
         )
         dataset_type = "validation" if is_validation else "training"
-        context.dataset_split = dataset_type
 
         return {
             "dataset_name": dataset_name,

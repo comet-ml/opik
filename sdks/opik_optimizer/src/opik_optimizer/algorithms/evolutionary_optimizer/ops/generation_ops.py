@@ -3,17 +3,10 @@ from __future__ import annotations
 import copy
 from typing import Any, TYPE_CHECKING, cast
 from collections.abc import Callable
-import hashlib
 import json
 import logging
 
-try:
-    from deap import tools
-
-    _DEAP_IMPORT_ERROR: Exception | None = None
-except Exception as exc:  # pragma: no cover - exercised when DEAP is missing
-    tools = None
-    _DEAP_IMPORT_ERROR = exc
+from deap import tools
 
 from ....core.state import OptimizationContext
 from ....utils import display as display_utils
@@ -28,44 +21,21 @@ if TYPE_CHECKING:  # pragma: no cover
 logger = logging.getLogger(__name__)
 
 
-def _require_deap() -> None:
-    if tools is None:
-        raise RuntimeError(
-            "DEAP is required for EvolutionaryOptimizer. "
-            "Install the optimizer extras that include DEAP."
-        ) from _DEAP_IMPORT_ERROR
-
-
 def build_deap_evaluator(
     optimizer: EvolutionaryOptimizer,
     context: OptimizationContext,
     experiment_config: dict[str, Any] | None,
 ) -> Callable[[Any], tuple[float, ...]]:
-    def _build_sampling_tag(individual: Any) -> str:
-        generation_idx = getattr(optimizer, "_current_generation_idx", None)
-        try:
-            payload = json.dumps(dict(individual), sort_keys=True, default=str)
-        except TypeError:
-            payload = json.dumps(str(individual))
-        candidate_hash = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:8]
-        return optimizer._build_sampling_tag(
-            scope="evolutionary",
-            round_index=generation_idx,
-            candidate_id=candidate_hash,
-        )
-
     if optimizer.enable_moo:
 
         def _evaluate(individual: Any) -> tuple[float, ...]:
             if optimizer._should_stop_context(context):
                 return (-float("inf"), float("inf"))
             prompts_bundle = optimizer._individual_to_prompts(individual)
-            sampling_tag = _build_sampling_tag(individual)
             primary_score = optimizer.evaluate(
                 context,
                 prompts_bundle,
                 experiment_config=(experiment_config or {}).copy(),
-                sampling_tag=sampling_tag,
             )
             prompt_length = float(len(str(json.dumps(dict(individual)))))
             return (primary_score, prompt_length)
@@ -76,12 +46,10 @@ def build_deap_evaluator(
             if optimizer._should_stop_context(context):
                 return (-float("inf"),)
             prompts_bundle = optimizer._individual_to_prompts(individual)
-            sampling_tag = _build_sampling_tag(individual)
             fitness_score = optimizer.evaluate(
                 context,
                 prompts_bundle,
                 experiment_config=(experiment_config or {}).copy(),
-                sampling_tag=sampling_tag,
             )
             return (fitness_score,)
 
@@ -137,6 +105,7 @@ def initialize_population(
             verbose=optimizer.verbose,
             prompts=optimizer._prompts,
             optimizer=optimizer,
+            prompt_key=prompt_name,
         )
         prompt_variations[prompt_name] = variations
 
@@ -161,7 +130,6 @@ def evaluate_initial_population(
     best_primary_score_overall: float,
     best_prompts_overall: dict[str, Any],
 ) -> tuple[float, dict[str, Any]]:
-    _require_deap()
     optimizer._current_generation_idx = 0
     logger.debug("Evaluating initial population")
     fitnesses: list[Any] = list(
@@ -209,7 +177,6 @@ def post_population_round(
     best_prompts_overall: dict[str, Any],
     use_valid_index: bool,
 ) -> None:
-    _require_deap()
     population_ops.post_population_candidates(
         optimizer=optimizer,
         context=context,
@@ -257,7 +224,6 @@ def run_generation(
     hof: tools.HallOfFame,
     best_primary_score_overall: float,
 ) -> tuple[list[Any], int]:
-    _require_deap()
     optimizer._current_generation_idx = generation_idx
     best_gen_score = 0.0
     gen_rng = optimizer._derive_rng("generation", generation_idx)
@@ -275,6 +241,9 @@ def run_generation(
     if optimizer._reporter:
         optimizer._reporter.performing_crossover()
     offspring = [copy.deepcopy(ind) for ind in offspring]
+    # The prompts each offspring is built from, so its trial records its real
+    # parents: both sides of a crossover, or the individual a mutation changed.
+    parents_of: dict[int, list[Any]] = {}
     for i in range(0, len(offspring), 2):
         if i + 1 < len(offspring):
             c1, c2 = offspring[i], offspring[i + 1]
@@ -300,6 +269,11 @@ def run_generation(
                         verbose=optimizer.verbose,
                         rng=crossover_rng,
                     )
+                crossed = [
+                    optimizer._individual_to_prompts(c1),
+                    optimizer._individual_to_prompts(c2),
+                ]
+                parents_of[i] = parents_of[i + 1] = crossed
                 offspring[i], offspring[i + 1] = c1_new, c2_new
                 del offspring[i].fitness.values, offspring[i + 1].fitness.values
 
@@ -313,6 +287,8 @@ def run_generation(
     mut_rate = optimizer._get_adaptive_mutation_rate()
     for i, ind in enumerate(offspring):
         if gen_rng.random() < mut_rate:
+            # A crossover child was never evaluated, so keep its parents.
+            parents_of.setdefault(i, [optimizer._individual_to_prompts(ind)])
             new_ind = mutation_ops.deap_mutation(
                 individual=ind,
                 optimizer=optimizer,
@@ -331,6 +307,10 @@ def run_generation(
             offspring[i] = new_ind
             del offspring[i].fitness.values
 
+    for i, parents in parents_of.items():
+        optimizer._lineage.declare_parents(
+            optimizer._individual_to_prompts(offspring[i]), parents
+        )
     invalid = [ind for ind in offspring if not ind.fitness.valid]
     if optimizer._reporter:
         optimizer._reporter.performing_evaluation(len(invalid))
@@ -365,7 +345,6 @@ def run_generations(
     initial_primary_score: float,
     max_trials: int,
 ) -> tuple[list[Any], float, dict[str, Any], int]:
-    _require_deap()
     generation_idx = 0
     with reporting.start_evolutionary_algo(verbose=optimizer.verbose) as evo_reporter:
         optimizer._set_reporter(evo_reporter)
@@ -388,6 +367,9 @@ def run_generations(
                 )
                 evo_reporter.start_gen(generation_idx, optimizer.num_generations)
                 round_handle = optimizer.pre_round(context)
+                # Offspring come from the whole population; the best so far is
+                # the closest single parent to show.
+                optimizer._lineage.derive_from(best_prompts_overall)
 
                 deap_population = population_ops.maybe_restart_population(
                     optimizer=optimizer,
@@ -425,16 +407,10 @@ def run_generations(
                 else:
                     optimizer._generations_without_overall_improvement += 1
 
-                if (
+                stagnated = (
                     optimizer._generations_without_overall_improvement
                     >= optimizer.DEFAULT_EARLY_STOPPING_GENERATIONS
-                ):
-                    logger.info(
-                        "No overall improvement for %d generations – early stopping at gen %d.",
-                        optimizer.DEFAULT_EARLY_STOPPING_GENERATIONS,
-                        generation_idx,
-                    )
-                    break
+                )
 
                 reporting.end_gen(
                     generation_idx,
@@ -481,6 +457,14 @@ def run_generations(
                         ),
                     },
                 )
+                # Checked after recording so the stagnant generation's round is kept.
+                if stagnated:
+                    logger.info(
+                        "No overall improvement for %d generations – early stopping at gen %d.",
+                        optimizer.DEFAULT_EARLY_STOPPING_GENERATIONS,
+                        generation_idx,
+                    )
+                    break
         finally:
             if context.finish_reason == "max_trials":
                 display_utils.display_message(

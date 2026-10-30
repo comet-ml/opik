@@ -600,7 +600,11 @@ def execute_task(
     metrics: list[str | dict[str, Any]] | None = None,
     prompt_messages: list[dict[str, Any]] | None = None,
 ) -> TaskResult:
-    """Shared execution path used by local and Modal runners."""
+    """Run a benchmark with independent evaluation and optimizer model settings.
+
+    model_name/model_parameters configure evaluation only. Optimizer reasoning
+    settings come from its registry config, per-task overrides or class defaults.
+    """
     timestamp_start = time.time()
     initial_prompt: ChatPrompt | dict[str, ChatPrompt] | None = None
     optimized_prompt: ChatPrompt | dict[str, ChatPrompt] | None = None
@@ -655,6 +659,10 @@ def execute_task(
 
     with reporting_utils.suppress_opik_logs():
         try:
+            if not isinstance(model_name, str) or not model_name.strip():
+                raise ValueError(
+                    "Benchmark evaluation model cannot be empty or whitespace-only."
+                )
             if test_mode and os.getenv("OPIK_DATASET_SKIP_EXISTING") is None:
                 # Avoid brittle failures in smoke runs when datasets already exist with different sizes.
                 os.environ["OPIK_DATASET_SKIP_EXISTING"] = "true"
@@ -697,15 +705,19 @@ def execute_task(
             constructor_kwargs = dict(optimizer_config.params)
             if optimizer_params_override:
                 constructor_kwargs.update(optimizer_params_override)
-            # Ensure we only supply model/model_parameters once. If provided in the config/overrides,
-            # respect those; otherwise inject the runner-specified values.
-            constructor_kwargs.setdefault("model", model_name)
-            constructor_kwargs.setdefault("model_parameters", model_parameters)
-            optimizer: BaseOptimizer = getattr(
-                opik_optimizer, optimizer_config.class_name
-            )(
-                **constructor_kwargs,
-            )
+            optimizer_cls = getattr(opik_optimizer, optimizer_config.class_name)
+            # Reasoning uses only the optimizer's configuration or its own defaults.
+            # Never fill these settings from the evaluated agent's configuration.
+            for field in ("model", "reasoning_model"):
+                configured_model = constructor_kwargs.get(field)
+                if configured_model is not None and (
+                    not isinstance(configured_model, str)
+                    or not configured_model.strip()
+                ):
+                    raise ValueError(
+                        f"Benchmark optimizer {field} cannot be empty or whitespace-only."
+                    )
+            optimizer: BaseOptimizer = optimizer_cls(**constructor_kwargs)
 
             # Check if this dataset is handled by a package-specific agent/prompt wiring.
             agent = None
@@ -727,14 +739,10 @@ def execute_task(
             # Standard single-prompt benchmark fallback
             if initial_prompt is None:
                 messages = prompt_messages or _resolve_initial_prompt(bundle.train_name)
-                # Bind the optimizer's model/model_parameters to the prompt so evaluations
-                # use the requested model instead of ChatPrompt defaults.
                 initial_prompt = ChatPrompt(
                     messages=messages,  # type: ignore[arg-type]
-                    model=getattr(optimizer, "model", model_name),
-                    model_parameters=getattr(
-                        optimizer, "model_parameters", model_parameters
-                    ),
+                    model=model_name,
+                    model_parameters=model_parameters,
                 )
             if initial_prompt is None:
                 raise RuntimeError(
@@ -808,13 +816,14 @@ def execute_task(
             elif isinstance(result_prompt, ChatPrompt):
                 optimized_prompt = result_prompt
             else:
-                optimized_prompt = ChatPrompt(
-                    messages=result_prompt,  # type: ignore[arg-type]
-                    model=getattr(optimizer, "model", model_name),
-                    model_parameters=getattr(
-                        optimizer, "model_parameters", model_parameters
-                    ),
-                )
+                if not isinstance(initial_prompt, ChatPrompt):
+                    raise ValueError(
+                        "An optimizer for a prompt bundle must return a dict of ChatPrompts."
+                    )
+                # Legacy message-only results inherit the evaluated prompt's own
+                # settings, never the optimizer's reasoning model or parameters.
+                optimized_prompt = initial_prompt.copy()
+                optimized_prompt.set_messages(result_prompt)
 
             optimized_evaluation = evaluate_prompt_on_dataset(
                 optimizer=optimizer,

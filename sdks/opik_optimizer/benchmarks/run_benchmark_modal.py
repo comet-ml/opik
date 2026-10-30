@@ -670,7 +670,7 @@ Examples:
         type=str,
         nargs="*",
         default=None,
-        help="Model names to benchmark.",
+        help="Evaluation model names to benchmark.",
     )
     parser.add_argument(
         "--test-mode",

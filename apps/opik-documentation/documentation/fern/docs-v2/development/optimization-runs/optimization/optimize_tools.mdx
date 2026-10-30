@@ -16,6 +16,10 @@ Tool optimization updates tool signatures. Prompt optimization updates system/us
 Agent optimization focuses on multi-step agent logic. Keep these runs separate to isolate changes.
 </Callout>
 
+<Note>
+MCP tools need the optional MCP SDK: `pip install "opik-optimizer[mcp]"`. Plain function-calling tools work without it.
+</Note>
+
 ## Quickstart: tool-only optimization
 
 ```python wordWrap
@@ -44,8 +48,8 @@ result = optimizer.optimize_prompt(
 )
 ```
 
-Tool optimization is supported by all optimizers **except** `FewShotBayesianOptimizer`,
-`ParameterOptimizer`, and `GepaOptimizer` (for now).
+Tool optimization is supported by all optimizers **except** `FewShotBayesianOptimizer` and
+`ParameterOptimizer`.
 
 ## Tool calling + MCP formats
 
@@ -184,6 +188,31 @@ result = optimizer.optimize_prompt(
 )
 ```
 
+Selectors may also carry the `tool:` segment prefix (`"tool:search_wikipedia"`). Passing `optimize_tools=False`,
+`{}`, or a dict that enables no tool means tool optimization is not requested.
+
+## Select tools in an agent bundle
+
+MetaPrompt, Evolutionary, HRPO, and GEPA also optimize tool descriptions when `prompt` is a
+dictionary of prompts. Qualify a selector with the prompt's **dictionary key** (not its
+`ChatPrompt.name`) to target one prompt's tool:
+
+```python wordWrap
+result = optimizer.optimize_prompt(
+    prompt={"planner": planner_prompt, "answerer": answerer_prompt},
+    agent=agent,
+    dataset=my_dataset,
+    metric=answer_quality,
+    optimize_tools={"lookup": True, "planner.lookup": False},
+)
+```
+
+- `optimize_tools=True` selects the tools of every prompt that declares tools.
+- An unqualified selector (`"lookup"`) applies to every prompt that declares that tool.
+- A qualified selector (`"planner.lookup"`) applies to that prompt only and overrides unqualified
+  ones, whatever their order. The example above optimizes `lookup` in `answerer` only.
+- If a selector matches no tool, the error lists the available `prompt.tool` names.
+
 ## Tool optimization limits
 
 To keep runs manageable, `optimize_tools=True` is limited by
@@ -226,8 +255,7 @@ result = optimizer.optimize_prompt(
 
 ## Limitations
 
-- Tool optimization only supports **single prompts**.
-- Not supported in `FewShotBayesianOptimizer`, `ParameterOptimizer`, or `GepaOptimizer`.
+- Not supported in `FewShotBayesianOptimizer` or `ParameterOptimizer`.
 
 ## Troubleshooting
 

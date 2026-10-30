@@ -6,6 +6,8 @@ from .agents.optimizable_agent import OptimizableAgent
 from .api_objects.chat_prompt import ChatPrompt
 from .base_optimizer import BaseOptimizer
 from .core import llm_calls
+from .api_objects.evidence import EvidenceCase, ReasoningEvidence, TextEdit
+from .utils.prompt_editing import apply_text_edits, describe_text_segments
 from .core.results import (
     OptimizationHistoryState,
     OptimizationRound,
@@ -57,6 +59,11 @@ __all__ = [
     # API Objects
     "BaseOptimizer",
     "ChatPrompt",
+    "EvidenceCase",
+    "ReasoningEvidence",
+    "TextEdit",
+    "apply_text_edits",
+    "describe_text_segments",
     "AlgorithmResult",
     "OptimizationResult",
     "OptimizationContext",

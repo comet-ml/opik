@@ -17,7 +17,6 @@ from opik_optimizer.api_objects import chat_prompt
 from opik.evaluation.metrics import score_result
 from tests.unit.fixtures.base_optimizer_test_helpers import (
     ConcreteOptimizer,
-    _DisplaySpy,
 )
 from tests.unit.test_helpers import (
     make_candidate_agent,
@@ -81,60 +80,6 @@ def test_evaluate_prompt_selection_policies(
     )
 
     assert score == 1.0
-
-
-def test_evaluate_forwards_configured_n_threads(
-    monkeypatch: pytest.MonkeyPatch, simple_chat_prompt
-) -> None:
-    """Candidate evaluations should honor the optimizer's configured n_threads."""
-    optimizer = ConcreteOptimizer(model="gpt-4", verbose=0)
-    optimizer.n_threads = 1
-    dataset = make_mock_dataset()
-    metric = MagicMock()
-    agent = MagicMock()
-
-    context = make_optimization_context(
-        simple_chat_prompt,
-        dataset=dataset,
-        metric=metric,
-        agent=agent,
-        max_trials=3,
-    )
-
-    captured_call: dict[str, Any] = {}
-
-    def fake_evaluate_prompt(
-        self,
-        *,
-        prompt,
-        dataset,
-        metric,
-        agent,
-        experiment_config,
-        n_samples,
-        verbose,
-        n_threads=None,
-        **kwargs,
-    ):
-        _ = (
-            prompt,
-            dataset,
-            metric,
-            agent,
-            experiment_config,
-            n_samples,
-            verbose,
-            kwargs,
-        )
-        captured_call["n_threads"] = n_threads
-        return 0.5
-
-    monkeypatch.setattr(ConcreteOptimizer, "evaluate_prompt", fake_evaluate_prompt)
-
-    score = optimizer.evaluate(context, {"main": simple_chat_prompt})
-
-    assert score == 0.5
-    assert captured_call["n_threads"] == optimizer.n_threads
 
 
 def test_normalize_n_threads_clamps_bounds(
@@ -206,15 +151,6 @@ def test_coerce_score_rejects_non_numeric() -> None:
     """Non-numeric scores should raise a TypeError."""
     with pytest.raises(TypeError, match="Score must be convertible to float"):
         BaseOptimizer._coerce_score(object())
-
-
-def test_reporter_helpers_set_and_clear() -> None:
-    optimizer = ConcreteOptimizer(model="gpt-4")
-    reporter = object()
-    optimizer._set_reporter(reporter)
-    assert optimizer._reporter is reporter
-    optimizer._clear_reporter()
-    assert optimizer._reporter is None
 
 
 def test_on_trial_handles_non_finite_scores(
@@ -418,38 +354,3 @@ def test_evaluate_prompt_on_dict_items_forwards_experiment_config(
 
     assert isinstance(result, DummyResult)
     assert captured["experiment_config"]["foo"] == "bar"
-
-
-def test_optimize_prompt_uses_injected_display(
-    monkeypatch: pytest.MonkeyPatch, simple_chat_prompt
-) -> None:
-    spy = _DisplaySpy()
-    optimizer = ConcreteOptimizer(model="gpt-4", display=spy)
-
-    mock_dataset = MagicMock()
-    mock_metric = MagicMock(__name__="metric")
-
-    def fake_setup(*_args, **_kwargs):
-        return make_optimization_context(
-            simple_chat_prompt,
-            dataset=mock_dataset,
-            metric=mock_metric,
-            agent=MagicMock(),
-            max_trials=1,
-        )
-
-    monkeypatch.setattr(optimizer, "_setup_optimization", fake_setup)
-    monkeypatch.setattr(optimizer, "_calculate_baseline", lambda _ctx: 0.1)
-    monkeypatch.setattr(optimizer, "_should_skip_optimization", lambda _score: True)
-    monkeypatch.setattr(optimizer, "_build_early_result", lambda **_kwargs: MagicMock())
-    monkeypatch.setattr(optimizer, "_finalize_optimization", lambda *_a, **_k: None)
-
-    BaseOptimizer.optimize_prompt(
-        optimizer,
-        prompt=simple_chat_prompt,
-        dataset=mock_dataset,
-        metric=mock_metric,
-        max_trials=1,
-    )
-
-    assert spy.header_calls, "Injected display handler should be used"

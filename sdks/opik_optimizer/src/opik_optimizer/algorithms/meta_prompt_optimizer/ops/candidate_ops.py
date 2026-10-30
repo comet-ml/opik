@@ -6,11 +6,10 @@ import logging
 from typing import Any
 from collections.abc import Callable, Sequence
 
-from litellm.exceptions import BadRequestError
+from litellm.exceptions import AuthenticationError, BadRequestError, NotFoundError
 
 from ....api_objects import chat_prompt
 from ....api_objects.types import MetricFunction
-from ....core.llm_calls import StructuredOutputParsingError
 from ....core.results import OptimizationRound
 from .candidate_bundle_ops import (  # noqa: F401
     _format_agent_prompts_for_prompt,
@@ -205,7 +204,14 @@ def generate_round_candidates(
 
         return candidate_prompts
     except Exception as exc:
-        if isinstance(exc, (BadRequestError, StructuredOutputParsingError)):
+        if _is_config_error(exc):
             raise
         logger.warning("Failed to generate %s candidates: %s", prompts_this_round, exc)
         return []
+
+
+def _is_config_error(exc: Exception) -> bool:
+    """Bad credentials or an unknown model fail every round, so they must not be skipped."""
+    return isinstance(exc, (AuthenticationError, NotFoundError)) or (
+        isinstance(exc, BadRequestError) and "LLM Provider NOT provided" in str(exc)
+    )

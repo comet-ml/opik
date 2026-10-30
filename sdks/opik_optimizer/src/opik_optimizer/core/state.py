@@ -27,6 +27,7 @@ FinishReason = Literal[
     "max_trials",  # Maximum number of trials reached
     "no_improvement",  # No improvement for configured number of generations
     "reflection_budget",  # Reflection-LLM call budget exhausted (GEPA)
+    "timeout",  # Time limit reached before the trial budget (ParameterOptimizer)
     "error",  # Optimization failed
     "cancelled",  # Optimization cancelled/interrupted
 ]

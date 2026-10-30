@@ -10,7 +10,7 @@ subtitle: Optimize prompts that use external tools and function calls
 title: Tool Optimization (MCP & Function Calling)
 ---
 
-Tool optimization is a specialized feature that allows you to optimize prompts that use external tools and the Model Context Protocol (MCP). This capability is supported by all optimizers **except** `FewShotBayesianOptimizer`, `ParameterOptimizer`, and `GepaOptimizer`.
+Tool optimization is a specialized feature that allows you to optimize prompts that use external tools and the Model Context Protocol (MCP). This capability is supported by all optimizers **except** `FewShotBayesianOptimizer` and `ParameterOptimizer`.
 
 ## What is Tool Optimization?
 
@@ -45,6 +45,22 @@ require:
   can be improved just like simple text prompts.
 
 </Note>
+
+## Selecting tools in an agent bundle
+
+MetaPrompt, Evolutionary, HRPO, and GEPA support tool-description optimization with a dictionary of prompts. Use `optimize_tools=True` to include tools from every prompt, or qualify selectors with the dictionary key to select one prompt's tools:
+
+```python
+result = optimizer.optimize_prompt(
+    prompt={"planner": planner_prompt, "answerer": answerer_prompt},
+    agent=agent,
+    dataset=dataset,
+    metric=metric,
+    optimize_tools={"planner.lookup": True},
+)
+```
+
+This selects the planner's `lookup` tool and preserves the answerer's tools. Selectors are qualified with the dictionary key, not the prompt's `ChatPrompt.name`. An unqualified selector such as `"lookup"` selects that name in every prompt that declares it, and qualified selectors override unqualified ones regardless of order: `{"lookup": True, "planner.lookup": False}` selects `lookup` in every prompt except the planner. Selectors may use the `tool:` prefix, a selector that enables no tool means tool optimization is not requested, and an unknown selector raises an error listing the available `prompt.tool` names. Prompts without tools can still participate in the agent.
 
 ## Supported Tool Types
 
@@ -95,7 +111,7 @@ result = optimizer.optimize_prompt(prompt=prompt, dataset=dataset, metric=metric
 
 ### 2. MCP (Model Context Protocol) Tools
 
-**True tool optimization** is available for MCP tools and function-calling tools across supported optimizers. MCP tools provide standardized interfaces for external integrations:
+**True tool optimization** is available for MCP tools and function-calling tools across supported optimizers. MCP tools provide standardized interfaces for external integrations. They need the optional MCP SDK: `pip install "opik-optimizer[mcp]"`.
 
 ```python wordWrap
 # MCP tool optimization example
@@ -112,7 +128,7 @@ optimizer = MetaPromptOptimizer(model="gpt-5-nano")
 <Note>
 MCP Tool Optimization:
 
-    - Supported by all optimizers **except** FewShotBayesianOptimizer, ParameterOptimizer, and GepaOptimizer
+    - Supported by all optimizers **except** FewShotBayesianOptimizer and ParameterOptimizer
     - Working examples available in `scripts/litellm_metaprompt_context7_remote_example.py`
 
 </Note>

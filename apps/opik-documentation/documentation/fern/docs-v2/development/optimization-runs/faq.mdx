@@ -38,6 +38,16 @@ title: Optimizer Frequently Asked Questions
   </Accordion>
 </AccordionGroup>
 
+## Agent and optimizer models
+
+The evaluated agent and the optimizer have independent model settings:
+
+- Set the agent's model and generation parameters on each `ChatPrompt`, or inside your custom agent.
+- Set `model` and `model_parameters` on the optimizer to control its internal prompt-generation and reflection calls. These settings are not copied into the agent's prompts, including when a prompt has empty parameters.
+- HRPO also accepts `reasoning_model` and `reasoning_model_parameters`. Omit reasoning parameters to inherit the optimizer's parameters, or pass `{}` to use an explicitly empty override.
+
+For `ParameterOptimizer`, the prompt's model and parameters form the baseline; the optimizer has no model of its own, and its `model` / `model_parameters` arguments are deprecated and ignored. Search-space values override only the fields being tuned; other prompt settings remain intact. To tune the agent's model itself, add a `model` parameter with `"target": "model"` to the search space. `baseline_parameters` and `optimized_model_kwargs` in results are keyed by prompt name.
+
 ## Optimization Algorithms
 
 <AccordionGroup>

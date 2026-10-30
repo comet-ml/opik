@@ -1,10 +1,8 @@
+from ...utils.prompt_editing import describe_text_segments
 from ...api_objects import chat_prompt
 from typing import Any
-import copy
 import rapidfuzz
-from ...utils.helpers import json_to_dict
 from ...utils.toolcalling.ops import toolcalling as toolcalling_utils
-from ...utils.text import normalize_llm_text
 
 
 # FIXME: Refactor and move to prompts.py and prompt library.
@@ -13,7 +11,7 @@ def get_task_description_for_llm(
 ) -> str:
     """Generates a concise task description for LLM prompts that need context."""
     description = "Task: Given a list of AI messages with placeholder values, generate an effective prompt. "
-    description += f"The original high-level instruction being optimized is: '{prompt.get_messages()}'. "
+    description += f"The original high-level instruction being optimized is: '{describe_text_segments(prompt)}'. "
     if optimize_tools:
         tool_blocks = toolcalling_utils.build_tool_blocks_from_prompt(prompt)
         if tool_blocks:
@@ -53,25 +51,3 @@ def calculate_population_diversity(population: list[Any] | None) -> float:
                 count += 1
 
     return total_distance / count if count > 0 else 0.0
-
-
-def update_individual_with_prompt(
-    individual: Any, prompt_candidate: chat_prompt.ChatPrompt
-) -> Any:
-    individual[:] = prompt_candidate.get_messages()
-    setattr(individual, "tools", copy.deepcopy(prompt_candidate.tools))
-    setattr(individual, "function_map", prompt_candidate.function_map)
-    setattr(individual, "model", prompt_candidate.model)
-    setattr(individual, "model_kwargs", copy.deepcopy(prompt_candidate.model_kwargs))
-    return individual
-
-
-def parse_llm_messages(response_item: Any) -> list[Any]:
-    """Normalize LLM responses into a list of message dicts."""
-    if hasattr(response_item, "model_dump"):
-        response_item = response_item.model_dump()
-    if isinstance(response_item, list):
-        return response_item
-    if isinstance(response_item, dict):
-        return response_item.get("messages") or [response_item]
-    return json_to_dict(normalize_llm_text(response_item))

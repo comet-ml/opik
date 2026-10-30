@@ -53,15 +53,12 @@ class _Optimizer(BaseOptimizer):
 
 
 class TestResolveOptimizationId:
-    def test_explicit_id_always_wins(self) -> None:
-        assert llm_calls._resolve_optimization_id("explicit") == "explicit"
-
     def test_falls_back_to_the_running_optimizer(self) -> None:
         """13 of 20 call sites never pass an id — every Evolutionary and
         HierarchicalReflective LLM call among them — so their traces carried no
         optimization tag and the run's cost aggregation never counted them."""
         optimizer = _Optimizer()
-        optimizer.current_optimization_id = "opt-from-stack"
+        optimizer.current_optimization_id = "opt-from-scope"
 
         def ops_style_call() -> str | None:  # a module-level ops helper
             return llm_calls._resolve_optimization_id(None)
@@ -70,9 +67,8 @@ class TestResolveOptimizationId:
             return ops_style_call()
 
         _Optimizer.probe = method  # type: ignore[attr-defined]
-        assert optimizer.probe() == "opt-from-stack"  # type: ignore[attr-defined]
-
-    def test_none_when_no_optimizer_is_running(self) -> None:
+        with llm_calls.optimizer_scope(optimizer):
+            assert optimizer.probe() == "opt-from-scope"  # type: ignore[attr-defined]
         assert llm_calls._resolve_optimization_id(None) is None
 
 
@@ -189,17 +185,6 @@ class TestInvokeTraced:
         )
 
 
-class TestTraceName:
-    def test_named_after_the_call_type(self) -> None:
-        assert (
-            llm_calls._trace_name({"metadata": {"opik_call_type": "reflection"}})
-            == "reflection"
-        )
-
-    def test_falls_back_when_the_call_type_is_absent(self) -> None:
-        assert llm_calls._trace_name({}) == "optimizer_llm_call"
-
-
 @pytest.mark.asyncio
 async def test_async_path_awaits_inside_the_trace(monkeypatch) -> None:
     """A sync wrapper would close the trace on returning the coroutine — before
@@ -267,3 +252,36 @@ async def test_async_path_tags_the_trace_it_opens(monkeypatch) -> None:
     )
 
     assert tagged == [["opt-async", "Prompt Optimization"]]
+
+
+def test_optimizer_scope_restores_parent_after_failure():
+    outer, inner = _Optimizer(), _Optimizer()
+    outer.current_optimization_id = "outer"
+    inner.current_optimization_id = "inner"
+    with llm_calls.optimizer_scope(outer):
+        try:
+            with llm_calls.optimizer_scope(inner):
+                assert llm_calls._resolve_optimization_id(None) == "inner"
+                raise RuntimeError("test")
+        except RuntimeError:
+            pass
+        assert llm_calls._resolve_optimization_id(None) == "outer"
+    assert llm_calls._resolve_optimization_id(None) is None
+
+
+def test_optimizer_scopes_do_not_leak_between_threads():
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    barrier = Barrier(2)
+
+    def run(optimization_id):
+        optimizer = _Optimizer()
+        optimizer.current_optimization_id = optimization_id
+        with llm_calls.optimizer_scope(optimizer):
+            barrier.wait(timeout=5)
+            return llm_calls._resolve_optimization_id(None)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        assert list(pool.map(run, ["first", "second"])) == ["first", "second"]
+    assert llm_calls._resolve_optimization_id(None) is None

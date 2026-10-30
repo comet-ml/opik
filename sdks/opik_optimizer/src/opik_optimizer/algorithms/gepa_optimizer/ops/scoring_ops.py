@@ -58,14 +58,9 @@ def rescore_candidates(
 
                 try:
                     context.evaluation_dataset = dataset
-                    sampling_tag = optimizer._build_sampling_tag(
-                        scope="gepa",
-                        candidate_id=candidate_id,
-                    )
                     score = optimizer.evaluate(
                         context,
                         prompt_variants,
-                        sampling_tag=sampling_tag,
                     )
                     score = float(score)
                 except Exception:

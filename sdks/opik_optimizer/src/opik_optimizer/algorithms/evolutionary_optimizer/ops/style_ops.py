@@ -1,3 +1,4 @@
+from ....core.reasoning import ReasoningEvidence, EvidenceCase
 from typing import Any
 
 import logging
@@ -45,21 +46,21 @@ def infer_output_style_from_dataset(
             )
             return None
 
-        examples_str = ""
-        for i, item_content in enumerate(items_to_process):
-            filtered_content: dict[str, str] = {
-                x: y for x, y in item_content.items() if x != "id"
-            }
-            examples_str += (
-                f"Example {i + 1}:\nDataset Item:\n{filtered_content}\n---\n"
-            )
-
+        # The items are attached as evidence cases, rendered once.
         user_prompt_for_style_inference = prompts.get(
-            "style_inference_user_prompt_template", examples_str=examples_str
+            "style_inference_user_prompt_template"
         )
 
         try:
             response = _llm_calls.call_model(
+                metadata={"opik_call_type": "output_style_inference"},
+                evidence=ReasoningEvidence(
+                    cases=[
+                        EvidenceCase(case_id=str(i), inputs=item)
+                        for i, item in enumerate(items_to_process)
+                    ],
+                    editable=False,
+                ),
                 messages=[
                     {
                         "role": "system",

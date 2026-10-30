@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from contextlib import nullcontext
+from contextlib import ExitStack, nullcontext
 from typing import Any, TYPE_CHECKING
 
 import opik
@@ -9,7 +9,8 @@ import opik
 from ....api_objects import chat_prompt
 from ....api_objects.types import MetricFunction
 from ....constants import normalize_eval_threads
-from ....core import runtime
+from ....core import evaluation, runtime
+from ....core.lineage import prompt_fingerprint
 from ....core.state import OptimizationContext
 from ....utils.logging import debug_log
 from ....utils.reporting import convert_tqdm_to_rich
@@ -22,6 +23,28 @@ from ..types import HierarchicalRootCauseAnalysis
 logger = logging.getLogger(__name__)
 
 
+def record_traces(recording_stack: ExitStack, metric: MetricFunction) -> Any | None:
+    """Record an evaluation's trace trees so analysis sees the agent's steps.
+
+    Opik refuses nested recordings, and task-span metrics open their own inside
+    evaluate(); either way the evaluation runs unrecorded (final outputs only).
+    """
+    if evaluation._metric_requires_task_span(metric):
+        return None
+    try:
+        return recording_stack.enter_context(opik.record_traces_locally())
+    except Exception as exc:
+        logger.debug("Agent traces unavailable for analysis: %s", exc, exc_info=True)
+        return None
+
+
+def _requested_items(sample: Any) -> frozenset[str] | None | bool:
+    """Items a sampling plan selects: None for all, False when only a count is known."""
+    if sample.dataset_item_ids is not None:
+        return frozenset(str(item_id) for item_id in sample.dataset_item_ids)
+    return None if sample.nb_samples is None else False
+
+
 def run_root_cause_analysis(
     *,
     optimizer: HierarchicalReflectiveOptimizer,
@@ -31,40 +54,41 @@ def run_root_cause_analysis(
     metric: MetricFunction,
     agent: Any,
     n_samples: int | float | str | None,
-    sampling_tag: str | None = None,
+    round_index: int,
 ) -> HierarchicalRootCauseAnalysis:
+    # Each iteration analyses its own training sample, so later iterations see
+    # failures the earlier ones did not.
+    sample = optimizer._prepare_sampling_plan(
+        dataset=dataset,
+        n_samples=n_samples,
+        phase=f"root_cause:{round_index}",
+        strategy=context.n_samples_strategy,
+    )
+    key = (prompt_fingerprint(best_prompts), str(dataset.id))
     with reporting.display_root_cause_analysis(
         verbose=optimizer.verbose
     ) as rca_reporter:
         optimizer._set_reporter(rca_reporter)
         try:
-            optimizer.pre_trial(context, best_prompts)
-            suppress_progress = bool(
-                (context.extra_params or {}).get("suppress_evaluation_progress", False)
-            )
-            progress_ctx = (
-                nullcontext()
-                if suppress_progress
-                else convert_tqdm_to_rich("  Evaluation", verbose=optimizer.verbose)
-            )
-            with progress_ctx:
-                train_dataset_experiment_result = optimizer.evaluate_prompt(
-                    prompt=best_prompts,
+            scored = optimizer._scored.get(key)
+            if scored is None or scored.item_ids != _requested_items(sample):
+                # The best prompt was scored on other items (a validation set or
+                # another sample), so evaluate it on this training sample.
+                _evaluate_for_analysis(
+                    optimizer=optimizer,
+                    context=context,
+                    best_prompts=best_prompts,
                     dataset=dataset,
                     metric=metric,
                     agent=agent,
-                    n_samples=n_samples,
-                    n_samples_strategy=context.n_samples_strategy,
-                    n_threads=normalize_eval_threads(
-                        getattr(optimizer, "n_threads", None)
-                    ),
-                    experiment_config=context.experiment_config,
-                    return_evaluation_result=True,
-                    allow_tool_use=context.allow_tool_use,
-                    sampling_tag=sampling_tag,
+                    sample=sample,
                 )
+                scored = optimizer._scored[key]
+            # Only the best prompt's evaluation can be analysed again; later
+            # bests are evaluated after this point.
+            optimizer._scored = {key: scored}
             hierarchical_analysis = optimizer._hierarchical_root_cause_analysis(
-                train_dataset_experiment_result
+                scored.result, scored.traces
             )
             rca_reporter.set_completed(
                 hierarchical_analysis.total_test_cases,
@@ -74,6 +98,45 @@ def run_root_cause_analysis(
             optimizer._clear_reporter()
 
     return hierarchical_analysis
+
+
+def _evaluate_for_analysis(
+    *,
+    optimizer: HierarchicalReflectiveOptimizer,
+    context: OptimizationContext,
+    best_prompts: dict[str, chat_prompt.ChatPrompt],
+    dataset: opik.Dataset,
+    metric: MetricFunction,
+    agent: Any,
+    sample: Any,
+) -> None:
+    optimizer.pre_trial(context, best_prompts)
+    suppress_progress = bool(
+        (context.extra_params or {}).get("suppress_evaluation_progress", False)
+    )
+    progress_ctx = (
+        nullcontext()
+        if suppress_progress
+        else convert_tqdm_to_rich("  Evaluation", verbose=optimizer.verbose)
+    )
+    with progress_ctx:
+        optimizer.evaluate_prompt(
+            prompt=best_prompts,
+            dataset=dataset,
+            metric=metric,
+            agent=agent,
+            n_samples=None
+            if sample.dataset_item_ids is not None
+            else sample.nb_samples,
+            dataset_item_ids=sample.dataset_item_ids,
+            n_samples_strategy=context.n_samples_strategy,
+            n_threads=normalize_eval_threads(getattr(optimizer, "n_threads", None)),
+            experiment_config=context.experiment_config,
+            return_evaluation_result=True,
+            allow_tool_use=context.allow_tool_use,
+            # Analysis, not a ranking: keep it out of the candidate's trial score.
+            experiment_type="mini-batch",
+        )
 
 
 def improve_over_failure_modes(
@@ -115,7 +178,6 @@ def improve_over_failure_modes(
                         max_trials,
                         root_cause.name,
                     )
-                    optimizer._should_stop_optimization = True
                     break
 
                 trials_before_attempt = context.trials_completed
@@ -177,9 +239,8 @@ def improve_over_failure_modes(
                         verbose=optimizer.verbose,
                     )
 
-        if optimizer._should_stop_optimization or context.should_stop:
-            break
-
+        # Adopt before honouring a stop: the attempt that ended the run (perfect
+        # score, last trial) is the winner and must be the prompt we return.
         if (
             improved_score is not None
             and improved_chat_prompts is not None
@@ -200,6 +261,9 @@ def improve_over_failure_modes(
                 "Keeping previous best prompt, no improvement from '%s'",
                 root_cause.name,
             )
+
+        if context.should_stop:
+            break
 
     return best_prompts, best_score
 
@@ -254,7 +318,11 @@ def finalize_iteration(
         trials_completed=context.trials_completed,
     )
 
-    if abs(iteration_improvement) < optimizer.convergence_threshold:
+    # Don't overwrite an earlier stop reason (e.g. perfect_score) with convergence.
+    if (
+        not context.should_stop
+        and abs(iteration_improvement) < optimizer.convergence_threshold
+    ):
         logger.info(
             "Convergence achieved: improvement (%.2f%%) below threshold (%.2f%%). Stopping after %s iterations.",
             iteration_improvement * 100,
@@ -263,6 +331,5 @@ def finalize_iteration(
         )
         context.should_stop = True
         context.finish_reason = "no_improvement"
-        optimizer._should_stop_optimization = True
 
     return iteration_improvement

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+from types import SimpleNamespace
 from collections.abc import Callable
 
 import pytest
@@ -51,17 +52,12 @@ class _DummyDataset:
     def __init__(self, name: str) -> None:
         self.name = name
         self._records: list[dict[str, str]] = []
-        self._hashes: list[str] = []
 
     def get_items(self) -> list[dict[str, str]]:
         return list(self._records)
 
     def insert(self, records: list[dict[str, str]]) -> None:
         self._records.extend(records)
-        # mirror behaviour used in the tests (len(_hashes) == expected size)
-        self._hashes.extend(
-            [rec.get("id", str(idx)) for idx, rec in enumerate(records)]
-        )
 
 
 @pytest.mark.parametrize(
@@ -73,7 +69,11 @@ def test_full_dataset_sizes(
     expected_size: int,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    original_load = dataset_utils.DatasetHandle.load
+    # Context7 loads bundled JSONL directly rather than using DatasetHandle.
+    monkeypatch.setattr(
+        "opik.Opik",
+        lambda: SimpleNamespace(get_or_create_dataset=lambda name: _DummyDataset(name)),
+    )
 
     def _stub_load(
         self: dataset_utils.DatasetHandle, **kwargs: object
@@ -88,17 +88,8 @@ def test_full_dataset_sizes(
 
     monkeypatch.setattr(dataset_utils.DatasetHandle, "load", _stub_load)
 
-    dataset: _DummyDataset | None = None
-    try:
-        dataset = dataset_func(**DATASET_CALL_KWARGS.get(dataset_name, {}))
-    except RuntimeError as exc:
-        if "Opik client is not available; context7_eval" in str(exc):
-            pytest.skip("context7_eval not available without Opik client")
-        raise
-    finally:
-        monkeypatch.setattr(dataset_utils.DatasetHandle, "load", original_load)
-    assert dataset is not None
-    assert len(dataset._hashes) == expected_size
+    dataset = dataset_func(**DATASET_CALL_KWARGS.get(dataset_name, {}))
+    assert len(dataset.get_items()) == expected_size
 
 
 @pytest.mark.parametrize(
@@ -110,7 +101,11 @@ def test_test_dataset_sizes(
     expected_size: int,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    original_load = dataset_utils.DatasetHandle.load
+    # Context7 loads bundled JSONL directly rather than using DatasetHandle.
+    monkeypatch.setattr(
+        "opik.Opik",
+        lambda: SimpleNamespace(get_or_create_dataset=lambda name: _DummyDataset(name)),
+    )
 
     def _stub_load(
         self: dataset_utils.DatasetHandle, **kwargs: object
@@ -125,16 +120,5 @@ def test_test_dataset_sizes(
 
     monkeypatch.setattr(dataset_utils.DatasetHandle, "load", _stub_load)
 
-    dataset: _DummyDataset | None = None
-    try:
-        dataset = dataset_func(
-            test_mode=True, **DATASET_CALL_KWARGS.get(dataset_name, {})
-        )
-    except RuntimeError as exc:
-        if "Opik client is not available; context7_eval" in str(exc):
-            pytest.skip("context7_eval not available without Opik client")
-        raise
-    finally:
-        monkeypatch.setattr(dataset_utils.DatasetHandle, "load", original_load)
-    assert dataset is not None
-    assert len(dataset._hashes) == expected_size
+    dataset = dataset_func(test_mode=True, **DATASET_CALL_KWARGS.get(dataset_name, {}))
+    assert len(dataset.get_items()) == expected_size

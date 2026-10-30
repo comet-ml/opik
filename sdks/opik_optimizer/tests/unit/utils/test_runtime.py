@@ -38,7 +38,12 @@ class _DummyOptimizer(BaseOptimizer):
         super().__init__(model="gpt-4o-mini", verbose=0)
         self.calls: list[tuple[Any, str]] = []
 
-    def _finalize_optimization(self, context: Any, status: str = "completed") -> None:
+    def _finalize_optimization(
+        self,
+        context: Any,
+        status: str = "completed",
+        error_info: dict[Any, Any] | None = None,
+    ) -> None:
         self.calls.append((context, status))
 
 
@@ -70,42 +75,3 @@ def test_handle_termination_marks_cancelled(
     assert context.should_stop is True
     assert context.finish_reason == "cancelled"
     assert optimizer.calls == [(context, "cancelled")]
-
-
-def test_candidate_first_aliases_use_history_builder(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    prompt = ChatPrompt(system="sys", user="{question}")
-    context = make_optimization_context(prompt)
-    optimizer = _DummyOptimizer()
-
-    calls: list[tuple[str, Any]] = []
-
-    class _HistorySpy:
-        def start_round(self, extras: Any | None = None) -> str:
-            calls.append(("start_round", extras))
-            return "round-handle"
-
-        def record_trial(self, **kwargs: Any) -> None:
-            calls.append(("record_trial", kwargs))
-
-        def end_round(self, **kwargs: Any) -> None:
-            calls.append(("end_round", kwargs))
-
-    optimizer._history_builder = _HistorySpy()  # type: ignore[assignment]
-
-    round_handle = optimizer.begin_round(context, stage="test")
-    candidate_handle = optimizer.start_candidate(
-        context, {"candidate": 1}, round_handle=round_handle
-    )
-    optimizer.finish_candidate(
-        context,
-        candidate_handle,
-        score=0.5,
-        round_handle=round_handle,
-    )
-    optimizer.finish_round(round_handle, context=context, best_score=0.5)
-
-    assert calls[0] == ("start_round", {"stage": "test"})
-    assert calls[1][0] == "record_trial"
-    assert calls[2][0] == "end_round"

@@ -1,8 +1,10 @@
 import copy
 import json
 import logging
-import sys
-from types import FrameType
+from contextlib import contextmanager
+from contextvars import ContextVar
+from functools import wraps
+from collections.abc import Callable, Iterator
 from typing import TYPE_CHECKING, Any, TypeVar, overload
 
 from pydantic import BaseModel, ValidationError as PydanticValidationError
@@ -15,6 +17,13 @@ from opik.integrations.litellm import track_completion
 
 from ..utils import throttle as _throttle
 from ..utils.helpers import json_to_dict
+
+from .reasoning import (
+    ChatMessages,
+    ReasoningEvidence,
+    build_reasoning_messages,
+    validate_reasoning_messages,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -154,7 +163,9 @@ def _invoke_traced(
     tags = _optimization_trace_tags(params)
     prepared = _strip_project_name(params)
 
-    @opik.track(name=_trace_name(params), project_name=project_name)
+    @opik.track(
+        name=_trace_name(params), project_name=project_name, source="optimization"
+    )
     def _call() -> Any:
         if tags:
             try:
@@ -191,7 +202,9 @@ async def _invoke_traced_async(
     tags = _optimization_trace_tags(params)
     prepared = _strip_project_name(params)
 
-    @opik.track(name=_trace_name(params), project_name=project_name)
+    @opik.track(
+        name=_trace_name(params), project_name=project_name, source="optimization"
+    )
     async def _call() -> Any:
         if tags:
             try:
@@ -300,47 +313,61 @@ _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 _T = TypeVar("_T", bound=BaseModel)
 
 
-def _find_optimizer_in_stack() -> Any | None:
-    """Return the nearest BaseOptimizer bound as `self` on the call stack."""
-    try:
-        from ..base_optimizer import BaseOptimizer
-    except Exception:
-        return None
+_active_optimizer: ContextVar[Any | None] = ContextVar(
+    "opik_active_optimizer", default=None
+)
 
-    try:
-        frame: FrameType | None = sys._getframe()
-    except ValueError:
-        return None
 
-    while frame is not None:
-        optimizer_candidate = frame.f_locals.get("self")
-        if isinstance(optimizer_candidate, BaseOptimizer):
-            return optimizer_candidate
-        frame = frame.f_back
-    return None
+@contextmanager
+def optimizer_scope(optimizer: Any) -> Iterator[None]:
+    """Bind accounting to this run, restoring any enclosing run on every exit."""
+    token = _active_optimizer.set(optimizer)
+    try:
+        yield
+    finally:
+        _active_optimizer.reset(token)
+
+
+def bind_optimizer(method: Callable[..., Any]) -> Callable[..., Any]:
+    """Bind a public optimizer entrypoint without inspecting Python frames."""
+    if getattr(method, "_opik_optimizer_bound", False):
+        return method
+
+    @wraps(method)
+    def wrapped(self: Any, *args: Any, **kwargs: Any) -> Any:
+        with optimizer_scope(self):
+            return method(self, *args, **kwargs)
+
+    setattr(wrapped, "_opik_optimizer_bound", True)
+    return wrapped
 
 
 def _increment_llm_counter_if_in_optimizer() -> None:
     """
-    Walk up the call stack and increment the first optimizer's counter if found.
+    Increment the active run's counter when called during optimization.
     """
-    optimizer = _find_optimizer_in_stack()
+    optimizer = _active_optimizer.get()
     if optimizer is not None:
         optimizer._increment_llm_counter()
 
 
-def _increment_llm_call_tools_counter_if_in_optimizer() -> None:
-    """
-    Walk up the call stack and increment the first optimizer's counter if found.
-    """
-    optimizer = _find_optimizer_in_stack()
-    if optimizer is not None:
-        optimizer._increment_llm_call_tools_counter()
+def _prepare_reasoning_request(
+    messages: ChatMessages, evidence: ReasoningEvidence | None, model: str
+) -> ChatMessages:
+    # Each optimizer passes exactly the cases it chose; nothing is added here.
+    optimizer = _active_optimizer.get()
+    result = build_reasoning_messages(
+        messages,
+        evidence=evidence,
+        allowed_roles=getattr(optimizer, "_optimizable_roles", None),
+    )
+    validate_reasoning_messages(result, model)
+    return result
 
 
 def _get_project_name_from_optimizer() -> str | None:
-    """Return project_name from the nearest optimizer on the call stack."""
-    optimizer = _find_optimizer_in_stack()
+    """Return project_name from the active optimizer."""
+    optimizer = _active_optimizer.get()
     if optimizer is not None:
         return getattr(optimizer, "project_name", None)
     return None
@@ -546,9 +573,9 @@ def _parse_response(
 
 
 def _append_json_format_instructions(
-    messages: list[dict[str, str]],
+    messages: ChatMessages,
     response_model: type[BaseModel],
-) -> list[dict[str, str]]:
+) -> ChatMessages:
     """
     Append JSON format instructions to the last user message.
 
@@ -577,31 +604,20 @@ Here is the output schema (shown in a code block for readability only — do not
     for i in range(len(modified_messages) - 1, -1, -1):
         if modified_messages[i].get("role") == "user":
             modified_messages[i] = modified_messages[i].copy()
-            modified_messages[i]["content"] = (
-                modified_messages[i]["content"] + format_instructions
-            )
+            content = modified_messages[i]["content"]
+            if isinstance(content, list):
+                content.append({"type": "text", "text": format_instructions})
+            else:
+                modified_messages[i]["content"] = content + format_instructions
             break
     return modified_messages
 
 
 def _resolve_optimization_id(optimization_id: str | None) -> str | None:
-    """Fall back to the running optimizer's id when the caller passed none.
-
-    Most optimizer-internal call sites never pass one — 13 of 20 on main, which
-    is every LLM call Evolutionary and HierarchicalReflective make — so their
-    traces carried no optimization tag and the run's cost aggregation, which
-    attributes optimizer-internal spend by exactly that tag, never counted them
-    (OPIK-7521).
-
-    Resolved from the optimizer on the call stack rather than threaded through
-    every ops signature. These calls run on the optimizer's own thread (the
-    worker pool is used for agent evaluation, not for these), and the failure
-    mode is losing a tag exactly as today — never attributing spend to the wrong
-    run, since an explicit argument always wins.
-    """
+    """Resolve the explicit ID or the optimizer bound to the active run."""
     if optimization_id is not None:
         return optimization_id
-    optimizer = _find_optimizer_in_stack()
+    optimizer = _active_optimizer.get()
     resolved = getattr(optimizer, "current_optimization_id", None)
     return str(resolved) if resolved else None
 
@@ -674,7 +690,7 @@ def _parse_response_list(
 # Overloads for call_model to provide precise return types
 @overload
 def call_model(
-    messages: list[dict[str, str]],
+    messages: ChatMessages,
     model: str,
     seed: int | None = None,
     model_parameters: dict[str, Any] | None = None,
@@ -690,12 +706,13 @@ def call_model(
     metadata: dict[str, Any] | None = None,
     project_name: str | None = None,
     return_all: bool = False,
+    evidence: ReasoningEvidence | None = None,
 ) -> str | list[str]: ...
 
 
 @overload
 def call_model(
-    messages: list[dict[str, str]],
+    messages: ChatMessages,
     model: str,
     seed: int | None = None,
     model_parameters: dict[str, Any] | None = None,
@@ -711,12 +728,13 @@ def call_model(
     metadata: dict[str, Any] | None = None,
     project_name: str | None = None,
     return_all: bool = False,
+    evidence: ReasoningEvidence | None = None,
 ) -> _T | list[_T]: ...
 
 
 @_throttle.rate_limited(_limiter)
 def call_model(
-    messages: list[dict[str, str]],
+    messages: ChatMessages,
     model: str,
     seed: int | None = None,
     model_parameters: dict[str, Any] | None = None,
@@ -734,6 +752,7 @@ def call_model(
     metadata: dict[str, Any] | None = None,
     project_name: str | None = None,
     return_all: bool = False,
+    evidence: ReasoningEvidence | None = None,
 ) -> BaseModel | str:
     """
     Call the LLM model with optional structured output.
@@ -758,6 +777,7 @@ def call_model(
         If response_model is provided, returns an instance of that model.
         Otherwise, returns the raw string response.
     """
+    messages = _prepare_reasoning_request(messages, evidence, model)
     _increment_llm_counter_if_in_optimizer()
 
     # Build dict of call-time LiteLLM parameter overrides (non-None only)
@@ -857,7 +877,7 @@ def call_model(
 # Overloads for call_model_async to provide precise return types
 @overload
 async def call_model_async(
-    messages: list[dict[str, str]],
+    messages: ChatMessages,
     model: str,
     seed: int | None = None,
     model_parameters: dict[str, Any] | None = None,
@@ -873,12 +893,13 @@ async def call_model_async(
     optimization_id: str | None = None,
     metadata: dict[str, Any] | None = None,
     return_all: bool = False,
+    evidence: ReasoningEvidence | None = None,
 ) -> str | list[str]: ...
 
 
 @overload
 async def call_model_async(
-    messages: list[dict[str, str]],
+    messages: ChatMessages,
     model: str,
     seed: int | None = None,
     model_parameters: dict[str, Any] | None = None,
@@ -894,12 +915,13 @@ async def call_model_async(
     optimization_id: str | None = None,
     metadata: dict[str, Any] | None = None,
     return_all: bool = False,
+    evidence: ReasoningEvidence | None = None,
 ) -> _T | list[_T]: ...
 
 
 @_throttle.rate_limited_async(_limiter)
 async def call_model_async(
-    messages: list[dict[str, str]],
+    messages: ChatMessages,
     model: str,
     seed: int | None = None,
     model_parameters: dict[str, Any] | None = None,
@@ -917,6 +939,7 @@ async def call_model_async(
     optimization_id: str | None = None,
     metadata: dict[str, Any] | None = None,
     return_all: bool = False,
+    evidence: ReasoningEvidence | None = None,
 ) -> BaseModel | str:
     """
     Async version of _call_model using litellm.acompletion.
@@ -941,6 +964,7 @@ async def call_model_async(
         If response_model is provided, returns an instance of that model.
         Otherwise, returns the raw string response.
     """
+    messages = _prepare_reasoning_request(messages, evidence, model)
     _increment_llm_counter_if_in_optimizer()
 
     # Build dict of call-time LiteLLM parameter overrides (non-None only)

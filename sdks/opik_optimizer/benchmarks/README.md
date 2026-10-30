@@ -122,9 +122,9 @@ python benchmarks/run_benchmark.py --config manifest.json
   - `dataset` (required): Dataset name from available datasets
   - `datasets` (optional): Per-split dataset kwargs (`train` required when present; `validation`/`test` optional). If omitted, the single `dataset` entry is applied to all splits.
   - `optimizer` (required): Optimizer name from available optimizers
-  - `model` (required): Model name from configured models
+  - `model` (required): Evaluation model for the `ChatPrompt` or package agent. Empty model names are rejected.
   - `test_mode` (optional): Override test mode for this specific task
-  - `model_parameters` (optional): Dict forwarded to the optimizer constructor (e.g., temperature, max_tokens)
+  - `model_parameters` (optional): Evaluation model settings (e.g., temperature, max_tokens). An explicit `{}` stays empty.
   - `optimizer_params` (optional): Dict merged into the optimizer constructor (per-task overrides)
   - `optimizer_prompt_params` (optional): Dict merged into the optimizer's `optimize_prompt` call (per-task overrides)
   - `metrics` (optional): List of metric callables (module.attr) to override the dataset defaults
@@ -139,10 +139,38 @@ python benchmarks/run_benchmark.py --config manifest.json
 
 Use the per-task `optimizer_params` and `optimizer_prompt_params` fields to enforce rollout budgets (e.g., `max_trials`, iteration caps) or tweak optimizer seeds without modifying the global defaults.
 
+### Separate evaluation and reasoning models
+
+Task `model` and `model_parameters` (or CLI `--models`) configure evaluation. Set the optimizer's
+reasoning configuration independently in `optimizer_params`. For example:
+
+```json
+{
+  "dataset": "gsm8k",
+  "optimizer": "meta_prompt",
+  "model": "openai/gpt-4o-mini",
+  "model_parameters": {},
+  "optimizer_params": {
+    "model": "openai/gpt-4o",
+    "model_parameters": { "temperature": 0.7 }
+  }
+}
+```
+
+Here evaluation uses the agent model with no explicit generation parameters. Reasoning uses the
+optimizer model and temperature. Neither configuration falls back to the other. Package agents
+receive the task's evaluation settings; their prompt bundles retain their declared settings.
+`ParameterOptimizer` needs only the evaluation settings because it makes no reasoning calls.
+
+Checkpoints include a format version for this model-ownership contract. Resume and retry reject
+unversioned checkpoints from the earlier shared-model runner, rather than silently choosing new
+reasoning settings. Start a new benchmark with explicit evaluation and optimizer configuration;
+existing result files remain available for inspection.
+
 #### Override Cheat Sheet
 
-- `model_parameters`: constructor overrides for model settings (temperature, max_tokens, reasoning_effort). Forwarded to the optimizer constructor as `model_parameters`.
-- `optimizer_params`: constructor overrides for the optimizer itself (e.g., change population size, tweak optimizer-specific random seeds, toggle tracing). These are applied once when we instantiate the optimizer class.
+- `model_parameters`: evaluation settings for the prompt or package agent (temperature, max_tokens, reasoning_effort). These are never forwarded to the optimizer constructor.
+- `optimizer_params`: constructor overrides for the optimizer itself, including its reasoning `model` and `model_parameters`. Omitted settings use the optimizer registry or class defaults, never the evaluation model. These are applied once when we instantiate the optimizer class.
 - `optimizer_prompt_params`: prompt-iteration overrides (e.g., `max_trials`, `n_samples`, judge batching). These are merged into the subsequent `optimize_prompt` call. When manifests omit this field, the runners derive an `optimizer_prompt_params_override` from the dataset rollout caps so Modal and local runs stay consistent.
 - `datasets`: Optional per-split dataset kwargs. Provide `train` (required when using this field) plus optional `validation`/`test`; missing splits reuse train kwargs. If you pass a single object via `dataset`, it applies to all splits.
 

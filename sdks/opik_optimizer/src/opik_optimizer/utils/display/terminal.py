@@ -517,10 +517,7 @@ def display_evaluation(
 
     with suppress_opik_logs():
         with convert_tqdm_to_rich("  Evaluation", verbose=verbose):
-            try:
-                yield Reporter()
-            finally:
-                pass
+            yield Reporter()
 
 
 def display_evaluation_progress(
@@ -622,6 +619,7 @@ def _format_stop_display(stop_reason: str | None) -> str:
         "completed": "Completed",
         "no_improvement": "No improvement",
         "reflection_budget": "Reflection budget",
+        "timeout": "Timeout",
         "error": "Error",
         "cancelled": "Cancelled",
     }.get(stop_display, stop_display)

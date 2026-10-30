@@ -9,26 +9,12 @@ from __future__ import annotations
 from typing import Any
 import logging
 
-try:
-    from deap import tools
-
-    _DEAP_IMPORT_ERROR: Exception | None = None
-except Exception as exc:  # pragma: no cover - exercised when DEAP is missing
-    tools = None
-    _DEAP_IMPORT_ERROR = exc
+from deap import tools
 
 logger = logging.getLogger(__name__)
 
 
 # TODO: Move into a shared optimizer-agnostic Pareto helper module.
-
-
-def _require_deap() -> None:
-    if tools is None:
-        raise RuntimeError(
-            "DEAP is required for EvolutionaryOptimizer. "
-            "Install the optimizer extras that include DEAP."
-        ) from _DEAP_IMPORT_ERROR
 
 
 # TODO: Decide whether selection policies should be centralized for all optimizers.
@@ -40,7 +26,6 @@ def select_population(
     tournament_size: int,
     enable_moo: bool,
 ) -> list[Any]:
-    _require_deap()
     if enable_moo:
         return tools.selNSGA2(population, population_size)
     elites = tools.selBest(population, elitism_size)
@@ -58,7 +43,6 @@ def select_population(
 def build_pareto_front(
     hof: tools.HallOfFame | tools.ParetoFront, generation_idx: int
 ) -> list[dict[str, Any]]:
-    _require_deap()
     if not hof:
         return []
     return [
@@ -90,7 +74,6 @@ def choose_best_from_front(
     hof: tools.HallOfFame | tools.ParetoFront,
     enable_moo: bool,
 ) -> Any | None:
-    _require_deap()
     if not hof:
         return None
     if enable_moo:
@@ -101,7 +84,6 @@ def choose_best_from_front(
 def serialize_pareto_solutions(
     hof: tools.HallOfFame | tools.ParetoFront,
 ) -> list[dict[str, Any]]:
-    _require_deap()
     if not hof:
         return []
     return [
@@ -115,7 +97,6 @@ def serialize_pareto_solutions(
 
 
 def format_pareto_log(hof: tools.HallOfFame | tools.ParetoFront) -> str:
-    _require_deap()
     if not hof:
         return "Pareto Front Solutions: <empty>"
     sorted_hof = sorted(hof, key=lambda ind: ind.fitness.values[0], reverse=True)

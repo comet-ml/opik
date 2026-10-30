@@ -109,9 +109,3 @@ def mock_full_optimization_flow(
         return mocks
 
     return _configure
-
-
-@pytest.fixture
-def optimizer_test_params() -> dict[str, Any]:
-    """Standard test parameters for fast optimizer testing."""
-    return {"max_trials": 1, "n_samples": 2, "verbose": 0}

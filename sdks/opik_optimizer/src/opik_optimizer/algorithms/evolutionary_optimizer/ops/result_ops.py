@@ -4,13 +4,7 @@ from typing import Any, TYPE_CHECKING
 import json
 import logging
 
-try:
-    from deap import tools
-
-    _DEAP_IMPORT_ERROR: Exception | None = None
-except Exception as exc:  # pragma: no cover - exercised when DEAP is missing
-    tools = None
-    _DEAP_IMPORT_ERROR = exc
+from deap import tools
 
 from ....core import runtime
 from . import pareto_ops
@@ -22,14 +16,6 @@ if TYPE_CHECKING:  # pragma: no cover
     from ...evolutionary_optimizer import EvolutionaryOptimizer
 
 logger = logging.getLogger(__name__)
-
-
-def _require_deap() -> None:
-    if tools is None:
-        raise RuntimeError(
-            "DEAP is required for EvolutionaryOptimizer. "
-            "Install the optimizer extras that include DEAP."
-        ) from _DEAP_IMPORT_ERROR
 
 
 def reconcile_winner_with_baseline(
@@ -66,7 +52,6 @@ def build_algorithm_result(
     effective_output_style_guidance: str,
     generation_idx: int,
 ) -> AlgorithmResult:
-    _require_deap()
     metric = context.metric
     final_details: dict[str, Any] = {}
 

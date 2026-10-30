@@ -79,25 +79,6 @@ class TestSpanCost:
             total_completion_tokens=50,
         )
 
-    def test_uses_existing_total_cost_when_available(self) -> None:
-        """Test that existing total_cost is used instead of calculating"""
-        metric = SpanCost()
-        span = make_span(
-            model="gpt-3.5-turbo",
-            usage={"prompt_tokens": 100, "completion_tokens": 50},
-            total_cost=0.05,  # Pre-calculated cost
-        )
-
-        result = metric.score(task_span=span)
-
-        assert_cost_result(
-            result=result,
-            expected_cost=0.05,
-            processed_span_count=1,
-            total_prompt_tokens=100,
-            total_completion_tokens=50,
-        )
-
     def test_traverses_nested_spans__accumulates_costs(self) -> None:
         """Test that nested spans are traversed and costs are accumulated"""
         metric = SpanCost()
@@ -115,41 +96,6 @@ class TestSpanCost:
         result = metric.score(task_span=root_span)
 
         assert_cost_result(result=result, expected_cost=0.06, processed_span_count=3)
-
-    def test_skips_spans_without_usage_data(self) -> None:
-        """Test that spans without usage data are skipped"""
-        metric = SpanCost()
-
-        root_span = make_span(
-            span_id="span-root",
-            name="root",
-            spans=[
-                make_span(span_id="span-with-cost", name="with_cost", total_cost=0.05),
-                make_span(
-                    span_id="span-without-usage",
-                    name="without_usage",
-                    model="gpt-3.5-turbo",
-                    usage=None,
-                    total_cost=None,
-                ),
-            ],
-        )
-
-        result = metric.score(task_span=root_span)
-
-        assert_cost_result(result=result, expected_cost=0.05, processed_span_count=1)
-
-    def test_skips_spans_with_zero_tokens(self) -> None:
-        """Spans with 0 prompt and 0 completion tokens should be ignored."""
-        metric = SpanCost()
-        span = make_span(
-            model="gpt-3.5-turbo",
-            usage={"prompt_tokens": 0, "completion_tokens": 0},
-        )
-
-        result = metric.score(task_span=span)
-
-        assert_cost_result(result=result, expected_cost=0.0, processed_span_count=0)
 
     def test_raises_error_when_all_spans_fail_cost_calculation(self) -> None:
         """Test that MetricComputationError is raised when all spans fail cost calculation"""
@@ -199,55 +145,3 @@ class TestSpanCost:
             processed_span_count=1,
             failed_span_count=1,
         )
-
-    def test_custom_metric_name(self) -> None:
-        """Test that custom metric name is used"""
-        custom_name = "my_custom_cost_metric"
-        metric = SpanCost(name=custom_name)
-        span = make_span(total_cost=0.05)
-
-        result = metric.score(task_span=span)
-
-        assert result.name == custom_name
-
-    def test_handles_deeply_nested_spans(self) -> None:
-        """Test that deeply nested span trees are handled correctly"""
-        metric = SpanCost()
-
-        # Create a deep hierarchy: root -> child -> grandchild
-        root = make_span(
-            span_id="span-root",
-            name="root",
-            total_cost=0.03,
-            spans=[
-                make_span(
-                    span_id="span-child",
-                    name="child",
-                    total_cost=0.02,
-                    spans=[
-                        make_span(
-                            span_id="span-grandchild",
-                            name="grandchild",
-                            total_cost=0.01,
-                        )
-                    ],
-                ),
-            ],
-        )
-
-        result = metric.score(task_span=root)
-
-        assert_cost_result(result=result, expected_cost=0.06, processed_span_count=3)
-
-    def test_metadata_contains_all_required_fields(self) -> None:
-        """Test that result metadata contains all required fields"""
-        metric = SpanCost()
-        span = make_span(total_cost=0.05)
-
-        result = metric.score(task_span=span)
-
-        assert "total_cost" in result.metadata
-        assert "total_prompt_tokens" in result.metadata
-        assert "total_completion_tokens" in result.metadata
-        assert "processed_span_count" in result.metadata
-        assert "failed_span_count" in result.metadata

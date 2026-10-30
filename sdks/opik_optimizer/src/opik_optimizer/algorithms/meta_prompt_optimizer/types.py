@@ -1,11 +1,13 @@
 """Type definitions for Meta Prompt Optimizer."""
 
+from ...utils.prompt_editing import TextEdit
+
 from dataclasses import dataclass, field
 from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
 
-from opik_optimizer.api_objects import chat_prompt, types
+from opik_optimizer.api_objects import chat_prompt
 
 
 @dataclass
@@ -27,9 +29,7 @@ class AgentPromptUpdate(BaseModel):
     # Used by AgentBundleCandidatesResponse (see ops/candidate_bundle_ops.py).
 
     name: str = Field(..., description="The name of the agent to update")
-    messages: list[types.Message] = Field(
-        ..., description="The updated messages for this agent"
-    )
+    edits: list[TextEdit] = Field(..., description="Targeted text edits for this agent")
     improvement_focus: str | None = Field(
         None, description="What aspect of the agent's performance is being improved"
     )
@@ -64,7 +64,9 @@ class AgentBundleCandidatesResponse(BaseModel):
 class PromptCandidateResponse(BaseModel):
     """Response model for single-prompt candidate generation."""
 
-    prompt: list[types.Message] = Field(..., description="Candidate prompt messages")
+    edits: list[TextEdit] = Field(
+        ..., description="Targeted text edits for this candidate"
+    )
     improvement_focus: str | None = Field(
         None, description="What aspect of the prompt is being improved"
     )
@@ -134,17 +136,3 @@ class AgentBundleCandidate:
 
     metadata: dict[str, AgentMetadata]
     """Dictionary mapping agent names to their improvement metadata"""
-
-    def get_agent_names(self) -> list[str]:
-        """Get all agent names in this bundle."""
-        return list(self.prompts.keys())
-
-    def get_agent_reasoning(self, agent_name: str) -> str | None:
-        """Get the reasoning for a specific agent's prompt changes."""
-        agent_meta = self.metadata.get(agent_name)
-        return agent_meta.reasoning if agent_meta else None
-
-    def get_agent_improvement_focus(self, agent_name: str) -> str | None:
-        """Get the improvement focus for a specific agent."""
-        agent_meta = self.metadata.get(agent_name)
-        return agent_meta.improvement_focus if agent_meta else None

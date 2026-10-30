@@ -9,7 +9,6 @@ from typing import Any, Protocol, cast
 from dataclasses import dataclass, field
 from unittest.mock import MagicMock
 import random
-import string
 
 from opik_optimizer import ChatPrompt
 from .message_builders import assistant_message, system_message, user_message
@@ -335,15 +334,3 @@ class EvaluationResultFactory:
     def create_all_failing(self, count: int) -> MagicMock:
         """Create results where all tests fail (score = 0.0)."""
         return self.create([0.0] * count)
-
-
-def random_string(length: int = 10, *, rng: random.Random | None = None) -> str:
-    """Generate a random string for testing."""
-    rand = _rand(rng)
-    return "".join(rand.choices(string.ascii_lowercase, k=length))
-
-
-def random_id(*, rng: random.Random | None = None) -> str:
-    """Generate a random ID string."""
-    rand = _rand(rng)
-    return f"id-{''.join(rand.choices(string.hexdigits.lower(), k=8))}"

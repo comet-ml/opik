@@ -814,9 +814,6 @@ class OptimizationResult(pydantic.BaseModel):
             optimization_id=self.optimization_id, dataset_id=self.dataset_id
         )
 
-    def model_dump(self, *kargs: Any, **kwargs: Any) -> dict[str, Any]:
-        return super().model_dump(*kargs, **kwargs)
-
     def get_optimized_model_kwargs(self) -> dict[str, Any]:
         """
         Extract optimized model_kwargs for use in other optimizers.

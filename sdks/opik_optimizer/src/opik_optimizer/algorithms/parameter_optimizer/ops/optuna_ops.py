@@ -45,7 +45,6 @@ def build_optuna_objective(
     stage_counts: dict[str, int],
     best_state: dict[str, Any],
     base_prompts: dict[str, chat_prompt.ChatPrompt],
-    base_model_kwargs: dict[str, Any],
     evaluation_dataset: Dataset,
     metric: MetricFunction,
     agent: OptimizableAgent | None,
@@ -70,7 +69,6 @@ def build_optuna_objective(
         stage_counts: Dictionary tracking trial counts per stage (mutated during execution).
         best_state: Dictionary tracking the best score and prompts found (mutated during execution).
         base_prompts: Base prompts to apply parameter variations to.
-        base_model_kwargs: Base model keyword arguments to use.
         evaluation_dataset: Dataset to evaluate prompts against.
         metric: Metric function to score prompt performance.
         agent: Optional agent to use for evaluation.
@@ -91,7 +89,6 @@ def build_optuna_objective(
         tuned_prompts = current_space_ref["space"].apply_to_prompts(
             base_prompts,
             sampled_values,
-            base_model_kwargs=base_model_kwargs,
         )
 
         with reporting.display_trial_evaluation(
@@ -120,35 +117,13 @@ def build_optuna_objective(
                 local_trials=stage_ref.get("local_trials"),
                 global_trials=stage_ref.get("global_trials"),
             )
-            optimizer.pre_trial(context, tuned_prompts, round_handle=round_handle)
-            sampling_tag = optimizer._build_sampling_tag(
-                scope="parameter_trial",
-                candidate_id=str(trial.number),
-            )
-            # Extract trial-specific model_kwargs to override optimizer_metadata.model_parameters
-            # For single prompt, use its model_kwargs directly; for multi-prompt, use first prompt's
-            first_prompt = next(iter(tuned_prompts.values()))
-            trial_model_kwargs = copy.deepcopy(first_prompt.model_kwargs or {})
-            # Create experiment_config override with trial-specific model_parameters
-            trial_experiment_config = (
-                copy.deepcopy(experiment_config) if experiment_config else {}
-            )
-            if "optimizer_metadata" not in trial_experiment_config:
-                trial_experiment_config["optimizer_metadata"] = {}
-            trial_experiment_config["optimizer_metadata"]["model_parameters"] = (
-                trial_model_kwargs
-            )
-            score = optimizer.evaluate_prompt(
-                prompt=tuned_prompts,
-                agent=agent,
-                dataset=evaluation_dataset,
-                metric=metric,
-                n_threads=optimizer.n_threads,
-                verbose=optimizer.verbose,
-                experiment_config=trial_experiment_config,
-                n_samples=n_samples,
-                n_samples_strategy=n_samples_strategy or context.n_samples_strategy,
-                sampling_tag=sampling_tag,
+            # The trial's settings are recorded in the experiment's agent_config.
+            score = optimizer.evaluate(
+                context,
+                tuned_prompts,
+                experiment_config=copy.deepcopy(experiment_config)
+                if experiment_config
+                else None,
             )
 
             prev_best_score = best_state["score"]
@@ -217,6 +192,8 @@ def build_optuna_objective(
             context=context,
             stop_reason=context.finish_reason,
         )
+        if context.should_stop:
+            trial.study.stop()
         return float(score)
 
     return objective

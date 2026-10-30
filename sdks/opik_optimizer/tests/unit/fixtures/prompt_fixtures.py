@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from opik_optimizer import ChatPrompt
-from tests.unit.fixtures import assistant_message, system_message, user_message
+from tests.unit.fixtures import system_message, user_message
 
 
 @pytest.fixture
@@ -15,20 +15,6 @@ def simple_chat_prompt() -> ChatPrompt:
         name="test-prompt",
         system="You are a helpful assistant.",
         user="{question}",
-    )
-
-
-@pytest.fixture
-def chat_prompt_with_messages() -> ChatPrompt:
-    """ChatPrompt using the messages list format."""
-    return ChatPrompt(
-        name="messages-prompt",
-        messages=[
-            system_message("You are a helpful assistant."),
-            user_message("Hello, {name}!"),
-            assistant_message("Hello! How can I help you today?"),
-            user_message("{question}"),
-        ],
     )
 
 

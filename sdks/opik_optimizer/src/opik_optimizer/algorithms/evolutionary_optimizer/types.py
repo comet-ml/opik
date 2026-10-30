@@ -1,25 +1,20 @@
 """Type definitions for Evolutionary Optimizer."""
 
-from typing import Any
+from ...utils.prompt_editing import TextEdit
 
-from pydantic import BaseModel, Field, model_validator
 
-from ...api_objects.types import Messages
+from pydantic import BaseModel, Field
 
 
 class CrossoverResponse(BaseModel):
-    """Response containing two child prompts from crossover operation.
+    """Each child is a targeted edit list applied to its respective parent.
 
-    Each child is a list of messages representing a complete prompt.
-    Example:
-        {
-            "child_1": [{"role": "system", "content": "..."}, {"role": "user", "content": "..."}],
-            "child_2": [{"role": "system", "content": "..."}, {"role": "user", "content": "..."}]
-        }
+    Example: {"child_1": [{"segment_id": "message:0", "text": "..."}],
+              "child_2": [{"segment_id": "message:0", "text": "..."}]}
     """
 
-    child_1: Messages
-    child_2: Messages
+    child_1: list[TextEdit]
+    child_2: list[TextEdit]
 
 
 class StyleInferenceResponse(BaseModel):
@@ -29,18 +24,12 @@ class StyleInferenceResponse(BaseModel):
 
 
 class MutationResponse(BaseModel):
-    """Response model for mutation operations returning prompt messages."""
+    """Response model for mutation operations returning targeted text edits."""
 
-    messages: Messages = Field(..., description="Mutated prompt messages")
+    edits: list[TextEdit] = Field(..., description="Targeted text edits")
 
-    @model_validator(mode="before")
-    @classmethod
-    def _wrap_messages(cls, value: Any) -> Any:
-        if isinstance(value, list):
-            return {"messages": value}
-        if isinstance(value, dict):
-            if "messages" in value:
-                return value
-            if "role" in value and "content" in value:
-                return {"messages": [value]}
-        return value
+
+class PopulationResponse(BaseModel):
+    """Fresh starts and variations are edits of the same immutable template."""
+
+    prompts: list[MutationResponse]

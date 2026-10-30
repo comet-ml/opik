@@ -13,6 +13,9 @@ runs without spending anything on a model.
 from __future__ import annotations
 
 import time
+from contextlib import nullcontext
+from types import SimpleNamespace
+from unittest.mock import MagicMock
 import uuid
 from typing import Any
 
@@ -32,21 +35,32 @@ def _configured() -> bool:
 
 
 @pytest.mark.skipif(not _configured(), reason="requires Opik credentials")
+@pytest.mark.parametrize("use_scope", [False, True], ids=["explicit", "scoped"])
 def test_optimizer_llm_call__lands_in_one_trace_tagged_with_the_optimization_id(
     monkeypatch: pytest.MonkeyPatch,
+    use_scope: bool,
 ) -> None:
     project = f"e2e-optimizer-attribution-{uuid.uuid4().hex[:8]}"
     optimization_id = f"opt-{uuid.uuid4().hex[:12]}"
     monkeypatch.setenv("OPIK_PROJECT_NAME", project)
 
-    llm_calls.call_model(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": "ping"}],
-        optimization_id=optimization_id,
+    owner = SimpleNamespace(
+        current_optimization_id=optimization_id,
         project_name=project,
-        metadata={"opik_call_type": "e2e_attribution"},
-        model_parameters={"mock_response": "pong"},
+        _increment_llm_counter=MagicMock(),
     )
+    with llm_calls.optimizer_scope(owner) if use_scope else nullcontext():
+        llm_calls.call_model(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": "ping"}],
+            optimization_id=None if use_scope else optimization_id,
+            project_name=None if use_scope else project,
+            metadata={"opik_call_type": "e2e_attribution"},
+            model_parameters={"mock_response": "pong"},
+        )
+    if use_scope:
+        owner._increment_llm_counter.assert_called_once()
+    assert llm_calls._resolve_optimization_id(None) is None
 
     client = opik.Opik(project_name=project)
     client.flush()
@@ -63,7 +77,8 @@ def test_optimizer_llm_call__lands_in_one_trace_tagged_with_the_optimization_id(
             ]
         except Exception:
             traces = []
-        if traces:
+        # Trace rows can arrive before their span-count aggregation.
+        if traces and traces[0].llm_span_count > 0:
             break
         time.sleep(3)
 

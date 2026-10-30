@@ -56,7 +56,7 @@ title: Agent Optimization
     Use Opik datasets (CSV upload, API, or trace exports) plus deterministic metrics/`ScoreResult` functions. See [Define datasets](/development/optimization-runs/optimization/define_datasets) and [Define metrics](/development/optimization-runs/optimization/define_metrics).
   </Step>
   <Step title="2. Pick an optimizer">
-    Choose the best algorithm for your task (see [Optimization algorithms](/development/optimization-runs/algorithms/overview)). All optimizers expose the same API, so you can swap them easily or chain runs.
+    Choose the best algorithm for your task (see [Optimization algorithms](/development/optimization-runs/algorithms/overview)). Prompt optimizers use `optimize_prompt()`; `ParameterOptimizer` uses `optimize_parameter()`. Every optimizer returns `OptimizationResult`, and you can chain runs.
   </Step>
   <Step title="3. Inspect & ship">
     Results land in the Opik dashboard under **Development → Optimization runs**, where you can compare trials and their prompts before promoting the change.
