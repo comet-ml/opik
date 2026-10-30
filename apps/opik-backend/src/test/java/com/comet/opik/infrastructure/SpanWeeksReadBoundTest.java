@@ -18,7 +18,6 @@ import com.comet.opik.api.filter.SpanField;
 import com.comet.opik.api.filter.SpanFilter;
 import com.comet.opik.api.filter.TraceField;
 import com.comet.opik.api.filter.TraceFilter;
-import com.comet.opik.api.filter.TraceThreadField;
 import com.comet.opik.api.filter.TraceThreadFilter;
 import com.comet.opik.api.metrics.KpiCardRequest;
 import com.comet.opik.api.metrics.KpiCardResponse;
@@ -106,6 +105,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
+import static com.comet.opik.api.resources.utils.FilterTestUtils.threadIdFilter;
 import static com.comet.opik.api.resources.utils.resources.ExperimentTestAssertions.EXPERIMENT_IGNORED_FIELDS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
@@ -1054,14 +1054,6 @@ class SpanWeeksReadBoundTest {
                 .status(TraceThreadStatus.ACTIVE)
                 .environment(source.environment())
                 .build();
-    }
-
-    private List<TraceThreadFilter> threadIdFilter(String threadId) {
-        return List.of(TraceThreadFilter.builder()
-                .field(TraceThreadField.ID)
-                .operator(Operator.EQUAL)
-                .value(threadId)
-                .build());
     }
 
     /** The partitioned successor has no public API before the cutover, so it is installed the way the cutover does. */
