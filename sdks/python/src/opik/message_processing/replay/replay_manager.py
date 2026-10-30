@@ -82,8 +82,9 @@ class ReplayManager(threading.Thread):
         """Checks if SDK has a connection to the OPIK server."""
         return self._monitor.has_server_connection
 
-    def refresh_server_connection(self) -> None:
-        """Pings the server now if it is believed to be unreachable.
+    def refresh_server_connection(self, timeout: Optional[float] = None) -> None:
+        """Pings the server now if it is believed to be unreachable, waiting at
+        most ``timeout`` seconds for the answer.
 
         The monitor pings only once per interval, so a server that came back a
         moment ago still looks unreachable until the next scheduled ping.
@@ -92,7 +93,7 @@ class ReplayManager(threading.Thread):
             return
 
         if (
-            self._monitor.ping()
+            self._monitor.ping(timeout)
             == connection_monitor.ConnectionStatus.connection_restored
         ):
             self._monitor.reset()

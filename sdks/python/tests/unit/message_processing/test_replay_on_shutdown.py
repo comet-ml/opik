@@ -251,6 +251,16 @@ class TestShutdownWhileServerLooksUnreachable:
         assert flushed is True
         assert _delivered(processor) == PARKED_TRACE_IDS
 
+    def test_flush__timeout__bounds_the_immediate_ping(self, build_stack):
+        st, rm, _, _ = build_stack(server_is_back=False)
+
+        with mock.patch.object(
+            rm, "refresh_server_connection", wraps=rm.refresh_server_connection
+        ) as refresh:
+            st.flush(timeout=0.5)
+
+        refresh.assert_called_once_with(0.5)
+
     def test_close_flush__parked_messages_cannot_be_counted__not_reported_as_flushed(
         self, build_stack
     ):

@@ -21,6 +21,8 @@ class CloudRateLimit:
 
 
 def parse_rate_limit(rate_limit_response: Dict[str, Any]) -> Optional[CloudRateLimit]:
+    """Reads Opik's ``RateLimit-Reset`` header (or ``ratelimit-reset``). Returns None
+    if it is absent, not a positive integer, or malformed."""
     try:
         rate_limit_reset_time = int(rate_limit_response.get("RateLimit-Reset", 0))
         if rate_limit_reset_time == 0:

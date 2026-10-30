@@ -233,3 +233,23 @@ class TestOpikConnectionMonitorPing:
         assert monitor.ping() == ConnectionStatus.connection_restored
         mock_probe.check_connection.assert_called_once_with(timeout=2.0)
         assert monitor.has_server_connection is True
+
+    @pytest.mark.parametrize(
+        "timeout, expected_check_timeout",
+        [(0.5, 0.5), (10.0, 2.0), (None, 2.0)],
+        ids=["shorter_timeout_wins", "longer_timeout_ignored", "no_timeout"],
+    )
+    def test_ping__timeout__can_only_shorten_the_check_timeout(
+        self, mock_probe, timeout, expected_check_timeout
+    ):
+        monitor = OpikConnectionMonitor(
+            ping_interval=1000.0,
+            check_timeout=2.0,
+            probe=mock_probe,
+        )
+
+        monitor.ping(timeout)
+
+        mock_probe.check_connection.assert_called_once_with(
+            timeout=expected_check_timeout
+        )
