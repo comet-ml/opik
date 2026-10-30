@@ -304,8 +304,8 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
                     // retry repeats. A trace in another project stays an IdentifierMismatchException.
                     return traceService.create(traceBuilder.build())
                             .onErrorResume(EntityAlreadyExistsException.class, _ -> {
-                                log.info("Trace '{}' already exists, storing its spans in project '{}'",
-                                        rootSpan.traceId(), projectName);
+                                log.info("Trace already exists, storing its spans, projectName '{}', traceId '{}'",
+                                        projectName, rootSpan.traceId());
                                 return Mono.empty();
                             });
                 })
