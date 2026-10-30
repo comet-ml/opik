@@ -19,11 +19,12 @@ _ISO_DATETIME_PATTERN = re.compile(
 DATETIME_FIELD_NAMES: Set[str] = {"start_time", "end_time", "last_updated_at"}
 
 
-def datetime_object_hook(obj: Dict[str, Any]) -> Dict[str, Any]:
-    """Object hook for json.loads that converts ISO format strings to datetime objects.
+def _restore_datetime_fields(obj: Dict[str, Any]) -> Dict[str, Any]:
+    """Converts ISO format strings back to datetime objects in a message's own fields.
 
-    Only converts values for keys listed in DATETIME_FIELD_NAMES to avoid
-    false conversions of ISO-like strings in arbitrary data fields.
+    Only converts values for keys listed in DATETIME_FIELD_NAMES, and only at the
+    top level of ``obj``: user payloads (input, output, metadata) may use the same
+    key names and must reach the backend exactly as logged.
     """
     for key in DATETIME_FIELD_NAMES:
         value = obj.get(key)
@@ -75,5 +76,7 @@ def deserialize_message(message_class: Type[messages.T], json_str: str) -> messa
         An instance of the provided message class populated with data
         from the JSON string.
     """
-    data = json.loads(json_str, object_hook=datetime_object_hook)
+    data = _restore_datetime_fields(json.loads(json_str))
+    for item in data.get("batch", []):
+        _restore_datetime_fields(item)
     return messages.from_db_message_dict(data=data, message_class=message_class)
