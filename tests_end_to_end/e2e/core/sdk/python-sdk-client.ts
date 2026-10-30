@@ -361,6 +361,37 @@ export interface PythonSdkClient {
       idx: number | null;
     }>;
   }>;
+  /**
+   * `cancel_experiments(ids=[...])`, one of the bindings opik#9211 regenerated.
+   *
+   * Answers what the SDK call answered — nothing — rather than the experiments'
+   * new state. The endpoint behind it replies 204 even for ids it is not
+   * tracking, so "the call went through" and "the run stopped" are two claims;
+   * read the second off `readExperimentLifecycle`.
+   */
+  cancelExperiments(args: {
+    ids: string[];
+    workspace?: string;
+  }): Promise<{ requested: number; returned_none: boolean }>;
+  /**
+   * An experiment's `status`/`finished_at` as the regenerated Python client
+   * deserialises them, through `Experiment.get_experiment_data()`.
+   *
+   * Nullable throughout on purpose: `ExperimentPublic` declares every field
+   * optional, so a field a regen dropped arrives as `null` instead of raising —
+   * which is why a caller has to assert the absence away before comparing.
+   */
+  readExperimentLifecycle(args: {
+    experiment_id: string;
+    workspace?: string;
+  }): Promise<{
+    experiment_id: string;
+    status: string | null;
+    finished_at: string | null;
+    created_at: string | null;
+    trace_count: number | null;
+    dataset_item_count: number | null;
+  }>;
   createTextPrompt(args: {
     name: string;
     prompt: string;
@@ -410,6 +441,38 @@ export interface PythonSdkClient {
      */
     resolve_via?: 'get_or_create' | 'list';
   }): Promise<{ suite_id: string; inserted: number }>;
+  /**
+   * Write a suite version whose llm_judge evaluator schema carries item TYPES.
+   *
+   * Not expressible through `createTestSuite`: every public entry point for
+   * suite-level assertions takes plain strings and writes every item as
+   * `BOOLEAN`, so the `INTEGER`/`DOUBLE` branch opik#8557 added is unreachable
+   * from the shorthand. The bridge builds the config from the same strings the
+   * shorthand would and replaces only each item's `type`, so the type is the
+   * single variable.
+   *
+   * Answers the suite re-read from the backend, so a caller asserts the round
+   * trip rather than the request it sent.
+   */
+  setTestSuiteEvaluatorSchema(args: {
+    suite_name: string;
+    project_name: string;
+    schema_items: Array<{
+      name: string;
+      type: 'BOOLEAN' | 'INTEGER' | 'DOUBLE';
+      description: string;
+    }>;
+    workspace?: string;
+  }): Promise<{
+    suite_id: string;
+    version_name: string | null;
+    global_assertions: string[];
+    schema_items: Array<{
+      name: string;
+      type: 'BOOLEAN' | 'INTEGER' | 'DOUBLE';
+      description: string;
+    }>;
+  }>;
   runTestSuite(args: {
     suite_name: string;
     project_name: string;
@@ -417,6 +480,15 @@ export interface PythonSdkClient {
     experiment_name: string;
     judge_model?: string;
     workspace?: string;
+    /**
+     * Return every assertion score result the run produced, per item and run.
+     *
+     * Opt-in because a run judged by a real model carries model prose in its
+     * reasons, which nothing deterministic can assert on. The one shape worth
+     * reading is the mechanical one: a schema item whose type the judge cannot
+     * score, where the SDK builds the result itself without a provider call.
+     */
+    include_assertions?: boolean;
   }): Promise<{
     experiment_id: string | null;
     experiment_name: string | null;
@@ -424,6 +496,32 @@ export interface PythonSdkClient {
     items_passed: number;
     items_failed: number;
     items_total: number;
+    /**
+     * The dataset item ids the run produced a result for.
+     *
+     * Distinct from `items_total`: a run that covered one item twice and
+     * another never still reports the right total, so "every item was covered"
+     * is a question about this set.
+     */
+    item_ids: string[];
+    /**
+     * `null` unless `include_assertions` asked for them — which keeps "the
+     * caller did not ask" distinct from "the run produced no assertion
+     * results", the second being a real and interesting answer.
+     */
+    item_assertions:
+      | Array<{
+          dataset_item_id: string;
+          trial_id: number;
+          name: string;
+          value: number;
+          reason: string | null;
+          category_name: string | null;
+          scoring_failed: boolean;
+          metadata: Record<string, unknown> | null;
+        }>
+      | null;
+    total_time: number | null;
   }>;
   createAnnotationQueue(args: {
     project_name: string;
@@ -831,6 +929,23 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
         timeoutMs: 300_000,
       });
     },
+    async cancelExperiments(args) {
+      return request<{ requested: number; returned_none: boolean }>(
+        'POST',
+        '/experiments/cancel',
+        args,
+      );
+    },
+    async readExperimentLifecycle(args) {
+      return request<{
+        experiment_id: string;
+        status: string | null;
+        finished_at: string | null;
+        created_at: string | null;
+        trace_count: number | null;
+        dataset_item_count: number | null;
+      }>('POST', '/experiments/lifecycle', args);
+    },
     async createTextPrompt(args) {
       return request<{ id: string; name: string }>('POST', '/prompts/text', args);
     },
@@ -864,6 +979,18 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
         args,
       );
     },
+    async setTestSuiteEvaluatorSchema(args) {
+      return request<{
+        suite_id: string;
+        version_name: string | null;
+        global_assertions: string[];
+        schema_items: Array<{
+          name: string;
+          type: 'BOOLEAN' | 'INTEGER' | 'DOUBLE';
+          description: string;
+        }>;
+      }>('POST', '/test-suites/evaluator-schema', args);
+    },
     async runTestSuite(args) {
       // Runs real LLM judge calls across every item/run in the suite, which
       // routinely outlives the default 30s budget on a loaded cloud
@@ -877,6 +1004,20 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
         items_passed: number;
         items_failed: number;
         items_total: number;
+        item_ids: string[];
+        item_assertions:
+          | Array<{
+              dataset_item_id: string;
+              trial_id: number;
+              name: string;
+              value: number;
+              reason: string | null;
+              category_name: string | null;
+              scoring_failed: boolean;
+              metadata: Record<string, unknown> | null;
+            }>
+          | null;
+        total_time: number | null;
       }>('POST', '/test-suites/run', args, { timeoutMs: 90_000 });
     },
     async createAnnotationQueue(args) {

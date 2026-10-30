@@ -307,6 +307,153 @@ export class ConfigurationPage {
     });
   }
 
+  // ── the dialog's custom-headers editor ──────────────────────────────────
+  //
+  // `CustomHeadersField` wraps the shared `KeyValueFieldArray`, which carries no
+  // data-testid and whose inputs have no label or accessible name — only a
+  // placeholder. Placeholder is therefore the most stable handle available here,
+  // and it is unambiguous: the same component is mounted a second time in this
+  // dialog for query parameters, but with "Parameter name"/"Parameter value",
+  // and a third time for auth credentials, which DO carry testids. A
+  // `data-testid` on the shared component would be better and belongs in a
+  // frontend change; these specs run against a deployed image, so they cannot
+  // add one and have it render.
+
+  /** Every header-name input in the dialog, in row order. */
+  headerKeyInputs(dialog: Locator): Locator {
+    return dialog.getByPlaceholder('Header name');
+  }
+
+  /** Every header-value input in the dialog, in row order. */
+  headerValueInputs(dialog: Locator): Locator {
+    return dialog.getByPlaceholder('Header value');
+  }
+
+  /**
+   * Append header rows and fill them, as a user would: one "Add header" click
+   * per row, then the row's two inputs.
+   *
+   * Rows are addressed by INDEX here, which is the one place in this POM where
+   * position is the identity: the editor is an ordered `useFieldArray` whose
+   * rows have no name until this types one in, so there is nothing else to
+   * match on. The count is asserted after each append so a build that stopped
+   * adding rows fails here rather than silently filling the same row twice.
+   *
+   * A row's `key` or `value` may be the empty string — the blank-name and
+   * blank-row cases are exactly what the validation rules are about.
+   */
+  async addHeaderRows(
+    dialog: Locator,
+    rows: ReadonlyArray<{ key: string; value: string }>,
+  ): Promise<void> {
+    return test.step(`add ${rows.length} custom header row(s)`, async () => {
+      const addButton = dialog.getByRole('button', { name: 'Add header', exact: true });
+      const before = await this.headerKeyInputs(dialog).count();
+      for (let i = 0; i < rows.length; i++) {
+        await addButton.click();
+        await expect(
+          this.headerKeyInputs(dialog),
+          'the "Add header" click appended exactly one row',
+        ).toHaveCount(before + i + 1);
+        const row = before + i;
+        if (rows[i].key !== '') await this.headerKeyInputs(dialog).nth(row).fill(rows[i].key);
+        if (rows[i].value !== '') await this.headerValueInputs(dialog).nth(row).fill(rows[i].value);
+      }
+    });
+  }
+
+  /** Clear the name of the header row at `index` — the blank-name case. */
+  async clearHeaderKey(dialog: Locator, index: number): Promise<void> {
+    return test.step(`clear the name of header row ${index}`, async () => {
+      await this.headerKeyInputs(dialog).nth(index).fill('');
+    });
+  }
+
+  /** Overwrite the name of the header row at `index`. */
+  async setHeaderKey(dialog: Locator, index: number, key: string): Promise<void> {
+    return test.step(`set header row ${index} name to "${key}"`, async () => {
+      await this.headerKeyInputs(dialog).nth(index).fill(key);
+    });
+  }
+
+  /**
+   * The header rows the dialog currently holds, in display order, read from the
+   * inputs' DOM values.
+   *
+   * `inputValue()` rather than an attribute filter: these are controlled React
+   * inputs, which never update the `value` attribute, so CSS cannot see what is
+   * typed. Same reason `credentialRow` scans by value.
+   *
+   * For a spec asserting that an EDIT dialog repopulated what the backend
+   * stored — a rule that locks a user out of their own provider key is only
+   * visible once the stored rows are back on screen.
+   */
+  async readHeaderRows(dialog: Locator): Promise<Array<{ key: string; value: string }>> {
+    return test.step('read the header rows the dialog shows', async () => {
+      const keys = this.headerKeyInputs(dialog);
+      const values = this.headerValueInputs(dialog);
+      const count = await keys.count();
+      expect(
+        await values.count(),
+        'every header row has both a name and a value input',
+      ).toBe(count);
+      const rows: Array<{ key: string; value: string }> = [];
+      for (let i = 0; i < count; i++) {
+        rows.push({ key: await keys.nth(i).inputValue(), value: await values.nth(i).inputValue() });
+      }
+      return rows;
+    });
+  }
+
+  /**
+   * The field error the headers editor is showing for the row at `index`.
+   *
+   * Resolved through the form's own ARIA wiring rather than by walking the DOM:
+   * `FormControl` stamps the input `id="<n>-form-item"` and points its
+   * `aria-describedby` at `"<n>-form-item-message"`, which is the id
+   * `FormMessage` renders under. Deriving the message element from the input's
+   * own id means the lookup survives any re-layout of the row, and — unlike a
+   * dialog-wide text match — it cannot be satisfied by the identical message
+   * sitting under the query-parameter editor or under another header row, which
+   * is precisely the confusion a uniqueness rule's test must avoid.
+   *
+   * Throws when the input carries no id, rather than returning a locator that
+   * can never match: that would turn a frontend change into a silent pass.
+   */
+  async headerKeyError(dialog: Locator, index: number): Promise<Locator> {
+    const input = this.headerKeyInputs(dialog).nth(index);
+    await expect(input, `header row ${index} is on screen`).toBeVisible();
+    const inputId = await input.getAttribute('id');
+    if (!inputId?.endsWith('-form-item')) {
+      throw new Error(
+        `header row ${index}'s name input has id "${inputId}", not the ` +
+          '"<n>-form-item" shape FormControl stamps — its error message cannot be located',
+      );
+    }
+    // `[id="..."]`, not `#...`: React's `useId` mints ids of the form `:r6a:`,
+    // whose colons are not valid in a CSS id selector — Playwright rejects
+    // `#:r6a:-form-item-message` outright rather than failing to match.
+    return dialog.locator(`[id="${inputId}-message"]`);
+  }
+
+  /**
+   * Submit the add-provider dialog. Deliberately does NOT wait for it to close:
+   * every rule under test here is one that must keep the dialog OPEN, so the
+   * caller decides which outcome to assert.
+   */
+  async submitAddProvider(dialog: Locator): Promise<void> {
+    return test.step('submit the add-provider dialog', async () => {
+      await dialog.getByRole('button', { name: 'Add provider', exact: true }).click();
+    });
+  }
+
+  /** As {@link submitAddProvider}, for the edit dialog's own button. */
+  async submitEditProvider(dialog: Locator): Promise<void> {
+    return test.step('submit the edit-provider dialog', async () => {
+      await dialog.getByRole('button', { name: 'Update configuration', exact: true }).click();
+    });
+  }
+
   /** Open the edit dialog for a Custom provider row and return the dialog locator. */
   async openCustomProviderEdit(providerName: string): Promise<Locator> {
     return test.step(`open edit dialog for custom provider "${providerName}"`, async () => {

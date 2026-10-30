@@ -1,6 +1,7 @@
 import type { Page, Locator } from '@playwright/test';
 import { expect, test } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
+import { openWidgetConfigDialog } from './add-widget-control';
 
 /** The dashboard date-range presets, labelled as the control renders them. */
 export type DashboardDateRange =
@@ -75,26 +76,6 @@ export class DashboardsPage {
   }
 
   /**
-   * Opens the widget config dialog from the header's "Add widget" control.
-   *
-   * When Ollie is available the control is a menu trigger, and the dialog only
-   * opens from its "Pick a chart" item; otherwise it opens the dialog directly.
-   */
-  private async openAddWidgetDialog(): Promise<Locator> {
-    return test.step('Open the Add widget dialog', async () => {
-      await this.page.getByRole('button', { name: 'Add widget' }).first().click();
-      const dialog = this.page.getByRole('dialog');
-      const pickAChart = this.page.getByRole('menuitem', { name: 'Pick a chart' });
-      await dialog.or(pickAChart).first().waitFor({ state: 'visible' });
-      if (await pickAChart.isVisible()) {
-        await pickAChart.click();
-      }
-      await dialog.waitFor({ state: 'visible' });
-      return dialog;
-    });
-  }
-
-  /**
    * Adds a Time series widget scoped to the whole workspace.
    *
    * Ticking "All projects in the workspace" is what points the widget at
@@ -105,7 +86,14 @@ export class DashboardsPage {
    */
   async addWorkspaceSpanTokenUsageWidget(): Promise<void> {
     await test.step('Add a workspace-scoped Span token usage widget', async () => {
-      const dialog = await this.openAddWidgetDialog();
+      // `.first()` because the dialog's own submit button carries the same name;
+      // only the header control exists before it opens. Whether that control is
+      // a plain button or a dropdown trigger depends on whether Ollie is
+      // available on the target, so the branch lives in one shared helper.
+      const dialog = await openWidgetConfigDialog(
+        this.page,
+        this.page.getByRole('button', { name: 'Add widget' }).first(),
+      );
 
       await dialog.getByRole('checkbox', { name: 'All projects in the workspace' }).click();
       await dialog
@@ -141,7 +129,11 @@ export class DashboardsPage {
    */
   async addProjectSpanTokenUsageWidget(projectName: string): Promise<void> {
     await test.step(`Add a Span token usage widget scoped to "${projectName}"`, async () => {
-      const dialog = await this.openAddWidgetDialog();
+      // See `addWorkspaceSpanTokenUsageWidget` on the `.first()` and the helper.
+      const dialog = await openWidgetConfigDialog(
+        this.page,
+        this.page.getByRole('button', { name: 'Add widget' }).first(),
+      );
 
       await dialog.getByRole('button', { name: 'Select projects' }).click();
       const projectPopover = this.page.locator('[data-radix-popper-content-wrapper]');

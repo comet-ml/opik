@@ -4,6 +4,17 @@ import { shouldLeaveArtifacts } from '../core/artifacts';
 export interface AnnotationQueueTraceRef {
   id: string;
   name: string;
+  /**
+   * Exactly what this trace's `input` / `output` were seeded with.
+   *
+   * On the ref so a spec can assert that the viewer it opened is rendering THIS
+   * item's payload and not a sibling's, without restating the literals the
+   * fixture writes — the three items differ only by their ordinal, so a spec
+   * holding its own copy of that pattern is one rename away from asserting
+   * about text nothing ever wrote.
+   */
+  input: string;
+  output: string;
 }
 
 export interface AnnotationQueueRef {
@@ -43,13 +54,15 @@ export const test = baseTest.extend<AnnotationQueueFixtures>({
     const traces: AnnotationQueueTraceRef[] = [];
     for (let i = 0; i < TRACE_COUNT; i += 1) {
       const name = `${testNamespace}-item-${i}`;
+      const input = `seed input ${i}`;
+      const output = `seed output ${i}`;
       const created = await sdkClient.python.createTrace({
         project_name: project.name,
         name,
-        input: `seed input ${i}`,
-        output: `seed output ${i}`,
+        input,
+        output,
       });
-      traces.push({ id: created.id, name: created.name });
+      traces.push({ id: created.id, name: created.name, input, output });
     }
 
     const queueName = `${testNamespace}-queue`;

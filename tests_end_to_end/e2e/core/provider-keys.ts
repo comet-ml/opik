@@ -34,6 +34,18 @@ export interface ProviderKeyRef {
   base_url?: string;
   auth_config?: ProviderAuthConfig;
   /**
+   * Static headers applied to every upstream call made with this key, as
+   * stored. Absent — not `{}` — when the key was created without any, which is
+   * a distinction a spec asserting "the blank row was dropped" needs to keep:
+   * a create that sent `headers: {}` and one that sent no `headers` field at
+   * all are different requests, and `convertHeadersForAPI` chooses between
+   * them on whether the dialog is editing or adding.
+   *
+   * Values come back in the clear (unlike `api_key`): the backend keeps header
+   * VALUES out of its logs, not out of this read.
+   */
+  headers?: Record<string, string>;
+  /**
    * The provider's own settings, as stored. `models` is a COMMA-SEPARATED
    * string of fully-qualified ids (`custom-llm/<provider>/<model>`), not an
    * array — see `providerModelNames` for reading it as a list.
@@ -131,10 +143,34 @@ export async function deleteProviderKeyById(id: string): Promise<void> {
 export const backendSelfUrl = process.env.OPIK_BACKEND_SELF_URL || 'http://localhost:8080';
 
 /**
+ * Whether this deployment's provider destination guard refuses internal
+ * addresses — the `strict` mode of `LLM_PROVIDER_DESTINATION_GUARD`.
+ *
+ * It matters to every seeded failure provider in the estate. opik#9214 made
+ * `strict` the APPLICATION default, and under it `127.0.0.1`, `localhost` and
+ * every RFC 1918 address are refused with a 400 *on save* — so a fixture that
+ * seeds a loopback `base_url` does not produce a provider that fails to
+ * answer, it produces no provider at all. Both shipped deployment manifests set
+ * `relaxed`, because a self-hosted gateway legitimately lives on an internal
+ * network; cloud runs `strict`.
+ *
+ * Inferred from the deployment shape rather than probed, so no seed has to be
+ * attempted and thrown away to find out: `cloud` is the deployment that runs
+ * `strict`. `OPIK_PROVIDER_DESTINATION_GUARD` overrides it for a deployment
+ * configured against that grain — a self-hosted stack that has deliberately
+ * turned the guard on, or a cloud-shaped target running `relaxed`.
+ */
+export function guardRefusesInternalDestinations(): boolean {
+  const override = process.env.OPIK_PROVIDER_DESTINATION_GUARD;
+  if (override) return override.trim().toLowerCase() === 'strict';
+  return loadEnvConfig().deployment === 'cloud';
+}
+
+/**
  * A custom-llm `base_url` that always answers a permanent HTTP 404.
  *
- * langchain4j appends `/chat/completions`, so the backend ends up asking its own
- * connector for a route that does not exist and gets its standard
+ * langchain4j appends `/chat/completions`, so the backend ends up asking for a
+ * route that does not exist and gets the standard
  * `{"code":404,"message":"HTTP 404 Not Found"}` back. That makes "the provider
  * refused with a 4xx" a routing fact rather than a data fact — no external
  * service, no credentials, no mock process, and nothing that can start
@@ -143,8 +179,170 @@ export const backendSelfUrl = process.env.OPIK_BACKEND_SELF_URL || 'http://local
  * Deliberately not httpbin.org or any other public status echo: a permanent test
  * must not depend on a third party being up, and an external body would also be
  * empty, which the scorer renders as a blank error reason.
+ *
+ * KNOWN LIMITATION, and not fixable without giving up what this URL is for: it
+ * only works where the destination guard is `relaxed`. Under `strict` a
+ * loopback `base_url` is refused on save, so `createPermanentlyFailing` cannot
+ * seed at all — see `guardRefusesInternalDestinations`. Substituting a public
+ * host would not rescue it either, because the whole value here is that the
+ * 404 body is OPIK'S OWN (`{"code":404,"message":"HTTP 404 Not Found"}`), which
+ * is what the one spec on this path quotes; any other host answers a body of
+ * its own. Fixing it needs a reachable always-404 route inside the deployment,
+ * which is a deployment change rather than a test one. `unreachableBaseUrl` in
+ * the provider-key fixture is strict-safe because it promises only that the
+ * call fails fast, never what the failure says.
  */
 export const notFoundProviderBaseUrl = `${backendSelfUrl}/qa-no-such-llm-endpoint`;
+
+/**
+ * A base URL that fails FAST and that a `strict` deployment will store.
+ *
+ * Under `strict` the estate has no better option, and this is not for want of
+ * looking. Probed against cloud staging at 2.2.121: loopback and every RFC
+ * 1918, CGNAT and link-local address are refused on save; the DEPLOYMENT'S OWN
+ * hostname is refused too, because it resolves to a private address from inside
+ * the cluster; and the documentation-reserved literals (`192.0.2.1`,
+ * `198.51.100.1`, `203.0.113.1`) are all stored but they BLACKHOLE, so a call
+ * to one hangs until it times out instead of failing. There is no public
+ * address that refuses a connect on demand — a refusal needs a host that is up
+ * with nothing listening, which nothing public guarantees.
+ *
+ * So this is the one URL in the estate that depends on a host outside the
+ * deployment, and the choice is narrowed by exactly that: `comet.com` is
+ * FIRST-PARTY — the same organisation that operates the deployment under test —
+ * rather than a third-party status echo, so "the dependency is down" and "the
+ * vendor is down" are the same event. The path will never exist, so the 4xx is
+ * permanent and cannot start succeeding.
+ *
+ * Only ever used where the caller needs the call to fail quickly and cheaply,
+ * never where it needs a particular error BODY — that is
+ * `notFoundProviderBaseUrl`, and see the limitation recorded on it.
+ *
+ * Override with `OPIK_PUBLIC_NOT_FOUND_BASE_URL` for a `strict` deployment that
+ * has its own reachable always-4xx host, which is strictly better than this.
+ */
+export const PUBLIC_NOT_FOUND_BASE_URL =
+  process.env.OPIK_PUBLIC_NOT_FOUND_BASE_URL ||
+  'https://www.comet.com/qa-no-such-llm-endpoint';
+
+/**
+ * A public base URL that always passes the destination guard and is never
+ * connected to.
+ *
+ * `192.0.2.1` is TEST-NET-1 (RFC 5737). Three properties, all load-bearing for
+ * a spec whose subject is the SAVE rather than the call:
+ *
+ *  - It is a literal address, so the guard's `InetAddress.getAllByName` parses
+ *    rather than resolves — no DNS, no third-party host, nothing that can
+ *    start failing.
+ *  - It is public by IANA and outside every range `DestinationGuard`'s
+ *    `NON_PUBLIC_RANGES` refuses (note `192.0.0.0/24` is a different block and
+ *    does not cover it), so it saves under `strict` as well as `relaxed` —
+ *    which the estate's loopback URLs do NOT: a `strict` deployment refuses
+ *    `127.0.0.1` and `localhost` with a 400 on save.
+ *  - `https`, so it also satisfies a deployment running the guard in
+ *    `HTTPS_ONLY` scheme mode rather than the `plaintext_or_tls` default.
+ *
+ * Deliberately NOT for a provider anything will call: a connect to TEST-NET-1
+ * hangs until it times out. `createUnresponsive` wants exactly that; a caller
+ * here wants a URL the server will store and never dial.
+ */
+export const guardPassingBaseUrl = 'https://192.0.2.1/v1';
+
+/** A second {@link guardPassingBaseUrl}, for asserting what a base_url CHANGE does. */
+export const guardPassingBaseUrlAlternate = 'https://192.0.2.1/v2';
+
+/**
+ * As {@link createProviderKey}, but hands back the status and body instead of
+ * throwing on a non-2xx.
+ *
+ * For specs whose subject is the REFUSAL — `provider=opik-free`, a guarded
+ * destination — where the status code and the message are the assertion. The
+ * throwing version turns both into an `Error` string a caller would have to
+ * parse back out.
+ */
+export async function createProviderKeyRaw(payload: {
+  provider: string;
+  provider_name?: string;
+  base_url?: string;
+  api_key?: string;
+  configuration?: Record<string, string>;
+  auth_config?: ProviderAuthConfig;
+  /**
+   * Static headers for every upstream call. Typed loosely enough to send the
+   * shapes the dialog cannot build — a blank name, a `null` value — because
+   * those are exactly what `LlmProviderApiKeyService.validateHeaders` refuses
+   * and what a spec mirroring the dialog's rules against the server's has to be
+   * able to put on the wire.
+   */
+  headers?: Record<string, string | null>;
+}): Promise<{ status: number; body: string; id: string | null }> {
+  const response = await fetch(endpoint(), {
+    method: 'POST',
+    headers: restHeaders(),
+    body: JSON.stringify(payload),
+  });
+  // A 201 answers with no body: the `Location` header is the only place the new
+  // id appears. Taken from there rather than by listing back and matching on
+  // `provider_name`, so the id a caller then PATCHes is the one this request
+  // actually created — on a shared workspace a list lookup can answer for a
+  // namesake another run left behind.
+  const location = response.headers.get('location');
+  return {
+    status: response.status,
+    body: await response.text(),
+    id: location ? (location.split('/').pop() ?? null) : null,
+  };
+}
+
+/**
+ * `PATCH /v1/private/llm-provider-key/{id}` — the update the AI providers tab
+ * sends, with the status and body kept.
+ *
+ * Raw by default rather than throwing, because the interesting updates here are
+ * the ones the server REFUSES: changing `base_url` without resubmitting the
+ * credentials is a 400 whose message is the whole point
+ * (`LlmProviderApiKeyService.validateCredentialsResubmittedOnUrlChange`).
+ *
+ * `base_url` and `api_key` are both optional and the distinction between
+ * omitted and empty is the contract: the rule only fires when `base_url` is
+ * PRESENT and different, so a caller testing the no-op branch must be able to
+ * send the same URL, and one testing the fires-branch must be able to send a
+ * URL with no credential beside it.
+ */
+export async function patchProviderKey(
+  id: string,
+  payload: {
+    base_url?: string;
+    api_key?: string;
+    configuration?: Record<string, string>;
+    auth_config?: ProviderAuthConfig;
+    /** As on {@link createProviderKeyRaw} — the update path runs the same rules. */
+    headers?: Record<string, string | null>;
+  },
+): Promise<{ status: number; body: string }> {
+  const response = await fetch(endpoint(`/${id}`), {
+    method: 'PATCH',
+    headers: restHeaders(),
+    body: JSON.stringify(payload),
+  });
+  return { status: response.status, body: await response.text() };
+}
+
+/**
+ * One provider key by id — `GET /v1/private/llm-provider-key/{id}`.
+ *
+ * Distinct from `findProviderKeyByName`, which pages the list: a caller
+ * asserting that a REFUSED update did not partially apply wants the stored row
+ * itself, and a 404 here is a different finding from "absent from the list".
+ */
+export async function getProviderKeyById(id: string): Promise<ProviderKeyRef> {
+  const response = await fetch(endpoint(`/${id}`), { headers: restHeaders() });
+  if (!response.ok) {
+    throw new Error(`get provider key ${id} returned ${response.status}: ${await response.text()}`);
+  }
+  return (await response.json()) as ProviderKeyRef;
+}
 
 export async function createProviderKey(payload: {
   provider: string;

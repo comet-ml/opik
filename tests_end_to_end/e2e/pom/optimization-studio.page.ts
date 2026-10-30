@@ -2,6 +2,7 @@ import type { Page, Locator } from '@playwright/test';
 import { test, expect } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 import { TraceLogsSidebarPage } from './trace-logs-sidebar.page';
+import { PromptLibraryMenu } from './prompt-library-menu';
 import { assertAllowedModelDisplayName } from '@e2e/core/llm-model-policy';
 
 export type OptimizerName = 'GEPA optimizer' | 'Hierarchical Reflective';
@@ -11,6 +12,13 @@ export type OptimizerName = 'GEPA optimizer' | 'Hierarchical Reflective';
  *  should not change meaning if that text ever grows a metacharacter. */
 const escapeForRegExp = (literal: string): string =>
   literal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * How long the new-run form is given to mount its model picker and seed a model
+ * into it — see {@link OptimizationStudioPage.waitForModelResolved} for why this
+ * is not the default `expect` timeout.
+ */
+const MODEL_RESOLVE_TIMEOUT_MS = 30_000;
 
 export interface StudioRunConfig {
   /** Name of a dataset already associated with the project (shown in the picker). */
@@ -122,6 +130,181 @@ export class OptimizationStudioPage {
     await expect(editor).toContainText(content);
   }
 
+  // ── the composer's shared message-row prompt library ────────────────────
+  //
+  // The new-run composer is the ONLY surface outside the Playground that mounts
+  // `LLMPromptMessages` with `hidePromptActions` false, so it is the only other
+  // place the per-row Load/Save strip — and the dirty check opik#8759 moved into
+  // `useMessageTextPrompt` — renders at all. (`PromptTemplateEditor`,
+  // `NewBlueprintFieldEditor`, `AgentRunnerPromptCard` and `BlueprintValuePrompt`
+  // all pass `hidePromptActions`, which defaults to true.) Everything in this
+  // group is scoped to `newRunPanel()` for that reason: the identical testids
+  // exist on the Playground's own rows.
+
+  /** One of the composer's message rows, by the role it carries. */
+  composerMessageRow(role: 'system' | 'user'): Locator {
+    return this.newRunPanel().locator(
+      `[data-testid="playground-message-row"][data-role="${role}"]`,
+    );
+  }
+
+  /**
+   * The text one composer row currently holds.
+   *
+   * Read from the CodeMirror content node with its placeholder stripped, the
+   * same way `PlaygroundPage.messageBodies` does: an empty editor renders "Type
+   * your message" as a child element, which `innerText` would hand back as the
+   * row's body.
+   */
+  async composerMessageBody(role: 'system' | 'user'): Promise<string> {
+    return test.step(`Read the composer's ${role} message body`, async () => {
+      return this.promptEditor(role)
+        .first()
+        .evaluate((editor) => {
+          const clone = editor.cloneNode(true) as HTMLElement;
+          clone.querySelectorAll('.cm-placeholder').forEach((node) => node.remove());
+          return (clone.textContent ?? '').trim();
+        });
+    });
+  }
+
+  /**
+   * REPLACE the text of one composer row, and settle once it really holds the
+   * new text.
+   *
+   * Select-all then type, rather than `fillMessage`'s `fill()`, and the
+   * difference is not cosmetic: `fill()` on a CodeMirror editor that already
+   * holds text sometimes lands as an insertion at the cursor instead of a
+   * replacement — measured here on staging, where one run of three came back
+   * holding the old body followed by the new one. Replacing a selection is the
+   * one gesture that is a replacement whatever the editor makes of synthetic
+   * input events. `fillMessage` is left alone because its callers all type into
+   * an EMPTY row, where the two are the same thing.
+   *
+   * Resolving on the body rather than on the keystrokes is what makes the dirty
+   * check assertable: `hasUnsavedChanges` is recomputed from the message's
+   * content, so a read taken before the edit has propagated reports the state
+   * before the edit.
+   */
+  async editComposerMessage(role: 'system' | 'user', content: string): Promise<void> {
+    return test.step(`Edit the composer's ${role} message`, async () => {
+      const editor = this.promptEditor(role).first();
+      await editor.click();
+      await editor.press('ControlOrMeta+A');
+      await this.page.keyboard.type(content);
+      await expect
+        .poll(async () => this.composerMessageBody(role), { timeout: 15_000 })
+        .toBe(content);
+    });
+  }
+
+  /**
+   * Load one named version of a text prompt into a composer row, through the
+   * row's own library door.
+   *
+   * The popover is the shared `PromptLibraryMenu`, driven from
+   * `pom/prompt-library-menu.ts` — the same driver `PlaygroundPage` uses, so
+   * the hover/retry workarounds the Radix hovercard needs live in one place.
+   * The row is hovered first because the strip holding its Load button is
+   * `invisible group-hover:visible`.
+   *
+   * No type chooser is involved: only `PlaygroundPrompt.tsx` passes
+   * `chooseTemplateStructure`, so this menu opens straight on the list.
+   */
+  async loadTextPromptVersionIntoComposer(
+    role: 'system' | 'user',
+    promptName: string,
+    versionLabel: string,
+  ): Promise<void> {
+    return test.step(
+      `Load text prompt "${promptName}" ${versionLabel} into the composer's ${role} message`,
+      async () => {
+        const row = this.composerMessageRow(role);
+        await row.hover();
+        await row.getByTestId('load-text-prompt-button').click();
+
+        const menu = new PromptLibraryMenu(this.page);
+        await menu.waitForOpen();
+        await menu.selectVersion(promptName, versionLabel);
+      },
+    );
+  }
+
+  /**
+   * The chip `LoadedPromptDisplay` puts on a row once a library prompt is
+   * linked to it, addressed by that prompt's name.
+   */
+  composerLoadedPromptChip(role: 'system' | 'user', promptName: string): Locator {
+    return this.composerMessageRow(role).getByText(promptName, { exact: true });
+  }
+
+  /**
+   * Settle on the row really showing that prompt's chip.
+   *
+   * The hover is re-applied on every attempt, for the reason
+   * `PlaygroundPage.waitForLoadedPromptVersionInMessage` records: the strip
+   * holding the chip is `invisible group-hover:visible`, so it is on screen only
+   * while the cursor is over the row — and applying a loaded prompt REBUILDS
+   * the row as fresh DOM. A single `hover()` is one synthetic mouse move, so
+   * once the node under the cursor has been replaced nothing re-fires it and a
+   * plain `toBeVisible()` waits out its whole timeout watching an element it
+   * can never un-hide.
+   */
+  async expectComposerPromptChip(role: 'system' | 'user', promptName: string): Promise<void> {
+    return test.step(`Assert the composer's ${role} row is linked to "${promptName}"`, async () => {
+      const chip = this.composerLoadedPromptChip(role, promptName);
+      await expect
+        .poll(
+          async () => {
+            await this.composerMessageRow(role).hover();
+            return chip.isVisible();
+          },
+          {
+            timeout: 30_000,
+            intervals: [250, 500, 1_000],
+            message: `the ${role} row never showed a chip for "${promptName}"`,
+          },
+        )
+        .toBe(true);
+    });
+  }
+
+  /**
+   * The amber dot the chip grows when the row no longer matches the version it
+   * was loaded from.
+   *
+   * The same class-scoped selector, and the same last-resort reasoning, as
+   * `PlaygroundPage.unsavedChangesDot`: the dot is a bare decorative `<span>`
+   * with no text, no role and no testid, and these specs run against a deployed
+   * Opik. `composerSaveTooltipText` asserts the same `saveWarning` flag through
+   * an independent text handle, so a renamed utility class surfaces as the two
+   * disagreeing rather than as a silent pass.
+   */
+  composerUnsavedChangesDot(role: 'system' | 'user'): Locator {
+    return this.composerMessageRow(role).locator('span.rounded-full.bg-warning');
+  }
+
+  /**
+   * Hover a composer row's save-to-library button and read its tooltip.
+   *
+   * The user-readable half of the same flag the dot renders: "Save as text
+   * prompt" while the row still matches its loaded version, "This prompt
+   * version hasn't been saved" once it does not. Radix portals the content out
+   * of the row, so it is read at page scope.
+   */
+  async composerSaveTooltipText(role: 'system' | 'user'): Promise<string> {
+    return test.step(`Read the composer's ${role} row save tooltip`, async () => {
+      const row = this.composerMessageRow(role);
+      await row.hover();
+      const save = row.getByTestId('save-text-prompt-button');
+      await expect(save, 'the row offers a save-to-library button').toHaveCount(1);
+      await save.hover();
+      const tooltip = this.page.getByRole('tooltip');
+      await expect(tooltip.first()).toBeVisible({ timeout: 10_000 });
+      return (await tooltip.first().innerText()).trim();
+    });
+  }
+
   async selectModel(displayName: string): Promise<void> {
     assertAllowedModelDisplayName(displayName);
     return test.step(`Select model "${displayName}"`, async () => {
@@ -143,6 +326,125 @@ export class OptimizationStudioPage {
         await option.first().click({ timeout: 2_000 });
         await expect(this.modelCombobox()).toContainText(displayName, { timeout: 2_000 });
       }).toPass({ timeout: 30_000 });
+    });
+  }
+
+  /**
+   * As {@link selectModel}, but reaching the picker through its own testid
+   * rather than through `modelCombobox`'s text filter.
+   *
+   * `modelCombobox()` identifies the picker by the provider name it renders —
+   * Anthropic, OpenAI, Gemini, openrouter, free — which is the only way to tell
+   * it apart from the form's other comboboxes once a model is chosen. A CUSTOM
+   * provider renders its own user-defined name instead, so that filter matches
+   * nothing and `selectModel` cannot drive a model the test itself seeded. That
+   * matters for any spec that wants a model nothing can bill: the custom
+   * provider's base URL refuses every connection, which is the only way to put
+   * a selectable model on the form without exposing the run to spend.
+   *
+   * `modelPickerTrigger()` is anchored on the `select-a-llm-model` testid, so
+   * it holds whatever the picker shows. The retry shape is `selectModel`'s, and
+   * for the same reasons: the trigger can swallow the first click as a hover,
+   * and the option list remounts when the provider-key and registry queries
+   * resolve.
+   *
+   * The model-policy guard is deliberately NOT bypassed — a name the run did
+   * not register as unbilled still has to be on the allowlist.
+   */
+  async selectModelByName(displayName: string): Promise<void> {
+    assertAllowedModelDisplayName(displayName);
+    return test.step(`Select model "${displayName}" through the picker trigger`, async () => {
+      const search = this.page.getByRole('textbox', { name: 'Search model' });
+      await expect(async () => {
+        await this.modelPickerTrigger().click();
+        await expect(search).toBeVisible({ timeout: 2_000 });
+      }).toPass({ timeout: 15_000 });
+
+      await expect(async () => {
+        await search.fill(displayName);
+        const option = this.page.getByRole('option', { name: displayName, exact: true });
+        await expect(option).toHaveCount(1, { timeout: 2_000 });
+        await option.click({ timeout: 2_000 });
+        await expect(this.modelPickerTrigger()).toHaveText(displayName, { timeout: 2_000 });
+      }).toPass({ timeout: 30_000 });
+    });
+  }
+
+  /**
+   * Type a value into one slider's numeric input and commit it.
+   *
+   * `SliderInputControl` commits on blur or on Enter/Tab/Escape, not on change,
+   * and inside a Radix menu Tab moves no focus while Escape unmounts the menu
+   * without a blur — so Enter is the only key that reliably lands the typed
+   * value. Clamped by the control itself: a value outside [min, max] is
+   * replaced with the bound, which is why the caller is handed back what the
+   * input ENDED UP holding rather than what it asked for. A spec must assert
+   * against the returned value, or a silently clamped nudge would make it look
+   * as though the form had sent something it never held.
+   *
+   * `id` is the control id `PromptModelConfigs` passes (`temperature`,
+   * `maxCompletionTokens`, `topP`, …); the input's testid is `<id>-input`.
+   * Leaves the panel OPEN, so a caller can set several and read them back.
+   */
+  async setModelParameter(id: string, value: number): Promise<string> {
+    return test.step(`Set the "${id}" model parameter to ${value}`, async () => {
+      const panel = this.modelParametersPanel();
+      if (!(await panel.isVisible().catch(() => false))) {
+        await this.modelParametersTrigger().click();
+        await panel.waitFor({ state: 'visible' });
+      }
+      const input = panel.getByTestId(`${id}-input`);
+      await expect(
+        input,
+        `the parameters panel mounts exactly one "${id}" control`,
+      ).toHaveCount(1);
+      await input.fill(String(value));
+      await input.press('Enter');
+      return input.inputValue();
+    });
+  }
+
+  /**
+   * Replace the Extra body parameters editor's contents with `json`.
+   *
+   * This is the control behind `custom_parameters` — the one model parameter
+   * whose VALUE the backend inspects, since
+   * `StudioModelParameters.DESTINATION_KEYS` refuses an inner key that could
+   * pick a host, a credential or a fallback model. A CodeMirror
+   * `contenteditable`, so it is filled the way the message editors are, then
+   * blurred: `useJsonInput` commits on blur, and a value left uncommitted would
+   * never reach the payload.
+   *
+   * Leaves the panel open. Returns nothing: what the editor accepted is only
+   * observable in the submitted request, which is where the caller asserts it.
+   */
+  async setExtraBodyParameters(json: string): Promise<void> {
+    return test.step('Fill the Extra body parameters editor', async () => {
+      const panel = this.modelParametersPanel();
+      if (!(await panel.isVisible().catch(() => false))) {
+        await this.modelParametersTrigger().click();
+        await panel.waitFor({ state: 'visible' });
+      }
+      const editor = panel.locator('#custom_parameters .cm-content').first();
+      await editor.click();
+      await editor.fill(json);
+      // Commit by blurring onto the panel's own label rather than pressing
+      // Escape, which unmounts the Radix menu without a blur and so drops the
+      // typed value — the same trap `SliderInputControl` documents.
+      await panel.getByText('Extra body parameters', { exact: false }).first().click();
+      await expect(
+        panel.getByText('Invalid JSON', { exact: false }),
+        'the editor accepted the JSON — an invalid value is never saved',
+      ).toHaveCount(0);
+    });
+  }
+
+  /** Close the model-parameters popover, if it is open. Safe to call blind. */
+  async dismissModelParameters(): Promise<void> {
+    return test.step('Close the model parameters popover', async () => {
+      if (await this.modelParametersPanel().isVisible().catch(() => false)) {
+        await this.closeModelParameters();
+      }
     });
   }
 
@@ -257,14 +559,36 @@ export class OptimizationStudioPage {
    * model" until a model is set, so a non-placeholder trigger means
    * `providersReady` has turned true and `convertOptimizationStudioToFormData`
    * has seeded a real one.
+   *
+   * Two waits, not one, and the split is the point. `NewRunSidebar` is an
+   * always-mounted shell: `newRunPanel()` resolves the moment the panel opens,
+   * but while `isRerunFetching` is true the body is a `Loader` and the picker
+   * does not exist at all. A single `not.toHaveText` over both phases reports
+   * the first as "element(s) not found", which reads like a selector that never
+   * matched — the one failure this POM's selectors are most often blamed for.
+   * So the mount is waited for under its own message first.
+   *
+   * The budget is `MODEL_RESOLVE_TIMEOUT_MS` rather than the 10s default
+   * `expect` timeout because the chain behind it is three or four serial reads
+   * — the rerun fetch, the provider keys, `GET /llm/models`, and on a rerun the
+   * dataset get-or-create — and under parallel load against one deployment that
+   * does not fit in 10s. Observed losing it on the second of four sequential
+   * reruns in one test at four workers, while the same test passes in isolation
+   * in ~8s per rerun. Three times the observed cost, not an open-ended wait: a
+   * form that genuinely never resolves still fails here, with the phase named.
    */
   async waitForModelResolved(): Promise<string> {
     return test.step('Wait for the form to resolve a prompt model', async () => {
       const picker = this.modelPickerTrigger();
       await expect(
         picker,
+        'the new-run form mounts its model picker — until the rerun fetch settles ' +
+          'the panel body is a Loader and the picker is absent',
+      ).toBeVisible({ timeout: MODEL_RESOLVE_TIMEOUT_MS });
+      await expect(
+        picker,
         'the form resolves a prompt model once the provider keys and the registry answer',
-      ).not.toHaveText('Select an LLM model');
+      ).not.toHaveText('Select an LLM model', { timeout: MODEL_RESOLVE_TIMEOUT_MS });
       return ((await picker.textContent()) ?? '').trim();
     });
   }
@@ -308,6 +632,144 @@ export class OptimizationStudioPage {
     return test.step('Assert Optimize prompt is enabled', async () => {
       await expect(this.optimizeButton()).toBeEnabled();
     });
+  }
+
+  /**
+   * Open the prompt model's parameters popover and leave it open.
+   *
+   * Separate from {@link readModelParameters}, which opens and closes in one
+   * call: a caller reading the effort dropdown has to keep the popover standing
+   * across several reads, because the dropdown's own options render in a portal
+   * and every close/reopen cycle re-runs the panel's remount race.
+   */
+  async openModelParameters(): Promise<void> {
+    return test.step('Open the prompt model’s parameters panel', async () => {
+      const panel = this.modelParametersPanel();
+      if (await panel.isVisible().catch(() => false)) return;
+      // Retried for the reason `selectModel` is: the panel remounts when the
+      // /llm/models and provider-key queries resolve, which detaches the
+      // trigger mid-click.
+      await expect(async () => {
+        await this.modelParametersTrigger().click({ timeout: 2_000 });
+        await expect(panel).toBeVisible({ timeout: 2_000 });
+      }).toPass({ timeout: 15_000 });
+    });
+  }
+
+  /**
+   * The effort `Select` the open prompt-model parameters panel mounts.
+   *
+   * Addressed by role rather than by its label: `SelectBox` does put the id on
+   * the trigger, but the label differs per provider ("Reasoning effort",
+   * "Thinking effort", "Effort") and this POM must run against the deployed
+   * image as it renders. The panel's only other controls are
+   * `SliderInputControl` number inputs and the Extra body parameters editor, so
+   * its one combobox is this dropdown — asserted `toHaveCount(1)` before every
+   * read rather than taken as `.first()`, so a panel that grew a second
+   * dropdown fails loudly instead of reading whichever came first.
+   *
+   * `PromptModelConfigs` is the same component the playground and the
+   * online-evaluation rule editor mount, so this mirrors
+   * `PlaygroundPage.reasoningEffortTrigger` and
+   * `OnlineEvaluationPage.judgeEffortTrigger`.
+   */
+  private promptEffortTrigger(): Locator {
+    return this.modelParametersPanel().getByRole('combobox');
+  }
+
+  /**
+   * Every effort the prompt model's control OFFERS, in the order it lists them.
+   *
+   * The whole list rather than one membership check: the Responses-API-only
+   * levels are APPENDED to the base set, so "Max is absent" and "the base
+   * levels are still there" are different claims and a caller wants both at
+   * once. A build that dropped the entire effort control and one that dropped
+   * only the Responses branch look identical through a single negative.
+   *
+   * Leaves the parameters panel open.
+   */
+  async promptEffortOptions(): Promise<string[]> {
+    return test.step('Read the offered prompt-model effort levels', async () => {
+      const current = await this.readPromptEffortValue();
+      const listbox = await this.openPromptEffortListbox();
+      const options = (await listbox.getByRole('option').allTextContents()).map((o) => o.trim());
+
+      // Closed by re-picking the level already in force, which is a no-op for
+      // the form. NOT Escape, for the reason `closeModelParameters` spells out:
+      // inside the `ResizableSidePanel` the keypress bubbles past the dropdown
+      // and dismisses the whole new-run sidebar, so a caller that then read the
+      // effort would find no control to read. Not the trigger either — while a
+      // Radix Select is open its trigger is not a hit target at all, and even a
+      // forced click waits for one that never comes.
+      const same = listbox.getByRole('option', { name: current, exact: true });
+      await expect(
+        same,
+        `the displayed level "${current}" is one of the levels offered`,
+      ).toHaveCount(1);
+      await same.click();
+      await expect(listbox).toHaveCount(0);
+      await expect(
+        this.modelParametersPanel(),
+        'reading the offered levels left the parameters panel open',
+      ).toBeVisible();
+      return options;
+    });
+  }
+
+  /**
+   * The effort the prompt model's panel currently DISPLAYS.
+   *
+   * Which is not always the effort that is stored: `updateProviderConfig` moves
+   * a carried-over level to the nearest one the new model offers, and
+   * `resolveEffort` masks a stored value the model cannot take — so the panel is
+   * the only place the reconciled level is visible before a run is launched.
+   *
+   * Leaves the parameters panel open.
+   */
+  async readPromptEffort(): Promise<string> {
+    return test.step('Read the displayed prompt-model effort', async () =>
+      this.readPromptEffortValue());
+  }
+
+  /** Pick a prompt-model effort by its rendered label, e.g. `xHigh`. */
+  async selectPromptEffort(label: string): Promise<void> {
+    return test.step(`Select prompt-model effort "${label}"`, async () => {
+      const listbox = await this.openPromptEffortListbox();
+      const option = listbox.getByRole('option', { name: label, exact: true });
+      // Exactly one, not `.first()`: "High" and "xHigh" are both offered, and
+      // an ambiguous match would silently store the wrong level.
+      await expect(option, `"${label}" is offered`).toHaveCount(1);
+      await option.click();
+      await expect(listbox).toHaveCount(0);
+      // The trigger, not the form state: a click Radix swallowed mid-remount
+      // would otherwise leave the caller asserting the next step against the
+      // level it meant to leave behind. Exact, so picking "High" cannot be
+      // satisfied by a trigger still reading "xHigh".
+      await expect(this.promptEffortTrigger()).toHaveText(label);
+    });
+  }
+
+  private async readPromptEffortValue(): Promise<string> {
+    await expect(
+      this.promptEffortTrigger(),
+      'the prompt-model parameters panel mounts exactly one effort control',
+    ).toHaveCount(1);
+    return ((await this.promptEffortTrigger().textContent()) ?? '').trim();
+  }
+
+  private async openPromptEffortListbox(): Promise<Locator> {
+    await expect(
+      this.promptEffortTrigger(),
+      'the prompt-model parameters panel mounts exactly one effort control',
+    ).toHaveCount(1);
+    const listbox = this.page.getByRole('listbox');
+    // Retried: the panel remounts when /llm/models and the provider-key query
+    // resolve, which detaches the trigger mid-click.
+    await expect(async () => {
+      await this.promptEffortTrigger().click();
+      await expect(listbox).toBeVisible({ timeout: 2_000 });
+    }).toPass({ timeout: 15_000 });
+    return listbox;
   }
 
   /**
