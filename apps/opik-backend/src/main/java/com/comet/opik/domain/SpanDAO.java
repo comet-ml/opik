@@ -97,6 +97,9 @@ public class SpanDAO {
      */
     private static final String SPANS_TABLE = "spans";
 
+    private static final Comparator<Span> LATEST_SPAN = Comparator.comparing(Span::lastUpdatedAt)
+            .thenComparing(Span::projectId);
+
     /** The {@code MergeTree} shard beneath the {@code Distributed} wrapper, and the mutation target once it is live. */
     private static final String SPANS_LOCAL_TABLE = "spans_local";
 
@@ -2526,25 +2529,23 @@ public class SpanDAO {
     @WithSpan
     public Mono<Span> getById(@NonNull UUID id) {
         log.info("Getting span by id '{}'", id);
-        return getByIds(Set.of(id))
-                .collectList()
-                .flatMap(spans -> Mono.deferContextual(ctx -> Mono.justOrEmpty(
-                        latestOrLogFanOut(spans, id, ctx.getOrDefault(RequestContext.WORKSPACE_ID, "unknown")))));
+        return Mono.deferContextual(ctx -> getByIds(Set.of(id))
+                .reduce((current, next) -> latestOrLogFanOut(current, next, id,
+                        ctx.getOrDefault(RequestContext.WORKSPACE_ID, "unknown"))));
     }
 
     /**
-     * Reduce the rows returned for a single span id to at most one {@link Span}. The by-ids query dedups per
-     * {@code (workspace_id, project_id, id)}, so a span id written under more than one project returns one row per
-     * project; a strict single-item reducer throws {@code IndexOutOfBoundsException} ("Source emitted more than one
-     * item"), which surfaces as a 500. The latest write wins, as it does within a project, and the fan-out is logged
-     * so the duplication stays visible.
+     * Reduce the rows returned for a single span id to at most one {@link Span}, keeping only the current pick as they
+     * stream. The by-ids query dedups per {@code (workspace_id, project_id, id)}, so a span id written under more than
+     * one project returns one row per project; a strict single-item reducer throws {@code IndexOutOfBoundsException}
+     * ("Source emitted more than one item"), which surfaces as a 500. The latest write wins, as it does within a
+     * project, the project id breaks a tie so repeated reads return the same span, and the fan-out is logged so the
+     * duplication stays visible.
      */
-    private static Optional<Span> latestOrLogFanOut(List<Span> spans, UUID id, String workspaceId) {
-        if (spans.size() > 1) {
-            log.warn("Span get-by-id resolved to multiple rows, returning the latest. workspaceId '{}', spanId '{}'",
-                    workspaceId, id);
-        }
-        return spans.stream().max(Comparator.comparing(Span::lastUpdatedAt));
+    private static Span latestOrLogFanOut(Span current, Span next, UUID id, String workspaceId) {
+        log.warn("Span get-by-id resolved to multiple rows, returning the latest. workspaceId '{}', spanId '{}'",
+                workspaceId, id);
+        return LATEST_SPAN.compare(current, next) >= 0 ? current : next;
     }
 
     @WithSpan
