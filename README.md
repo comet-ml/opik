@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 2.2.136](https://img.shields.io/badge/Version-2.2.136-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.2.136](https://img.shields.io/badge/AppVersion-2.2.136-informational?style=flat-square)
+![Version: 2.2.116](https://img.shields.io/badge/Version-2.2.116-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.2.116](https://img.shields.io/badge/AppVersion-2.2.116-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -183,7 +183,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.forceMerge.minAgeSeconds | int | `604800` | A part quiet for this long becomes eligible for force-merge (min_age_to_force_merge_seconds). |
 | clickhouse.forceMerge.numberOfFreeEntriesInPoolToLowerMaxSizeOfMerge | int | `8` | Below this many free pool slots, the largest merges are throttled so they cannot starve the pool (number_of_free_entries_in_pool_to_lower_max_size_of_merge). |
 | clickhouse.forceMerge.onPartitionOnly | bool | `false` | false: per part. true: only once the whole partition is quiet, so a partition still taking writes never becomes eligible (min_age_to_force_merge_on_partition_only). |
-| clickhouse.image | string | `"altinity/clickhouse-server:26.3.16.10001.altinitystable"` |  |
+| clickhouse.image | string | `"clickhouse/clickhouse-server:26.3.62.3"` |  |
 | clickhouse.lifecycle | object | `{}` |  |
 | clickhouse.livenessProbe.failureThreshold | int | `10` |  |
 | clickhouse.livenessProbe.httpGet.path | string | `"/ping"` |  |
@@ -268,9 +268,7 @@ Call opik api on http://localhost:5173/api
 | component.backend.env.LLM_MODEL_REGISTRY_REFRESH_INTERVAL_SECONDS | string | `"300"` |  |
 | component.backend.env.LLM_MODEL_REGISTRY_REMOTE_ENABLED | string | `"false"` |  |
 | component.backend.env.LLM_MODEL_REGISTRY_REMOTE_URL | string | `""` |  |
-| component.backend.env.LLM_PROVIDER_DESTINATION_GUARD | string | `"relaxed"` |  |
 | component.backend.env.LLM_PROVIDER_TOKEN_AUTH_DESTINATION_GUARD | string | `"relaxed"` |  |
-| component.backend.env.LLM_PROVIDER_VIDEO_URL_DESTINATION_GUARD | string | `"relaxed"` |  |
 | component.backend.env.OPIK_OTEL_SDK_ENABLED | bool | `false` |  |
 | component.backend.env.OTEL_EXPERIMENTAL_EXPORTER_OTLP_RETRY_ENABLED | bool | `true` |  |
 | component.backend.env.OTEL_EXPERIMENTAL_RESOURCE_DISABLED_KEYS | string | `"process.command_args"` |  |
@@ -286,7 +284,6 @@ Call opik api on http://localhost:5173/api
 | component.backend.env.STATE_DB_URL | string | `"opik-mysql:3306/opik?rewriteBatchedStatements=true&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true"` |  |
 | component.backend.env.STATE_DB_USER | string | `"opik"` |  |
 | component.backend.env.UI_DEFAULT_PAGE_SIZE | string | `"100"` |  |
-| component.backend.env.WEBHOOK_DESTINATION_GUARD | string | `"relaxed"` |  |
 | component.backend.envFrom[0].configMapRef.name | string | `"opik-backend"` |  |
 | component.backend.image.pullPolicy | string | `"IfNotPresent"` |  |
 | component.backend.image.registry | string | `nil` | Registry for this component only. Defaults to the chart-wide `registry`. Set it when one component is pulled from a different registry. |
@@ -452,12 +449,9 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS | string | `"3"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_IMAGE_NAME | string | `"opik-sandbox-executor-python"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_IMAGE_REGISTRY | string | `"ghcr.io/comet-ml/opik"` |  |
-| component.python-backend.env.PYTHON_CODE_EXECUTOR_MAX_RESULT_SIZE_IN_BYTES | string | `"67108864"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_MEM_LIMIT | string | `"256m"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_METRICS_INTERVAL_IN_SECONDS | string | `"60"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_PARALLEL_NUM | string | `"5"` |  |
-| component.python-backend.env.PYTHON_CODE_EXECUTOR_PROCESS_NETWORK_ISOLATION | string | `"false"` |  |
-| component.python-backend.env.PYTHON_CODE_EXECUTOR_READY_TIMEOUT_SECONDS | string | `"10"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_STRATEGY | string | `"process"` |  |
 | component.python-backend.env.REDIS_URL | string | `"redis://:wFSuJX9nDBdCa25sKZG7bh@opik-redis-master:6379/"` |  |
 | component.python-backend.envFrom[0].configMapRef.name | string | `"opik-python-backend"` |  |
