@@ -52,12 +52,14 @@ final class OpenAiUsageFormat implements UsageFormat {
 
     private static NativeUsage chatCompletions(VariantInput input, long cachedTokens, long cacheWriteTokens) {
         var keys = input.keys();
-        long promptTokens = input.includingCache(keys.get("prompt_tokens"), cachedTokens + cacheWriteTokens,
+        var cacheWrites = CacheWrites.of(keys, cacheWriteTokens);
+        long promptTokens = input.includingCache(keys.get("prompt_tokens"), cachedTokens + cacheWrites.total(),
                 keys.get("completion_tokens"));
         return builder(input)
                 .promptTokens(promptTokens)
                 .cachedTokens(cachedTokens)
-                .cacheWriteTokens(cacheWriteTokens)
+                .cacheWriteTokens(cacheWrites.total())
+                .cacheWrite1hTokens(cacheWrites.oneHour())
                 .audioPromptTokens(keys.get("prompt_tokens_details.audio_tokens"))
                 .completionTokens(keys.get("completion_tokens"))
                 .reasoningTokens(keys.first("completion_tokens_details.reasoning_tokens", "reasoning.output_tokens",
@@ -73,13 +75,15 @@ final class OpenAiUsageFormat implements UsageFormat {
         var keys = input.keys();
         long cachedTokens = keys.first("input_tokens_details.cached_tokens", "cache_read.input_tokens",
                 "cache_read_input_tokens", "cached_tokens");
-        long cacheWriteTokens = keys.first("cache_creation.input_tokens", "cache_creation_input_tokens");
-        long promptTokens = input.includingCache(keys.get("input_tokens"), cachedTokens + cacheWriteTokens,
+        var cacheWrites = CacheWrites.of(keys,
+                keys.first("cache_creation.input_tokens", "cache_creation_input_tokens"));
+        long promptTokens = input.includingCache(keys.get("input_tokens"), cachedTokens + cacheWrites.total(),
                 keys.get("output_tokens"));
         return builder(input)
                 .promptTokens(promptTokens)
                 .cachedTokens(cachedTokens)
-                .cacheWriteTokens(cacheWriteTokens)
+                .cacheWriteTokens(cacheWrites.total())
+                .cacheWrite1hTokens(cacheWrites.oneHour())
                 .audioPromptTokens(keys.get("input_tokens_details.audio_tokens"))
                 .completionTokens(keys.get("output_tokens"))
                 .reasoningTokens(keys.first("output_tokens_details.reasoning_tokens", "reasoning.output_tokens",

@@ -4941,6 +4941,23 @@ paths:
             application/json:
               schema:
                 type: string
+  /v1/private/llm/models/profiles:
+    get:
+      tags:
+      - LLM Models
+      summary: Get LLM model profiles
+      description: "Get the params each provider's unlisted models take, keyed by\
+        \ provider"
+      operationId: getLlmModelProfiles
+      responses:
+        "200":
+          description: Params by provider
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  $ref: "#/components/schemas/ModelParams"
   /v1/private/llm-provider-key/delete:
     post:
       tags:
@@ -19232,6 +19249,74 @@ components:
           $ref: "#/components/schemas/JsonNode"
         details:
           $ref: "#/components/schemas/JsonNode"
+    EffortParam:
+      type: object
+      properties:
+        accepted:
+          type: boolean
+        levels:
+          type: array
+          items:
+            type: string
+        default:
+          type: string
+    FlagParam:
+      type: object
+      properties:
+        accepted:
+          type: boolean
+    ModelParams:
+      type: object
+      properties:
+        temperature:
+          $ref: "#/components/schemas/NumberParam"
+        topP:
+          $ref: "#/components/schemas/NumberParam"
+        topK:
+          $ref: "#/components/schemas/NumberParam"
+        frequencyPenalty:
+          $ref: "#/components/schemas/NumberParam"
+        presencePenalty:
+          $ref: "#/components/schemas/NumberParam"
+        maxOutputTokens:
+          $ref: "#/components/schemas/NumberParam"
+        stop:
+          $ref: "#/components/schemas/FlagParam"
+        seed:
+          $ref: "#/components/schemas/FlagParam"
+        effort:
+          $ref: "#/components/schemas/EffortParam"
+        tools:
+          $ref: "#/components/schemas/ToolsParam"
+        samplingExclusive:
+          type: boolean
+        thinksByDefault:
+          type: boolean
+        routes:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/ModelParams"
+    NumberParam:
+      type: object
+      properties:
+        accepted:
+          type: boolean
+        min:
+          type: number
+        max:
+          type: number
+        default:
+          type: number
+    ToolsParam:
+      type: object
+      properties:
+        chatCompletions:
+          type: string
+          enum:
+          - effortNoneOnly
+          - refused
+        forcedChoice:
+          $ref: "#/components/schemas/FlagParam"
     Credential_Public:
       required:
       - key

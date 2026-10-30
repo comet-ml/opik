@@ -1,6 +1,6 @@
 package com.comet.opik.infrastructure.llm.openai;
 
-import com.comet.opik.infrastructure.LlmProviderClientConfig;
+import com.comet.opik.TestConfigUtils;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmTestClients;
 import com.fasterxml.jackson.core.StreamReadFeature;
@@ -68,17 +68,19 @@ class LlmProviderOpenAiResponsesExtraBodyTest {
 
     @BeforeEach
     void setUp() {
-        openAi = new WireMockServer(0);
+        openAi = LlmTestClients.newLoopbackWireMock();
         openAi.start();
         openAi.stubFor(post(urlPathEqualTo(RESPONSES_PATH)).willReturn(aResponse()
                 .withStatus(400)
                 .withHeader("Content-Type", "application/json")
                 .withBody("{\"error\":{\"message\":\"stub\",\"type\":\"invalid_request_error\"}}")));
         provider = new LlmProviderOpenAiResponses(
-                new OpenAIClientGenerator(new LlmProviderClientConfig(), LlmTestClients.RESPONSES_API_HTTP_CLIENT),
+                new OpenAIClientGenerator(TestConfigUtils.loadConfigTest().getLlmProviderClient(),
+                        LlmTestClients.RESPONSES_API_HTTP_CLIENT,
+                        LlmTestClients.LLM_HTTP_CLIENT_BUILDERS),
                 LlmProviderClientApiConfig.builder()
                         .apiKey("test-key")
-                        .baseUrl(openAi.baseUrl())
+                        .baseUrl(LlmTestClients.baseUrlOf(openAi))
                         .headers(Map.of(CUSTOM_HEADER, "custom-value"))
                         .build());
     }

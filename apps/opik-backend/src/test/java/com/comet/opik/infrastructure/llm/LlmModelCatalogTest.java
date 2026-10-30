@@ -180,6 +180,15 @@ class LlmModelCatalogTest {
         }
 
         @Test
+        void aCuratedFileNamingAnUnknownOnlyRouteStopsTheLoad() {
+            assertThatThrownBy(
+                    () -> service("llm-models-test.yaml", "llm-models-test-curated-unknown-only-route.yaml", null))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("response_api")
+                    .hasMessageContaining("chat_api");
+        }
+
+        @Test
         void anIdTakesTheProfileOfTheFirstPatternItMatches() {
             var service = service("llm-models-test.yaml", "llm-models-test-curated-id-profiles.yaml", null);
 
@@ -317,6 +326,41 @@ class LlmModelCatalogTest {
                     .structuredOutput(true)
                     .reasoning(true)
                     .params(O3)
+                    .build());
+        }
+
+        @Test
+        void aRowsOnlyRouteReachesEveryRouteTheApiServes(@TempDir Path tempDir) throws IOException {
+            var override = tempDir.resolve("override.yaml");
+            Files.writeString(override, """
+                    openai:
+                      - id: "o3"
+                        params: {onlyRoute: responses_api}
+                    """);
+
+            assertThat(model(service(override.toString()), "openai", "o3").params()).isEqualTo(O3.toBuilder()
+                    .onlyRoute(ModelParams.RESPONSES_API_ROUTE)
+                    .routes(Map.of(ModelParams.RESPONSES_API_ROUTE,
+                            O3.routes().get(ModelParams.RESPONSES_API_ROUTE).toBuilder()
+                                    .onlyRoute(ModelParams.RESPONSES_API_ROUTE)
+                                    .build()))
+                    .build());
+        }
+
+        @Test
+        void aLocalOverrideNamingAnUnknownOnlyRouteLosesOnlyThatValue(@TempDir Path tempDir) throws IOException {
+            var override = tempDir.resolve("override.yaml");
+            Files.writeString(override, """
+                    openai:
+                      - id: "o3"
+                        params: {onlyRoute: response_api, routes: {responses_api: {onlyRoute: responses_api}}}
+                    """);
+
+            assertThat(model(service(override.toString()), "openai", "o3").params()).isEqualTo(O3.toBuilder()
+                    .routes(Map.of(ModelParams.RESPONSES_API_ROUTE,
+                            O3.routes().get(ModelParams.RESPONSES_API_ROUTE).toBuilder()
+                                    .onlyRoute(ModelParams.RESPONSES_API_ROUTE)
+                                    .build()))
                     .build());
         }
     }

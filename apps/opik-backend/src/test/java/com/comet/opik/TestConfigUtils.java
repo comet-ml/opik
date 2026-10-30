@@ -6,6 +6,7 @@ import io.dropwizard.configuration.FileConfigurationSourceProvider;
 import io.dropwizard.configuration.YamlConfigurationFactory;
 import io.dropwizard.jackson.Jackson;
 import io.dropwizard.jersey.validation.Validators;
+import io.dropwizard.util.Duration;
 import lombok.experimental.UtilityClass;
 
 import java.io.IOException;
@@ -31,5 +32,10 @@ public class TestConfigUtils {
         } catch (ConfigurationException | IOException exception) {
             throw new IllegalStateException("Failed to load '%s'".formatted(CONFIG_TEST_YML_PATH), exception);
         }
+    }
+
+    /** A config duration written as in config.yml, such as {@code 1s}, for tests that shorten one. */
+    public Duration duration(String value) {
+        return Duration.parse(value);
     }
 }

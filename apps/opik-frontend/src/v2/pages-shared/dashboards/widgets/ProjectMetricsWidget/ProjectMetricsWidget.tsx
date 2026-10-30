@@ -43,8 +43,10 @@ import { buildDocsUrl } from "@/v2/lib/utils";
 import { BREAKDOWN_FIELD } from "@/types/dashboard";
 import {
   BREAKDOWN_GROUP_NAMES,
+  TAG_COST_BREAKDOWN_DESCRIPTION,
   buildBreakdownDrilldownFilter,
   getMetricEntityType,
+  getCompatibleBreakdownFields,
 } from "./breakdown";
 
 const ProjectMetricsWidget: React.FunctionComponent<
@@ -505,12 +507,22 @@ const ProjectMetricsWidget: React.FunctionComponent<
     );
   };
 
+  const tagCostInfo =
+    isCostMetric &&
+    effectiveBreakdown?.field === BREAKDOWN_FIELD.TAGS &&
+    getCompatibleBreakdownFields(metricType ?? "").includes(
+      BREAKDOWN_FIELD.TAGS,
+    )
+      ? TAG_COST_BREAKDOWN_DESCRIPTION
+      : undefined;
+
   return (
     <DashboardWidget>
       {preview ? (
-        <DashboardWidget.PreviewHeader />
+        <DashboardWidget.PreviewHeader infoMessage={tagCostInfo} />
       ) : (
         <DashboardWidget.Header
+          infoMessage={tagCostInfo}
           title={widget.title || widget.generatedTitle || ""}
           subtitle={widget.subtitle}
           readOnly={readOnly}

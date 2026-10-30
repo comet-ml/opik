@@ -6,7 +6,7 @@ docker==7.1.0
 Flask==3.1.3
 gunicorn==23.0.0
 uuid6==2025.0.1
-opik==1.10.56
+opik==2.2.125
 idna==3.15
 itsdangerous==2.2.0
 Jinja2==3.1.6
@@ -40,6 +40,6 @@ gepa==0.1.4
 # Transitive via opik-optimizer, pinned for reproducibility. No longer built from source:
 # 1.94.2 was the first release publishing musllinux wheels, so the Alpine builder installs
 # a prebuilt abi3 wheel and the Rust toolchain no longer has to compile it.
-litellm==1.103.0
+litellm==1.103.1
 pyrate-limiter>=3.0.0,<4.0.0
 python-jsonpath>=2.0.0,<3.0.0

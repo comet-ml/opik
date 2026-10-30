@@ -23,7 +23,6 @@ import com.comet.opik.infrastructure.http.HttpModule;
 import com.comet.opik.infrastructure.job.JobGuiceyInstaller;
 import com.comet.opik.infrastructure.job.JobModule;
 import com.comet.opik.infrastructure.llm.LlmModule;
-import com.comet.opik.infrastructure.llm.VideoMimeTypeUtils;
 import com.comet.opik.infrastructure.llm.antropic.AnthropicModule;
 import com.comet.opik.infrastructure.llm.customllm.CustomLlmModule;
 import com.comet.opik.infrastructure.llm.freemodel.FreeModelModule;
@@ -52,9 +51,11 @@ import dev.langchain4j.model.openai.internal.chat.Message;
 import io.dropwizard.configuration.EnvironmentVariableSubstitutor;
 import io.dropwizard.configuration.SubstitutingSourceProvider;
 import io.dropwizard.core.Application;
+import io.dropwizard.core.server.DefaultServerFactory;
 import io.dropwizard.core.setup.Bootstrap;
 import io.dropwizard.core.setup.Environment;
 import io.dropwizard.forms.MultiPartBundle;
+import lombok.extern.slf4j.Slf4j;
 import org.glassfish.jersey.server.ServerProperties;
 import org.jdbi.v3.jackson2.Jackson2Plugin;
 import org.jdbi.v3.sqlobject.SqlObjectPlugin;
@@ -63,12 +64,14 @@ import ru.vyarus.guicey.jdbi3.JdbiBundle;
 
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.util.List;
 
 import static com.comet.opik.infrastructure.bundle.LiquibaseBundle.DB_APP_ANALYTICS_MIGRATIONS_FILE_NAME;
 import static com.comet.opik.infrastructure.bundle.LiquibaseBundle.DB_APP_ANALYTICS_NAME;
 import static com.comet.opik.infrastructure.bundle.LiquibaseBundle.DB_APP_STATE_MIGRATIONS_FILE_NAME;
 import static com.comet.opik.infrastructure.bundle.LiquibaseBundle.DB_APP_STATE_NAME;
 
+@Slf4j
 public class OpikApplication extends Application<OpikConfiguration> {
 
     public static void main(String[] args) throws Exception {
@@ -121,7 +124,7 @@ public class OpikApplication extends Application<OpikConfiguration> {
     @Override
     public void run(OpikConfiguration configuration, Environment environment) {
         EncryptionUtils.setConfig(configuration);
-        VideoMimeTypeUtils.setConfig(configuration.getLlmProviderClient());
+        disableAdminServerUnlessEnabled(configuration);
 
         // Resources
         var jersey = environment.jersey();
@@ -162,5 +165,21 @@ public class OpikApplication extends Application<OpikConfiguration> {
         jersey.register(InstantParamConverter.class);
         jersey.register(LocalDateParamConverter.class);
         jersey.register(JsonUploadFormatMessageBodyReader.class);
+    }
+
+    /**
+     * Without admin connectors, nothing listens on the admin port. Runs before Dropwizard builds the server from the
+     * server factory, which it does once run returns.
+     */
+    private static void disableAdminServerUnlessEnabled(OpikConfiguration configuration) {
+        if (configuration.getAdminServer().getEnabled()) {
+            return;
+        }
+        if (!(configuration.getServerFactory() instanceof DefaultServerFactory serverFactory)) {
+            throw new IllegalStateException("adminServer.enabled false needs the default server factory, factory '%s'"
+                    .formatted(configuration.getServerFactory().getClass().getSimpleName()));
+        }
+        serverFactory.setAdminConnectors(List.of());
+        log.info("Admin server disabled: no admin connector is started");
     }
 }

@@ -2,7 +2,10 @@ package com.comet.opik.infrastructure.llm.openai;
 
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
+import com.comet.opik.infrastructure.http.OneShotRequestBodies;
 import com.comet.opik.infrastructure.llm.LlmServiceProvider;
+import com.comet.opik.infrastructure.llm.customllm.LlmHttpClientBuilders;
+import com.comet.opik.infrastructure.llm.customllm.StreamCallTimeouts;
 import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.comet.opik.infrastructure.net.DestinationGuardDns;
 import com.google.inject.AbstractModule;
@@ -14,29 +17,48 @@ import jakarta.inject.Named;
 import lombok.NonNull;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.time.Duration;
+import java.util.Optional;
+
 public class OpenAIModule extends AbstractModule {
     @Provides
     @Singleton
     @Named("openaiGenerator")
     public OpenAIClientGenerator clientGenerator(@NonNull @Config("llmProviderClient") LlmProviderClientConfig config,
-            @NonNull HttpClient responsesApiHttpClient) {
-        return new OpenAIClientGenerator(config, responsesApiHttpClient);
+            @NonNull HttpClient responsesApiHttpClient, @NonNull LlmHttpClientBuilders httpClientBuilders) {
+        return new OpenAIClientGenerator(config, responsesApiHttpClient, httpClientBuilders);
     }
 
     /**
      * Replaces the OpenAI SDK's own transport, which follows redirects: they would take a request past the base URL
-     * check. Every connection is also resolved through the destination guard.
+     * check. Every connection is also resolved through the destination guard, and a host's next address is tried when
+     * connecting to one fails, but OkHttp never sends a request twice, see {@link OneShotRequestBodies}. It is shared
+     * by every Responses API client, none of which can close it, see {@link NonClosingHttpClient}.
      */
     @Provides
     @Singleton
     public HttpClient responsesApiHttpClient(@NonNull @Config("llmProviderClient") LlmProviderClientConfig config) {
-        return new OkHttpClient(DestinationGuardDns.clientBuilder(DestinationGuard.builder()
+        var guard = DestinationGuard.builder()
                 .mode(config.getDestinationGuard())
                 .scheme(config.getDestinationScheme())
-                .build())
+                .build();
+        return new NonClosingHttpClient(new OkHttpClient(OneShotRequestBodies
+                .failOverWithoutResending(DestinationGuardDns.clientBuilder(guard))
                 .followRedirects(false)
                 .followSslRedirects(false)
-                .build());
+                // the read timeout bounds a call's headers, the longer of it and the stream read timeout those of a call
+                // accepting an event stream, then the stream read timeout an event stream's body; the SDK's own
+                // per-call read timeout never fires first, see OpenAIClientGenerator
+                .addNetworkInterceptor(StreamCallTimeouts.forEventStreams(readTimeout(config),
+                        Duration.ofMillis(config.getStreamReadTimeout().toMilliseconds())))
+                .build()));
+    }
+
+    /** The configured read timeout, none when unset. */
+    static Duration readTimeout(@NonNull LlmProviderClientConfig config) {
+        return Optional.ofNullable(config.getReadTimeout())
+                .map(timeout -> Duration.ofMillis(timeout.toMilliseconds()))
+                .orElse(Duration.ZERO);
     }
 
     @Provides

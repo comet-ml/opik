@@ -892,6 +892,7 @@ export const updateProviderConfig = <
       toParamsRoute(params.openAiPipelineMode ?? "responses_api"),
     );
     if (modelParams) {
+      // The previous model is read on the route its panel showed, as in the branch below.
       return adjustConfigForModel(
         currentConfig,
         modelParams,
@@ -900,7 +901,7 @@ export const updateProviderConfig = <
           ? getModelParams(
               PROVIDER_TYPE.OPEN_AI,
               params.previousModel,
-              toParamsRoute(params.openAiPipelineMode ?? "responses_api"),
+              toParamsRoute(params.openAiPipelineMode),
             )
           : undefined,
         getOpenAIEffortLevels,

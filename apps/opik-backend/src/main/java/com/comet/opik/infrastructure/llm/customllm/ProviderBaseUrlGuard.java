@@ -101,6 +101,11 @@ public class ProviderBaseUrlGuard {
         }
     }
 
+    /** For a client that also applies the policy at connect time, to each address it connects to. */
+    public DestinationGuard destinationGuard() {
+        return destinationGuard;
+    }
+
     void validateResolved(@NonNull String url) {
         if (!isAllowed(() -> destinationGuard.validate(url))) {
             throw new BadRequestException(REFUSED);

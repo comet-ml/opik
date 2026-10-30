@@ -131,7 +131,7 @@ test.describe('Playground — experiment naming', { tag: ['@t2-cuj', '@area:play
           userPrompt: '{{input}}',
           modelDisplayName,
         });
-        await playground.duplicateLastVariant();
+        await playground.duplicateVariant(0);
         // Give B a prompt of its own. Two byte-identical variants post two
         // indistinguishable bodies, and then the only thing separating them is
         // arrival order — which races. With a marker the suffix-to-variant

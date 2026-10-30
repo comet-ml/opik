@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.comet.opik.api.events.ExperimentItemToProcess;
 import com.comet.opik.domain.ExperimentTracePersistence.PersistenceContext;
 import com.comet.opik.domain.llm.ChatCompletionService;
+import com.comet.opik.domain.llm.ProviderFailures;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionResponse;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -53,7 +54,8 @@ public class ExperimentItemProcessor {
                             // debugging where workspace ACLs apply.
                             log.error(
                                     "LLM call failed for experiment '{}', dataset item '{}' (exception '{}'); persisting trace with error info",
-                                    message.experimentId(), datasetItem.id(), e.getClass().getName(), e);
+                                    message.experimentId(), datasetItem.id(), e.getClass().getName(),
+                                    ProviderFailures.redacted(e));
                             return new LlmCallResult(null, e.getClass().getSimpleName(), e.getMessage(),
                                     startTime, Instant.now());
                         }

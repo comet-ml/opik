@@ -4,6 +4,7 @@ import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
+import com.comet.opik.infrastructure.llm.LlmTestClients;
 import com.comet.opik.infrastructure.llm.MediaContentUtils;
 import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.comet.opik.utils.JsonUtils;
@@ -76,7 +77,8 @@ class CustomLlmProviderTest {
                 .mode(DestinationGuard.Mode.RELAXED)
                 .scheme(DestinationGuard.Scheme.PLAINTEXT_OR_TLS)
                 .build();
-        clientGenerator = new CustomLlmClientGenerator(clientConfig, relaxedGuard, mock(AuthTokenProvider.class));
+        clientGenerator = new CustomLlmClientGenerator(clientConfig, relaxedGuard, mock(AuthTokenProvider.class),
+                LlmTestClients.LLM_HTTP_CLIENT_BUILDERS);
     }
 
     @AfterAll
