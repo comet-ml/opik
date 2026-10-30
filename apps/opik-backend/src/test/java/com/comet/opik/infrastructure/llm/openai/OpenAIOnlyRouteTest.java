@@ -26,6 +26,8 @@ import static org.mockito.Mockito.mock;
 class OpenAIOnlyRouteTest {
 
     private static final String MODEL = "gpt-5.5-pro";
+    private static final String REFUSAL = "Model 'gpt-5.5-pro' works only with OpenAI's %s, and this workspace's"
+            + " OpenAI provider uses the %s. Set its OpenAI API to %s in the AI provider settings to use this model.";
 
     private final OpenAILlmServiceProvider onOpenAi = provider(null);
     private final OpenAILlmServiceProvider behindServerWideUrl = provider("https://gateway.example.com/v1");
@@ -48,7 +50,7 @@ class OpenAIOnlyRouteTest {
             String modelApi, String keyApi) {
         assertThatThrownBy(() -> onOpenAi.requireOnlyRoute(key(keyMode, null), MODEL, onlyRoute))
                 .isInstanceOf(BadRequestException.class)
-                .hasMessage(OpenAILlmServiceProvider.ERROR_ONLY_ROUTE.formatted(MODEL, modelApi, keyApi, modelApi));
+                .hasMessage(REFUSAL.formatted(modelApi, keyApi, modelApi));
     }
 
     @ParameterizedTest

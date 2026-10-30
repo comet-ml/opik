@@ -85,6 +85,9 @@ export const isServedOnKeyApi = (
   );
 };
 
+export const useModelParamsIndex = (): ModelParamsIndex =>
+  useSyncExternalStore(subscribeToModelParams, getLatestModelParamsIndex);
+
 export function useModelOptions(
   configuredProvidersList: ProviderObject[],
   providerModelsMap: Record<string, ModelOption[]>,
@@ -93,10 +96,7 @@ export function useModelOptions(
   const modelProviderMapRef = useRef<Record<string, COMPOSED_PROVIDER_TYPE>>(
     {},
   );
-  const modelParams = useSyncExternalStore(
-    subscribeToModelParams,
-    getLatestModelParamsIndex,
-  );
+  const modelParams = useModelParamsIndex();
 
   const freeModelOption = useMemo(() => {
     const freeProvider = configuredProvidersList.find(

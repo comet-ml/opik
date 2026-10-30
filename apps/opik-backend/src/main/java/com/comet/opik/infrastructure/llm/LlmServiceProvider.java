@@ -5,6 +5,7 @@ import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.domain.llm.LlmProviderService;
 import dev.langchain4j.model.chat.ChatModel;
 import jakarta.annotation.Nullable;
+import lombok.NonNull;
 
 public interface LlmServiceProvider {
 
@@ -17,6 +18,7 @@ public interface LlmServiceProvider {
         return getLanguageModel(config, modelParameters);
     }
 
-    default void requireOnlyRoute(LlmProviderClientApiConfig config, String model, @Nullable String onlyRoute) {
+    default void requireOnlyRoute(@NonNull LlmProviderClientApiConfig config, @NonNull String model,
+            @Nullable String onlyRoute) {
     }
 }

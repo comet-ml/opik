@@ -26,7 +26,7 @@ import static com.comet.opik.infrastructure.llm.openai.OpenAIClientGenerator.Api
 @Slf4j
 class OpenAILlmServiceProvider implements LlmServiceProvider {
 
-    static final String ERROR_ONLY_ROUTE = "Model '%s' works only with OpenAI's %s, and this workspace's OpenAI"
+    private static final String ERROR_ONLY_ROUTE = "Model '%s' works only with OpenAI's %s, and this workspace's OpenAI"
             + " provider uses the %s. Set its OpenAI API to %s in the AI provider settings to use this model.";
 
     private static final Map<String, String> ROUTE_LABELS = Map.of(

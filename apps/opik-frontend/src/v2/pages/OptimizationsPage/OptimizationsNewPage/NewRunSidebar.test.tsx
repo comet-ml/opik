@@ -13,6 +13,7 @@ import type { LlmModelsByProvider } from "@/api/llm/useLlmModels";
 import {
   getLatestProviderModelsSnapshot,
   resetModelRegistryStoreForTesting,
+  setLatestModelParams,
   setLatestProviderModelsSnapshot,
 } from "@/lib/modelRegistryStore";
 import NewRunSidebar from "./NewRunSidebar";
@@ -37,6 +38,7 @@ const HIDDEN_REGISTRY_MODELS: Record<string, PROVIDER_TYPE> = {
   [PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO_BATCH]: PROVIDER_TYPE.OPEN_ROUTER,
   [PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_3_5_HAIKU]: PROVIDER_TYPE.OPEN_ROUTER,
   [PROVIDER_MODEL_TYPE.GPT_LIVE_1]: PROVIDER_TYPE.OPEN_AI,
+  [PROVIDER_MODEL_TYPE.GPT_5_5_PRO]: PROVIDER_TYPE.OPEN_AI,
   [PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5]: PROVIDER_TYPE.ANTHROPIC,
   [OLLAMA_BATCH_TAG_MODEL]: PROVIDER_TYPE.OLLAMA,
 };
@@ -325,6 +327,74 @@ describe("NewRunSidebar — re-run model resolution", () => {
 
     expect(content.modelName).toBe("");
     expect(content.savedModelReplacement).toBeNull();
+  });
+});
+
+describe("NewRunSidebar — re-run with a model the catalog serves on one OpenAI API", () => {
+  const RESPONSES_ONLY = PROVIDER_MODEL_TYPE.GPT_5_5_PRO;
+
+  const openAiKeyOn = (openai_pipeline_mode: string) => ({
+    content: [
+      {
+        ...CONFIGURED_PROVIDER_KEYS.content[0],
+        configuration: { openai_pipeline_mode },
+      },
+    ],
+  });
+
+  beforeEach(() => {
+    mocks.isRegistryFetched = true;
+    mocks.hasRegistryModels = true;
+    setLatestModelParams(
+      new Map([
+        [
+          PROVIDER_TYPE.OPEN_AI as string,
+          new Map([
+            [RESPONSES_ONLY as string, { only_route: "responses_api" }],
+          ]),
+        ],
+      ]),
+    );
+  });
+
+  afterEach(() => {
+    resetModelRegistryStoreForTesting();
+  });
+
+  it("replaces it on a Chat Completions key, which the backend would refuse, and says so", () => {
+    mocks.providerKeysData = openAiKeyOn("chat_completions_api");
+
+    const content = renderRerun(RESPONSES_ONLY);
+
+    expect(content.modelName).toBe(PROVIDER_MODEL_TYPE.GPT_4O_MINI);
+    expect(content.availableModels).not.toContain(RESPONSES_ONLY);
+    expect(content.savedModelReplacement).toEqual({
+      savedModel: RESPONSES_ONLY,
+      replacementModel: PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+      replacementLabel: "GPT 4o Mini",
+    });
+  });
+
+  it("drops it as the algorithm model on a Chat Completions key", () => {
+    mocks.providerKeysData = openAiKeyOn("chat_completions_api");
+
+    const content = renderRerun(
+      PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+      RESPONSES_ONLY,
+    );
+
+    expect(content.optimizerModel).toBeNull();
+  });
+
+  it("keeps it on a Responses API key", () => {
+    mocks.providerKeysData = openAiKeyOn("responses_api");
+
+    const content = renderRerun(RESPONSES_ONLY, RESPONSES_ONLY);
+
+    expect(content.modelName).toBe(RESPONSES_ONLY);
+    expect(content.availableModels).toContain(RESPONSES_ONLY);
+    expect(content.savedModelReplacement).toBeNull();
+    expect(content.optimizerModel).toBe(RESPONSES_ONLY);
   });
 });
 

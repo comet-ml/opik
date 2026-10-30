@@ -5,14 +5,20 @@ import com.comet.opik.api.ModelParams;
 import com.comet.opik.api.ModelParams.EffortParam;
 import com.comet.opik.api.ModelParams.FlagParam;
 import com.comet.opik.api.ModelParams.NumberParam;
+import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
+import com.comet.opik.infrastructure.llm.OpenAiClientConfig;
 import com.comet.opik.utils.JsonUtils;
 import io.dropwizard.testing.junit5.DropwizardExtensionsSupport;
 import io.dropwizard.testing.junit5.ResourceExtension;
 import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.Response;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -27,11 +33,17 @@ import static org.mockito.Mockito.when;
 class LlmModelsResourceTest {
 
     private static final LlmModelRegistryService REGISTRY_SERVICE = mock(LlmModelRegistryService.class);
+    private static final LlmProviderClientConfig CLIENT_CONFIG = new LlmProviderClientConfig();
 
     private static final ResourceExtension EXT = ResourceExtension.builder()
             .setMapper(JsonUtils.getMapper())
-            .addResource(new LlmModelsResource(REGISTRY_SERVICE))
+            .addResource(new LlmModelsResource(REGISTRY_SERVICE, CLIENT_CONFIG))
             .build();
+
+    @AfterEach
+    void reachOpenAiDirectly() {
+        CLIENT_CONFIG.setOpenAiClient(null);
+    }
 
     @Test
     void servesModelFieldsInSnakeCase() {
@@ -130,6 +142,49 @@ class LlmModelsResourceTest {
                                 }
                               }]
                             }"""));
+        }
+    }
+
+    private static final Map<String, List<LlmModelDefinition>> RESPONSES_ONLY_MODELS = Map.of(
+            "openai", List.of(LlmModelDefinition.builder()
+                    .id("gpt-5.5-pro")
+                    .params(ModelParams.builder().onlyRoute(ModelParams.RESPONSES_API_ROUTE).build())
+                    .build()),
+            "openrouter", List.of(LlmModelDefinition.builder()
+                    .id("openai/gpt-5.5-pro")
+                    .params(ModelParams.builder().onlyRoute(ModelParams.RESPONSES_API_ROUTE).build())
+                    .build()));
+
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(strings = {"", " "})
+    void servesOpenAiOnlyRoutesWhenOpenAiIsReachedDirectly(String serverWideUrl) {
+        CLIENT_CONFIG.setOpenAiClient(new OpenAiClientConfig(serverWideUrl));
+        when(REGISTRY_SERVICE.getRegistry()).thenReturn(RESPONSES_ONLY_MODELS);
+
+        try (Response response = EXT.target("/v1/private/llm/models").request().get()) {
+            assertThat(response.getStatus()).isEqualTo(OK.getStatusCode());
+
+            var registry = JsonUtils.getJsonNodeFromString(response.readEntity(String.class));
+
+            assertThat(registry.at("/openai/0/params/only_route").asText()).isEqualTo("responses_api");
+            assertThat(registry.at("/openrouter/0/params/only_route").asText()).isEqualTo("responses_api");
+        }
+    }
+
+    @Test
+    void dropsOpenAiOnlyRoutesBehindAServerWideUrlWhichTheRouteCheckLetsThrough() {
+        CLIENT_CONFIG.setOpenAiClient(new OpenAiClientConfig("https://gateway.example.com/v1"));
+        when(REGISTRY_SERVICE.getRegistry()).thenReturn(RESPONSES_ONLY_MODELS);
+
+        try (Response response = EXT.target("/v1/private/llm/models").request().get()) {
+            assertThat(response.getStatus()).isEqualTo(OK.getStatusCode());
+
+            var registry = JsonUtils.getJsonNodeFromString(response.readEntity(String.class));
+
+            assertThat(registry.at("/openai/0/id").asText()).isEqualTo("gpt-5.5-pro");
+            assertThat(registry.at("/openai/0/params").has("only_route")).isFalse();
+            assertThat(registry.at("/openrouter/0/params/only_route").asText()).isEqualTo("responses_api");
         }
     }
 
