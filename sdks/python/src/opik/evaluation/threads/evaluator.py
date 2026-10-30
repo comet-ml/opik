@@ -23,6 +23,7 @@ def evaluate_threads(
     verbose: int = 1,
     num_workers: int = 8,
     max_traces_per_thread: int = 1000,
+    max_threads: int = 1000,
 ) -> evaluation_result.ThreadsEvaluationResult:
     """Evaluate conversation threads using specified metrics.
 
@@ -47,7 +48,7 @@ def evaluate_threads(
             - `duration`, `number_of_messages`, `total_estimated_cost`: Numeric fields
 
             Examples: 'id = "thread_123"', 'duration > 300', 'tags contains "prod"'
-            If None, all threads in the project will be evaluated.
+            If None, all threads in the project will be evaluated, up to `max_threads`.
         eval_project_name: Optional name for the evaluation project where evaluation traces will be stored.
             If None, the same project_name will be used.
         metrics: List of ConversationThreadMetric instances to apply to each thread.
@@ -89,6 +90,9 @@ def evaluate_threads(
             Default is 8.
         max_traces_per_thread: Maximum number of traces to fetch per thread.
             Default is 1000.
+        max_threads: Maximum number of threads to evaluate. Default is 1000.
+            When the search returns this many threads, the project may hold more
+            that match, so a warning is logged.
 
     Returns:
         ThreadsEvaluationResult containing evaluation scores for each thread.
@@ -153,4 +157,5 @@ def evaluate_threads(
             trace_output_transform=trace_output_transform,
             trace_context_transform=trace_context_transform,
             max_traces_per_thread=max_traces_per_thread,
+            max_threads=max_threads,
         )

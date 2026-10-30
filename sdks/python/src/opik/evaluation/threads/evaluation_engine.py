@@ -46,6 +46,7 @@ class ThreadsEvaluationEngine:
             Callable[[TracePublic], Optional[List[str]]]
         ] = None,
         max_traces_per_thread: int = 1000,
+        max_threads: int = 1000,
     ) -> evaluation_result.ThreadsEvaluationResult:
         if len(metrics) == 0:
             raise ValueError("No metrics provided")
@@ -53,10 +54,19 @@ class ThreadsEvaluationEngine:
         threads = self._threads_client.search_threads(
             project_name=self._project_name,
             filter_string=filter_string,
+            max_results=max_threads,
         )
         if len(threads) == 0:
             raise exceptions.EvaluationError(
                 f"No threads found with filter_string: {filter_string}"
+            )
+        if len(threads) == max_threads:
+            LOGGER.warning(
+                "Evaluating the first %d threads found, the max_threads=%d limit. "
+                "Threads past the limit are not evaluated: raise max_threads or "
+                "narrow filter_string to evaluate them.",
+                len(threads),
+                max_threads,
             )
 
         evaluation_tasks: List[
