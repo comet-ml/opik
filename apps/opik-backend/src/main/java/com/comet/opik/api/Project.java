@@ -25,8 +25,7 @@ import java.util.UUID;
 public record Project(
         @JsonView({
                 Project.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID id,
-        @JsonView({Project.View.Public.class,
-                View.Write.class}) @NotBlank @Size(max = 150, message = "cannot exceed 150 characters") String name,
+        @JsonView({Project.View.Public.class, View.Write.class}) @NotBlank String name,
         @JsonView({Project.View.Public.class, View.Write.class}) Visibility visibility,
         @JsonView({Project.View.Public.class,
                 View.Write.class}) @Size(max = 255, message = "cannot exceed 255 characters") String description,

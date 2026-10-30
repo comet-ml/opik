@@ -14,7 +14,7 @@ import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record ProjectUpdate(
         // Not Blank makes the field required, while this pattern allows null values and validates the string if it is not null
-        @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Size(max = 150, message = "cannot exceed 150 characters") String name,
+        @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") String name,
         @Size(max = 255, message = "cannot exceed 255 characters") String description,
         Visibility visibility) {
 }

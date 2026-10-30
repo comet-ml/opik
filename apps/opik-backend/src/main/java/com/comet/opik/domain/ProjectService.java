@@ -149,9 +149,9 @@ class ProjectServiceImpl implements ProjectService {
     }
 
     private static final String PROJECT_ALREADY_EXISTS = "Project already exists";
-    // Width of projects.name. Names arriving implicitly (trace, span, dataset... project_name) skip the Project
-    // bean validation, so they're checked here before the INSERT fails with a data truncation error.
-    private static final int NAME_MAX_LENGTH = 150;
+    // Width of projects.name, in characters (code points, not UTF-16 units). Checked here rather than with @Size so
+    // every path that writes a name (create, update, implicit creation from a project_name) counts the same way.
+    private static final int PROJECT_NAME_MAX_LENGTH = 150;
 
     // recordLastUpdatedTrace populates projects.last_updated_trace_at from the trace timestamp, so sorting by last
     // trace reads it straight from MySQL instead of querying ClickHouse. Projects without traces have it NULL, so we
@@ -179,9 +179,9 @@ class ProjectServiceImpl implements ProjectService {
                 Response.status(Response.Status.NOT_FOUND).entity(new ErrorMessage(List.of(message))).build());
     }
 
-    private static void validateNameLength(String name) {
-        if (name != null && name.length() > NAME_MAX_LENGTH) {
-            String message = "Project name length must not exceed '%d'".formatted(NAME_MAX_LENGTH);
+    private static void validateProjectNameLength(String name) {
+        if (name != null && name.codePointCount(0, name.length()) > PROJECT_NAME_MAX_LENGTH) {
+            String message = "Project name length must not exceed '%d'".formatted(PROJECT_NAME_MAX_LENGTH);
             throw new BadRequestException(message,
                     Response.status(Response.Status.BAD_REQUEST).entity(new ErrorMessage(List.of(message))).build());
         }
@@ -198,7 +198,7 @@ class ProjectServiceImpl implements ProjectService {
 
     private Project createProject(Project project, UUID projectId, String userName, String workspaceId) {
         IdGenerator.validateVersion(projectId, "project");
-        validateNameLength(project.name());
+        validateProjectNameLength(project.name());
 
         var newProject = project.toBuilder()
                 .id(projectId)
@@ -242,6 +242,7 @@ class ProjectServiceImpl implements ProjectService {
     public Project update(@NonNull UUID id, @NonNull ProjectUpdate projectUpdate) {
         String userName = requestContext.get().getUserName();
         String workspaceId = requestContext.get().getWorkspaceId();
+        validateProjectNameLength(projectUpdate.name());
 
         try {
             template.inTransaction(WRITE, handle -> {
@@ -751,7 +752,7 @@ class ProjectServiceImpl implements ProjectService {
 
     private void checkIfNeededToCreateProjects(Set<String> projectNames,
             String userName, String workspaceId) {
-        projectNames.forEach(ProjectServiceImpl::validateNameLength);
+        projectNames.forEach(ProjectServiceImpl::validateProjectNameLength);
 
         Map<String, Project> projectsPerLowerCaseName = ProjectService.groupByName(
                 getAllProjectsByName(workspaceId, projectNames));

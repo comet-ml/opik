@@ -2922,6 +2922,18 @@ class ProjectsResourceTest {
         }
 
         @Test
+        void create__whenNameHasSupplementaryCharactersWithinLimit__thenAcceptCreate() {
+            // 150 characters but 300 UTF-16 units: the limit counts characters, like the column.
+            var project = factory.manufacturePojo(Project.class).toBuilder()
+                    .name("\uD83D\uDE80".repeat(150))
+                    .build();
+
+            var id = createProject(project);
+
+            assertProject(project.toBuilder().lastUpdatedTraceAt(null).id(id).build());
+        }
+
+        @Test
         void create__whenNameTooLong__thenRejectCreate() {
             var project = Project.builder().name(RandomStringUtils.secure().nextAlphanumeric(151)).build();
 
@@ -2931,8 +2943,8 @@ class ProjectsResourceTest {
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
                     .post(Entity.json(project))) {
 
-                assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
-                var expectedError = new ErrorMessage(List.of("name cannot exceed 150 characters"));
+                assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                var expectedError = new ErrorMessage(List.of("Project name length must not exceed '150'"));
                 assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(expectedError);
             }
         }
@@ -3168,8 +3180,8 @@ class ProjectsResourceTest {
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
                     .method(HttpMethod.PATCH, Entity.json(projectUpdate))) {
 
-                assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
-                var expectedError = new ErrorMessage(List.of("name cannot exceed 150 characters"));
+                assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                var expectedError = new ErrorMessage(List.of("Project name length must not exceed '150'"));
                 assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(expectedError);
             }
         }
