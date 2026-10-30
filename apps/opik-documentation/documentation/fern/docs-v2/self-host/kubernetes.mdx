@@ -102,28 +102,35 @@ clickhouse:
 
 ## Configure Python code execution
 
-By default, custom Python evaluators run with the `process` strategy, inside the Python backend container. If users
-you do not fully trust can create evaluators, switch to the `docker` strategy, which runs each evaluation in an
-isolated, non-root container without network access. See
-[Python code execution](/self-host/architecture#python-code-execution) for the differences.
+By default, the Helm chart runs custom Python evaluators and Optimization Studio code metrics with the `process`
+strategy, inside the Python backend container. If users you do not fully trust can create evaluators or run
+optimizations, switch to the `docker` strategy, which runs each evaluation in an isolated, non-root container without
+network access. See [Python code execution](/self-host/architecture#python-code-execution) for the differences.
 
 ```yaml
 component:
   python-backend:
     env:
       PYTHON_CODE_EXECUTOR_STRATEGY: "docker"
+      PYTHON_CODE_EXECUTOR_ALLOW_NETWORK: "false" # keep "false" so evaluation containers have no network access
     securityContext:
       privileged: true # required by the docker strategy (Docker-in-Docker); set by default
 ```
 
-To turn off Python evaluators entirely instead:
+To stop Python online evaluation rules from running, set all three toggles on the backend. Each covers a different
+rule scope (traces, threads and spans):
 
 ```yaml
 component:
   backend:
     env:
       TOGGLE_PYTHON_EVALUATOR_ENABLED: "false"
+      TOGGLE_TRACE_THREAD_PYTHON_EVALUATOR_ENABLED: "false"
+      TOGGLE_SPAN_USER_DEFINED_METRIC_PYTHON_ENABLED: "false"
 ```
+
+These toggles do not affect Optimization Studio code metrics, which always run through the configured execution
+strategy.
 
 ## Configure Clickhouse backup
 
