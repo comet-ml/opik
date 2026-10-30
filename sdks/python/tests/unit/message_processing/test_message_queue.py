@@ -6,32 +6,61 @@ import pytest
 from opik.message_processing import message_queue
 
 
-def test_message_queue_accept_put_without_discarding___max_size_handling():
+def test_message_queue_put__bounded_queue_full__oldest_evicted_and_reported():
     max_size = 10
     queue: message_queue.MessageQueue[str] = message_queue.MessageQueue(max_size)
+    evicted = []
+    queue.set_eviction_callback(evicted.append)
 
     queue.put("the oldest message")
-    assert queue.accept_put_without_discarding() is True
-
     for i in range(max_size - 1):
-        assert queue.accept_put_without_discarding() is True, f"Failed at {i}"
         queue.put(f"line: {i}")
+    assert evicted == []
 
-    assert queue.accept_put_without_discarding() is False
-
-    # put one more message to have the oldest discarded
     queue.put("the newest message")
 
-    # check that the oldest message ("the oldest message") was discarded
+    assert evicted == ["the oldest message"]
     assert queue.get(0.0001) == "line: 0"
 
 
-def test_message_queue_accept_put_without_discarding___max_size_none():
+def test_message_queue_put__unbounded_queue__nothing_evicted():
     queue: message_queue.MessageQueue[str] = message_queue.MessageQueue(None)
+    evicted = []
+    queue.set_eviction_callback(evicted.append)
+
     for i in range(100):
         queue.put(f"line: {i}")
 
-    assert queue.accept_put_without_discarding() is True
+    assert evicted == []
+    assert queue.size() == 100
+
+
+def test_message_queue_put_back__bounded_queue_full__newest_evicted_and_reported():
+    queue: message_queue.MessageQueue[str] = message_queue.MessageQueue(max_length=2)
+    evicted = []
+    queue.set_eviction_callback(evicted.append)
+
+    queue.put("a")
+    queue.put("b")
+    msg = queue.get(0.0001)
+    queue.put("c")
+
+    queue.put_back(msg)
+
+    assert evicted == ["c"]
+
+
+def test_message_queue_put__zero_length_queue__new_message_evicted_and_reported():
+    queue: message_queue.MessageQueue[str] = message_queue.MessageQueue(max_length=0)
+    evicted = []
+    queue.set_eviction_callback(evicted.append)
+
+    queue.put("a")
+    queue.put_back("b")
+
+    assert evicted == ["a", "b"]
+    assert queue.size() == 0
+    assert queue.all_tasks_done() is True
 
 
 def test_message_queue_task_done__fresh_queue__reports_all_tasks_done():

@@ -193,6 +193,7 @@ def create_connection_resources(
         message_processor=message_processor,
         url_override=config.url_override,
         fallback_replay_manager=fallback_replay,
+        data_loss_tracker=data_loss_tracker,
     )
 
     return SharedConnectionResourcesBundle(

@@ -1,7 +1,7 @@
 import logging
 import threading
 import time
-from typing import Optional
+from typing import Iterator, Optional
 
 from opik.healthcheck import connection_monitor
 from . import db_manager, types
@@ -81,6 +81,33 @@ class ReplayManager(threading.Thread):
     def has_server_connection(self) -> bool:
         """Checks if SDK has a connection to the OPIK server."""
         return self._monitor.has_server_connection
+
+    def refresh_server_connection(self, timeout: Optional[float] = None) -> None:
+        """Pings the server now if it is believed to be unreachable, waiting at
+        most ``timeout`` seconds for the answer.
+
+        The monitor pings only once per interval, so a server that came back a
+        moment ago still looks unreachable until the next scheduled ping.
+        """
+        if self._monitor.has_server_connection:
+            return
+
+        if (
+            self._monitor.ping(timeout)
+            == connection_monitor.ConnectionStatus.connection_restored
+        ):
+            self._monitor.reset()
+
+    def failed_messages(self) -> Iterator[messages.BaseMessage]:
+        """Yields the messages currently parked for replay."""
+        if not self._db_manager.initialized:
+            return
+
+        for db_messages in self._db_manager.fetch_failed_messages_batched(
+            self._db_manager.batch_size
+        ):
+            for db_message in db_messages:
+                yield db_manager.db_message_to_message(db_message)
 
     def register_message(
         self,
