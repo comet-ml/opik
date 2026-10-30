@@ -30,6 +30,9 @@ import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.google.protobuf.ByteString;
+import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.protobuf.util.JsonFormat;
+import com.google.rpc.Status;
 import com.redis.testcontainers.RedisContainer;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import io.opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest;
@@ -77,6 +80,7 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -1534,6 +1538,57 @@ class OpenTelemetryResourceTest {
             assertThat(topSpans.stream().map(com.comet.opik.api.Span::name))
                     .containsExactlyInAnyOrder("mcp_registration", "llm_request");
             topSpans.forEach(span -> assertThat(span.traceId()).isEqualTo(expectedOpikTraceId));
+        }
+
+        private static final String PROJECT_MISMATCH_ERROR = "Project name and workspace name do not match the existing trace";
+
+        @ParameterizedTest(name = "an error answering a protobuf request accepting {0} is a protobuf google.rpc.Status")
+        @ValueSource(strings = {"application/x-protobuf", MediaType.WILDCARD})
+        void errorAnsweringProtobufRequestIsProtobufStatus(String accept) throws InvalidProtocolBufferException {
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName);
+            var otelSpans = rootAndChild();
+            var expectedStatus = Status.newBuilder()
+                    .setMessage(PROJECT_MISMATCH_ERROR)
+                    .build();
+
+            try (var actualResponse = sendTraceToTwoProjects(otelSpans, workspaceName, accept,
+                    Entity.entity(exportRequest(otelSpans).toByteArray(), "application/x-protobuf"))) {
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CONFLICT);
+                assertThat(actualResponse.getMediaType().toString()).isEqualTo("application/x-protobuf");
+                assertThat(Status.parseFrom(actualResponse.readEntity(byte[].class))).isEqualTo(expectedStatus);
+            }
+        }
+
+        @Test
+        @DisplayName("an error answering a JSON request accepting any type keeps its JSON body")
+        void errorAnsweringJsonRequestKeepsJsonBody() throws InvalidProtocolBufferException {
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName);
+            var otelSpans = rootAndChild();
+            var expectedError = JsonUtils.valueToTree(
+                    Map.of("errors", List.of(PROJECT_MISMATCH_ERROR)));
+
+            try (var actualResponse = sendTraceToTwoProjects(otelSpans, workspaceName, MediaType.WILDCARD,
+                    Entity.json(JsonFormat.printer().print(exportRequest(otelSpans))))) {
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CONFLICT);
+                assertThat(actualResponse.getMediaType()).isEqualTo(MediaType.APPLICATION_OCTET_STREAM_TYPE);
+                assertThat(JsonUtils.getJsonNodeFromString(actualResponse.readEntity(String.class)))
+                        .isEqualTo(expectedError);
+            }
+        }
+
+        private Response sendTraceToTwoProjects(List<Span> otelSpans, String workspaceName, String accept,
+                Entity<?> secondPayload) {
+            sendProtobufTraces(otelSpans, "project-%s".formatted(RandomStringUtils.secure().nextAlphanumeric(32)),
+                    workspaceName, okApikey, HttpStatus.SC_OK, null);
+            return client.target(URL_TEMPLATE.formatted(baseURI))
+                    .request(accept)
+                    .header(HttpHeaders.AUTHORIZATION, okApikey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .header(RequestContext.PROJECT_NAME,
+                            "project-%s".formatted(RandomStringUtils.secure().nextAlphanumeric(32)))
+                    .post(secondPayload);
         }
 
         Stream<Arguments> sendProtobufTracesOutOfWindowTimestampThrowsException() {
