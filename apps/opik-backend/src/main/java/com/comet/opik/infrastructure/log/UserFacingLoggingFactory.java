@@ -27,7 +27,6 @@ public class UserFacingLoggingFactory {
         asyncAppender = new AsyncAppender();
         asyncAppender.setContext(CONTEXT);
         asyncAppender.setNeverBlock(true);
-        asyncAppender.setIncludeCallerData(true);
         asyncAppender.addAppender(clickHouseAppender);
         asyncAppender.start();
 
