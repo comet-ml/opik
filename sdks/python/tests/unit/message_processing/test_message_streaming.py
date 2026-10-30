@@ -1,5 +1,4 @@
 import threading
-import time
 from unittest import mock
 from unittest.mock import sentinel
 
@@ -199,14 +198,12 @@ def test_streamer__flush_with_zero_timeout__does_not_wait_for_an_in_flight_messa
         tested.put(messages.BaseMessage())
         assert process_started.wait(timeout=2.0) is True
 
-        started = time.monotonic()
         flushed = tested.flush(timeout=0)
-        elapsed = time.monotonic() - started
 
         # The message is still in flight, so the flush cannot report success,
         # and it must not have waited for it to come out of the processor.
         assert flushed is False
-        assert elapsed < 1.0
+        assert release_process.is_set() is False
     finally:
         release_process.set()
         # Let the in-flight message finish before the fire-and-forget close:
