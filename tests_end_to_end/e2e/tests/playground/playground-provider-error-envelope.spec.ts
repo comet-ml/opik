@@ -43,6 +43,16 @@ import { mockAuthSkipReason } from '@e2e/core/mock-auth';
  * passes through the allowlist at all. The release's own coverage report
  * predicted that row would lose its message; it does not, and this comment is
  * where that is written down.
+ *
+ * ## Two tests, because only one of the two surfaces holds
+ *
+ * The allowlist is applied on the BLOCKING `/chat/completions` call and is not
+ * reached at all on the STREAMING one, which is the only path the Playground
+ * uses — so the API contract below passes and the UI rendering of it does not.
+ * The second test is `test.fail()` for that reason; see its own comment. They
+ * are split rather than left as one test so that the API assertions stay live
+ * assertions: under a single `test.fail()` they would stop guarding anything,
+ * since a test marked expected-to-fail passes however early it fails.
  */
 
 /**
@@ -91,8 +101,6 @@ test.describe('Playground — provider error envelope allowlist', { tag: ['@t2-c
   });
 
   test('A documented envelope keeps the provider\'s message and a bare one is replaced, with the status preserved either way', { tag: ['@cap:playground.run-error-info'] }, async ({
-    page,
-    project,
     backendClient,
     testNamespace,
     providerKeys,
@@ -152,6 +160,83 @@ test.describe('Playground — provider error envelope allowlist', { tag: ['@t2-c
         result.message,
         'no fragment of the undocumented body leaks into the replacement',
       ).not.toContain(BARE_MARKER);
+    });
+
+  });
+
+  test('The Playground renders the kept message for a documented envelope and the generic one for a bare envelope', { tag: ['@cap:playground.run-error-info'] }, async ({
+    page,
+    project,
+    backendClient,
+    testNamespace,
+    providerKeys,
+  }) => {
+    // QA: failing against a local OSS build for 2.2.125, and reproduced outside
+    // Playwright entirely — one provider, one forced body, two calls:
+    //
+    //   stream=false -> HTTP 400 {"message": "<the gateway's own words>"}
+    //   stream=true  -> HTTP 200, SSE event {"code": 500, "message":
+    //                   "Unexpected error calling LLM provider"}
+    //
+    // The Playground only ever sends `stream: true`
+    // (`useCompletionProxyStreaming`), so neither half of the contract this
+    // spec is about reaches the user: the documented envelope's message is
+    // dropped, AND the provider's 400 is downgraded to a 500 — which
+    // `ChatCompletionService`'s own comment on the streaming branch says must
+    // not happen ("an unparsed envelope must not downgrade a provider 4xx to
+    // the 500 that a bare ErrorMessage(String) defaults to").
+    //
+    // Root cause is one step earlier and explains both halves at once. On the
+    // streaming path the throwable the error consumer is handed is an
+    // `EOFException`, not langchain4j's `HttpException`, so
+    // `extractErrorJson` finds no body ("failed to parse CustomLlmErrorMessage
+    // message" in the backend log) and `findProviderHttpStatus` finds no
+    // status; both recoveries miss and the generic 500 falls out of the last
+    // branch. The blocking path, over byte-identical gateway bytes, parses the
+    // same body fine — the mock answers the forced status before it looks at
+    // `stream` at all — so this is the product, not the fixture.
+    //
+    // NOT weakened to match: `playground.run-error-info` is a capability about
+    // what a user READS when a run fails, and the generic line is the whole
+    // failure. The assertions below are the CORRECT behaviour and are left
+    // intact. Remove test.fail() once the streaming branch recovers the
+    // provider's body; Playwright reports it the moment this passes.
+    //
+    // The bare-envelope step below never executes while this is marked, since
+    // the documented one fails first. It is kept beside it so the pair reads as
+    // one contract and both halves come back together.
+    test.fail();
+    test.setTimeout(180_000);
+
+    const providerName = `${testNamespace}-envelope-ui`;
+    const documentedModel = `${testNamespace}-documented-ui`;
+    const bareModel = `${testNamespace}-bare-ui`;
+
+    await test.step('Register one gateway serving a documented and a bare error body', async () => {
+      await providerKeys.createOauth({
+        providerName,
+        modelNames: [documentedModel, bareModel],
+      });
+      await providerKeys.forceChatStatus(documentedModel, DOCUMENTED_STATUS, {
+        envelope: 'documented',
+        message: DOCUMENTED_MARKER,
+      });
+      await providerKeys.forceChatStatus(bareModel, BARE_STATUS, {
+        envelope: 'bare',
+        message: BARE_MARKER,
+      });
+    });
+
+    await test.step('The blocking endpoint still keeps the documented message, so the gateway is set up right', async () => {
+      // The premise the expected-to-fail assertions below rest on, asserted
+      // here where a failure is loud rather than swallowed by `test.fail()`: a
+      // gateway that was never reachable, or a body the mock refused to force,
+      // would otherwise be indistinguishable from the streaming defect.
+      const result = await backendClient.postChatCompletion({
+        model: `custom-llm/${providerName}/${documentedModel}`,
+      });
+      expect(result.status).toBe(DOCUMENTED_STATUS);
+      expect(result.message).toBe(DOCUMENTED_MARKER);
     });
 
     const playground = new PlaygroundPage(page, project.id);
