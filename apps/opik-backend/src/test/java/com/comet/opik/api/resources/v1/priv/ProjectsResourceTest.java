@@ -3171,6 +3171,7 @@ class ProjectsResourceTest {
 
         @Test
         void update__whenNameTooLong__thenRejectTheUpdate() {
+            var expectedProject = getProject(projectId);
             var projectUpdate = ProjectUpdate.builder().name(RandomStringUtils.secure().nextAlphanumeric(151)).build();
 
             try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
@@ -3183,6 +3184,22 @@ class ProjectsResourceTest {
                 assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
                 var expectedError = new ErrorMessage(List.of("Project name length must not exceed '150'"));
                 assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(expectedError);
+            }
+
+            var actualProject = getProject(projectId);
+            assertThat(actualProject).isEqualTo(expectedProject);
+        }
+
+        private Project getProject(UUID id) {
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path(id.toString())
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get()) {
+
+                assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_OK);
+                return actualResponse.readEntity(Project.class);
             }
         }
     }
