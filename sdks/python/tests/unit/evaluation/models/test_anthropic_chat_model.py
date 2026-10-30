@@ -1046,22 +1046,151 @@ class TestFactoryRouting:
         assert isinstance(model, LiteLLMChatModel)
 
 
-class TestSupportedFeatures:
-    def test_supported_features__native_adapter__no_reasoning_effort(self, monkeypatch):
+class TestReasoningEffort:
+    @pytest.mark.parametrize(
+        "model_name,expected",
+        [
+            ("anthropic/claude-sonnet-5-5", True),
+            ("claude-opus-4-5-20251101", True),
+            ("claude-sonnet-4-6", True),
+            ("claude-haiku-4-5", False),
+            ("claude-sonnet-4-5", False),
+            ("claude-sonnet-4-20250514", False),
+        ],
+    )
+    def test_supported_features__reasoning_effort_follows_the_claude_version(
+        self, monkeypatch, model_name, expected
+    ):
         _install_anthropic_stub(monkeypatch)
+        monkeypatch.setattr(message_adapter, "_sdk_accepted_params", lambda: None)
+
+        model = anthropic_chat_model.AnthropicChatModel(
+            model_name=model_name, track=False
+        )
+
+        assert model.supported_features == base_model.ModelFeatures(
+            reasoning_effort=expected
+        )
+
+    def test_supported_features__sdk_without_output_config__no_reasoning_effort(
+        self, monkeypatch
+    ):
+        _install_anthropic_stub(monkeypatch)
+        monkeypatch.setattr(
+            message_adapter,
+            "_sdk_accepted_params",
+            lambda: frozenset({"model", "messages", "max_tokens"}),
+        )
 
         model = anthropic_chat_model.AnthropicChatModel(
             model_name="anthropic/claude-sonnet-5-5", track=False
         )
 
-        assert model.supported_features == base_model.ModelFeatures(
-            reasoning_effort=False, response_format_with_tools=True
+        assert model.supported_features.reasoning_effort is False
+
+    @pytest.mark.parametrize(
+        "model_name,reasoning_effort,expected_output_config",
+        [
+            ("anthropic/claude-sonnet-5-5", "low", {"effort": "low"}),
+            ("claude-opus-4-6", "max", {"effort": "max"}),
+            ("claude-opus-4-6", "xhigh", None),
+            ("claude-opus-4-5", "high", {"effort": "high"}),
+            ("claude-opus-4-5", "max", None),
+            ("claude-haiku-4-5", "low", None),
+            ("anthropic/claude-sonnet-5-5", "minimal", None),
+        ],
+    )
+    def test_reasoning_effort__sent_as_output_config_effort_when_the_model_takes_it(
+        self, monkeypatch, model_name, reasoning_effort, expected_output_config
+    ):
+        _, mock_client, _ = _install_anthropic_stub(monkeypatch)
+        monkeypatch.setattr(message_adapter, "_sdk_accepted_params", lambda: None)
+        monkeypatch.setenv("OPIK_ENABLE_LITELLM_MODELS_MONITORING", "false")
+
+        model = anthropic_chat_model.AnthropicChatModel(
+            model_name=model_name, track=False, reasoning_effort=reasoning_effort
+        )
+        model.generate_provider_response(
+            [{"role": "user", "content": "hi"}], max_tokens=10
         )
 
-    def test_llm_judge__native_claude_model__built_once_without_an_effort(
+        call_kwargs = mock_client.messages.create.call_args.kwargs
+        assert "reasoning_effort" not in call_kwargs
+        assert call_kwargs.get("output_config") == expected_output_config
+
+    def test_reasoning_effort__per_call_value__overrides_the_constructor(
         self, monkeypatch
     ):
+        _, mock_client, _ = _install_anthropic_stub(monkeypatch)
+        monkeypatch.setattr(message_adapter, "_sdk_accepted_params", lambda: None)
+        monkeypatch.setenv("OPIK_ENABLE_LITELLM_MODELS_MONITORING", "false")
+
+        model = anthropic_chat_model.AnthropicChatModel(
+            model_name="anthropic/claude-sonnet-5-5",
+            track=False,
+            reasoning_effort="low",
+        )
+        model.generate_provider_response(
+            [{"role": "user", "content": "hi"}], reasoning_effort="high"
+        )
+
+        call_kwargs = mock_client.messages.create.call_args.kwargs
+        assert call_kwargs["output_config"] == {"effort": "high"}
+
+    def test_reasoning_effort__with_response_format__parse_gets_both(self, monkeypatch):
+        _, mock_client, _ = _install_anthropic_stub(monkeypatch)
+        monkeypatch.setattr(message_adapter, "_sdk_accepted_params", lambda: None)
+        monkeypatch.setenv("OPIK_ENABLE_LITELLM_MODELS_MONITORING", "false")
+
+        model = anthropic_chat_model.AnthropicChatModel(
+            model_name="anthropic/claude-sonnet-5-5",
+            track=False,
+            reasoning_effort="low",
+        )
+        model.generate_provider_response(
+            [{"role": "user", "content": "hi"}], response_format=SampleFormat
+        )
+
+        call_kwargs = mock_client.messages.parse.call_args.kwargs
+        assert call_kwargs["output_format"] is SampleFormat
+        assert call_kwargs["output_config"] == {"effort": "low"}
+
+    def test_reasoning_effort__model_refuses_the_level__warned_once(
+        self, monkeypatch, caplog
+    ):
         _install_anthropic_stub(monkeypatch)
+        monkeypatch.setattr(message_adapter, "_sdk_accepted_params", lambda: None)
+        monkeypatch.setenv("OPIK_ENABLE_LITELLM_MODELS_MONITORING", "false")
+        caplog.set_level(logging.WARNING, logger=message_adapter.LOGGER.name)
+
+        model = anthropic_chat_model.AnthropicChatModel(
+            model_name="claude-haiku-4-5", track=False, reasoning_effort="low"
+        )
+        for _ in range(2):
+            model.generate_provider_response(
+                [{"role": "user", "content": "hi"}], max_tokens=10
+            )
+
+        assert [
+            record.getMessage()
+            for record in caplog.records
+            if record.name == message_adapter.LOGGER.name
+        ] == [
+            "Model claude-haiku-4-5 does not accept effort=low. Dropping reasoning_effort."
+        ]
+
+    @pytest.mark.parametrize(
+        "model_name,expected_builds",
+        [
+            ("anthropic/claude-sonnet-5-5", [{}, {"reasoning_effort": "low"}]),
+            ("anthropic/claude-haiku-4-5", [{}]),
+        ],
+    )
+    def test_llm_judge__native_claude_model__default_effort_only_where_taken(
+        self, monkeypatch, model_name, expected_builds
+    ):
+        _install_anthropic_stub(monkeypatch)
+        monkeypatch.setattr(message_adapter, "_sdk_accepted_params", lambda: None)
         built_with = []
         create_model = models_factory._create_model
 
@@ -1071,11 +1200,9 @@ class TestSupportedFeatures:
 
         monkeypatch.setattr(models_factory, "_create_model", spy_create_model)
 
-        llm_judge.LLMJudge(
-            assertions=["ok"], model="anthropic/claude-sonnet-5-5", track=False
-        )
+        llm_judge.LLMJudge(assertions=["ok"], model=model_name, track=False)
 
-        assert built_with == [{}]
+        assert built_with == expected_builds
 
 
 @pytest.mark.asyncio
