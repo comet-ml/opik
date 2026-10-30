@@ -307,6 +307,22 @@ class BedrockConverseTest {
     }
 
     @Test
+    void leavesOutACustomTokenLimitSetToNull() {
+        var judge = serviceProvider.getLanguageModel(config(), LlmAsJudgeModelParameters.builder()
+                .name(OPIK_MODEL)
+                .temperature(0.0)
+                .customParameters(JsonUtils.getJsonNodeFromString("{\"max_tokens\": null}"))
+                .build());
+
+        judge.chat(ChatRequest.builder().messages(UserMessage.from("Is Dublin right?")).build());
+
+        bedrock.verify(1, postRequestedFor(urlEqualTo(CONVERSE_PATH)).withRequestBody(equalToJson("""
+                {"messages": [{"role": "user", "content": [{"text": "Is Dublin right?"}]}],
+                 "inferenceConfig": {"temperature": 0.0}}
+                """)));
+    }
+
+    @Test
     void sendsAFetchedTokenAsBearerInTokenMode() {
         when(authTokenProvider.bearer(any(), any(), any())).thenReturn("fetched-token");
         var config = config().toBuilder()

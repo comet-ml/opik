@@ -86,7 +86,7 @@ class BedrockConverseMapper {
         if (CollectionUtils.isNotEmpty(request.stop())) {
             request.stop().forEach(inference.putArray("stopSequences")::add);
         }
-        return withSettings(body, inference, MapUtils.isEmpty(request.customParameters())
+        return applyCustomParameters(body, inference, MapUtils.isEmpty(request.customParameters())
                 ? null
                 : (ObjectNode) JsonUtils.valueToTree(request.customParameters()));
     }
@@ -116,7 +116,7 @@ class BedrockConverseMapper {
             parameters.stopSequences().forEach(inference.putArray("stopSequences")::add);
         }
         // A judge's custom parameters are shared by every call of its rule, so they are copied before keys are moved.
-        return withSettings(body, inference,
+        return applyCustomParameters(body, inference,
                 customParameters instanceof ObjectNode custom && !custom.isEmpty() ? custom.deepCopy() : null);
     }
 
@@ -191,10 +191,12 @@ class BedrockConverseMapper {
                 : UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
     }
 
-    private static ObjectNode withSettings(ObjectNode body, ObjectNode inference, ObjectNode customParameters) {
+    private static ObjectNode applyCustomParameters(ObjectNode body, ObjectNode inference,
+            ObjectNode customParameters) {
         if (customParameters != null) {
             INFERENCE_CONFIG_PARAMETER_MAPPINGS.forEach(mapping -> Optional
                     .ofNullable(customParameters.remove(mapping.getKey()))
+                    .filter(value -> !value.isNull())
                     .ifPresent(value -> inference.set(mapping.getValue(), value)));
             if (!customParameters.isEmpty()) {
                 body.set("additionalModelRequestFields", customParameters);
