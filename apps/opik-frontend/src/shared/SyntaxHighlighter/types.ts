@@ -1,8 +1,9 @@
+import { PrettifyMessageConfig } from "@/lib/traces";
 import type { Node } from "unist";
 import { MODE_TYPE } from "@/shared/SyntaxHighlighter/constants";
 
-export type PrettifyConfig = {
-  fieldType: "input" | "output";
+export type PrettifyConfig = Omit<PrettifyMessageConfig, "type"> & {
+  fieldType: PrettifyMessageConfig["type"];
 };
 
 export type CodeOutput = {

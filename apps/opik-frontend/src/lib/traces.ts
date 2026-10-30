@@ -13,6 +13,14 @@ import { JsonObject } from "@/types/shared";
 import { safelyParseJSON } from "@/lib/utils";
 import isEmpty from "lodash/isEmpty";
 import mergeWith from "lodash/mergeWith";
+import {
+  extractLegacyOpenInferenceOutputText,
+  extractOpenInferencePrettyText,
+  hasLegacyOpenInferenceAttributes,
+  hasLegacyOpenInferenceOutputAttributes,
+  hasOpenInferenceHint,
+  isOpenInferenceField,
+} from "@/lib/openinference";
 
 const MESSAGES_DIVIDER = `\n\n  ----------------- \n\n`;
 
@@ -38,8 +46,10 @@ export const traceExist = (item: ExperimentItem) =>
 export const traceVisible = (item: ExperimentItem) =>
   item.trace_visibility_mode === TRACE_VISIBILITY_MODE.default;
 
-type PrettifyMessageConfig = {
+export type PrettifyMessageConfig = {
   type: "input" | "output";
+  openInferenceInput?: object | string;
+  openInferenceHint?: boolean;
 };
 
 type PrettifyMessageResponse = {
@@ -145,21 +155,9 @@ const prettifyOpenAIMessageLogic = (
     "messages" in message &&
     isArray(message.messages)
   ) {
-    // A conversation logged as output (e.g. by the Open WebUI Opik filter):
-    // show the last assistant reply, mirroring the input branch above
-    const lastAssistantMessage = findLast(
-      message.messages,
-      (m) => isObject(m) && "role" in m && m.role === "assistant",
-    );
-    if (
-      lastAssistantMessage &&
-      isObject(lastAssistantMessage) &&
-      "content" in lastAssistantMessage &&
-      isString(lastAssistantMessage.content) &&
-      lastAssistantMessage.content.length > 0
-    ) {
-      return lastAssistantMessage.content;
-    }
+    // Skip textless tool calls and support OpenAI array content using the same
+    // role-aware text selection as canonical messages.
+    return extractOpenInferencePrettyText(message, "output");
   }
 };
 
@@ -628,12 +626,27 @@ const extractTextFieldFromTruncatedJson = (
 };
 
 export const prettifyMessage = (
-  message: object | string | undefined,
+  message: object | string | number | boolean | undefined,
   config: PrettifyMessageConfig = {
     type: "input",
   },
 ): PrettifyMessageResponse => {
-  if (isString(message)) {
+  const rawValue =
+    isObject(message) &&
+    "value" in message &&
+    Object.keys(message).every((key) => key === "value" || key === "mime_type")
+      ? message.value
+      : undefined;
+  if (
+    typeof message === "number" ||
+    typeof message === "boolean" ||
+    typeof rawValue === "number" ||
+    typeof rawValue === "boolean"
+  ) {
+    return { message: String(rawValue ?? message), prettified: true };
+  }
+
+  if (isString(message) && message.trim().length > 0) {
     const extracted = extractTextFieldFromTruncatedJson(message, config);
     return {
       message: extracted || message,
@@ -641,7 +654,17 @@ export const prettifyMessage = (
     } as PrettifyMessageResponse;
   }
   try {
-    let processedMessage = prettifyOpenAIMessageLogic(message, config);
+    const shouldExtractOpenInference =
+      config.openInferenceHint ||
+      hasLegacyOpenInferenceAttributes(message) ||
+      hasLegacyOpenInferenceAttributes(config.openInferenceInput);
+    let processedMessage = shouldExtractOpenInference
+      ? extractOpenInferencePrettyText(message, config.type)
+      : undefined;
+
+    if (!isString(processedMessage)) {
+      processedMessage = prettifyOpenAIMessageLogic(message, config);
+    }
 
     if (!isString(processedMessage)) {
       processedMessage = prettifyOpenAIAgentsMessageLogic(message, config);
@@ -675,6 +698,17 @@ export const prettifyMessage = (
       processedMessage = prettifyGenericLogic(message, config);
     }
 
+    if (
+      (!isString(processedMessage) || processedMessage.trim().length === 0) &&
+      config.type === "output" &&
+      hasLegacyOpenInferenceOutputAttributes(config.openInferenceInput) &&
+      !isOpenInferenceField(message, "output", true)
+    ) {
+      processedMessage = extractLegacyOpenInferenceOutputText(
+        config.openInferenceInput,
+      );
+    }
+
     // attempt to improve JSON string if the message is serialised JSON string
     if (isString(processedMessage)) {
       const json = safelyParseJSON(processedMessage, true);
@@ -704,4 +738,68 @@ export const mergeSampleEntities = (entities: object[]): JsonObject =>
         return objValue === undefined ? srcValue : objValue;
       }),
     {},
+  );
+
+export type PrettifySource = {
+  input?: object | string;
+  output?: object | string;
+  metadata?: unknown;
+};
+
+export const getPrettifyConfig = (
+  source: PrettifySource,
+  type: "input" | "output",
+): PrettifyMessageConfig => ({
+  type,
+  openInferenceHint: hasOpenInferenceHint(
+    source.metadata,
+    source.input,
+    source.output,
+  ),
+  openInferenceInput: type === "output" ? source.input : undefined,
+});
+
+export const prettifyTraceField = (
+  source: PrettifySource,
+  type: "input" | "output",
+) => prettifyMessage(source[type], getPrettifyConfig(source, type));
+
+type ThreadPrettifySource = Partial<
+  Pick<Thread, "first_message" | "last_message">
+>;
+
+export const getThreadPrettifyConfig = (
+  source: ThreadPrettifySource,
+  type: "input" | "output",
+): PrettifyMessageConfig => {
+  const field = type === "input" ? source.first_message : source.last_message;
+  // Ordinary role/content messages also belong to OpenAI. Only distinctive
+  // OpenInference content, role aliases, or legacy attributes establish the hint.
+  const hasDistinctMessages =
+    isObject(field) &&
+    "messages" in field &&
+    isArray(field.messages) &&
+    field.messages.some(
+      (message) =>
+        isObject(message) &&
+        ("contents" in message ||
+          (!("role" in message) && !("type" in message)) ||
+          ("role" in message &&
+            ["human", "ai", "model"].includes(String(message.role)))),
+    );
+  return {
+    type,
+    openInferenceHint:
+      hasLegacyOpenInferenceAttributes(field) || hasDistinctMessages,
+  };
+};
+
+export const prettifyThreadField = (
+  source: ThreadPrettifySource,
+  type: "input" | "output",
+) =>
+  prettifyMessage(
+    (type === "input" ? source.first_message : source.last_message) ??
+      undefined,
+    getThreadPrettifyConfig(source, type),
   );

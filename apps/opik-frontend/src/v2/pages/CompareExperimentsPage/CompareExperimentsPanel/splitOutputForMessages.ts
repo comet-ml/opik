@@ -1,5 +1,6 @@
 import omit from "lodash/omit";
 import isEmpty from "lodash/isEmpty";
+import { omitOpenInferenceStructuredFields } from "@/lib/openinference";
 import {
   detectLLMMessages,
   mapAndCombineMessages,
@@ -23,6 +24,10 @@ const getRemainingOutput = (
   format: string | undefined,
 ): Record<string, unknown> => {
   if (format === "playground") return omit(output, "output");
+
+  if (format === "openinference") {
+    return omitOpenInferenceStructuredFields(output);
+  }
 
   if (format === "openai") {
     return Array.isArray(output.choices)
