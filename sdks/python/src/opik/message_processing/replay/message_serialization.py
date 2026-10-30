@@ -64,8 +64,10 @@ def deserialize_message(message_class: Type[messages.T], json_str: str) -> messa
 
     This function takes a JSON string and transforms it into an instance of the
     provided message class. The conversion process includes mapping JSON structures
-    into their equivalent class representations, with custom handling of date and
-    time fields.
+    into their equivalent class representations. ISO strings under the keys in
+    DATETIME_FIELD_NAMES are turned back into datetime objects only in the
+    message's own fields and in the fields of each ``batch`` item; the same keys
+    nested inside user data (input, output, metadata) are left exactly as logged.
 
     Args:
         message_class: The class type into which the JSON string
