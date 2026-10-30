@@ -168,7 +168,7 @@ class ThreadDAOImplTest {
 
         private static final String SEARCH_CLAUSE = "ilike(thread_id, :search_text)";
         private static final Pattern SEARCH_BLOCK = Pattern.compile(
-                "AND id IN \\(\\s*SELECT id\\s+FROM traces\\s.*?AND ilike\\(thread_id, :search_text\\)\\s*\\)",
+                "AND thread_id IN \\(\\s*SELECT thread_id\\s+FROM traces\\s.*?AND ilike\\(thread_id, :search_text\\)\\s*\\)",
                 Pattern.DOTALL);
 
         /**

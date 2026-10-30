@@ -150,8 +150,8 @@ class ThreadDAOImpl implements ThreadDAO {
                               \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                           <if(filters)> AND <filters> <endif>
                           <if(search_text)>
-                          AND id IN (
-                              SELECT id
+                          AND thread_id IN (
+                              SELECT thread_id
                               FROM traces
                               WHERE workspace_id = :workspace_id
                                 AND project_id = :project_id
@@ -188,6 +188,7 @@ class ThreadDAOImpl implements ThreadDAO {
                                       <endif>
                                     GROUP BY id
                                 )
+                                <if(filters)> AND <filters> <endif>
                                 AND <search_text>
                           )
                           <endif>
@@ -225,13 +226,15 @@ class ThreadDAOImpl implements ThreadDAO {
      * window trace's input and output, and the uncached thread_id lookup in trace_threads_final ran that scan four times
      * per stats call.
      * <p>
-     * The search matches each trace's latest version outside FINAL: a key-only {@code max(last_updated_at)} pass picks
-     * the version, the ilike reads only those rows, and the FINAL read keeps the matching ids. Under FINAL the ilike ran
-     * after the in-order merge, which holds every part's payload blocks at once and ran a project with multi-MiB
-     * messages past the query memory limit. Two rows of one trace share a {@code last_updated_at} only if two inserts
-     * land in the same microsecond: it defaults to the insert's {@code now64(6)}, and {@code optimize_on_insert} collapses
-     * a trace repeated within one insert. FINAL's pick between such rows follows the commit order of that race, so either
-     * is the trace's latest version.
+     * The search picks threads, not traces: a thread matches when one of its traces that pass the filters does, and the
+     * FINAL read keeps all those traces, so its messages, cost, usage and first and last messages are the same as without
+     * the search. The search matches each trace's latest version outside FINAL: a key-only
+     * {@code max(last_updated_at)} pass picks the version, the ilike reads only those rows and returns their thread ids.
+     * Under FINAL the ilike ran after the in-order merge, which holds every part's payload blocks at once and ran a
+     * project with multi-MiB messages past the query memory limit. Two rows of one trace share a
+     * {@code last_updated_at} only if two inserts land in the same microsecond: it defaults to the insert's
+     * {@code now64(6)}, and {@code optimize_on_insert} collapses a trace repeated within one insert. FINAL's pick between
+     * such rows follows the commit order of that race, so either is the trace's latest version.
      * <p>
      * The page pushdown reads its page's trace ids once, without FINAL or payload, into {@code page_trace_ids}
      * (OPIK-8894), and traces_final, the spans filter and the span_weeks lookup all take them through that scalar.
@@ -244,8 +247,8 @@ class ThreadDAOImpl implements ThreadDAO {
      * it names the row's own partition whatever the {@code id_at} type.
      * <p>
      * The set may hold traces that traces_final drops: a trace whose older version carried one of the page's thread ids
-     * before it moved to another thread, or a trace the filters or the search reject. That changes no result: spans_agg
-     * is joined to traces_final, and span_weeks only bounds the weeks read.
+     * before it moved to another thread, or a trace the filters reject. That changes no result: spans_agg is joined to
+     * traces_final, and span_weeks only bounds the weeks read.
      */
     @VisibleForTesting
     static final String SELECT_TRACES_THREADS_BY_PROJECT_IDS = """
@@ -291,8 +294,8 @@ class ThreadDAOImpl implements ThreadDAO {
                 <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)>
-                AND id IN (
-                    SELECT id
+                AND thread_id IN (
+                    SELECT thread_id
                     FROM traces
                     WHERE workspace_id = :workspace_id
                       AND project_id = :project_id
@@ -329,6 +332,7 @@ class ThreadDAOImpl implements ThreadDAO {
                             <endif>
                           GROUP BY id
                       )
+                      <if(filters)> AND <filters> <endif>
                       AND <search_text>
                 )
                 <endif>
@@ -400,7 +404,6 @@ class ThreadDAOImpl implements ThreadDAO {
                 <if(page_pushdown)>
                 WHERE 1 = 1
                 <if(filters)> AND <filters> <endif>
-                <if(search_text)> AND <search_text> <endif>
                 <endif>
             ), spans_deduped AS (
                 SELECT
@@ -793,8 +796,8 @@ class ThreadDAOImpl implements ThreadDAO {
                 <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)>
-                AND id IN (
-                    SELECT id
+                AND thread_id IN (
+                    SELECT thread_id
                     FROM traces
                     WHERE workspace_id = :workspace_id
                       AND project_id = :project_id
@@ -831,6 +834,7 @@ class ThreadDAOImpl implements ThreadDAO {
                             <endif>
                           GROUP BY id
                       )
+                      <if(filters)> AND <filters> <endif>
                       AND <search_text>
                 )
                 <endif>
@@ -1508,8 +1512,8 @@ class ThreadDAOImpl implements ThreadDAO {
                     <endif>
                     <if(filters)> AND <filters> <endif>
                     <if(search_text)>
-                    AND id IN (
-                        SELECT id
+                    AND thread_id IN (
+                        SELECT thread_id
                         FROM traces
                         WHERE workspace_id = :workspace_id
                           AND project_id = :project_id
@@ -1546,6 +1550,7 @@ class ThreadDAOImpl implements ThreadDAO {
                                 <endif>
                               GROUP BY id
                           )
+                          <if(filters)> AND <filters> <endif>
                           AND <search_text>
                     )
                     <endif>
@@ -1964,12 +1969,14 @@ class ThreadDAOImpl implements ThreadDAO {
                             // full query for any filter/sort that needs the joined sources to determine the page.
                             if (isPagePushdownEligible(finalTemplate, criteria)) {
                                 finalTemplate.add("page_pushdown", true);
+                                // The page's threads are the search's, and the list aggregates all their traces
+                                var pageCriteria = criteria.toBuilder().searchText(null).build();
                                 return findPageThreadIds(criteria, sortFields, size, offset, connection,
                                         workspaceId)
                                         .flatMap(pageThreadIds -> pageThreadIds.isEmpty()
                                                 ? Mono.just(new TraceThread.TraceThreadPage(page, 0, count, List.of(),
                                                         traceThreadSortingFactory.getSortableFields()))
-                                                : findThreadPage(finalTemplate, criteria, size, page, count,
+                                                : findThreadPage(finalTemplate, pageCriteria, size, page, count,
                                                         connection, workspaceId, hasDynamicKeys,
                                                         statement -> statement.bind("page_thread_ids",
                                                                 pageThreadIds.toArray(String[]::new))));
