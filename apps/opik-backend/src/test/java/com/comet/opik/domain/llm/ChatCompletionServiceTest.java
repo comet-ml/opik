@@ -1696,7 +1696,7 @@ class ChatCompletionServiceTest {
         @MethodSource("toolLoopRounds")
         @DisplayName("scoreTrace builds the tool-calling model for every round of a tool loop")
         void scoreTrace__picksTheToolCallingModelForAToolLoop(String name, ChatRequest request) {
-            when(llmProviderFactory.getToolCallingLanguageModel(anyString(), any())).thenReturn(chatModel);
+            when(llmProviderFactory.getToolCallingLanguageModel(anyString(), any(), any())).thenReturn(chatModel);
             when(chatModel.chat(any(ChatRequest.class))).thenReturn(ChatResponse.builder()
                     .aiMessage(AiMessage.from("{}"))
                     .build());
@@ -1719,7 +1719,7 @@ class ChatCompletionServiceTest {
             chatCompletionService.scoreTrace(request, JUDGE, "test-workspace-id");
 
             verify(chatModel).chat(request);
-            verify(llmProviderFactory, never()).getToolCallingLanguageModel(anyString(), any());
+            verify(llmProviderFactory, never()).getToolCallingLanguageModel(anyString(), any(), any());
         }
 
         @Test
@@ -1729,7 +1729,7 @@ class ChatCompletionServiceTest {
             var judge = LlmAsJudgeModelParameters.builder()
                     .name("vertex_ai/gemini-3.1-flash-lite")
                     .build();
-            when(llmProviderFactory.getToolCallingLanguageModel(anyString(), any())).thenThrow(
+            when(llmProviderFactory.getToolCallingLanguageModel(anyString(), any(), any())).thenThrow(
                     new ProviderRequestRefusedException(ProviderRequestRefusedException.Reason.VERTEX_AI_LOCATION));
 
             var thrown = catchThrowable(() -> chatCompletionService.scoreTrace(request, judge, "test-workspace-id"));

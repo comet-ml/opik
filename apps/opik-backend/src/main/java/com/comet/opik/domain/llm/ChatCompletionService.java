@@ -157,9 +157,7 @@ public class ChatCompletionService {
     public ChatResponse scoreTrace(@NonNull ChatRequest chatRequest,
             @NonNull LlmAsJudgeModelParameters modelParameters,
             @NonNull String workspaceId) {
-        var resolved = paramResolver.resolve(modelParameters);
-        logChanges(resolved.request().name(), resolved.changes());
-        var languageModelClient = getLanguageModel(workspaceId, resolved.request(), chatRequest);
+        var languageModelClient = getLanguageModel(workspaceId, modelParameters, chatRequest);
 
         ChatResponse chatResponse;
         try {
@@ -299,6 +297,12 @@ public class ChatCompletionService {
         return resolved.request();
     }
 
+    private LlmAsJudgeModelParameters resolve(LlmAsJudgeModelParameters modelParameters) {
+        var resolved = paramResolver.resolve(modelParameters);
+        logChanges(resolved.request().name(), resolved.changes());
+        return resolved.request();
+    }
+
     private void logChanges(String model, List<ParamResolver.ParamChange> changes) {
         if (!changes.isEmpty()) {
             log.debug("Request to model '{}' changed: {}", model, changes);
@@ -377,8 +381,8 @@ public class ChatCompletionService {
             ChatRequest chatRequest) {
         try {
             return usesTools(chatRequest)
-                    ? llmProviderFactory.getToolCallingLanguageModel(workspaceId, modelParameters)
-                    : llmProviderFactory.getLanguageModel(workspaceId, modelParameters);
+                    ? llmProviderFactory.getToolCallingLanguageModel(workspaceId, modelParameters, this::resolve)
+                    : llmProviderFactory.getLanguageModel(workspaceId, resolve(modelParameters));
         } catch (RuntimeException runtimeException) {
             failIfRequestRefused(runtimeException);
             throw runtimeException;

@@ -27,6 +27,7 @@ public record ModelParams(
         EffortParam effort,
         ToolsParam tools,
         Boolean samplingExclusive,
+        Boolean samplingAtEffortNone,
         Boolean thinksByDefault,
         Map<String, ModelParams> routes) {
 
@@ -162,6 +163,7 @@ public record ModelParams(
                 EffortParam.overlay(base.effort, top.effort),
                 ToolsParam.overlay(base.tools, top.tools),
                 ObjectUtils.getIfNull(top.samplingExclusive, base.samplingExclusive),
+                ObjectUtils.getIfNull(top.samplingAtEffortNone, base.samplingAtEffortNone),
                 ObjectUtils.getIfNull(top.thinksByDefault, base.thinksByDefault),
                 overlayRoutes(base.routes, top.routes));
     }
@@ -207,6 +209,7 @@ public record ModelParams(
                 effort == null ? null : effort.settled(),
                 tools == null ? null : tools.settled(),
                 samplingExclusive,
+                samplingAtEffortNone,
                 thinksByDefault,
                 routes);
     }

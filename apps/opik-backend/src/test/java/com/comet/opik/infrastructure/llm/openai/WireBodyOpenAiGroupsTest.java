@@ -60,12 +60,14 @@ class WireBodyOpenAiGroupsTest {
     void everyGroupAgreesWithTheRegistry(String rowsFile) {
         var groups = read(rowsFile).get("models");
         var reasoning = group(groups, "reasoning");
+        var reasoningNoneLevel = group(groups, "reasoning-none-level");
         var nonReasoning = group(groups, "non-reasoning");
         var registryOnly = group(groups, "registry-only");
         var enumOnly = group(groups, "enum-only");
 
-        assertThat(reasoning).doesNotContainAnyElementsOf(registryOnly);
-        assertThat(union(reasoning, registryOnly)).containsExactlyInAnyOrderElementsOf(reasoningIds);
+        assertThat(reasoning).doesNotContainAnyElementsOf(registryOnly).doesNotContainAnyElementsOf(reasoningNoneLevel);
+        assertThat(union(union(reasoning, registryOnly), reasoningNoneLevel))
+                .containsExactlyInAnyOrderElementsOf(reasoningIds);
         assertThat(nonReasoning).containsExactlyInAnyOrderElementsOf(otherIds);
         assertThat(registryOnly).isNotEmpty().doesNotContainAnyElementsOf(ENUM_IDS);
         assertThat(enumOnly).isNotEmpty()
