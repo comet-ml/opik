@@ -14,15 +14,24 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import dev.langchain4j.model.chat.ChatModel;
 import jakarta.annotation.Nullable;
 import jakarta.inject.Named;
+import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.Map;
 import java.util.stream.Stream;
 
 import static com.comet.opik.infrastructure.llm.openai.OpenAIClientGenerator.ApiPipelineMode.RESPONSES_API;
 
 @Slf4j
 class OpenAILlmServiceProvider implements LlmServiceProvider {
+
+    static final String ERROR_ONLY_ROUTE = "Model '%s' works only with OpenAI's %s, and this workspace's OpenAI"
+            + " provider uses the %s. Set its OpenAI API to %s in the AI provider settings to use this model.";
+
+    private static final Map<String, String> ROUTE_LABELS = Map.of(
+            ModelParams.CHAT_COMPLETIONS_API_ROUTE, "Chat Completions API",
+            ModelParams.RESPONSES_API_ROUTE, "Responses API");
 
     private static final String REASONING_EFFORT = "reasoning_effort";
     private static final String NO_REASONING = "none";
@@ -49,6 +58,28 @@ class OpenAILlmServiceProvider implements LlmServiceProvider {
             // LlmProviderOpenAiResponses builds its ChatModels per request — the per-request
             // response_format.json_schema.strict flag has to be set at langchain4j build time.
             case RESPONSES_API -> new LlmProviderOpenAiResponses(clientGenerator, apiKey);
+        };
+    }
+
+    // A key with a custom base URL may front a gateway that serves the model on the key's route, so only a key that
+    // reaches OpenAI itself is refused here; the key's route is kept either way.
+    @Override
+    public void requireOnlyRoute(@NonNull LlmProviderClientApiConfig config, @NonNull String model,
+            @Nullable String onlyRoute) {
+        if (onlyRoute == null || clientGenerator.hasCustomBaseUrl(config)) {
+            return;
+        }
+        var keyRoute = routeOf(clientGenerator.extractApiPipelineMode(config));
+        if (!onlyRoute.equals(keyRoute)) {
+            throw new BadRequestException(ERROR_ONLY_ROUTE.formatted(model, ROUTE_LABELS.get(onlyRoute),
+                    ROUTE_LABELS.get(keyRoute), ROUTE_LABELS.get(onlyRoute)));
+        }
+    }
+
+    private static String routeOf(OpenAIClientGenerator.ApiPipelineMode mode) {
+        return switch (mode) {
+            case CHAT_COMPLETIONS_API -> ModelParams.CHAT_COMPLETIONS_API_ROUTE;
+            case RESPONSES_API -> ModelParams.RESPONSES_API_ROUTE;
         };
     }
 

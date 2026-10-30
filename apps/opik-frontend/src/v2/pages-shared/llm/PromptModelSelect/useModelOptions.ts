@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useSyncExternalStore } from "react";
 import pick from "lodash/pick";
 import isNull from "lodash/isNull";
 
@@ -7,8 +7,17 @@ import {
   PROVIDER_TYPE,
   ProviderObject,
 } from "@/types/providers";
-import { getProviderDisplayName, getProviderIcon } from "@/lib/provider";
+import {
+  getProviderDisplayName,
+  getProviderIcon,
+  normalizeOpenAiPipelineMode,
+} from "@/lib/provider";
 import { getRoutableProviderModelValue } from "@/lib/modelUtils";
+import {
+  getLatestModelParamsIndex,
+  ModelParamsIndex,
+  subscribeToModelParams,
+} from "@/lib/modelRegistryStore";
 
 interface ModelOption {
   label: string;
@@ -60,6 +69,22 @@ export const sortProviderModels = (
   return sorted;
 };
 
+// The backend refuses a model the catalog serves on one OpenAI API when the key is set to the other one.
+export const isServedOnKeyApi = (
+  provider: ProviderObject,
+  model: string,
+  modelParams: ModelParamsIndex,
+): boolean => {
+  if (provider.provider !== PROVIDER_TYPE.OPEN_AI) return true;
+  const onlyRoute = modelParams.get(PROVIDER_TYPE.OPEN_AI)?.get(model)
+    ?.only_route;
+  return (
+    !onlyRoute ||
+    onlyRoute ===
+      normalizeOpenAiPipelineMode(provider.configuration?.openai_pipeline_mode)
+  );
+};
+
 export function useModelOptions(
   configuredProvidersList: ProviderObject[],
   providerModelsMap: Record<string, ModelOption[]>,
@@ -67,6 +92,10 @@ export function useModelOptions(
 ): UseModelOptionsResult {
   const modelProviderMapRef = useRef<Record<string, COMPOSED_PROVIDER_TYPE>>(
     {},
+  );
+  const modelParams = useSyncExternalStore(
+    subscribeToModelParams,
+    getLatestModelParamsIndex,
   );
 
   const freeModelOption = useMemo(() => {
@@ -120,16 +149,21 @@ export function useModelOptions(
           (p) => p.ui_composed_provider === composedProviderType,
         )!;
 
-        const options = sortProviderModels(
-          composedProviderType,
-          providerModels,
-        ).map((providerModel) => ({
-          label: providerModel.label,
-          value: getRoutableProviderModelValue(
-            composedProviderType,
-            providerModel.value,
-          ),
-        }));
+        const options = sortProviderModels(composedProviderType, providerModels)
+          .filter((providerModel) =>
+            isServedOnKeyApi(
+              configuredProvider,
+              providerModel.value,
+              modelParams,
+            ),
+          )
+          .map((providerModel) => ({
+            label: providerModel.label,
+            value: getRoutableProviderModelValue(
+              composedProviderType,
+              providerModel.value,
+            ),
+          }));
 
         if (!options.length) return null;
 
@@ -141,7 +175,7 @@ export function useModelOptions(
         };
       })
       .filter((g): g is NonNullable<typeof g> => !isNull(g));
-  }, [configuredProvidersList, providerModelsMap]);
+  }, [configuredProvidersList, providerModelsMap, modelParams]);
 
   // Combined filtering logic
   const { filteredFreeModel, filteredGroups } = useMemo(() => {
