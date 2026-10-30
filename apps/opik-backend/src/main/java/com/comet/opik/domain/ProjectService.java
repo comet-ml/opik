@@ -524,10 +524,7 @@ class ProjectServiceImpl implements ProjectService {
             return Mono.just(Optional.empty());
         }
 
-        return Mono.deferContextual(ctx -> Mono.fromCallable(
-                () -> Optional.of(getOrCreate(ctx.get(RequestContext.WORKSPACE_ID),
-                        projectName, ctx.get(RequestContext.USER_NAME)).id()))
-                .subscribeOn(Schedulers.boundedElastic()));
+        return getOrCreate(projectName).map(project -> Optional.of(project.id()));
     }
 
     @Override
@@ -572,7 +569,6 @@ class ProjectServiceImpl implements ProjectService {
     public Mono<Project> getOrCreate(@NonNull String projectName) {
         return makeMonoContextAware((userName, workspaceId) -> Mono
                 .fromCallable(() -> getOrCreate(workspaceId, projectName, userName))
-                .onErrorResume(e -> handleProjectCreationError(e, projectName, workspaceId))
                 .subscribeOn(Schedulers.boundedElastic()));
     }
 
@@ -772,16 +768,6 @@ class ProjectServiceImpl implements ProjectService {
 
             return null;
         });
-    }
-
-    private Mono<Project> handleProjectCreationError(Throwable exception, String projectName, String workspaceId) {
-        return switch (exception) {
-            case EntityAlreadyExistsException __ -> Mono.fromCallable(
-                    () -> findByNames(workspaceId, List.of(projectName)).stream().findFirst()
-                            .orElseThrow())
-                    .subscribeOn(Schedulers.boundedElastic());
-            default -> Mono.error(exception);
-        };
     }
 
     @Override
