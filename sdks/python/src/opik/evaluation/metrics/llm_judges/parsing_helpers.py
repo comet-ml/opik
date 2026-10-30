@@ -31,6 +31,11 @@ def reason_to_text(value: Any) -> str:
     return str(value)
 
 
+# Failed brace candidates tolerated before the fallback scan gives up. Normal replies
+# have a handful at most; a judge stuck in a repetition loop has thousands.
+_MAX_FAILED_CANDIDATES = 200
+
+
 def _extract_presumably_json_dict_or_raise(content: str) -> Any:
     first_paren = content.find("{")
     last_paren = content.rfind("}")
@@ -47,6 +52,10 @@ def _extract_presumably_json_dict_or_raise(content: str) -> Any:
         return json.loads(json_string)
     except json.JSONDecodeError:
         pass
+    except RecursionError:
+        raise exceptions.JSONParsingError(
+            "Failed to extract presumably JSON dictionary: content is nested too deeply"
+        )
 
     # Fallback: reasoning models occasionally repeat their answer object
     # (``{...}\n{...}``), which is fine. Two different top-level objects are
@@ -56,12 +65,25 @@ def _extract_presumably_json_dict_or_raise(content: str) -> Any:
     found: List[Any] = []
     seen: Set[str] = set()
     index = first_paren
+    failed_candidates = 0
     while index != -1:
         try:
             obj, end = decoder.raw_decode(content, index)
         except json.JSONDecodeError:
+            # Each failed attempt can scan to the end of the content, so a long
+            # run of unclosed braces is quadratic. Bound the number of attempts.
+            failed_candidates += 1
+            if failed_candidates > _MAX_FAILED_CANDIDATES:
+                raise exceptions.JSONParsingError(
+                    "Failed to extract presumably JSON dictionary: too many "
+                    "unparseable '{' candidates; refusing to keep scanning"
+                )
             index = content.find("{", index + 1)
             continue
+        except RecursionError:
+            raise exceptions.JSONParsingError(
+                "Failed to extract presumably JSON dictionary: content is nested too deeply"
+            )
         key = json.dumps(obj, sort_keys=True)
         if isinstance(obj, dict) and key not in seen:
             seen.add(key)

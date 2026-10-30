@@ -6,6 +6,8 @@ reasoning models under ``response_format``), ambiguous outputs holding different
 objects, and malformed input.
 """
 
+import time
+
 import pytest
 
 from opik import exceptions
@@ -106,3 +108,23 @@ class TestReasonToText:
 
     def test_reason_to_text__empty_list__returns_no_reason_provided(self):
         assert parsing_helpers.reason_to_text([]) == "No reason provided"
+
+
+def test_unclosed_nested_braces__bounded_and_prompt():
+    # Regression: each failed brace candidate scanned to the end of the content,
+    # so a judge stuck in a repetition loop made the fallback quadratic.
+    adversarial = '{"a": [1, ' * 2000 + '{"score": 1}'
+
+    start = time.perf_counter()
+    with pytest.raises(exceptions.JSONParsingError):
+        parsing_helpers.extract_json_content_or_raise("prose " + adversarial)
+    assert time.perf_counter() - start < 2.0
+
+
+def test_nesting_beyond_recursion_limit__raises_json_parsing_error():
+    # Regression: a RecursionError from the decoder escaped as a raw builtin
+    # instead of the JSON parsing error every caller handles.
+    deep = "[" * 100_000 + "]" * 100_000
+
+    with pytest.raises(exceptions.JSONParsingError):
+        parsing_helpers.extract_json_content_or_raise("{" + deep + "}")
