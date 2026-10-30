@@ -844,14 +844,10 @@ databaseAnalyticsDataModel:
   # disagrees with the actual `spans` engine in either direction, the backend fails readiness at startup with a
   # message naming the flag and the observed engine, and clears on the next probe once the two are back in step.
   spansDistributedWrapEnabled: false
-  # Register each written span's weekly partition in the span_weeks index. Turn true before the span weeks
-  # backfill starts.
-  spanWeeksWriteEnabled: false
-  # Run the span weeks backfill job. Turn true only once spanWeeksWriteEnabled is live on every backend instance.
+  # Run the span weeks backfill job, which indexes the spans written before span_weeks_mv.
   spanWeeksBackfillEnabled: false
-  # Bound span reads by trace id with the span_weeks index. Effective only with spanWeeksWriteEnabled and
-  # spanColumnsNonNullable; turn true
-  # once the span weeks backfill logs that it is complete.
+  # Bound span reads by trace id with the span_weeks index. Effective only with spanColumnsNonNullable; turn true
+  # once the span weeks backfill has no pending chunk.
   spanWeeksReadEnabled: false
 
 # ClickHouse partition-health observability (OPIK-6904). Polls system.parts plus the

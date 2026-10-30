@@ -2,8 +2,6 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.InstantToUUIDMapper;
 import com.comet.opik.infrastructure.SpanWeeksBackfillConfig;
-import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
-import com.comet.opik.utils.JsonUtils;
 import com.google.common.base.Preconditions;
 import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.Result;
@@ -23,14 +21,11 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
-import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
-import static com.comet.opik.infrastructure.FilterUtils.getLogComment;
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
-import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 
 /**
  * Writes and reads span_weeks, the index of which weekly partitions of the spans table each trace's spans occupy.
@@ -75,30 +70,9 @@ public class SpanWeeksDAO {
                 max_execution_time = <max_execution_time>
             """;
 
-    private static final String TABLE = "span_weeks";
-
     private final @NonNull ConnectionFactory connectionFactory;
-    private final @NonNull JsonEachRowBulkInsert jsonBulkInsert;
     private final @NonNull InstantToUUIDMapper uuidMapper;
     private final @NonNull @Config("spanWeeksBackfill") SpanWeeksBackfillConfig backfillConfig;
-
-    public Mono<Long> insert(List<SpanWeek> rows) {
-        if (CollectionUtils.isEmpty(rows)) {
-            return Mono.just(0L);
-        }
-        return makeMonoContextAware((userName, workspaceId) -> jsonBulkInsert.insert(
-                TABLE,
-                getLogComment("insert_span_weeks", workspaceId, userName, "span_weeks_rows:%d".formatted(rows.size())),
-                rows,
-                row -> {
-                    var node = JsonUtils.createObjectNode();
-                    node.put("workspace_id", workspaceId);
-                    node.put("project_id", row.projectId().toString());
-                    node.put("trace_id", row.traceId().toString());
-                    node.put("id_week", row.idWeek());
-                    return node;
-                }));
-    }
 
     /**
      * The weeks the given traces' spans are registered in. Bounded by the trace ids, each holding a handful of weeks

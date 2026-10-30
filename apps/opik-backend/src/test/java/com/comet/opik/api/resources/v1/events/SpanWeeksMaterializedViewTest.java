@@ -94,9 +94,7 @@ class SpanWeeksMaterializedViewTest {
                 .databaseAnalyticsFactory(databaseAnalyticsFactory)
                 .runtimeInfo(wireMock.runtimeInfo())
                 .redisUrl(REDIS.getRedisURI())
-                .customConfigs(List.of(new CustomConfig("uuidValidation.enabled", "false"),
-                        // The listener stays off, so every span_weeks row here comes from span_weeks_mv.
-                        new CustomConfig("databaseAnalyticsDataModel.spanWeeksWriteEnabled", "false")))
+                .customConfigs(List.of(new CustomConfig("uuidValidation.enabled", "false")))
                 .build());
     }
 
