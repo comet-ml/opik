@@ -1477,19 +1477,24 @@ class DatasetItemServiceImpl implements DatasetItemService {
                     return Mono.error(new BadRequestException(
                             "addedItems, editedItems, and deletedIds must be empty when baseVersion is null."));
                 }
-                UUID newVersionId = idGenerator.generateId();
-                return Mono.fromCallable(() -> {
-                    DatasetVersion version = versionService.createVersionFromDelta(
-                            datasetId, newVersionId, 0, null,
-                            changes.tags(), changes.changeDescription(),
-                            changes.evaluators(), changes.executionPolicy(),
-                            Boolean.TRUE.equals(changes.clearExecutionPolicy()),
-                            // First version (baseVersionId == null): no prior 'latest' to CAS against.
-                            null, false, workspaceId, userName);
-                    log.info("Created first version '{}' for dataset '{}' with hash '{}'",
-                            version.id(), datasetId, version.versionHash());
-                    return version;
-                });
+                // Goes through the canonical helper for its deadlock retry: the first version's 'latest' flip
+                // deletes and inserts a tag row that doesn't exist yet, so concurrent first versions of
+                // adjacent datasets contend on the same index gap.
+                return createVersionFromDelta(
+                        datasetId,
+                        idGenerator.generateId(),
+                        0,
+                        null,
+                        changes.tags(),
+                        changes.changeDescription(),
+                        changes.evaluators(),
+                        changes.executionPolicy(),
+                        Boolean.TRUE.equals(changes.clearExecutionPolicy()),
+                        null,
+                        // First version (baseVersionId == null): no prior 'latest' to CAS against.
+                        false,
+                        workspaceId,
+                        userName);
             }
 
             // Verify the base version exists (throws NotFoundException otherwise).
