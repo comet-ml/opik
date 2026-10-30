@@ -2922,6 +2922,34 @@ class ProjectsResourceTest {
         }
 
         @Test
+        void create__whenNameHasSupplementaryCharactersWithinLimit__thenAcceptCreate() {
+            // 150 characters but 300 UTF-16 units: the limit counts characters, like the column.
+            var project = factory.manufacturePojo(Project.class).toBuilder()
+                    .name("\uD83D\uDE80".repeat(150))
+                    .build();
+
+            var id = createProject(project);
+
+            assertProject(project.toBuilder().lastUpdatedTraceAt(null).id(id).build());
+        }
+
+        @Test
+        void create__whenNameTooLong__thenRejectCreate() {
+            var project = Project.builder().name(RandomStringUtils.secure().nextAlphanumeric(151)).build();
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI)).request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(project))) {
+
+                assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                var expectedError = new ErrorMessage(List.of("Project name length must not exceed '150'"));
+                assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(expectedError);
+            }
+        }
+
+        @Test
         @DisplayName("when project name already exists, then reject the request")
         void create__whenProjectNameAlreadyExists__thenRejectNameCreate() {
 
@@ -3138,6 +3166,40 @@ class ProjectsResourceTest {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
                 assertThat(actualResponse.readEntity(ErrorMessage.class).errors()).contains("name must not be blank");
+            }
+        }
+
+        @Test
+        void update__whenNameTooLong__thenRejectTheUpdate() {
+            var expectedProject = getProject(projectId);
+            var projectUpdate = ProjectUpdate.builder().name(RandomStringUtils.secure().nextAlphanumeric(151)).build();
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path(projectId.toString())
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .method(HttpMethod.PATCH, Entity.json(projectUpdate))) {
+
+                assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                var expectedError = new ErrorMessage(List.of("Project name length must not exceed '150'"));
+                assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(expectedError);
+            }
+
+            var actualProject = getProject(projectId);
+            assertThat(actualProject).isEqualTo(expectedProject);
+        }
+
+        private Project getProject(UUID id) {
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path(id.toString())
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get()) {
+
+                assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_OK);
+                return actualResponse.readEntity(Project.class);
             }
         }
     }

@@ -2942,6 +2942,23 @@ class TracesResourceTest {
                     API_KEY);
         }
 
+        @Test
+        void batch__whenProjectNameTooLong__thenReturnBadRequest() {
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectName(RandomStringUtils.secure().nextAlphanumeric(151))
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .toList();
+
+            try (var actualResponse = traceResourceClient.callBatchCreateTraces(traces, API_KEY, TEST_WORKSPACE)) {
+                assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                var expectedError = new ErrorMessage(List.of("Project name length must not exceed '150'"));
+                assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(expectedError);
+            }
+        }
+
         @ParameterizedTest
         @MethodSource
         void batch__whenSendingMultipleTracesWithSameId__dedupeTraces__thenReturnNoContent(
