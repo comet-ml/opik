@@ -32,6 +32,7 @@ def _make_mock_model() -> Mock:
     would return a Mock that isn't subscriptable, so we pre-configure the return value.
     """
     mock_model = Mock(spec=base_model.OpikBaseModel)
+    mock_model.supported_features = base_model.ModelFeatures()
     assistant_message = {"role": "assistant", "content": "{}"}
     mock_model.generate_chat_completion.return_value = assistant_message
     mock_model.agenerate_chat_completion.return_value = assistant_message

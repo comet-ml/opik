@@ -54,10 +54,19 @@ def loop_log_records():
 class _StubChatModel(base_model.OpikBaseModel):
     """Returns canned responses in order; records every call."""
 
-    def __init__(self, responses: List[base_model.ConversationDict]) -> None:
+    def __init__(
+        self,
+        responses: List[base_model.ConversationDict],
+        features: base_model.ModelFeatures = base_model.ModelFeatures(),
+    ) -> None:
         super().__init__(model_name="stub-model")
         self._responses = list(responses)
+        self._features = features
         self.calls: List[dict] = []
+
+    @property
+    def supported_features(self) -> base_model.ModelFeatures:
+        return self._features
 
     def generate_string(
         self,
@@ -128,8 +137,14 @@ def _tool_call(tool_id: str, name: str, arguments: str = "{}") -> dict:
     }
 
 
-def _run_with_responses(responses, tools, ctx, overview_truncated=False):
-    model = _StubChatModel(responses)
+def _run_with_responses(
+    responses,
+    tools,
+    ctx,
+    overview_truncated=False,
+    features=base_model.ModelFeatures(),
+):
+    model = _StubChatModel(responses, features=features)
     registry = tool_registry.ToolRegistry(tools=tools)
     content = loop.run_agentic_judge(
         model=model,
@@ -412,3 +427,54 @@ class TestDuplicateToolCallShortCircuit:
             r for r in loop_log_records if "Agentic loop finished" in r.getMessage()
         ]
         assert "duplicates=0" in finished[0].getMessage()
+
+
+class TestResponseFormatOnToolRounds:
+    def test_run_agentic_judge__model_refuses_format_with_tools__tool_rounds_unformatted_and_wrapup_structures(
+        self,
+    ):
+        tools = [_StubTool("read")]
+        responses = [
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [_tool_call("c1", "read")],
+            },
+            {"role": "assistant", "content": "The answer looks right."},
+            {"role": "assistant", "content": '{"verdict": "pass"}'},
+        ]
+
+        content, model, _ = _run_with_responses(
+            responses,
+            tools,
+            _ctx(_trace()),
+            features=base_model.ModelFeatures(response_format_with_tools=False),
+        )
+
+        assert [call["response_format"] for call in model.calls] == [
+            None,
+            None,
+            _WrapupSchema,
+        ]
+        assert content == '{"verdict": "pass"}'
+
+    def test_run_agentic_judge__model_taking_both__every_round_formatted_without_wrapup(
+        self,
+    ):
+        tools = [_StubTool("read")]
+        responses = [
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [_tool_call("c1", "read")],
+            },
+            {"role": "assistant", "content": '{"verdict": "pass"}'},
+        ]
+
+        content, model, _ = _run_with_responses(responses, tools, _ctx(_trace()))
+
+        assert [call["response_format"] for call in model.calls] == [
+            _WrapupSchema,
+            _WrapupSchema,
+        ]
+        assert content == '{"verdict": "pass"}'

@@ -39,6 +39,7 @@ class AnthropicChatModel(base_model.OpikBaseModel):
 
         self._api_model_name = message_adapter.strip_anthropic_prefix(model_name)
         self._unsupported_warned: set[str] = set()
+        self._reasoning_effort = completion_kwargs.pop("reasoning_effort", None)
         self._completion_kwargs = message_adapter.filter_unsupported_params(
             completion_kwargs, self._unsupported_warned
         )
@@ -71,6 +72,14 @@ class AnthropicChatModel(base_model.OpikBaseModel):
 
         self._client = client
         self._async_client = async_client
+
+    @property
+    def supported_features(self) -> base_model.ModelFeatures:
+        return base_model.ModelFeatures(
+            reasoning_effort=bool(
+                message_adapter.accepted_effort_levels(self._api_model_name)
+            )
+        )
 
     def generate_string(
         self,
@@ -225,6 +234,7 @@ class AnthropicChatModel(base_model.OpikBaseModel):
         # full mapping.
         non_system_messages = message_adapter.normalize_messages(non_system_messages)
 
+        reasoning_effort = extra_kwargs.pop("reasoning_effort", self._reasoning_effort)
         filtered_extra = message_adapter.filter_unsupported_params(
             extra_kwargs, self._unsupported_warned
         )
@@ -249,6 +259,14 @@ class AnthropicChatModel(base_model.OpikBaseModel):
             **self._completion_kwargs,
             **filtered_extra,
         }
+        message_adapter.drop_unsupported_sampling_params(
+            call_kwargs, self._api_model_name, self._unsupported_warned
+        )
+        effort = message_adapter.output_effort(
+            reasoning_effort, self._api_model_name, self._unsupported_warned
+        )
+        if effort is not None:
+            call_kwargs["output_config"] = {"effort": effort}
         call_kwargs["model"] = self._api_model_name
         call_kwargs["messages"] = non_system_messages
         call_kwargs.setdefault("max_tokens", DEFAULT_MAX_TOKENS)
