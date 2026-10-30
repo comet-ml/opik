@@ -1001,6 +1001,10 @@ attachmentsConfig:
   # For tests, use 5KB (same as local dev default)
   stripMinSize: 5000
 
+workspaceFeatures:
+  # Off in tests, like the auth cache: a test that needs it turns it on.
+  cacheTtl: 0s
+
 # Python evaluator configuration
 pythonEvaluator:
   # Default: http://localhost:8000
