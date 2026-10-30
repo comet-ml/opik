@@ -1,0 +1,48 @@
+---
+title: Webhook destinations and the admin port
+headline: Webhook destinations and the admin port | Opik Documentation
+og:title: Webhook destinations and the admin port — Opik
+og:description: Choose which destinations Opik's alert webhooks may reach, and whether the backend runs its admin
+  server.
+og:site_name: Opik Documentation
+subtitle: Backend settings for alert webhook destinations and the admin port
+---
+
+## Webhook destinations
+
+Alerts send their webhooks from the backend, so a webhook URL decides where the backend makes a request. Two
+settings control which URLs are accepted:
+
+| Variable | Default | Values |
+|---|---|---|
+| `WEBHOOK_DESTINATION_GUARD` | `relaxed` | `strict` refuses webhook URLs that resolve to loopback, link-local, private or unresolvable addresses; `relaxed` allows them |
+| `WEBHOOK_DESTINATION_SCHEME` | `plaintext_or_tls` | `plaintext_or_tls` allows `http` and `https`; `https_only` allows `https` only. Checked in `strict` mode only |
+
+The default is `relaxed` on every launch path, as self-hosted deployments often point webhooks at internal services.
+Opik Cloud runs with `strict`. Set `strict` if every webhook goes to a public service, so that a webhook URL can't
+reach your internal network:
+
+```yaml
+# Helm values
+component:
+  backend:
+    env:
+      WEBHOOK_DESTINATION_GUARD: "strict"
+```
+
+Values are case-insensitive, and any other value stops the backend at startup.
+
+## Admin port
+
+Besides the application port (`8080`), the backend runs Dropwizard's admin server on `SERVER_ADMIN_PORT` (`8081` by
+default). It serves the operational tasks (log level, garbage collection), `/healthcheck`, `/metrics`, `/threads` and
+`/ping`. The Helm chart's probes use `/health-check` on the application port, and its Service doesn't expose the admin
+port.
+
+| Variable | Default | Values |
+|---|---|---|
+| `SERVER_ADMIN_ENABLED` | `true` | `false` starts no admin connector, so nothing listens on the admin port, on any interface |
+
+With `SERVER_ADMIN_ENABLED=false`, the admin endpoints above are unavailable, including through
+`kubectl port-forward`; set it back to `true` while you investigate an issue that needs them, such as the health check
+messages described in [Troubleshooting](/self-host/troubleshooting).

@@ -74,13 +74,6 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
         return buildConfig(getProviderApiKey(workspaceId, llmProvider, model), workspaceId);
     }
 
-    // OPIK_FREE's URL is operator-configured; any other base URL is the workspace's own
-    public boolean hasUserConfiguredDestination(@NonNull String workspaceId, @NonNull String model) {
-        var llmProvider = getLlmProvider(model);
-        return llmProvider != LlmProvider.OPIK_FREE
-                && StringUtils.isNotBlank(getProviderApiKey(workspaceId, llmProvider, model).baseUrl());
-    }
-
     private static final Set<LlmProvider> NAMED_PROVIDERS = Arrays.stream(LlmProvider.values())
             .filter(LlmProvider::supportsProviderName)
             .collect(Collectors.toUnmodifiableSet());

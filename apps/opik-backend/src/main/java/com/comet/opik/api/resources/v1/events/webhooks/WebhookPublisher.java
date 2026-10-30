@@ -6,6 +6,7 @@ import com.comet.opik.api.AlertType;
 import com.comet.opik.api.events.webhooks.WebhookEvent;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.infrastructure.WebhookConfig;
+import com.comet.opik.infrastructure.net.LoggableUrl;
 import com.comet.opik.infrastructure.redis.RedisStreamUtils;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -79,7 +80,7 @@ public class WebhookPublisher {
                 .build();
 
         log.info("Publishing webhook event: id='{}', type='{}', workspace='{}', url='{}'",
-                eventId, eventType, workspaceId, alert.webhook().url());
+                eventId, eventType, workspaceId, LoggableUrl.of(alert.webhook().url()));
 
         return Mono.defer(() -> {
             RStreamReactive<String, WebhookEvent<?>> stream = redisson.getStream(

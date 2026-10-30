@@ -83,7 +83,6 @@ const useAnnotatorThreadPreviewSamples = ({
     traces: tracesData ? visibleTraces : undefined,
     sampleIndex: currentIndex,
     setSampleIndex,
-    fromProject: !fromQueue,
     isPending:
       (useQueueSample && isQueuePending) ||
       (useProjectSample && isProjectPending),

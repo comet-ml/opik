@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.metrics;
 
+import com.comet.opik.domain.llm.ProviderFailures;
 import com.comet.opik.infrastructure.auth.MatchedTemplatePathResolver;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import io.opentelemetry.api.common.AttributeKey;
@@ -7,7 +8,6 @@ import jakarta.inject.Provider;
 import jakarta.ws.rs.core.Request;
 import jakarta.ws.rs.core.UriInfo;
 import lombok.experimental.UtilityClass;
-import org.apache.commons.lang3.exception.ExceptionUtils;
 
 import java.util.function.Function;
 
@@ -37,8 +37,8 @@ public class ErrorMetricsResolver {
         if (throwable == null) {
             return UNKNOWN;
         }
-        Throwable rootCause = ExceptionUtils.getRootCause(throwable);
-        return (rootCause != null ? rootCause : throwable).getClass().getSimpleName();
+        // the type a redacted provider failure stands for, not the redaction's own
+        return ProviderFailures.rootType(throwable);
     }
 
     public static String method(Provider<Request> request) {

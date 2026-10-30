@@ -135,7 +135,7 @@ test.describe('Playground — per-column run', { tag: ['@t2-cuj', '@area:playgro
           userPrompt: '{{input}}',
           modelDisplayName,
         });
-        await playground.duplicateLastVariant();
+        await playground.duplicateVariant(0);
         await playground.configureVariant(1, { userPrompt: `${variantBMarker} {{input}}` });
         await playground.clickRunExperiment();
         await playground.selectRunExperimentSource({ mode: 'dataset', entityName: dataset.name });

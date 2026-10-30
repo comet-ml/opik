@@ -1,5 +1,12 @@
 import React, { ReactElement, useCallback, useMemo, useState } from "react";
-import { ChevronRight, Clock, GitCommitVertical } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  FileText,
+  GitCommitVertical,
+  MessagesSquare,
+} from "lucide-react";
 import toLower from "lodash/toLower";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
@@ -23,7 +30,28 @@ const DEFAULT_LOADED_PROMPTS = 1000;
 export type PromptLibrarySelection = {
   promptId: string;
   versionId?: string;
+  templateStructure?: PROMPT_TEMPLATE_STRUCTURE;
 };
+
+const TEMPLATE_STRUCTURE_OPTIONS = [
+  {
+    value: PROMPT_TEMPLATE_STRUCTURE.TEXT,
+    label: "Text prompt",
+    listLabel: "Text prompts",
+    description: "Loads into a single message, e.g. system prompt.",
+    icon: FileText,
+    iconClassName: "text-[var(--color-turquoise)]",
+  },
+  {
+    value: PROMPT_TEMPLATE_STRUCTURE.CHAT,
+    label: "Chat prompt",
+    listLabel: "Chat prompts",
+    description:
+      "Loads as multiple messages across system, user, and assistant roles.",
+    icon: MessagesSquare,
+    iconClassName: "text-[var(--color-burgundy)]",
+  },
+];
 
 type PromptLibraryMenuProps = {
   projectId: string;
@@ -38,6 +66,11 @@ type PromptLibraryMenuProps = {
    * to avoid silently dropping the user's version pick.
    */
   enableVersionSelect?: boolean;
+  /**
+   * Ask for the prompt type first when the library holds both text and chat
+   * prompts. With only one type there, its list opens directly.
+   */
+  chooseTemplateStructure?: boolean;
 };
 
 const PromptLibraryMenu: React.FC<PromptLibraryMenuProps> = ({
@@ -47,9 +80,12 @@ const PromptLibraryMenu: React.FC<PromptLibraryMenuProps> = ({
   onOpenChange,
   trigger,
   enableVersionSelect = true,
+  chooseTemplateStructure = false,
 }) => {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [chosenStructure, setChosenStructure] =
+    useState<PROMPT_TEMPLATE_STRUCTURE>();
 
   const { data, isLoading } = useProjectPromptsList(
     {
@@ -60,26 +96,46 @@ const PromptLibraryMenu: React.FC<PromptLibraryMenuProps> = ({
     { enabled: open, staleTime: 60_000 },
   );
 
+  const structureFilter = filterByTemplateStructure ?? chosenStructure;
+
+  const hasBothStructures = useMemo(() => {
+    const allPrompts = data?.content ?? [];
+    return TEMPLATE_STRUCTURE_OPTIONS.every(({ value }) =>
+      allPrompts.some((p) => p.template_structure === value),
+    );
+  }, [data?.content]);
+
+  const isChoosingStructure =
+    chooseTemplateStructure &&
+    !filterByTemplateStructure &&
+    (isLoading || hasBothStructures);
+
   const filteredPrompts = useMemo(() => {
     const allPrompts = data?.content ?? [];
-    const byStructure = filterByTemplateStructure
-      ? allPrompts.filter(
-          (p) => p.template_structure === filterByTemplateStructure,
-        )
+    const byStructure = structureFilter
+      ? allPrompts.filter((p) => p.template_structure === structureFilter)
       : allPrompts;
     if (!search) return byStructure;
     const q = toLower(search);
     return byStructure.filter((p) => toLower(p.name).includes(q));
-  }, [data?.content, filterByTemplateStructure, search]);
+  }, [data?.content, structureFilter, search]);
 
   const handleOpenChange = useCallback(
     (next: boolean) => {
       setOpen(next);
-      if (!next) setSearch("");
+      if (!next) {
+        setSearch("");
+        setChosenStructure(undefined);
+      }
       onOpenChange?.(next);
     },
     [onOpenChange],
   );
+
+  const handleBackToStructures = useCallback(() => {
+    setChosenStructure(undefined);
+    setSearch("");
+  }, []);
 
   const handleSelect = useCallback(
     (selection: PromptLibrarySelection) => {
@@ -104,38 +160,100 @@ const PromptLibraryMenu: React.FC<PromptLibraryMenuProps> = ({
           }
         }}
       >
-        <div className="px-1 pt-1">
-          <SearchInput
-            searchText={search}
-            setSearchText={setSearch}
-            placeholder="Search"
-            variant="ghost"
-            dimension="sm"
-          />
-        </div>
-        <Separator className="my-1" />
-        <div className="max-h-[40vh] overflow-y-auto p-1">
-          {isLoading ? (
+        {isChoosingStructure && !chosenStructure ? (
+          isLoading ? (
             <div className="flex items-center justify-center py-4">
               <Spinner />
             </div>
-          ) : filteredPrompts.length === 0 ? (
-            <NoOptions text={search ? "No search results" : "No prompts"} />
           ) : (
-            filteredPrompts.map((prompt) => (
-              <PromptRow
-                key={prompt.id}
-                prompt={prompt}
-                onSelect={handleSelect}
-                enableVersionSelect={enableVersionSelect}
+            <TemplateStructureOptions onSelect={setChosenStructure} />
+          )
+        ) : (
+          <>
+            {chosenStructure && (
+              <>
+                <button
+                  type="button"
+                  className="comet-body-s flex h-9 w-full items-center gap-1 px-2 text-left text-foreground"
+                  onClick={handleBackToStructures}
+                  data-testid="prompt-library-menu-back"
+                >
+                  <ChevronLeft className="size-3.5 shrink-0 text-light-slate" />
+                  {
+                    TEMPLATE_STRUCTURE_OPTIONS.find(
+                      ({ value }) => value === chosenStructure,
+                    )?.listLabel
+                  }
+                </button>
+                <Separator />
+              </>
+            )}
+            <div className="px-1 pt-1">
+              <SearchInput
+                searchText={search}
+                setSearchText={setSearch}
+                placeholder="Search"
+                variant="ghost"
+                dimension="sm"
               />
-            ))
-          )}
-        </div>
+            </div>
+            <Separator className="my-1" />
+            <div className="max-h-[40vh] overflow-y-auto p-1">
+              {isLoading ? (
+                <div className="flex items-center justify-center py-4">
+                  <Spinner />
+                </div>
+              ) : filteredPrompts.length === 0 ? (
+                <NoOptions text={search ? "No search results" : "No prompts"} />
+              ) : (
+                filteredPrompts.map((prompt) => (
+                  <PromptRow
+                    key={prompt.id}
+                    prompt={prompt}
+                    onSelect={handleSelect}
+                    enableVersionSelect={enableVersionSelect}
+                  />
+                ))
+              )}
+            </div>
+          </>
+        )}
       </PopoverContent>
     </Popover>
   );
 };
+
+type TemplateStructureOptionsProps = {
+  onSelect: (value: PROMPT_TEMPLATE_STRUCTURE) => void;
+};
+
+const TemplateStructureOptions: React.FC<TemplateStructureOptionsProps> = ({
+  onSelect,
+}) => (
+  <div className="p-1" data-testid="prompt-library-structure-options">
+    {TEMPLATE_STRUCTURE_OPTIONS.map(
+      ({ value, label, description, icon: Icon, iconClassName }, index) => (
+        <React.Fragment key={value}>
+          {index > 0 && <Separator className="my-1" />}
+          <button
+            type="button"
+            className="flex w-full flex-col gap-0.5 rounded-md px-2 py-1.5 text-left hover:bg-primary-foreground"
+            onClick={() => onSelect(value)}
+            data-testid={`prompt-library-structure-${value}`}
+          >
+            <span className="flex items-center gap-1.5">
+              <Icon className={cn("size-3.5 shrink-0", iconClassName)} />
+              <span className="comet-body-s text-foreground">{label}</span>
+            </span>
+            <span className="comet-body-xs text-light-slate">
+              {description}
+            </span>
+          </button>
+        </React.Fragment>
+      ),
+    )}
+  </div>
+);
 
 type PromptRowProps = {
   prompt: Prompt;
@@ -160,7 +278,12 @@ const PromptRow: React.FC<PromptRowProps> = ({
       role="button"
       tabIndex={0}
       className="comet-body-s flex h-9 cursor-pointer items-center gap-2 rounded-md px-2 hover:bg-primary-foreground"
-      onClick={() => onSelect({ promptId: prompt.id })}
+      onClick={() =>
+        onSelect({
+          promptId: prompt.id,
+          templateStructure: prompt.template_structure,
+        })
+      }
     >
       <span className="truncate">{prompt.name}</span>
       <div className="ml-auto flex shrink-0 items-center gap-1.5">
@@ -207,7 +330,13 @@ const PromptRow: React.FC<PromptRowProps> = ({
           promptId={prompt.id}
           activeVersionId={prompt.latest_version?.id}
           enabled={hoverOpen}
-          onSelect={(versionId) => onSelect({ promptId: prompt.id, versionId })}
+          onSelect={(versionId) =>
+            onSelect({
+              promptId: prompt.id,
+              versionId,
+              templateStructure: prompt.template_structure,
+            })
+          }
         />
       </HoverCardContent>
     </HoverCard>

@@ -1,9 +1,13 @@
 package com.comet.opik.api;
 
 import com.comet.opik.infrastructure.llm.OpenAiCompatFinishReasons;
+import com.comet.opik.infrastructure.llm.OpenAiStreamingHelper;
+import com.comet.opik.utils.ClientDisconnectedException;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.model.StreamingResponseHandler;
 import dev.langchain4j.model.chat.response.ChatResponse;
+import dev.langchain4j.model.chat.response.PartialResponse;
+import dev.langchain4j.model.chat.response.PartialResponseContext;
 import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionChoice;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionResponse;
@@ -72,6 +76,16 @@ public record ChunkedResponseHandler(
     @Override
     public void onPartialResponse(String s) {
         this.onNext(s);
+    }
+
+    /** As {@link #onPartialResponse(String)}; when the caller is gone, the provider call is cancelled. */
+    @Override
+    public void onPartialResponse(@NonNull PartialResponse partialResponse, @NonNull PartialResponseContext context) {
+        try {
+            onNext(partialResponse.text());
+        } catch (ClientDisconnectedException exception) {
+            OpenAiStreamingHelper.cancel(context.streamingHandle());
+        }
     }
 
     @Override

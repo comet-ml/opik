@@ -3,6 +3,7 @@ package com.comet.opik.infrastructure;
 import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.dropwizard.util.Duration;
+import io.dropwizard.validation.MaxDuration;
 import io.dropwizard.validation.MinDuration;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
@@ -27,8 +28,15 @@ public class LlmProviderTokenAuthConfig {
     @JsonProperty
     @DecimalMin("0.0") @DecimalMax("0.99") private double refreshFraction = 0.25;
 
+    /**
+     * Connect and read timeout for the token fetch call. Capped at one minute: a token endpoint
+     * replies in well under that, and a longer fetch holds the single-flight lock while every
+     * request waiting on the token stalls. The cap also keeps the value within the int range
+     * Jersey takes for its connect and read timeouts.
+     */
     @JsonProperty
     @NotNull @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS)
+    @MaxDuration(value = 1, unit = TimeUnit.MINUTES)
     private Duration fetchTimeout = Duration
             .seconds(10);
 

@@ -99,7 +99,7 @@
   "author": "Opik",
   "license": "Apache-2.0",
   "volta": {
-    "node": "20.18.2",
+    "node": "26.12.1",
     "pnpm": "9.15.5"
   }
 }

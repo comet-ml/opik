@@ -4,6 +4,7 @@ import {
   generateDefaultLLMPromptMessage,
   getMediaUrlsFromListVariable,
   getNextMessageType,
+  parsePromptVersionRole,
   resolveTraceEvaluatorVariableDefault,
   toContentForRole,
 } from "./llm";
@@ -221,6 +222,38 @@ describe("toContentForRole", () => {
       content: "Be concise",
       mediaDropped: false,
     });
+  });
+});
+
+describe("parsePromptVersionRole", () => {
+  const MESSAGES_JSON_METADATA = {
+    created_from: "opik_ui",
+    type: "messages_json",
+  };
+
+  it("reads the role a playground message was saved with", () => {
+    expect(
+      parsePromptVersionRole({
+        template: JSON.stringify([{ role: "system", content: "Be concise" }]),
+        metadata: MESSAGES_JSON_METADATA,
+      }),
+    ).toBe(LLM_MESSAGE_ROLE.system);
+  });
+
+  it("has no role for a plain text template", () => {
+    expect(
+      parsePromptVersionRole({ template: "Be concise", metadata: {} }),
+    ).toBeUndefined();
+  });
+
+  it.each([
+    ["an unknown role", JSON.stringify([{ role: "robot", content: "Hi" }])],
+    ["broken JSON", "[{"],
+    ["an empty list", "[]"],
+  ])("has no role for %s", (_label, template) => {
+    expect(
+      parsePromptVersionRole({ template, metadata: MESSAGES_JSON_METADATA }),
+    ).toBeUndefined();
   });
 });
 

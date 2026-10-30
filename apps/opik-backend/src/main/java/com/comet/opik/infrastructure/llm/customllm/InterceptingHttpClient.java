@@ -1,12 +1,15 @@
 package com.comet.opik.infrastructure.llm.customllm;
 
+import com.comet.opik.infrastructure.llm.DelegatingHttpClient;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.JsonNode;
 import dev.langchain4j.exception.HttpException;
 import dev.langchain4j.http.client.HttpClient;
 import dev.langchain4j.http.client.HttpRequest;
 import dev.langchain4j.http.client.SuccessfulHttpResponse;
+import dev.langchain4j.http.client.sse.HttpStreamingEvent;
 import dev.langchain4j.http.client.sse.ServerSentEvent;
 import dev.langchain4j.http.client.sse.ServerSentEventContext;
 import dev.langchain4j.http.client.sse.ServerSentEventListener;
@@ -14,14 +17,21 @@ import dev.langchain4j.http.client.sse.ServerSentEventParser;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import mutiny.zero.ZeroPublisher;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.http.client.utils.URIBuilder;
+import reactor.adapter.JdkFlowAdapter;
+import reactor.core.publisher.Flux;
 
+import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.URISyntaxException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Flow;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
@@ -50,8 +60,8 @@ import java.util.regex.Pattern;
  *       {@code Authorization: Bearer} (or raw under the configured {@code auth_header_name}).
  *       Precedence: the fetched token wins — a pre-configured static {@code Authorization}
  *       header is dropped with a warn. A 401/403 from the gateway invalidates the cached token
- *       and retries the request once; for streamed responses only before the first delivered
- *       event.</li>
+ *       and retries the request once, on every call: the synchronous, asynchronous, listener and
+ *       publisher ones; for streamed responses only before the first delivered event.</li>
  * </ul>
  *
  * <p>When none of the relevant config keys are set and no {@code {model}}
@@ -60,12 +70,15 @@ import java.util.regex.Pattern;
  * {@code OpenAiClient} already produced.
  */
 @Slf4j
-class InterceptingHttpClient implements HttpClient {
+class InterceptingHttpClient extends DelegatingHttpClient {
 
     static final String URL_QUERY_PARAMS_CONFIG_KEY = "url_query_params";
     static final String AUTH_HEADER_NAME_CONFIG_KEY = "auth_header_name";
     static final String SUPPRESS_DEFAULT_AUTH_CONFIG_KEY = "suppress_default_auth";
     static final String MODEL_PLACEHOLDER = "{model}";
+
+    /** The request body field whose value replaces {@link #MODEL_PLACEHOLDER}. */
+    private static final String MODEL_FIELD = "model";
 
     private static final String AUTHORIZATION_HEADER = "Authorization";
 
@@ -80,7 +93,6 @@ class InterceptingHttpClient implements HttpClient {
 
     private static final Pattern AUTHORITY_MODEL_NAME = Pattern.compile("[A-Za-z0-9.-]+");
 
-    private final @NonNull HttpClient delegate;
     private final Map<String, String> configuration;
     private final String apiKey;
     private final Supplier<String> tokenSupplier;
@@ -98,7 +110,7 @@ class InterceptingHttpClient implements HttpClient {
      */
     InterceptingHttpClient(@NonNull HttpClient delegate, Map<String, String> configuration, String apiKey,
             Supplier<String> tokenSupplier, Runnable tokenInvalidator) {
-        this.delegate = delegate;
+        super(delegate);
         this.configuration = configuration != null ? configuration : Map.of();
         this.apiKey = apiKey;
         this.tokenSupplier = tokenSupplier;
@@ -119,6 +131,31 @@ class InterceptingHttpClient implements HttpClient {
         }
     }
 
+    /**
+     * As {@link #execute(HttpRequest)}, asynchronously: a refused request fails the future, and a token rejection
+     * retries once with a fresh token.
+     */
+    @Override
+    public CompletableFuture<SuccessfulHttpResponse> executeAsync(HttpRequest request) {
+        CompletableFuture<SuccessfulHttpResponse> response;
+        try {
+            response = delegate.executeAsync(mutate(request));
+        } catch (ProviderRequestRefusedException exception) {
+            return CompletableFuture.failedFuture(exception);
+        }
+        if (tokenSupplier == null) {
+            return response;
+        }
+        return recoverAsync(response, failure -> {
+            if (!(failure instanceof HttpException httpException && shouldRetryWithFreshToken(httpException))) {
+                return CompletableFuture.failedFuture(failure);
+            }
+            invalidateToken();
+            // re-mutating asks the supplier again, which now yields a fresh token
+            return delegate.executeAsync(mutate(request));
+        });
+    }
+
     @Override
     public void execute(HttpRequest request, ServerSentEventParser parser,
             ServerSentEventListener listener) {
@@ -134,6 +171,43 @@ class InterceptingHttpClient implements HttpClient {
             return;
         }
         delegate.execute(mutated, parser, new RetryOnAuthFailureListener(request, parser, listener));
+    }
+
+    /**
+     * As the listener call: every subscription mutates the request and makes the call, a refused request fails that
+     * subscription, and a token rejection retries once with a fresh token, but only before any event, the response
+     * head included, reached the subscriber, so two half-responses are never spliced.
+     */
+    @Override
+    public Flow.Publisher<HttpStreamingEvent> stream(HttpRequest request, ServerSentEventParser parser) {
+        if (tokenSupplier == null) {
+            return subscriber -> {
+                HttpRequest mutated;
+                try {
+                    mutated = mutate(request);
+                } catch (ProviderRequestRefusedException exception) {
+                    ZeroPublisher.<HttpStreamingEvent>fromFailure(exception).subscribe(subscriber);
+                    return;
+                }
+                delegate.stream(mutated, parser).subscribe(subscriber);
+            };
+        }
+        return JdkFlowAdapter.publisherToFlowPublisher(Flux.defer(() -> {
+            var delivered = new AtomicBoolean(false);
+            return streamMutated(request, parser)
+                    .doOnNext(event -> delivered.set(true))
+                    .onErrorResume(failure -> !delivered.get() && failure instanceof HttpException httpException
+                            && shouldRetryWithFreshToken(httpException), failure -> {
+                                invalidateToken();
+                                // straight to the subscriber: a second failure must not retry again
+                                return streamMutated(request, parser);
+                            });
+        }));
+    }
+
+    /** The events of a call with the request mutated now; a refusal is thrown, which Reactor signals as an error. */
+    private Flux<HttpStreamingEvent> streamMutated(HttpRequest request, ServerSentEventParser parser) {
+        return JdkFlowAdapter.flowPublisherToFlux(delegate.stream(mutate(request), parser));
     }
 
     /**
@@ -232,6 +306,8 @@ class InterceptingHttpClient implements HttpClient {
                 .method(request.method())
                 .url(url)
                 .headers(mutatedHeaders)
+                .formDataFields(request.formDataFields())
+                .formDataFiles(request.formDataFiles())
                 .body(request.body())
                 .build();
     }
@@ -255,23 +331,21 @@ class InterceptingHttpClient implements HttpClient {
                     MODEL_PLACEHOLDER);
             return url;
         }
-        JsonNode root;
+        Optional<String> model;
         try {
-            root = JsonUtils.getJsonNodeFromString(body);
-        } catch (UncheckedIOException exception) {
+            model = topLevelModel(body);
+        } catch (IOException | UncheckedIOException exception) {
             log.warn("Failed to parse request body as JSON for '{}' substitution; forwarding URL unchanged",
                     MODEL_PLACEHOLDER, exception);
             return url;
         }
-
-        JsonNode modelNode = root == null ? null : root.get("model");
-        if (modelNode == null || !modelNode.isTextual() || StringUtils.isBlank(modelNode.asText())) {
+        if (model.filter(StringUtils::isNotBlank).isEmpty()) {
             log.warn(
                     "Base URL contains '{}' but request body has no string 'model' field; forwarding URL unchanged",
                     MODEL_PLACEHOLDER);
             return url;
         }
-        String modelName = modelNode.asText();
+        String modelName = model.get();
         // a raw substitution into the authority must not move the host, or the credential follows it elsewhere
         if (ProviderBaseUrlGuard.hasModelPlaceholderInAuthority(url)
                 && !AUTHORITY_MODEL_NAME.matcher(modelName).matches()) {
@@ -283,6 +357,30 @@ class InterceptingHttpClient implements HttpClient {
                     modelName);
         }
         return url.replace(MODEL_PLACEHOLDER, modelName);
+    }
+
+    /**
+     * The top-level {@code "model"} string of a JSON object body, if any. Read with a streaming parser that stops at
+     * that field: the body is the whole chat request, inline media included, so a tree of it would cost several times
+     * its size.
+     */
+    private static Optional<String> topLevelModel(String body) throws IOException {
+        // every token read moves forward through a finite string, so the loop ends: at the end of the input
+        // nextToken() is null, and truncated, malformed or too deeply nested input throws
+        try (JsonParser parser = JsonUtils.createParser(body)) {
+            if (parser.nextToken() != JsonToken.START_OBJECT) {
+                return Optional.empty();
+            }
+            while (parser.nextToken() == JsonToken.FIELD_NAME) {
+                String field = parser.currentName();
+                JsonToken value = parser.nextToken();
+                if (MODEL_FIELD.equals(field)) {
+                    return value == JsonToken.VALUE_STRING ? Optional.of(parser.getText()) : Optional.empty();
+                }
+                parser.skipChildren();
+            }
+            return Optional.empty();
+        }
     }
 
     private Map<String, List<String>> applyAuthHeaders(Map<String, List<String>> headers) {
@@ -381,7 +479,9 @@ class InterceptingHttpClient implements HttpClient {
             }
             return builder.build().toString();
         } catch (URISyntaxException exception) {
-            log.warn("Failed to parse custom provider URL as URI; forwarding unchanged", exception);
+            // the type only: the exception's message is the custom base URL
+            log.warn("Failed to parse custom provider URL as URI; forwarding unchanged, error type '{}'",
+                    exception.getClass().getSimpleName());
             return url;
         }
     }

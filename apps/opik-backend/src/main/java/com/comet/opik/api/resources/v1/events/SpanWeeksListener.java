@@ -49,6 +49,8 @@ public class SpanWeeksListener {
     }
 
     private void register(List<Span> spans, String workspaceId, String userName) {
+        // Capture only the count: a lambda holding the spans would pin their full payloads for every retry.
+        int spanCount = spans.size();
         spanService.registerWeeks(spans)
                 .retryWhen(RetryUtils.handleClickHouseErrors(config.maxRetries(),
                         config.minBackoff().toJavaDuration(), config.maxBackoff().toJavaDuration()))
@@ -56,6 +58,6 @@ public class SpanWeeksListener {
                 .subscribe(
                         null,
                         error -> log.error("Failed to register the weeks of '{}' spans for workspace '{}'",
-                                spans.size(), workspaceId, error));
+                                spanCount, workspaceId, error));
     }
 }

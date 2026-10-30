@@ -5,18 +5,15 @@ import com.comet.opik.domain.llm.langchain4j.OpikOpenAiChatModel;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
+import com.comet.opik.infrastructure.llm.ProviderHeadersHttpClient;
 import dev.langchain4j.http.client.HttpClientBuilder;
-import dev.langchain4j.http.client.jdk.JdkHttpClient;
-import dev.langchain4j.http.client.jdk.JdkHttpClientBuilder;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.openai.internal.OpenAiClient;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 
-import java.net.http.HttpClient;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Supplier;
@@ -28,6 +25,7 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
     private final @NonNull LlmProviderClientConfig llmProviderClientConfig;
     private final @NonNull ProviderBaseUrlGuard providerBaseUrlGuard;
     private final @NonNull AuthTokenProvider authTokenProvider;
+    private final @NonNull LlmHttpClientBuilders httpClientBuilders;
 
     public OpenAiClient newCustomLlmClient(@NonNull LlmProviderClientApiConfig config) {
         var baseUrl = Optional.ofNullable(config.baseUrl())
@@ -40,10 +38,6 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
                 .httpClientBuilder(newHttpClientBuilder(config))
                 .logRequests(llmProviderClientConfig.getLogRequests())
                 .logResponses(llmProviderClientConfig.getLogResponses());
-
-        Optional.ofNullable(config.headers())
-                .filter(MapUtils::isNotEmpty)
-                .ifPresent(openAiClientBuilder::customHeaders);
 
         Optional.ofNullable(llmProviderClientConfig.getConnectTimeout())
                 .ifPresent(connectTimeout -> openAiClientBuilder.connectTimeout(connectTimeout.toJavaDuration()));
@@ -84,10 +78,6 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
         Optional.ofNullable(llmProviderClientConfig.getConnectTimeout())
                 .ifPresent(connectTimeout -> builder.timeout(connectTimeout.toJavaDuration()));
 
-        Optional.ofNullable(config.headers())
-                .filter(MapUtils::isNotEmpty)
-                .ifPresent(builder::customHeaders);
-
         Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
         Optional.ofNullable(modelParameters.seed()).ifPresent(builder::seed);
 
@@ -108,31 +98,22 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
     }
 
     /**
-     * Builds the HTTP client builder passed to LangChain4j. The underlying
-     * {@code JdkHttpClientBuilder} is always used (HTTP/1.1 pinning for
-     * vLLM / FastAPI servers is pre-OPIK-4551 behaviour that must be preserved
-     * for every Custom LLM provider), behind a destination check. Only the
-     * {@link InterceptingHttpClientBuilder} wrapper is conditional — applied
-     * when the provider actually needs request mutation (OPIK-4551 config keys
-     * or {@code {model}} placeholder).
+     * Builds the HTTP client builder passed to LangChain4j: the shared HTTP/1.1 client, which checks each address
+     * connected to, behind a check of the final request URL. Only the {@link InterceptingHttpClientBuilder} wrapper is
+     * conditional, applied when the provider needs request mutation (its configuration keys, a {@code {model}}
+     * placeholder or token auth).
      */
     private HttpClientBuilder newHttpClientBuilder(LlmProviderClientApiConfig config) {
-        // Force HTTP/1.1 to avoid upgrade. For example, vLLM is built on FastAPI and explicitly uses HTTP/1.1
-        HttpClient.Builder httpClientBuilder = HttpClient.newBuilder()
-                .version(HttpClient.Version.HTTP_1_1)
-                .followRedirects(HttpClient.Redirect.NEVER);
-
-        JdkHttpClientBuilder jdkHttpClientBuilder = JdkHttpClient.builder()
-                .httpClientBuilder(httpClientBuilder);
-
         // innermost, so it sees the URL after InterceptingHttpClient's mutations
-        var guardedBuilder = new DestinationGuardHttpClientBuilder(jdkHttpClientBuilder, providerBaseUrlGuard);
+        var guardedBuilder = new DestinationGuardHttpClientBuilder(httpClientBuilders.builder(), providerBaseUrlGuard);
 
+        // outermost, so the provider's headers are on the request before InterceptingHttpClient's mutations
         if (!requiresInterceptingBuilder(config)) {
-            return guardedBuilder;
+            return ProviderHeadersHttpClient.builder(guardedBuilder, config.headers());
         }
-        return new InterceptingHttpClientBuilder(guardedBuilder, config.configuration(), config.apiKey(),
-                bearerSupplier(config), tokenInvalidator(config));
+        return ProviderHeadersHttpClient.builder(new InterceptingHttpClientBuilder(guardedBuilder,
+                config.configuration(), config.apiKey(), bearerSupplier(config), tokenInvalidator(config)),
+                config.headers());
     }
 
     /**

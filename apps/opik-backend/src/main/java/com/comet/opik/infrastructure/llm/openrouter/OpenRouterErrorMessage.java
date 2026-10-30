@@ -1,5 +1,7 @@
 package com.comet.opik.infrastructure.llm.openrouter;
 
+import com.comet.opik.domain.llm.ProviderErrorMessageValidator;
+import com.comet.opik.domain.llm.ProviderErrorMessageValidator.DocumentedErrors;
 import com.comet.opik.infrastructure.llm.LlmProviderError;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -11,7 +13,6 @@ import org.apache.commons.lang3.StringUtils;
 
 import java.io.UncheckedIOException;
 import java.util.Optional;
-import java.util.stream.Stream;
 
 import static com.comet.opik.infrastructure.llm.openrouter.OpenRouterErrorMessage.OpenRouterError;
 
@@ -29,14 +30,23 @@ public record OpenRouterErrorMessage(
         return new ErrorMessage(error.code(), upstreamReason().map(this::withSource).orElse(error.message()));
     }
 
-    // OpenRouter answers "Provider returned error" when the upstream fails, and keeps the upstream's own body in
-    // metadata.raw: usually that provider's JSON error as a string, sometimes plain text.
+    public boolean isDocumented() {
+        return DocumentedErrors.OPENROUTER.documents(error.code());
+    }
+
+    /**
+     * OpenRouter answers "Provider returned error" when the upstream fails, and keeps the upstream's own body in
+     * metadata.raw: usually that provider's JSON error as a string, sometimes plain text. Its message is passed on only
+     * from an error envelope a provider documents, naming one of that provider's documented errors, and only as plain
+     * text; otherwise OpenRouter's own message is.
+     */
     private Optional<String> upstreamReason() {
         if (error.metadata() == null) {
             return Optional.empty();
         }
         return text(error.metadata().path("raw"))
-                .map(raw -> parseObject(raw).flatMap(OpenRouterErrorMessage::reasonOf).orElse(raw))
+                .flatMap(raw -> parseObject(raw).flatMap(OpenRouterErrorMessage::documentedReasonOf))
+                .filter(ProviderErrorMessageValidator::isPlainText)
                 .map(StringUtils::normalizeSpace)
                 .map(reason -> StringUtils.abbreviate(reason, MAX_UPSTREAM_REASON_LENGTH));
     }
@@ -56,15 +66,22 @@ public record OpenRouterErrorMessage(
         }
     }
 
-    private static Optional<String> reasonOf(JsonNode upstreamError) {
-        return Stream.of(
-                upstreamError.path("error").path("message"),
-                upstreamError.path("error"),
-                upstreamError.path("message"),
-                upstreamError.path("detail"))
-                .map(OpenRouterErrorMessage::text)
-                .flatMap(Optional::stream)
-                .findFirst();
+    /**
+     * The upstream's message from {@code {"error": {"message": ...}}}, the envelope OpenAI-compatible providers
+     * (identified by {@code error.type} or {@code error.code}), Anthropic ({@code error.type}) and Google
+     * ({@code error.status}) share, when the identifier is one that provider documents.
+     */
+    private static Optional<String> documentedReasonOf(JsonNode upstreamBody) {
+        var upstreamError = upstreamBody.path("error");
+        var type = text(upstreamError.path("type")).orElse(null);
+        var code = text(upstreamError.path("code")).orElse(null);
+        var status = text(upstreamError.path("status")).orElse(null);
+        var documented = DocumentedErrors.OPENAI.documents(type)
+                || DocumentedErrors.OPENAI.documents(code)
+                || DocumentedErrors.AZURE_OPENAI.documents(code)
+                || DocumentedErrors.ANTHROPIC.documents(type)
+                || DocumentedErrors.GOOGLE.documents(status);
+        return documented ? text(upstreamError.path("message")) : Optional.empty();
     }
 
     private static Optional<String> text(JsonNode node) {

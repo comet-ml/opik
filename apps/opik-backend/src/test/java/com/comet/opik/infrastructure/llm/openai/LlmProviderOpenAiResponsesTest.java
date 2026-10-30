@@ -30,6 +30,7 @@ import dev.langchain4j.model.openai.internal.chat.ToolCall;
 import dev.langchain4j.model.openai.internal.chat.ToolType;
 import dev.langchain4j.model.output.FinishReason;
 import dev.langchain4j.model.output.TokenUsage;
+import io.dropwizard.jersey.errors.ErrorMessage;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
@@ -40,6 +41,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
 
+import static com.comet.opik.domain.llm.ChatCompletionService.UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
@@ -315,11 +317,12 @@ class LlmProviderOpenAiResponsesTest {
         var ex = openAiBadRequest("Unsupported parameter: 'top_p' is not supported with this model.",
                 "unsupported_parameter", "invalid_request_error");
 
-        var result = provider.getLlmProviderError(ex);
+        var expectedError = new ErrorMessage(400,
+                "Unsupported parameter: 'top_p' is not supported with this model.", "unsupported_parameter");
 
-        assertThat(result).isPresent();
-        assertThat(result.get().getCode()).isEqualTo(400);
-        assertThat(result.get().getMessage()).contains("'top_p' is not supported");
+        var actualError = provider.getLlmProviderError(ex);
+
+        assertThat(actualError).contains(expectedError);
     }
 
     @Test
@@ -347,10 +350,12 @@ class LlmProviderOpenAiResponsesTest {
 
         var ex = openAiBadRequest("Something else broke", "weird_specific", "weird_high_level");
 
-        var result = provider.getLlmProviderError(ex);
+        // neither is an identifier OpenAI documents, so its text isn't passed on
+        var expectedError = new ErrorMessage(400, UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
 
-        assertThat(result).isPresent();
-        assertThat(result.get().getCode()).isEqualTo(400);
+        var actualError = provider.getLlmProviderError(ex);
+
+        assertThat(actualError).contains(expectedError);
     }
 
     @Test
@@ -367,6 +372,19 @@ class LlmProviderOpenAiResponsesTest {
 
         assertThat(result).isPresent();
         assertThat(result.get().getCode()).isEqualTo(429);
+    }
+
+    @Test
+    void openAiExceptionWithoutAnErrorBodyGetsTheGenericMessage() {
+        var provider = new LlmProviderOpenAiResponses(
+                Mockito.mock(OpenAIClientGenerator.class), Mockito.mock(LlmProviderClientApiConfig.class));
+
+        var ex = BadRequestException.builder().headers(Headers.builder().build()).build();
+        var expectedError = new ErrorMessage(400, UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
+
+        var actualError = provider.getLlmProviderError(ex);
+
+        assertThat(actualError).contains(expectedError);
     }
 
     private static BadRequestException openAiBadRequest(String message, String code, String type) {
