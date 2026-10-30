@@ -22,7 +22,6 @@ import com.comet.opik.api.resources.utils.traces.TraceAssertions;
 import com.comet.opik.domain.OpenTelemetryMapper;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.SpanType;
-import com.comet.opik.domain.TraceService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -1541,6 +1540,8 @@ class OpenTelemetryResourceTest {
             topSpans.forEach(span -> assertThat(span.traceId()).isEqualTo(expectedOpikTraceId));
         }
 
+        private static final String PROJECT_MISMATCH_ERROR = "Project name and workspace name do not match the existing trace";
+
         @ParameterizedTest(name = "an error answering a protobuf request accepting {0} is a protobuf google.rpc.Status")
         @ValueSource(strings = {"application/x-protobuf", MediaType.WILDCARD})
         void errorAnsweringProtobufRequestIsProtobufStatus(String accept) throws InvalidProtocolBufferException {
@@ -1548,7 +1549,7 @@ class OpenTelemetryResourceTest {
             mockTargetWorkspace(okApikey, workspaceName);
             var otelSpans = rootAndChild();
             var expectedStatus = Status.newBuilder()
-                    .setMessage(TraceService.PROJECT_NAME_AND_WORKSPACE_NAME_MISMATCH)
+                    .setMessage(PROJECT_MISMATCH_ERROR)
                     .build();
 
             try (var actualResponse = sendTraceToTwoProjects(otelSpans, workspaceName, accept,
@@ -1566,7 +1567,7 @@ class OpenTelemetryResourceTest {
             mockTargetWorkspace(okApikey, workspaceName);
             var otelSpans = rootAndChild();
             var expectedError = JsonUtils.valueToTree(
-                    Map.of("errors", List.of(TraceService.PROJECT_NAME_AND_WORKSPACE_NAME_MISMATCH)));
+                    Map.of("errors", List.of(PROJECT_MISMATCH_ERROR)));
 
             try (var actualResponse = sendTraceToTwoProjects(otelSpans, workspaceName, MediaType.WILDCARD,
                     Entity.json(JsonFormat.printer().print(exportRequest(otelSpans))))) {
