@@ -163,6 +163,13 @@ export const ANTHROPIC_PARAM_BINDING: ParamBinding = {
   effort: "thinkingEffort",
 };
 
+export const GEMINI_PARAM_BINDING: ParamBinding = {
+  temperature: "temperature",
+  top_p: "topP",
+  max_output_tokens: "maxCompletionTokens",
+  effort: "thinkingLevel",
+};
+
 export const OPENAI_PARAM_BINDING: ParamBinding = {
   temperature: "temperature",
   top_p: "topP",
