@@ -43,7 +43,11 @@ def load_conversation_thread(
 ) -> conversation_thread.ConversationThread:
     traces = client.search_traces(
         project_name=project_name,
-        filter_string=f'thread_id = "{thread.id}"',
+        # A thread id is a free-form string, so a value containing a double
+        # quote would otherwise terminate the literal early and make the
+        # filter match other threads' traces. The OQL parser reads a doubled
+        # quote inside a double-quoted literal as one quote character.
+        filter_string=f'thread_id = "{thread.id.replace(chr(34), chr(34) * 2)}"',
         max_results=max_results,
         truncate=False,
     )

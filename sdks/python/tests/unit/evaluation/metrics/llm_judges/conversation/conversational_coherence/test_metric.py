@@ -722,3 +722,35 @@ async def test_score__only_replies_without_text__raises_without_calling_the_mode
         await metric.ascore(conversation=conversation)
 
     mock_model.agenerate_chat_completion.assert_not_called()
+
+
+def _punctuated_no_side_effect(*args, **kwargs):
+    """A judge that drifts from the STRICTLY yes/no prompt with punctuation."""
+    response_format = kwargs.get("response_format")
+    if response_format == schema.EvaluateConversationCoherenceResponse:
+        return _assistant_message(json.dumps({"verdict": "No.", "reason": None}))
+    elif response_format == schema.ScoreReasonResponse:
+        return _assistant_message(json.dumps({"reason": "The reply is off-topic."}))
+    return _assistant_message("{}")
+
+
+def test_score__punctuated_no_verdict__still_counts_as_irrelevant(mock_model):
+    """A drifted verdict must not silently inflate the score.
+
+    The prompt asks for STRICTLY ``yes``/``no`` but the schema accepts any
+    string, and models drift. Before the shared normalizer, ``"No."`` passed
+    the ``!= "no"`` comparison and a fully incoherent thread scored 1.0.
+    """
+    conversation = [
+        {"role": "user", "content": "What is the overdraft fee?"},
+        {"role": "assistant", "content": "I like cats."},
+    ]
+    mock_model.generate_chat_completion.side_effect = _punctuated_no_side_effect
+
+    metric = ConversationalCoherenceMetric(model=mock_model, track=False)
+    result = metric.score(conversation=conversation)
+
+    assert result.name == "conversational_coherence_score"
+    assert result.value == 0.0
+    assert result.reason == "The reply is off-topic."
+    assert result.scoring_failed is False

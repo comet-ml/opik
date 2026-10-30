@@ -298,7 +298,7 @@ def _extract_negative_verdicts(
     return [
         v.reason
         for v in verdicts
-        if v.verdict.strip().lower() == "no" and v.reason is not None
+        if parsing_helpers.normalize_verdict(v.verdict) == "no" and v.reason is not None
     ]
 
 
@@ -306,5 +306,7 @@ def _score_from_verdicts(verdicts: List[schema.EvaluateUserGoalResponse]) -> flo
     if len(verdicts) == 0:
         return 0.0
 
-    relevant_count = sum(v.verdict.strip().lower() != "no" for v in verdicts)
+    relevant_count = sum(
+        parsing_helpers.normalize_verdict(v.verdict) != "no" for v in verdicts
+    )
     return relevant_count / len(verdicts)

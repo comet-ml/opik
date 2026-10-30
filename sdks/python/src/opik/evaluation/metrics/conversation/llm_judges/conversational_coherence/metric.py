@@ -322,7 +322,8 @@ def _extract_irrelevancies_from_verdicts(
     return [
         {"message_number": f"{index + 1}", "reason": verdict.reason}
         for index, verdict in enumerate(verdicts)
-        if verdict.verdict.strip().lower() == "no" and verdict.reason is not None
+        if parsing_helpers.normalize_verdict(verdict.verdict) == "no"
+        and verdict.reason is not None
     ]
 
 
@@ -343,7 +344,9 @@ def _evaluate_conversation_from_model_output(
 def _score_from_verdicts(
     verdicts: List[schema.EvaluateConversationCoherenceResponse],
 ) -> float:
-    relevant_count = sum(v.verdict.strip().lower() != "no" for v in verdicts)
+    relevant_count = sum(
+        parsing_helpers.normalize_verdict(v.verdict) != "no" for v in verdicts
+    )
     return relevant_count / len(verdicts)
 
 
