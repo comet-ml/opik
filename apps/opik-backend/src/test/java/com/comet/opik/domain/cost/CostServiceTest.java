@@ -568,6 +568,36 @@ class CostServiceTest {
                 Arguments.of("unknown-model-with-dots.1.2.3", "unknown", false));
     }
 
+    /**
+     * Before the fix these priced at $0: each lower-case retry was skipped when the name differed from its
+     * lower-case form only in letter case, and these providers' price table keys are lower case.
+     */
+    @ParameterizedTest
+    @MethodSource("provideUpperCaseModelNames")
+    void calculateCost_upperCaseNamePricesLikeLowerCase(String upperCaseName, String lowerCaseName,
+            String provider) {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1000,
+                "completion_tokens", 500);
+
+        BigDecimal lowerCaseCost = CostService.calculateCost(lowerCaseName, provider, usage, null);
+        BigDecimal upperCaseCost = CostService.calculateCost(upperCaseName, provider, usage, null);
+
+        assertThat(lowerCaseCost).isGreaterThan(BigDecimal.ZERO);
+        assertThat(upperCaseCost).isEqualByComparingTo(lowerCaseCost);
+    }
+
+    private static Stream<Arguments> provideUpperCaseModelNames() {
+        return Stream.of(
+                Arguments.of("GPT-5-MINI", "gpt-5-mini", "openai"),
+                Arguments.of("Gpt-4o", "gpt-4o", "openai"),
+                Arguments.of("GPT-4.1", "gpt-4.1", "openai"),
+                Arguments.of("GPT-5.2", "gpt-5.2", "openai"),
+                Arguments.of("openai/GPT-5-MINI", "gpt-5-mini", "openai"),
+                Arguments.of("ANTHROPIC.CLAUDE-OPUS-4-6-V1", "anthropic.claude-opus-4-6-v1", "bedrock"),
+                Arguments.of("GPT-5-MINI-2025-08-07", "gpt-5-mini-2025-08-07", "openai"));
+    }
+
     @ParameterizedTest
     @MethodSource("provideModelNamesWithDateSuffixes")
     void calculateCost_shouldStripDateSuffixes_issue5018(String modelName, String provider) {
