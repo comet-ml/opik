@@ -199,7 +199,7 @@ class Streamer:
 
         self._batch_preprocessor.flush()
 
-        self._fallback_replay_manager.refresh_server_connection()
+        self._fallback_replay_manager.refresh_server_connection(timeout)
         if self._fallback_replay_manager.has_server_connection:
             # do replay only if we have a connection to the server
             self._fallback_replay_manager.flush()
