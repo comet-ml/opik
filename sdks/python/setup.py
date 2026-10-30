@@ -37,10 +37,21 @@ setup(
     ).read(),
     long_description_content_type="text/markdown",
     install_requires=[
+        # Each library is followed by its cap: the latest allowed version older than
+        # 3 days, so a hijacked release has time to be caught and yanked before
+        # installs pick it up. scripts/update_python_sdk_dependency_caps.py writes
+        # the caps and a weekday job runs it through a PR; run it after changing a
+        # requirement instead of editing a cap. To ship an urgent fix sooner, raise
+        # the library's lower bound to the fixed release: with no version older
+        # than 3 days allowed, the cap is the oldest allowed one.
         "boto3-stubs[bedrock-runtime]>=1.34.110",
+        "boto3-stubs<=1.43.119",  # the latest version older than 3 days, released 2026-10-26
         "click",
+        "click<=8.5.0",  # the latest version older than 3 days, released 2026-08-26
         "httpx",  # some older version of openai/litellm are broken with httpx>=0.28.0
+        "httpx<=0.28.1",  # the latest version older than 3 days, released 2024-12-06
         "rapidfuzz>=3.0.0,<4.0.0",
+        "rapidfuzz<=3.14.6",  # the latest version older than 3 days, released 2026-08-30
         # LiteLLM dependency comments:
         # Please keep this list in sync with the one in sdks/opik_optimizer/pyproject.toml
         # - Exclude 1.82.7, 1.82.8: compromised in supply chain attack (TeamPCP)
@@ -68,15 +79,25 @@ setup(
         #   upstream actually tests 3.10 (or once we drop 3.10 -- see OPIK_7955).
         "litellm>=1.79.2,!=1.81.*,!=1.82.*,!=1.83.0,!=1.83.1,!=1.83.2,!=1.83.3,!=1.83.4,!=1.83.5,!=1.83.6,!=1.92.*,<1.97; python_version < '3.11'",
         "litellm>=1.79.2,!=1.81.*,!=1.82.*,!=1.83.0,!=1.83.1,!=1.83.2,!=1.83.3,!=1.83.4,!=1.83.5,!=1.83.6,!=1.92.*,<1.106; python_version >= '3.11'",
+        "litellm<=1.105.5",  # the latest version older than 3 days, released 2026-10-25
         "openai",
+        "openai<=3.39.0",  # the latest version older than 3 days, released 2026-10-26
         "pydantic-settings>=2.0.0,<3.0.0,!=2.9.0",
+        "pydantic-settings<=2.16.1",  # the latest version older than 3 days, released 2026-10-20
         "pydantic>=2.0.0,<3.0.0",
+        "pydantic<=2.14.1",  # the latest version older than 3 days, released 2026-10-11
         "pytest",
+        "pytest<=9.1.1",  # the latest version older than 3 days, released 2026-06-19
         "rich",
+        "rich<=15.0.0",  # the latest version older than 3 days, released 2026-04-12
         "sentry_sdk>=2.0.0",
+        "sentry_sdk<=2.73.0",  # the latest version older than 3 days, released 2026-10-22
         "tenacity",
+        "tenacity<=9.2.1",  # the latest version older than 3 days, released 2026-10-07
         "tqdm",
+        "tqdm<=4.70.1",  # the latest version older than 3 days, released 2026-09-11
         "uuid6",
+        "uuid6<=2025.0.1",  # the latest version older than 3 days, released 2025-07-04
         # Optional accelerator for JSON encoding; see opik/json_helpers.py. Guarded
         # twice -- this marker keeps pip from attempting a source build where no
         # wheel exists, and the import there is optional, so a missing orjson costs
@@ -93,8 +114,11 @@ setup(
             " or platform_machine != 'ARM64'"
             " or python_version >= '3.11')"
         ),
+        "orjson<=3.13.0; platform_python_implementation == 'CPython' and platform_machine in 'x86_64 AMD64 aarch64 arm64 ARM64 i686 x86' and (sys_platform != 'win32' or platform_machine != 'ARM64' or python_version >= '3.11')",  # the latest version older than 3 days, released 2026-10-07
         "jinja2",
+        "jinja2<=3.1.6",  # the latest version older than 3 days, released 2025-03-05
         "watchfiles>=1.0.0,<2.0.0",
+        "watchfiles<=1.3.0",  # the latest version older than 3 days, released 2026-09-21
         # tree-sitter is used for JS/TS syntax checking in bridge handlers.
         # Pre-built wheels are missing for musllinux_aarch64 (Alpine on ARM64),
         # and PEP 508 has no marker to distinguish musl from glibc, so we
@@ -107,72 +131,19 @@ setup(
             " platform_machine != 'aarch64'"
             " or sys_platform != 'linux'"
         ),
+        "tree-sitter<=0.26.0; platform_machine != 'aarch64' or sys_platform != 'linux'",  # the latest version older than 3 days, released 2026-06-30
         (
             "tree-sitter-javascript>=0.23,<1.0;"
             " platform_machine != 'aarch64'"
             " or sys_platform != 'linux'"
         ),
+        "tree-sitter-javascript<=0.25.0; platform_machine != 'aarch64' or sys_platform != 'linux'",  # the latest version older than 3 days, released 2025-09-01
         (
             "tree-sitter-typescript>=0.23,<1.0;"
             " platform_machine != 'aarch64'"
             " or sys_platform != 'linux'"
         ),
-        # Dependency caps: one per requirement above, admitting only releases that
-        # have been on PyPI for at least 3 days, so a hijacked release has time to be
-        # caught and yanked before installs pick it up.
-        # Generated by scripts/update_python_sdk_dependency_caps.py, which a weekday
-        # job runs through a PR; run it after changing the requirements above instead
-        # of editing the caps. To ship an urgent fix sooner, raise the package's lower
-        # bound to the fixed release: with no release that old allowed, its cap is the
-        # oldest allowed release.
-        # BEGIN dependency caps
-        "boto3-stubs<=1.43.118",  # released 2026-10-22
-        "click<=8.5.0",  # released 2026-08-26
-        "httpx<=0.28.1",  # released 2024-12-06
-        "rapidfuzz<=3.14.6",  # released 2026-08-30
-        (
-            "litellm<=1.96.2;"  # released 2026-08-11
-            " python_version < '3.11'"
-        ),
-        (
-            "litellm<=1.105.5;"  # released 2026-10-25
-            " python_version >= '3.11'"
-        ),
-        "openai<=3.37.0",  # released 2026-10-22
-        "pydantic-settings<=2.16.1",  # released 2026-10-20
-        "pydantic<=2.14.1",  # released 2026-10-11
-        "pytest<=9.1.1",  # released 2026-06-19
-        "rich<=15.0.0",  # released 2026-04-12
-        "sentry_sdk<=2.73.0",  # released 2026-10-22
-        "tenacity<=9.2.1",  # released 2026-10-07
-        "tqdm<=4.70.1",  # released 2026-09-11
-        "uuid6<=2025.0.1",  # released 2025-07-04
-        (
-            "orjson<=3.13.0;"  # released 2026-10-07
-            " platform_python_implementation == 'CPython'"
-            " and platform_machine in 'x86_64 AMD64 aarch64 arm64 ARM64 i686 x86'"
-            " and (sys_platform != 'win32'"
-            " or platform_machine != 'ARM64'"
-            " or python_version >= '3.11')"
-        ),
-        "jinja2<=3.1.6",  # released 2025-03-05
-        "watchfiles<=1.3.0",  # released 2026-09-21
-        (
-            "tree-sitter<=0.26.0;"  # released 2026-06-30
-            " platform_machine != 'aarch64'"
-            " or sys_platform != 'linux'"
-        ),
-        (
-            "tree-sitter-javascript<=0.25.0;"  # released 2025-09-01
-            " platform_machine != 'aarch64'"
-            " or sys_platform != 'linux'"
-        ),
-        (
-            "tree-sitter-typescript<=0.23.2;"  # released 2024-11-11
-            " platform_machine != 'aarch64'"
-            " or sys_platform != 'linux'"
-        ),
-        # END dependency caps
+        "tree-sitter-typescript<=0.23.2; platform_machine != 'aarch64' or sys_platform != 'linux'",  # the latest version older than 3 days, released 2024-11-11
     ],
     extras_require={
         "proxy": [

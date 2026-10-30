@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """
-Regenerate the Python SDK's dependency caps from its requirements.
+Write a cap after every library in the Python SDK's install_requires (sdks/python/setup.py).
 
-sdks/python/setup.py holds one cap per requirement in install_requires, between the "BEGIN dependency caps" and
-"END dependency caps" comments. A cap is the newest release that satisfies its requirement and has been on PyPI for at
-least three days, and it repeats the requirement's environment marker, so it applies exactly where the requirement
-does. A release counts from the upload of its newest file, since PyPI accepts new files for an existing release.
-Pre-releases and yanked releases never count. When no release that old satisfies a requirement, its cap is the oldest
-release that does: raising a lower bound to a fresh fix ships exactly that fix.
+A library's cap is the latest version that its requirements allow and that has been on PyPI for at least three days.
+It goes after the library's last requirement and repeats their environment markers, so it applies exactly where the
+library is required. A release counts from the upload of its newest file, since PyPI accepts new files for an existing
+release. Pre-releases and yanked releases never count. When no version that old is allowed, the cap is the oldest
+allowed version: raising a lower bound to a fresh fix ships exactly that fix.
+
+The script finds its caps by their comment, drops them all and writes a fresh one after each library, so adding or
+removing a library adds or removes its cap.
 
 Usage:
   python scripts/update_python_sdk_dependency_caps.py
@@ -26,10 +28,12 @@ from pathlib import Path
 from packaging import requirements, utils, version
 
 SETUP_PY = Path(__file__).resolve().parent.parent / "sdks" / "python" / "setup.py"
-MIN_RELEASE_AGE = datetime.timedelta(days=3)
+MIN_RELEASE_AGE_DAYS = 3
 
-CAPS_SECTION = re.compile(
-    r"^(?P<indent> *)# BEGIN dependency caps\n.*?^ *# END dependency caps$", re.DOTALL | re.MULTILINE
+CAP_LINE = re.compile(
+    r'^ *".*",  # (the latest version older than \d+ days'
+    r"|the oldest allowed version \(none is older than \d+ days\)), released \d{4}-\d{2}-\d{2}\n",
+    re.MULTILINE,
 )
 
 
@@ -64,52 +68,58 @@ def releases(package_name: str) -> dict[version.Version, datetime.datetime]:
     }
 
 
-def cap_lines(requirement_text: str, indent: str, cutoff: datetime.datetime) -> str:
-    requirement = requirements.Requirement(requirement_text)
+def cap_line(requirement_texts: list[str], indent: str, cutoff: datetime.datetime) -> str:
+    library_requirements = [requirements.Requirement(text) for text in requirement_texts]
+    name = library_requirements[0].name
     candidates = {
         release: uploaded
-        for release, uploaded in releases(requirement.name).items()
-        if requirement.specifier.contains(release)
+        for release, uploaded in releases(name).items()
+        if any(requirement.specifier.contains(release) for requirement in library_requirements)
     }
     settled = [release for release, uploaded in candidates.items() if uploaded <= cutoff]
-    cap = max(settled) if settled else min(candidates)
-    head = f"{requirement.name}<={cap}"
-    released = f"  # released {candidates[cap].date()}"
+    if settled:
+        cap = max(settled)
+        reason = f"the latest version older than {MIN_RELEASE_AGE_DAYS} days"
+    else:
+        cap = min(candidates)
+        reason = f"the oldest allowed version (none is older than {MIN_RELEASE_AGE_DAYS} days)"
 
-    if requirement.marker is None:
-        return f"{indent}{json.dumps(head)},{released}"
-    # The marker as written in setup.py, split before each `and`/`or` like the requirements there.
-    marker_text = " " + requirement_text.split(";", 1)[1].strip()
-    fragments = [f"{indent}    {json.dumps(fragment)}" for fragment in re.split(r"(?= and | or )", marker_text)]
-    return "\n".join([f"{indent}(", f"{indent}    {json.dumps(head + ';')}{released}", *fragments, f"{indent}),"])
+    cap_text = f"{name}<={cap}"
+    # A cap is a requirement too, so it repeats the marker of a library required only on some platforms. A library with
+    # several requirements (litellm, split by Python version) is required everywhere, so its cap has no marker.
+    if len(library_requirements) == 1 and library_requirements[0].marker is not None:
+        cap_text += "; " + requirement_texts[0].split(";", 1)[1].strip()
+    return f"{indent}{json.dumps(cap_text)},  # {reason}, released {candidates[cap].date()}\n"
 
 
 def main() -> None:
-    cutoff = datetime.datetime.now(datetime.UTC) - MIN_RELEASE_AGE
-    setup_py = SETUP_PY.read_text()
-    section = CAPS_SECTION.search(setup_py)
-    first_section_line = setup_py.count("\n", 0, section.start()) + 1
-    last_section_line = setup_py.count("\n", 0, section.end()) + 1
+    cutoff = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=MIN_RELEASE_AGE_DAYS)
+    lines = CAP_LINE.sub("", SETUP_PY.read_text()).splitlines(keepends=True)
 
     setup_call = next(
         node
-        for node in ast.walk(ast.parse(setup_py))
+        for node in ast.walk(ast.parse("".join(lines)))
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "setup"
     )
     install_requires = next(keyword.value for keyword in setup_call.keywords if keyword.arg == "install_requires")
-    requirement_texts = [
-        ast.literal_eval(element)
-        for element in install_requires.elts
-        if not first_section_line <= element.lineno <= last_section_line
-    ]
 
-    indent = section["indent"]
-    caps = "\n".join(cap_lines(requirement_text, indent, cutoff) for requirement_text in requirement_texts)
-    SETUP_PY.write_text(
-        setup_py[: section.start()]
-        + f"{indent}# BEGIN dependency caps\n{caps}\n{indent}# END dependency caps"
-        + setup_py[section.end() :]
-    )
+    elements_by_library: dict[str, list[ast.expr]] = {}
+    for element in install_requires.elts:
+        name = utils.canonicalize_name(requirements.Requirement(ast.literal_eval(element)).name)
+        elements_by_library.setdefault(name, []).append(element)
+
+    # From the last library up, so the line numbers of the ones above stay valid.
+    for elements in sorted(elements_by_library.values(), key=lambda elements: elements[-1].end_lineno, reverse=True):
+        comma_line = elements[-1].end_lineno - 1
+        column = elements[-1].end_col_offset
+        while "," not in lines[comma_line][column:]:
+            comma_line += 1
+            column = 0
+        indent = re.match(r" *", lines[comma_line])[0]
+        requirement_texts = [ast.literal_eval(element) for element in elements]
+        lines.insert(comma_line + 1, cap_line(requirement_texts, indent, cutoff))
+
+    SETUP_PY.write_text("".join(lines))
 
 
 if __name__ == "__main__":
