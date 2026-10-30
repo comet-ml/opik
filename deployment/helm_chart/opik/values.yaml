@@ -931,7 +931,7 @@ clickhouse:
   # clones the schema to the new replicas. Installing directly on >= 2 replicas prevents the analytics
   # migrations from completing on a fresh cluster. See the self-host/scaling docs.
   replicasCount: 1
-  image: altinity/clickhouse-server:26.3.16.10001.altinitystable
+  image: clickhouse/clickhouse-server:26.3.62.3
   storage: 50Gi
   logsLevel: information
   # Custom health checks with longer timeouts for major version upgrades
