@@ -575,7 +575,7 @@ class CostServiceTest {
     @ParameterizedTest
     @MethodSource("provideUpperCaseModelNames")
     void calculateCost_upperCaseNamePricesLikeLowerCase(String upperCaseName, String lowerCaseName,
-            String provider) {
+            String provider, String expectedCost) {
         Map<String, Integer> usage = Map.of(
                 "prompt_tokens", 1000,
                 "completion_tokens", 500);
@@ -583,19 +583,24 @@ class CostServiceTest {
         BigDecimal lowerCaseCost = CostService.calculateCost(lowerCaseName, provider, usage, null);
         BigDecimal upperCaseCost = CostService.calculateCost(upperCaseName, provider, usage, null);
 
-        assertThat(lowerCaseCost).isGreaterThan(BigDecimal.ZERO);
-        assertThat(upperCaseCost).isEqualByComparingTo(lowerCaseCost);
+        assertThat(lowerCaseCost).isEqualByComparingTo(expectedCost);
+        assertThat(upperCaseCost).isEqualByComparingTo(expectedCost);
     }
 
     private static Stream<Arguments> provideUpperCaseModelNames() {
         return Stream.of(
-                Arguments.of("GPT-5-MINI", "gpt-5-mini", "openai"),
-                Arguments.of("Gpt-4o", "gpt-4o", "openai"),
-                Arguments.of("GPT-4.1", "gpt-4.1", "openai"),
-                Arguments.of("GPT-5.2", "gpt-5.2", "openai"),
-                Arguments.of("openai/GPT-5-MINI", "gpt-5-mini", "openai"),
-                Arguments.of("ANTHROPIC.CLAUDE-OPUS-4-6-V1", "anthropic.claude-opus-4-6-v1", "bedrock"),
-                Arguments.of("GPT-5-MINI-2025-08-07", "gpt-5-mini-2025-08-07", "openai"));
+                // 1000*2.5e-7 + 500*2e-6
+                Arguments.of("GPT-5-MINI", "gpt-5-mini", "openai", "0.00125"),
+                // 1000*2.5e-6 + 500*1e-5
+                Arguments.of("Gpt-4o", "gpt-4o", "openai", "0.0075"),
+                // 1000*2e-6 + 500*8e-6
+                Arguments.of("GPT-4.1", "gpt-4.1", "openai", "0.006"),
+                // 1000*1.75e-6 + 500*1.4e-5
+                Arguments.of("GPT-5.2", "gpt-5.2", "openai", "0.00875"),
+                Arguments.of("openai/GPT-5-MINI", "gpt-5-mini", "openai", "0.00125"),
+                // 1000*5e-6 + 500*2.5e-5
+                Arguments.of("ANTHROPIC.CLAUDE-OPUS-4-6-V1", "anthropic.claude-opus-4-6-v1", "bedrock", "0.0175"),
+                Arguments.of("GPT-5-MINI-2025-08-07", "gpt-5-mini-2025-08-07", "openai", "0.00125"));
     }
 
     @ParameterizedTest
