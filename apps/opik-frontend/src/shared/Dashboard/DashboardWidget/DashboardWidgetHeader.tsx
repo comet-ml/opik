@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { TriangleAlert, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import { Button } from "@/ui/button";
 
 type DashboardWidgetHeaderProps = {
   title: string;
@@ -75,7 +76,15 @@ const DashboardWidgetHeader: React.FunctionComponent<
             {titleAdornment}
             {infoMessage && (
               <TooltipWrapper content={infoMessage}>
-                <Info className="size-3 shrink-0 text-light-slate" />
+                <Button
+                  type="button"
+                  variant="minimal"
+                  size="icon-2xs"
+                  aria-label="Widget information"
+                  className="shrink-0"
+                >
+                  <Info />
+                </Button>
               </TooltipWrapper>
             )}
           </div>

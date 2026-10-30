@@ -127,9 +127,11 @@ Charts a project metric over time as a **Line chart** or a **Bar chart**.
   - **Failed guardrails**: the trace fields plus **Guardrail name**
   - Span metrics: the trace fields plus **Model**, **Provider**, and **Span type**
   - Thread metrics: **Tags**
-  - **Thread estimated cost** and **Span estimated cost** can't be grouped
+  - **Thread estimated cost** can't be grouped
 
   To group a score, duration, or token metric, select exactly one score, percentile, or token count first. Set **Aggregation mode** to **Time-based** for one value per time bucket, or to **Total** for one value per group over the whole date range.
+
+  **Cost by tag uses overlapping groups.** Each tag receives the full cost of its matching spans. For example, a $1 span tagged `prod` and `agent` contributes $1 to each group. Adding the groups (including in a stacked chart) can therefore exceed actual spend. Use **Provider**, **Model**, or **Span type** for span cost groups that add up to total spend. Untagged spans appear as **Unknown**. When there are more than ten groups, **Others** sums the remaining groups' costs once per time bucket; tag overlap still applies.
 
 Click a series name in the legend to open the project **Logs** filtered to that series.
 

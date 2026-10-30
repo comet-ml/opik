@@ -7,6 +7,7 @@ import {
 } from "@/store/DashboardStore";
 import InlineEditableText from "@/shared/InlineEditableText/InlineEditableText";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import { Button } from "@/ui/button";
 import { cn } from "@/lib/utils";
 
 type DashboardWidgetPreviewHeaderProps = {
@@ -38,20 +39,29 @@ const DashboardWidgetPreviewHeader: React.FunctionComponent<
 
   return (
     <div className={cn("flex flex-col gap-0.5 pt-1", className)}>
-      <InlineEditableText
-        value={displayTitle}
-        placeholder={titlePlaceholder}
-        defaultValue={generatedTitle}
-        onChange={handleTitleChange}
-        isTitle
-        rightIcon={
-          infoMessage ? (
-            <TooltipWrapper content={infoMessage}>
-              <Info className="size-3 shrink-0 text-light-slate" />
-            </TooltipWrapper>
-          ) : undefined
-        }
-      />
+      <div className="flex items-center gap-1.5">
+        <InlineEditableText
+          value={displayTitle}
+          placeholder={titlePlaceholder}
+          defaultValue={generatedTitle}
+          onChange={handleTitleChange}
+          isTitle
+          className="min-w-0"
+        />
+        {infoMessage && (
+          <TooltipWrapper content={infoMessage}>
+            <Button
+              type="button"
+              variant="minimal"
+              size="icon-2xs"
+              aria-label="Widget information"
+              className="shrink-0"
+            >
+              <Info />
+            </Button>
+          </TooltipWrapper>
+        )}
+      </div>
       <InlineEditableText
         value={subtitle || ""}
         placeholder="Click to add a description"

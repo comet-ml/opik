@@ -4,12 +4,26 @@ import jakarta.ws.rs.BadRequestException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class BreakdownQueryBuilderTest {
+
+    @ParameterizedTest
+    @EnumSource(value = BreakdownField.class, names = {"NONE", "GUARDRAIL_NAME"}, mode = EnumSource.Mode.EXCLUDE)
+    void spanCostSupportsSpanBreakdowns(BreakdownField field) {
+        var breakdown = BreakdownConfig.builder().field(field).metadataKey("env").build();
+
+        assertThatCode(() -> BreakdownQueryBuilder.validate(breakdown, MetricType.SPAN_COST))
+                .doesNotThrowAnyException();
+        assertThat(BreakdownQueryBuilder.getBreakdownGroupExpression(MetricType.SPAN_COST, breakdown))
+                .contains("s.")
+                .isEqualTo(BreakdownQueryBuilder.getBreakdownGroupExpression(MetricType.SPAN_COUNT, breakdown));
+    }
 
     @ParameterizedTest
     @CsvSource({"p50,0.5", "p90,0.9", "p99,0.99", "P50,0.5", "P99,0.99"})
