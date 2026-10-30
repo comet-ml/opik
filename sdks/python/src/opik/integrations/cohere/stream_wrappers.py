@@ -1,4 +1,5 @@
 import logging
+import weakref
 from typing import Any, AsyncIterator, Callable, Iterator, List, Optional
 
 from opik.api_objects import span, trace
@@ -6,6 +7,28 @@ from opik.decorator import error_info_collector, generator_wrappers
 from opik.types import ErrorInfoDict
 
 LOGGER = logging.getLogger(__name__)
+
+
+def _end_abandoned_stream(
+    span_to_end: span.SpanData,
+    trace_to_end: Optional[trace.TraceData],
+    finally_callback: generator_wrappers.FinishGeneratorCallback,
+) -> None:
+    """End the span of a stream that was never iterated.
+
+    A generator's body, and so its ``finally``, does not run until the first
+    ``next()``. The span is already popped from the decorator by the time this
+    wrapper is built, so a stream that is created and then dropped would leave
+    it open for good. Registered with ``weakref.finalize`` and detached as soon
+    as the generator does run, the same way the LiteLLM integration does it.
+    """
+    finally_callback(
+        output=None,
+        error_info=None,
+        capture_output=True,
+        generators_span_to_end=span_to_end,
+        generators_trace_to_end=trace_to_end,
+    )
 
 
 def wrap_sync_stream(
@@ -23,6 +46,8 @@ def wrap_sync_stream(
     leaves untracked streams untouched.
     """
 
+    finalizer: Optional[weakref.finalize] = None
+
     def wrapper() -> Iterator[Any]:
         accumulated_items: List[Any] = []
         error_info: Optional[ErrorInfoDict] = None
@@ -39,6 +64,8 @@ def wrap_sync_stream(
             error_info = error_info_collector.collect(exception)
             raise exception
         finally:
+            if finalizer is not None:
+                finalizer.detach()
             output = (
                 generations_aggregator(accumulated_items)
                 if error_info is None
@@ -52,7 +79,15 @@ def wrap_sync_stream(
                 generators_trace_to_end=trace_to_end,
             )
 
-    return wrapper()
+    generator = wrapper()
+    finalizer = weakref.finalize(
+        generator,
+        _end_abandoned_stream,
+        span_to_end,
+        trace_to_end,
+        finally_callback,
+    )
+    return generator
 
 
 def wrap_async_stream(
@@ -63,6 +98,8 @@ def wrap_async_stream(
     finally_callback: generator_wrappers.FinishGeneratorCallback,
 ) -> AsyncIterator[Any]:
     """Async counterpart of :func:`wrap_sync_stream`."""
+
+    finalizer: Optional[weakref.finalize] = None
 
     async def wrapper() -> AsyncIterator[Any]:
         accumulated_items: List[Any] = []
@@ -80,6 +117,8 @@ def wrap_async_stream(
             error_info = error_info_collector.collect(exception)
             raise exception
         finally:
+            if finalizer is not None:
+                finalizer.detach()
             output = (
                 generations_aggregator(accumulated_items)
                 if error_info is None
@@ -93,4 +132,12 @@ def wrap_async_stream(
                 generators_trace_to_end=trace_to_end,
             )
 
-    return wrapper()
+    generator = wrapper()
+    finalizer = weakref.finalize(
+        generator,
+        _end_abandoned_stream,
+        span_to_end,
+        trace_to_end,
+        finally_callback,
+    )
+    return generator

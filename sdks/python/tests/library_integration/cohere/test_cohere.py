@@ -1,5 +1,7 @@
 import asyncio
+import gc
 import json
+import weakref
 
 import httpx
 import respx
@@ -201,6 +203,46 @@ def test_cohere_chat_stream__aggregates_into_one_span(respx_mock, fake_backend):
     assert span.model == MODEL
     assert span.usage["prompt_tokens"] == 5
     assert span.usage["completion_tokens"] == 2
+
+
+# assert_all_called=False on purpose: the request is only issued on the first
+# iteration, and this test never iterates. The unused route is the point.
+@respx.mock(base_url=BASE_URL, assert_all_called=False)
+def test_cohere_chat_stream__never_read_then_dropped__span_still_ends(
+    respx_mock, fake_backend
+):
+    """A stream the caller never iterates must still end its span.
+
+    The wrapper is a generator, and a generator's body, including its
+    ``finally``, does not run until the first ``next()``. The span is already
+    popped from the decorator by then, so without a finalizer it would stay
+    open for good.
+    """
+    respx_mock.post(CHAT_ROUTE).mock(
+        return_value=httpx.Response(
+            200,
+            headers={"Content-Type": "text/event-stream"},
+            content=_sse(*_stream_events()),
+        )
+    )
+    client = track_cohere(cohere.ClientV2(api_key="fake-api-key"))
+
+    stream = client.chat_stream(
+        model=MODEL, messages=[{"role": "user", "content": "hi"}]
+    )
+    stream_ref = weakref.ref(stream)
+    del stream
+    for _ in range(5):
+        gc.collect()
+        if stream_ref() is None:
+            break
+    opik.flush_tracker()
+
+    assert len(fake_backend.trace_trees) == 1
+    span = fake_backend.trace_trees[0].spans[0]
+    assert span.end_time is not None
+    assert span.error_info is None
+    assert fake_backend.trace_trees[0].end_time is not None
 
 
 @respx.mock(base_url=BASE_URL)
