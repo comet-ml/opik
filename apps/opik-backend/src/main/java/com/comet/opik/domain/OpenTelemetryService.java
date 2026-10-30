@@ -4,6 +4,7 @@ import com.comet.opik.api.Project;
 import com.comet.opik.api.Source;
 import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.domain.mapping.OpenTelemetryMappingRuleFactory;
 import com.comet.opik.domain.mapping.otel.GeneralMappingRules;
 import com.comet.opik.infrastructure.OpenTelemetryConfig;
@@ -297,7 +298,16 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
                         traceBuilder.threadId(threadId);
                     }
 
-                    return traceService.create(traceBuilder.build());
+                    // Exporters batch by time, so another top-level span of a trace that an earlier batch created can
+                    // arrive later; the trace exists and the batch's spans still belong to it. Failing would drop the
+                    // whole batch: a lone conflict as a 409 the exporter doesn't retry, several as a 500 that every
+                    // retry repeats. A trace in another project stays an IdentifierMismatchException.
+                    return traceService.create(traceBuilder.build())
+                            .onErrorResume(EntityAlreadyExistsException.class, _ -> {
+                                log.info("Trace '{}' already exists, storing its spans in project '{}'",
+                                        rootSpan.traceId(), projectName);
+                                return Mono.empty();
+                            });
                 })
                 .doOnNext(traceId -> log.info("TraceId '{}' created", traceId))
                 .then(Mono.defer(() -> {
