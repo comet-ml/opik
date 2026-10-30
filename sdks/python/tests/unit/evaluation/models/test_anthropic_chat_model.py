@@ -13,6 +13,7 @@ from opik.evaluation.models import models_factory
 from opik.evaluation.models import base_model
 from opik.evaluation.models.anthropic import anthropic_chat_model
 from opik.evaluation.models.anthropic import message_adapter, response_parser
+from opik.evaluation.suite_evaluators import llm_judge
 
 from ....testlib import patch_submodule
 
@@ -1043,6 +1044,38 @@ class TestFactoryRouting:
         from opik.evaluation.models.litellm.litellm_chat_model import LiteLLMChatModel
 
         assert isinstance(model, LiteLLMChatModel)
+
+
+class TestSupportedFeatures:
+    def test_supported_features__native_adapter__no_reasoning_effort(self, monkeypatch):
+        _install_anthropic_stub(monkeypatch)
+
+        model = anthropic_chat_model.AnthropicChatModel(
+            model_name="anthropic/claude-sonnet-5-5", track=False
+        )
+
+        assert model.supported_features == base_model.ModelFeatures(
+            reasoning_effort=False, response_format_with_tools=True
+        )
+
+    def test_llm_judge__native_claude_model__built_once_without_an_effort(
+        self, monkeypatch
+    ):
+        _install_anthropic_stub(monkeypatch)
+        built_with = []
+        create_model = models_factory._create_model
+
+        def spy_create_model(model_name, track, model_kwargs):
+            built_with.append(dict(model_kwargs))
+            return create_model(model_name, track, model_kwargs)
+
+        monkeypatch.setattr(models_factory, "_create_model", spy_create_model)
+
+        llm_judge.LLMJudge(
+            assertions=["ok"], model="anthropic/claude-sonnet-5-5", track=False
+        )
+
+        assert built_with == [{}]
 
 
 @pytest.mark.asyncio

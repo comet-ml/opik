@@ -72,6 +72,12 @@ class AnthropicChatModel(base_model.OpikBaseModel):
         self._client = client
         self._async_client = async_client
 
+    # Claude can reason, but the native adapter drops `reasoning_effort`
+    # (see `message_adapter._SUPPORTED_PARAMS`).
+    @property
+    def supported_features(self) -> base_model.ModelFeatures:
+        return base_model.ModelFeatures(reasoning_effort=False)
+
     def generate_string(
         self,
         input: str,
