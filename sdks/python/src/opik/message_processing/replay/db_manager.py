@@ -226,12 +226,13 @@ class DBManager:
             LOGGER.debug("Not initialized - register message ignored")
             return
 
+        # Serialised outside the lock, so consumer threads do not queue behind each other.
+        message_json = _preprocess_registered_message(message)
         with self.__lock__:
             if self.closed:
                 LOGGER.warning("Already closed - register message ignored")
                 return
 
-            message_json = _preprocess_registered_message(message)
             # insert into DB
             values = (
                 message.message_id,
