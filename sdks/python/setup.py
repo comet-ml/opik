@@ -37,13 +37,20 @@ setup(
     ).read(),
     long_description_content_type="text/markdown",
     install_requires=[
-        # Each library is followed by its cap: the latest allowed version older than
-        # 3 days, so a hijacked release has time to be caught and yanked before
-        # installs pick it up. scripts/update_python_sdk_dependency_caps.py writes
-        # the caps and a weekday job runs it through a PR; run it after changing a
-        # requirement instead of editing a cap. To ship an urgent fix sooner, raise
-        # the library's lower bound to the fixed release: with no version older
-        # than 3 days allowed, the cap is the oldest allowed one.
+        # Dependency caps, written by scripts/update_python_sdk_dependency_caps.py
+        # (a weekday job runs it and opens a PR):
+        # - Each library's requirements are followed by its cap: the latest allowed
+        #   version older than 3 days, so a hijacked release has time to be caught
+        #   and yanked before installs pick it up.
+        # - Don't edit caps by hand. After adding, removing or changing a
+        #   requirement, run from the repository root:
+        #     uv run --no-project --python 3.12 --with packaging \
+        #       python scripts/update_python_sdk_dependency_caps.py
+        # - To ship a release that is less than 3 days old (e.g. a security fix),
+        #   raise the library's lower bound to it (`>=1.2.4`) and run the script:
+        #   with no older version allowed, the cap becomes exactly that release.
+        # - To leave a library uncapped, so its newest release is always allowed,
+        #   add `# allow-latest: <why>` to its requirement line.
         "boto3-stubs[bedrock-runtime]>=1.34.110",
         "boto3-stubs<=1.43.119",  # the latest version older than 3 days, released 2026-10-26
         "click",

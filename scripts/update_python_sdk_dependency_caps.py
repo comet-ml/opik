@@ -9,7 +9,8 @@ release. Pre-releases and yanked releases never count. When no version that old 
 allowed version: raising a lower bound to a fresh fix ships exactly that fix.
 
 The script finds its caps by their comment, drops them all and writes a fresh one after each library, so adding or
-removing a library adds or removes its cap.
+removing a library adds or removes its cap. A library with an `# allow-latest: <why>` comment on one of its requirements
+gets no cap, so its newest release is always allowed.
 
 Usage:
   python scripts/update_python_sdk_dependency_caps.py
@@ -29,6 +30,7 @@ from packaging import requirements, utils, version
 
 SETUP_PY = Path(__file__).resolve().parent.parent / "sdks" / "python" / "setup.py"
 MIN_RELEASE_AGE_DAYS = 3
+ALLOW_LATEST = "# allow-latest"
 
 CAP_LINE = re.compile(
     r'^ *".*",  # (the latest version older than \d+ days'
@@ -92,6 +94,15 @@ def cap_line(requirement_texts: list[str], indent: str, cutoff: datetime.datetim
     return f"{indent}{json.dumps(cap_text)},  # {reason}, released {candidates[cap].date()}\n"
 
 
+def trailing_comma_line(lines: list[str], element: ast.expr) -> int:
+    line = element.end_lineno - 1
+    column = element.end_col_offset
+    while "," not in lines[line][column:]:
+        line += 1
+        column = 0
+    return line
+
+
 def main() -> None:
     cutoff = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=MIN_RELEASE_AGE_DAYS)
     lines = CAP_LINE.sub("", SETUP_PY.read_text()).splitlines(keepends=True)
@@ -110,14 +121,16 @@ def main() -> None:
 
     # From the last library up, so the line numbers of the ones above stay valid.
     for elements in sorted(elements_by_library.values(), key=lambda elements: elements[-1].end_lineno, reverse=True):
-        comma_line = elements[-1].end_lineno - 1
-        column = elements[-1].end_col_offset
-        while "," not in lines[comma_line][column:]:
-            comma_line += 1
-            column = 0
-        indent = re.match(r" *", lines[comma_line])[0]
+        comma_lines = [trailing_comma_line(lines, element) for element in elements]
+        if any(
+            ALLOW_LATEST in line
+            for element, comma_line in zip(elements, comma_lines)
+            for line in lines[element.lineno - 1 : comma_line + 1]
+        ):
+            continue
+        indent = re.match(r" *", lines[comma_lines[-1]])[0]
         requirement_texts = [ast.literal_eval(element) for element in elements]
-        lines.insert(comma_line + 1, cap_line(requirement_texts, indent, cutoff))
+        lines.insert(comma_lines[-1] + 1, cap_line(requirement_texts, indent, cutoff))
 
     SETUP_PY.write_text("".join(lines))
 
