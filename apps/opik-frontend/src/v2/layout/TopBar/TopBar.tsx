@@ -3,6 +3,7 @@ import Breadcrumbs from "@/v2/layout/Breadcrumbs/Breadcrumbs";
 import usePluginsStore from "@/store/PluginsStore";
 import AppDebugInfo from "@/v2/layout/AppDebugInfo/AppDebugInfo";
 import SettingsMenu from "../SettingsMenu/SettingsMenu";
+import WhatsNewButton from "@/shared/WhatsNew/WhatsNewButton";
 import { Button } from "@/ui/button";
 import OllieOwl from "@/icons/ollie-owl.svg?react";
 
@@ -27,6 +28,7 @@ const TopBar: React.FC<TopBarProps> = ({
       <div className="flex items-center gap-2">
         <AppDebugInfo />
         {UpgradeButton && <UpgradeButton />}
+        <WhatsNewButton />
         {UserMenu ? <UserMenu /> : <SettingsMenu />}
         {showOllieToggle && (
           <Button

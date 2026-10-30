@@ -289,17 +289,34 @@ jobs:
           echo "$new_version" > version.txt
           echo "new_version=${new_version}" >> "$GITHUB_OUTPUT"
 
+      - name: Refresh in-product release notes manifest
+        shell: bash
+        working-directory: apps/opik-frontend
+        env:
+          # Read-only: `gh release list` on this repo.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -x
+          # Runs after create-github-release, so the release just published is in the index:
+          # the entries it shipped move from "pending on version.txt" to attributed by publish
+          # date. version.txt was bumped above, so anything written since is pending on the
+          # next version, which is what the next tag's frontend image will show as its own.
+          # Both scripts are dependency-free, so no npm install is needed.
+          npm run release-notes:index
+          npm run release-notes
+
       - name: Commit all version changes
         run: |
           git config --local user.email "github-actions@comet.com"
           git config --local user.name "github-actions"
-          
+
           # Add all modified version files
           git add sdks/typescript/package.json sdks/typescript/package-lock.json
           git add sdks/typescript/src/opik/integrations/*/package.json sdks/typescript/src/opik/integrations/*/package-lock.json
           git add deployment/helm_chart/opik/Chart.yaml
           git add deployment/helm_chart/opik/README.md
           git add version.txt
+          git add apps/opik-frontend/public/release-notes.json apps/opik-frontend/scripts/release-notes/release-index.json
           
           # Check if there are any changes to commit
           if git diff --staged --quiet; then

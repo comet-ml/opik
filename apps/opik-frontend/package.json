@@ -22,6 +22,9 @@
     "lint": "eslint src --max-warnings=0 && stylelint src/**/*.{css,scss,sass}",
     "lint:fix": "eslint src --fix --max-warnings=0 && stylelint src/**/*.{css,scss,sass} --fix",
     "typecheck": "tsc --project tsconfig.json --noEmit",
+    "release-notes": "node scripts/release-notes/generate-manifest.mjs",
+    "release-notes:check": "node scripts/release-notes/generate-manifest.mjs --check",
+    "release-notes:index": "node scripts/release-notes/fetch-release-index.mjs",
     "deps:validate": "depcruise src --config --ignore-known .dependency-cruiser-known-violations.json",
     "deps:baseline": "depcruise src --config --output-type baseline > .dependency-cruiser-known-violations.json"
   },
