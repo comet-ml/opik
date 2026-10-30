@@ -11,6 +11,7 @@ import {
 } from "@/ui/accordion";
 import { ToggleGroup, ToggleGroupItem } from "@/ui/toggle-group";
 import { Label } from "@/ui/label";
+import { Description } from "@/ui/description";
 
 import SelectBox from "@/shared/SelectBox/SelectBox";
 import TracesOrSpansPathsAutocomplete from "@/v2/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
@@ -23,9 +24,12 @@ import { BreakdownConfig } from "@/types/dashboard";
 import { BREAKDOWN_FIELD } from "@/types/dashboard";
 import {
   BREAKDOWN_FIELD_LABELS,
+  TAG_COST_BREAKDOWN_DESCRIPTION,
   getCompatibleBreakdownFields,
 } from "./breakdown";
 import { ProjectMetricsWidgetFormData } from "./schema";
+import { METRIC_NAME_TYPE } from "@/api/projects/useProjectMetric";
+import { isCostMetricType } from "./helpers";
 
 interface ProjectMetricsBreakdownSectionProps {
   control: Control<ProjectMetricsWidgetFormData>;
@@ -278,6 +282,11 @@ const ProjectMetricsBreakdownSection: React.FC<
               </ToggleGroup>
             </div>
           </div>
+          {isCostMetricType(metricType as METRIC_NAME_TYPE) &&
+            compatibleBreakdownFields.includes(BREAKDOWN_FIELD.TAGS) &&
+            breakdown.field === BREAKDOWN_FIELD.TAGS && (
+              <Description>{TAG_COST_BREAKDOWN_DESCRIPTION}</Description>
+            )}
         </AccordionContent>
       </AccordionItem>
     </Accordion>

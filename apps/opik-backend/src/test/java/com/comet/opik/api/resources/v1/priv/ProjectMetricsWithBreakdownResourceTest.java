@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.DataPoint;
 import com.comet.opik.api.ErrorInfo;
 import com.comet.opik.api.GuardrailType;
 import com.comet.opik.api.ScoreSource;
@@ -10,6 +11,7 @@ import com.comet.opik.api.metrics.BreakdownConfig;
 import com.comet.opik.api.metrics.BreakdownField;
 import com.comet.opik.api.metrics.MetricType;
 import com.comet.opik.api.metrics.ProjectMetricRequest;
+import com.comet.opik.api.metrics.ProjectMetricResponse;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -49,6 +51,8 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
@@ -66,11 +70,13 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.ObjIntConsumer;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -114,8 +120,16 @@ class ProjectMetricsWithBreakdownResourceTest {
         MigrationUtils.runMysqlDbMigration(mysql);
         MigrationUtils.runClickhouseDbMigration(clickHouseContainer);
 
-        app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
-                mysql.getJdbcUrl(), databaseAnalyticsFactory, wireMock.runtimeInfo(), redisContainer.getRedisURI());
+        var contextConfig = TestDropwizardAppExtensionUtils.AppContextConfig.builder()
+                .jdbcUrl(mysql.getJdbcUrl())
+                .databaseAnalyticsFactory(databaseAnalyticsFactory)
+                .runtimeInfo(wireMock.runtimeInfo())
+                .redisUrl(redisContainer.getRedisURI())
+                // Time-bucketed metrics tests intentionally ingest historical span and trace IDs.
+                .customConfigs(List.of(
+                        new TestDropwizardAppExtensionUtils.CustomConfig("uuidValidation.enabled", "false")))
+                .build();
+        app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(contextConfig);
     }
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
@@ -202,17 +216,12 @@ class ProjectMetricsWithBreakdownResourceTest {
     }
 
     /**
-     * Valid breakdown fields for Span metrics: TAGS, METADATA, NAME, ERROR_INFO, MODEL, PROVIDER, TYPE
+     * Valid breakdown fields for Span metrics, including ERROR_TYPE.
      */
     static Stream<Arguments> spanValidBreakdownFields() {
-        return Stream.of(
-                Arguments.of(BreakdownField.TAGS),
-                Arguments.of(BreakdownField.METADATA),
-                Arguments.of(BreakdownField.NAME),
-                Arguments.of(BreakdownField.ERROR_INFO),
-                Arguments.of(BreakdownField.MODEL),
-                Arguments.of(BreakdownField.PROVIDER),
-                Arguments.of(BreakdownField.TYPE));
+        return Stream.of(BreakdownField.values())
+                .filter(field -> field != BreakdownField.NONE && field.isCompatibleWith(MetricType.SPAN_COUNT))
+                .map(Arguments::of);
     }
 
     /**
@@ -990,6 +999,278 @@ class ProjectMetricsWithBreakdownResourceTest {
     // ==================== SPAN METRICS ====================
 
     @Nested
+    @DisplayName("Span Cost with Breakdown")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class SpanCostWithBreakdownTest {
+
+        Stream<BreakdownField> plainFields() {
+            return spanValidBreakdownFields().map(args -> (BreakdownField) args.get()[0])
+                    .filter(field -> field != BreakdownField.METADATA && field != BreakdownField.ERROR_INFO
+                            && field != BreakdownField.ERROR_TYPE && field != BreakdownField.TYPE);
+        }
+
+        Stream<Arguments> bucketedFields() {
+            return plainFields().flatMap(field -> Stream.of(TimeInterval.HOURLY, TimeInterval.DAILY)
+                    .map(interval -> Arguments.of(field, interval)));
+        }
+
+        Stream<Arguments> namedGroups() {
+            return Stream.of(Arguments.of(BreakdownField.ERROR_INFO, "Has Error", "No Error"),
+                    Arguments.of(BreakdownField.ERROR_TYPE, "ValueError", "No Error"),
+                    Arguments.of(BreakdownField.TYPE, "llm", "tool"));
+        }
+
+        Stream<Arguments> bucketedNamedGroups() {
+            return namedGroups().flatMap(args -> Stream.of(TimeInterval.HOURLY, TimeInterval.DAILY)
+                    .map(interval -> Arguments.of(args.get()[0], args.get()[1], args.get()[2], interval)));
+        }
+
+        @ParameterizedTest
+        @MethodSource("plainFields")
+        void totalCostByField(BreakdownField field) {
+            verifyTotalCost(BreakdownConfig.builder().field(field).build(), "group-a", "group-b");
+        }
+
+        @ParameterizedTest
+        @MethodSource("bucketedFields")
+        void bucketedCostByField(BreakdownField field, TimeInterval interval) {
+            verifyBucketedCost(BreakdownConfig.builder().field(field).build(), "group-a", "group-b", interval);
+        }
+
+        @ParameterizedTest
+        @MethodSource("namedGroups")
+        void totalCostByErrorOrSpanType(BreakdownField field, String groupA, String groupB) {
+            verifyTotalCost(BreakdownConfig.builder().field(field).build(), groupA, groupB);
+        }
+
+        @ParameterizedTest
+        @MethodSource("bucketedNamedGroups")
+        void bucketedCostByErrorOrSpanType(BreakdownField field, String groupA, String groupB, TimeInterval interval) {
+            verifyBucketedCost(BreakdownConfig.builder().field(field).build(), groupA, groupB, interval);
+        }
+
+        @Test
+        void totalCostByMetadataKey() {
+            verifyTotalCost(BreakdownConfig.builder().field(BreakdownField.METADATA).metadataKey("env").build(),
+                    "group-a", "group-b");
+        }
+
+        @ParameterizedTest
+        @EnumSource(value = TimeInterval.class, names = {"HOURLY", "DAILY"})
+        void bucketedCostByMetadataKey(TimeInterval interval) {
+            verifyBucketedCost(BreakdownConfig.builder().field(BreakdownField.METADATA).metadataKey("env").build(),
+                    "group-a", "group-b", interval);
+        }
+
+        private void verifyTotalCost(BreakdownConfig breakdown, String groupA, String groupB) {
+            mockTargetWorkspace();
+            Instant marker = getIntervalStart(TimeInterval.DAILY);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+            seedCostGroups(projectName, marker, TimeInterval.DAILY, breakdown.field());
+            Instant start = subtract(marker, 3, TimeInterval.DAILY);
+            assertCostResponse(projectId, TimeInterval.TOTAL, start, marker, breakdown,
+                    List.of(costResult(groupB, costPoint(start, "2.6")), costResult(groupA, costPoint(start, "1.0"))));
+        }
+
+        private void verifyBucketedCost(BreakdownConfig breakdown, String groupA, String groupB,
+                TimeInterval interval) {
+            mockTargetWorkspace();
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+            seedCostGroups(projectName, marker, interval, breakdown.field());
+            Instant bucket1 = subtract(marker, 2, interval);
+            Instant bucket2 = subtract(marker, 1, interval);
+            assertCostResponse(projectId, interval, subtract(marker, 3, interval), marker, breakdown,
+                    List.of(costResult(groupB, costPoint(bucket1, "1.1"), costPoint(bucket2, "1.5")),
+                            costResult(groupA, costPoint(bucket1, "0.3"), costPoint(bucket2, "0.7"))));
+        }
+
+        private void seedCostGroups(String projectName, Instant marker, TimeInterval interval, BreakdownField field) {
+            createSpansWithCost(projectName, subtract(marker, 2, interval), field, "group-a", "0.1", "0.2");
+            createSpansWithCost(projectName, subtract(marker, 1, interval), field, "group-a", "0.3", "0.4");
+            createSpansWithCost(projectName, subtract(marker, 2, interval), field, "group-b", "0.5", "0.6");
+            createSpansWithCost(projectName, subtract(marker, 1, interval), field, "group-b", "0.7", "0.8");
+            createSpansWithCost(projectName, subtract(marker, 4, interval), field, "group-a", "99");
+        }
+
+        @ParameterizedTest
+        @EnumSource(value = TimeInterval.class, names = {"HOURLY", "DAILY"})
+        void multiTagCostsAreAttributedInFullToEachTag(TimeInterval interval) {
+            mockTargetWorkspace();
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+            seedTaggedCosts(projectName, marker);
+            assertCostResponse(projectId, interval, marker, marker.plusSeconds(60),
+                    BreakdownConfig.builder().field(BreakdownField.TAGS).build(),
+                    List.of(costResult("prod", costPoint(marker, "1.5")),
+                            costResult("agent", costPoint(marker, "1.0")),
+                            costResult("Unknown", costPoint(marker, "0.25"))));
+        }
+
+        @Test
+        void totalMultiTagCostsAreAttributedInFullToEachTag() {
+            mockTargetWorkspace();
+            Instant marker = getIntervalStart(TimeInterval.DAILY);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+            seedTaggedCosts(projectName, marker);
+            assertCostResponse(projectId, TimeInterval.TOTAL, marker, marker.plusSeconds(60),
+                    BreakdownConfig.builder().field(BreakdownField.TAGS).build(),
+                    List.of(costResult("prod", costPoint(marker, "1.5")),
+                            costResult("agent", costPoint(marker, "1.0")),
+                            costResult("Unknown", costPoint(marker, "0.25"))));
+        }
+
+        private void seedTaggedCosts(String projectName, Instant marker) {
+            createSpansForBreakdown(projectName, marker, BreakdownField.TAGS, "prod", 1,
+                    (builder, i) -> builder.tags(Set.of("prod", "agent")).totalEstimatedCost(new BigDecimal("1.0")));
+            createSpansWithCost(projectName, marker, BreakdownField.TAGS, "prod", "0.5");
+            createSpansForBreakdown(projectName, marker, BreakdownField.TAGS, "unused", 1,
+                    (builder, i) -> builder.tags(Set.of()).totalEstimatedCost(new BigDecimal("0.25")));
+        }
+
+        Stream<Arguments> unknownFields() {
+            return Stream.of(BreakdownField.PROVIDER, BreakdownField.MODEL)
+                    .flatMap(field -> Stream.of("", null).map(value -> Arguments.of(field, value)));
+        }
+
+        Stream<Arguments> bucketedUnknownFields() {
+            return unknownFields().flatMap(args -> Stream.of(TimeInterval.HOURLY, TimeInterval.DAILY)
+                    .map(interval -> Arguments.of(args.get()[0], args.get()[1], interval)));
+        }
+
+        @ParameterizedTest
+        @MethodSource("unknownFields")
+        void totalCostWithUnknownProviderOrModel(BreakdownField field, String value) {
+            mockTargetWorkspace();
+            Instant marker = getIntervalStart(TimeInterval.DAILY);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+            createSpansWithCost(projectName, marker, field, value, "0.1", "0.2");
+            assertCostResponse(projectId, TimeInterval.TOTAL, marker, marker.plusSeconds(60),
+                    BreakdownConfig.builder().field(field).build(),
+                    List.of(costResult("Unknown", costPoint(marker, "0.3"))));
+        }
+
+        @ParameterizedTest
+        @MethodSource("bucketedUnknownFields")
+        void bucketedCostWithUnknownProviderOrModel(BreakdownField field, String value, TimeInterval interval) {
+            mockTargetWorkspace();
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+            createSpansWithCost(projectName, marker, field, value, "0.1", "0.2");
+            assertCostResponse(projectId, interval, marker, marker.plusSeconds(60),
+                    BreakdownConfig.builder().field(field).build(),
+                    List.of(costResult("Unknown", costPoint(marker, "0.3"))));
+        }
+
+        @ParameterizedTest
+        @EnumSource(value = TimeInterval.class, names = {"HOURLY", "DAILY"})
+        void overflowCostsAreSummedOncePerBucket(TimeInterval interval) {
+            mockTargetWorkspace();
+            Instant marker = getIntervalStart(interval);
+            Instant bucket1 = subtract(marker, 2, interval);
+            Instant bucket2 = subtract(marker, 1, interval);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+            seedOverflowCosts(projectName, bucket1, bucket2);
+            var results = new ArrayList<ProjectMetricResponse.Results<BigDecimal>>();
+            for (int i = 12; i >= 3; i--) {
+                results.add(costResult("group-" + i, costPoint(bucket1, String.valueOf(i)),
+                        costPoint(bucket2, String.valueOf(i))));
+            }
+            results.add(costResult("__others__", costPoint(bucket1, "0.3"), costPoint(bucket2, "0.7")));
+            assertCostResponse(projectId, interval, subtract(marker, 3, interval), marker,
+                    BreakdownConfig.builder().field(BreakdownField.NAME).build(), results);
+        }
+
+        @Test
+        void overflowTotalCostsAreSummedIntoOnePoint() {
+            mockTargetWorkspace();
+            Instant marker = getIntervalStart(TimeInterval.DAILY);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+            seedOverflowCosts(projectName, marker.minus(2, ChronoUnit.DAYS), marker.minus(1, ChronoUnit.DAYS));
+            Instant start = marker.minus(3, ChronoUnit.DAYS);
+            var results = new ArrayList<ProjectMetricResponse.Results<BigDecimal>>();
+            for (int i = 12; i >= 3; i--) {
+                results.add(costResult("group-" + i, costPoint(start, String.valueOf(2 * i))));
+            }
+            results.add(costResult("__others__", costPoint(start, "1.0")));
+            assertCostResponse(projectId, TimeInterval.TOTAL, start, marker,
+                    BreakdownConfig.builder().field(BreakdownField.NAME).build(), results);
+        }
+
+        private void seedOverflowCosts(String projectName, Instant bucket1, Instant bucket2) {
+            for (int i = 3; i <= 12; i++) {
+                createSpansWithCost(projectName, bucket1, BreakdownField.NAME, "group-" + i, String.valueOf(i));
+                createSpansWithCost(projectName, bucket2, BreakdownField.NAME, "group-" + i, String.valueOf(i));
+            }
+            createSpansWithCost(projectName, bucket1, BreakdownField.NAME, "group-1", "0.1");
+            createSpansWithCost(projectName, bucket2, BreakdownField.NAME, "group-1", "0.3");
+            createSpansWithCost(projectName, bucket1, BreakdownField.NAME, "group-2", "0.2");
+            createSpansWithCost(projectName, bucket2, BreakdownField.NAME, "group-2", "0.4");
+        }
+
+        private void assertCostResponse(UUID projectId, TimeInterval interval, Instant start, Instant end,
+                BreakdownConfig breakdown, List<ProjectMetricResponse.Results<BigDecimal>> results) {
+            var request = ProjectMetricRequest.builder().metricType(MetricType.SPAN_COST).interval(interval)
+                    .intervalStart(start).intervalEnd(end).breakdown(breakdown).build();
+            var expected = ProjectMetricResponse.<BigDecimal>builder().projectId(projectId)
+                    .metricType(MetricType.SPAN_COST).interval(interval).results(results).build();
+            var response = projectMetricsResourceClient.getProjectMetrics(projectId, request,
+                    BigDecimal.class, API_KEY, WORKSPACE_NAME);
+            assertThat(response).usingRecursiveComparison()
+                    .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
+                    .isEqualTo(expected);
+        }
+
+        private DataPoint<BigDecimal> costPoint(Instant time, String cost) {
+            return DataPoint.<BigDecimal>builder().time(time).value(new BigDecimal(cost)).build();
+        }
+
+        @SafeVarargs
+        private final ProjectMetricResponse.Results<BigDecimal> costResult(String name, DataPoint<BigDecimal>... data) {
+            return ProjectMetricResponse.Results.<BigDecimal>builder().name(name).data(List.of(data)).build();
+        }
+
+        @ParameterizedTest
+        @CsvSource({"METADATA, metadata_key is required", "GUARDRAIL_NAME, not compatible with metric type"})
+        void invalidParameters(BreakdownField field, String expectedError) {
+            mockTargetWorkspace();
+            var projectId = projectResourceClient.createProject(RandomStringUtils.secure().nextAlphabetic(10),
+                    API_KEY, WORKSPACE_NAME);
+            var request = ProjectMetricRequest.builder()
+                    .metricType(MetricType.SPAN_COST)
+                    .interval(TimeInterval.DAILY)
+                    .intervalStart(Instant.now().minus(1, ChronoUnit.DAYS))
+                    .intervalEnd(Instant.now())
+                    .breakdown(BreakdownConfig.builder().field(field).build())
+                    .build();
+
+            try (var response = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, WORKSPACE_NAME)
+                    .post(Entity.json(request))) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_CONTENT);
+                assertThat(response.readEntity(ValidationErrorMessage.class).getErrors())
+                        .anySatisfy(error -> assertThat(error).contains(expectedError));
+            }
+        }
+
+        private void createSpansWithCost(String projectName, Instant marker, BreakdownField field,
+                String groupValue, String... costs) {
+            createSpansForBreakdown(projectName, marker, field, groupValue, costs.length,
+                    (builder, i) -> builder.totalEstimatedCost(new BigDecimal(costs[i])));
+        }
+    }
+
+    @Nested
     @DisplayName("Span Count with Breakdown")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class SpanCountWithBreakdownTest {
@@ -1601,6 +1882,12 @@ class ProjectMetricsWithBreakdownResourceTest {
 
     private void createSpansForBreakdown(String projectName, Instant marker, BreakdownField breakdownField,
             String groupValue, int count) {
+        createSpansForBreakdown(projectName, marker, breakdownField, groupValue, count, (builder, i) -> {
+        });
+    }
+
+    private void createSpansForBreakdown(String projectName, Instant marker, BreakdownField breakdownField,
+            String groupValue, int count, ObjIntConsumer<Span.SpanBuilder> customizer) {
         List<Span> spans = IntStream.range(0, count)
                 .mapToObj(i -> {
                     Instant spanStartTime = marker.plus(i, ChronoUnit.SECONDS);
@@ -1610,6 +1897,7 @@ class ProjectMetricsWithBreakdownResourceTest {
                             .startTime(spanStartTime);
 
                     applyBreakdownFieldToSpan(builder, breakdownField, groupValue);
+                    customizer.accept(builder, i);
                     return builder.build();
                 })
                 .toList();
@@ -1689,6 +1977,9 @@ class ProjectMetricsWithBreakdownResourceTest {
                     builder.errorInfo(null);
                 }
             }
+            case ERROR_TYPE -> builder.errorInfo("group-a".equals(groupValue)
+                    ? ErrorInfo.builder().exceptionType("ValueError").message("Some error").build()
+                    : null);
             case MODEL -> builder.model(groupValue);
             case PROVIDER -> builder.provider(groupValue);
             case TYPE -> builder.type("group-a".equals(groupValue) ? SpanType.llm : SpanType.tool);
