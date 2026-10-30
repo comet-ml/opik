@@ -3,6 +3,7 @@ import concurrent.futures
 import json
 import logging
 import os
+import re
 import time
 from queue import Queue, Empty
 from threading import Lock, Event
@@ -28,6 +29,37 @@ from opik_backend.executor import (
 from opik_backend.score_validation import rejection_reason
 
 logger = logging.getLogger(__name__)
+
+HARDENING_ENV_VAR = "PYTHON_CODE_EXECUTOR_DOCKER_HARDENING"
+PIDS_LIMIT_ENV_VAR = "PYTHON_CODE_EXECUTOR_DOCKER_PIDS_LIMIT"
+TMPFS_SIZE_ENV_VAR = "PYTHON_CODE_EXECUTOR_DOCKER_TMPFS_SIZE"
+
+
+def sandbox_hardening_options() -> dict:
+    """Extra run options for executor containers: no capabilities, read-only root with a small /tmp, capped processes.
+
+    Opt-in, so metrics that write outside /tmp or start many processes keep working unless an operator turns it on.
+    The same setting hardens the in-container Docker daemon in entrypoint.sh. Any value other than true/false (any case) or empty raises, so a typo fails startup instead of leaving
+    containers unhardened.
+    """
+    value = os.getenv(HARDENING_ENV_VAR, "").lower()
+    if value in ("", "false"):
+        return {}
+    if value != "true":
+        raise ValueError(f"{HARDENING_ENV_VAR} must be true or false, not {value[:32]!r}")
+    pids_limit = os.getenv(PIDS_LIMIT_ENV_VAR) or "64"
+    if not pids_limit.isdecimal() or int(pids_limit) == 0:
+        raise ValueError(f"{PIDS_LIMIT_ENV_VAR} must be a positive integer, not {pids_limit[:32]!r}")
+    tmpfs_size = os.getenv(TMPFS_SIZE_ENV_VAR) or "16m"
+    if not re.fullmatch(r"[1-9][0-9]*[kmg]?", tmpfs_size):
+        raise ValueError(f"{TMPFS_SIZE_ENV_VAR} must be a size such as 16m, not {tmpfs_size[:32]!r}")
+    return {
+        "cap_drop": ["ALL"],
+        "read_only": True,
+        "tmpfs": {"/tmp": f"rw,noexec,nosuid,size={tmpfs_size}"},
+        "pids_limit": int(pids_limit),
+    }
+
 
 # Create a meter for Docker executor metrics
 meter = metrics.get_meter("docker_executor")
@@ -112,6 +144,7 @@ class DockerExecutor(CodeExecutorBase):
         self.cpu_shares = int(os.getenv("PYTHON_CODE_EXECUTOR_CPU_SHARES", str(DEFAULT_CPU_SHARES)))
         self.mem_limit = os.getenv("PYTHON_CODE_EXECUTOR_MEM_LIMIT", DEFAULT_MEM_LIMIT)
         self.nano_cpus = self._parse_cpu_limit()
+        self.hardening_options = sandbox_hardening_options()
         self.metrics_interval = self._parse_metrics_interval()
 
         self.client = docker.from_env()
@@ -132,7 +165,8 @@ class DockerExecutor(CodeExecutorBase):
         # Log container configuration for debugging
         logger.debug(f"Docker executor configuration: cpu_shares={self.cpu_shares}, mem_limit={self.mem_limit}, "
                     f"nano_cpus={self.nano_cpus}, exec_timeout={self.exec_timeout}s, "
-                    f"max_parallel={self.max_parallel}, network_disabled={self.network_disabled}")
+                    f"max_parallel={self.max_parallel}, network_disabled={self.network_disabled}, "
+                    f"sandbox_hardening={bool(self.hardening_options)}")
 
         # Pre-warm the container pool
         self._pre_warm_container_pool()
@@ -316,6 +350,7 @@ class DockerExecutor(CodeExecutorBase):
                 network_disabled=self.network_disabled,
                 security_opt=["no-new-privileges"],
                 labels=self.container_labels,
+                **self.hardening_options,
             )
             if self.nano_cpus is not None:
                 run_kwargs["nano_cpus"] = self.nano_cpus

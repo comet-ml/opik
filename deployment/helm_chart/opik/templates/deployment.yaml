@@ -36,6 +36,12 @@ spec:
         {{- end }}
     spec:
       serviceAccountName: {{ include "service.serviceAccountName" ( merge . (dict "serviceName" $key ) ) }}
+      {{- if hasKey $value "automountServiceAccountToken" }}
+      {{- if not (kindIs "bool" $value.automountServiceAccountToken) }}
+      {{- fail (printf "component.%s.automountServiceAccountToken must be a boolean" $key) }}
+      {{- end }}
+      automountServiceAccountToken: {{ $value.automountServiceAccountToken }}
+      {{- end }}
       {{- with $.Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}

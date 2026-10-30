@@ -3,6 +3,31 @@
 set -e
 
 if [ "$PYTHON_CODE_EXECUTOR_STRATEGY" = "docker" ]; then
+  # Opt-in daemon hardening, merged into any daemon.json the operator mounted. Fails startup on a bad value.
+  python3 - <<'EOF'
+import json, os, sys
+
+name = "PYTHON_CODE_EXECUTOR_DOCKER_HARDENING"
+value = os.getenv(name, "").lower()
+if value in ("", "false"):
+    sys.exit(0)
+if value != "true":
+    sys.exit(f"{name} must be true or false, not {value[:32]!r}")
+
+path = "/etc/docker/daemon.json"
+config = json.load(open(path)) if os.path.exists(path) else {}
+# Root in an executor container maps to an unprivileged host uid range.
+config["userns-remap"] = "default"
+# Executor containers without network access need no bridge or firewall rules in the daemon.
+disable_bridge = os.getenv("PYTHON_CODE_EXECUTOR_ALLOW_NETWORK", "false").lower() != "true"
+if disable_bridge:
+    config.update({"bridge": "none", "iptables": False, "ip6tables": False})
+os.makedirs(os.path.dirname(path), exist_ok=True)
+with open(path, "w") as f:
+    json.dump(config, f)
+print(f"Docker daemon hardening: userns_remap=True, disable_bridge={disable_bridge}")
+EOF
+
   echo "Starting the Docker daemon as background process"
   dockerd-entrypoint.sh &
 
