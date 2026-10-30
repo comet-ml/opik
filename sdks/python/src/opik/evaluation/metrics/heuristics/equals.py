@@ -1,7 +1,51 @@
-from typing import Any, Optional
+from typing import Any, Callable, Optional, Set
 
 from .. import base_metric, score_result
 from opik.exceptions import MetricComputationError
+
+_CONTAINER_TYPES = (dict, list, tuple, set, frozenset)
+
+
+def _is_container(value: Any) -> bool:
+    # A namedtuple prints with its field names, so it keeps being compared by str().
+    return isinstance(value, _CONTAINER_TYPES) and not hasattr(value, "_fields")
+
+
+def _canonical_text(
+    value: Any, normalize: Callable[[str], str], active_ids: Set[int]
+) -> str:
+    """Render a container the way str() does, with dict keys and set items sorted.
+
+    Leaves are rendered with repr(), as str() does inside a container, so ``1``,
+    ``1.0``, ``"1"`` and ``True`` stay distinct. Sorting the rendered entries makes
+    the result independent of dict insertion order and set iteration order, while
+    list and tuple order still counts.
+    """
+    if not _is_container(value):
+        return normalize(repr(value))
+    if id(value) in active_ids:
+        return "..."
+    active_ids.add(id(value))
+    try:
+        if isinstance(value, dict):
+            entries = sorted(
+                f"{_canonical_text(key, normalize, active_ids)}: "
+                f"{_canonical_text(item, normalize, active_ids)}"
+                for key, item in value.items()
+            )
+            return "{" + ", ".join(entries) + "}"
+        rendered = [_canonical_text(item, normalize, active_ids) for item in value]
+        if isinstance(value, list):
+            return "[" + ", ".join(rendered) + "]"
+        if isinstance(value, tuple):
+            return "(" + ", ".join(rendered) + ("," if len(rendered) == 1 else "") + ")"
+        return type(value).__name__ + "{" + ", ".join(sorted(rendered)) + "}"
+    finally:
+        active_ids.discard(id(value))
+
+
+def _keep_case(text: str) -> str:
+    return text
 
 
 class Equals(base_metric.BaseMetric):
@@ -10,6 +54,11 @@ class Equals(base_metric.BaseMetric):
 
     This metric returns a score of 1.0 if the strings match exactly, and 0.0 otherwise.
     The comparison can be made case-sensitive or case-insensitive.
+
+    When both values are dicts, lists, tuples or sets, they are compared by content:
+    dict key order and set order do not matter, list and tuple order does, and
+    strings inside them follow ``case_sensitive``. Other values are compared by
+    their ``str()`` form.
 
     Args:
         case_sensitive: Whether the comparison should be case-sensitive. Defaults to False.
@@ -63,12 +112,19 @@ class Equals(base_metric.BaseMetric):
                 f"got output={output!r}, reference={reference!r}"
             )
 
-        # Convert to string to handle numeric and other types
-        output_str = str(output)
-        reference_str = str(reference)
+        if _is_container(output) and _is_container(reference):
+            normalize = _keep_case if self._case_sensitive else str.lower
+            value_left = _canonical_text(output, normalize, set())
+            value_right = _canonical_text(reference, normalize, set())
+        else:
+            # Convert to string to handle numeric and other types
+            output_str = str(output)
+            reference_str = str(reference)
 
-        value_left = output_str if self._case_sensitive else output_str.lower()
-        value_right = reference_str if self._case_sensitive else reference_str.lower()
+            value_left = output_str if self._case_sensitive else output_str.lower()
+            value_right = (
+                reference_str if self._case_sensitive else reference_str.lower()
+            )
 
         if value_left == value_right:
             return score_result.ScoreResult(value=1.0, name=self.name)
