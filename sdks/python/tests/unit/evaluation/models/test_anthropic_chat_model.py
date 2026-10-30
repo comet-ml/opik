@@ -1116,6 +1116,7 @@ class TestReasoningEffort:
 
         call_kwargs = mock_client.messages.create.call_args.kwargs
         assert "reasoning_effort" not in call_kwargs
+        assert ("output_config" in call_kwargs) == (expected_output_config is not None)
         assert call_kwargs.get("output_config") == expected_output_config
 
     def test_reasoning_effort__per_call_value__overrides_the_constructor(
