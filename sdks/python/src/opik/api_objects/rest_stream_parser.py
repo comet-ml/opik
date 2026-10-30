@@ -34,49 +34,37 @@ _SIZE_CORRELATED_ERRORS: Tuple[Type[Exception], ...] = (
 T = TypeVar("T")
 
 
-def _default_cursor_extractor(item: T) -> Optional[str]:
-    # Most endpoints paginate by the item's `id` field. Endpoints whose cursor
-    # is a different column (e.g. the trace-threads endpoint paginates by
-    # `thread_model_id`) pass their own extractor instead.
-    return item.id  # type: ignore
-
-
 def read_and_parse_full_stream(
     read_source: Callable[[int, Optional[str]], Iterable[bytes]],
     parsed_item_class: Type[T],
     max_results: Optional[int],
     max_endpoint_batch_size: int = MAX_ENDPOINT_BATCH_SIZE,
-    cursor_extractor: Optional[Callable[[T], Optional[str]]] = None,
+    cursor_field: str = "id",
     strict: bool = False,
-    raw_cursor_extractor: Optional[Callable[[dict], Optional[str]]] = None,
 ) -> List[T]:
     """
     Args:
+        cursor_field: The record field the backend pages by. Most endpoints
+            page by ``id``; the trace-threads endpoint pages by
+            ``thread_model_id``. The cursor is that field's value on the last
+            line the backend sent, whether or not the record parsed, so a page
+            ending in unreadable records is never served twice.
         strict: When True, a page that drops any record raises instead of
             returning a short result. Callers that turn a short read into
             deletions (the migrate paths) must fail loudly rather than replay
             missing records as deletions; search paths, where the caller can see
             the warning, keep the default.
-        raw_cursor_extractor: Maps the last decoded record of a page into the
-            cursor domain, for pages with no parsed items. A page whose records
-            all fail validation still has a backend position, but it only
-            exists in the raw records: the parsed-item extractor cannot see it.
-            Without this, such a page ends the read even when more pages
-            follow. It must map into the same domain as ``cursor_extractor``;
-            falling back to the raw record ``id`` would page by the wrong key.
     """
     result: List[T] = []
-    extract_cursor = (
-        cursor_extractor if cursor_extractor is not None else _default_cursor_extractor
-    )
     # Per-page page size, adaptively halved on size-correlated failures and
     # held at the shrunk value for the rest of the read (a backend that
     # couldn't serve N items is unlikely to serve N again later).
     batch_size = max_endpoint_batch_size
     dropped_records_total = 0
-    # The backend pages with `id < :last_received_id`, so the cursor has to be
-    # the last id the backend *sent*, not the last one that parsed: a page that
-    # ends with unreadable records would otherwise be served again.
+    # The backend pages by the cursor field, so the cursor has to be that
+    # field's value on the last line the backend *sent*, not the last record
+    # that parsed: a page ending in unreadable records would otherwise be
+    # served again.
     cursor: Optional[str] = None
     while True:
         if max_results is None:
@@ -92,7 +80,6 @@ def read_and_parse_full_stream(
         last_retrieved_id = cursor
         dropped_records: Dict[str, int] = {"count": 0}
         page_last_id: Dict[str, Optional[str]] = {"id": None}
-        page_raw: Dict[str, Optional[dict]] = {"raw": None}
         try:
             results_stream = read_source(current_batch_size, last_retrieved_id)
             parsed_items = read_and_parse_stream(
@@ -100,7 +87,7 @@ def read_and_parse_full_stream(
                 item_class=parsed_item_class,
                 dropped_records_out=dropped_records,
                 last_id_out=page_last_id,
-                last_raw_out=page_raw,
+                cursor_field=cursor_field,
             )
         except _SIZE_CORRELATED_ERRORS as exc:
             if batch_size <= MIN_ENDPOINT_BATCH_SIZE:
@@ -119,37 +106,17 @@ def read_and_parse_full_stream(
         dropped_records_total += dropped_records["count"]
         cursor_before_page = cursor
         if page_last_id["id"] is not None:
-            if cursor_extractor is not None:
-                if parsed_items:
-                    cursor = extract_cursor(result[-1])
-                else:
-                    # No parsed item on this page: result[-1] still belongs to
-                    # the previous page, so deriving the cursor from it would
-                    # falsely report a repeat. When the caller can map the last
-                    # raw record into the cursor domain, use that instead: it
-                    # is the backend's own position, in the right domain.
-                    # Without it, fall back to the stale value and let the stop
-                    # logic below end the read rather than loop on one page.
-                    # Never fall back to page_last_id here: the raw record id
-                    # is a different domain than a custom cursor (for the
-                    # threads endpoint, thread_model_id), so it would page by
-                    # the wrong key.
-                    raw_cursor = (
-                        raw_cursor_extractor(page_raw["raw"])
-                        if raw_cursor_extractor is not None
-                        and page_raw["raw"] is not None
-                        else None
-                    )
-                    if raw_cursor is not None:
-                        cursor = raw_cursor
-                    elif len(result) > 0:
-                        cursor = extract_cursor(result[-1])
-            else:
-                cursor = page_last_id["id"]
-        elif len(result) > 0:
-            # No line on this page decoded to an object with an id; fall back to
-            # the last record that parsed so the read still advances.
-            cursor = extract_cursor(result[-1])  # type: ignore
+            # The cursor is the cursor field's value on the last line the
+            # backend sent, parsed or not. When no line carried one, the
+            # cursor stays stale and the stop checks below end the read
+            # rather than re-requesting the same page.
+            cursor = page_last_id["id"]
+        elif parsed_items:
+            # Nothing on this page carried a cursor value, so fall back to
+            # the last parsed record: the read still advances instead of
+            # stopping at the first page. The backend position above always
+            # wins when it is reported.
+            cursor = getattr(parsed_items[-1], cursor_field, None)
 
         # Records the backend sent but that failed to parse were still part of
         # this page, so they count towards it being full. Leaving them out makes
@@ -198,27 +165,13 @@ def read_and_parse_full_stream(
         if current_batch_size > records_received:
             break
 
-        # Stop when the backend gives us no cursor to advance past (a NULL
-        # cursor, e.g. a NULL thread_model_id from the LEFT JOIN on
-        # trace_threads_final), or repeats the previous one, so we never loop
-        # forever or re-request the same page. This is a hard stop, not a
-        # signal that the stream is exhausted: a full page ending without an
-        # advancing cursor means the returned list may be truncated, so log it
-        # instead of stopping silently.
-        # Compare the cursor this page actually advanced to (`cursor`), not
-        # the last parsed record: after a page with no parsed items, result[-1]
-        # still belongs to the previous page, so deriving the cursor from it
-        # falsely reports a repeat and abandons the pages behind the
-        # unreadable one. `cursor` already holds the effective value in every
-        # case: the extracted value after a page with parsed records, the raw
-        # record's cursor after a fully unreadable page, or the stale value
-        # when no advance was possible (which is exactly what must stop).
-        next_cursor = cursor
-        if next_cursor is None or next_cursor == last_retrieved_id:
+        # A missing (e.g. NULL thread_model_id) or repeated cursor would re-request the
+        # same page: stop, and warn on a full page since the list may be truncated.
+        if cursor is None or cursor == last_retrieved_id:
             if len(parsed_items) == current_batch_size:
                 reason = (
                     "the last item carries no cursor"
-                    if next_cursor is None
+                    if cursor is None
                     else "the cursor repeats the previous page's cursor"
                 )
                 LOGGER.warning(
@@ -244,7 +197,7 @@ def read_and_parse_stream(
     nb_samples: Optional[int] = None,
     dropped_records_out: Optional[Dict[str, int]] = None,
     last_id_out: Optional[Dict[str, Optional[str]]] = None,
-    last_raw_out: Optional[Dict[str, Optional[dict]]] = None,
+    cursor_field: str = "id",
 ) -> List[T]:
     """Parse an NDJSON stream into ``item_class`` instances.
 
@@ -252,17 +205,14 @@ def read_and_parse_stream(
     ``dropped_records_out`` is given, its ``"count"`` key is set to how many
     were skipped, which is what a paginating caller needs to tell a short page
     (end of data) apart from a full page with unreadable records. When
-    ``last_id_out`` is given, its ``"id"`` key is set to the ``id`` of the last
-    line that decoded to an object, even if that record failed validation: a
-    paginating caller needs the backend's own position, not the last record it
-    managed to use. When ``last_raw_out`` is given, its ``"raw"`` key is set
-    to the last line that decoded to an object, for the same reason: a caller
-    whose cursor domain is not ``id`` needs the record itself to advance.
+    ``last_id_out`` is given, its ``"id"`` key is set to the ``cursor_field``
+    value of the last line that decoded to an object, even if that record
+    failed validation: a paginating caller needs the backend's own position,
+    not the last record it managed to use.
     """
     result: List[T] = []
     dropped_records = 0
-    last_id: Optional[str] = None
-    last_raw: Optional[dict] = None
+    last_cursor: Optional[str] = None
 
     # last record in chunk may be incomplete, we will use this buffer to concatenate strings
     buffer = b""
@@ -273,11 +223,11 @@ def read_and_parse_stream(
 
         # last record in chunk may be incomplete
         for line in lines[:-1]:
-            item, raw_id, raw = _parse_stream_line(line=line, item_class=item_class)
-            if raw_id is not None:
-                last_id = raw_id
-            if raw is not None:
-                last_raw = raw
+            item, line_cursor = _parse_stream_line(
+                line=line, item_class=item_class, cursor_field=cursor_field
+            )
+            if line_cursor is not None:
+                last_cursor = line_cursor
             if item is None:
                 dropped_records += 1
             else:
@@ -285,8 +235,7 @@ def read_and_parse_stream(
 
                 if nb_samples is not None and len(result) == nb_samples:
                     _report_dropped_records(dropped_records_out, dropped_records)
-                    _report_last_id(last_id_out, last_id)
-                    _report_last_raw(last_raw_out, last_raw)
+                    _report_last_id(last_id_out, last_cursor)
                     return result
 
         # Keep the last potentially incomplete line in buffer
@@ -294,19 +243,18 @@ def read_and_parse_stream(
 
     # Process any remaining data in the buffer after the stream ends
     if buffer:
-        item, raw_id, raw = _parse_stream_line(line=buffer, item_class=item_class)
-        if raw_id is not None:
-            last_id = raw_id
-        if raw is not None:
-            last_raw = raw
+        item, line_cursor = _parse_stream_line(
+            line=buffer, item_class=item_class, cursor_field=cursor_field
+        )
+        if line_cursor is not None:
+            last_cursor = line_cursor
         if item is None:
             dropped_records += 1
         else:
             result.append(item)
 
     _report_dropped_records(dropped_records_out, dropped_records)
-    _report_last_id(last_id_out, last_id)
-    _report_last_raw(last_raw_out, last_raw)
+    _report_last_id(last_id_out, last_cursor)
     return result
 
 
@@ -326,33 +274,24 @@ def _report_last_id(
         last_id_out["id"] = last_id
 
 
-def _report_last_raw(
-    last_raw_out: Optional[Dict[str, Optional[dict]]],
-    last_raw: Optional[dict],
-) -> None:
-    if last_raw_out is not None:
-        last_raw_out["raw"] = last_raw
-
-
 def _parse_stream_line(
     line: bytes,
     item_class: Type[T],
-) -> Tuple[Optional[T], Optional[str], Optional[dict]]:
+    cursor_field: str = "id",
+) -> Tuple[Optional[T], Optional[str]]:
     """Parse one NDJSON line.
 
     Returns the parsed item (or None when the record is unusable) together with
-    the ``id`` the record carried and the decoded record itself, both reported
-    even when validation of the rest of the record failed.
+    the ``cursor_field`` value the record carried, reported even when
+    validation of the rest of the record failed.
     """
-    raw_id: Optional[str] = None
-    raw_dict: Optional[dict] = None
+    cursor_value: Optional[str] = None
     try:
         item_dict = json.loads(line.decode("utf-8"))
         if isinstance(item_dict, dict):
-            raw_id = item_dict.get("id")
-            raw_dict = item_dict
+            cursor_value = item_dict.get(cursor_field)
         item_obj = item_class(**item_dict)
-        return item_obj, raw_id, raw_dict
+        return item_obj, cursor_value
 
     except json.JSONDecodeError as e:
         LOGGER.error(f"Error decoding {item_class.__name__}, reason: {e}")
@@ -361,4 +300,4 @@ def _parse_stream_line(
     except Exception as e:
         LOGGER.error(f"Error decoding or parsing {item_class.__name__}, reason: {e}")
 
-    return None, raw_id, raw_dict
+    return None, cursor_value
