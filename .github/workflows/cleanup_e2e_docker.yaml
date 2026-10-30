@@ -1,7 +1,14 @@
 name: Cleanup E2E Docker Images
 
 on:
-  pull_request:
+  # pull_request_target (not pull_request) because fork-originated pull_request
+  # runs wait for maintainer approval before any job `if:` is evaluated; nobody
+  # approves a cleanup on a closed PR, so those runs expire as failures after 30
+  # days. This is safe because the job never checks out or executes PR code: it
+  # only calls the packages API with the integer PR number. See the
+  # dangerous-triggers audit rationale:
+  # https://docs.zizmor.sh/audits/#dangerous-triggers
+  pull_request_target: # zizmor: ignore[dangerous-triggers]
     types: [closed]
   schedule:
     - cron: "0 3 * * 6"  # Every Saturday at 03:00 UTC
@@ -26,6 +33,9 @@ env:
 jobs:
   cleanup:
     name: Cleanup CI images
+    # Fork PRs never push ci-e2e-pr* images (the E2E builds skip forks), so
+    # there is nothing to clean up.
+    if: github.event_name != 'pull_request_target' || github.event.pull_request.head.repo.fork != true
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -41,7 +51,7 @@ jobs:
           FAILED=0
 
           # Build the jq filter and age cutoff based on trigger type
-          if [ "$EVENT_NAME" = "pull_request" ]; then
+          if [ "$EVENT_NAME" = "pull_request_target" ]; then
             echo "Mode: PR close — deleting all ci-e2e-pr${PR_NUMBER}-* images"
             JQ_FILTER=".[] | select(.metadata.container.tags | any(startswith(\"ci-e2e-pr${PR_NUMBER}-\"))) | {id: .id, tags: .metadata.container.tags, created_at: .created_at}"
             CUTOFF=""
