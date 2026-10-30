@@ -110,13 +110,14 @@ class TestReasonToText:
         assert parsing_helpers.reason_to_text([]) == "No reason provided"
 
 
-def test_unclosed_nested_braces__bounded_and_prompt():
-    # Regression: each failed brace candidate scanned to the end of the content,
-    # so a judge stuck in a repetition loop made the fallback quadratic.
-    adversarial = '{"a": [1, ' * 2000 + '{"score": 1}'
+def test_many_failing_brace_candidates__stops_at_candidate_limit():
+    # Regression: every failed '{' candidate was retried, with no bound, so a
+    # long run of them made the fallback scan quadratic. Shallow candidates keep
+    # the input far from the recursion limit, so this exercises the bound itself.
+    adversarial = "{ bad " * 300 + '{"score": 1}'
 
     start = time.perf_counter()
-    with pytest.raises(exceptions.JSONParsingError):
+    with pytest.raises(exceptions.JSONParsingError, match="too many unparseable"):
         parsing_helpers.extract_json_content_or_raise("prose " + adversarial)
     assert time.perf_counter() - start < 2.0
 
@@ -126,5 +127,7 @@ def test_nesting_beyond_recursion_limit__raises_json_parsing_error():
     # instead of the JSON parsing error every caller handles.
     deep = "[" * 100_000 + "]" * 100_000
 
-    with pytest.raises(exceptions.JSONParsingError):
-        parsing_helpers.extract_json_content_or_raise("{" + deep + "}")
+    with pytest.raises(exceptions.JSONParsingError, match="nested too deeply"):
+        # Prose around the object sends it through the brace-extraction path,
+        # where the decoder's RecursionError is converted.
+        parsing_helpers.extract_json_content_or_raise('reasoning: {"a": ' + deep + "}")
