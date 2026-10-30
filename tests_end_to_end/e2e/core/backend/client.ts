@@ -5455,6 +5455,49 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * `PATCH /v1/private/traces/{id}` rewriting BOTH payload columns at once.
+     *
+     * Separate from `updateTraceOutput` above, and the pairing is the point. A
+     * trace update is persisted as a partial insert that merges over the stored
+     * row on read, but the thread search clause does not read the merged row:
+     * opik#9264 moved the `ilike` outside `FINAL`, behind a key-only
+     * `(id, max(last_updated_at))` pass, so the term is matched against the
+     * RAW latest version of each trace. An update that mentioned one column
+     * would leave the other absent from that row, and "the search reads the
+     * latest version" and "the search lost a column" would be indistinguishable
+     * from the answer. Sending both means the newest version is a complete
+     * payload, so the only variable left is which version was read.
+     *
+     * Both are optional so a caller can still send one on purpose; at least one
+     * is required, because a PATCH carrying neither writes a new version with
+     * no payload at all — which would look exactly like the search having gone
+     * wrong.
+     *
+     * Scoped by `projectName` for the reason `updateTraceTags` gives — a bare
+     * id-only update falls back to the Default Project.
+     */
+    async updateTracePayload(args: {
+      traceId: string;
+      projectName: string;
+      input?: Record<string, unknown>;
+      output?: Record<string, unknown>;
+    }): Promise<void> {
+      if (args.input === undefined && args.output === undefined) {
+        throw new Error(
+          'updateTracePayload: give at least one of input/output — a PATCH carrying ' +
+            'neither writes a payload-less version of the trace',
+        );
+      }
+      await opik.api.traces.updateTrace(args.traceId, {
+        body: {
+          projectName: args.projectName,
+          ...(args.input === undefined ? {} : { input: args.input }),
+          ...(args.output === undefined ? {} : { output: args.output }),
+        },
+      });
+    },
+
+    /**
      * `PATCH /v1/private/traces/{id}` carrying a `thread_id` and nothing else.
      *
      * The subject of opik#8529. Before it, only the trace CREATE path published
@@ -6289,12 +6332,22 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
      *
      * `page` so a caller can walk the searched listing: a thread lost at a page
      * boundary is the same silent shortfall the trace-side walk exists to catch.
+     *
+     * `sorting` is a FOURTH branch again, and the only way to reach one of the
+     * two copies of the search clause from outside. `ThreadDAO` resolves a page
+     * from a narrow id-only pre-pass whenever every sort and filter is
+     * computable from that scan (`isPagePushdownEligible`); a sort on a field
+     * outside `PAGE_PUSHDOWN_SORT_FIELDS` — cost, usage, feedback scores — or a
+     * filter on `first_message`/`last_message` sends the read down the full-scan
+     * copy instead. Both copies carry their own rendering of the search clause,
+     * so a spec that only ever read unsorted has exercised one of them.
      */
     async listThreads(
       args: {
         projectId: string;
         filters?: BackendFilter[];
         search?: string;
+        sorting?: BackendSort[];
         page?: number;
         size?: number;
       } & ReadWindow,
@@ -6305,6 +6358,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         page: args.page ?? 1,
         ...(args.filters?.length ? { filters: JSON.stringify(args.filters) } : {}),
         ...(args.search === undefined ? {} : { search: args.search }),
+        ...(args.sorting?.length ? { sorting: JSON.stringify(args.sorting) } : {}),
         ...(args.fromTime ? { fromTime: args.fromTime } : {}),
         ...(args.toTime ? { toTime: args.toTime } : {}),
       });

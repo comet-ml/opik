@@ -792,9 +792,18 @@ export class LogsPage {
    *
    * Returns the direction the URL ended up carrying, so a caller asserts the
    * direction it got rather than assuming the first click sorts descending.
+   *
+   * `'threads'` is here as well as the two entity tables because the Threads
+   * tab mounts the same `DataTable` under its own `threads_sorting` param — but
+   * its listing is `/v1/private/traces/threads`, a different endpoint from the
+   * `/v1/private/traces` the Traces tab reads, so the request this waits on is
+   * mapped from `type` rather than spelled from it. Note the Threads columns
+   * take their sortability from the listing's own `sortable_by`, not from a
+   * `sortable: true` on the column definition, so a header is only clickable
+   * for a field `TraceThreadSortingFactory` lists.
    */
   async sortByColumn(
-    type: 'traces' | 'spans',
+    type: 'traces' | 'spans' | 'threads',
     label: string,
     columnId: string,
   ): Promise<'asc' | 'desc'> {
@@ -804,6 +813,7 @@ export class LogsPage {
       // otherwise sort whichever the DOM happened to order first.
       await expect(title, `exactly one "${label}" column header`).toHaveCount(1);
 
+      const endpoint = type === 'threads' ? '/v1/private/traces/threads' : `/v1/private/${type}`;
       const listed = this.page.waitForResponse((response) => {
         // Trailing slash tolerated deliberately: the frontend's own
         // `TRACES_REST_ENDPOINT` / `SPANS_REST_ENDPOINT` are declared WITH one
@@ -811,7 +821,7 @@ export class LogsPage {
         // same endpoint without. Pinning either spelling makes this wait pass
         // or hang on which caller happened to issue the request.
         const pathname = new URL(response.url()).pathname.replace(/\/$/, '');
-        return pathname.endsWith(`/v1/private/${type}`) && response.ok();
+        return pathname.endsWith(endpoint) && response.ok();
       });
       await title.click();
 
@@ -846,7 +856,7 @@ export class LogsPage {
    * asserting both is asserting the table and the API agree.
    */
   async readUrlSorting(
-    type: 'traces' | 'spans',
+    type: 'traces' | 'spans' | 'threads',
   ): Promise<Array<{ id: string; desc: boolean }> | null> {
     const raw = new URL(this.page.url()).searchParams.get(`${type}_sorting`);
     if (raw === null) return null;

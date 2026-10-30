@@ -1,4 +1,4 @@
-export { test, expect } from './queue-form-seed.fixture';
+export { test, expect } from './numeric-assertion-suite.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -611,3 +611,20 @@ export type {
 } from './studio-unlisted-model-runs.fixture';
 export { SAVED_TEMPERATURE } from './studio-unlisted-model-runs.fixture';
 export type { QueueFormSeedRef, QueueFormSeedFixtures } from './queue-form-seed.fixture';
+export type {
+  ThreadVersionRowRef,
+  ThreadVersionSearchRef,
+  ThreadVersionSearchFixtures,
+} from './thread-version-search.fixture';
+export { VERSION_MARKER } from './thread-version-search.fixture';
+export type {
+  ThreadCostOrderRowRef,
+  ThreadCostOrderSearchRef,
+  ThreadCostOrderSearchFixtures,
+} from './thread-cost-order-search.fixture';
+export { COST_ORDER_MARKER } from './thread-cost-order-search.fixture';
+export type {
+  NumericAssertionSuiteRef,
+  NumericAssertionSuiteFixtures,
+} from './numeric-assertion-suite.fixture';
+export { NUMERIC_ITEM } from './numeric-assertion-suite.fixture';
