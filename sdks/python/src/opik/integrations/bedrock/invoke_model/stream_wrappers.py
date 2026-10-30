@@ -25,7 +25,6 @@ def wrap_invoke_model_response(
     trace_to_end: Optional[trace.TraceData],
     finally_callback: generator_wrappers.FinishGeneratorCallback,
 ) -> types.InvokeModelOutput:
-    response_metadata = output["ResponseMetadata"]
     streaming_body = output["body"]
 
     @functools.wraps(__original_streaming_body_read)
@@ -46,6 +45,7 @@ def wrap_invoke_model_response(
         finally:
             if hasattr(self, "opik_tracked_instance"):
                 delattr(self, "opik_tracked_instance")
+                response_metadata = self.opik_response_metadata
 
                 if error_info is None and result is not None:
                     try:
@@ -65,16 +65,23 @@ def wrap_invoke_model_response(
                     LOGGER.debug("Error occurred or result is None, using empty body")
                     output = {"body": {}, "ResponseMetadata": response_metadata}
 
-                finally_callback(
+                self.opik_finally_callback(
                     output=output,
                     error_info=error_info,
-                    generators_span_to_end=span_to_end,
-                    generators_trace_to_end=trace_to_end,
+                    generators_span_to_end=self.opik_span_to_end,
+                    generators_trace_to_end=self.opik_trace_to_end,
                     capture_output=True,
                 )
 
     botocore.response.StreamingBody.read = wrapped_read
     streaming_body.opik_tracked_instance = True
+    # Kept on the instance, not in the class-level wrapper: the wrapper is replaced on
+    # every call, so a body read after a later invoke_model call would otherwise end
+    # that later call's span with this body.
+    streaming_body.opik_response_metadata = output["ResponseMetadata"]
+    streaming_body.opik_span_to_end = span_to_end
+    streaming_body.opik_trace_to_end = trace_to_end
+    streaming_body.opik_finally_callback = finally_callback
 
     return output
 
