@@ -100,6 +100,31 @@ clickhouse:
     annotations: <your clickhouse LB service annotations>
 ```
 
+## Configure Python code execution
+
+By default, custom Python evaluators run with the `process` strategy, inside the Python backend container. If users
+you do not fully trust can create evaluators, switch to the `docker` strategy, which runs each evaluation in an
+isolated, non-root container without network access. See
+[Python code execution](/self-host/architecture#python-code-execution) for the differences.
+
+```yaml
+component:
+  python-backend:
+    env:
+      PYTHON_CODE_EXECUTOR_STRATEGY: "docker"
+    securityContext:
+      privileged: true # required by the docker strategy (Docker-in-Docker); set by default
+```
+
+To turn off Python evaluators entirely instead:
+
+```yaml
+component:
+  backend:
+    env:
+      TOGGLE_PYTHON_EVALUATOR_ENABLED: "false"
+```
+
 ## Configure Clickhouse backup
 
 [Clickhouse Backup](./backup)
