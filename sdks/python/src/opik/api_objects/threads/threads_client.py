@@ -5,7 +5,7 @@ import opik
 from opik.rest_api import TraceThread
 from opik.types import BatchFeedbackScoreDict
 
-from .. import helpers, rest_stream_parser, constants, search_helpers
+from .. import helpers, constants, search_helpers
 from ... import config
 from ...message_processing import messages
 from ...message_processing.batching import sequence_splitter
@@ -119,23 +119,13 @@ class ThreadsClient:
 
         project_name = self._opik_client._resolve_project_name(project_name)
 
-        threads = rest_stream_parser.read_and_parse_full_stream(
-            read_source=lambda current_batch_size,
-            last_retrieved_id: self._opik_client.rest_client.traces.search_trace_threads(
-                project_name=project_name,
-                filters=filters,
-                limit=current_batch_size,
-                truncate=truncate,
-                last_retrieved_thread_model_id=last_retrieved_id,
-            ),
+        return search_helpers.search_threads_with_filters(
+            rest_client=self._opik_client.rest_client,
+            project_name=project_name,
+            filters=filters,
             max_results=max_results,
-            parsed_item_class=TraceThread,
-            # The endpoint's cursor is compared against `thread_model_id`
-            # (a UUID), not the caller-supplied thread `id`.
-            cursor_extractor=search_helpers.extract_thread_model_id_cursor,
-            raw_cursor_extractor=search_helpers.extract_thread_model_id_cursor_from_raw,
+            truncate=truncate,
         )
-        return threads
 
     def log_threads_feedback_scores(
         self, scores: List[BatchFeedbackScoreDict], project_name: Optional[str] = None
