@@ -36,6 +36,7 @@ export class TraceOQLConfig extends OQLConfig {
       created_at: "date_time",
       last_updated_at: "date_time",
       annotation_queue_ids: "list",
+      comments: "comments",
       experiment_id: "string",
       environment: "enum",
     };
@@ -67,6 +68,7 @@ export class TraceOQLConfig extends OQLConfig {
       created_at: OPERATOR_SETS.DATETIME_OPS,
       last_updated_at: OPERATOR_SETS.DATETIME_OPS,
       annotation_queue_ids: OPERATOR_SETS.LIST_OPS,
+      comments: ["is_empty", "is_not_empty"],
       experiment_id: OPERATOR_SETS.STRING_OPS,
       environment: OPERATOR_SETS.ENUM_OPS,
     };

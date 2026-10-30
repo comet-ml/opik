@@ -34,6 +34,7 @@ public enum FieldType {
         }
     },
     ERROR_CONTAINER("error_container"),
+    COMMENTS("comments"),
     CUSTOM("custom"),
     ;
 
