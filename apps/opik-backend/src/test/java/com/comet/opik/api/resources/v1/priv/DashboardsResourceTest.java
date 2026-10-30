@@ -73,7 +73,7 @@ import static org.assertj.core.api.Assertions.within;
 @ExtendWith(DropwizardAppExtensionProvider.class)
 class DashboardsResourceTest {
 
-    public static final String[] DASHBOARD_IGNORED_FIELDS = {"id", "workspaceId", "slug", "projectName", "createdAt",
+    public static final String[] DASHBOARD_IGNORED_FIELDS = {"id", "workspaceId", "projectName", "createdAt",
             "lastUpdatedAt", "createdBy", "lastUpdatedBy"};
 
     private static final String API_KEY = UUID.randomUUID().toString();
@@ -309,7 +309,6 @@ class DashboardsResourceTest {
                     .build();
             assertDashboard(expectedDashboard, createdDashboard);
             assertThat(createdDashboard.id()).isNotNull();
-            assertThat(createdDashboard.slug()).isNotNull();
             assertThat(createdDashboard.workspaceId()).isEqualTo(WORKSPACE_ID);
             assertThat(createdDashboard.createdBy()).isEqualTo(USER);
             assertThat(createdDashboard.lastUpdatedBy()).isEqualTo(USER);
@@ -347,7 +346,6 @@ class DashboardsResourceTest {
             var createdDashboard = dashboardResourceClient.createAndGet(dashboard, API_KEY, TEST_WORKSPACE_NAME);
 
             assertDashboard(dashboard, createdDashboard);
-            assertThat(createdDashboard.slug()).isEqualTo("test-dashboard-special-characters-symbols");
         }
 
         @Test
@@ -372,7 +370,27 @@ class DashboardsResourceTest {
             assertThat(created1.name()).isEqualTo(dashboardName);
             assertThat(created2.name()).isEqualTo(dashboardName);
             assertThat(created1.id()).isNotEqualTo(created2.id());
-            assertThat(created1.slug()).isNotEqualTo(created2.slug());
+        }
+
+        @Test
+        @DisplayName("Create dashboard whose name is a prefix of an existing one succeeds")
+        void createDashboardWithNamePrefixOfExistingSucceeds() {
+            var baseName = "Report " + RandomStringUtils.secure().nextAlphanumeric(10);
+
+            dashboardResourceClient.create(
+                    dashboardResourceClient.createPartialDashboard().name(baseName + " 2").build(),
+                    API_KEY, TEST_WORKSPACE_NAME);
+            var baseId = dashboardResourceClient.create(
+                    dashboardResourceClient.createPartialDashboard().name(baseName).build(),
+                    API_KEY, TEST_WORKSPACE_NAME);
+            dashboardResourceClient.update(baseId, DashboardUpdate.builder().name(baseName).build(),
+                    API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_OK);
+            var duplicateId = dashboardResourceClient.create(
+                    dashboardResourceClient.createPartialDashboard().name(baseName).build(),
+                    API_KEY, TEST_WORKSPACE_NAME);
+
+            assertThat(dashboardResourceClient.get(duplicateId, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_OK)
+                    .name()).isEqualTo(baseName);
         }
 
         @Test
@@ -899,7 +917,6 @@ class DashboardsResourceTest {
             var updatedDashboard = dashboardResourceClient.updateAndGet(id, update, API_KEY, TEST_WORKSPACE_NAME);
 
             assertThat(updatedDashboard.name()).isEqualTo("Updated Dashboard Name");
-            assertThat(updatedDashboard.slug()).isEqualTo("updated-dashboard-name");
             assertThat(updatedDashboard.lastUpdatedAt()).isAfter(createdDashboard.lastUpdatedAt());
             assertThat(updatedDashboard.lastUpdatedBy()).isEqualTo(USER);
         }
@@ -980,7 +997,6 @@ class DashboardsResourceTest {
 
             assertThat(updated.name()).isEqualTo("Dashboard One");
             assertThat(original.name()).isEqualTo("Dashboard One");
-            assertThat(updated.slug()).isNotEqualTo(original.slug());
         }
 
         @Test

@@ -660,7 +660,6 @@ paths:
               workspace_id: workspace-12345
               project_id: a1b2c3d4-e5f6-7890-abcd-ef1234567890
               name: Team Performance Dashboard
-              slug: team-performance-dashboard
               type: multi_project
               scope: workspace
               description: Dashboard showing key performance metrics across multiple projects.
@@ -678,7 +677,6 @@ paths:
                   workspace_id: workspace-12345
                   project_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
                   name: Q1 Marketing Dashboard
-                  slug: q1-marketing-dashboard
                   type: multi_project
                   scope: workspace
                   description: Dashboard showing key marketing metrics for Q1 campaigns.
@@ -711,7 +709,6 @@ paths:
               workspace_id: workspace-12345
               project_id: 7b9e1f2a-4d3c-4f8a-9a2e-1c2b3d4e5f6a
               name: Q2 Marketing Dashboard
-              slug: q2-marketing-dashboard
               type: multi_project
               scope: workspace
               description: Dashboard showing key marketing metrics and campaign performance for Q2.
@@ -749,7 +746,6 @@ paths:
               workspace_id: workspace-12345
               project_id: 7b9e1f2a-4d3c-4f8a-9a2e-1c2d3e4f5a6b
               name: Q2 Marketing Dashboard
-              slug: q2-marketing-dashboard
               type: multi_project
               scope: workspace
               description: Dashboard showing key marketing metrics for Q2 campaigns.
@@ -2006,7 +2002,6 @@ paths:
               workspace_id: workspace-12345
               project_id: 7b9e1f2a-4d3c-4f6a-9a2b-8e7d5c1f9a0b
               name: Model Performance Overview
-              slug: model-performance-overview
               type: multi_project
               scope: workspace
               description: Dashboard showing key metrics and insights across multiple projects for performance tracking.
@@ -2043,7 +2038,6 @@ paths:
               workspace_id: team-alpha
               project_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
               name: Q2 Marketing Insights
-              slug: q2-marketing-insights
               type: multi_project
               scope: workspace
               description: Dashboard showing key marketing metrics and campaign performance for Q2.
@@ -2064,7 +2058,6 @@ paths:
               workspace_id: workspace-12345
               project_id: a1b2c3d4-e5f6-7890-abcd-ef1234567890
               name: Team Performance Overview
-              slug: team-performance-overview
               type: multi_project
               scope: workspace
               description: Dashboard showing key performance metrics across multiple projects within the workspace.
@@ -2082,7 +2075,6 @@ paths:
                   workspace_id: workspace-12345
                   project_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
                   name: Monthly Sales Insights
-                  slug: monthly-sales-insights
                   type: multi_project
                   scope: workspace
                   description: Dashboard showing aggregated sales metrics across multiple projects for the last month.
@@ -2951,7 +2943,6 @@ paths:
                   workspace_id: workspace-12345
                   project_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
                   name: Sales Performance Dashboard
-                  slug: sales-performance-dashboard
                   type: multi_project
                   scope: workspace
                   description: Dashboard showing key sales metrics and trends across multiple projects.

@@ -100,22 +100,14 @@ class DashboardServiceImpl implements DashboardService {
 
         projectService.validateProjectIdExists(resolvedProjectId, workspaceId);
 
-        // Generate slug from name
-        String baseSlug = SlugUtils.generateSlug(dashboard.name());
-
         return template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(DashboardDAO.class);
-
-            // Check for existing slugs to generate unique slug
-            long existingCount = dao.countBySlugPrefix(workspaceId, baseSlug);
-            String uniqueSlug = SlugUtils.generateUniqueSlug(baseSlug, existingCount);
 
             // Build the complete dashboard, forcing the provided scope
             var newDashboard = dashboard.toBuilder()
                     .id(dashboardId)
                     .projectId(resolvedProjectId)
                     .workspaceId(workspaceId)
-                    .slug(uniqueSlug)
                     .type(Optional.ofNullable(dashboard.type()).orElse(DashboardType.MULTI_PROJECT))
                     .scope(scope)
                     .createdBy(userName)
@@ -124,12 +116,12 @@ class DashboardServiceImpl implements DashboardService {
 
             try {
                 dao.save(newDashboard, workspaceId);
-                log.info("Created dashboard with id '{}', name '{}', slug '{}', scope '{}' in workspace '{}'",
-                        dashboardId, dashboard.name(), uniqueSlug, scope, workspaceId);
+                log.info("Created dashboard with id '{}', name '{}', scope '{}' in workspace '{}'",
+                        dashboardId, dashboard.name(), scope, workspaceId);
                 return dao.findById(dashboardId, workspaceId, scope.getValue()).orElseThrow();
             } catch (UnableToExecuteStatementException e) {
                 if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
-                    log.warn("Dashboard slug constraint violation in workspace '{}'", workspaceId);
+                    log.warn("Dashboard with id '{}' already exists in workspace '{}'", dashboardId, workspaceId);
                     throw new EntityAlreadyExistsException(new ErrorMessage(List.of(DASHBOARD_ALREADY_EXISTS)));
                 } else {
                     throw e;
@@ -245,34 +237,17 @@ class DashboardServiceImpl implements DashboardService {
         return template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(DashboardDAO.class);
 
-            // Generate new slug if name is being updated
-            String newSlug = null;
-            if (StringUtils.isNotBlank(dashboardUpdate.name())) {
-                String baseSlug = SlugUtils.generateSlug(dashboardUpdate.name());
-                long existingCount = dao.countBySlugPrefix(workspaceId, baseSlug);
-                newSlug = SlugUtils.generateUniqueSlug(baseSlug, existingCount);
+            int result = dao.update(workspaceId, id, dashboardUpdate, userName, scope.getValue());
+
+            if (result == 0) {
+                log.warn("Dashboard not found with id '{}' and scope '{}' in workspace '{}'",
+                        id, scope, workspaceId);
+                throw new NotFoundException(DASHBOARD_NOT_FOUND);
             }
 
-            try {
-                int result = dao.update(workspaceId, id, dashboardUpdate, newSlug, userName, scope.getValue());
+            log.info("Updated dashboard with id '{}' and scope '{}' in workspace '{}'", id, scope, workspaceId);
 
-                if (result == 0) {
-                    log.warn("Dashboard not found with id '{}' and scope '{}' in workspace '{}'",
-                            id, scope, workspaceId);
-                    throw new NotFoundException(DASHBOARD_NOT_FOUND);
-                }
-
-                log.info("Updated dashboard with id '{}' and scope '{}' in workspace '{}'", id, scope, workspaceId);
-
-                return dao.findById(id, workspaceId, scope.getValue()).orElseThrow();
-            } catch (UnableToExecuteStatementException e) {
-                if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
-                    log.warn("Dashboard slug constraint violation in workspace '{}'", workspaceId);
-                    throw new EntityAlreadyExistsException(new ErrorMessage(List.of(DASHBOARD_ALREADY_EXISTS)));
-                } else {
-                    throw e;
-                }
-            }
+            return dao.findById(id, workspaceId, scope.getValue()).orElseThrow();
         });
     }
 
