@@ -28,6 +28,7 @@ import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
@@ -148,6 +149,9 @@ class ProjectServiceImpl implements ProjectService {
     }
 
     private static final String PROJECT_ALREADY_EXISTS = "Project already exists";
+    // Width of projects.name. Names arriving implicitly (trace, span, dataset... project_name) skip the Project
+    // bean validation, so they're checked here before the INSERT fails with a data truncation error.
+    private static final int NAME_MAX_LENGTH = 150;
 
     // recordLastUpdatedTrace populates projects.last_updated_trace_at from the trace timestamp, so sorting by last
     // trace reads it straight from MySQL instead of querying ClickHouse. Projects without traces have it NULL, so we
@@ -175,6 +179,14 @@ class ProjectServiceImpl implements ProjectService {
                 Response.status(Response.Status.NOT_FOUND).entity(new ErrorMessage(List.of(message))).build());
     }
 
+    private static void validateNameLength(String name) {
+        if (name != null && name.length() > NAME_MAX_LENGTH) {
+            String message = "Project name length must not exceed '%d'".formatted(NAME_MAX_LENGTH);
+            throw new BadRequestException(message,
+                    Response.status(Response.Status.BAD_REQUEST).entity(new ErrorMessage(List.of(message))).build());
+        }
+    }
+
     @Override
     public Project create(@NonNull Project project) {
         UUID projectId = idGenerator.generateId();
@@ -186,6 +198,7 @@ class ProjectServiceImpl implements ProjectService {
 
     private Project createProject(Project project, UUID projectId, String userName, String workspaceId) {
         IdGenerator.validateVersion(projectId, "project");
+        validateNameLength(project.name());
 
         var newProject = project.toBuilder()
                 .id(projectId)
@@ -738,6 +751,7 @@ class ProjectServiceImpl implements ProjectService {
 
     private void checkIfNeededToCreateProjects(Set<String> projectNames,
             String userName, String workspaceId) {
+        projectNames.forEach(ProjectServiceImpl::validateNameLength);
 
         Map<String, Project> projectsPerLowerCaseName = ProjectService.groupByName(
                 getAllProjectsByName(workspaceId, projectNames));

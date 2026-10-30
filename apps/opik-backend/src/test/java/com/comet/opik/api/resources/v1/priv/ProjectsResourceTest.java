@@ -2922,6 +2922,22 @@ class ProjectsResourceTest {
         }
 
         @Test
+        void create__whenNameTooLong__thenRejectCreate() {
+            var project = Project.builder().name(RandomStringUtils.secure().nextAlphanumeric(151)).build();
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI)).request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(project))) {
+
+                assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+                var expectedError = new ErrorMessage(List.of("name cannot exceed 150 characters"));
+                assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(expectedError);
+            }
+        }
+
+        @Test
         @DisplayName("when project name already exists, then reject the request")
         void create__whenProjectNameAlreadyExists__thenRejectNameCreate() {
 
@@ -3138,6 +3154,23 @@ class ProjectsResourceTest {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
                 assertThat(actualResponse.readEntity(ErrorMessage.class).errors()).contains("name must not be blank");
+            }
+        }
+
+        @Test
+        void update__whenNameTooLong__thenRejectTheUpdate() {
+            var projectUpdate = ProjectUpdate.builder().name(RandomStringUtils.secure().nextAlphanumeric(151)).build();
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path(projectId.toString())
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .method(HttpMethod.PATCH, Entity.json(projectUpdate))) {
+
+                assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+                var expectedError = new ErrorMessage(List.of("name cannot exceed 150 characters"));
+                assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(expectedError);
             }
         }
     }

@@ -2161,6 +2161,23 @@ class SpansResourceTest {
                     List.of());
         }
 
+        @Test
+        void batch__whenProjectNameTooLong__thenReturnBadRequest() {
+            var spans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class).stream()
+                    .map(span -> span.toBuilder()
+                            .projectName(RandomStringUtils.secure().nextAlphanumeric(151))
+                            .parentSpanId(null)
+                            .feedbackScores(null)
+                            .build())
+                    .toList();
+
+            try (var actualResponse = spanResourceClient.callBatchCreateSpans(spans, API_KEY, TEST_WORKSPACE)) {
+                assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                var expectedError = new ErrorMessage(List.of("Project name length must not exceed '150'"));
+                assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(expectedError);
+            }
+        }
+
         @ParameterizedTest
         @MethodSource
         void batch__whenSendingMultipleSpansWithSameId__dedupeSpans__thenReturnNoContent(
