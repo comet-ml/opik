@@ -25,6 +25,20 @@ except ImportError:  # pragma: no cover - optional dependency
 # interleave and score with each other's locale.
 _TEXTSTAT_LOCK = threading.Lock()
 
+# Returned by `_current_textstat_lang` when the locale cannot be read, so it is not
+# confused with a locale that is set to ``None``.
+_UNKNOWN_LANG = object()
+
+
+def _current_textstat_lang(set_lang: Any) -> Any:
+    """Return the locale textstat is set to, or ``_UNKNOWN_LANG`` when it cannot be read.
+
+    textstat has no public getter; in 0.7.x the locale is a name-mangled attribute
+    of the shared instance that ``set_lang`` is bound to.
+    """
+    instance = getattr(set_lang, "__self__", None)
+    return getattr(instance, "_textstatistics__lang", _UNKNOWN_LANG)
+
 
 def _is_unknown_locale(language: str) -> bool:
     """Return ``True`` when textstat's hyphenation backend has no ``language`` dictionary."""
@@ -100,31 +114,43 @@ class Readability(BaseMetric):
         # locale stable for the whole computation when metrics run concurrently.
         with _TEXTSTAT_LOCK:
             set_lang = getattr(self._textstat, "set_lang", None)
-            if set_lang is not None:
-                set_lang(self._language)
-
-            sentence_count = self._textstat.sentence_count(cleaned)
-            word_count = self._textstat.lexicon_count(cleaned, removepunct=True)
-            if sentence_count <= 0 or word_count <= 0:
-                raise MetricComputationError(
-                    "Unable to parse text for readability metrics."
-                )
+            previous_lang = (
+                _current_textstat_lang(set_lang)
+                if set_lang is not None
+                else _UNKNOWN_LANG
+            )
 
             try:
-                syllable_count = self._textstat.syllable_count(cleaned)
-                reading_ease = float(self._textstat.flesch_reading_ease(cleaned))
-                fk_grade = float(self._textstat.flesch_kincaid_grade(cleaned))
-            except KeyError as exc:
-                # `set_lang` does not validate; textstat only fails on the first
-                # locale-dependent call, with a bare `KeyError: None` from pyphen's
-                # dictionary lookup. Name the cause, but only when the locale really
-                # is unknown so unrelated KeyErrors keep their own traceback.
-                if not _is_unknown_locale(self._language):
-                    raise
-                raise MetricComputationError(
-                    f"Unsupported language {self._language!r} for textstat "
-                    "(Readability metric)."
-                ) from exc
+                if set_lang is not None:
+                    set_lang(self._language)
+
+                sentence_count = self._textstat.sentence_count(cleaned)
+                word_count = self._textstat.lexicon_count(cleaned, removepunct=True)
+                if sentence_count <= 0 or word_count <= 0:
+                    raise MetricComputationError(
+                        "Unable to parse text for readability metrics."
+                    )
+
+                try:
+                    syllable_count = self._textstat.syllable_count(cleaned)
+                    reading_ease = float(self._textstat.flesch_reading_ease(cleaned))
+                    fk_grade = float(self._textstat.flesch_kincaid_grade(cleaned))
+                except KeyError as exc:
+                    # `set_lang` does not validate; textstat only fails on the first
+                    # locale-dependent call, with a bare `KeyError: None` from
+                    # pyphen's dictionary lookup. Name the cause, but only when the
+                    # locale really is unknown so unrelated KeyErrors keep their own
+                    # traceback.
+                    if not _is_unknown_locale(self._language):
+                        raise
+                    raise MetricComputationError(
+                        f"Unsupported language {self._language!r} for textstat "
+                        "(Readability metric)."
+                    ) from exc
+            finally:
+                # Leave textstat on the locale it had, for code that uses it directly.
+                if set_lang is not None and previous_lang is not _UNKNOWN_LANG:
+                    set_lang(previous_lang)
 
         words_per_sentence = word_count / sentence_count
         syllables_per_word = syllable_count / word_count if word_count else 0.0
