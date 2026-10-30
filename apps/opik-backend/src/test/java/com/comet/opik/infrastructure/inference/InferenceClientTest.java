@@ -21,6 +21,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -54,6 +55,7 @@ class InferenceClientTest {
     private static final String JOB_ID = "job-7d3f";
     private static final String JOB_PATH = "/v1/batch/jobs/" + JOB_ID;
     private static final String STATUS_PATH = "/v1/batch/jobs/status";
+    private static final String EMBED_PATH = "/v1/embed";
     private static final JsonNodeFactory NODES = JsonNodeFactory.instance;
 
     private WireMockServer server;
@@ -414,6 +416,111 @@ class InferenceClientTest {
                 });
     }
 
+    @Test
+    void embedSendsBearerAuthAndReadsTheVectorsInOrder() {
+        server.stubFor(post(urlEqualTo(EMBED_PATH)).willReturn(embedded()));
+
+        var response = client.embed(embedRequest(), later()).block();
+
+        assertThat(response.result()).isEqualTo(EmbedResult.builder()
+                .embeddings(List.of(List.of(0.6f, 0.8f), List.of(1.0f, 0.0f)))
+                .dimensions(2)
+                .build());
+        var sent = single(postRequestedFor(urlEqualTo(EMBED_PATH)));
+        assertThat(sent.getHeader("Authorization")).isEqualTo("Bearer " + CREDENTIAL);
+        var body = json(sent);
+        assertThat(body.path("org_id").asText()).isEqualTo("workspace-1");
+        assertThat(body.path("cache").asBoolean(true)).isFalse();
+        assertThat(body.path("inputs")).extracting(JsonNode::asText)
+                .containsExactly("refund a duplicate invoice charge", "export traces to csv");
+        assertThat(body.path("request_id").asText()).isNotBlank();
+        // The time left before the 60 s deadline, never above the service's maximum.
+        assertThat(body.path("deadline_ms").asLong()).isBetween(1L, InferenceClient.MAX_EMBED_DEADLINE.toMillis());
+    }
+
+    @Test
+    void embedQuotaExceededIsNotRetried() {
+        server.stubFor(post(urlEqualTo(EMBED_PATH))
+                .willReturn(error("quota_exceeded", 429).withHeader("Retry-After", "2")));
+
+        assertThatThrownBy(() -> client.embed(embedRequest(), later()).block())
+                .isInstanceOfSatisfying(InferenceException.class, exception -> {
+                    assertThat(exception.isQuotaExceeded()).isTrue();
+                    assertThat(exception.getHttpStatus()).isEqualTo(429);
+                    assertThat(exception.getRetryAfter()).isEqualTo(Duration.ofSeconds(2));
+                });
+        assertThat(server.findAll(postRequestedFor(urlEqualTo(EMBED_PATH)))).hasSize(1);
+    }
+
+    @Test
+    void embedServerErrorIsRetriedWithTheSameRequestIdThenFails() {
+        server.stubFor(post(urlEqualTo(EMBED_PATH)).willReturn(error("overloaded", 503)));
+
+        assertThatThrownBy(() -> client.embed(embedRequest(), later()).block())
+                .isInstanceOfSatisfying(InferenceException.class, exception -> {
+                    assertThat(exception.getCode()).isEqualTo("overloaded");
+                    assertThat(exception.getHttpStatus()).isEqualTo(503);
+                });
+        var sent = server.findAll(postRequestedFor(urlEqualTo(EMBED_PATH)));
+        assertThat(sent).hasSize(InferenceClient.MAX_RETRIES + 1);
+        var requestId = json(sent.getFirst()).path("request_id").asText();
+        assertThat(sent).allSatisfy(request -> assertThat(json(request).path("request_id").asText())
+                .isEqualTo(requestId));
+    }
+
+    @Test
+    void embedTimeoutStopsAtTheDeadline() {
+        server.stubFor(post(urlEqualTo(EMBED_PATH)).willReturn(embedded().withFixedDelay(5_000)));
+
+        var started = System.nanoTime();
+        assertThatThrownBy(() -> client.embed(embedRequest(), Instant.now().plusMillis(300)).block())
+                .isInstanceOfSatisfying(InferenceException.class,
+                        exception -> assertThat(exception.getCode()).isEqualTo("upstream_error"));
+        var elapsed = Duration.ofNanos(System.nanoTime() - started);
+
+        assertThat(server.findAll(postRequestedFor(urlEqualTo(EMBED_PATH)))).hasSize(1);
+        assertThat(elapsed).isLessThan(Duration.ofMillis(2_000));
+    }
+
+    @Test
+    void embedDeadlineIsTheSmallestOfTheCallersTheTimeLeftAndTheMaximum() {
+        server.stubFor(post(urlEqualTo(EMBED_PATH)).willReturn(embedded()));
+
+        client.embed(embedRequest().toBuilder().deadlineMs(2_000L).build(), later()).block();
+        client.embed(embedRequest().toBuilder().deadlineMs(120_000L).build(), Instant.now().plusSeconds(5)).block();
+        client.embed(embedRequest().toBuilder().deadlineMs(120_000L).build(), Instant.now().plusSeconds(600))
+                .block();
+
+        var sent = server.findAll(postRequestedFor(urlEqualTo(EMBED_PATH))).stream()
+                .map(request -> json(request).path("deadline_ms").asLong())
+                .toList();
+        assertThat(sent).hasSize(3);
+        assertThat(sent.get(0)).isEqualTo(2_000L);
+        assertThat(sent.get(1)).isBetween(1L, 5_000L);
+        assertThat(sent.get(2)).isEqualTo(InferenceClient.MAX_EMBED_DEADLINE.toMillis());
+    }
+
+    @ParameterizedTest(name = "deadline_ms {0}")
+    @ValueSource(longs = {0L, -1L})
+    void embedRejectsANonPositiveDeadline(long deadlineMs) {
+        var request = embedRequest().toBuilder().deadlineMs(deadlineMs).build();
+
+        assertThatThrownBy(() -> client.embed(request, later())).isInstanceOf(IllegalArgumentException.class);
+        assertThat(server.getAllServeEvents()).isEmpty();
+    }
+
+    @Test
+    void embedTakesOneTo256Inputs() {
+        var tooMany = IntStream.rangeClosed(0, InferenceClient.MAX_EMBED_INPUTS).mapToObj("text %d"::formatted)
+                .toList();
+
+        assertThatThrownBy(() -> client.embed(embedRequest().toBuilder().inputs(List.of()).build(), later()))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> client.embed(embedRequest().toBuilder().inputs(tooMany).build(), later()))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(server.getAllServeEvents()).isEmpty();
+    }
+
     private static Instant later() {
         return Instant.now().plusSeconds(60);
     }
@@ -471,6 +578,23 @@ class InferenceClientTest {
         return aResponse().withStatus(status)
                 .withHeader("Content-Type", "application/json")
                 .withBody("{\"error\":{\"code\":\"%s\",\"message\":\"m\",\"retryable\":true}}".formatted(code));
+    }
+
+    private static ResponseDefinitionBuilder embedded() {
+        return aResponse().withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("""
+                        {"request_id": "r-1", "usage": {"input_tokens": 9, "output_tokens": 0}, "cache_hit": false,
+                         "latency_ms": 12, "result": {"embeddings": [[0.6, 0.8], [1.0, 0.0]], "dimensions": 2}}
+                        """);
+    }
+
+    private static EmbedRequest embedRequest() {
+        return EmbedRequest.builder()
+                .orgId("workspace-1")
+                .workspaceId("workspace-1")
+                .inputs(List.of("refund a duplicate invoice charge", "export traces to csv"))
+                .build();
     }
 
     private static BatchDecideRequest decideRequest() {

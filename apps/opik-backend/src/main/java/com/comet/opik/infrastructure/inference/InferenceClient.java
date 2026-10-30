@@ -30,9 +30,9 @@ import java.util.UUID;
 import java.util.function.Function;
 
 /**
- * Client for the opik-inference v1 batch API. Its retries mirror the Python client's: up to 2, backing off 0.1 s then
- * 0.2 s or honoring {@code Retry-After}, except that a submit answered with {@code quota_exceeded} fails at once, so
- * the caller can back that one workspace off.
+ * Client for the opik-inference v1 batch API and {@code /v1/embed}. Its retries mirror the Python client's: up to 2,
+ * backing off 0.1 s then 0.2 s or honoring {@code Retry-After}, except that a submit or embed answered with
+ * {@code quota_exceeded} fails at once, so the caller can back off.
  * <p>
  * Every call takes a deadline: no attempt outlasts it (its connect and read timeouts are cut to the time left), no
  * retry starts that can't finish its backoff before it, and a call made past it fails with {@code out_of_time} without
@@ -49,6 +49,9 @@ public class InferenceClient {
     static final Duration BASE_BACKOFF = Duration.ofMillis(100);
     public static final int MAX_BATCH_ITEMS = 10_000;
     public static final int MAX_STATUS_JOB_IDS = 1_000;
+    public static final int MAX_EMBED_INPUTS = 256;
+    /** The service rejects an embed {@code deadline_ms} above this. */
+    static final Duration MAX_EMBED_DEADLINE = Duration.ofSeconds(60);
 
     /**
      * The service reads and enqueues the whole body before it answers a submit, so the read timeout grows by a second
@@ -60,6 +63,7 @@ public class InferenceClient {
     private static final String BATCH_GENERATE_PATH = "v1/batch/generate";
     private static final String JOB_PATH_TEMPLATE = "v1/batch/jobs/{job_id}";
     private static final String JOBS_STATUS_PATH = "v1/batch/jobs/status";
+    private static final String EMBED_PATH = "v1/embed";
 
     private final @NonNull Client client;
     private final @NonNull @Config("aiLabels") AiLabelsConfig config;
@@ -115,6 +119,42 @@ public class InferenceClient {
                 .type(BatchJobStatusResponse.class)
                 .build())
                 .map(BatchJobStatusResponse::jobs);
+    }
+
+    /**
+     * One vector per input, in the inputs' order, from the realtime embedding pool. Retried like a submit, and like a
+     * submit a {@code quota_exceeded} answer fails at once, so the caller can stop calling for a while. The request's
+     * {@code deadline_ms} is the caller's, if set, cut to the time left before {@code deadline} and to the service's
+     * maximum.
+     */
+    public Mono<EmbedResponse> embed(@NonNull EmbedRequest request, @NonNull Instant deadline) {
+        Preconditions.checkArgument(!request.inputs().isEmpty() && request.inputs().size() <= MAX_EMBED_INPUTS,
+                "an embed call takes 1 to '%s' inputs, inputs '%s'", MAX_EMBED_INPUTS, request.inputs().size());
+        Preconditions.checkArgument(request.deadlineMs() == null || request.deadlineMs() > 0,
+                "an embed deadline must be positive, deadlineMs '%s'", request.deadlineMs());
+        return Mono.defer(() -> {
+            var left = Duration.between(Instant.now(), deadline);
+            if (left.toMillis() < 1) {
+                return Mono.error(InferenceException.outOfTime());
+            }
+            var withIds = request.toBuilder()
+                    .requestId(request.requestId() == null ? newRequestId() : request.requestId())
+                    .deadlineMs(Math.min(request.deadlineMs() == null ? Long.MAX_VALUE : request.deadlineMs(),
+                            Math.min(left.toMillis(), MAX_EMBED_DEADLINE.toMillis())))
+                    .build();
+            // Serialized once, so every retry sends the same bytes and the same request_id.
+            var body = InferenceJson.writeBytes(withIds);
+            return execute(Call.<EmbedResponse>builder()
+                    .method(HttpMethod.POST)
+                    .path(EMBED_PATH)
+                    .target(base -> base.path(EMBED_PATH))
+                    .body(body)
+                    .readTimeout(config.getInference().getReadTimeout().toJavaDuration())
+                    .deadline(deadline)
+                    .type(EmbedResponse.class)
+                    .failFastOnQuotaExceeded(true)
+                    .build());
+        });
     }
 
     private Mono<BatchSubmitResponse> submit(String path, Object request, int items, Instant deadline) {

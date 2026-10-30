@@ -225,6 +225,9 @@ public class OpikConfiguration extends JobConfiguration {
     private AiLabelsConfig aiLabels = new AiLabelsConfig();
 
     @Valid @NotNull @JsonProperty
+    private TopicsConfig topics = new TopicsConfig();
+
+    @Valid @NotNull @JsonProperty
     private AdminServerConfig adminServer;
 
     @JsonIgnore
@@ -238,5 +241,13 @@ public class OpikConfiguration extends JobConfiguration {
     @AssertTrue(message = "aiLabels.enabled (AI_LABELS_ENABLED) requires databaseAnalyticsDataModel.traceColumnsNonNullable (ANALYTICS_DB_DATA_MODEL_TRACE_COLUMNS_NON_NULLABLE): ai-labels reads only the cut-over traces table")
     public boolean isAiLabelsDataModelSupported() {
         return !aiLabels.isEnabled() || databaseAnalyticsDataModel.traceColumnsNonNullable();
+    }
+
+    // Topics embeds ai-labels' summaries through ai-labels' opik-inference deployment: without labels there is nothing.
+    @JsonIgnore
+    @AssertTrue(message = "topics.enabled (TOPICS_ENABLED) requires aiLabels.enabled (AI_LABELS_ENABLED) and aiLabels.inference.url (AI_LABELS_INFERENCE_URL)")
+    public boolean isTopicsAiLabelsEnabled() {
+        return !topics.isEnabled()
+                || (aiLabels.isEnabled() && StringUtils.isNotBlank(aiLabels.getInference().getUrl()));
     }
 }
