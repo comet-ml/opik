@@ -174,6 +174,7 @@ def test_evaluation__equals_with_numeric_inputs():
         ({"outer": {"x": 1, "y": [1, 2]}}, {"outer": {"y": [1, 2], "x": 1}}),
         ([{"a": 1, "b": 2}, 3], [{"b": 2, "a": 1}, 3]),
         ({"x", "y", "z"}, {"z", "y", "x"}),
+        (frozenset({"x", "y", "z"}), frozenset({"z", "y", "x"})),
         ({"a": "Hello"}, {"a": "hello"}),
         ({"B": 1, "a": 2}, {"a": 2, "b": 1}),
     ],
@@ -181,7 +182,9 @@ def test_evaluation__equals_with_numeric_inputs():
 def test_equals__containers_with_same_content__score_one(output, reference):
     metric = equals.Equals(track=False)
 
-    assert metric.score(output=output, reference=reference).value == 1.0
+    assert metric.score(output=output, reference=reference) == ScoreResult(
+        name=metric.name, value=1.0, reason=None, metadata=None
+    )
 
 
 @pytest.mark.parametrize(
@@ -194,12 +197,16 @@ def test_equals__containers_with_same_content__score_one(output, reference):
         ({"a": True}, {"a": 1}),
         ([1, 2], (1, 2)),
         ({"a": 1}, '{"a": 1}'),
+        ({"A": 1, "a": 2}, {"A": 2, "a": 1}),
+        (frozenset({"x"}), {"x"}),
     ],
 )
 def test_equals__containers_with_different_content__score_zero(output, reference):
     metric = equals.Equals(track=False)
 
-    assert metric.score(output=output, reference=reference).value == 0.0
+    assert metric.score(output=output, reference=reference) == ScoreResult(
+        name=metric.name, value=0.0, reason=None, metadata=None
+    )
 
 
 def test_equals__case_sensitive__applies_to_strings_inside_containers():
@@ -212,6 +219,17 @@ def test_equals__case_sensitive__applies_to_strings_inside_containers():
     )
 
 
+def test_equals__container_subclass__compared_by_stored_content():
+    class NoItems(dict):
+        def items(self):
+            return iter(())
+
+    metric = equals.Equals(track=False)
+
+    assert metric.score(output=NoItems(a=1), reference={}).value == 0.0
+    assert metric.score(output=NoItems(a=1), reference={"a": 1}).value == 1.0
+
+
 def test_equals__self_referencing_containers__do_not_recurse_forever():
     output: list = [1]
     output.append(output)
@@ -219,7 +237,9 @@ def test_equals__self_referencing_containers__do_not_recurse_forever():
     reference.append(reference)
     metric = equals.Equals(track=False)
 
-    assert metric.score(output=output, reference=reference).value == 1.0
+    assert metric.score(output=output, reference=reference) == ScoreResult(
+        name=metric.name, value=1.0, reason=None, metadata=None
+    )
 
 
 def test_evaluation__regex_match():

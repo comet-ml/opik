@@ -14,32 +14,36 @@ def _is_container(value: Any) -> bool:
 def _canonical_text(
     value: Any, normalize: Callable[[str], str], active_ids: Set[int]
 ) -> str:
-    """Render a container the way str() does, with dict keys and set items sorted.
-
-    Leaves are rendered with repr(), as str() does inside a container, so ``1``,
-    ``1.0``, ``"1"`` and ``True`` stay distinct. Sorting the rendered entries makes
-    the result independent of dict insertion order and set iteration order, while
-    list and tuple order still counts.
-    """
+    # Recursion guard: a container that holds itself renders as "...", as in str().
     if not _is_container(value):
         return normalize(repr(value))
     if id(value) in active_ids:
         return "..."
     active_ids.add(id(value))
+    # Read the built-in type's contents, as str() does, not a subclass override.
+    base = next(kind for kind in _CONTAINER_TYPES if isinstance(value, kind))
     try:
-        if isinstance(value, dict):
+        if base is dict:
+            # The original key breaks ties, so keys that differ only in case
+            # keep their own values when the comparison ignores case.
             entries = sorted(
-                f"{_canonical_text(key, normalize, active_ids)}: "
-                f"{_canonical_text(item, normalize, active_ids)}"
-                for key, item in value.items()
+                (
+                    _canonical_text(key, normalize, active_ids),
+                    _canonical_text(key, _keep_case, active_ids),
+                    _canonical_text(item, normalize, active_ids),
+                )
+                for key, item in dict.items(value)
             )
-            return "{" + ", ".join(entries) + "}"
-        rendered = [_canonical_text(item, normalize, active_ids) for item in value]
-        if isinstance(value, list):
+            return "{" + ", ".join(f"{key}: {item}" for key, _, item in entries) + "}"
+        rendered = [
+            _canonical_text(item, normalize, active_ids)
+            for item in base.__iter__(value)
+        ]
+        if base is list:
             return "[" + ", ".join(rendered) + "]"
-        if isinstance(value, tuple):
+        if base is tuple:
             return "(" + ", ".join(rendered) + ("," if len(rendered) == 1 else "") + ")"
-        return type(value).__name__ + "{" + ", ".join(sorted(rendered)) + "}"
+        return base.__name__ + "{" + ", ".join(sorted(rendered)) + "}"
     finally:
         active_ids.discard(id(value))
 
