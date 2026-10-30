@@ -1456,10 +1456,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "upstage/solar-mini4",
     },
     {
-      value: PROVIDER_MODEL_TYPE.UPSTAGE_SOLAR_PRO_3,
-      label: "upstage/solar-pro-3",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.UPSTAGE_SOLAR_PRO4,
       label: "upstage/solar-pro4",
     },

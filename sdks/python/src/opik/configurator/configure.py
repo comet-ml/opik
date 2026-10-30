@@ -297,6 +297,10 @@ class OpikConfigurator:
         """
         config_file_needs_updating = False
 
+        if isinstance(self.api_key, str):
+            # configure() arguments don't go through OpikConfig's validator.
+            self.api_key = self.api_key.strip() or None
+
         if self.api_key:
             extracted_base_url = _extract_base_url_from_api_key(self.api_key)
             if extracted_base_url is None and self.self_hosted_comet:
