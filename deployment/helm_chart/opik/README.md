@@ -192,6 +192,8 @@ Call opik api on http://localhost:5173/api
 | clickhouse.livenessProbe.periodSeconds | int | `30` |  |
 | clickhouse.livenessProbe.timeoutSeconds | int | `5` |  |
 | clickhouse.logsLevel | string | `"information"` |  |
+| clickhouse.logsMaxCount | int | `3` | Rotated file logs kept (applies to both the server and error log) |
+| clickhouse.logsMaxSize | string | `"100M"` | Rotation cap for the ClickHouse file logs. No volume is mounted for them, so they land on the node's root disk |
 | clickhouse.monitoring.additionalLabels | object | `{}` |  |
 | clickhouse.monitoring.annotations | object | `{}` |  |
 | clickhouse.monitoring.enabled | bool | `false` |  |
