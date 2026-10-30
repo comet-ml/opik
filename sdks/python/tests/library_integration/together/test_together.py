@@ -279,6 +279,68 @@ def test_together_chat_completions_create__stream__happyflow(respx_mock, fake_ba
     assert span.usage is not None
 
 
+@respx.mock(base_url=BASE_URL)
+def test_together_chat_completions_create__stream_with_tool_call__tool_call_in_span_output(
+    respx_mock, fake_backend
+):
+    """A streamed tool call goes through the real SSE parser and into the span output."""
+    tool_call_chunk = {
+        "id": "t1",
+        "object": "chat.completion.chunk",
+        "created": 0,
+        "model": MODEL,
+        "choices": [
+            {
+                "index": 0,
+                "delta": {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "index": 0,
+                            "id": "call_1",
+                            "type": "function",
+                            "function": {
+                                "name": "get_weather",
+                                "arguments": '{"city": "Paris"}',
+                            },
+                        }
+                    ],
+                },
+                "finish_reason": None,
+            }
+        ],
+    }
+    respx_mock.post(COMPLETIONS_ROUTE).mock(
+        return_value=httpx.Response(
+            200,
+            headers={"Content-Type": "text/event-stream"},
+            content=_sse(tool_call_chunk, _stream_chunk(finish_reason="tool_calls")),
+        )
+    )
+    client = together.Together(api_key="fake-api-key")
+    tracked = track_together(client)
+
+    stream = tracked.chat.completions.create(
+        model=MODEL,
+        messages=[{"role": "user", "content": "Weather in Paris?"}],
+        stream=True,
+    )
+    list(stream)
+    opik.flush_tracker()
+
+    assert len(fake_backend.trace_trees) == 1
+    choice = fake_backend.trace_trees[0].spans[0].output["choices"][0]
+    assert choice["finish_reason"] == "tool_calls"
+    assert choice["message"]["tool_calls"] == [
+        {
+            "id": "call_1",
+            "type": "function",
+            "function": {"name": "get_weather", "arguments": '{"city": "Paris"}'},
+        }
+    ]
+
+
 def test_aggregate__reasoning_deltas__kept_alongside_content():
     """Together streams reasoning in its own delta field, unlike OpenAI."""
     aggregated = chat_completion_chunks_aggregator.aggregate(
@@ -320,6 +382,74 @@ def test_aggregate__no_reasoning_deltas__reasoning_key_absent():
     )
 
     assert "reasoning" not in aggregated.choices[0]["message"]
+
+
+def test_aggregate__streamed_tool_calls__kept_in_message():
+    """Together sends each tool call whole, in one delta, with its index."""
+    aggregated = chat_completion_chunks_aggregator.aggregate(
+        [
+            _chunk(role="assistant"),
+            ChatCompletionChunk.model_validate(
+                {
+                    "id": "t1",
+                    "object": "chat.completion.chunk",
+                    "created": 0,
+                    "model": MODEL,
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {
+                                "role": "assistant",
+                                "tool_calls": [
+                                    {
+                                        "index": 0,
+                                        "id": "call_1",
+                                        "type": "function",
+                                        "function": {
+                                            "name": "get_weather",
+                                            "arguments": '{"city": "Paris"}',
+                                        },
+                                    }
+                                ],
+                            },
+                        }
+                    ],
+                }
+            ),
+            _chunk(finish_reason="tool_calls"),
+        ]
+    )
+
+    assert aggregated.choices[0] == {
+        "index": 0,
+        "finish_reason": "tool_calls",
+        "message": {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {
+                        "name": "get_weather",
+                        "arguments": '{"city": "Paris"}',
+                    },
+                }
+            ],
+        },
+    }
+
+
+def test_aggregate__no_tool_call_deltas__tool_calls_key_absent():
+    aggregated = chat_completion_chunks_aggregator.aggregate(
+        [
+            _chunk(role="assistant"),
+            _chunk(content="Blue."),
+            _chunk(finish_reason="stop"),
+        ]
+    )
+
+    assert "tool_calls" not in aggregated.choices[0]["message"]
 
 
 def test_extract_metadata_from_client__credentials_in_base_url__stripped():

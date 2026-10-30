@@ -4,6 +4,8 @@ from typing import Any, Dict, List, Optional
 import pydantic
 from together.types.chat import ChatCompletionChunk
 
+from opik.integrations import _streamed_tool_calls
+
 LOGGER = logging.getLogger(__name__)
 
 
@@ -35,6 +37,7 @@ def aggregate(
 
         text_chunks: List[str] = []
         reasoning_chunks: List[str] = []
+        tool_calls = _streamed_tool_calls.StreamedToolCalls()
 
         for chunk in items:
             if chunk.choices and chunk.choices[0].delta:
@@ -56,6 +59,9 @@ def aggregate(
                 if reasoning:
                     reasoning_chunks.append(reasoning)
 
+                for tool_call in getattr(delta, "tool_calls", None) or []:
+                    tool_calls.add(tool_call)
+
             if chunk.choices and chunk.choices[0].finish_reason:
                 aggregated_response["choices"][0]["finish_reason"] = chunk.choices[
                     0
@@ -69,6 +75,8 @@ def aggregate(
             aggregated_response["choices"][0]["message"]["reasoning"] = "".join(
                 reasoning_chunks
             )
+        if streamed_calls := tool_calls.to_list():
+            aggregated_response["choices"][0]["message"]["tool_calls"] = streamed_calls
         result = ChatCompletionChunksAggregated(**aggregated_response)
 
         return result
