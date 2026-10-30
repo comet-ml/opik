@@ -1169,6 +1169,7 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
             OPENROUTER_AUTO_BETA,
             OPENROUTER_FREE,
             OPENROUTER_PARETO_CODE,
+            PARTICLE_AI_PARTICLE_1,
             PERCEPTRON_PERCEPTRON_MK1,
             PERCEPTRON_PERCEPTRON_MK1_5,
             PERPLEXITY_SONAR_PRO_SEARCH,
