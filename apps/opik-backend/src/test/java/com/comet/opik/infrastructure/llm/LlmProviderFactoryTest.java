@@ -6,6 +6,7 @@ import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.ModelParams;
 import com.comet.opik.api.ModelParams.NumberParam;
 import com.comet.opik.api.ProviderApiKey;
+import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.domain.LlmProviderApiKeyService;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.LlmProviderService;
@@ -594,6 +595,63 @@ class LlmProviderFactoryTest {
                         LlmTestClients.VIDEO_MIME_TYPE_UTILS));
 
         assertThat(llmProviderFactory.getService(workspaceId, model)).isInstanceOf(LlmProviderVertexAI.class);
+    }
+
+    @Test
+    @DisplayName("A Responses-only model on a Chat Completions key is refused for playground and judge calls")
+    void aResponsesOnlyModelOnAChatCompletionsKeyIsRefusedBeforeAnyCall() {
+        var model = "gpt-9-pro";
+        var workspaceId = UUID.randomUUID().toString();
+        var llmProviderFactory = openAiFactoryServing(model, workspaceId, Map.of());
+        var judge = LlmAsJudgeModelParameters.builder().name(model).build();
+        var refusal = "Model '%s' works only with OpenAI's Responses API, and this workspace's OpenAI provider uses"
+                + " the Chat Completions API";
+
+        assertThatThrownBy(() -> llmProviderFactory.getService(workspaceId, model))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageStartingWith(refusal.formatted(model));
+        assertThatThrownBy(() -> llmProviderFactory.getLanguageModel(workspaceId, judge))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageStartingWith(refusal.formatted(model));
+        assertThatThrownBy(() -> llmProviderFactory.getToolCallingLanguageModel(workspaceId, judge))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageStartingWith(refusal.formatted(model));
+    }
+
+    @Test
+    @DisplayName("A Responses-only model on a Responses key gets the Responses service")
+    void aResponsesOnlyModelOnAResponsesKeyGetsTheResponsesService() {
+        var model = "gpt-9-pro";
+        var workspaceId = UUID.randomUUID().toString();
+        var llmProviderFactory = openAiFactoryServing(model, workspaceId,
+                Map.of("openai_pipeline_mode", "responses_api"));
+
+        assertThat(llmProviderFactory.getService(workspaceId, model).getClass().getSimpleName())
+                .isEqualTo("LlmProviderOpenAiResponses");
+    }
+
+    private LlmProviderFactory openAiFactoryServing(String model, String workspaceId,
+            Map<String, String> keyConfiguration) {
+        var registry = mock(LlmModelRegistryService.class);
+        when(registry.findModel(model)).thenReturn(Optional.of(
+                new LlmModelRegistryService.ModelLookupResult(LlmProvider.OPEN_AI, LlmModelDefinition.builder()
+                        .id(model)
+                        .params(ModelParams.builder().onlyRoute(ModelParams.RESPONSES_API_ROUTE).build())
+                        .build())));
+        var llmProviderApiKeyService = mock(LlmProviderApiKeyService.class);
+        when(llmProviderApiKeyService.findByProviders(eq(workspaceId), anySet()))
+                .thenReturn(List.of(ProviderApiKey.builder()
+                        .provider(LlmProvider.OPEN_AI)
+                        .apiKey(EncryptionUtils.encrypt(UUID.randomUUID().toString()))
+                        .configuration(keyConfiguration)
+                        .build()));
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService,
+                createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai"), registry, RELAXED_GUARD);
+        var clientConfig = new LlmProviderClientConfig();
+        clientConfig.setOpenAiClient(new OpenAiClientConfig(null));
+        new OpenAIModule().llmServiceProvider(llmProviderFactory, new OpenAIClientGenerator(clientConfig,
+                LlmTestClients.RESPONSES_API_HTTP_CLIENT, LlmTestClients.LLM_HTTP_CLIENT_BUILDERS));
+        return llmProviderFactory;
     }
 
     @Test
