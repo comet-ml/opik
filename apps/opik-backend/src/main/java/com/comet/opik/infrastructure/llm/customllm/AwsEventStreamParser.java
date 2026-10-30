@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.llm.customllm;
 
+import com.comet.opik.utils.JsonUtils;
 import dev.langchain4j.exception.HttpException;
 import dev.langchain4j.http.client.sse.ServerSentEvent;
 import dev.langchain4j.http.client.sse.ServerSentEventListener;
@@ -8,6 +9,7 @@ import lombok.NonNull;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
@@ -89,7 +91,7 @@ class AwsEventStreamParser implements ServerSentEventParser {
     private static HttpException toException(Map<String, String> headers, String payload) {
         var type = headers.getOrDefault(EXCEPTION_TYPE, headers.getOrDefault(ERROR_CODE, ""));
         var body = payload.isBlank()
-                ? "{\"message\": \"%s\"}".formatted(headers.getOrDefault(ERROR_MESSAGE, type))
+                ? JsonUtils.writeValueAsString(Map.of("message", headers.getOrDefault(ERROR_MESSAGE, type)))
                 : payload;
         return new HttpException(statusOf(type), body);
     }
@@ -107,22 +109,27 @@ class AwsEventStreamParser implements ServerSentEventParser {
 
     private static Map<String, String> stringHeaders(ByteBuffer buffer) throws IOException {
         var headers = new HashMap<String, String>();
-        while (buffer.hasRemaining()) {
-            var name = new String(bytes(buffer, Byte.toUnsignedInt(buffer.get())), StandardCharsets.UTF_8);
-            byte type = buffer.get();
-            switch (type) {
-                case 0, 1 -> {
+        try {
+            while (buffer.hasRemaining()) {
+                var name = new String(bytes(buffer, Byte.toUnsignedInt(buffer.get())), StandardCharsets.UTF_8);
+                byte type = buffer.get();
+                switch (type) {
+                    case 0, 1 -> {
+                    }
+                    case 2 -> skip(buffer, 1);
+                    case 3 -> skip(buffer, 2);
+                    case 4 -> skip(buffer, 4);
+                    case 5, 8 -> skip(buffer, 8);
+                    case 6 -> skip(buffer, Short.toUnsignedInt(buffer.getShort()));
+                    case STRING_HEADER -> headers.put(name,
+                            new String(bytes(buffer, Short.toUnsignedInt(buffer.getShort())),
+                                    StandardCharsets.UTF_8));
+                    case 9 -> skip(buffer, 16);
+                    default -> throw new IOException("Unknown event stream header type " + type);
                 }
-                case 2 -> skip(buffer, 1);
-                case 3 -> skip(buffer, 2);
-                case 4 -> skip(buffer, 4);
-                case 5, 8 -> skip(buffer, 8);
-                case 6 -> skip(buffer, Short.toUnsignedInt(buffer.getShort()));
-                case STRING_HEADER -> headers.put(name,
-                        new String(bytes(buffer, Short.toUnsignedInt(buffer.getShort())), StandardCharsets.UTF_8));
-                case 9 -> skip(buffer, 16);
-                default -> throw new IOException("Unknown event stream header type " + type);
             }
+        } catch (BufferUnderflowException | IllegalArgumentException exception) {
+            throw new IOException("Malformed event stream headers", exception);
         }
         return headers;
     }

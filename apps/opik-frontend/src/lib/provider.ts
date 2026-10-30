@@ -155,3 +155,25 @@ export const normalizeBedrockApi = (
     ? (lowered as BedrockApi)
     : DEFAULT_BEDROCK_API;
 };
+
+const BEDROCK_RUNTIME_HOST = /(^|\.)bedrock-runtime(-fips)?\./;
+
+const BEDROCK_RUNTIME_PATHS: Record<BedrockApi, string> = {
+  chat_completions: "/openai/v1",
+  anthropic_messages: "/anthropic",
+  converse: "",
+};
+
+// A bedrock-runtime host serves each API on one fixed path, so a URL typed for one API is wrong for the next.
+// Other hosts, such as bedrock-mantle or a company gateway, have their own paths and keep what the user typed.
+export const bedrockUrlForApi = (url: string, api: BedrockApi): string => {
+  let parsed: URL;
+  try {
+    parsed = new URL(url.trim());
+  } catch {
+    return url;
+  }
+  return BEDROCK_RUNTIME_HOST.test(parsed.hostname)
+    ? `${parsed.origin}${BEDROCK_RUNTIME_PATHS[api]}`
+    : url;
+};

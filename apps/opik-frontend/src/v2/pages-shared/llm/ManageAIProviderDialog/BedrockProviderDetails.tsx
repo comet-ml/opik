@@ -12,7 +12,7 @@ import { Button } from "@/ui/button";
 import SelectBox from "@/shared/SelectBox/SelectBox";
 import { DropdownOption } from "@/types/shared";
 import { BedrockApi } from "@/types/providers";
-import { normalizeBedrockApi } from "@/lib/provider";
+import { bedrockUrlForApi, normalizeBedrockApi } from "@/lib/provider";
 import CustomHeadersField from "./CustomHeadersField";
 import AuthConfigSection from "./AuthConfigSection";
 
@@ -91,7 +91,15 @@ const BedrockProviderDetails: React.FC<BedrockProviderDetailsProps> = ({
               <SelectBox
                 id="bedrockApi"
                 value={normalizeBedrockApi(field.value)}
-                onChange={(value: BedrockApi) => field.onChange(value)}
+                onChange={(value: BedrockApi) => {
+                  field.onChange(value);
+                  const url = form.getValues("url");
+                  if (url) {
+                    form.setValue("url", bedrockUrlForApi(url, value), {
+                      shouldDirty: true,
+                    });
+                  }
+                }}
                 options={BEDROCK_API_OPTIONS}
               />
             </FormControl>

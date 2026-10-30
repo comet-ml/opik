@@ -46,7 +46,6 @@ import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -150,6 +149,21 @@ class BedrockConverseTest {
     }
 
     @Test
+    void movesTokenAndSamplingCustomParametersIntoTheInferenceConfig() {
+        serviceProvider.getService(config()).generate(ChatCompletionRequest.builder()
+                .from(request(List.of(OpikUserMessage.from("Hi")), 10))
+                .temperature(0.9)
+                .customParameters(Map.of("max_tokens", 300, "temperature", 0.2, "top_p", 0.5, "top_k", 50))
+                .build(), "workspace");
+
+        bedrock.verify(1, postRequestedFor(urlEqualTo(CONVERSE_PATH)).withRequestBody(equalToJson("""
+                {"messages": [{"role": "user", "content": [{"text": "Hi"}]}],
+                 "inferenceConfig": {"maxTokens": 300, "temperature": 0.2, "topP": 0.5},
+                 "additionalModelRequestFields": {"top_k": 50}}
+                """)));
+    }
+
+    @Test
     void streamsTheTextThenAFinalChunkWithTheFinishReasonAndUsage() throws Exception {
         bedrock.stubFor(post(urlEqualTo(STREAM_PATH)).willReturn(aResponse()
                 .withHeader("Content-Type", "application/vnd.amazon.eventstream")
@@ -190,6 +204,35 @@ class BedrockConverseTest {
             assertThat(message.getCode()).isEqualTo(429);
             assertThat(message.getMessage()).isEqualTo("Too many requests, please wait before trying again.");
         });
+    }
+
+    @Test
+    void keepsAQuotedMessageFromTheHeadersOfAnExceptionWithNoBody() {
+        bedrock.stubFor(post(urlEqualTo(STREAM_PATH)).willReturn(aResponse()
+                .withHeader("Content-Type", "application/vnd.amazon.eventstream")
+                .withBody(frame(Map.of(AwsEventStreamParser.MESSAGE_TYPE, "exception",
+                        AwsEventStreamParser.EXCEPTION_TYPE, "validationException",
+                        AwsEventStreamParser.ERROR_MESSAGE, "Value \"0\" for \"maxTokens\" is too small"), ""))));
+        var stream = stream();
+
+        assertThat(stream.done()).failsWithin(10, TimeUnit.SECONDS);
+        assertThat(serviceProvider.getService(config()).getLlmProviderError(stream.done().exceptionNow()))
+                .hasValueSatisfying(message -> {
+                    assertThat(message.getCode()).isEqualTo(400);
+                    assertThat(message.getMessage()).isEqualTo("Value \"0\" for \"maxTokens\" is too small");
+                });
+    }
+
+    @Test
+    void reportsAFrameWithMalformedHeadersAsAnIoError() {
+        bedrock.stubFor(post(urlEqualTo(STREAM_PATH)).willReturn(aResponse()
+                .withHeader("Content-Type", "application/vnd.amazon.eventstream")
+                .withBody(frame(new byte[]{20, 'x'}, "{}"))));
+        var stream = stream();
+
+        assertThat(stream.done()).failsWithin(10, TimeUnit.SECONDS).withThrowableThat()
+                .withStackTraceContaining("IOException: Malformed event stream headers");
+        assertThat(stream.chunks()).isEmpty();
     }
 
     @Test
@@ -272,11 +315,17 @@ class BedrockConverseTest {
 
     @Test
     void doesNotTakeOverAChatCompletionsBedrockProvider() {
+        bedrock.stubFor(post(urlEqualTo("/chat/completions")).willReturn(okJson("""
+                {"id": "chatcmpl-1", "object": "chat.completion", "created": 0, "model": "openai.gpt-oss-20b-1:0",
+                 "choices": [{"index": 0, "message": {"role": "assistant", "content": "hi"}, "finish_reason": "stop"}]}
+                """)));
         var config = config().toBuilder().configuration(Map.of("provider_name", PROVIDER_NAME)).build();
 
-        assertThatThrownBy(() -> serviceProvider.getService(config)
-                .generate(request(List.of(OpikUserMessage.from("Hi")), 10), "workspace"))
-                .isInstanceOf(RuntimeException.class);
+        var response = serviceProvider.getService(config)
+                .generate(request(List.of(OpikUserMessage.from("Hi")), 10), "workspace");
+
+        assertThat(response.choices().getFirst().message().content()).isEqualTo("hi");
+        bedrock.verify(1, postRequestedFor(urlEqualTo("/chat/completions")));
         assertThat(bedrock.findAll(postRequestedFor(urlEqualTo(CONVERSE_PATH)))).isEmpty();
     }
 
@@ -334,7 +383,10 @@ class BedrockConverseTest {
             headerBytes.write(valueBytes.length);
             headerBytes.writeBytes(valueBytes);
         });
-        var headersArray = headerBytes.toByteArray();
+        return frame(headerBytes.toByteArray(), payload);
+    }
+
+    private static byte[] frame(byte[] headersArray, String payload) {
         var payloadArray = payload.getBytes(StandardCharsets.UTF_8);
         int totalLength = 12 + headersArray.length + payloadArray.length + 4;
         var buffer = ByteBuffer.allocate(totalLength);

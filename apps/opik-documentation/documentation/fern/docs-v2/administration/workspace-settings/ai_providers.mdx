@@ -238,6 +238,8 @@ Amazon Bedrock provides access to foundation models from leading AI companies li
 
 To use several kinds of models, add one Bedrock provider for each API.
 
+Providers saved before the **API** field existed use Chat Completions. When you create a provider through the REST API, set `configuration.bedrock_api` to `chat_completions`, `anthropic_messages` or `converse`. A missing, empty or unknown value means Chat Completions.
+
 ##### Prerequisites
 
 Before configuring Bedrock in Opik, ensure you have:

@@ -21,6 +21,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.ArrayList;
@@ -155,6 +156,20 @@ class BedrockAnthropicMessagesTest {
 
         bedrock.verify(1, postRequestedFor(urlEqualTo(MESSAGES_PATH))
                 .withRequestBody(matchingJsonPath("$.max_tokens", equalTo("4096"))));
+    }
+
+    @ParameterizedTest
+    @CsvSource({", 256, 256", "0, 256, 256", "512, 256, 512"})
+    void fallsBackToTheLegacyMaxTokensOnlyWithoutAPositiveMaxCompletionTokens(Integer maxCompletionTokens,
+            Integer maxTokens, String expected) {
+        serviceProvider.getService(config("/anthropic")).generate(ChatCompletionRequest.builder()
+                .from(request(0))
+                .maxCompletionTokens(maxCompletionTokens)
+                .maxTokens(maxTokens)
+                .build(), "workspace");
+
+        bedrock.verify(1, postRequestedFor(urlEqualTo(MESSAGES_PATH))
+                .withRequestBody(matchingJsonPath("$.max_tokens", equalTo(expected))));
     }
 
     @Test

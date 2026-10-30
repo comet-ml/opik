@@ -151,6 +151,27 @@ describe("adding a Bedrock provider from the playground setup dialog", () => {
     });
   });
 
+  it("moves a typed bedrock-runtime URL to the path of the API picked after it", async () => {
+    startBedrockSetup();
+    const url = screen.getByPlaceholderText(
+      "https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1",
+    );
+    fireEvent.change(url, {
+      target: {
+        value: "https://bedrock-runtime.eu-west-1.amazonaws.com/openai/v1",
+      },
+    });
+    fireEvent.keyDown(bedrockApiSelect(), { key: "Enter" });
+    fireEvent.keyDown(
+      screen.getByRole("option", { name: "Anthropic Messages (Claude)" }),
+      { key: "Enter" },
+    );
+
+    expect(url).toHaveValue(
+      "https://bedrock-runtime.eu-west-1.amazonaws.com/anthropic",
+    );
+  });
+
   it("saves Converse and suggests the plain region URL when the user picks it", async () => {
     startBedrockSetup();
     fireEvent.keyDown(bedrockApiSelect(), { key: "Enter" });

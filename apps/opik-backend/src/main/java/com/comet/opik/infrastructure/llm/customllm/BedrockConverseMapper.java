@@ -3,6 +3,7 @@ package com.comet.opik.infrastructure.llm.customllm;
 import com.comet.opik.domain.llm.MessageContentNormalizer;
 import com.comet.opik.domain.llm.langchain4j.OpikContent;
 import com.comet.opik.domain.llm.langchain4j.OpikUserMessage;
+import com.comet.opik.infrastructure.llm.CustomParametersOverrides;
 import com.comet.opik.infrastructure.llm.OpenAiCompatFinishReasons;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -35,6 +36,7 @@ import org.apache.commons.lang3.StringUtils;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -49,6 +51,14 @@ class BedrockConverseMapper {
     private static final Pattern IMAGE_DATA_URL = Pattern.compile("^data:image/([a-zA-Z0-9.+-]+);base64,(.+)$",
             Pattern.DOTALL);
     private static final Set<String> IMAGE_FORMATS = Set.of("png", "jpeg", "gif", "webp");
+    // Converse reads these settings only from inferenceConfig and passes additionalModelRequestFields to the model in
+    // its own native format, where the OpenAI names mean nothing. A custom value wins over the typed field, as it does
+    // for the other providers; listed in order, so max_completion_tokens wins when both limits are set.
+    private static final List<Map.Entry<String, String>> INFERENCE_CONFIG_KEYS = List.of(
+            Map.entry(CustomParametersOverrides.MAX_TOKENS, "maxTokens"),
+            Map.entry(CustomParametersOverrides.MAX_COMPLETION_TOKENS, "maxTokens"),
+            Map.entry("temperature", "temperature"),
+            Map.entry("top_p", "topP"));
 
     private record Turn(String role, ArrayNode content) {
     }
@@ -76,11 +86,16 @@ class BedrockConverseMapper {
         if (CollectionUtils.isNotEmpty(request.stop())) {
             request.stop().forEach(inference.putArray("stopSequences")::add);
         }
+        if (MapUtils.isNotEmpty(request.customParameters())) {
+            var additionalFields = (ObjectNode) JsonUtils.valueToTree(request.customParameters());
+            INFERENCE_CONFIG_KEYS.forEach(keys -> Optional.ofNullable(additionalFields.remove(keys.getKey()))
+                    .ifPresent(value -> inference.set(keys.getValue(), value)));
+            if (!additionalFields.isEmpty()) {
+                body.set("additionalModelRequestFields", additionalFields);
+            }
+        }
         if (!inference.isEmpty()) {
             body.set("inferenceConfig", inference);
-        }
-        if (MapUtils.isNotEmpty(request.customParameters())) {
-            body.set("additionalModelRequestFields", JsonUtils.valueToTree(request.customParameters()));
         }
         return body;
     }
