@@ -142,49 +142,49 @@ openai:
   - id: "gpt-5-codex"
     structuredOutput: true
     reasoning: true
-    params: {maxOutputTokens: {max: 128000}, effort: {accepted: true, levels: [low, medium, high], default: medium}}
+    params: {maxOutputTokens: {max: 128000}, effort: {accepted: true, levels: [low, medium, high], default: medium}, onlyRoute: responses_api}
   - id: "gpt-5-pro"
     structuredOutput: true
     reasoning: true
-    params: {maxOutputTokens: {max: 272000}, effort: {accepted: true, levels: [minimal, low, medium, high], default: medium}}
+    params: {maxOutputTokens: {max: 272000}, effort: {accepted: true, levels: [minimal, low, medium, high], default: medium}, onlyRoute: responses_api}
   - id: "gpt-5.1-chat-latest"
     structuredOutput: true
     params: {maxOutputTokens: {max: 16384}}
   - id: "gpt-5.1-codex"
     structuredOutput: true
     reasoning: true
-    params: {maxOutputTokens: {max: 128000}, effort: {accepted: true, levels: [low, medium, high], default: medium}}
+    params: {maxOutputTokens: {max: 128000}, effort: {accepted: true, levels: [low, medium, high], default: medium}, onlyRoute: responses_api}
   - id: "gpt-5.1-codex-max"
     structuredOutput: true
     reasoning: true
-    params: {maxOutputTokens: {max: 128000}, effort: {accepted: true, levels: [low, medium, high], default: medium}}
+    params: {maxOutputTokens: {max: 128000}, effort: {accepted: true, levels: [low, medium, high], default: medium}, onlyRoute: responses_api}
   - id: "gpt-5.1-codex-mini"
     structuredOutput: true
     reasoning: true
-    params: {maxOutputTokens: {max: 128000}, effort: {accepted: true, levels: [low, medium, high], default: medium}}
+    params: {maxOutputTokens: {max: 128000}, effort: {accepted: true, levels: [low, medium, high], default: medium}, onlyRoute: responses_api}
   - id: "gpt-5.2-chat-latest"
     params: {maxOutputTokens: {max: 16384}}
   - id: "gpt-5.2-codex"
     structuredOutput: true
     reasoning: true
-    params: {maxOutputTokens: {max: 128000}, effort: {accepted: true, levels: [low, medium, high], default: medium}}
+    params: {maxOutputTokens: {max: 128000}, effort: {accepted: true, levels: [low, medium, high], default: medium}, onlyRoute: responses_api}
   - id: "gpt-5.2-pro"
     structuredOutput: true
     reasoning: true
-    params: {maxOutputTokens: {max: 128000}, effort: {accepted: true, levels: [minimal, low, medium, high, xhigh], default: medium}}
+    params: {maxOutputTokens: {max: 128000}, effort: {accepted: true, levels: [minimal, low, medium, high, xhigh], default: medium}, onlyRoute: responses_api}
   - id: "gpt-5.3-chat-latest"
     structuredOutput: true
     params: {maxOutputTokens: {max: 16384}}
   - id: "gpt-5.3-codex"
     structuredOutput: true
     reasoning: true
-    params: {maxOutputTokens: {max: 128000}, effort: {accepted: true, levels: [none, low, medium, high, xhigh], default: medium}}
+    params: {maxOutputTokens: {max: 128000}, effort: {accepted: true, levels: [none, low, medium, high, xhigh], default: medium}, onlyRoute: responses_api}
   - id: "gpt-5.4-pro"
     reasoning: true
-    params: {maxOutputTokens: {max: 128000}, effort: {accepted: true, levels: [low, medium, high, xhigh], default: medium}}
+    params: {maxOutputTokens: {max: 128000}, effort: {accepted: true, levels: [low, medium, high, xhigh], default: medium}, onlyRoute: responses_api}
   - id: "gpt-5.5-pro"
     reasoning: true
-    params: {maxOutputTokens: {max: 128000}, effort: {accepted: true, levels: [low, medium, high, xhigh], default: medium}}
+    params: {maxOutputTokens: {max: 128000}, effort: {accepted: true, levels: [low, medium, high, xhigh], default: medium}, onlyRoute: responses_api}
   - id: "gpt-image-1"
   - id: "gpt-image-1-mini"
   - id: "gpt-image-1.5"
@@ -209,18 +209,18 @@ openai:
   - id: "o1-pro"
     structuredOutput: true
     reasoning: true
-    params: {maxOutputTokens: {max: 100000}, effort: {accepted: true, levels: [low, medium, high], default: medium}}
+    params: {maxOutputTokens: {max: 100000}, effort: {accepted: true, levels: [low, medium, high], default: medium}, onlyRoute: responses_api}
   - id: "o3-deep-research"
     structuredOutput: true
     reasoning: true
-    params: {maxOutputTokens: {max: 100000}, effort: {accepted: true, levels: [low, medium, high], default: medium}}
+    params: {maxOutputTokens: {max: 100000}, effort: {accepted: true, levels: [low, medium, high], default: medium}, onlyRoute: responses_api}
   - id: "o3-mini"
     reasoning: true
     params: {maxOutputTokens: {max: 100000}, effort: {accepted: true, levels: [low, medium, high], default: medium}}
   - id: "o3-pro"
     structuredOutput: true
     reasoning: true
-    params: {maxOutputTokens: {max: 100000}, effort: {accepted: true, levels: [low, medium, high], default: medium}}
+    params: {maxOutputTokens: {max: 100000}, effort: {accepted: true, levels: [low, medium, high], default: medium}, onlyRoute: responses_api}
   - id: "o4-mini"
     structuredOutput: true
     reasoning: true
@@ -228,7 +228,7 @@ openai:
   - id: "o4-mini-deep-research"
     structuredOutput: true
     reasoning: true
-    params: {maxOutputTokens: {max: 100000}, effort: {accepted: true, levels: [low, medium, high], default: medium}}
+    params: {maxOutputTokens: {max: 100000}, effort: {accepted: true, levels: [low, medium, high], default: medium}, onlyRoute: responses_api}
 anthropic:
   - id: "claude-opus-5-5"
     label: "Claude Opus 5.5"
