@@ -150,8 +150,8 @@ class ThreadDAOImpl implements ThreadDAO {
                               \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                           <if(filters)> AND <filters> <endif>
                           <if(search_text)>
-                          AND id IN (
-                              SELECT id
+                          AND thread_id IN (
+                              SELECT thread_id
                               FROM traces
                               WHERE workspace_id = :workspace_id
                                 AND project_id = :project_id
@@ -188,6 +188,7 @@ class ThreadDAOImpl implements ThreadDAO {
                                       <endif>
                                     GROUP BY id
                                 )
+                                <if(filters)> AND <filters> <endif>
                                 AND <search_text>
                           )
                           <endif>
@@ -218,18 +219,22 @@ class ThreadDAOImpl implements ThreadDAO {
             """;
 
     /**
-     * Every reference to traces_final_ids goes through the same scalar subquery, {@code groupArray((id, thread_id))}:
-     * ClickHouse caches it, so the set is computed once per query, whereas {@code IN (SELECT id FROM traces_final_ids)}
-     * re-reads it at each reference. With a search that set scans every window trace's input and output, and the
-     * uncached thread_id lookup in trace_threads_final ran that scan four times per stats call.
+     * Every reference to traces_final_ids goes through the same scalar subquery,
+     * {@code groupArray((id, thread_id, id_week))}, and every reference to page_trace_ids through
+     * {@code groupArray((id, id_week))}: ClickHouse caches each, so a set is computed once per query, whereas
+     * {@code IN (SELECT id FROM traces_final_ids)} re-reads it at each reference. With a search that set scans every
+     * window trace's input and output, and the uncached thread_id lookup in trace_threads_final ran that scan four times
+     * per stats call.
      * <p>
-     * The search matches each trace's latest version outside FINAL: a key-only {@code max(last_updated_at)} pass picks
-     * the version, the ilike reads only those rows, and the FINAL read keeps the matching ids. Under FINAL the ilike ran
-     * after the in-order merge, which holds every part's payload blocks at once and ran a project with multi-MiB
-     * messages past the query memory limit. Two rows of one trace share a {@code last_updated_at} only if two inserts
-     * land in the same microsecond: it defaults to the insert's {@code now64(6)}, and {@code optimize_on_insert} collapses
-     * a trace repeated within one insert. FINAL's pick between such rows follows the commit order of that race, so either
-     * is the trace's latest version.
+     * The search picks threads, not traces: a thread matches when one of its traces that pass the filters does, and the
+     * FINAL read keeps all those traces, so its messages, cost, usage and first and last messages are the same as without
+     * the search. The search matches each trace's latest version outside FINAL: a key-only
+     * {@code max(last_updated_at)} pass picks the version, the ilike reads only those rows and returns their thread ids.
+     * Under FINAL the ilike ran after the in-order merge, which holds every part's payload blocks at once and ran a
+     * project with multi-MiB messages past the query memory limit. Two rows of one trace share a
+     * {@code last_updated_at} only if two inserts land in the same microsecond: it defaults to the insert's
+     * {@code now64(6)}, and {@code optimize_on_insert} collapses a trace repeated within one insert. FINAL's pick between
+     * such rows follows the commit order of that race, so either is the trace's latest version.
      * <p>
      * The page pushdown reads its page's trace ids once, without FINAL or payload, into {@code page_trace_ids}
      * (OPIK-8894), and traces_final, the spans filter and the span_weeks lookup all take them through that scalar.
@@ -237,9 +242,13 @@ class ThreadDAOImpl implements ThreadDAO {
      * Filtering on thread_id alone would read every window trace's payload: FINAL merges versions before it filters,
      * and thread_id is not in the sort key.
      * <p>
+     * Both sets carry each trace's week, and traces_final reads only those weeks: the ids alone leave the planner every
+     * partition of the project to open. The week is the stored {@code id_at}'s rather than one derived from the id, so
+     * it names the row's own partition whatever the {@code id_at} type.
+     * <p>
      * The set may hold traces that traces_final drops: a trace whose older version carried one of the page's thread ids
-     * before it moved to another thread, or a trace the filters or the search reject. That changes no result: spans_agg
-     * is joined to traces_final, and span_weeks only bounds the weeks read.
+     * before it moved to another thread, or a trace the filters reject. That changes no result: spans_agg is joined to
+     * traces_final, and span_weeks only bounds the weeks read.
      */
     @VisibleForTesting
     static final String SELECT_TRACES_THREADS_BY_PROJECT_IDS = """
@@ -261,7 +270,7 @@ class ThreadDAOImpl implements ThreadDAO {
                 <if(!annotation_queue_filters_match_unqueued)><if(annotation_queue_filters)> AND <annotation_queue_filters><endif><endif>
                 <if(annotation_queue_id)> AND has(ttaqi.annotation_queue_ids, :annotation_queue_id)<endif>
             ), <endif><if(traces_final_ids)>traces_final_ids AS (
-                SELECT id, thread_id
+                SELECT id, thread_id, toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) AS id_week
                 FROM traces FINAL
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
@@ -285,8 +294,8 @@ class ThreadDAOImpl implements ThreadDAO {
                 <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)>
-                AND id IN (
-                    SELECT id
+                AND thread_id IN (
+                    SELECT thread_id
                     FROM traces
                     WHERE workspace_id = :workspace_id
                       AND project_id = :project_id
@@ -323,11 +332,12 @@ class ThreadDAOImpl implements ThreadDAO {
                             <endif>
                           GROUP BY id
                       )
+                      <if(filters)> AND <filters> <endif>
                       AND <search_text>
                 )
                 <endif>
             ), <endif><if(page_pushdown)>page_trace_ids AS (
-                SELECT id FROM traces
+                SELECT id, toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) AS id_week FROM traces
                 WHERE workspace_id = :workspace_id
                   AND project_id = :project_id
                   AND thread_id IN :page_thread_ids
@@ -367,23 +377,17 @@ class ThreadDAOImpl implements ThreadDAO {
                       AND project_id = :project_id
                       AND thread_id \\<> ''
                       <if(page_pushdown)>
-                          AND id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_trace_ids)))
+                          AND id IN (SELECT arrayJoin(arrayMap(t -> t.1, (SELECT groupArray((id, id_week)) FROM page_trace_ids))))
+                          AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT arrayJoin(arrayMap(t -> t.2, (SELECT groupArray((id, id_week)) FROM page_trace_ids))))
                           AND thread_id IN :page_thread_ids
                           <if(uuid_from_time)> AND id >= :uuid_from_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                               >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
                           <if(uuid_to_time)> AND id \\<= :uuid_to_time AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                               \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
-                          <if(traces_partitioned && search_text)>
-                          AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
-                              SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                              FROM traces
-                              WHERE workspace_id = :workspace_id AND project_id = :project_id
-                              <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
-                              <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>)
-                          <endif>
                       <else>
                           <if(traces_final_ids)>
-                              AND id IN (SELECT arrayJoin(arrayMap(t -> t.1, (SELECT groupArray((id, thread_id)) FROM traces_final_ids))))
+                              AND id IN (SELECT arrayJoin(arrayMap(t -> t.1, (SELECT groupArray((id, thread_id, id_week)) FROM traces_final_ids))))
+                              AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT arrayJoin(arrayMap(t -> t.3, (SELECT groupArray((id, thread_id, id_week)) FROM traces_final_ids))))
                               <if(uuid_from_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                                   >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
                               <if(uuid_to_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
@@ -400,7 +404,6 @@ class ThreadDAOImpl implements ThreadDAO {
                 <if(page_pushdown)>
                 WHERE 1 = 1
                 <if(filters)> AND <filters> <endif>
-                <if(search_text)> AND <search_text> <endif>
                 <endif>
             ), spans_deduped AS (
                 SELECT
@@ -416,10 +419,10 @@ class ThreadDAOImpl implements ThreadDAO {
                 WHERE workspace_id = :workspace_id
                   AND project_id = :project_id
                   <if(page_pushdown)>
-                      AND trace_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_trace_ids)))
+                      AND trace_id IN (SELECT arrayJoin(arrayMap(t -> t.1, (SELECT groupArray((id, id_week)) FROM page_trace_ids))))
                   <else>
                       <if(traces_final_ids)>
-                          AND trace_id IN (SELECT arrayJoin(arrayMap(t -> t.1, (SELECT groupArray((id, thread_id)) FROM traces_final_ids))))
+                          AND trace_id IN (SELECT arrayJoin(arrayMap(t -> t.1, (SELECT groupArray((id, thread_id, id_week)) FROM traces_final_ids))))
                       <else>
                           <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
                           <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
@@ -430,10 +433,10 @@ class ThreadDAOImpl implements ThreadDAO {
                       WHERE workspace_id = :workspace_id
                       AND project_id = :project_id
                       <if(page_pushdown)>
-                          AND trace_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_trace_ids)))
+                          AND trace_id IN (SELECT arrayJoin(arrayMap(t -> t.1, (SELECT groupArray((id, id_week)) FROM page_trace_ids))))
                       <else>
                           <if(traces_final_ids)>
-                              AND trace_id IN (SELECT arrayJoin(arrayMap(t -> t.1, (SELECT groupArray((id, thread_id)) FROM traces_final_ids))))
+                              AND trace_id IN (SELECT arrayJoin(arrayMap(t -> t.1, (SELECT groupArray((id, thread_id, id_week)) FROM traces_final_ids))))
                           <else>
                               <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
                               <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
@@ -472,7 +475,7 @@ class ThreadDAOImpl implements ThreadDAO {
                 <if(page_pushdown)>
                     AND thread_id IN :page_thread_ids
                 <elseif(traces_final_ids)>
-                    AND thread_id IN (SELECT arrayJoin(arrayMap(t -> t.2, (SELECT groupArray((id, thread_id)) FROM traces_final_ids))))
+                    AND thread_id IN (SELECT arrayJoin(arrayMap(t -> t.2, (SELECT groupArray((id, thread_id, id_week)) FROM traces_final_ids))))
                 <elseif(uuid_from_time || uuid_to_time)>
                     AND thread_id IN (SELECT thread_id FROM traces_final)
                 <endif>
@@ -769,7 +772,7 @@ class ThreadDAOImpl implements ThreadDAO {
                 <if(!annotation_queue_filters_match_unqueued)><if(annotation_queue_filters)> AND <annotation_queue_filters><endif><endif>
                 <if(annotation_queue_id)> AND has(ttaqi.annotation_queue_ids, :annotation_queue_id)<endif>
             ), <endif><if(traces_final_ids)>traces_final_ids AS (
-                SELECT id, thread_id
+                SELECT id, thread_id, toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) AS id_week
                 FROM traces FINAL
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
@@ -793,8 +796,8 @@ class ThreadDAOImpl implements ThreadDAO {
                 <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)>
-                AND id IN (
-                    SELECT id
+                AND thread_id IN (
+                    SELECT thread_id
                     FROM traces
                     WHERE workspace_id = :workspace_id
                       AND project_id = :project_id
@@ -831,6 +834,7 @@ class ThreadDAOImpl implements ThreadDAO {
                             <endif>
                           GROUP BY id
                       )
+                      <if(filters)> AND <filters> <endif>
                       AND <search_text>
                 )
                 <endif>
@@ -855,7 +859,8 @@ class ThreadDAOImpl implements ThreadDAO {
                       AND project_id = :project_id
                       AND thread_id \\<> ''
                       <if(traces_final_ids)>
-                          AND id IN (SELECT arrayJoin(arrayMap(t -> t.1, (SELECT groupArray((id, thread_id)) FROM traces_final_ids))))
+                          AND id IN (SELECT arrayJoin(arrayMap(t -> t.1, (SELECT groupArray((id, thread_id, id_week)) FROM traces_final_ids))))
+                          AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT arrayJoin(arrayMap(t -> t.3, (SELECT groupArray((id, thread_id, id_week)) FROM traces_final_ids))))
                           <if(uuid_from_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                               >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
                           <if(uuid_to_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
@@ -888,7 +893,7 @@ class ThreadDAOImpl implements ThreadDAO {
                 -- because the join and the feedback-score, comment and annotation-queue lookups each read this CTE, and unnarrowed each
                 -- would dedupe every thread row of the project.
                 <if(traces_final_ids)>
-                    AND thread_id IN (SELECT arrayJoin(arrayMap(t -> t.2, (SELECT groupArray((id, thread_id)) FROM traces_final_ids))))
+                    AND thread_id IN (SELECT arrayJoin(arrayMap(t -> t.2, (SELECT groupArray((id, thread_id, id_week)) FROM traces_final_ids))))
                 <elseif(uuid_from_time || uuid_to_time)>
                     AND thread_id IN (SELECT thread_id FROM traces_final)
                 <endif>
@@ -1093,7 +1098,8 @@ class ThreadDAOImpl implements ThreadDAO {
      * <p>
      * traces_ids reads the thread's traces once, as a scalar (OPIK-8894): a plain CTE is inlined at every reference, so
      * traces_final, the spans filter and the span_weeks lookup would each re-scan them on thread_id, which is not in
-     * the sort key.
+     * the sort key. It also carries each trace's stored week, so traces_final and messages read only the thread's
+     * weeks, as in {@link #SELECT_TRACES_THREADS_BY_PROJECT_IDS}.
      * <p>
      * Update-before-create placeholders carry the sentinel start time, so the start, end, first and last trace and the
      * environment skip them while the thread has a real trace. A thread made only of placeholders falls back to them
@@ -1104,13 +1110,16 @@ class ThreadDAOImpl implements ThreadDAO {
     @VisibleForTesting
     static final String SELECT_TRACES_THREAD_BY_ID = """
             WITH traces_ids AS (
-                SELECT arrayJoin((
-                    SELECT groupArray(id)
-                    FROM traces
-                    WHERE workspace_id = :workspace_id
-                    AND project_id = :project_id
-                    AND thread_id = :thread_id
-                )) AS id
+                SELECT tupleElement(trace, 1) AS id, tupleElement(trace, 2) AS id_week
+                FROM (
+                    SELECT arrayJoin((
+                        SELECT groupArray((id, toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))))
+                        FROM traces
+                        WHERE workspace_id = :workspace_id
+                        AND project_id = :project_id
+                        AND thread_id = :thread_id
+                    )) AS trace
+                )
             ), traces_final AS (
                 SELECT
                     id,
@@ -1128,6 +1137,7 @@ class ThreadDAOImpl implements ThreadDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 AND id IN (SELECT id FROM traces_ids)
+                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT id_week FROM traces_ids)
                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ), spans_deduped AS (
@@ -1201,6 +1211,7 @@ class ThreadDAOImpl implements ThreadDAO {
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
                     AND has(arrayConcat(arrayMap(a -> a.7, thread_aggs), arrayMap(a -> a.8, thread_aggs)), id)
+                    AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT id_week FROM traces_ids)
                     ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 )
@@ -1477,7 +1488,7 @@ class ThreadDAOImpl implements ThreadDAO {
                 <if(!annotation_queue_filters_match_unqueued)><if(annotation_queue_filters)> AND <annotation_queue_filters><endif><endif>
                 <if(annotation_queue_id)> AND has(ttaqi.annotation_queue_ids, :annotation_queue_id)<endif>
             ), <endif><if(traces_final_ids)>traces_final_ids AS (
-                    SELECT id, thread_id
+                    SELECT id, thread_id, toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) AS id_week
                     FROM traces FINAL
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
@@ -1501,8 +1512,8 @@ class ThreadDAOImpl implements ThreadDAO {
                     <endif>
                     <if(filters)> AND <filters> <endif>
                     <if(search_text)>
-                    AND id IN (
-                        SELECT id
+                    AND thread_id IN (
+                        SELECT thread_id
                         FROM traces
                         WHERE workspace_id = :workspace_id
                           AND project_id = :project_id
@@ -1539,6 +1550,7 @@ class ThreadDAOImpl implements ThreadDAO {
                                 <endif>
                               GROUP BY id
                           )
+                          <if(filters)> AND <filters> <endif>
                           AND <search_text>
                     )
                     <endif>
@@ -1563,7 +1575,8 @@ class ThreadDAOImpl implements ThreadDAO {
                           AND project_id = :project_id
                           AND thread_id \\<> ''
                           <if(traces_final_ids)>
-                              AND id IN (SELECT arrayJoin(arrayMap(t -> t.1, (SELECT groupArray((id, thread_id)) FROM traces_final_ids))))
+                              AND id IN (SELECT arrayJoin(arrayMap(t -> t.1, (SELECT groupArray((id, thread_id, id_week)) FROM traces_final_ids))))
+                              AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT arrayJoin(arrayMap(t -> t.3, (SELECT groupArray((id, thread_id, id_week)) FROM traces_final_ids))))
                               <if(uuid_from_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                                   >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
                               <if(uuid_to_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
@@ -1590,7 +1603,7 @@ class ThreadDAOImpl implements ThreadDAO {
                     WHERE workspace_id = :workspace_id
                       AND project_id = :project_id
                       <if(traces_final_ids)>
-                          AND trace_id IN (SELECT arrayJoin(arrayMap(t -> t.1, (SELECT groupArray((id, thread_id)) FROM traces_final_ids))))
+                          AND trace_id IN (SELECT arrayJoin(arrayMap(t -> t.1, (SELECT groupArray((id, thread_id, id_week)) FROM traces_final_ids))))
                       <else>
                           <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
                           <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
@@ -1600,7 +1613,7 @@ class ThreadDAOImpl implements ThreadDAO {
                           WHERE workspace_id = :workspace_id
                           AND project_id = :project_id
                           <if(traces_final_ids)>
-                              AND trace_id IN (SELECT arrayJoin(arrayMap(t -> t.1, (SELECT groupArray((id, thread_id)) FROM traces_final_ids))))
+                              AND trace_id IN (SELECT arrayJoin(arrayMap(t -> t.1, (SELECT groupArray((id, thread_id, id_week)) FROM traces_final_ids))))
                           <else>
                               <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
                               <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
@@ -1636,7 +1649,7 @@ class ThreadDAOImpl implements ThreadDAO {
                     -- because the join and the feedback-score, comment and annotation-queue lookups each read this CTE, and unnarrowed each
                     -- would dedupe every thread row of the project.
                     <if(traces_final_ids)>
-                        AND thread_id IN (SELECT arrayJoin(arrayMap(t -> t.2, (SELECT groupArray((id, thread_id)) FROM traces_final_ids))))
+                        AND thread_id IN (SELECT arrayJoin(arrayMap(t -> t.2, (SELECT groupArray((id, thread_id, id_week)) FROM traces_final_ids))))
                     <elseif(uuid_from_time || uuid_to_time)>
                         AND thread_id IN (SELECT thread_id FROM traces_final)
                     <endif>
@@ -1956,12 +1969,15 @@ class ThreadDAOImpl implements ThreadDAO {
                             // full query for any filter/sort that needs the joined sources to determine the page.
                             if (isPagePushdownEligible(finalTemplate, criteria)) {
                                 finalTemplate.add("page_pushdown", true);
+                                // The page's threads are the search's, and the list aggregates all their traces
+                                var threadAggregationCriteria = criteria.toBuilder().searchText(null).build();
                                 return findPageThreadIds(criteria, sortFields, size, offset, connection,
                                         workspaceId)
                                         .flatMap(pageThreadIds -> pageThreadIds.isEmpty()
                                                 ? Mono.just(new TraceThread.TraceThreadPage(page, 0, count, List.of(),
                                                         traceThreadSortingFactory.getSortableFields()))
-                                                : findThreadPage(finalTemplate, criteria, size, page, count,
+                                                : findThreadPage(finalTemplate, threadAggregationCriteria, size, page,
+                                                        count,
                                                         connection, workspaceId, hasDynamicKeys,
                                                         statement -> statement.bind("page_thread_ids",
                                                                 pageThreadIds.toArray(String[]::new))));
