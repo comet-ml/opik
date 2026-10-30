@@ -11,6 +11,7 @@ import com.comet.opik.infrastructure.net.DestinationGuardDnsResolver;
 import com.comet.opik.infrastructure.net.DestinationGuardException;
 import com.comet.opik.infrastructure.net.RefusedHostException;
 import com.comet.opik.infrastructure.redis.StringRedisClient;
+import com.comet.opik.utils.HttpStatusRetryability;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.opentelemetry.api.GlobalOpenTelemetry;
@@ -292,7 +293,7 @@ public class AuthTokenProvider {
             if (deadline != null && deadline.expired()) {
                 recordFetchMetric(startNanos, "slow_reply", origin);
                 throw new AuthTokenException("token reply from '%s' took longer than the fetch timeout"
-                        .formatted(authConfig.tokenUrl()));
+                        .formatted(authConfig.tokenUrl()), null, true);
             }
             // the guard checks each address connected to as well, refusing a host that no longer resolves as above
             var refused = ExceptionUtils.throwableOfType(exception, RefusedHostException.class);
@@ -315,7 +316,8 @@ public class AuthTokenProvider {
         if (status < 200 || status >= 300) {
             recordFetchMetric(startNanos, "upstream_error", origin);
             throw new AuthTokenException("token fetch failed with status '%d' from '%s': %s"
-                    .formatted(status, authConfig.tokenUrl(), redact(authConfig, body)));
+                    .formatted(status, authConfig.tokenUrl(), redact(authConfig, body)), null,
+                    HttpStatusRetryability.isTransient(status));
         }
 
         JsonNode root;

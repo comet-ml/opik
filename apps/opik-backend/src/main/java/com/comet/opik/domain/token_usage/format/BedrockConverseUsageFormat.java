@@ -34,10 +34,12 @@ final class BedrockConverseUsageFormat implements UsageFormat {
 
     private static NativeUsage fromConverse(VariantInput input) {
         var keys = input.keys();
+        var cacheWrites = CacheWrites.of(keys, keys.first("cache_write_input_tokens", "cache_creation_input_tokens"));
         return builder(input)
                 .inputTokens(keys.get("input_tokens"))
                 .cacheReadInputTokens(keys.get("cache_read_input_tokens"))
-                .cacheWriteInputTokens(keys.first("cache_write_input_tokens", "cache_creation_input_tokens"))
+                .cacheWriteInputTokens(cacheWrites.total())
+                .cacheWrite1hInputTokens(cacheWrites.oneHour())
                 .outputTokens(keys.get("output_tokens"))
                 .build();
     }
@@ -54,16 +56,17 @@ final class BedrockConverseUsageFormat implements UsageFormat {
         // The LiteLLM versions that include it also report the prompt's details.
         var keys = input.keys();
         long cacheRead = keys.get("cache_read_input_tokens");
-        long cacheWrite = keys.get("cache_creation_input_tokens");
+        var cacheWrites = CacheWrites.of(keys, keys.get("cache_creation_input_tokens"));
         long promptTokens = keys.get("prompt_tokens");
         return builder(input)
                 .inputTokens(keys.hasAny("prompt_tokens_details.cached_tokens",
                         "prompt_tokens_details.cache_creation_tokens")
-                                ? input.excludingCache(promptTokens, cacheRead + cacheWrite,
+                                ? input.excludingCache(promptTokens, cacheRead + cacheWrites.total(),
                                         keys.get("completion_tokens"))
                                 : promptTokens)
                 .cacheReadInputTokens(cacheRead)
-                .cacheWriteInputTokens(cacheWrite)
+                .cacheWriteInputTokens(cacheWrites.total())
+                .cacheWrite1hInputTokens(cacheWrites.oneHour())
                 .outputTokens(keys.get("completion_tokens"))
                 .build();
     }
