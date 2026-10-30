@@ -80,6 +80,7 @@ def read_and_parse_full_stream(
         last_retrieved_id = cursor
         dropped_records: Dict[str, int] = {"count": 0}
         page_last_id: Dict[str, Optional[str]] = {"id": None}
+        page_cursor_known: Dict[str, bool] = {"known": False}
         try:
             results_stream = read_source(current_batch_size, last_retrieved_id)
             parsed_items = read_and_parse_stream(
@@ -87,6 +88,7 @@ def read_and_parse_full_stream(
                 item_class=parsed_item_class,
                 dropped_records_out=dropped_records,
                 last_id_out=page_last_id,
+                cursor_known_out=page_cursor_known,
                 cursor_field=cursor_field,
             )
         except _SIZE_CORRELATED_ERRORS as exc:
@@ -105,14 +107,15 @@ def read_and_parse_full_stream(
         result.extend(parsed_items)
         dropped_records_total += dropped_records["count"]
         cursor_before_page = cursor
-        if page_last_id["id"] is not None:
-            # The cursor is the cursor field's value on the last line the
-            # backend sent, parsed or not. When no line carried one, the
-            # cursor stays stale and the stop checks below end the read
-            # rather than re-requesting the same page.
+        if page_cursor_known["known"]:
+            # A decoded line carried the cursor field, so the backend
+            # position is known even when its value is NULL: keep None as
+            # the cursor and let the stop checks below end the read. NULL
+            # rows sort last, so nothing past them is lost, and the next
+            # request would only re-fetch the same NULL rows.
             cursor = page_last_id["id"]
         elif parsed_items:
-            # Nothing on this page carried a cursor value, so fall back to
+            # No decoded line carried a cursor value, so fall back to
             # the last parsed record: the read still advances instead of
             # stopping at the first page. The backend position above always
             # wins when it is reported.
@@ -197,6 +200,7 @@ def read_and_parse_stream(
     nb_samples: Optional[int] = None,
     dropped_records_out: Optional[Dict[str, int]] = None,
     last_id_out: Optional[Dict[str, Optional[str]]] = None,
+    cursor_known_out: Optional[Dict[str, bool]] = None,
     cursor_field: str = "id",
 ) -> List[T]:
     """Parse an NDJSON stream into ``item_class`` instances.
@@ -208,11 +212,15 @@ def read_and_parse_stream(
     ``last_id_out`` is given, its ``"id"`` key is set to the ``cursor_field``
     value of the last line that decoded to an object, even if that record
     failed validation: a paginating caller needs the backend's own position,
-    not the last record it managed to use.
+    not the last record it managed to use. When ``cursor_known_out`` is given,
+    its ``"known"`` key says whether any line decoded to an object at all, so
+    the caller can tell an explicit NULL cursor apart from no cursor
+    reported: only the former must stop the read.
     """
     result: List[T] = []
     dropped_records = 0
     last_cursor: Optional[str] = None
+    last_cursor_known = False
 
     # last record in chunk may be incomplete, we will use this buffer to concatenate strings
     buffer = b""
@@ -223,11 +231,12 @@ def read_and_parse_stream(
 
         # last record in chunk may be incomplete
         for line in lines[:-1]:
-            item, line_cursor = _parse_stream_line(
+            item, line_cursor, line_cursor_known = _parse_stream_line(
                 line=line, item_class=item_class, cursor_field=cursor_field
             )
-            if line_cursor is not None:
+            if line_cursor_known:
                 last_cursor = line_cursor
+                last_cursor_known = True
             if item is None:
                 dropped_records += 1
             else:
@@ -236,6 +245,7 @@ def read_and_parse_stream(
                 if nb_samples is not None and len(result) == nb_samples:
                     _report_dropped_records(dropped_records_out, dropped_records)
                     _report_last_id(last_id_out, last_cursor)
+                    _report_cursor_known(cursor_known_out, last_cursor_known)
                     return result
 
         # Keep the last potentially incomplete line in buffer
@@ -243,11 +253,12 @@ def read_and_parse_stream(
 
     # Process any remaining data in the buffer after the stream ends
     if buffer:
-        item, line_cursor = _parse_stream_line(
+        item, line_cursor, line_cursor_known = _parse_stream_line(
             line=buffer, item_class=item_class, cursor_field=cursor_field
         )
-        if line_cursor is not None:
+        if line_cursor_known:
             last_cursor = line_cursor
+            last_cursor_known = True
         if item is None:
             dropped_records += 1
         else:
@@ -255,6 +266,7 @@ def read_and_parse_stream(
 
     _report_dropped_records(dropped_records_out, dropped_records)
     _report_last_id(last_id_out, last_cursor)
+    _report_cursor_known(cursor_known_out, last_cursor_known)
     return result
 
 
@@ -274,24 +286,36 @@ def _report_last_id(
         last_id_out["id"] = last_id
 
 
+def _report_cursor_known(
+    cursor_known_out: Optional[Dict[str, bool]],
+    cursor_known: bool,
+) -> None:
+    if cursor_known_out is not None:
+        cursor_known_out["known"] = cursor_known
+
+
 def _parse_stream_line(
     line: bytes,
     item_class: Type[T],
     cursor_field: str = "id",
-) -> Tuple[Optional[T], Optional[str]]:
+) -> Tuple[Optional[T], Optional[str], bool]:
     """Parse one NDJSON line.
 
-    Returns the parsed item (or None when the record is unusable) together with
-    the ``cursor_field`` value the record carried, reported even when
-    validation of the rest of the record failed.
+    Returns the parsed item (or None when the record is unusable), the
+    ``cursor_field`` value the record carried, and whether the line decoded
+    to an object at all. The value is reported even when validation of the
+    rest of the record failed, and is None when the field was NULL or absent;
+    the flag is what tells those cases apart from a line that never decoded.
     """
     cursor_value: Optional[str] = None
+    cursor_known = False
     try:
         item_dict = json.loads(line.decode("utf-8"))
         if isinstance(item_dict, dict):
             cursor_value = item_dict.get(cursor_field)
+            cursor_known = True
         item_obj = item_class(**item_dict)
-        return item_obj, cursor_value
+        return item_obj, cursor_value, cursor_known
 
     except json.JSONDecodeError as e:
         LOGGER.error(f"Error decoding {item_class.__name__}, reason: {e}")
@@ -300,4 +324,4 @@ def _parse_stream_line(
     except Exception as e:
         LOGGER.error(f"Error decoding or parsing {item_class.__name__}, reason: {e}")
 
-    return None, cursor_value
+    return None, cursor_value, cursor_known
