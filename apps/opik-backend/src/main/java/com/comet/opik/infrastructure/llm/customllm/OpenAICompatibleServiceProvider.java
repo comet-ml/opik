@@ -9,7 +9,6 @@ import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmServiceProvider;
 import com.comet.opik.infrastructure.llm.antropic.AnthropicClientGenerator;
 import com.comet.opik.infrastructure.llm.antropic.LlmProviderAnthropic;
-import com.fasterxml.jackson.databind.JsonNode;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.request.ChatRequestParameters;
 import jakarta.inject.Named;
@@ -77,8 +76,8 @@ class OpenAICompatibleServiceProvider implements LlmServiceProvider {
                     ChatRequestParameters.builder()
                             .modelName(modelId)
                             .temperature(modelParameters.temperature())
-                            .maxOutputTokens(maxTokens(modelParameters.customParameters()))
-                            .build());
+                            .build(),
+                    modelParameters.customParameters());
         }
         if (BedrockApi.of(config) == BedrockApi.ANTHROPIC_MESSAGES) {
             var messagesConfig = toAnthropicMessagesConfig(config);
@@ -94,11 +93,6 @@ class OpenAICompatibleServiceProvider implements LlmServiceProvider {
     private BedrockConverseClient newConverseClient(LlmProviderClientApiConfig config) {
         return new BedrockConverseClient(clientGenerator.newHttpClient(config),
                 BedrockApi.converseBaseUrl(requireBaseUrl(config)), config.apiKey());
-    }
-
-    private static Integer maxTokens(JsonNode customParameters) {
-        var maxTokens = customParameters == null ? null : customParameters.get("max_tokens");
-        return maxTokens != null && maxTokens.canConvertToInt() && maxTokens.asInt() > 0 ? maxTokens.asInt() : null;
     }
 
     private static String requireBaseUrl(LlmProviderClientApiConfig config) {

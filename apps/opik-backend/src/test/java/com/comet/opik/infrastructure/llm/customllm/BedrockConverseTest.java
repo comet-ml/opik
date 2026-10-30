@@ -10,6 +10,7 @@ import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmTestClients;
 import com.comet.opik.infrastructure.llm.antropic.AnthropicClientGenerator;
+import com.comet.opik.utils.JsonUtils;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
@@ -282,6 +283,27 @@ class BedrockConverseTest {
                          "messages": [{"role": "user", "content": [{"text": "Is Dublin right?"}]}],
                          "inferenceConfig": {"temperature": 0.0}}
                         """)));
+    }
+
+    @Test
+    void judgesWithTheRulesCustomParametersOnEveryCall() {
+        var judge = serviceProvider.getLanguageModel(config(), LlmAsJudgeModelParameters.builder()
+                .name(OPIK_MODEL)
+                .temperature(0.0)
+                .customParameters(JsonUtils.getJsonNodeFromString("""
+                        {"max_completion_tokens": 200, "top_p": 0.9, "top_k": 50}
+                        """))
+                .build());
+        var request = ChatRequest.builder().messages(UserMessage.from("Is Dublin right?")).build();
+
+        judge.chat(request);
+        judge.chat(request);
+
+        bedrock.verify(2, postRequestedFor(urlEqualTo(CONVERSE_PATH)).withRequestBody(equalToJson("""
+                {"messages": [{"role": "user", "content": [{"text": "Is Dublin right?"}]}],
+                 "inferenceConfig": {"maxTokens": 200, "temperature": 0.0, "topP": 0.9},
+                 "additionalModelRequestFields": {"top_k": 50}}
+                """)));
     }
 
     @Test

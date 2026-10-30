@@ -54,7 +54,7 @@ class BedrockConverseMapper {
     // Converse reads these settings only from inferenceConfig and passes additionalModelRequestFields to the model in
     // its own native format, where the OpenAI names mean nothing. A custom value wins over the typed field, as it does
     // for the other providers; listed in order, so max_completion_tokens wins when both limits are set.
-    private static final List<Map.Entry<String, String>> INFERENCE_CONFIG_KEYS = List.of(
+    private static final List<Map.Entry<String, String>> INFERENCE_CONFIG_PARAMETER_MAPPINGS = List.of(
             Map.entry(CustomParametersOverrides.MAX_TOKENS, "maxTokens"),
             Map.entry(CustomParametersOverrides.MAX_COMPLETION_TOKENS, "maxTokens"),
             Map.entry("temperature", "temperature"),
@@ -86,21 +86,13 @@ class BedrockConverseMapper {
         if (CollectionUtils.isNotEmpty(request.stop())) {
             request.stop().forEach(inference.putArray("stopSequences")::add);
         }
-        if (MapUtils.isNotEmpty(request.customParameters())) {
-            var additionalFields = (ObjectNode) JsonUtils.valueToTree(request.customParameters());
-            INFERENCE_CONFIG_KEYS.forEach(keys -> Optional.ofNullable(additionalFields.remove(keys.getKey()))
-                    .ifPresent(value -> inference.set(keys.getValue(), value)));
-            if (!additionalFields.isEmpty()) {
-                body.set("additionalModelRequestFields", additionalFields);
-            }
-        }
-        if (!inference.isEmpty()) {
-            body.set("inferenceConfig", inference);
-        }
-        return body;
+        return withSettings(body, inference, MapUtils.isEmpty(request.customParameters())
+                ? null
+                : (ObjectNode) JsonUtils.valueToTree(request.customParameters()));
     }
 
-    ObjectNode toConverseRequest(List<ChatMessage> messages, ChatRequestParameters parameters) {
+    ObjectNode toConverseRequest(List<ChatMessage> messages, ChatRequestParameters parameters,
+            JsonNode customParameters) {
         var system = JsonUtils.createArrayNode();
         var turns = new ArrayList<Turn>();
         for (ChatMessage message : messages) {
@@ -123,10 +115,9 @@ class BedrockConverseMapper {
         if (CollectionUtils.isNotEmpty(parameters.stopSequences())) {
             parameters.stopSequences().forEach(inference.putArray("stopSequences")::add);
         }
-        if (!inference.isEmpty()) {
-            body.set("inferenceConfig", inference);
-        }
-        return body;
+        // A judge's custom parameters are shared by every call of its rule, so they are copied before keys are moved.
+        return withSettings(body, inference,
+                customParameters instanceof ObjectNode custom && !custom.isEmpty() ? custom.deepCopy() : null);
     }
 
     ChatCompletionResponse toResponse(JsonNode response, String model) {
@@ -198,6 +189,21 @@ class BedrockConverseMapper {
         return message.isTextual() && StringUtils.isNotBlank(message.asText())
                 ? message.asText()
                 : UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
+    }
+
+    private static ObjectNode withSettings(ObjectNode body, ObjectNode inference, ObjectNode customParameters) {
+        if (customParameters != null) {
+            INFERENCE_CONFIG_PARAMETER_MAPPINGS.forEach(mapping -> Optional
+                    .ofNullable(customParameters.remove(mapping.getKey()))
+                    .ifPresent(value -> inference.set(mapping.getValue(), value)));
+            if (!customParameters.isEmpty()) {
+                body.set("additionalModelRequestFields", customParameters);
+            }
+        }
+        if (!inference.isEmpty()) {
+            body.set("inferenceConfig", inference);
+        }
+        return body;
     }
 
     private static ObjectNode body(ArrayNode system, List<Turn> turns) {

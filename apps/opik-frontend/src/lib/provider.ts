@@ -156,7 +156,8 @@ export const normalizeBedrockApi = (
     : DEFAULT_BEDROCK_API;
 };
 
-const BEDROCK_RUNTIME_HOST = /(^|\.)bedrock-runtime(-fips)?\./;
+const BEDROCK_RUNTIME_HOST_REGEX =
+  /(^|\.)bedrock-runtime(-fips)?\.([a-z0-9-]+\.)+amazonaws\.com(\.cn)?$/;
 
 const BEDROCK_RUNTIME_PATHS: Record<BedrockApi, string> = {
   chat_completions: "/openai/v1",
@@ -164,7 +165,7 @@ const BEDROCK_RUNTIME_PATHS: Record<BedrockApi, string> = {
   converse: "",
 };
 
-// A bedrock-runtime host serves each API on one fixed path, so a URL typed for one API is wrong for the next.
+// AWS's own bedrock-runtime hosts serve each API on one fixed path, so a URL typed for one API is wrong for the next.
 // Other hosts, such as bedrock-mantle or a company gateway, have their own paths and keep what the user typed.
 export const bedrockUrlForApi = (url: string, api: BedrockApi): string => {
   let parsed: URL;
@@ -173,7 +174,7 @@ export const bedrockUrlForApi = (url: string, api: BedrockApi): string => {
   } catch {
     return url;
   }
-  return BEDROCK_RUNTIME_HOST.test(parsed.hostname)
-    ? `${parsed.origin}${BEDROCK_RUNTIME_PATHS[api]}`
+  return BEDROCK_RUNTIME_HOST_REGEX.test(parsed.hostname)
+    ? `${parsed.origin}${BEDROCK_RUNTIME_PATHS[api]}${parsed.search}`
     : url;
 };
