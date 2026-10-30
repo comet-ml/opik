@@ -233,6 +233,11 @@ test.describe(
       'the trace panel renders each re-priced amount against its own model, and no amount at all for the removed id',
       { tag: ['@cap:traces.span-model-cost-tokens'] },
       async ({ openRouterRepricedSpans, project, backendClient, page }) => {
+        // Room for the row-reload path below: an ingestion poll, a panel walk
+        // and up to three listing reads with a reload between them do not fit
+        // the 90s default once the workspace traces budget is being shed.
+        test.setTimeout(240_000);
+
         const vectors = priced(openRouterRepricedSpans.spans);
 
         const byName = await test.step(
@@ -343,6 +348,14 @@ test.describe(
           ).toBeCloseTo(openRouterRepricedSpans.expectedTraceCost, 9);
 
           await page.goBack();
+          // Waited through the POM rather than straight into the cell: on
+          // staging for 2.2.136 the listing this return re-issues was answered
+          // 429 by the per-workspace traces limit, and the FE keeps that empty
+          // answer without refetching — so the table stayed rowless and the
+          // cell could never appear, while the roll-up just above had read
+          // back fine. See the POM method for why a reload is the only thing
+          // that re-issues the listing.
+          await logs.waitForTraceRow(openRouterRepricedSpans.traceId);
           const cell = logs.estimatedCostCell(openRouterRepricedSpans.traceId);
           await expect(cell, 'exactly one Estimated cost cell for the seeded trace').toHaveCount(1);
           // Matched as the node whose OWN text is the amount rather than as the

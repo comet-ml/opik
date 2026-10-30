@@ -343,6 +343,11 @@ test.describe(
       'the panel and the Logs cost column render the amount the file resolved, and the unpriced control shows none',
       { tag: ['@cap:traces.span-model-cost-tokens'] },
       async ({ openRouterCostSpans, project, backendClient, page }) => {
+        // Room for the span-tree reload path below: two 60s ingestion polls and
+        // up to three tree reads with a panel reload between them do not fit the
+        // 90s default once the workspace spans budget is being shed.
+        test.setTimeout(240_000);
+
         const prefixed = bySpelling(openRouterCostSpans.spans, 'prefixed');
 
         const byName = await test.step(
@@ -415,12 +420,15 @@ test.describe(
           // reads as "the span is missing" rather than "the tree had not
           // rendered". Waited for explicitly, so a tree that genuinely never
           // lists a seeded span fails here with that named.
-          for (const seed of prefixed) {
-            await expect(
-              panel.spanTreeNode(seed.name),
-              `the tree lists '${seed.name}' exactly once`,
-            ).toHaveCount(1, { timeout: 30_000 });
-          }
+          //
+          // Waited through `waitForSpanTreeNodes` rather than a plain
+          // `toHaveCount`: on staging for 2.2.136 the panel's spans call was
+          // answered 429 by the per-workspace `getSpans` limit, and the FE
+          // keeps that empty answer without refetching — so the tree read
+          // `Spans (0)` for the whole wait while `readSeededSpans` above had
+          // already proved all five spans queryable. See the POM method for
+          // why a reload is the only thing that re-issues the query.
+          await panel.waitForSpanTreeNodes(prefixed.map((seed) => seed.name));
         });
 
         await test.step('Each priced span shows its own resolved cost against its own model', async () => {

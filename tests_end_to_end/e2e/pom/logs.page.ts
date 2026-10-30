@@ -629,6 +629,47 @@ export class LogsPage {
     return this.page.locator(`tr[data-row-id="${traceId}"]`);
   }
 
+  /**
+   * Wait for a trace's own row to be in the table, re-issuing the listing if
+   * the table came back without it.
+   *
+   * The table is filled by `GET /v1/private/traces/`, which is rate limited per
+   * workspace. When parallel specs have spent the budget that call is shed with
+   * a 429, the empty answer is kept, and nothing refetches — so the table stays
+   * rowless and a wait on `data-row-id` can never succeed however long it runs.
+   * Observed on staging for 2.2.136 on the `page.goBack()` return from a trace
+   * panel, with the trace reading back fine through the backend client (which
+   * carries `withRateLimitRetry` for exactly this burst; the browser has none).
+   *
+   * Not a loosened assertion: the row must still resolve to exactly one
+   * element, and the last attempt rethrows the locator's own failure — so a
+   * trace the table genuinely never lists still fails here, naming that trace,
+   * rather than being reported as a rate limit.
+   */
+  async waitForTraceRow(
+    traceId: string,
+    opts: { attempts?: number; timeout?: number } = {},
+  ): Promise<void> {
+    const attempts = opts.attempts ?? 3;
+    const timeout = opts.timeout ?? 20_000;
+    return test.step(`Wait for the row of trace ${traceId}`, async () => {
+      for (let attempt = 1; attempt <= attempts; attempt++) {
+        const isLast = attempt === attempts;
+        try {
+          await expect(
+            this.traceRow(traceId),
+            'exactly one row for this trace',
+          ).toHaveCount(1, { timeout: isLast ? timeout + 10_000 : timeout });
+          return;
+        } catch (error) {
+          if (isLast) throw error;
+          await this.page.reload();
+          await this.waitForReady({ timeout: 60_000 });
+        }
+      }
+    });
+  }
+
   /** Tick the selection checkbox on a trace's row. */
   async selectTrace(traceId: string): Promise<void> {
     return test.step(`Select trace ${traceId}`, async () => {
