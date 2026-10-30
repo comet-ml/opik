@@ -6,6 +6,7 @@ import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
 import com.comet.opik.infrastructure.llm.ProviderHeadersHttpClient;
+import dev.langchain4j.http.client.HttpClient;
 import dev.langchain4j.http.client.HttpClientBuilder;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.openai.internal.OpenAiClient;
@@ -86,6 +87,15 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
         return new OpikOpenAiChatModel(builder, modelParameters.customParameters());
     }
 
+    HttpClient newHttpClient(@NonNull LlmProviderClientApiConfig config) {
+        var builder = newHttpClientBuilder(config);
+        Optional.ofNullable(llmProviderClientConfig.getConnectTimeout())
+                .ifPresent(connectTimeout -> builder.connectTimeout(connectTimeout.toJavaDuration()));
+        Optional.ofNullable(llmProviderClientConfig.getReadTimeout())
+                .ifPresent(readTimeout -> builder.readTimeout(readTimeout.toJavaDuration()));
+        return builder.build();
+    }
+
     @Override
     public OpenAiClient generate(@NonNull LlmProviderClientApiConfig config, Object... params) {
         return newCustomLlmClient(config);
@@ -103,7 +113,7 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
      * conditional, applied when the provider needs request mutation (its configuration keys, a {@code {model}}
      * placeholder or token auth).
      */
-    private HttpClientBuilder newHttpClientBuilder(LlmProviderClientApiConfig config) {
+    HttpClientBuilder newHttpClientBuilder(LlmProviderClientApiConfig config) {
         // innermost, so it sees the URL after InterceptingHttpClient's mutations
         var guardedBuilder = new DestinationGuardHttpClientBuilder(httpClientBuilders.builder(), providerBaseUrlGuard);
 

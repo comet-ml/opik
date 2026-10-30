@@ -9,8 +9,32 @@ import { cn } from "@/lib/utils";
 import { Input } from "@/ui/input";
 import { Description } from "@/ui/description";
 import { Button } from "@/ui/button";
+import SelectBox from "@/shared/SelectBox/SelectBox";
+import { DropdownOption } from "@/types/shared";
+import { BedrockApi } from "@/types/providers";
+import { bedrockUrlForApi, normalizeBedrockApi } from "@/lib/provider";
 import CustomHeadersField from "./CustomHeadersField";
 import AuthConfigSection from "./AuthConfigSection";
+
+const BEDROCK_API_OPTIONS: DropdownOption<BedrockApi>[] = [
+  { value: "chat_completions", label: "Chat Completions (OpenAI-compatible)" },
+  { value: "anthropic_messages", label: "Anthropic Messages (Claude)" },
+  { value: "converse", label: "Converse (Amazon Nova and others)" },
+];
+
+const URL_PLACEHOLDERS: Record<BedrockApi, string> = {
+  chat_completions: "https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1",
+  anthropic_messages:
+    "https://bedrock-runtime.us-east-1.amazonaws.com/anthropic",
+  converse: "https://bedrock-runtime.us-east-1.amazonaws.com",
+};
+
+const MODELS_EXAMPLES: Record<BedrockApi, string> = {
+  chat_completions: "openai.gpt-oss-20b-1:0,mistral.ministral-3-3b-instruct",
+  anthropic_messages:
+    "us.anthropic.claude-haiku-5-5,global.anthropic.claude-sonnet-5",
+  converse: "us.amazon.nova-pro-v1:0,us.amazon.nova-2-lite-v1:0",
+};
 
 type BedrockProviderDetailsProps = {
   form: UseFormReturn<AIProviderFormType>;
@@ -21,6 +45,8 @@ const BedrockProviderDetails: React.FC<BedrockProviderDetailsProps> = ({
   form,
   isEdit = false,
 }) => {
+  const bedrockApi = normalizeBedrockApi(form.watch("bedrockApi"));
+
   return (
     <div className="flex flex-col gap-4 pb-4">
       {!isEdit && (
@@ -57,6 +83,37 @@ const BedrockProviderDetails: React.FC<BedrockProviderDetailsProps> = ({
       )}
       <FormField
         control={form.control}
+        name="bedrockApi"
+        render={({ field }) => (
+          <FormItem>
+            <Label htmlFor="bedrockApi">API</Label>
+            <FormControl>
+              <SelectBox
+                id="bedrockApi"
+                value={normalizeBedrockApi(field.value)}
+                onChange={(value: BedrockApi) => {
+                  field.onChange(value);
+                  const url = form.getValues("url");
+                  if (url) {
+                    form.setValue("url", bedrockUrlForApi(url, value), {
+                      shouldDirty: true,
+                    });
+                  }
+                }}
+                options={BEDROCK_API_OPTIONS}
+              />
+            </FormControl>
+            <Description>
+              Bedrock serves Claude only through Anthropic Messages and Amazon
+              Nova only through Converse. Use Chat Completions for
+              OpenAI-compatible models such as gpt-oss.
+            </Description>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+      <FormField
+        control={form.control}
         name="url"
         render={({ field, formState }) => {
           const validationErrors = get(formState.errors, ["url"]);
@@ -67,7 +124,7 @@ const BedrockProviderDetails: React.FC<BedrockProviderDetailsProps> = ({
               <FormControl>
                 <Input
                   id="url"
-                  placeholder="https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1"
+                  placeholder={URL_PLACEHOLDERS[bedrockApi]}
                   value={field.value}
                   onChange={(e) => field.onChange(e.target.value)}
                   className={cn({
@@ -76,6 +133,13 @@ const BedrockProviderDetails: React.FC<BedrockProviderDetailsProps> = ({
                 />
               </FormControl>
               <FormMessage />
+              {bedrockApi === "anthropic_messages" && (
+                <Description>
+                  For bedrock-mantle, use
+                  https://bedrock-mantle.us-east-1.api.aws/anthropic with your
+                  region.
+                </Description>
+              )}
             </FormItem>
           );
         }}
@@ -104,7 +168,7 @@ const BedrockProviderDetails: React.FC<BedrockProviderDetailsProps> = ({
               <FormMessage />
               <Description>
                 Comma separated list of available models. Example:
-                {`"openai.gpt-oss-20b-1:0,mistral.ministral-3-3b-instruct"`}
+                {`"${MODELS_EXAMPLES[bedrockApi]}"`}
               </Description>
             </FormItem>
           );
