@@ -9,12 +9,14 @@ import com.comet.opik.api.metrics.BreakdownField;
 import com.comet.opik.api.metrics.MetricType;
 import com.comet.opik.api.metrics.ProjectMetricRequest;
 import com.comet.opik.api.metrics.ProjectMetricResponse;
+import com.comet.opik.podam.PodamFactoryUtils;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Mono;
+import uk.co.jemos.podam.api.PodamFactory;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -29,6 +31,8 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class ProjectMetricsServiceTest {
+
+    private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
 
     @Mock
     private ProjectMetricsDAO dao;
@@ -46,19 +50,16 @@ class ProjectMetricsServiceTest {
         var results = new ArrayList<ProjectMetricResponse.Results<Number>>();
         for (int i = 12; i >= 3; i--) {
             entries.add(entry("group-" + i, first, String.valueOf(i)));
-            results.add(ProjectMetricResponse.Results.<Number>builder().name("group-" + i)
-                    .data(List.of(point(first, String.valueOf(i)))).build());
+            results.add(result("group-" + i, List.of(point(first, String.valueOf(i)))));
         }
         // Deliberately unsorted and sparse; the shared bucket must be summed without a double conversion.
         entries.add(entry("small-a", third, "0.4"));
         entries.add(entry("small-a", first, "0.100000000000000001"));
         entries.add(entry("small-b", second, "0.3"));
         entries.add(entry("small-b", first, "0.200000000000000002"));
-        entries.add(ProjectMetricsDAO.Entry.builder().name("cost").groupName("small-b").time(third)
-                .value(null).build());
-        results.add(ProjectMetricResponse.Results.<Number>builder().name("__others__")
-                .data(List.of(point(first, "0.300000000000000003"), point(second, "0.3"), point(third, "0.4")))
-                .build());
+        entries.add(entry("small-b", third, null));
+        results.add(result("__others__",
+                List.of(point(first, "0.300000000000000003"), point(second, "0.3"), point(third, "0.4"))));
         when(projectService.getOrFail(projectId)).thenReturn(Mono.just(Project.builder().id(projectId).build()));
         if (metricType == MetricType.SPAN_COST) {
             when(dao.getSpanCost(eq(projectId), any())).thenReturn(Mono.just(entries));
@@ -76,8 +77,16 @@ class ProjectMetricsServiceTest {
     }
 
     private ProjectMetricsDAO.Entry entry(String group, Instant time, String cost) {
-        return ProjectMetricsDAO.Entry.builder().name("cost").groupName(group).time(time)
-                .value(new BigDecimal(cost)).build();
+        var fixture = podamFactory.manufacturePojo(ProjectMetricsDAO.Entry.class);
+        return new ProjectMetricsDAO.Entry(fixture.name(), time,
+                cost == null ? null : new BigDecimal(cost), group);
+    }
+
+    @SuppressWarnings("unchecked")
+    private ProjectMetricResponse.Results<Number> result(String group, List<DataPoint<Number>> data) {
+        ProjectMetricResponse.Results<Number> fixture = podamFactory
+                .manufacturePojo(ProjectMetricResponse.Results.class, BigDecimal.class);
+        return fixture.toBuilder().name(group).data(data).build();
     }
 
     private DataPoint<Number> point(Instant time, String cost) {

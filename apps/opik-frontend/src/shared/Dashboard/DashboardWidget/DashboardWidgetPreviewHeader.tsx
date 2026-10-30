@@ -7,6 +7,7 @@ import {
 } from "@/store/DashboardStore";
 import InlineEditableText from "@/shared/InlineEditableText/InlineEditableText";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import { Button } from "@/ui/button";
 import { cn } from "@/lib/utils";
 
 type DashboardWidgetPreviewHeaderProps = {
@@ -49,13 +50,15 @@ const DashboardWidgetPreviewHeader: React.FunctionComponent<
         />
         {infoMessage && (
           <TooltipWrapper content={infoMessage}>
-            <button
+            <Button
               type="button"
+              variant="minimal"
+              size="icon-2xs"
               aria-label="Widget information"
               className="shrink-0"
             >
-              <Info className="size-3 text-light-slate" />
-            </button>
+              <Info />
+            </Button>
           </TooltipWrapper>
         )}
       </div>
