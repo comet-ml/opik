@@ -98,9 +98,10 @@ const CloudAIProviderDetails: React.FC<CloudAIProviderDetailsProps> = ({
                 />
               </FormControl>
               <span className="comet-body-s mt-1 text-light-slate">
-                Use Chat Completions unless you need Max reasoning effort, which
-                only the Responses API offers. The Responses API sends text only
-                (no images or audio) and ignores frequency and presence penalty.
+                Use Chat Completions unless you need Max reasoning effort or a
+                Pro or Codex model, which only the Responses API offers. The
+                Responses API sends text only (no images or audio) and ignores
+                frequency and presence penalty.
               </span>
               <FormMessage />
             </FormItem>

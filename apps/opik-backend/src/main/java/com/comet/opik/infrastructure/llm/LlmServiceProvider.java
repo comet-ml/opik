@@ -16,4 +16,7 @@ public interface LlmServiceProvider {
             LlmAsJudgeModelParameters modelParameters, @Nullable ModelParams.ToolsParam tools) {
         return getLanguageModel(config, modelParameters);
     }
+
+    default void requireOnlyRoute(LlmProviderClientApiConfig config, String model, @Nullable String onlyRoute) {
+    }
 }

@@ -71,6 +71,8 @@ export const subscribeToModelParams = (listener: () => void): (() => void) => {
 
 export const getModelParamsVersion = (): number => paramsVersion;
 
+export const getLatestModelParamsIndex = (): ModelParamsIndex => latestParams;
+
 const notifyModelParamsChanged = (): void => {
   paramsVersion += 1;
   paramsListeners.forEach((listener) => listener());

@@ -1,20 +1,27 @@
-import { describe, expect, it } from "vitest";
-import { renderHook } from "@testing-library/react";
+import { beforeEach, describe, expect, it } from "vitest";
+import { act, renderHook } from "@testing-library/react";
 
 import {
   PROVIDER_MODEL_TYPE,
   PROVIDER_TYPE,
   ProviderObject,
 } from "@/types/providers";
+import {
+  resetModelRegistryStoreForTesting,
+  setLatestModelParams,
+} from "@/lib/modelRegistryStore";
 import { sortProviderModels, useModelOptions } from "./useModelOptions";
 
-const createProvider = (provider: PROVIDER_TYPE): ProviderObject =>
+const createProvider = (
+  provider: PROVIDER_TYPE,
+  configuration: Record<string, string> = {},
+): ProviderObject =>
   ({
     id: provider,
     created_at: "",
     provider,
     ui_composed_provider: provider,
-    configuration: {},
+    configuration,
     read_only: false,
   }) as ProviderObject;
 
@@ -127,5 +134,78 @@ describe("useModelOptions", () => {
         PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO
       ],
     ).toBe(PROVIDER_TYPE.VERTEX_AI);
+  });
+});
+
+describe("useModelOptions — a model the catalog serves on one OpenAI API", () => {
+  const RESPONSES_ONLY = PROVIDER_MODEL_TYPE.GPT_5_5_PRO;
+  const BOTH_APIS = PROVIDER_MODEL_TYPE.GPT_5_5;
+  const MODELS = [
+    { label: "GPT 5.5", value: BOTH_APIS },
+    { label: "GPT 5.5 Pro", value: RESPONSES_ONLY },
+  ];
+  const PARAMS = new Map([
+    [
+      PROVIDER_TYPE.OPEN_AI as string,
+      new Map([
+        [BOTH_APIS as string, {}],
+        [RESPONSES_ONLY as string, { only_route: "responses_api" }],
+      ]),
+    ],
+  ]);
+
+  const renderOptions = (
+    configuration: Record<string, string>,
+    provider = PROVIDER_TYPE.OPEN_AI,
+  ) => {
+    const providers = [createProvider(provider, configuration)];
+    const providerModelsMap = { [provider]: MODELS };
+    const { result } = renderHook(() =>
+      useModelOptions(providers, providerModelsMap, ""),
+    );
+    return () => result.current.groupOptions[0].options.map((o) => o.value);
+  };
+
+  beforeEach(() => {
+    resetModelRegistryStoreForTesting();
+  });
+
+  it.each([
+    ["no API set", {}],
+    ["Chat Completions", { openai_pipeline_mode: "chat_completions_api" }],
+  ])("hides it on a key with %s", (_, configuration) => {
+    setLatestModelParams(PARAMS);
+
+    expect(renderOptions(configuration)()).toEqual([BOTH_APIS]);
+  });
+
+  it.each(["responses_api", "RESPONSES_API"])(
+    "shows it on a key set to %s",
+    (mode) => {
+      setLatestModelParams(PARAMS);
+
+      expect(renderOptions({ openai_pipeline_mode: mode })()).toEqual([
+        BOTH_APIS,
+        RESPONSES_ONLY,
+      ]);
+    },
+  );
+
+  it("leaves another provider's list alone", () => {
+    setLatestModelParams(PARAMS);
+
+    expect(renderOptions({}, PROVIDER_TYPE.GEMINI)()).toEqual([
+      BOTH_APIS,
+      RESPONSES_ONLY,
+    ]);
+  });
+
+  it("hides it once the catalog params arrive after the model list", () => {
+    const optionValues = renderOptions({});
+    expect(optionValues()).toEqual([BOTH_APIS, RESPONSES_ONLY]);
+
+    act(() => setLatestModelParams(PARAMS));
+
+    expect(optionValues()).toEqual([BOTH_APIS]);
   });
 });
