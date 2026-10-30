@@ -1466,6 +1466,19 @@ export interface ThreadRowRef {
   startTime: string | null;
   endTime: string | null;
   status: string | null;
+  /**
+   * The first and last turn the row's aggregate selected, as the endpoint
+   * serialises them — the two columns the Threads table renders as "First
+   * message" and "Last message".
+   *
+   * Carried here for the same reason the numbers above are: they are chosen by
+   * the aggregate over the thread's traces, so a read that aggregated the wrong
+   * SUBSET of a conversation answers a different pair while the row still looks
+   * entirely ordinary. `unknown` rather than `string`: the column is a
+   * `JsonListString`, so a turn whose input was an object comes back as one.
+   */
+  firstMessage: unknown | null;
+  lastMessage: unknown | null;
 }
 
 /** Percentile bucket a `PERCENTAGE` stat item carries instead of a scalar. */
@@ -6375,6 +6388,8 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
           startTime: t.startTime ? new Date(t.startTime).toISOString() : null,
           endTime: t.endTime ? new Date(t.endTime).toISOString() : null,
           status: t.status ? String(t.status) : null,
+          firstMessage: t.firstMessage ?? null,
+          lastMessage: t.lastMessage ?? null,
         })),
       };
     },

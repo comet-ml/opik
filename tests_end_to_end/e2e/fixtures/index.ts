@@ -1,4 +1,4 @@
-export { test, expect } from './numeric-assertion-suite.fixture';
+export { test, expect } from './environment-split-thread.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -628,3 +628,15 @@ export type {
   NumericAssertionSuiteFixtures,
 } from './numeric-assertion-suite.fixture';
 export { NUMERIC_ITEM } from './numeric-assertion-suite.fixture';
+export type {
+  SearchedThreadTurnRef,
+  SearchedThreadRef,
+  SearchedThreadAggregateRef,
+  SearchedThreadAggregateFixtures,
+} from './searched-thread-aggregate.fixture';
+export { AGGREGATE_MARKER } from './searched-thread-aggregate.fixture';
+export type {
+  SplitThreadTurnRef,
+  EnvironmentSplitThreadRef,
+  EnvironmentSplitThreadFixtures,
+} from './environment-split-thread.fixture';

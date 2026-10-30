@@ -1499,6 +1499,60 @@ export class LogsPage {
   }
 
   /**
+   * The "Total tokens" cell of a thread row — the `usage.total_tokens` column.
+   *
+   * Note the UNDERSCORE: `ThreadsTab` declares the column as
+   * `usage.total_tokens`, `convertColumnDataToColumn` passes that through as the
+   * `accessorKey` with no explicit `id`, and TanStack then derives the column id
+   * from the accessor key with every `.` replaced by `_` — so the
+   * `data-cell-id` the DataTable stamps is `<rowId>_usage_total_tokens`, not the
+   * dotted form the column data uses. Both this column and Estimated cost are
+   * in `DEFAULT_SELECTED_COLUMNS`, so a spec reaching for them does not have to
+   * open the column picker first.
+   */
+  threadTotalTokensCell(threadId: string): Locator {
+    return this.threadRow(threadId).locator(`[data-cell-id="${threadId}_usage_total_tokens"]`);
+  }
+
+  /**
+   * Read the "Total tokens" cell of a thread row as a number.
+   *
+   * Throws rather than returning 0 when the cell renders the `-` placeholder
+   * `ThreadsTab`'s `accessorFn` falls back to: an absent aggregate and a zero
+   * one are different answers, and a reader that folded them together would let
+   * a row with no usage at all pass an assertion about its token total.
+   */
+  async readThreadTotalTokens(threadId: string): Promise<number> {
+    return test.step(`Read total tokens for thread ${threadId}`, async () => {
+      const cell = this.threadTotalTokensCell(threadId);
+      await cell.waitFor({ state: 'visible' });
+      const text = ((await cell.textContent()) ?? '').trim();
+      const digits = text.replace(/[^\d]/g, '');
+      if (digits === '') {
+        throw new Error(
+          `LogsPage.readThreadTotalTokens: thread ${threadId} renders no token total ` +
+            `(cell reads "${text}")`,
+        );
+      }
+      return Number(digits);
+    });
+  }
+
+  /**
+   * The table's "No matching results" state — what the Logs tables render when
+   * a search or a filter matched nothing.
+   *
+   * Addressed as the heading rather than by text: `DataTableNoMatchingData`
+   * renders the same string as its illustration's `alt` too, so a role-less
+   * lookup would be ambiguous about which element it found. Note this is also
+   * what the table shows for a FAILED request, so a spec asserting it should
+   * have checked the API's own answer for the same question first.
+   */
+  get noMatchingResults(): Locator {
+    return this.page.getByRole('heading', { name: 'No matching results' });
+  }
+
+  /**
    * Open a thread's detail panel by id, returning the conversation panel POM.
    *
    * `traceId` sets the panel's `trace` param — the shape a deep link into one
