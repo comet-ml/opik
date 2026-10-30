@@ -8,6 +8,7 @@ import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.Builder;
 
 import java.math.BigDecimal;
@@ -15,6 +16,7 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
 
+import static com.comet.opik.utils.ValidationUtils.MAX_EVALUATOR_REVISION_LENGTH;
 import static com.comet.opik.utils.ValidationUtils.MAX_FEEDBACK_SCORE_VALUE;
 import static com.comet.opik.utils.ValidationUtils.MIN_FEEDBACK_SCORE_VALUE;
 
@@ -32,5 +34,6 @@ public record FeedbackScore(
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy,
-        @Schema(accessMode = Schema.AccessMode.READ_ONLY) Map<String, ValueEntry> valueByAuthor) {
+        @Schema(accessMode = Schema.AccessMode.READ_ONLY) Map<String, ValueEntry> valueByAuthor,
+        @Size(max = MAX_EVALUATOR_REVISION_LENGTH) @Schema(description = "Revision of the evaluator that produced the score. On read, set only when every entry in value_by_author has the same revision") String evaluatorRevision) {
 }

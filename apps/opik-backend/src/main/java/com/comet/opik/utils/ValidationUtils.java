@@ -39,6 +39,7 @@ public class ValidationUtils {
      */
     public static final String MIN_FEEDBACK_SCORE_VALUE = "-999999999.999999999";
     public static final String MAX_FEEDBACK_SCORE_VALUE = "999999999.999999999";
+    public static final int MAX_EVALUATOR_REVISION_LENGTH = 256;
     public static final int SCALE = 9;
 
     /**

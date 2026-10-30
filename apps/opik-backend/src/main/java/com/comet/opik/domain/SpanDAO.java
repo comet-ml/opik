@@ -598,7 +598,8 @@ public class SpanDAO {
                        last_updated_by,
                        created_at,
                        last_updated_at,
-                       author
+                       author,
+                       evaluator_revision
                 FROM (
                     SELECT workspace_id,
                            project_id,
@@ -612,7 +613,8 @@ public class SpanDAO {
                            last_updated_by,
                            created_at,
                            last_updated_at,
-                           feedback_scores.last_updated_by AS author
+                           feedback_scores.last_updated_by AS author,
+                           evaluator_revision
                     FROM feedback_scores
                     WHERE entity_type = 'span'
                       AND workspace_id = :workspace_id
@@ -631,7 +633,8 @@ public class SpanDAO {
                            last_updated_by,
                            created_at,
                            last_updated_at,
-                           author
+                           author,
+                           evaluator_revision
                     FROM authored_feedback_scores
                     WHERE entity_type = 'span'
                       AND workspace_id = :workspace_id
@@ -646,7 +649,7 @@ public class SpanDAO {
                     project_id,
                     entity_id,
                     name,
-                    groupArray(tuple(value, reason, category_name, source, author, created_by, last_updated_by, created_at, last_updated_at)) AS entries
+                    groupArray(tuple(value, reason, category_name, source, author, created_by, last_updated_by, created_at, last_updated_at, evaluator_revision)) AS entries
                 FROM feedback_scores_deduped
                 GROUP BY workspace_id, project_id, entity_id, name
              ), feedback_scores_final AS (
@@ -661,7 +664,7 @@ public class SpanDAO {
                     entries[1].4 AS source,
                     mapFromArrays(
                             arrayMap(e -> e.5, entries),
-                            arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9, '', '', '', e.5), entries)
+                            arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9, '', '', '', e.5, e.10), entries)
                     ) AS value_by_author,
                     arrayStringConcat(arrayMap(e -> e.6, entries), ', ') AS created_by,
                     arrayStringConcat(arrayMap(e -> e.7, entries), ', ') AS last_updated_by,
@@ -993,7 +996,8 @@ public class SpanDAO {
                        last_updated_by,
                        created_at,
                        last_updated_at,
-                       author
+                       author,
+                       evaluator_revision
                 FROM (
                     SELECT workspace_id,
                            project_id,
@@ -1007,7 +1011,8 @@ public class SpanDAO {
                            last_updated_by,
                            created_at,
                            last_updated_at,
-                           feedback_scores.last_updated_by AS author
+                           feedback_scores.last_updated_by AS author,
+                           evaluator_revision
                     FROM feedback_scores
                     WHERE entity_type = 'span'
                       AND workspace_id = :workspace_id
@@ -1031,7 +1036,8 @@ public class SpanDAO {
                            last_updated_by,
                            created_at,
                            last_updated_at,
-                           author
+                           author,
+                           evaluator_revision
                     FROM authored_feedback_scores
                     WHERE entity_type = 'span'
                       AND workspace_id = :workspace_id
@@ -1051,7 +1057,7 @@ public class SpanDAO {
                     project_id,
                     entity_id,
                     name,
-                    groupArray(tuple(value, reason, category_name, source, author, created_by, last_updated_by, created_at, last_updated_at)) AS entries
+                    groupArray(tuple(value, reason, category_name, source, author, created_by, last_updated_by, created_at, last_updated_at, evaluator_revision)) AS entries
                 FROM feedback_scores_deduped
                 GROUP BY workspace_id, project_id, entity_id, name
             ), feedback_scores_final AS (
@@ -1066,7 +1072,7 @@ public class SpanDAO {
                     entries[1].4 AS source,
                     mapFromArrays(
                             arrayMap(e -> e.5, entries),
-                            arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9, '', '', '', e.5), entries)
+                            arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9, '', '', '', e.5, e.10), entries)
                     ) AS value_by_author,
                     arrayStringConcat(arrayMap(e -> e.6, entries), ', ') AS created_by,
                     arrayStringConcat(arrayMap(e -> e.7, entries), ', ') AS last_updated_by,
@@ -1608,7 +1614,8 @@ public class SpanDAO {
                        last_updated_by,
                        created_at,
                        last_updated_at,
-                       author
+                       author,
+                       evaluator_revision
                 FROM (
                     <if(has_legacy_scores)>
                     SELECT workspace_id,
@@ -1623,7 +1630,8 @@ public class SpanDAO {
                            last_updated_by,
                            created_at,
                            last_updated_at,
-                           feedback_scores.last_updated_by AS author
+                           feedback_scores.last_updated_by AS author,
+                           evaluator_revision
                     FROM feedback_scores
                     WHERE entity_type = 'span'
                       AND workspace_id = :workspace_id
@@ -1644,7 +1652,8 @@ public class SpanDAO {
                            last_updated_by,
                            created_at,
                            last_updated_at,
-                           author
+                           author,
+                           evaluator_revision
                     FROM authored_feedback_scores
                     WHERE entity_type = 'span'
                       AND workspace_id = :workspace_id
@@ -1660,7 +1669,7 @@ public class SpanDAO {
                     project_id,
                     entity_id,
                     name,
-                    groupArray(tuple(value, reason, category_name, source, author, created_by, last_updated_by, created_at, last_updated_at)) AS entries
+                    groupArray(tuple(value, reason, category_name, source, author, created_by, last_updated_by, created_at, last_updated_at, evaluator_revision)) AS entries
                 FROM feedback_scores_deduped
                 GROUP BY workspace_id, project_id, entity_id, name
             ), feedback_scores_final AS (
@@ -1675,7 +1684,7 @@ public class SpanDAO {
                     entries[1].4 AS source,
                     mapFromArrays(
                             arrayMap(e -> e.5, entries),
-                            arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9, '', '', '', e.5), entries)
+                            arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9, '', '', '', e.5, e.10), entries)
                     ) AS value_by_author,
                     arrayStringConcat(arrayMap(e -> e.6, entries), ', ') AS created_by,
                     arrayStringConcat(arrayMap(e -> e.7, entries), ', ') AS last_updated_by,

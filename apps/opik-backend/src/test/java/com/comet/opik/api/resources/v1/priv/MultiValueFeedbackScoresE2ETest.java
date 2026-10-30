@@ -1224,6 +1224,126 @@ class MultiValueFeedbackScoresE2ETest {
                 StatsUtils.getProjectSpanStatItems(List.of(expected)));
     }
 
+    @Test
+    @DisplayName("test score trace by multiple authors with different evaluator revisions")
+    void testScoreTraceByMultipleAuthorsWithDifferentEvaluatorRevisions() {
+        var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+        var traceId = createTrace(projectName);
+
+        var user1Score = scoreWithRevision(RandomStringUtils.secure().nextAlphanumeric(10));
+        traceResourceClient.feedbackScore(traceId, user1Score, TEST_WORKSPACE, API_KEY1);
+        var user2Score = scoreWithRevision(RandomStringUtils.secure().nextAlphanumeric(10)).toBuilder()
+                .name(user1Score.name())
+                .build();
+        traceResourceClient.feedbackScore(traceId, user2Score, TEST_WORKSPACE, API_KEY2);
+
+        var actualScore = getTraceScore(traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY1));
+
+        assertThat(actualScore.evaluatorRevision()).isNull();
+        assertValueByAuthor(actualScore.valueByAuthor(), Map.of(
+                USER1, expectedValueEntry(user1Score, USER1),
+                USER2, expectedValueEntry(user2Score, USER2)));
+    }
+
+    @Test
+    @DisplayName("test score trace by multiple authors with the same evaluator revision")
+    void testScoreTraceByMultipleAuthorsWithSameEvaluatorRevision() {
+        var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+        var traceId = createTrace(projectName);
+
+        var user1Score = scoreWithRevision(RandomStringUtils.secure().nextAlphanumeric(10));
+        traceResourceClient.feedbackScore(traceId, user1Score, TEST_WORKSPACE, API_KEY1);
+        var user2Score = scoreWithRevision(user1Score.evaluatorRevision()).toBuilder()
+                .name(user1Score.name())
+                .build();
+        traceResourceClient.feedbackScore(traceId, user2Score, TEST_WORKSPACE, API_KEY2);
+
+        var actualScore = getTraceScore(traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY1));
+
+        assertThat(actualScore.evaluatorRevision()).isEqualTo(user1Score.evaluatorRevision());
+        assertValueByAuthor(actualScore.valueByAuthor(), Map.of(
+                USER1, expectedValueEntry(user1Score, USER1),
+                USER2, expectedValueEntry(user2Score, USER2)));
+    }
+
+    @Test
+    @DisplayName("test span scores with different evaluator revisions rolled up on the parent trace")
+    void testSpanScoresWithDifferentEvaluatorRevisionsOnParentTrace() {
+        var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+        var traceId = createTrace(projectName);
+        var spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
+                .limit(2)
+                .map(span -> span.toBuilder()
+                        .traceId(traceId)
+                        .projectName(projectName)
+                        .feedbackScores(null)
+                        .build())
+                .toList();
+        spanResourceClient.batchCreateSpans(spans, API_KEY1, TEST_WORKSPACE);
+
+        var name = RandomStringUtils.secure().nextAlphanumeric(10);
+        var spanScores = spans.stream()
+                .map(span -> scoreWithRevision(RandomStringUtils.secure().nextAlphanumeric(10)).toBuilder()
+                        .name(name)
+                        .build())
+                .toList();
+        for (int i = 0; i < spans.size(); i++) {
+            spanResourceClient.feedbackScore(spans.get(i).id(), spanScores.get(i), TEST_WORKSPACE, API_KEY1);
+        }
+
+        var actualTrace = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY1);
+        assertThat(actualTrace.spanFeedbackScores()).hasSize(1);
+        var actualScore = actualTrace.spanFeedbackScores().getFirst();
+
+        assertThat(actualScore.evaluatorRevision()).isNull();
+        assertValueByAuthor(actualScore.valueByAuthor(), Map.of(
+                USER1 + "_" + spans.get(0).id(), expectedSpanValueEntry(spanScores.get(0), spans.get(0)),
+                USER1 + "_" + spans.get(1).id(), expectedSpanValueEntry(spanScores.get(1), spans.get(1))));
+    }
+
+    private UUID createTrace(String projectName) {
+        var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                .projectName(projectName)
+                .feedbackScores(null)
+                .build();
+        return traceResourceClient.createTrace(trace, API_KEY1, TEST_WORKSPACE);
+    }
+
+    private FeedbackScore scoreWithRevision(String evaluatorRevision) {
+        return factory.manufacturePojo(FeedbackScore.class).toBuilder()
+                .sourceQueueId(null)
+                .evaluatorRevision(evaluatorRevision)
+                .build();
+    }
+
+    private ValueEntry expectedValueEntry(FeedbackScore score, String author) {
+        return ValueEntry.builder()
+                .value(score.value())
+                .reason(score.reason())
+                .categoryName(score.categoryName())
+                .source(score.source())
+                .spanType("")
+                .spanId("")
+                .author(author)
+                .evaluatorRevision(score.evaluatorRevision())
+                .build();
+    }
+
+    private ValueEntry expectedSpanValueEntry(FeedbackScore score, Span span) {
+        return expectedValueEntry(score, USER1).toBuilder()
+                .spanType(span.type().toString())
+                .spanId(span.id().toString())
+                .build();
+    }
+
+    private void assertValueByAuthor(Map<String, ValueEntry> actual, Map<String, ValueEntry> expected) {
+        assertThat(actual)
+                .usingRecursiveComparison()
+                .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                .ignoringFieldsOfTypes(Instant.class)
+                .isEqualTo(expected);
+    }
+
     private FeedbackScore getTraceScore(Trace trace) {
         assertThat(trace.feedbackScores()).hasSize(1);
         return trace.feedbackScores().getFirst();

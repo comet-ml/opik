@@ -249,8 +249,15 @@ class FeedbackScoreMessage(BaseMessage):
     source: str
     reason: Optional[str] = None
     category_name: Optional[str] = None
+    evaluator_revision: Optional[str] = None
 
     message_type = "FeedbackScoreMessage"
+
+    def as_payload_dict(self) -> Dict[str, Any]:
+        data = super().as_payload_dict()
+        if data.get("evaluator_revision") is None:
+            data.pop("evaluator_revision", None)
+        return data
 
 
 @dataclasses.dataclass

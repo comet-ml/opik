@@ -21,6 +21,10 @@ class FeedbackScoreCompare(UniversalBaseModel):
     created_by: typing.Optional[str] = None
     last_updated_by: typing.Optional[str] = None
     value_by_author: typing.Optional[typing.Dict[str, ValueEntryCompare]] = None
+    evaluator_revision: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    Revision of the evaluator that produced the score. On read, set only when every entry in value_by_author has the same revision
+    """
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
