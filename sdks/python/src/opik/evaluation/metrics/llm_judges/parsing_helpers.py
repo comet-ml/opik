@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, List, Set
 import json
 import opik.exceptions as exceptions
 
@@ -31,6 +31,11 @@ def reason_to_text(value: Any) -> str:
     return str(value)
 
 
+# Failed brace candidates tolerated before the fallback scan gives up. Normal replies
+# have a handful at most; a judge stuck in a repetition loop has thousands.
+_MAX_FAILED_CANDIDATES = 200
+
+
 def _extract_presumably_json_dict_or_raise(content: str) -> Any:
     first_paren = content.find("{")
     last_paren = content.rfind("}")
@@ -47,16 +52,50 @@ def _extract_presumably_json_dict_or_raise(content: str) -> Any:
         return json.loads(json_string)
     except json.JSONDecodeError:
         pass
-
-    # Fallback: under reasoning models with response_format the LLM
-    # occasionally emits multiple complete JSON objects glued together
-    # (e.g. ``{...}\n{...}``). Streaming-decode the first complete object
-    # so the call doesn't fail when the model duplicates its answer.
-    decoder = json.JSONDecoder()
-    try:
-        obj, _ = decoder.raw_decode(content[first_paren:])
-        return obj
-    except json.JSONDecodeError as e:
+    except RecursionError:
         raise exceptions.JSONParsingError(
-            f"Failed to extract presumably JSON dictionary: {str(e)}"
-        ) from e
+            "Failed to extract presumably JSON dictionary: content is nested too deeply"
+        )
+
+    # Fallback: reasoning models occasionally repeat their answer object
+    # (``{...}\n{...}``), which is fine. Two different top-level objects are
+    # ambiguous: the first may be text the judge quoted from the evaluated
+    # answer (#7848), so refuse to pick one by position.
+    decoder = json.JSONDecoder()
+    found: List[Any] = []
+    seen: Set[str] = set()
+    index = first_paren
+    failed_candidates = 0
+    while index != -1:
+        try:
+            obj, end = decoder.raw_decode(content, index)
+        except json.JSONDecodeError:
+            # Each failed attempt can scan to the end of the content, so a long
+            # run of unclosed braces is quadratic. Bound the number of attempts.
+            failed_candidates += 1
+            if failed_candidates > _MAX_FAILED_CANDIDATES:
+                raise exceptions.JSONParsingError(
+                    "Failed to extract presumably JSON dictionary: too many "
+                    "unparseable '{' candidates; refusing to keep scanning"
+                )
+            index = content.find("{", index + 1)
+            continue
+        except RecursionError:
+            raise exceptions.JSONParsingError(
+                "Failed to extract presumably JSON dictionary: content is nested too deeply"
+            )
+        key = json.dumps(obj, sort_keys=True)
+        if isinstance(obj, dict) and key not in seen:
+            seen.add(key)
+            found.append(obj)
+            if len(found) > 1:
+                raise exceptions.JSONParsingError(
+                    "Ambiguous LLM output: found several different JSON objects; "
+                    "refusing to pick one by position"
+                )
+        index = content.find("{", end)
+    if not found:
+        raise exceptions.JSONParsingError(
+            "Failed to extract presumably JSON dictionary: no JSON object found in content"
+        )
+    return found[0]
