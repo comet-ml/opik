@@ -152,8 +152,10 @@ public class CostService {
         }
 
         // Try normalized model name (replace dots with hyphens and lowercase)
+        // Every variant below is lower-cased, so each skip check compares case-sensitively: a name that differs
+        // from its variant only in letter case ("GPT-5-MINI") still needs the retry.
         String normalizedModelName = normalizeModelName(modelName);
-        if (!normalizedModelName.equalsIgnoreCase(modelName)) {
+        if (!normalizedModelName.equals(modelName)) {
             ModelPrice normalizedMatch = ModelPriceTable.get(normalizedModelName, provider);
             if (normalizedMatch != null) {
                 log.debug("Found model price using normalized name. Original: '{}', Normalized: '{}'",
@@ -164,7 +166,7 @@ public class CostService {
 
         // Try stripping date suffix from original name with dots preserved (e.g., "gpt-5.2-2025-12-17" -> "gpt-5.2")
         String baseOriginalModelName = stripDateSuffix(modelName);
-        if (!baseOriginalModelName.equalsIgnoreCase(modelName)) {
+        if (!baseOriginalModelName.equals(modelName)) {
             ModelPrice normalizedMatch = ModelPriceTable.get(baseOriginalModelName, provider);
             if (normalizedMatch != null) {
                 log.debug(
@@ -176,7 +178,7 @@ public class CostService {
 
         // Try stripping date suffix from normalized name (e.g., "gpt-5-2-2025-12-17" -> "gpt-5-2")
         String baseNormalizedModelName = stripDateSuffix(normalizedModelName);
-        if (!baseNormalizedModelName.equalsIgnoreCase(normalizedModelName)) {
+        if (!baseNormalizedModelName.equals(normalizedModelName)) {
             ModelPrice normalizedMatch = ModelPriceTable.get(baseNormalizedModelName, provider);
             if (normalizedMatch != null) {
                 log.debug(
@@ -189,7 +191,7 @@ public class CostService {
         // Try stripping version-pin suffix from original name with dots preserved
         // (e.g., "anthropic.claude-opus-4-6-v1:0" -> "anthropic.claude-opus-4-6-v1")
         String baseOriginalVersionName = stripVersionSuffix(modelName);
-        if (!baseOriginalVersionName.equalsIgnoreCase(modelName)) {
+        if (!baseOriginalVersionName.equals(modelName)) {
             ModelPrice normalizedMatch = ModelPriceTable.get(baseOriginalVersionName, provider);
             if (normalizedMatch != null) {
                 log.debug(
@@ -202,7 +204,7 @@ public class CostService {
         // Try stripping version-pin suffix from normalized name
         // (e.g., "anthropic-claude-opus-4-6-v1:0" -> "anthropic-claude-opus-4-6-v1")
         String baseNormalizedVersionName = stripVersionSuffix(normalizedModelName);
-        if (!baseNormalizedVersionName.equalsIgnoreCase(normalizedModelName)) {
+        if (!baseNormalizedVersionName.equals(normalizedModelName)) {
             ModelPrice normalizedMatch = ModelPriceTable.get(baseNormalizedVersionName, provider);
             if (normalizedMatch != null) {
                 log.debug(
