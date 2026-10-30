@@ -184,13 +184,15 @@ class Streamer:
         return self._all_done()
 
     def flush(self, timeout: Optional[float], upload_sleep_time: int = 5) -> bool:
+        end_time = time.time() + timeout if timeout is not None else None
+
         # wait for current pending messages processing to be completed
         # this should be done before flushing batch preprocessor because some
         # batch messages may be added to the queue during processing
         with self._lock:
             synchronization.wait_for_done(
                 check_function=lambda: self._idle,
-                timeout=timeout,
+                timeout=None if end_time is None else max(0.0, end_time - time.time()),
                 sleep_time=0.1,
             )
 
@@ -200,24 +202,17 @@ class Streamer:
             # do replay only if we have a connection to the server
             self._fallback_replay_manager.flush()
 
-        start_time = time.time()
-
         synchronization.wait_for_done(
             check_function=lambda: self._all_done(),
-            timeout=timeout,
+            timeout=None if end_time is None else max(0.0, end_time - time.time()),
             sleep_time=0.1,
             progress_callback=self._batch_preprocessor.flush,
         )
 
-        elapsed_time = time.time() - start_time
-        if timeout is not None:
-            timeout = timeout - elapsed_time
-            if timeout < 0.0:
-                timeout = 1.0
-
         # flushing upload manager is blocking operation
         upload_flushed = self._file_upload_manager.flush(
-            timeout=timeout, sleep_time=upload_sleep_time
+            timeout=None if end_time is None else max(0.0, end_time - time.time()),
+            sleep_time=upload_sleep_time,
         )
 
         flushed = upload_flushed and self._all_done()

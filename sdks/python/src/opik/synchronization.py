@@ -23,9 +23,10 @@ def wait_for_done(
         # Wait a max of sleep_time, but keep checking to see if
         # check_function is done. Allows wait_for_empty to end
         # before sleep_time has elapsed:
-        end_sleep_time = time.time() + sleep_time
+        end_sleep_time = min(time.time() + sleep_time, end_time)
         while check_function() is False and time.time() < end_sleep_time:
-            time.sleep(sleep_time / 20.0)
+            remaining = max(0.0, end_sleep_time - time.time())
+            time.sleep(min(sleep_time / 20.0, remaining))
 
 
 def until(

@@ -50,3 +50,23 @@ def test_wait_for_done__positive_timeout__returns_as_soon_as_the_check_passes() 
     synchronization.wait_for_done(check_function=check, timeout=30, sleep_time=0.01)
 
     assert len(calls) == 1
+
+
+def test_wait_for_done__short_budget__caps_the_sleep(monkeypatch) -> None:
+    now = [0.0]
+    sleeps = []
+
+    def sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+        now[0] += seconds
+        assert len(sleeps) < 100, "wait did not stop at the deadline"
+
+    monkeypatch.setattr(synchronization.time, "time", lambda: now[0])
+    monkeypatch.setattr(synchronization.time, "sleep", sleep)
+
+    synchronization.wait_for_done(
+        check_function=lambda: False, timeout=0.01, sleep_time=5
+    )
+
+    assert now[0] == 0.01
+    assert sleeps == [0.01]
