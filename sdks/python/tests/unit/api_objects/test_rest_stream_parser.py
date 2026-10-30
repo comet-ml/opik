@@ -6,6 +6,7 @@ import httpx
 import pytest
 
 from opik.rest_api.types import span_public as rest_api_types
+from opik.rest_api.types import trace_thread as trace_thread_types
 from opik.api_objects import rest_stream_parser
 
 SPANS_STREAM_JSON = [
@@ -163,6 +164,155 @@ def test_read_and_parse_full_stream__non_size_correlated_error__propagates(
             max_results=None,
             max_endpoint_batch_size=400,
         )
+
+
+THREADS_STREAM_JSON = [
+    {
+        "id": "thread_123",
+        "thread_model_id": "0195f6f1-9da2-7630-b285-60cf5580372f",
+        "project_id": "0195f6f1-9c82-751f-a1ad-54fec4b5c7d8",
+    },
+    {
+        "id": "thread_124",
+        "thread_model_id": "0195f6f1-9d9f-77c0-8063-17c59f6d9875",
+        "project_id": "0195f6f1-9c82-751f-a1ad-54fec4b5c7d8",
+    },
+]
+
+
+@pytest.fixture
+def threads_stream_source():
+    yield [f"{json.dumps(thread)}\n".encode("utf-8") for thread in THREADS_STREAM_JSON]
+
+
+def test_read_and_parse_full_stream__default_cursor_field__uses_item_id(
+    spans_stream_source,
+):
+    cursors = []
+
+    def read_source(current_batch_size, last_retrieved_id):
+        cursors.append(last_retrieved_id)
+        # Full page once, then an empty page to end the read.
+        return spans_stream_source if len(cursors) == 1 else []
+
+    rest_stream_parser.read_and_parse_full_stream(
+        read_source=read_source,
+        parsed_item_class=rest_api_types.SpanPublic,
+        max_results=None,
+        max_endpoint_batch_size=2,
+    )
+
+    # Without cursor_field the cursor is the item's `id`.
+    assert cursors == [None, SPANS_STREAM_JSON[1]["id"]]
+
+
+def test_read_and_parse_full_stream__cursor_field__threads_use_thread_model_id(
+    threads_stream_source,
+):
+    cursors = []
+
+    def read_source(current_batch_size, last_retrieved_id):
+        cursors.append(last_retrieved_id)
+        # Full page once, then an empty page to end the read.
+        return threads_stream_source if len(cursors) == 1 else []
+
+    threads = rest_stream_parser.read_and_parse_full_stream(
+        read_source=read_source,
+        parsed_item_class=trace_thread_types.TraceThread,
+        max_results=None,
+        max_endpoint_batch_size=2,
+        cursor_field="thread_model_id",
+    )
+
+    assert len(threads) == 2
+    # The threads endpoint compares the cursor against `thread_model_id`
+    # (a UUID), not the caller-supplied thread `id` (e.g. "thread_124").
+    assert cursors == [None, THREADS_STREAM_JSON[1]["thread_model_id"]]
+
+
+def test_read_and_parse_full_stream__null_cursor__stops_instead_of_looping():
+    # A full page whose cursor field is NULL on every record (e.g. a NULL
+    # thread_model_id from the LEFT JOIN on trace_threads_final):
+    # re-requesting with a NULL cursor would return page 1 again, so stop
+    # instead of looping forever.
+    calls = {"n": 0}
+    null_cursor_threads = [
+        f"{json.dumps({k: v for k, v in thread.items() if k != 'thread_model_id'})}\n".encode(
+            "utf-8"
+        )
+        for thread in THREADS_STREAM_JSON
+    ]
+
+    def read_source(current_batch_size, last_retrieved_id):
+        calls["n"] += 1
+        return null_cursor_threads
+
+    threads = rest_stream_parser.read_and_parse_full_stream(
+        read_source=read_source,
+        parsed_item_class=trace_thread_types.TraceThread,
+        max_results=None,
+        max_endpoint_batch_size=2,
+        cursor_field="thread_model_id",
+    )
+
+    assert calls["n"] == 1
+    assert len(threads) == 2
+
+
+def test_read_and_parse_full_stream__null_cursor_after_non_null__stops_without_duplicating():
+    # A page whose last record carries a NULL cursor after non-null ones:
+    # the NULL position must win over the last non-null cursor, or the next
+    # request re-fetches the NULL rows and returns them twice.
+    source = _PagedSource(
+        pages=[
+            _ndjson(
+                {
+                    "id": "thread_1",
+                    "thread_model_id": "0195f6f1-9da2-7630-b285-60cf5580372f",
+                    "project_id": "0195f6f1-9c82-751f-a1ad-54fec4b5c7d8",
+                },
+                {
+                    "id": "thread_2",
+                    "thread_model_id": None,
+                    "project_id": "0195f6f1-9c82-751f-a1ad-54fec4b5c7d8",
+                },
+            ),
+        ]
+    )
+
+    threads = rest_stream_parser.read_and_parse_full_stream(
+        read_source=source,
+        parsed_item_class=trace_thread_types.TraceThread,
+        max_results=None,
+        max_endpoint_batch_size=2,
+        cursor_field="thread_model_id",
+    )
+
+    assert [thread.id for thread in threads] == ["thread_1", "thread_2"]
+    assert source.requested == [(2, None)]
+
+
+def test_read_and_parse_full_stream__repeated_cursor__stops_instead_of_looping(
+    spans_stream_source,
+):
+    # A full page whose cursor repeats the previous one (the backend
+    # re-returned the same page): stop after the repeat instead of looping
+    # forever.
+    calls = {"n": 0}
+
+    def read_source(current_batch_size, last_retrieved_id):
+        calls["n"] += 1
+        return spans_stream_source
+
+    spans = rest_stream_parser.read_and_parse_full_stream(
+        read_source=read_source,
+        parsed_item_class=rest_api_types.SpanPublic,
+        max_results=None,
+        max_endpoint_batch_size=2,
+    )
+
+    assert calls["n"] == 2
+    assert len(spans) == 4
 
 
 # --- pagination must not be driven by the post-filter count ---------------
@@ -349,6 +499,120 @@ def test_read_and_parse_full_stream__page_of_unreadable_records_does_not_end_the
     assert source.requested == [(2, None), (2, "r05"), (2, "r03"), (2, "r01")]
 
 
+def _traced_span(span_id, trace_id):
+    return {**_span_record(span_id), "trace_id": trace_id}
+
+
+def _untraced_span(span_id, trace_id):
+    # Decodes to an object with an id but fails validation (no start_time),
+    # the way a backend/SDK skew record looks: the backend's position moved,
+    # but no parsed item carries the cursor domain forward.
+    return {**_record_without_start_time(span_id), "trace_id": trace_id}
+
+
+def test_read_and_parse_full_stream__cursor_field__unreadable_page_does_not_end_the_read():
+    # Same shape as the default-field case above, but the cursor domain is
+    # trace_id, not id: after a fully unreadable page, the last parsed record
+    # still belongs to the previous page, so the cursor must come from the
+    # last decoded line, in the trace_id domain. The raw record id must not
+    # be used: it pages by the wrong key.
+    source = _PagedSource(
+        pages=[
+            _ndjson(
+                _traced_span("span-a", "trace-a"),
+                _traced_span("span-b", "trace-b"),
+            ),
+            _ndjson(
+                _untraced_span("bad-1", "trace-bad-1"),
+                _untraced_span("bad-2", "trace-bad-2"),
+            ),
+            _ndjson(_traced_span("span-c", "trace-c")),
+        ]
+    )
+
+    spans = rest_stream_parser.read_and_parse_full_stream(
+        read_source=source,
+        parsed_item_class=rest_api_types.SpanPublic,
+        max_results=None,
+        max_endpoint_batch_size=2,
+        cursor_field="trace_id",
+    )
+
+    assert [span.id for span in spans] == ["span-a", "span-b", "span-c"]
+    assert source.requested == [
+        (2, None),
+        (2, "trace-b"),
+        (2, "trace-bad-2"),
+    ]
+
+
+def test_read_and_parse_full_stream__cursor_field__unreadable_page_without_cursor_value_stops():
+    # No decoded line on the page carries the cursor field, so there is no
+    # in-domain value to advance with: the read must stop at the unreadable
+    # page rather than loop on it.
+    def _unreadable_without_cursor(span_id):
+        record = _record_without_start_time(span_id)
+        del record["trace_id"]
+        return record
+
+    source = _PagedSource(
+        pages=[
+            _ndjson(
+                _traced_span("span-a", "trace-a"),
+                _traced_span("span-b", "trace-b"),
+            ),
+            _ndjson(
+                _unreadable_without_cursor("bad-1"),
+                _unreadable_without_cursor("bad-2"),
+            ),
+            _ndjson(_traced_span("span-c", "trace-c")),
+        ]
+    )
+
+    spans = rest_stream_parser.read_and_parse_full_stream(
+        read_source=source,
+        parsed_item_class=rest_api_types.SpanPublic,
+        max_results=None,
+        max_endpoint_batch_size=2,
+        cursor_field="trace_id",
+    )
+
+    assert [span.id for span in spans] == ["span-a", "span-b"]
+    assert source.requested == [(2, None), (2, "trace-b")]
+
+
+def test_read_and_parse_full_stream__cursor_field__trailing_unreadable_record_advances_past_it():
+    # A page whose last record fails validation still has a backend position:
+    # the cursor must come from the last decoded line, not the last parsed
+    # record, or the unreadable record is served again on the next page.
+    source = _PagedSource(
+        pages=[
+            _ndjson(
+                _traced_span("span-a", "trace-5"),
+                _traced_span("span-b", "trace-4"),
+                _untraced_span("bad-1", "trace-3"),
+            ),
+            _ndjson(
+                _traced_span("span-c", "trace-2"),
+                _traced_span("span-d", "trace-1"),
+            ),
+        ]
+    )
+
+    spans = rest_stream_parser.read_and_parse_full_stream(
+        read_source=source,
+        parsed_item_class=rest_api_types.SpanPublic,
+        max_results=None,
+        max_endpoint_batch_size=3,
+        cursor_field="trace_id",
+    )
+
+    assert [span.id for span in spans] == ["span-a", "span-b", "span-c", "span-d"]
+    # Page 2 advances past the backend's position ("trace-3"), not the last
+    # parsed record ("trace-4").
+    assert source.requested == [(3, None), (3, "trace-3")]
+
+
 def test_read_and_parse_full_stream__strict_raises_on_a_page_without_usable_records(
     caplog,
 ):
@@ -400,9 +664,8 @@ def test_read_and_parse_full_stream__a_dropped_record_among_good_ones_keeps_the_
 
 
 def test_read_and_parse_full_stream__dropped_records_are_counted_once(caplog):
-    # Every fourth row is unreadable. A cursor taken from the last parsed record
-    # re-serves the unreadable tail of each page, so the aggregate warning used
-    # to report more dropped records than the backend ever sent.
+    # Every fourth row is unreadable. The aggregate warning must report
+    # exactly the records the backend sent, each counted once.
     specs = tuple(
         (f"r{index:02d}", "bad" if index % 4 == 0 else "good")
         for index in range(20, 0, -1)

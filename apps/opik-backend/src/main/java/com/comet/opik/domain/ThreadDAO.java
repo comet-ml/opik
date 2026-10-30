@@ -733,7 +733,7 @@ class ThreadDAOImpl implements ThreadDAO {
             <if(trace_thread_filters)>AND<trace_thread_filters><endif>
             <if(annotation_queue_narrows)> AND tt.thread_model_id IN (SELECT thread_model_id FROM annotation_queue_thread_model_ids) <endif>
             <if(annotation_queue_filters_match_unqueued)> AND tt.thread_model_id NOT IN (SELECT thread_model_id FROM annotation_queue_memberships AS ttaqi WHERE NOT (<annotation_queue_filters>)) <endif>
-            <if(last_received_id)> AND thread_model_id \\< :last_received_id<endif>
+            <if(last_received_id)> AND (thread_model_id \\< :last_received_id OR thread_model_id IS NULL)<endif>
             <if(stream)>
             ORDER BY workspace_id, project_id, thread_model_id DESC
             <else>

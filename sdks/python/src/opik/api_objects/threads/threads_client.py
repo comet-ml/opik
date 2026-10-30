@@ -5,7 +5,7 @@ import opik
 from opik.rest_api import TraceThread
 from opik.types import BatchFeedbackScoreDict
 
-from .. import helpers, rest_stream_parser, constants
+from .. import helpers, constants, search_helpers
 from ... import config
 from ...message_processing import messages
 from ...message_processing.batching import sequence_splitter
@@ -89,7 +89,11 @@ class ThreadsClient:
 
         Returns:
             List[TraceThread]: A list of TraceThread objects that match the search
-            criteria.
+            criteria. Threads are streamed page by page using `thread_model_id`
+            as the pagination cursor. Pagination stops early and logs a
+            warning when a full page's last item carries no cursor or when the
+            extracted cursor repeats the previous one: the returned list may
+            be truncated rather than complete.
 
         Example:
             >>> from opik import Opik
@@ -115,19 +119,13 @@ class ThreadsClient:
 
         project_name = self._opik_client._resolve_project_name(project_name)
 
-        threads = rest_stream_parser.read_and_parse_full_stream(
-            read_source=lambda current_batch_size,
-            last_retrieved_id: self._opik_client.rest_client.traces.search_trace_threads(
-                project_name=project_name,
-                filters=filters,
-                limit=current_batch_size,
-                truncate=truncate,
-                last_retrieved_thread_model_id=last_retrieved_id,
-            ),
+        return search_helpers.search_threads_with_filters(
+            rest_client=self._opik_client.rest_client,
+            project_name=project_name,
+            filters=filters,
             max_results=max_results,
-            parsed_item_class=TraceThread,
+            truncate=truncate,
         )
-        return threads
 
     def log_threads_feedback_scores(
         self, scores: List[BatchFeedbackScoreDict], project_name: Optional[str] = None
