@@ -59,73 +59,90 @@ export const test = baseTest.extend<ComparisonFixtures>({
     const datasetName = `${testNamespace}-cmp-ds`;
     const experimentNameA = `${testNamespace}-cmp-expA`;
     const experimentNameB = `${testNamespace}-cmp-expB`;
-
-    const seeded = await sdkClient.python.compareSeed({
-      project_name: project.name,
-      dataset_name: datasetName,
-      items: SEED_ITEMS,
-      experiments: [
-        { experiment_name: experimentNameA, task_outputs: EXPERIMENT_A_OUTPUTS },
-        { experiment_name: experimentNameB, task_outputs: EXPERIMENT_B_OUTPUTS },
-      ],
-    });
-
-    // itemId per seed input, so tests can address a shared item by its input.
-    const itemIdByInput: Record<string, string> = {};
-    for (const s of seeded.experiments[0].scores) {
-      itemIdByInput[s.input] = s.dataset_item_id;
-    }
-
-    // The bridge doesn't echo task_output on the dataset item, so map each
-    // experiment's per-item output from the seed arrays (aligned to SEED_ITEMS).
-    const outputsBySeedIndex = [EXPERIMENT_A_OUTPUTS, EXPERIMENT_B_OUTPUTS];
-
-    const experiments: ComparisonExperimentRef[] = seeded.experiments.map((exp, expIndex) => {
-      const scoresByItemId = Object.fromEntries(exp.scores.map((s) => [s.dataset_item_id, s.score_value]));
-      const outputsByItemId: Record<string, string> = {};
-      SEED_ITEMS.forEach((item, i) => {
-        outputsByItemId[itemIdByInput[item.input]] = outputsBySeedIndex[expIndex][i];
+    // Registered straight off the seed response, before any mapping: cleanup
+    // must not depend on the ref-building below completing.
+    const seededExperiments: Array<{ experimentId: string; experimentName: string }> = [];
+    let datasetId: string | null = null;
+    try {
+      const seeded = await sdkClient.python.compareSeed({
+        project_name: project.name,
+        dataset_name: datasetName,
+        items: SEED_ITEMS,
+        experiments: [
+          { experiment_name: experimentNameA, task_outputs: EXPERIMENT_A_OUTPUTS },
+          { experiment_name: experimentNameB, task_outputs: EXPERIMENT_B_OUTPUTS },
+        ],
       });
-      const scoreValues = Object.values(scoresByItemId);
-      const aggregateScore = scoreValues.reduce((a, b) => a + b, 0) / scoreValues.length;
-      return {
-        experimentId: exp.experiment_id,
-        experimentName: exp.experiment_name,
-        scoresByItemId,
-        outputsByItemId,
-        aggregateScore,
-      };
-    });
-
-    const ref: ComparisonRef = {
-      datasetId: seeded.dataset_id,
-      datasetName,
-      projectName: project.name,
-      items: SEED_ITEMS,
-      itemIds: SEED_ITEMS.map((item) => itemIdByInput[item.input]),
-      evaluator: { name: 'equals_metric' },
-      experiments,
-    };
-
-    await testInfo.attach('opik.comparison', {
-      body: JSON.stringify(ref, null, 2),
-      contentType: 'application/json',
-    });
-
-    await use(ref);
-
-    if (!shouldLeaveArtifacts(testInfo)) {
-      for (const exp of experiments) {
-        try {
-          await backendClient.deleteExperiment(exp.experimentId);
-        } catch (err) {
-          console.warn(`[comparison fixture] delete experiment warning for ${exp.experimentName}:`, err);
-        }
+      datasetId = seeded.dataset_id;
+      for (const exp of seeded.experiments) {
+        seededExperiments.push({
+          experimentId: exp.experiment_id,
+          experimentName: exp.experiment_name,
+        });
       }
-      try {
-        await backendClient.deleteDataset(seeded.dataset_id);
-      } catch (err) {
-        console.warn(`[comparison fixture] delete dataset warning for ${datasetName}:`, err);
+
+      // itemId per seed input, so tests can address a shared item by its input.
+      const itemIdByInput: Record<string, string> = {};
+      for (const s of seeded.experiments[0].scores) {
+        itemIdByInput[s.input] = s.dataset_item_id;
+      }
+
+      // The bridge doesn't echo task_output on the dataset item, so map each
+      // experiment's per-item output from the seed arrays (aligned to SEED_ITEMS).
+      const outputsBySeedIndex = [EXPERIMENT_A_OUTPUTS, EXPERIMENT_B_OUTPUTS];
+
+      const experiments: ComparisonExperimentRef[] = seeded.experiments.map((exp, expIndex) => {
+        const scoresByItemId = Object.fromEntries(exp.scores.map((s) => [s.dataset_item_id, s.score_value]));
+        const outputsByItemId: Record<string, string> = {};
+        SEED_ITEMS.forEach((item, i) => {
+          outputsByItemId[itemIdByInput[item.input]] = outputsBySeedIndex[expIndex][i];
+        });
+        const scoreValues = Object.values(scoresByItemId);
+        const aggregateScore = scoreValues.reduce((a, b) => a + b, 0) / scoreValues.length;
+        return {
+          experimentId: exp.experiment_id,
+          experimentName: exp.experiment_name,
+          scoresByItemId,
+          outputsByItemId,
+          aggregateScore,
+        };
+      });
+
+      const ref: ComparisonRef = {
+        datasetId: seeded.dataset_id,
+        datasetName,
+        projectName: project.name,
+        items: SEED_ITEMS,
+        itemIds: SEED_ITEMS.map((item) => itemIdByInput[item.input]),
+        evaluator: { name: 'equals_metric' },
+        experiments,
+      };
+
+      await testInfo.attach('opik.comparison', {
+        body: JSON.stringify(ref, null, 2),
+        contentType: 'application/json',
+      });
+
+      await use(ref);
+    } finally {
+      // Cleanup is governed by shouldLeaveArtifacts alone, so OPIK_LEAVE_FAILURES
+      // keeps one meaning across the suite. Experiments before the dataset they
+      // share.
+      if (!shouldLeaveArtifacts(testInfo)) {
+        for (const exp of seededExperiments) {
+          try {
+            await backendClient.deleteExperiment(exp.experimentId);
+          } catch (err) {
+            console.warn(`[comparison fixture] delete experiment warning for ${exp.experimentName}:`, err);
+          }
+        }
+        if (datasetId !== null) {
+          try {
+            await backendClient.deleteDataset(datasetId);
+          } catch (err) {
+            console.warn(`[comparison fixture] delete dataset warning for ${datasetName}:`, err);
+          }
+        }
       }
     }
   },

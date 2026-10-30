@@ -1,6 +1,6 @@
 import { test as baseTest } from './model-cost-spans.fixture';
 import { shouldLeaveArtifacts } from '../core/artifacts';
-import { uuid7 } from '../core/backend';
+import { deleteTracesResilient, uuid7 } from '../core/backend';
 
 /**
  * A dataset shape, chosen so no two datasets in the seed share a summary.
@@ -93,125 +93,137 @@ export const test = baseTest.extend<SummarisedDatasetsFixtures>({
   ) => {
     const datasets: SummarisedDatasetRef[] = [];
     const traceIds: string[] = [];
+    // Registered as created: experiments, optimizations and datasets land here
+    // the moment the backend accepts them, so a failure partway through the
+    // seed loop still tears down everything that succeeded.
+    const experimentIds: string[] = [];
+    const optimizationIds: string[] = [];
+    const datasetIds: string[] = [];
 
-    for (const shape of SUMMARISED_DATASET_SHAPES) {
-      const name = `${testNamespace}-ds-${shape.key}`;
-      const created = await sdkClient.python.createDataset({
-        project_name: project.name,
-        name,
-        description: `summary shape ${shape.key}`,
-      });
-
-      // One insert() call per version. Item payloads are unique per dataset so
-      // content-hash dedup can never silently collapse two of them.
-      let inserted = 0;
-      for (const batchSize of shape.itemsPerVersion) {
-        await sdkClient.python.insertDatasetItems({
-          project_name: project.name,
-          dataset_name: name,
-          items: Array.from({ length: batchSize }, (_, i) => ({
-            input: `${shape.key} item ${inserted + i}`,
-            expected_output: `${shape.key} output ${inserted + i}`,
-          })),
-        });
-        inserted += batchSize;
+    const safe = async (what: string, fn: () => Promise<unknown>): Promise<void> => {
+      try {
+        await fn();
+      } catch (err) {
+        console.warn(`[summarisedDatasets fixture] delete warning for ${what}:`, err);
       }
-
-      const datasetItemIds = (await backendClient.getDatasetItems(created.id)).map(
-        (item) => item.id,
-      );
-
-      const experimentIds: string[] = [];
-      for (let e = 0; e < shape.experiments; e++) {
-        const experimentId = uuid7();
-        const traceId = uuid7();
-        await backendClient.createTraceWithSource({
-          id: traceId,
-          projectName: project.name,
-          name: `${testNamespace}-${shape.key}-exp-${e}`,
-          source: 'experiment',
-          input: { text: `${shape.key} experiment ${e}` },
-          output: { text: 'ok' },
-          endTime: new Date(),
-        });
-        traceIds.push(traceId);
-
-        await backendClient.createExperiment({
-          id: experimentId,
-          name: `${testNamespace}-${shape.key}-exp-${e}`,
-          datasetName: name,
-          projectName: project.name,
-        });
-        // Without an experiment item the experiment does not count, so this is
-        // load-bearing rather than decoration.
-        await backendClient.createExperimentItems([
-          { experimentId, datasetItemId: datasetItemIds[e % datasetItemIds.length], traceId },
-        ]);
-        experimentIds.push(experimentId);
-      }
-
-      const optimizationIds: string[] = [];
-      for (let o = 0; o < shape.optimizations; o++) {
-        const optimizationId = uuid7();
-        await backendClient.createOptimization({
-          id: optimizationId,
-          name: `${testNamespace}-${shape.key}-opt-${o}`,
-          datasetName: name,
-          projectName: project.name,
-          objectiveName: 'equals',
-          status: 'completed',
-        });
-        optimizationIds.push(optimizationId);
-      }
-
-      datasets.push({
-        id: created.id,
-        name,
-        shape,
-        itemCount: inserted,
-        versionCount: shape.itemsPerVersion.length,
-        experimentIds,
-        optimizationIds,
-      });
-    }
-
-    const ref: SummarisedDatasetsRef = {
-      projectId: project.id,
-      projectName: project.name,
-      datasets,
     };
-    await testInfo.attach('opik.summarisedDatasets', {
-      body: JSON.stringify(ref, null, 2),
-      contentType: 'application/json',
-    });
 
-    await use(ref);
+    try {
+      for (const shape of SUMMARISED_DATASET_SHAPES) {
+        const name = `${testNamespace}-ds-${shape.key}`;
+        const created = await sdkClient.python.createDataset({
+          project_name: project.name,
+          name,
+          description: `summary shape ${shape.key}`,
+        });
+        datasetIds.push(created.id);
 
-    if (!shouldLeaveArtifacts(testInfo)) {
-      const safe = async (what: string, fn: () => Promise<unknown>): Promise<void> => {
-        try {
-          await fn();
-        } catch (err) {
-          console.warn(`[summarisedDatasets fixture] delete warning for ${what}:`, err);
+        // One insert() call per version. Item payloads are unique per dataset so
+        // content-hash dedup can never silently collapse two of them.
+        let inserted = 0;
+        for (const batchSize of shape.itemsPerVersion) {
+          await sdkClient.python.insertDatasetItems({
+            project_name: project.name,
+            dataset_name: name,
+            items: Array.from({ length: batchSize }, (_, i) => ({
+              input: `${shape.key} item ${inserted + i}`,
+              expected_output: `${shape.key} output ${inserted + i}`,
+            })),
+          });
+          inserted += batchSize;
         }
+
+        const datasetItemIds = (await backendClient.getDatasetItems(created.id)).map(
+          (item) => item.id,
+        );
+
+        const shapeExperimentIds: string[] = [];
+        for (let e = 0; e < shape.experiments; e++) {
+          const experimentId = uuid7();
+          const traceId = uuid7();
+          await backendClient.createTraceWithSource({
+            id: traceId,
+            projectName: project.name,
+            name: `${testNamespace}-${shape.key}-exp-${e}`,
+            source: 'experiment',
+            input: { text: `${shape.key} experiment ${e}` },
+            output: { text: 'ok' },
+            endTime: new Date(),
+          });
+          traceIds.push(traceId);
+
+          await backendClient.createExperiment({
+            id: experimentId,
+            name: `${testNamespace}-${shape.key}-exp-${e}`,
+            datasetName: name,
+            projectName: project.name,
+          });
+          // Registered the moment the row exists: the item link below is what
+          // makes the experiment countable, but a failed link must not leave the
+          // row behind with nothing tracking it.
+          experimentIds.push(experimentId);
+          shapeExperimentIds.push(experimentId);
+          await backendClient.createExperimentItems([
+            { experimentId, datasetItemId: datasetItemIds[e % datasetItemIds.length], traceId },
+          ]);
+        }
+
+        const shapeOptimizationIds: string[] = [];
+        for (let o = 0; o < shape.optimizations; o++) {
+          const optimizationId = uuid7();
+          await backendClient.createOptimization({
+            id: optimizationId,
+            name: `${testNamespace}-${shape.key}-opt-${o}`,
+            datasetName: name,
+            projectName: project.name,
+            objectiveName: 'equals',
+            status: 'completed',
+          });
+          optimizationIds.push(optimizationId);
+          shapeOptimizationIds.push(optimizationId);
+        }
+
+        datasets.push({
+          id: created.id,
+          name,
+          shape,
+          itemCount: inserted,
+          versionCount: shape.itemsPerVersion.length,
+          experimentIds: shapeExperimentIds,
+          optimizationIds: shapeOptimizationIds,
+        });
+      }
+
+      const ref: SummarisedDatasetsRef = {
+        projectId: project.id,
+        projectName: project.name,
+        datasets,
       };
-      for (const dataset of datasets) {
-        for (const experimentId of dataset.experimentIds) {
+      await testInfo.attach('opik.summarisedDatasets', {
+        body: JSON.stringify(ref, null, 2),
+        contentType: 'application/json',
+      });
+
+      await use(ref);
+    } finally {
+      // Cleanup is governed by shouldLeaveArtifacts alone, so OPIK_LEAVE_FAILURES
+      // keeps one meaning across the suite. Children before parents: experiments,
+      // optimizations, traces, then the datasets.
+      if (!shouldLeaveArtifacts(testInfo)) {
+        for (const experimentId of experimentIds) {
           await safe(`experiment ${experimentId}`, () =>
             backendClient.deleteExperiment(experimentId),
           );
         }
-        for (const optimizationId of dataset.optimizationIds) {
+        for (const optimizationId of optimizationIds) {
           await safe(`optimization ${optimizationId}`, () =>
             backendClient.deleteOptimization(optimizationId),
           );
         }
-      }
-      if (traceIds.length > 0) {
-        await safe(`${traceIds.length} traces`, () => backendClient.deleteTraces(traceIds));
-      }
-      for (const dataset of datasets) {
-        await safe(`dataset ${dataset.name}`, () => backendClient.deleteDataset(dataset.id));
+        await deleteTracesResilient(backendClient, traceIds, 'summarisedDatasets fixture');
+        for (const id of datasetIds) {
+          await safe(`dataset ${id}`, () => backendClient.deleteDataset(id));
+        }
       }
     }
   },
