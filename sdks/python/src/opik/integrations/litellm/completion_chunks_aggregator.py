@@ -3,6 +3,8 @@ from typing import Any, Dict, List, Optional
 
 import litellm.types.utils
 
+from opik.integrations import _streamed_tool_calls
+
 LOGGER = logging.getLogger(__name__)
 
 
@@ -70,12 +72,21 @@ def _extract_usage_from_chunk(
 def aggregate(
     items: List[litellm.types.utils.ModelResponse],
 ) -> Optional[litellm.types.utils.ModelResponse]:
+    """Combine the chunks of a streamed completion into one ``ModelResponse``.
+
+    Text deltas are joined into ``message["content"]``. Tool call fragments are
+    merged into ``message["tool_calls"]`` by their ``index`` (a fragment without
+    one continues the call with the same ``id``, or opens a new call), their
+    ``function.arguments`` are concatenated, and the calls are returned in index
+    order. A stream without tool calls leaves ``tool_calls`` unset.
+    """
     try:
         if not items:
             return None
 
         aggregated_response = _initialize_aggregated_response(items[0])
         text_chunks: List[str] = []
+        tool_calls = _streamed_tool_calls.StreamedToolCalls()
 
         for chunk in items:
             if not hasattr(chunk, "choices") or not chunk.choices:
@@ -95,6 +106,9 @@ def aggregate(
                 if content:
                     text_chunks.append(content)
 
+                for tool_call in getattr(delta, "tool_calls", None) or []:
+                    tool_calls.add(tool_call)
+
             finish_reason = _extract_finish_reason_from_choice(choice)
             if finish_reason:
                 aggregated_response["choices"][0]["finish_reason"] = finish_reason
@@ -104,6 +118,10 @@ def aggregate(
                 aggregated_response["usage"] = chunk_usage
 
         aggregated_response["choices"][0]["message"]["content"] = "".join(text_chunks)
+        if aggregated_tool_calls := tool_calls.to_list():
+            aggregated_response["choices"][0]["message"]["tool_calls"] = (
+                aggregated_tool_calls
+            )
         return litellm.types.utils.ModelResponse(**aggregated_response)
 
     except Exception as exception:
