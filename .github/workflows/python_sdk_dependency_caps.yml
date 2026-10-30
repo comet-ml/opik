@@ -34,11 +34,11 @@ jobs:
         with:
           token: ${{ secrets.COMET_ACTION_CREATE_PR }}
           branch: github-actions/NA-update-python-sdk-dependency-caps
-          commit-message: "[NA] [SDK] chore: raise Python SDK dependency caps"
-          title: "[NA] [SDK] chore: raise Python SDK dependency caps"
+          commit-message: "[NA] [SDK] chore: update Python SDK dependency caps"
+          title: "[NA] [SDK] chore: update Python SDK dependency caps"
           body: |
             ## Details
-            Automated update of the dependency caps in `sdks/python/setup.py`: the entry after each library in `install_requires`.
+            Automated update of the cooldown caps in `sdks/python/setup.py`: the entry after each library in `install_requires`.
 
             - Each cap is the latest version that the library's requirements allow and that has been on PyPI for at least 3 days.
             - A library added to or removed from `install_requires` gets its cap added or removed.

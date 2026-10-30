@@ -3,10 +3,14 @@
 Write a cap after every library in the Python SDK's install_requires (sdks/python/setup.py).
 
 A library's cap is the latest version that its requirements allow and that has been on PyPI for at least three days.
-It goes after the library's last requirement and repeats their environment markers, so it applies exactly where the
-library is required. A release counts from the upload of its newest file, since PyPI accepts new files for an existing
-release. Pre-releases and yanked releases never count. When no version that old is allowed, the cap is the oldest
-allowed version: raising a lower bound to a fresh fix ships exactly that fix.
+It goes after the library's last requirement. A library required only on some platforms gets a cap with the same
+environment marker. A library with several requirements split by Python version (litellm) gets one cap with no marker,
+so where a requirement allows only older versions (litellm on Python 3.10), new releases of those have no cooldown.
+Requirements split any other way stop the script, since an unmarked cap would require the library everywhere.
+
+A release counts from the upload of its newest file, since PyPI accepts new files for an existing release. Pre-releases
+and yanked releases never count. When no version that old is allowed, the cap is the oldest allowed version: raising a
+lower bound to a fresh fix ships exactly that fix.
 
 The script finds its caps by their comment, drops them all and writes a fresh one after each library, so adding or
 removing a library adds or removes its cap. A library with an `# allow-latest: <why>` comment on one of its requirements
@@ -15,7 +19,7 @@ gets no cap, so its newest release is always allowed.
 Usage:
   python scripts/update_python_sdk_dependency_caps.py
 
-Needs `packaging`. Exits non-zero without writing anything when PyPI can't be reached.
+Needs `packaging`. Exits non-zero without writing anything when PyPI can't be reached or a library can't be capped.
 """
 
 import ast
@@ -31,6 +35,7 @@ from packaging import requirements, utils, version
 SETUP_PY = Path(__file__).resolve().parent.parent / "sdks" / "python" / "setup.py"
 MIN_RELEASE_AGE_DAYS = 3
 ALLOW_LATEST = "# allow-latest"
+NON_PYTHON_VERSION_MARKER = re.compile(r"\b(os_name|sys_platform|platform_\w+|implementation_\w+|extra)\b")
 
 CAP_LINE = re.compile(
     r'^ *".*",  # (the latest version older than \d+ days'
@@ -73,11 +78,21 @@ def releases(package_name: str) -> dict[version.Version, datetime.datetime]:
 def cap_line(requirement_texts: list[str], indent: str, cutoff: datetime.datetime) -> str:
     library_requirements = [requirements.Requirement(text) for text in requirement_texts]
     name = library_requirements[0].name
+    if len(library_requirements) > 1 and any(
+        NON_PYTHON_VERSION_MARKER.search(str(requirement.marker)) for requirement in library_requirements
+    ):
+        raise SystemExit(
+            f"{name}: its requirements differ by more than the Python version, and its one unmarked cap would require "
+            f"it everywhere. Merge them into one requirement, or add `{ALLOW_LATEST}: <why>` to leave it uncapped."
+        )
+
     candidates = {
         release: uploaded
         for release, uploaded in releases(name).items()
         if any(requirement.specifier.contains(release) for requirement in library_requirements)
     }
+    if not candidates:
+        raise SystemExit(f"{name}: no release on PyPI satisfies its requirements in {SETUP_PY}")
     settled = [release for release, uploaded in candidates.items() if uploaded <= cutoff]
     if settled:
         cap = max(settled)
@@ -88,7 +103,8 @@ def cap_line(requirement_texts: list[str], indent: str, cutoff: datetime.datetim
 
     cap_text = f"{name}<={cap}"
     # A cap is a requirement too, so it repeats the marker of a library required only on some platforms. A library with
-    # several requirements (litellm, split by Python version) is required everywhere, so its cap has no marker.
+    # several requirements is split by Python version (checked above), so it's required everywhere and its cap has no
+    # marker.
     if len(library_requirements) == 1 and library_requirements[0].marker is not None:
         cap_text += "; " + requirement_texts[0].split(";", 1)[1].strip()
     return f"{indent}{json.dumps(cap_text)},  # {reason}, released {candidates[cap].date()}\n"
@@ -97,7 +113,8 @@ def cap_line(requirement_texts: list[str], indent: str, cutoff: datetime.datetim
 def trailing_comma_line(lines: list[str], element: ast.expr) -> int:
     line = element.end_lineno - 1
     column = element.end_col_offset
-    while "," not in lines[line][column:]:
+    # A comment on the requirement's last line can hold a comma too.
+    while "," not in lines[line][column:].split("#", 1)[0]:
         line += 1
         column = 0
     return line

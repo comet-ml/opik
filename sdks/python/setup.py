@@ -37,20 +37,22 @@ setup(
     ).read(),
     long_description_content_type="text/markdown",
     install_requires=[
-        # Dependency caps, written by scripts/update_python_sdk_dependency_caps.py
+        # Cooldown caps, written by scripts/update_python_sdk_dependency_caps.py
         # (a weekday job runs it and opens a PR):
-        # - Each library's requirements are followed by its cap: the latest allowed
-        #   version older than 3 days, so a hijacked release has time to be caught
-        #   and yanked before installs pick it up.
-        # - Don't edit caps by hand. After adding, removing or changing a
+        # - Each library's requirements are followed by its cooldown cap: the
+        #   latest allowed version older than 3 days, so a hijacked release has
+        #   time to be caught and yanked before installs pick it up. Compatibility
+        #   caps inside the requirements (litellm's `<1.106`) are separate and
+        #   maintained by hand.
+        # - Don't edit cooldown caps by hand. After adding, removing or changing a
         #   requirement, run from the repository root:
         #     uv run --no-project --python 3.12 --with packaging \
         #       python scripts/update_python_sdk_dependency_caps.py
         # - To ship a release that is less than 3 days old (e.g. a security fix),
         #   raise the library's lower bound to it (`>=1.2.4`) and run the script:
-        #   with no older version allowed, the cap becomes exactly that release.
-        # - To leave a library uncapped, so its newest release is always allowed,
-        #   add `# allow-latest: <why>` to its requirement line.
+        #   with no older version allowed, the cooldown cap becomes that release.
+        # - To leave a library without a cooldown cap, so its newest release is
+        #   always allowed, add `# allow-latest: <why>` to its requirement line.
         "boto3-stubs[bedrock-runtime]>=1.34.110",
         "boto3-stubs<=1.43.119",  # the latest version older than 3 days, released 2026-10-26
         "click",
@@ -82,7 +84,7 @@ setup(
         #                typing.NotRequired does not exist on 3.10 (added in 3.11);
         #                litellm should import it from typing_extensions.
         #   Both are still unfixed on litellm main, so 1.99+ is expected to break on 3.10 too.
-        #   The cap is the standing guard; 3.11+ deliberately stays uncapped. Lift it once
+        #   The cap is the standing guard; 3.11+ deliberately doesn't get it. Lift it once
         #   upstream actually tests 3.10 (or once we drop 3.10 -- see OPIK_7955).
         "litellm>=1.79.2,!=1.81.*,!=1.82.*,!=1.83.0,!=1.83.1,!=1.83.2,!=1.83.3,!=1.83.4,!=1.83.5,!=1.83.6,!=1.92.*,<1.97; python_version < '3.11'",
         "litellm>=1.79.2,!=1.81.*,!=1.82.*,!=1.83.0,!=1.83.1,!=1.83.2,!=1.83.3,!=1.83.4,!=1.83.5,!=1.83.6,!=1.92.*,<1.106; python_version >= '3.11'",
