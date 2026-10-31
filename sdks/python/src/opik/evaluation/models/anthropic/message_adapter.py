@@ -9,6 +9,8 @@ from typing import Any, Dict, List, Optional, Set, Tuple, Type
 
 import pydantic
 
+from ..litellm import util as litellm_util
+
 LOGGER = logging.getLogger(__name__)
 
 # Parameters accepted by anthropic.messages.create().
@@ -230,7 +232,15 @@ def _sdk_accepted_params() -> Optional[frozenset[str]]:
 def filter_unsupported_params(
     params: Dict[str, Any],
     already_warned: Set[str],
+    model_name: Optional[str] = None,
 ) -> Dict[str, Any]:
+    """Keep only the parameters the installed SDK accepts for ``model_name``.
+
+    SDKs before 1.7.0 still take ``temperature``, ``top_p`` and ``top_k``,
+    so the agentic loop's ``temperature=0`` reaches models that reject a
+    non-default value (Opus 4.7 onward). Those get the same rule as the
+    LiteLLM path.
+    """
     supported = _SUPPORTED_PARAMS
     sdk_params = _sdk_accepted_params()
     if sdk_params is not None:
@@ -246,6 +256,22 @@ def filter_unsupported_params(
                 key,
             )
             already_warned.add(key)
+
+    if model_name is not None and (
+        litellm_util.is_claude_default_temperature_only_model(model_name)
+    ):
+
+        def _warn(param: str, value: Any) -> None:
+            LOGGER.warning(
+                "Model %s does not accept %s=%s. Dropping the parameter.",
+                model_name,
+                param,
+                value,
+            )
+
+        litellm_util.apply_default_temperature_only_filter(
+            filtered, already_warned, _warn
+        )
     return filtered
 
 

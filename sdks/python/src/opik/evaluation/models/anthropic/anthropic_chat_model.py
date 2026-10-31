@@ -40,7 +40,7 @@ class AnthropicChatModel(base_model.OpikBaseModel):
         self._api_model_name = message_adapter.strip_anthropic_prefix(model_name)
         self._unsupported_warned: set[str] = set()
         self._completion_kwargs = message_adapter.filter_unsupported_params(
-            completion_kwargs, self._unsupported_warned
+            completion_kwargs, self._unsupported_warned, self._api_model_name
         )
         if "tool_choice" in self._completion_kwargs:
             self._completion_kwargs["tool_choice"] = (
@@ -226,7 +226,7 @@ class AnthropicChatModel(base_model.OpikBaseModel):
         non_system_messages = message_adapter.normalize_messages(non_system_messages)
 
         filtered_extra = message_adapter.filter_unsupported_params(
-            extra_kwargs, self._unsupported_warned
+            extra_kwargs, self._unsupported_warned, self._api_model_name
         )
         # OpenAI-style `tool_choice` ("auto" / "none" / "required" /
         # `{"type": "function", ...}`) needs to be translated to the

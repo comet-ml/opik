@@ -59,6 +59,8 @@ def apply_model_specific_filters(
     Currently handles:
     - GPT-5: only honours temperature=1 and does not return log probabilities.
     - Bedrock GPT-5.x / GPT-6: same as GPT-5, and temperature is dropped even at 1
+    - Claude Opus 4.7 and later (Opus 4.8, Claude 5 family): only accept the default
+      temperature (1) and reject `top_p` / `top_k`
     - DashScope Qwen: enforces constraints for logprobs / top_logprobs
     """
     normalized_model_name = _normalize_model_name(model_name)
@@ -73,6 +75,10 @@ def apply_model_specific_filters(
         # value, 1 included; the OpenAI-format routes (e.g. bedrock_mantle/) accept
         # only the default while reasoning is on. Omitting it gives the default (1).
         params.pop("temperature", None)
+        return
+
+    if is_claude_default_temperature_only_model(model_name):
+        apply_default_temperature_only_filter(params, already_warned, warn)
         return
 
     if normalized_model_name.startswith("dashscope/"):
@@ -103,6 +109,57 @@ def _is_bedrock_openai_gpt_model(model_name: str) -> bool:
         return False
     base_model_name = model_name.rpartition("openai.")[2]
     return base_model_name.startswith(("gpt-5", "gpt-6"))
+
+
+_CLAUDE_DEFAULT_TEMPERATURE_ONLY_PREFIXES = (
+    "claude-opus-4-7",
+    "claude-opus-4-8",
+    "claude-opus-5",
+    "claude-sonnet-5",
+    "claude-haiku-5",
+    "claude-fable-5",
+)
+
+
+def is_claude_default_temperature_only_model(model_name: str) -> bool:
+    """Match Claude models that reject a non-default temperature.
+
+    Covers the bare id, provider-qualified names (anthropic/claude-opus-4-7) and
+    Bedrock names that keep a geo/vendor segment
+    (bedrock/us.anthropic.claude-opus-4-7, bedrock/global.anthropic.claude-opus-5).
+    """
+    base_model_name = model_name.rsplit("/", 1)[-1].rpartition("anthropic.")[2]
+    return base_model_name.startswith(_CLAUDE_DEFAULT_TEMPERATURE_ONLY_PREFIXES)
+
+
+def apply_default_temperature_only_filter(
+    params: Dict[str, Any],
+    already_warned: Set[str],
+    warn: Callable[[str, Any], None],
+) -> None:
+    """Drop `temperature` unless it is the default (1), and drop `top_p` / `top_k`.
+
+    Shared with the native Anthropic adapter, which reaches these models
+    without going through LiteLLM.
+    """
+    unsupported: list[tuple[str, Any]] = []
+
+    if "temperature" in params:
+        value = params["temperature"]
+        numeric_value = coerce_temperature_to_float(value)
+        if numeric_value is None or abs(numeric_value - 1.0) > 1e-6:
+            unsupported.append(("temperature", value))
+
+    for param in ("top_p", "top_k"):
+        if param in params:
+            unsupported.append((param, params[param]))
+
+    _drop_unsupported_params_with_warning(
+        params,
+        unsupported,
+        already_warned,
+        warn,
+    )
 
 
 def _apply_gpt5_filters(
