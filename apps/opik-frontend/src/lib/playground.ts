@@ -1,9 +1,9 @@
 import first from "lodash/first";
-import { isMiniMaxTextModel } from "@/constants/minimax";
 import isNil from "lodash/isNil";
 import escapeRegExp from "lodash/escapeRegExp";
 import last from "lodash/last";
 import omitBy from "lodash/omitBy";
+import { isMiniMaxTextModel } from "@/constants/minimax";
 import { PlaygroundPromptType } from "@/types/playground";
 import { generateRandomString } from "@/lib/utils";
 import {
