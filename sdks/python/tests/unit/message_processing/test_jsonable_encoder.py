@@ -2,6 +2,7 @@ import base64
 import dataclasses
 import decimal
 import importlib
+import json
 import uuid
 import warnings
 from datetime import date, datetime, timezone
@@ -117,6 +118,22 @@ def test_jsonable_encoder__common_types(obj):
 )
 def test_jsonable_encoder__converted_to_list(obj):
     assert list(obj) == jsonable_encoder.encode(obj)
+
+
+@pytest.mark.parametrize(
+    "obj,expected_json",
+    [
+        (np.int64(42), "42"),
+        (np.int32(-7), "-7"),
+        (np.float32(1.5), "1.5"),
+        (np.bool_(True), "true"),
+        ({"count": np.int64(3), "ok": np.bool_(False)}, '{"count": 3, "ok": false}'),
+    ],
+)
+def test_jsonable_encoder__numpy_scalar__encoded_as_json_number_or_bool(
+    obj, expected_json
+):
+    assert json.dumps(jsonable_encoder.encode(obj)) == expected_json
 
 
 @pytest.mark.parametrize(

@@ -102,6 +102,9 @@ def encode(obj: Any, seen: Optional[Set[int]] = None) -> Any:
         if np is not None and isinstance(obj, np.ndarray):
             return encode(obj.tolist(), seen)
 
+        if np is not None and isinstance(obj, (np.number, np.bool_)):
+            return encode(obj.item(), seen)
+
         if _is_pydantic_iterator_validator(obj):
             return "<Pydantic ValidatorIterator serialization is not supported>"
 
