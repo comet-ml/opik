@@ -87,31 +87,38 @@ def _capability_for(
         # Bedrock keeps a geo/vendor prefix: "bedrock/us.anthropic.claude-sonnet-4-6".
         candidates.append(model_name.rsplit("/", 1)[1].rpartition("anthropic.")[2])
 
-    best: Optional[capabilities_registry.ModelCapability] = None
-    best_len = -1
-    catch_all: Optional[capabilities_registry.ModelCapability] = None
     for candidate in candidates:
-        for cap in table:
-            prefix = cap.model_name_prefix
-            if not prefix:
-                # An empty prefix matches everything via startswith, so it
-                # cannot compete on prefix length without shadowing real
-                # matches. It is still a deliberate caller configuration,
-                # so it is held aside and used ahead of DEFAULT_CAPABILITY.
-                catch_all = catch_all or cap
-                continue
-            if candidate == prefix:
-                return cap
-            if candidate.startswith(prefix) and len(prefix) > best_len:
-                best = cap
-                best_len = len(prefix)
-        if best is not None:
-            break
-    if best is not None:
-        return best
+        match = _match(candidate, table)
+        if match is not None:
+            return match
+    # An empty prefix matches everything via startswith, so it cannot
+    # compete on prefix length without shadowing real matches. It is still
+    # a deliberate caller configuration, so it is used ahead of
+    # DEFAULT_CAPABILITY.
+    catch_all = next((cap for cap in table if not cap.model_name_prefix), None)
     if catch_all is not None:
         return catch_all
     return capabilities_registry.DEFAULT_CAPABILITY
+
+
+def _match(
+    candidate: str,
+    table: Sequence[capabilities_registry.ModelCapability],
+) -> Optional[capabilities_registry.ModelCapability]:
+    """Exact prefix match, else the longest matching prefix. Empty prefixes are
+    skipped here and handled by the caller."""
+    best: Optional[capabilities_registry.ModelCapability] = None
+    for cap in table:
+        prefix = cap.model_name_prefix
+        if not prefix:
+            continue
+        if candidate == prefix:
+            return cap
+        if candidate.startswith(prefix) and (
+            best is None or len(prefix) > len(best.model_name_prefix)
+        ):
+            best = cap
+    return best
 
 
 def compute_budget_tokens(

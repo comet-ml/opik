@@ -59,7 +59,8 @@ def apply_model_specific_filters(
     Currently handles:
     - GPT-5: only honours temperature=1 and does not return log probabilities.
     - Bedrock GPT-5.x / GPT-6: same as GPT-5, and temperature is dropped even at 1
-    - Claude Opus 4.7, Opus 5, Sonnet 5: only accept the default temperature (1)
+    - Claude Opus 4.7 and later (Opus 4.8, Claude 5 family): only accept the default
+      temperature (1) and reject `top_p` / `top_k`
     - DashScope Qwen: enforces constraints for logprobs / top_logprobs
     """
     normalized_model_name = _normalize_model_name(model_name)
@@ -76,8 +77,8 @@ def apply_model_specific_filters(
         params.pop("temperature", None)
         return
 
-    if _is_claude_default_temperature_only_model(model_name):
-        _apply_default_temperature_only_filter(params, already_warned, warn)
+    if is_claude_default_temperature_only_model(model_name):
+        apply_default_temperature_only_filter(params, already_warned, warn)
         return
 
     if normalized_model_name.startswith("dashscope/"):
@@ -120,7 +121,7 @@ _CLAUDE_DEFAULT_TEMPERATURE_ONLY_PREFIXES = (
 )
 
 
-def _is_claude_default_temperature_only_model(model_name: str) -> bool:
+def is_claude_default_temperature_only_model(model_name: str) -> bool:
     """Match Claude models that reject a non-default temperature.
 
     Covers the bare id, provider-qualified names (anthropic/claude-opus-4-7) and
@@ -131,12 +132,16 @@ def _is_claude_default_temperature_only_model(model_name: str) -> bool:
     return base_model_name.startswith(_CLAUDE_DEFAULT_TEMPERATURE_ONLY_PREFIXES)
 
 
-def _apply_default_temperature_only_filter(
+def apply_default_temperature_only_filter(
     params: Dict[str, Any],
     already_warned: Set[str],
     warn: Callable[[str, Any], None],
 ) -> None:
-    """Drop `temperature` unless it is the default (1)."""
+    """Drop `temperature` unless it is the default (1), and drop `top_p` / `top_k`.
+
+    Shared with the native Anthropic adapter, which reaches these models
+    without going through LiteLLM.
+    """
     unsupported: list[tuple[str, Any]] = []
 
     if "temperature" in params:
@@ -144,6 +149,10 @@ def _apply_default_temperature_only_filter(
         numeric_value = coerce_temperature_to_float(value)
         if numeric_value is None or abs(numeric_value - 1.0) > 1e-6:
             unsupported.append(("temperature", value))
+
+    for param in ("top_p", "top_k"):
+        if param in params:
+            unsupported.append((param, params[param]))
 
     _drop_unsupported_params_with_warning(
         params,

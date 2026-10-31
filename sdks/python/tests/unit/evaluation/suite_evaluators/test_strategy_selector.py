@@ -162,20 +162,15 @@ class TestCapabilityLookup:
             assert cap.model_name_prefix == model_name, model_name
             assert cap.context_window == 1_000_000, model_name
 
-    def test_default_temperature_only_models__keep_agentic_auto(self):
-        # These models reject a non-default temperature. The LiteLLM filter
-        # drops the loop's temperature=0 for them, so `auto` keeps them on
+    @pytest.mark.parametrize(
+        "model_name", ["claude-opus-4-7", "claude-opus-5", "claude-sonnet-5"]
+    )
+    def test_default_temperature_only_models__keep_agentic_auto(self, model_name):
+        # These models reject a non-default temperature. The model filters
+        # drop the loop's temperature=0 for them, so `auto` keeps them on
         # the agentic path like the other 1M-context Claude models.
-        for model_name in (
-            "claude-opus-4-7",
-            "claude-opus-5",
-            "claude-sonnet-5",
-            "claude-sonnet-4-6",
-            "claude-opus-4-6",
-            "gpt-4o",
-        ):
-            cap = strategy_selector._capability_for(model_name)
-            assert cap.agentic_in_auto is True, model_name
+        cap = strategy_selector._capability_for(model_name)
+        assert cap.agentic_in_auto is True
 
     def test_custom_table_with_empty_prefix__prefers_real_match(self):
         # An empty prefix matches every name via startswith. Without
@@ -234,13 +229,9 @@ class TestBudgetTokens:
         ) == strategy_selector.compute_budget_tokens("claude-sonnet-4-6")
 
     def test_qualified_name__is_not_the_default_budget(self):
-        default_budget = (
-            int(model_capabilities.DEFAULT_CAPABILITY.context_window * 0.5) - 1500
-        )
-        assert (
-            strategy_selector.compute_budget_tokens("anthropic/claude-sonnet-4-6")
-            != default_budget
-        )
+        assert strategy_selector.compute_budget_tokens(
+            "anthropic/claude-sonnet-4-6"
+        ) != strategy_selector.compute_budget_tokens("totally-unknown-model")
 
 
 class TestLLMJudgeIntegration:

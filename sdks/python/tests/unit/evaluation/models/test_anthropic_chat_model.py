@@ -264,6 +264,38 @@ class TestMessageAdapter:
         )
         assert result == {"temperature": 0.0}
 
+    @pytest.mark.parametrize("model_name", ["claude-opus-4-7", "claude-opus-5"])
+    def test_filter_unsupported_params__default_temperature_only_model__sampling_dropped(
+        self, monkeypatch, model_name
+    ):
+        # anthropic<1.7.0 still accepts temperature/top_p/top_k, so the
+        # model rule has to drop them before the request reaches the API.
+        monkeypatch.setattr(message_adapter, "_sdk_accepted_params", lambda: None)
+        result = message_adapter.filter_unsupported_params(
+            {"temperature": 0.0, "top_p": 0.9, "top_k": 40, "max_tokens": 10},
+            set(),
+            model_name,
+        )
+        assert result == {"max_tokens": 10}
+
+    def test_filter_unsupported_params__default_temperature_only_model__keeps_default(
+        self, monkeypatch
+    ):
+        monkeypatch.setattr(message_adapter, "_sdk_accepted_params", lambda: None)
+        result = message_adapter.filter_unsupported_params(
+            {"temperature": 1, "max_tokens": 10}, set(), "claude-opus-4-7"
+        )
+        assert result == {"temperature": 1, "max_tokens": 10}
+
+    def test_filter_unsupported_params__earlier_model__keeps_sampling(
+        self, monkeypatch
+    ):
+        monkeypatch.setattr(message_adapter, "_sdk_accepted_params", lambda: None)
+        result = message_adapter.filter_unsupported_params(
+            {"temperature": 0.0, "top_p": 0.9}, set(), "claude-sonnet-4-6"
+        )
+        assert result == {"temperature": 0.0, "top_p": 0.9}
+
     def test_filter_unsupported_params_warns_once(self):
         warned: set = set()
         message_adapter.filter_unsupported_params({"logprobs": True}, warned)
@@ -670,6 +702,24 @@ class TestAnthropicChatModelProviderResponse:
         model.generate_provider_response([{"role": "user", "content": "hi"}])
         call_kwargs = mock_client.messages.create.call_args.kwargs
         assert call_kwargs["max_tokens"] == 4096
+
+    def test_per_call_temperature__default_temperature_only_model__not_forwarded(
+        self, monkeypatch
+    ):
+        # The agentic loop passes temperature=0 per call. With an SDK that
+        # still accepts it, it would reach Opus 4.7 and come back as a 400.
+        _, mock_client, _ = _install_anthropic_stub(monkeypatch)
+        monkeypatch.setenv("OPIK_ENABLE_LITELLM_MODELS_MONITORING", "false")
+
+        model = anthropic_chat_model.AnthropicChatModel(
+            model_name="anthropic/claude-opus-4-7", track=False
+        )
+
+        model.generate_provider_response(
+            [{"role": "user", "content": "hi"}], temperature=0
+        )
+        call_kwargs = mock_client.messages.create.call_args.kwargs
+        assert "temperature" not in call_kwargs
 
     def test_strips_anthropic_prefix_in_api_call(self, monkeypatch):
         _, mock_client, _ = _install_anthropic_stub(monkeypatch)

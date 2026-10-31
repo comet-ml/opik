@@ -339,6 +339,41 @@ def test_litellm_chat_model_drops_non_default_temperature_for_claude_opus_4_7_on
     assert "temperature" not in kwargs
 
 
+@pytest.mark.parametrize(
+    "model_name",
+    [
+        "anthropic/claude-opus-4-7",
+        "bedrock/us.anthropic.claude-opus-4-7",
+        "claude-sonnet-5",
+    ],
+)
+def test_litellm_chat_model_drops_top_p_and_top_k_for_claude_opus_4_7_onward(
+    monkeypatch, model_name
+):
+    stub = _install_litellm_stub(monkeypatch)
+
+    model = litellm_chat_model.LiteLLMChatModel(model_name=model_name, top_p=0.9)
+    model.generate_chat_completion(
+        messages=[{"role": "user", "content": "hello"}], top_k=40
+    )
+
+    _, _, kwargs = stub._calls[-1]
+    assert "top_p" not in kwargs
+    assert "top_k" not in kwargs
+
+
+def test_litellm_chat_model_keeps_top_p_for_earlier_claude(monkeypatch):
+    stub = _install_litellm_stub(monkeypatch)
+
+    model = litellm_chat_model.LiteLLMChatModel(
+        model_name="anthropic/claude-sonnet-4-6", top_p=0.9
+    )
+    model.generate_chat_completion(messages=[{"role": "user", "content": "hello"}])
+
+    _, _, kwargs = stub._calls[-1]
+    assert kwargs.get("top_p") == 0.9
+
+
 def test_litellm_chat_model_keeps_default_temperature_for_claude_opus_4_7(
     monkeypatch,
 ):
