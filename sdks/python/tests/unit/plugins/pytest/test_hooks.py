@@ -115,6 +115,61 @@ def test_pytest_sessionfinish__valid_item__logs_scores_and_runs_experiment__happ
     client.flush.assert_called_once()
 
 
+def test_pytest_sessionfinish__skipped_test__not_scored_or_added_to_experiment(
+    monkeypatch,
+):
+    # pytest.skip() in the test body and an xfail that fails both give a
+    # skipped call report. They are not failures, and the terminal summary
+    # already leaves them out.
+    passed_item = SimpleNamespace(
+        nodeid="passed", report=SimpleNamespace(passed=True, skipped=False)
+    )
+    skipped_item = SimpleNamespace(
+        nodeid="skipped", report=SimpleNamespace(passed=False, skipped=True)
+    )
+    session = _session(auto_active=True)
+    session.items = [passed_item, skipped_item]
+    for nodeid in ("passed", "skipped"):
+        test_runs_storage.LLM_UNIT_TEST_RUNS.add(nodeid)
+        test_runs_storage.TEST_RUNS_TO_TRACE_DATA[nodeid] = SimpleNamespace(
+            id=f"trace-{nodeid}"
+        )
+
+    client = mock.Mock()
+    monkeypatch.setattr(
+        hooks.opik_client, "get_global_client", mock.Mock(return_value=client)
+    )
+    run_mock = mock.Mock()
+    monkeypatch.setattr(hooks.experiment_runner, "run", run_mock)
+
+    hooks.pytest_sessionfinish(session=session, exitstatus=0)
+
+    payload = client.log_traces_feedback_scores.call_args.args[0]
+    assert [(score["id"], score["value"]) for score in payload] == [
+        ("trace-passed", 1.0)
+    ]
+    run_mock.assert_called_once_with(client=client, test_items=[passed_item])
+
+
+def test_pytest_sessionfinish__only_skipped_tests__no_client_calls(monkeypatch):
+    item = SimpleNamespace(
+        nodeid="skipped", report=SimpleNamespace(passed=False, skipped=True)
+    )
+    session = _session(auto_active=True)
+    session.items = [item]
+    test_runs_storage.LLM_UNIT_TEST_RUNS.add("skipped")
+    test_runs_storage.TEST_RUNS_TO_TRACE_DATA["skipped"] = SimpleNamespace(
+        id="trace-skipped"
+    )
+
+    get_client_mock = mock.Mock()
+    monkeypatch.setattr(hooks.opik_client, "get_global_client", get_client_mock)
+
+    hooks.pytest_sessionfinish(session=session, exitstatus=0)
+
+    get_client_mock.assert_not_called()
+
+
 def test_pytest_sessionfinish__runner_error__flushes_client(monkeypatch):
     report = SimpleNamespace(passed=True)
     item = SimpleNamespace(nodeid="case-1", report=report)

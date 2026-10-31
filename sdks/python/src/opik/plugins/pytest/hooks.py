@@ -114,6 +114,10 @@ def pytest_sessionfinish(session: "pytest.Session", exitstatus: Any) -> None:
             trace_data = test_runs_storage.TEST_RUNS_TO_TRACE_DATA.get(nodeid)
             if report is None or trace_data is None:
                 continue
+            # pytest.skip() in the test body and a failing xfail test are
+            # skipped, not failed, so they get no "Passed" score.
+            if getattr(report, "skipped", False):
+                continue
 
             traces_feedback_scores.append(
                 BatchFeedbackScoreDict(
