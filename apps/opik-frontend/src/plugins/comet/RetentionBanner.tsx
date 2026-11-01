@@ -26,10 +26,12 @@ const RetentionBanner = ({ onChangeHeight, hidden }: RetentionBannerProps) => {
   const [closed, setClosed] = useState(false);
   const activeWorkspaceName = useActiveWorkspaceName();
 
-  const { data: quotas } = useWorkspaceQuotas(
+  const { data: quotasResponse } = useWorkspaceQuotas(
     { workspaceName: activeWorkspaceName },
     { enabled: !!activeWorkspaceName && !!user?.loggedIn },
   );
+  const quotas = quotasResponse?.quotas;
+  const isTrialExpired = !!quotasResponse?.trialExpired;
 
   const { data: allWorkspaces } = useAllWorkspaces({
     enabled: !!user?.loggedIn,
@@ -62,6 +64,24 @@ const RetentionBanner = ({ onChangeHeight, hidden }: RetentionBannerProps) => {
       .slice(0, 3);
   }, [organizationMembers]);
 
+  // Mirrors the EM plan picker, which only enables Free for one admin whose other members are all
+  // Opik-only; offering the downgrade to anyone else would lead to a disabled option.
+  const canDowngradeToFree = useMemo(() => {
+    if (!organizationMembers) return false;
+
+    const adminCount = organizationMembers.filter(
+      (m) => m.role === ORGANIZATION_ROLE_TYPE.admin,
+    ).length;
+    return (
+      adminCount === 1 &&
+      organizationMembers.every(
+        (m) =>
+          m.role === ORGANIZATION_ROLE_TYPE.admin ||
+          m.role === ORGANIZATION_ROLE_TYPE.opik,
+      )
+    );
+  }, [organizationMembers]);
+
   const isOrganizationAdmin =
     organization?.role === ORGANIZATION_ROLE_TYPE.admin;
 
@@ -71,9 +91,69 @@ const RetentionBanner = ({ onChangeHeight, hidden }: RetentionBannerProps) => {
     (spanQuota?.used || 0) / (spanQuota?.limit || 1) <
     SHOW_BANNER_MIN_THRESHOLD;
 
-  const hideBanner = !spanQuota || isUsedLess80 || closed || !user;
+  const hideBanner =
+    !user || (!isTrialExpired && (!spanQuota || isUsedLess80 || closed));
 
   const isExceededLimit = !!spanQuota && spanQuota.used >= spanQuota.limit;
+
+  const renderAdminNames = () => {
+    const isOneAdmin = firstThreeAdmins?.length === 1;
+
+    return (
+      <>
+        {isOneAdmin ? "admin" : "admins"} (
+        {firstThreeAdmins?.map((user, idx) => (
+          <React.Fragment key={user.userName}>
+            <TooltipWrapper content={user.email}>
+              <span className="underline">{user.userName}</span>
+            </TooltipWrapper>
+            {idx !== firstThreeAdmins.length - 1 && ", "}
+          </React.Fragment>
+        ))}
+        {!isOneAdmin && "..."})
+      </>
+    );
+  };
+
+  const getTrialExpiredLabel = () => {
+    if (!isOrganizationAdmin) {
+      return (
+        <span>
+          Your Pro trial has ended, so your organization is limited to the Free
+          plan. Ask your organization {renderAdminNames()} to update the payment
+          details.
+        </span>
+      );
+    }
+
+    // The plan picker opens straight away and closing it keeps the admin on the billing page;
+    // without redirectFromTrialModal EM sends a suspended organization back to its trial-over modal.
+    const planPickerUrl = buildUrl(
+      `organizations/${workspace?.organizationId}/billing`,
+      undefined,
+      "&initialOpenUpgradeCard=true&redirectFromTrialModal=true",
+    );
+    const linkProps = {
+      href: planPickerUrl,
+      target: "_blank",
+      rel: "noopener noreferrer",
+      className: "whitespace-nowrap underline",
+    };
+
+    return (
+      <span>
+        Your Pro trial has ended, so your organization is limited to the Free
+        plan. <a {...linkProps}>Update your payment details</a> to keep Pro
+        {canDowngradeToFree ? (
+          <>
+            , or <a {...linkProps}>downgrade to the Free plan</a>.
+          </>
+        ) : (
+          "."
+        )}
+      </span>
+    );
+  };
 
   const getExceededLabel = () => {
     if (isOrganizationAdmin) {
@@ -95,31 +175,24 @@ const RetentionBanner = ({ onChangeHeight, hidden }: RetentionBannerProps) => {
       );
     }
 
-    const isOneAdmin = firstThreeAdmins?.length === 1;
-
     return (
       <span>
         You&apos;ve hit your plan limits. To keep monitoring running, ask your
-        organization {isOneAdmin ? "admin" : "admins"} (
-        {firstThreeAdmins?.map((user, idx) => (
-          <React.Fragment key={user.userName}>
-            <TooltipWrapper content={user.email}>
-              <span className="underline">{user.userName}</span>
-            </TooltipWrapper>
-            {idx !== firstThreeAdmins.length - 1 && ", "}
-          </React.Fragment>
-        ))}
-        {!isOneAdmin && "..."}) to upgrade your plan.
+        organization {renderAdminNames()} to upgrade your plan.
       </span>
     );
   };
 
-  const label = isExceededLimit
-    ? getExceededLabel()
-    : `You're at 80% of your ${spanQuota?.limit} free spans. Upgrade to ensure` +
-      "uninterrupted monitoring";
+  const getLabel = () => {
+    if (isTrialExpired) return getTrialExpiredLabel();
+    if (isExceededLimit) return getExceededLabel();
+    return (
+      `You're at 80% of your ${spanQuota?.limit} free spans. Upgrade to ensure` +
+      "uninterrupted monitoring"
+    );
+  };
 
-  const closable = !isExceededLimit;
+  const closable = !isTrialExpired && !isExceededLimit;
 
   return (
     <Banner
@@ -131,7 +204,7 @@ const RetentionBanner = ({ onChangeHeight, hidden }: RetentionBannerProps) => {
       className="min-h-12 p-1.5 transition-all"
       contentClassName="comet-body-s"
     >
-      {label}
+      {getLabel()}
     </Banner>
   );
 };
