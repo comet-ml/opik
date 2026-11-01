@@ -1,0 +1,59 @@
+# Betterleaks secret-scanning config, run by the `betterleaks` pre-commit hook
+# (.pre-commit-config.yaml) locally and in the 🐙 Code Quality workflow.
+#
+# Extends the upstream default rule set and only allowlists exact, known
+# non-secret values: every regex below is anchored (^...$) and scoped to the
+# rules that flag it, so a new real secret never matches, wherever it lives.
+# Don't add path-wide exclusions (e.g. whole test or docs directories): they
+# fail open on every future file. For a one-off false positive, prefer an inline
+# `betterleaks:allow` comment on the flagged line.
+#
+# Exclusions use the v1 `[[allowlists]]` form on purpose: in betterleaks v1 they
+# are OR-ed into the default global filter, whereas a top-level `filter` here
+# would replace it. Convert them to a `filter` when moving to v2, where global
+# filters are additive.
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Local-dev and chart defaults, published by design and documented as must-override"
+targetRules = ["generic-credential-uri", "generic-password"]
+regexes = [
+  '''^opik$''',                       # Redis password in docker-compose, backend config.yml and CI
+  '''^opikmon$''',                    # Helm chart monitoring password
+  '''^wFSuJX9nDBdCa25sKZG7bh$''',     # Helm chart Redis password
+  '''^-?LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY\}?$''',  # MinIO root password (AWS docs-style example key)
+  '''^changeit$''',                   # JDK truststore default password
+  '''^miniopassword$''',              # MinIO Testcontainers password
+]
+
+[[allowlists]]
+description = "Documentation placeholders"
+targetRules = ["generic-api-key", "generic-credential-uri", "generic-password"]
+regexes = [
+  '''^redis-password$''',
+  '''^sentinel-password$''',
+  '''^my_secure_password$''',
+  '''^sk-4a7b9c8d0e1f2g3h4i5j6k7l8m9n0o1p(2q3r4s5t)?$''',
+  '''^sk-4f8b7c9d2e3f4a5b6c7d8e9f0a1b2c3d$''',
+  '''^b91f7c3d5a2e08461fd7c9b8e05a3d2f$''',
+]
+
+[[allowlists]]
+description = "Test fixtures"
+targetRules = ["generic-api-key", "generic-credential-uri", "generic-password"]
+regexes = [
+  '''^Et1RBc4nd1ef3LfyJvhyB34Po$''',                     # Opik API key parsing tests
+  '''^QWxpY2VIb3BwZXJCYXJjbGF5c1JlY29uY2lsaWF0aW9u$''',  # base64 of plain text, redaction tests
+  '''^(password|pass456|secret|s3cr3t|s3cret|name)$''',
+  '''^(sentinel-pass|data@pass|data%40pass)$''',
+  '''^(pass%40word|pass%3Eword|name:pass>word|my%40pass%3Aword|password<with>special&chars)$''',  # URL-encoding cases
+]
+
+[[allowlists]]
+description = "PostHog project key: write-only, shipped to clients by design"
+targetRules = ["posthog-project-api-key"]
+regexes = [
+  '''^phc_NAfd7RuhI3CPTaYZ7wnjStOgyvlseao9JHp5fWkTkzM$''',
+]
