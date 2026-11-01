@@ -463,7 +463,17 @@ repos:
         language: node
         # commitlint 21 needs Node >= 22.12; pinning makes pre-commit provision it
         # (nodeenv) instead of borrowing whatever system Node the contributor has.
-        language_version: 22.23.3
-        additional_dependencies: ['@commitlint/cli@21.2.4']
+        language_version: &commitlint_node 22.23.3
+        additional_dependencies: &commitlint_deps ['@commitlint/cli@21.2.4']
         stages: [commit-msg]
+      # Self-check: the accepted / rejected headers in both modes, whenever the
+      # config or its tests change. Shares the pins above through YAML anchors.
+      - id: commitlint-config-tests
+        name: 🧪 commitlint config tests
+        entry: scripts/test_commitlint_config.sh
+        language: node
+        language_version: *commitlint_node
+        additional_dependencies: *commitlint_deps
+        files: ^commitlint\.config\.mjs$|^scripts/test_commitlint_config\.sh$
+        pass_filenames: false
 ...

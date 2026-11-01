@@ -40,15 +40,24 @@ jobs:
       # Lint the PR title and every commit in the PR with the same commitlint hook
       # that runs locally at commit-msg, so commitlint.config.mjs and its pinned
       # version in .pre-commit-config.yaml are the only definition of the format.
+      # Fetched in its own step so the token never shares an environment with the
+      # PR's code, which the lint step below runs (commitlint.config.mjs).
+      - name: Fetch PR Commits
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          # The PR commits endpoint returns at most 250 commits, which covers any PR we review.
+          gh api --paginate "repos/$REPO/pulls/$PR_NUMBER/commits" \
+            --jq '.[] | "\(.sha) \(.commit.message | @base64)"' > "$RUNNER_TEMP/commits.txt"
+
       # A failing title / commit subjects are written to files that the next step
       # turns into the linter comment; commitlint's full output goes to this job's
       # log. This step itself never fails the job.
       - name: Lint PR Title and Commits (commitlint)
         env:
-          GH_TOKEN: ${{ github.token }}
           PR_TITLE: ${{ github.event.pull_request.title }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          REPO: ${{ github.repository }}
         run: |
           : > "$RUNNER_TEMP/commitlint-title-failed"
           : > "$RUNNER_TEMP/commitlint-bad-commits.txt"
@@ -63,9 +72,6 @@ jobs:
           fi
           echo "::endgroup::"
 
-          # The PR commits endpoint returns at most 250 commits, which covers any PR we review.
-          gh api --paginate "repos/$REPO/pulls/$PR_NUMBER/commits" \
-            --jq '.[] | "\(.sha) \(.commit.message | @base64)"' > "$RUNNER_TEMP/commits.txt"
           while read -r sha message; do
             printf '%s' "$message" | base64 -d > "$RUNNER_TEMP/msg.txt"
             echo "::group::commit ${sha:0:10}"

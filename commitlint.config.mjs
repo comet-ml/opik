@@ -61,11 +61,17 @@ export default {
     ],
   },
   // Bot-generated commits that can land inside a human PR or on main. Bot-authored
-  // PRs (Dependabot, Renovate) are skipped by the PR Linter before commitlint runs.
+  // PRs (Dependabot, Renovate) are skipped by the PR Linter before commitlint runs,
+  // so PR titles get no ignores: a human title must not slip past by mimicking a bot.
   // Merge, revert, fixup! and squash! commits are covered by commitlint's default ignores.
-  ignores: [
-    (message) => /^Update versions to \S+ and bump base version to \S+/.test(message),
-    (message) => message.startsWith("Optimised images with calibre/image-actions"),
-    (message) => /^Bump \S+ from \S+ to \S+/.test(message),
-  ],
+  // These match editable text, so they only suit format rules; a content rule must not
+  // be exempted by them.
+  defaultIgnores: !isPrTitle,
+  ignores: isPrTitle
+    ? []
+    : [
+        (message) => /^Update versions to \S+ and bump base version to \S+/.test(message),
+        (message) => message.startsWith("Optimised images with calibre/image-actions"),
+        (message) => /^Bump \S+ from \S+ to \S+/.test(message),
+      ],
 };
