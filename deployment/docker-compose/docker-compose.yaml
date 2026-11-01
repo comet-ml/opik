@@ -151,10 +151,13 @@ services:
     depends_on:
       minio:
         condition: service_healthy
+    environment:
+      MC_USER: ${MINIO_ROOT_USER:-THAAIOSFODNN7EXAMPLE}
+      MC_PASSWORD: ${MINIO_ROOT_PASSWORD:-LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY} # betterleaks:allow — local-dev MinIO default
     entrypoint: >
       /bin/sh -c "
       set -e;
-      /usr/bin/mc alias set s3 http://minio:9000 ${MINIO_ROOT_USER:-THAAIOSFODNN7EXAMPLE} ${MINIO_ROOT_PASSWORD:-LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY} --api S3v4 ;
+      /usr/bin/mc alias set s3 http://minio:9000 $$MC_USER $$MC_PASSWORD --api S3v4 ;
       /usr/bin/mc mb --ignore-existing s3/public;
       /usr/bin/mc anonymous set download s3/public/;
       "

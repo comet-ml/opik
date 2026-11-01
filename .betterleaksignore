@@ -3,8 +3,5 @@
 # name no values. If the line moves, the finding resurfaces; re-check it and
 # update the line number here.
 
-# MinIO local-dev default, inside a folded `sh -c` string where `#` would end the command
-deployment/docker-compose/docker-compose.yaml:generic-password:157
-
 # Example hash in a JSON code block rendered on the docs page
 apps/opik-documentation/documentation/fern/docs-v2/cost_intelligence/data-privacy-security.mdx:generic-api-key:89
