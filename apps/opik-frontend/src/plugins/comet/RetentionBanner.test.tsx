@@ -93,7 +93,7 @@ describe("RetentionBanner", () => {
       }
     });
 
-    // The EM plan picker disables Free for these organizations, so the link would lead nowhere.
+    // Billing doesn't offer Free to these organizations, so the link would lead nowhere.
     it("hides the downgrade link when the organization has other full members", () => {
       givenMembers(
         member("owner", ORGANIZATION_ROLE_TYPE.admin),
@@ -136,6 +136,14 @@ describe("RetentionBanner", () => {
         "Ask your organization admin (owner) to update the payment details.",
       );
       expect(screen.queryByRole("link")).toBeNull();
+    });
+
+    it("waits for the organization members before rendering", () => {
+      hooks.useOrganizationMembers.mockReturnValue({ data: undefined });
+
+      const { container } = renderBanner();
+
+      expect(container).toBeEmptyDOMElement();
     });
 
     it("cannot be dismissed", () => {

@@ -64,8 +64,8 @@ const RetentionBanner = ({ onChangeHeight, hidden }: RetentionBannerProps) => {
       .slice(0, 3);
   }, [organizationMembers]);
 
-  // Mirrors the EM plan picker, which only enables Free for one admin whose other members are all
-  // Opik-only; offering the downgrade to anyone else would lead to a disabled option.
+  // Billing only offers Free to a single admin whose other members are all Opik-only; offering the
+  // downgrade to anyone else would lead to a disabled option.
   const canDowngradeToFree = useMemo(() => {
     if (!organizationMembers) return false;
 
@@ -91,8 +91,12 @@ const RetentionBanner = ({ onChangeHeight, hidden }: RetentionBannerProps) => {
     (spanQuota?.used || 0) / (spanQuota?.limit || 1) <
     SHOW_BANNER_MIN_THRESHOLD;
 
+  // Until membership loads, admins can't be told apart from members, so the wrong message would flash.
   const hideBanner =
-    !user || (!isTrialExpired && (!spanQuota || isUsedLess80 || closed));
+    !user ||
+    (isTrialExpired
+      ? !organization || !organizationMembers
+      : !spanQuota || isUsedLess80 || closed);
 
   const isExceededLimit = !!spanQuota && spanQuota.used >= spanQuota.limit;
 
@@ -126,8 +130,7 @@ const RetentionBanner = ({ onChangeHeight, hidden }: RetentionBannerProps) => {
       );
     }
 
-    // The plan picker opens straight away and closing it keeps the admin on the billing page;
-    // without redirectFromTrialModal EM sends a suspended organization back to its trial-over modal.
+    // Opens the plan picker directly and keeps the admin on the billing page when it is closed.
     const planPickerUrl = buildUrl(
       `organizations/${workspace?.organizationId}/billing`,
       undefined,
