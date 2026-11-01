@@ -6,6 +6,8 @@ from opik.logging_messages import (
 
 import pytest
 
+from ...testlib import fake_api_key
+
 
 @pytest.mark.parametrize("raw_key", ["", None])
 def test_parse_api_key__empty_key(raw_key, capture_log):
@@ -48,7 +50,7 @@ def test_parse_api_key__too_many_parts(capture_log):
 def test_parse_api_key__happy_path__with_padding():
     # attributes: {"baseUrl": "https://www.comet.com"}
     raw_key = (
-        "Et1RBc4nd1ef3LfyJvhyB34Po"
+        fake_api_key.SHORT_API_KEY
         + DELIMITER_CHAR
         + "eyJiYXNlVXJsIjoiaHR0cHM6Ly93d3cuY29tZXQuY29tIn0="
     )
@@ -56,9 +58,7 @@ def test_parse_api_key__happy_path__with_padding():
 
     assert comet_api_key is not None
     assert comet_api_key.api_key == raw_key
-    assert (
-        comet_api_key.short_api_key == "Et1RBc4nd1ef3LfyJvhyB34Po"  # betterleaks:allow
-    )
+    assert comet_api_key.short_api_key == fake_api_key.SHORT_API_KEY
 
     assert comet_api_key.base_url == "https://www.comet.com"
     assert comet_api_key["baseUrl"] == "https://www.comet.com"
@@ -67,7 +67,7 @@ def test_parse_api_key__happy_path__with_padding():
 def test_parse_api_key__happy_path__no_padding():
     # attributes: {"baseUrl": "https://www.comet.com"}
     raw_key = (
-        "Et1RBc4nd1ef3LfyJvhyB34Po"
+        fake_api_key.SHORT_API_KEY
         + DELIMITER_CHAR
         + "eyJiYXNlVXJsIjoiaHR0cHM6Ly93d3cuY29tZXQuY29tIn0"
     )
@@ -75,9 +75,7 @@ def test_parse_api_key__happy_path__no_padding():
 
     assert comet_api_key is not None
     assert comet_api_key.api_key == raw_key
-    assert (
-        comet_api_key.short_api_key == "Et1RBc4nd1ef3LfyJvhyB34Po"  # betterleaks:allow
-    )
+    assert comet_api_key.short_api_key == fake_api_key.SHORT_API_KEY
 
     assert comet_api_key.base_url == "https://www.comet.com"
     assert comet_api_key["baseUrl"] == "https://www.comet.com"
@@ -86,10 +84,10 @@ def test_parse_api_key__happy_path__no_padding():
 @pytest.mark.parametrize(
     "raw_key",
     [
-        "Et1RBc4nd1ef3LfyJvhyB34Po"
+        fake_api_key.SHORT_API_KEY
         + DELIMITER_CHAR
         + "eyJiYXNlVXJsIjoiaHR0cHM6Ly93d3cuY29tZXQuY29tIn0===",
-        "Et1RBc4nd1ef3LfyJvhyB34Po"
+        fake_api_key.SHORT_API_KEY
         + DELIMITER_CHAR
         + "eyJiYXNlVXJsIjoiaHR0cHM6Ly93d3cuY29tZXQuY29tIn0==",
     ],
@@ -100,9 +98,7 @@ def test_parse_api_key__happy_path__wrong_padding(raw_key):
 
     assert comet_api_key is not None
     assert comet_api_key.api_key == raw_key
-    assert (
-        comet_api_key.short_api_key == "Et1RBc4nd1ef3LfyJvhyB34Po"  # betterleaks:allow
-    )
+    assert comet_api_key.short_api_key == fake_api_key.SHORT_API_KEY
 
     assert comet_api_key.base_url == "https://www.comet.com"
     assert comet_api_key["baseUrl"] == "https://www.comet.com"
