@@ -3,10 +3,11 @@
  * the data wrapper and inject instructions into the judge prompt. The rest of
  * the value is passed through verbatim so the judged content is unchanged.
  */
-const WRAPPER_CLOSE_TAG = /<\/(opik_(?:input|context|output|solution))>/gi;
+const WRAPPER_CLOSE_TAG_PATTERN =
+  /<\/(opik_(?:input|context|output|solution))\s*>/gi;
 
 function escapePromptData(value: string): string {
-  return value.replace(WRAPPER_CLOSE_TAG, "&lt;/$1&gt;");
+  return value.replace(WRAPPER_CLOSE_TAG_PATTERN, "&lt;/$1&gt;");
 }
 
 const G_EVAL_COT_TEMPLATE = `*** TASK:

@@ -8,10 +8,11 @@ import { FewShotExampleHallucination } from "../types";
  * the data wrapper and inject instructions into the judge prompt. The rest of
  * the value is passed through verbatim so the judged content is unchanged.
  */
-const WRAPPER_CLOSE_TAG = /<\/(opik_(?:input|context|output|solution))>/gi;
+const WRAPPER_CLOSE_TAG_PATTERN =
+  /<\/(opik_(?:input|context|output|solution))\s*>/gi;
 
 function escapePromptData(value: string): string {
-  return value.replace(WRAPPER_CLOSE_TAG, "&lt;/$1&gt;");
+  return value.replace(WRAPPER_CLOSE_TAG_PATTERN, "&lt;/$1&gt;");
 }
 
 const CONTEXT_HALLUCINATION_TEMPLATE = `You are an expert judge tasked with evaluating the faithfulness of an AI-generated answer to the given context. Analyze the provided INPUT, CONTEXT, and OUTPUT to determine if the OUTPUT contains any hallucinations or unfaithful information.
