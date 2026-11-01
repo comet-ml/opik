@@ -1,0 +1,82 @@
+name: '🐙 Pre-commit Autoupdate'
+
+# Weekly bump of the remote hooks' pinned `rev:`s in .pre-commit-config.yaml.
+# Pinned revs keep every contributor and CI on identical linter versions, but
+# they go stale without a refresh. A bump can also add rules that fail files no
+# diff touched, so the bumped hooks (and only those) are re-run against the
+# whole repo and their results land in the PR body. No PR when nothing bumped.
+on:
+  schedule:
+    - cron: '0 6 * * 1' # Monday 06:00 UTC ≈ 09:00 Israel (drifts 1h across DST)
+  workflow_dispatch:
+
+concurrency:
+  group: precommit-autoupdate
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Retry transient PyPI/network failures longer before failing the build.
+  PIP_RETRIES: 8
+  PIP_DEFAULT_TIMEOUT: 30
+  UV_HTTP_TIMEOUT: 30
+  UV_HTTP_RETRIES: 8
+
+jobs:
+  autoupdate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10.3.0
+
+      - name: Cache pre-commit environments
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-autoupdate-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+
+      - name: Bump revs and re-scan bumped hooks
+        run: scripts/precommit-autoupdate.sh "$RUNNER_TEMP/report.md"
+
+      - name: Build PR body
+        run: |
+          {
+            echo "## Details"
+            echo "Automated weekly \`pre-commit autoupdate\`. Only the hooks whose \`rev:\` changed were re-run with \`--all-files\`; unchanged hooks have no new rules to apply."
+            echo
+            cat "$RUNNER_TEMP/report.md"
+            echo
+            echo "## Change checklist"
+            echo "- [ ] User facing changes"
+            echo "- [ ] Documentation updated"
+            echo
+            echo "## Issues"
+            echo "N/A"
+            echo
+            echo "## Testing"
+            echo "- Bumped hooks re-run against the whole repo (results above)"
+            echo
+            echo "## Documentation"
+            echo "N/A"
+          } > "$RUNNER_TEMP/pr-body.md"
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ secrets.COMET_ACTION_CREATE_PR }}
+          branch: automation/precommit-autoupdate
+          delete-branch: true
+          commit-message: "[NA] [INFRA] chore: weekly pre-commit hook autoupdate"
+          author: "GitHub Actions <github-actions@comet.com>"
+          committer: "GitHub Actions <github-actions@comet.com>"
+          title: "[NA] [INFRA] chore: weekly pre-commit hook autoupdate"
+          body-path: ${{ runner.temp }}/pr-body.md
+          base: main

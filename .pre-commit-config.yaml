@@ -390,6 +390,10 @@ repos:
     hooks:
       - id: hadolint-docker
         name: 🐳 hadolint — dockerfiles
+        # Upstream's entry is the untagged image, so `rev:` alone would float
+        # hadolint to :latest. The tag here is what pins the version; the weekly
+        # autobump (scripts/precommit-bumped-hooks.py) keeps it equal to rev.
+        entry: ghcr.io/hadolint/hadolint:v2.15.1 hadolint
         # Explicit files: regex (not the upstream `types: [dockerfile]`) so the
         # CI matrix builder in scripts/precommit-detect-hooks.py can route a
         # changed Dockerfile to this leg — it matches on paths, not content type.
