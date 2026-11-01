@@ -64,6 +64,26 @@ class TestExportTracesByIdsFailureCount:
 
         assert result == (1, 0, 1)
 
+    def test_export_traces_by_ids__write_failure__reports_failed_count(self, tmp_path):
+        """A write error must be reported as failed, not silently skipped."""
+        from opik.cli.exports.experiment import export_traces_by_ids
+
+        trace = MagicMock()
+        trace.model_dump.return_value = {"id": "t1"}
+        client = MagicMock()
+        client.get_trace_content.return_value = trace
+        client.search_spans.return_value = []
+
+        with patch(
+            f"{_EXPERIMENT_MODULE}.write_json_data",
+            side_effect=OSError("disk full"),
+        ):
+            result = export_traces_by_ids(
+                client, ["t1"], tmp_path, "proj", None, "json", False, False
+            )
+
+        assert result == (0, 0, 1)
+
 
 class TestExportExperimentReportsTraceFailures:
     def test_export_experiment_by_name__trace_failure__exits_1(self, tmp_path):
@@ -115,6 +135,113 @@ class TestExportExperimentReportsTraceFailures:
                 )
 
         assert exc_info.value.code == 1
+
+    def test_export_experiment_by_name_or_id__id_path_trace_failure__exits_1(
+        self, tmp_path
+    ):
+        """A failed trace export on the direct-ID path must exit non-zero."""
+        from opik.cli.exports import experiment as experiment_module
+
+        experiment = MagicMock()
+        experiment.id = "e1"
+        experiment.name = "exp"
+        experiment.dataset_name = None
+
+        client = MagicMock()
+        client.get_experiment_by_id.return_value = experiment
+
+        def export_by_id(
+            client_,
+            output_dir,
+            project_name,
+            experiment_id,
+            max_traces,
+            force,
+            debug,
+            format_,
+            trace_ids_collector=None,
+            experiment_obj=None,
+        ):
+            trace_ids_collector.add("t1")
+            return {}, 1, None
+
+        with (
+            patch(f"{_EXPERIMENT_MODULE}.opik.Opik", return_value=client),
+            patch(
+                f"{_EXPERIMENT_MODULE}.prepare_project_export_dir",
+                return_value=("pid", tmp_path),
+            ),
+            patch(
+                f"{_EXPERIMENT_MODULE}.export_experiment_by_id",
+                side_effect=export_by_id,
+            ),
+            patch(
+                f"{_EXPERIMENT_MODULE}._fetch_trace_data",
+                side_effect=RuntimeError("boom"),
+            ),
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                experiment_module.export_experiment_by_name_or_id(
+                    "e1", "ws", "proj", str(tmp_path), None, None, True, False, "json"
+                )
+
+        assert exc_info.value.code == 1
+
+    def test_export_experiment_by_name__trace_failure__prints_summary(self, tmp_path):
+        """The failure summary must name traces as well as set the exit code."""
+        from opik.cli.exports import experiment as experiment_module
+
+        experiment = MagicMock()
+        experiment.id = "e1"
+        experiment.name = "exp"
+        experiment.dataset_name = None
+        experiment.get_experiment_data.return_value.prompt_versions = []
+
+        client = MagicMock()
+        client.get_experiments_by_name.return_value = [experiment]
+
+        def export_by_id(
+            client_,
+            output_dir,
+            project_name,
+            experiment_id,
+            max_traces,
+            force,
+            debug,
+            format_,
+            trace_ids_collector=None,
+            experiment_obj=None,
+        ):
+            trace_ids_collector.add("t1")
+            return {}, 1, None
+
+        with (
+            patch(f"{_EXPERIMENT_MODULE}.opik.Opik", return_value=client),
+            patch(
+                f"{_EXPERIMENT_MODULE}.prepare_project_export_dir",
+                return_value=("pid", tmp_path),
+            ),
+            patch(
+                f"{_EXPERIMENT_MODULE}.export_experiment_by_id",
+                side_effect=export_by_id,
+            ),
+            patch(
+                f"{_EXPERIMENT_MODULE}._fetch_trace_data",
+                side_effect=RuntimeError("boom"),
+            ),
+            patch.object(experiment_module.console, "print") as mock_print,
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                experiment_module.export_experiment_by_name(
+                    "exp", "ws", "proj", str(tmp_path), None, None, True, False, "json"
+                )
+
+        assert exc_info.value.code == 1
+        printed = [str(call.args[0]) for call in mock_print.call_args_list if call.args]
+        assert any(
+            "Export completed with errors" in message and "traces" in message
+            for message in printed
+        )
 
     def test_export_all_experiments__trace_failure__sets_had_errors(self, tmp_path):
         """A failed batch trace export must set had_errors for `export all`."""

@@ -104,41 +104,38 @@ def _write_trace_file(
     force: bool,
     debug: bool,
 ) -> bool:
-    """Write a single trace to file. Returns True if exported, False if skipped."""
-    try:
-        # Save trace directly in the project directory
-        project_dir.mkdir(parents=True, exist_ok=True)
+    """Write a single trace to file.
 
-        # Determine file path based on format
-        if format.lower() == "csv":
-            file_path = project_dir / f"trace_{trace_id}.csv"
-        else:
-            file_path = project_dir / f"trace_{trace_id}.json"
+    Returns True if exported and False if skipped because the file already
+    exists. Write errors are not swallowed: they propagate so callers can
+    count them as failures instead of reporting a successful export.
+    """
+    # Save trace directly in the project directory
+    project_dir.mkdir(parents=True, exist_ok=True)
 
-        # Check if file already exists and should be skipped
-        if should_skip_file(file_path, force):
-            if debug:
-                debug_print(f"Skipping trace {trace_id} (already exists)", debug)
-            return False
+    # Determine file path based on format
+    if format.lower() == "csv":
+        file_path = project_dir / f"trace_{trace_id}.csv"
+    else:
+        file_path = project_dir / f"trace_{trace_id}.json"
 
-        # Save to file using the appropriate format
-        if format.lower() == "csv":
-            write_csv_data(trace_data, file_path, trace_to_csv_rows)
-            if debug:
-                debug_print(f"Wrote CSV file: {file_path}", debug)
-        else:
-            write_json_data(trace_data, file_path)
-            if debug:
-                debug_print(f"Wrote JSON file: {file_path}", debug)
-
-        return True
-    except Exception as e:
-        console.print(f"[red]Error writing trace {trace_id} to file: {e}[/red]")
+    # Check if file already exists and should be skipped
+    if should_skip_file(file_path, force):
         if debug:
-            import traceback
-
-            debug_print(f"Traceback: {traceback.format_exc()}", debug)
+            debug_print(f"Skipping trace {trace_id} (already exists)", debug)
         return False
+
+    # Save to file using the appropriate format
+    if format.lower() == "csv":
+        write_csv_data(trace_data, file_path, trace_to_csv_rows)
+        if debug:
+            debug_print(f"Wrote CSV file: {file_path}", debug)
+    else:
+        write_json_data(trace_data, file_path)
+        if debug:
+            debug_print(f"Wrote JSON file: {file_path}", debug)
+
+    return True
 
 
 def _scan_downloaded_trace_ids(project_dir: Path, format: str) -> Set[str]:
@@ -221,8 +218,11 @@ def export_traces_by_ids(
     - When *manifest* is provided its downloaded-ID set is used for the check.
     - Otherwise the project directory is scanned for existing trace files.
 
-    Returns ``(exported, skipped, failed)``, where *failed* counts traces
-    whose fetch or write raised after the retries were exhausted.
+    Returns ``(exported, skipped, failed)``. *skipped* counts traces that were
+    already downloaded, excluded by *filter_string*, or returned ``None`` for an
+    unresolvable ID (for example a 404). *failed* counts traces whose fetch or
+    write raised. ``manifest.complete()`` runs only when *failed* is 0, so an
+    interrupted export resumes on the next run.
     """
     exported_count = 0
     skipped_count = 0
@@ -365,9 +365,14 @@ def export_traces_by_ids(
                                 skipped_count += 1
                         except Exception as e:
                             failed_count += 1
+                            console.print(
+                                f"[red]Error writing trace {trace_id}: {e}[/red]"
+                            )
                             if debug:
-                                console.print(
-                                    f"[red]Error writing trace {trace_id}: {e}[/red]"
+                                import traceback
+
+                                debug_print(
+                                    f"Traceback: {traceback.format_exc()}", debug
                                 )
                         finally:
                             progress.update(
