@@ -56,7 +56,9 @@ def test_parse_api_key__happy_path__with_padding():
 
     assert opik_api_key is not None
     assert opik_api_key.api_key == raw_key
-    assert opik_api_key.short_api_key == "Et1RBc4nd1ef3LfyJvhyB34Po"
+    assert (
+        opik_api_key.short_api_key == "Et1RBc4nd1ef3LfyJvhyB34Po"  # betterleaks:allow
+    )
 
     assert opik_api_key.base_url == "https://www.comet.com"
     assert opik_api_key["baseUrl"] == "https://www.comet.com"
@@ -73,7 +75,9 @@ def test_parse_api_key__happy_path__no_padding():
 
     assert opik_api_key is not None
     assert opik_api_key.api_key == raw_key
-    assert opik_api_key.short_api_key == "Et1RBc4nd1ef3LfyJvhyB34Po"
+    assert (
+        opik_api_key.short_api_key == "Et1RBc4nd1ef3LfyJvhyB34Po"  # betterleaks:allow
+    )
 
     assert opik_api_key.base_url == "https://www.comet.com"
     assert opik_api_key["baseUrl"] == "https://www.comet.com"
@@ -96,7 +100,9 @@ def test_parse_api_key__happy_path__wrong_padding(raw_key):
 
     assert opik_api_key is not None
     assert opik_api_key.api_key == raw_key
-    assert opik_api_key.short_api_key == "Et1RBc4nd1ef3LfyJvhyB34Po"
+    assert (
+        opik_api_key.short_api_key == "Et1RBc4nd1ef3LfyJvhyB34Po"  # betterleaks:allow
+    )
 
     assert opik_api_key.base_url == "https://www.comet.com"
     assert opik_api_key["baseUrl"] == "https://www.comet.com"

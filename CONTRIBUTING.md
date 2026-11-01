@@ -83,7 +83,11 @@ Every commit is scanned for hardcoded secrets (API keys, tokens, credentials, pr
 
 - **If it flags a real secret**, remove it, and rotate it if it was ever pushed anywhere. Don't allowlist it.
 - **To run it yourself**, use `pre-commit run betterleaks --files <paths>`, or `pre-commit run betterleaks --all-files` for the whole tree.
-- **Suppressing a false positive** must be explicit and justified. For a one-off, add an inline `betterleaks:allow` comment with a short reason on the flagged line. For a value that recurs, add an exact, anchored entry to [`.betterleaks.toml`](.betterleaks.toml), scoped to the rule that flags it. Never exclude whole paths or directories: that would let real secrets in those paths through.
+- **Suppressing a false positive** must be explicit and justified, and must not copy the value anywhere new:
+  - Add an inline `betterleaks:allow` comment with a short reason on the flagged line.
+  - If the line can't hold a comment (inside a shell string, or a rendered docs code block), add its fingerprint (`path:rule:line`, using the rule, path and line printed with the finding) to [`.betterleaksignore`](.betterleaksignore).
+  - Only obvious placeholder words (such as `password` or `changeit`) go in [`.betterleaks.toml`](.betterleaks.toml), as exact, anchored entries scoped to the rule that flags them. Never list a value there that looks like a real secret, even a harmless one.
+  - Never exclude whole paths or directories: that would let real secrets in those paths through.
 
 ## SQL query construction (Java backend)
 Production Java under `apps/opik-backend/src/main/java/` is scanned with [semgrep](https://semgrep.dev/) for SQL assembled by string formatting, as a hook in the unified `🐙 Code Quality` workflow (and locally via pre-commit). The rules live in [`.semgrep/`](.semgrep/), with the conventions they enforce documented in [`.agents/rules/security.mdc`](.agents/rules/security.mdc) and the backend skill.
