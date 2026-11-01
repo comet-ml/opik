@@ -4,14 +4,14 @@ import { FewShotExampleHallucination } from "../types";
  * Context hallucination template - evaluates if output is faithful to provided context
  */
 /**
- * Escapes XML special characters in caller-provided values so they cannot
- * close the data wrapper tags and inject instructions into the judge prompt.
+ * Escapes caller-provided wrapper-closing tags so caller content cannot close
+ * the data wrapper and inject instructions into the judge prompt. The rest of
+ * the value is passed through verbatim so the judged content is unchanged.
  */
+const WRAPPER_CLOSE_TAG = /<\/(opik_(?:input|context|output|solution))>/gi;
+
 function escapePromptData(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+  return value.replace(WRAPPER_CLOSE_TAG, "&lt;/$1&gt;");
 }
 
 const CONTEXT_HALLUCINATION_TEMPLATE = `You are an expert judge tasked with evaluating the faithfulness of an AI-generated answer to the given context. Analyze the provided INPUT, CONTEXT, and OUTPUT to determine if the OUTPUT contains any hallucinations or unfaithful information.
