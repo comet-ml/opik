@@ -42,6 +42,12 @@ import yaml
 DEFAULT_FILES = ""        # pre-commit default: match everything
 DEFAULT_EXCLUDE = "^$"     # pre-commit default: match nothing
 
+# Code Quality legs run `pre-commit run --hook-stage manual`, and local commits
+# run the pre-commit stage. A hook in neither (commitlint is commit-msg only) has
+# no files to route and would no-op as a leg, so it is left out entirely.
+# "commit" is pre-commit's legacy alias for the pre-commit stage.
+FILE_STAGES = {"pre-commit", "commit", "manual"}
+
 # Map a hook to the heavy runtime its leg must provision. Python hooks need
 # nothing (pre-commit builds them in isolated envs); actionlint is language:
 # golang (self-built); hygiene hooks are pure-python. Only the repo-local
@@ -105,11 +111,16 @@ def main(argv):
 
     global_files = config.get("files", DEFAULT_FILES)
     global_exclude = config.get("exclude", DEFAULT_EXCLUDE)
+    default_stages = config.get("default_stages")
 
     legs = []
     skipped = []
     for repo in config.get("repos", []):
         for hook in repo.get("hooks", []):
+            stages = hook.get("stages", default_stages)
+            if stages is not None and not FILE_STAGES.intersection(stages):
+                continue
+
             hook_files = hook.get("files", global_files)
             hook_exclude = hook.get("exclude", global_exclude)
 

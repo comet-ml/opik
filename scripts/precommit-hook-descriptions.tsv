@@ -30,6 +30,7 @@ actionlint	Lint GitHub Actions workflows
 zizmor	Security-scan GitHub Actions workflows
 hadolint	Lint Dockerfiles
 semgrep	Enforce the repo's own backend Java rules
+commitlint	Lint commit messages and PR titles
 spotless	Format Java code
 swagger resolve	Resolve the backend OpenAPI spec
 eslint	Lint + autofix JS/TS

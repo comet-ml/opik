@@ -95,6 +95,10 @@ check "spec input emits swagger-resolve"  '"id": "swagger-resolve"'  "$out"
 check "swagger-resolve provisions java"   '"toolchain": "java"'      "$out"
 check_empty "test-only java omits swagger-resolve" \
 	"$(printf 'apps/opik-backend/src/test/java/com/comet/opik/FooTest.java\n' | python3 scripts/precommit-detect-hooks.py .pre-commit-config.yaml | leg_ids | grep -o 'swagger-resolve' || true)"
+# commitlint runs at the commit-msg stage only and has no files: — it must never
+# become a Code Quality leg (it would match every path and no-op at runtime).
+check_empty "commit-msg hook emits no leg" \
+	"$(printf 'README.md\n.pre-commit-config.yaml\n' | python3 scripts/precommit-detect-hooks.py .pre-commit-config.yaml | grep -o '"commitlint"' || true)"
 
 echo "precommit-hook-desc.py:"
 # Single shared resolver both tables use. Substring match, TSV order honoured
