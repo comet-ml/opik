@@ -300,9 +300,11 @@ class TestHierarchicalReflectiveOptimizerCounters:
         monkeypatch.setattr(
             optimizer,
             "evaluate_prompt",
-            lambda **kwargs: _mock_experiment_result(0.1)
-            if kwargs.get("return_evaluation_result")
-            else 0.1,
+            lambda **kwargs: (
+                _mock_experiment_result(0.1)
+                if kwargs.get("return_evaluation_result")
+                else 0.1
+            ),
         )
 
         analysis = HierarchicalRootCauseAnalysis(

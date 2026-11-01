@@ -42,6 +42,7 @@ The e2e suite runs under `pytest-xdist` with `--dist=loadfile`: each test file i
 - **Backend project name** for a test module comes from `generate_project_name("e2e", __name__)` (helper in `tests/testlib/project_naming.py`, re-exported from `tests.testlib`). Files that need to reference the project (verifier fallback, `search_traces`, etc.) declare at module top:
   ```python
   from ..testlib import generate_project_name
+
   PROJECT_NAME = generate_project_name("e2e", __name__)
   ```
   Reference `PROJECT_NAME` directly in test bodies — do not introduce a `project_name = PROJECT_NAME` indirection. The autouse `configure_e2e_tests_env` fixture reads `PROJECT_NAME` from each test module and patches `OPIK_PROJECT_NAME`, so the constant is the single source of truth. Files that don't reference the project name in Python don't need to declare anything; the fixture falls back to deriving a name from the module.
@@ -51,7 +52,8 @@ The e2e suite runs under `pytest-xdist` with `--dist=loadfile`: each test file i
   def test_xxx(opik_client, override_project_name):
       project_name = (
           generate_project_name("e2e", "anonymization", "override")
-          if override_project_name else None
+          if override_project_name
+          else None
       )
       ...
   ```

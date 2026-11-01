@@ -36,10 +36,10 @@ import opik
 
 # Initialize client
 client = opik.Opik(
-    project_name="my_project",    # Optional: defaults to "Default Project"
-    workspace="my_workspace",     # Optional: defaults to "default"
+    project_name="my_project",  # Optional: defaults to "Default Project"
+    workspace="my_workspace",  # Optional: defaults to "default"
     host="https://api.opik.com",  # Optional: custom backend URL
-    api_key="your_api_key"        # Optional: for cloud deployments
+    api_key="your_api_key",  # Optional: for cloud deployments
 )
 ```
 
@@ -61,35 +61,33 @@ trace = client.trace(
     name="my_operation",
     input={"query": "What is AI?"},
     metadata={"version": "1.0"},
-    tags=["production"]
+    tags=["production"],
 )
 
 # Create a span (must be within trace context or provide trace_id)
 span = client.span(
     name="llm_call",
-    trace_id=trace.id,           # Required if no trace context
-    parent_span_id=None,         # Optional: for nested spans
+    trace_id=trace.id,  # Required if no trace context
+    parent_span_id=None,  # Optional: for nested spans
     input={"prompt": "..."},
-    type="llm",                  # Types: "llm", "tool", "general"
+    type="llm",  # Types: "llm", "tool", "general"
     model="gpt-4",
-    provider="openai"
+    provider="openai",
 )
 
 # Update trace/span
-client.trace(
-    id=trace.id,
-    output={"answer": "..."},
-    metadata={"tokens": 150}
-)
+client.trace(id=trace.id, output={"answer": "..."}, metadata={"tokens": 150})
 
 # Add feedback scores
 client.log_traces_feedback_scores(
-    scores=[{
-        "id": trace.id,
-        "name": "accuracy",
-        "value": 0.95,
-        "reason": "Accurate response"
-    }]
+    scores=[
+        {
+            "id": trace.id,
+            "name": "accuracy",
+            "value": 0.95,
+            "reason": "Accurate response",
+        }
+    ]
 )
 
 # Ensure all data is sent
@@ -101,6 +99,7 @@ client.flush(timeout=30)  # Wait up to 30 seconds
 ```python
 import opik
 
+
 # Simplest usage
 @opik.track
 def my_function(input: str) -> str:
@@ -108,29 +107,33 @@ def my_function(input: str) -> str:
     # Captures input and output
     return process(input)
 
+
 # With options
 @opik.track(
-    name="custom_name",              # Override function name
-    project_name="my_project",       # Set project
-    capture_input=True,              # Capture inputs (default: True)
-    capture_output=True,             # Capture outputs (default: True)
-    tags=["production"],             # Add tags
-    metadata={"version": "1.0"},     # Add metadata
-    type="llm"                       # Set span type
+    name="custom_name",  # Override function name
+    project_name="my_project",  # Set project
+    capture_input=True,  # Capture inputs (default: True)
+    capture_output=True,  # Capture outputs (default: True)
+    tags=["production"],  # Add tags
+    metadata={"version": "1.0"},  # Add metadata
+    type="llm",  # Set span type
 )
 def llm_call(prompt: str) -> str:
     return call_llm(prompt)
+
 
 # Nested functions create nested spans
 @opik.track
 def outer_function(data):
     preprocessed = preprocess(data)  # Creates nested span
-    result = process(preprocessed)   # Creates nested span
+    result = process(preprocessed)  # Creates nested span
     return result
+
 
 @opik.track
 def preprocess(data):
     return {"cleaned": data}
+
 
 @opik.track
 def process(data):
@@ -150,12 +153,10 @@ span_data = opik.get_current_span_data()
 opik.update_current_span(
     metadata={"key": "value"},
     tags=["important"],
-    usage={"completion_tokens": 100, "prompt_tokens": 50, "total_tokens": 150}
+    usage={"completion_tokens": 100, "prompt_tokens": 50, "total_tokens": 150},
 )
 
-opik.update_current_trace(
-    output={"result": "success"}
-)
+opik.update_current_trace(output={"result": "success"})
 
 # Context managers for manual control
 with opik.start_as_current_trace(name="my_trace", input={"data": "test"}) as trace:
@@ -176,33 +177,25 @@ headers = opik.get_distributed_trace_headers()
 
 ```python
 # Create and manage datasets
-dataset = client.create_dataset(
-    name="my_dataset",
-    description="Test dataset"
-)
+dataset = client.create_dataset(name="my_dataset", description="Test dataset")
 
-dataset.insert([
-    {"input": "query1", "expected": "answer1"},
-    {"input": "query2", "expected": "answer2"}
-])
+dataset.insert(
+    [
+        {"input": "query1", "expected": "answer1"},
+        {"input": "query2", "expected": "answer2"},
+    ]
+)
 
 # Create experiments
-experiment = client.create_experiment(
-    name="exp_v1",
-    dataset_name="my_dataset"
-)
+experiment = client.create_experiment(name="exp_v1", dataset_name="my_dataset")
 
 # Manage prompts
 prompt = client.create_prompt(
-    name="my_prompt",
-    prompt="Answer this question: {{question}}",
-    type="text"
+    name="my_prompt", prompt="Answer this question: {{question}}", type="text"
 )
 
 # Create new version
-prompt_v2 = prompt.create_version(
-    prompt="Enhanced: {{question}}\nContext: {{context}}"
-)
+prompt_v2 = prompt.create_version(prompt="Enhanced: {{question}}\nContext: {{context}}")
 ```
 
 ## Core Architecture
@@ -409,7 +402,7 @@ class Streamer:
         queue: MessageQueue,
         queue_consumers: List[QueueConsumer],
         batch_manager: Optional[BatchManager],
-        file_upload_manager: FileUploadManager
+        file_upload_manager: FileUploadManager,
     ):
         self._message_queue = queue
         self._queue_consumers = queue_consumers
@@ -471,7 +464,7 @@ class QueueConsumer(threading.Thread):
         self,
         queue: MessageQueue,
         message_processor: MessageProcessor,
-        name: Optional[str] = None
+        name: Optional[str] = None,
     ):
         super().__init__(daemon=True, name=name)
         self._message_queue = queue
@@ -551,9 +544,7 @@ import opik
 
 client = opik.Opik(project_name="my_project")
 trace = client.trace(
-    name="my_trace",
-    input={"query": "test"},
-    metadata={"version": "1.0"}
+    name="my_trace", input={"query": "test"}, metadata={"version": "1.0"}
 )
 ```
 
@@ -561,6 +552,7 @@ trace = client.trace(
 
 ```python
 # In opik_client.py: Opik.trace()
+
 
 def trace(self, name: str, input: dict, metadata: dict, **kwargs):
     # 1. Generate ID if not provided
@@ -576,7 +568,7 @@ def trace(self, name: str, input: dict, metadata: dict, **kwargs):
         input=input,
         metadata=metadata,
         project_name=self._project_name,
-        start_time=datetime_helpers.now()
+        start_time=datetime_helpers.now(),
     )
 
     # 4. Create message
@@ -604,26 +596,23 @@ def trace(self, name: str, input: dict, metadata: dict, **kwargs):
 ```python
 # In streamer.py: Streamer.put()
 
+
 def put(self, message: BaseMessage) -> None:
-   with self._lock:
-      # Check if draining
-      if self._drain:
-         return
+    with self._lock:
+        # Check if draining
+        if self._drain:
+            return
 
-      # do embedded attachments pre-processing first (MUST ALWAYS BE DONE FIRST)
-      preprocessed_message = self._attachments_preprocessor.preprocess(
-        message
-      )
+        # do embedded attachments pre-processing first (MUST ALWAYS BE DONE FIRST)
+        preprocessed_message = self._attachments_preprocessor.preprocess(message)
 
-      # do batching pre-processing third
-      preprocessed_message = self._batch_preprocessor.preprocess(
-        preprocessed_message
-      )
+        # do batching pre-processing third
+        preprocessed_message = self._batch_preprocessor.preprocess(preprocessed_message)
 
-      # Route to queue
-      if not self._message_queue.accept_put_without_discarding():
-         LOGGER.warning("Queue full, discarding oldest message")
-      self._message_queue.put(preprocessed_message)
+        # Route to queue
+        if not self._message_queue.accept_put_without_discarding():
+            LOGGER.warning("Queue full, discarding oldest message")
+        self._message_queue.put(preprocessed_message)
 ```
 
 **Decision Tree**:
@@ -653,6 +642,7 @@ If batching is enabled, certain message types accumulate before sending.
 
 ```python
 # In batch_manager.py
+
 
 class BatchManager:
     def process_message(self, message: BaseMessage) -> None:
@@ -705,9 +695,8 @@ self._message_processor.process(message)
 ```python
 # In message_processors.py
 
-def _process_create_trace_message(
-    self, message: CreateTraceMessage
-) -> None:
+
+def _process_create_trace_message(self, message: CreateTraceMessage) -> None:
     # Map message to REST request
     trace_write = trace_write.TraceWrite(
         id=message.trace_id,
@@ -720,15 +709,14 @@ def _process_create_trace_message(
     )
 
     # Make REST API call
-    self._rest_client.traces.create_trace(
-        request=trace_write
-    )
+    self._rest_client.traces.create_trace(request=trace_write)
 ```
 
 #### Step 7: REST API Layer
 
 ```python
 # In rest_api (auto-generated)
+
 
 def create_trace(self, request: TraceWrite) -> TracePublic:
     # Serialize request
@@ -738,7 +726,7 @@ def create_trace(self, request: TraceWrite) -> TracePublic:
     response = self._client.post(
         "/v1/traces",
         json=json_data,
-        headers={"Authorization": f"Bearer {self._api_key}"}
+        headers={"Authorization": f"Bearer {self._api_key}"},
     )
 
     # Handle response
@@ -764,6 +752,7 @@ The `@opik.track` decorator provides automatic tracing. Here's the complete flow
 @opik.track
 def my_function(x: int) -> int:
     return x * 2
+
 
 # Behind the scenes
 _decorator = OpikTrackDecorator()
@@ -882,9 +871,11 @@ def outer(x):
     result = inner(x)
     return result * 2
 
+
 @opik.track
 def inner(x):
     return x + 1
+
 
 # Call
 outer(5)
@@ -934,6 +925,7 @@ class BaseMessage:
     def dict(self) -> Dict[str, Any]:
         """Convert to dictionary"""
 
+
 # Core message types
 class CreateTraceMessage(BaseMessage):
     trace_id: str
@@ -945,6 +937,7 @@ class CreateTraceMessage(BaseMessage):
     start_time: datetime
     end_time: Optional[datetime]
     # ... more fields
+
 
 class CreateSpanMessage(BaseMessage):
     span_id: str
@@ -959,27 +952,34 @@ class CreateSpanMessage(BaseMessage):
     provider: Optional[str]
     # ... more fields
 
+
 class UpdateSpanMessage(BaseMessage):
     span_id: str
     # Only fields to update
+
 
 class UpdateTraceMessage(BaseMessage):
     trace_id: str
     # Only fields to update
 
+
 # Batch message types
 class CreateSpansBatchMessage(BaseMessage):
     spans: List[CreateSpanMessage]
 
+
 class CreateTraceBatchMessage(BaseMessage):
     traces: List[CreateTraceMessage]
+
 
 # Feedback messages
 class AddTraceFeedbackScoresBatchMessage(BaseMessage):
     feedback_scores: List[FeedbackScoreDict]
 
+
 class AddSpanFeedbackScoresBatchMessage(BaseMessage):
     feedback_scores: List[FeedbackScoreDict]
+
 
 # Experiment item messages
 class ExperimentItemMessage(BaseMessage):
@@ -987,6 +987,7 @@ class ExperimentItemMessage(BaseMessage):
     experiment_id: str
     trace_id: str
     dataset_item_id: str
+
 
 class CreateExperimentItemsBatchMessage(BaseMessage):
     batch: List[ExperimentItemMessage]
@@ -996,38 +997,38 @@ class CreateExperimentItemsBatchMessage(BaseMessage):
 
 ```python
 def put(self, message: BaseMessage) -> None:
-   """Route message to appropriate handler"""
+    """Route message to appropriate handler"""
 
-   # 1. Check if draining
-   if self._drain:
-      return  # Drop message (shutdown in progress)
+    # 1. Check if draining
+    if self._drain:
+        return  # Drop message (shutdown in progress)
 
-   # 2. Check batching support
-   if (
-           self._batch_manager is not None
-           and self._batch_manager.message_supports_batching(message)
-   ):
-      # Messages that support batching:
-      # - CreateSpanMessage
-      # - CreateTraceMessage
-      # - Feedback score messages (always batched)
-      self._batch_manager.process_message(message)
-      return
+    # 2. Check batching support
+    if (
+        self._batch_manager is not None
+        and self._batch_manager.message_supports_batching(message)
+    ):
+        # Messages that support batching:
+        # - CreateSpanMessage
+        # - CreateTraceMessage
+        # - Feedback score messages (always batched)
+        self._batch_manager.process_message(message)
+        return
 
-   # 3. Check file upload support
-   if base_upload_manager.message_supports_upload(message):
-      # Messages with attachments
-      # - Uploaded to S3 first
-      # - Then regular message sent with S3 URLs
-      self._upload_preprocessor.upload(message)
-      return
+    # 3. Check file upload support
+    if base_upload_manager.message_supports_upload(message):
+        # Messages with attachments
+        # - Uploaded to S3 first
+        # - Then regular message sent with S3 URLs
+        self._upload_preprocessor.upload(message)
+        return
 
-   # 4. Default: Add to queue
-   if not self._message_queue.accept_put_without_discarding():
-      # Queue is full
-      LOGGER.warning("Queue full, discarding oldest message")
+    # 4. Default: Add to queue
+    if not self._message_queue.accept_put_without_discarding():
+        # Queue is full
+        LOGGER.warning("Queue full, discarding oldest message")
 
-   self._message_queue.put(message)
+    self._message_queue.put(message)
 ```
 
 ### Attachment Extraction Preprocessing
@@ -1082,6 +1083,7 @@ class AttachmentsPreprocessor(MessagePreprocessor):
             return AttachmentSupportingMessage(message)
         return message
 
+
 def _has_potential_content_with_attachments(message: BaseMessage) -> bool:
     # Check if it's an Update message - always process these
     if isinstance(message, (UpdateSpanMessage, UpdateTraceMessage)):
@@ -1094,6 +1096,7 @@ def _has_potential_content_with_attachments(message: BaseMessage) -> bool:
         return False
 
     return False
+
 
 def _message_has_field_of_interest_set(message) -> bool:
     """Check if message has input, output, or metadata fields set"""
@@ -1142,11 +1145,9 @@ class AttachmentSupportingMessage(BaseMessage):
     The wrapped message is processed by AttachmentsExtractionProcessor
     before being sent to backend.
     """
+
     original_message: Union[
-        CreateSpanMessage,
-        UpdateSpanMessage,
-        CreateTraceMessage,
-        UpdateTraceMessage
+        CreateSpanMessage, UpdateSpanMessage, CreateTraceMessage, UpdateTraceMessage
     ]
 ```
 
@@ -1235,8 +1236,11 @@ trace_input = {
             "role": "user",
             "content": [
                 {"type": "text", "text": "What's in this image?"},
-                {"type": "image_url", "image_url": {"url": "data:image/png;base64,iVBORw0K..."}}
-            ]
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "data:image/png;base64,iVBORw0K..."},
+                },
+            ],
         }
     ]
 }
@@ -1248,8 +1252,11 @@ trace_input = {
             "role": "user",
             "content": [
                 {"type": "text", "text": "What's in this image?"},
-                {"type": "image_url", "image_url": {"url": "[input-attachment-abc123.png]"}}
-            ]
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "[input-attachment-abc123.png]"},
+                },
+            ],
         }
     ]
 }
@@ -1325,9 +1332,7 @@ class QueueConsumer(threading.Thread):
         # 2. Get message from queue
         try:
             self.idling = True
-            message = self._message_queue.get(
-                timeout=SLEEP_BETWEEN_LOOP_ITERATIONS
-            )
+            message = self._message_queue.get(timeout=SLEEP_BETWEEN_LOOP_ITERATIONS)
             self.idling = False
 
             if message is None:
@@ -1346,10 +1351,7 @@ class QueueConsumer(threading.Thread):
 
         except OpikCloudRequestsRateLimited as e:
             # 4. Handle rate limiting
-            LOGGER.info(
-                "Rate limited, retrying in %s seconds",
-                e.retry_after
-            )
+            LOGGER.info("Rate limited, retrying in %s seconds", e.retry_after)
 
             # Update next processing time
             self.next_message_time = now + e.retry_after
@@ -1394,7 +1396,7 @@ def process(self, message: BaseMessage) -> None:
                 if rate_limiter is not None:
                     raise OpikCloudRequestsRateLimited(
                         headers=exception.headers,
-                        retry_after=rate_limiter.retry_after()
+                        retry_after=rate_limiter.retry_after(),
                     )
 
         # 3. Other API errors
@@ -1402,25 +1404,19 @@ def process(self, message: BaseMessage) -> None:
             "Failed to process %s: %s",
             message_type.__name__,
             str(exception),
-            extra={"error_tracking_extra": error_info}
+            extra={"error_tracking_extra": error_info},
         )
 
     except RetryError as retry_error:
         # 4. Retry exhausted
         cause = retry_error.last_attempt.exception()
-        LOGGER.error(
-            "Retries exhausted for %s: %s",
-            message_type.__name__,
-            cause
-        )
+        LOGGER.error("Retries exhausted for %s: %s", message_type.__name__, cause)
         LOGGER.warning("Check Opik configuration")
 
     except ValidationError as validation_error:
         # 5. Data validation failed
         LOGGER.error(
-            "Validation failed for %s: %s",
-            message_type.__name__,
-            validation_error
+            "Validation failed for %s: %s", message_type.__name__, validation_error
         )
 ```
 
@@ -1453,10 +1449,7 @@ class BatchManager:
 
     def _schedule_flush(self) -> None:
         """Schedule next flush"""
-        self._timer = threading.Timer(
-            self._flush_interval,
-            self._periodic_flush
-        )
+        self._timer = threading.Timer(self._flush_interval, self._periodic_flush)
         self._timer.daemon = True
         self._timer.start()
 
@@ -1493,9 +1486,7 @@ class SpansBatcher(BaseBatcher):
 
     def create_batch_message(self) -> CreateSpansBatchMessage:
         """Create batch message from accumulated spans"""
-        return CreateSpansBatchMessage(
-            spans=self._messages.copy()
-        )
+        return CreateSpansBatchMessage(spans=self._messages.copy())
 
     def clear(self) -> None:
         """Clear batch"""
@@ -1506,7 +1497,7 @@ class SpansBatcher(BaseBatcher):
         """Estimate message size in bytes"""
         # Rough estimation based on serialized size
         data = message.dict()
-        return len(json.dumps(data).encode('utf-8'))
+        return len(json.dumps(data).encode("utf-8"))
 ```
 
 ### Batch Processing Flow
@@ -1629,28 +1620,22 @@ def stop(self) -> None:
 ### Batch Message Processing
 
 ```python
-def _process_create_spans_batch_message(
-    self, message: CreateSpansBatchMessage
-) -> None:
+def _process_create_spans_batch_message(self, message: CreateSpansBatchMessage) -> None:
     """Process batch of spans"""
 
     # Split into chunks if too large
     chunks = sequence_splitter.split_into_chunks(
-        message.spans,
-        max_chunk_size=self._batch_memory_limit_mb
+        message.spans, max_chunk_size=self._batch_memory_limit_mb
     )
 
     for chunk in chunks:
         # Convert to REST request format
         span_writes = [
-            span_write.SpanWrite.from_message(span_msg)
-            for span_msg in chunk
+            span_write.SpanWrite.from_message(span_msg) for span_msg in chunk
         ]
 
         # Make single API call for all spans
-        self._rest_client.spans.create_spans_batch(
-            request=span_writes
-        )
+        self._rest_client.spans.create_spans_batch(request=span_writes)
 ```
 
 **Benefits**:
@@ -1694,15 +1679,11 @@ opik                        # Root logger
 
 ```python
 # Queue full warning
-LOGGER.warning(
-    "Queue size limit reached. Message added, oldest discarded."
-)
+LOGGER.warning("Queue size limit reached. Message added, oldest discarded.")
 
 # Rate limiting info
 LOGGER.info(
-    "Rate limited, retrying in %s seconds, queue size: %d",
-    retry_after,
-    queue_size
+    "Rate limited, retrying in %s seconds, queue size: %d", retry_after, queue_size
 )
 
 # Processing error
@@ -1710,14 +1691,11 @@ LOGGER.error(
     "Failed to process %s: %s",
     message_type.__name__,
     str(exception),
-    extra={"error_tracking_extra": error_info}
+    extra={"error_tracking_extra": error_info},
 )
 
 # Configuration warning
-LOGGER.warning(
-    "Opik may not be configured correctly. "
-    "Run 'opik configure' to set up."
-)
+LOGGER.warning("Opik may not be configured correctly. Run 'opik configure' to set up.")
 ```
 
 ### Error Tracking
@@ -1730,11 +1708,14 @@ The SDK integrates with Sentry for error tracking (opt-in, randomized).
 # Only track specific errors
 class ErrorLevelCountFilter:
     """Only send ERROR and CRITICAL level events"""
+
     def __call__(self, event, hint):
-        return event['level'] in ['error', 'fatal']
+        return event["level"] in ["error", "fatal"]
+
 
 class ResponseStatusCodeFilter:
     """Filter out expected HTTP errors"""
+
     def __call__(self, event, hint):
         # Don't track 409 (Conflict - duplicate)
         # Don't track 429 (Rate Limit - expected)
@@ -1746,16 +1727,15 @@ class ResponseStatusCodeFilter:
 
 ```python
 def _generate_error_tracking_extra(
-    exception: Exception,
-    message: BaseMessage
+    exception: Exception, message: BaseMessage
 ) -> Dict[str, Any]:
     """Generate structured error context"""
     return {
         "message_type": type(message).__name__,
         "exception_type": type(exception).__name__,
-        "status_code": getattr(exception, 'status_code', None),
+        "status_code": getattr(exception, "status_code", None),
         "message_data": message.dict(),
-        "timestamp": datetime.now().isoformat()
+        "timestamp": datetime.now().isoformat(),
     }
 ```
 
@@ -1807,7 +1787,7 @@ result = check_health()
     "authentication_valid": True,
     "project_exists": True,
     "version": "0.1.0",
-    "configuration": {...}
+    "configuration": {...},
 }
 ```
 
@@ -1876,6 +1856,7 @@ client = opik.Opik()  # No queue limit
 ```python
 # Non-blocking call
 trace = client.trace(...)  # Returns trace object immediately (~1μs)
+
 
 # Decorator overhead
 @opik.track

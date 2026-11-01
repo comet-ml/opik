@@ -75,7 +75,7 @@ class TitanAggregator:
                 "inputTokens": input_tokens,
                 "outputTokens": output_tokens,
                 "totalTokens": input_tokens + output_tokens,
-            }
+            },
         }
 ```
 
@@ -86,9 +86,11 @@ Update `format_detector.py`:
 ```python
 from . import titan
 
+
 def _is_titan_format(chunk_data: Dict[str, Any]) -> bool:
     """Check if chunk is Titan format."""
     return "outputText" in chunk_data or "completionReason" in chunk_data
+
 
 # Add to the registration section (after existing registrations)
 # Add to _DETECTORS registry
@@ -110,20 +112,19 @@ client = track_bedrock(client)
 
 response = client.invoke_model_with_response_stream(
     modelId="amazon.titan-text-express-v1",
-    body=json.dumps({
-        "inputText": "What is AI?",
-        "textGenerationConfig": {
-            "maxTokenCount": 100,
-            "temperature": 0.7
+    body=json.dumps(
+        {
+            "inputText": "What is AI?",
+            "textGenerationConfig": {"maxTokenCount": 100, "temperature": 0.7},
         }
-    })
+    ),
 )
 
 # Format is automatically detected and aggregated!
-for event in response['body']:
-    if 'chunk' in event:
-        chunk_data = json.loads(event['chunk']['bytes'])
-        print(chunk_data.get('outputText', ''), end='')
+for event in response["body"]:
+    if "chunk" in event:
+        chunk_data = json.loads(event["chunk"]["bytes"])
+        print(chunk_data.get("outputText", ""), end="")
 ```
 
 ## Key Points
@@ -143,15 +144,22 @@ Create a unit test for your new aggregator:
 import json
 from chunks_aggregator import titan
 
+
 def test_titan_aggregator():
     chunks = [
         {"chunk": {"bytes": json.dumps({"outputText": "Hello "}).encode()}},
         {"chunk": {"bytes": json.dumps({"outputText": "World"}).encode()}},
-        {"chunk": {"bytes": json.dumps({
-            "completionReason": "FINISH",
-            "inputTokenCount": 5,
-            "outputTokenCount": 10
-        }).encode()}},
+        {
+            "chunk": {
+                "bytes": json.dumps(
+                    {
+                        "completionReason": "FINISH",
+                        "inputTokenCount": 5,
+                        "outputTokenCount": 10,
+                    }
+                ).encode()
+            }
+        },
     ]
 
     aggregator = titan.TitanAggregator()
@@ -179,9 +187,9 @@ elif titan_condition:  # Adding this requires modifying existing code
 ### After (Modular)
 ```python
 # Each format is isolated
-claude.py       # Claude logic only
-nova.py         # Nova logic only
-titan.py        # Titan logic only (new file, no changes to existing code)
+claude.py  # Claude logic only
+nova.py  # Nova logic only
+titan.py  # Titan logic only (new file, no changes to existing code)
 ```
 
 ### Extensibility Comparison
@@ -213,9 +221,10 @@ class CustomAggregator:
             "usage": {
                 "inputTokens": usage.get("input_tokens", 0),
                 "outputTokens": usage.get("output_tokens", 0),
-                "totalTokens": usage.get("input_tokens", 0) + usage.get("output_tokens", 0),
+                "totalTokens": usage.get("input_tokens", 0)
+                + usage.get("output_tokens", 0),
             },
-            "stop_reason": stop_reason
+            "stop_reason": stop_reason,
         }
 
     def _extract_text(self, items):
@@ -237,8 +246,10 @@ Then register it:
 # format_detector.py
 from . import custom
 
+
 def _is_custom_format(chunk_data):
     return "your_marker" in chunk_data
+
 
 # Add to _DETECTORS registry
 _DETECTORS["custom"] = _is_custom_format

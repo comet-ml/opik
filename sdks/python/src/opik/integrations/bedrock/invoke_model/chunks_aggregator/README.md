@@ -82,9 +82,10 @@ class YourFormatAggregator:
             "usage": {
                 "inputTokens": usage.get("input_tokens", 0),
                 "outputTokens": usage.get("output_tokens", 0),
-                "totalTokens": usage.get("input_tokens", 0) + usage.get("output_tokens", 0),
+                "totalTokens": usage.get("input_tokens", 0)
+                + usage.get("output_tokens", 0),
             },
-            "stop_reason": stop_reason
+            "stop_reason": stop_reason,
         }
 ```
 
@@ -95,9 +96,11 @@ Update `format_detector.py`:
 ```python
 from . import yourformat
 
+
 def _is_yourformat_format(chunk_data: Dict[str, Any]) -> bool:
     """Check if chunk is YourFormat format."""
     return "your_unique_field" in chunk_data
+
 
 # Register detector and aggregator
 # Add to _DETECTORS registry
@@ -113,12 +116,11 @@ Your new format is now automatically supported:
 
 ```python
 response = client.invoke_model_with_response_stream(
-    modelId="your-model-id",
-    body=json.dumps({...})
+    modelId="your-model-id", body=json.dumps({...})
 )
 
 # Automatically detects and aggregates your format
-result = aggregate_chunks_to_dataclass(list(response['body']))
+result = aggregate_chunks_to_dataclass(list(response["body"]))
 ```
 
 ## Benefits
