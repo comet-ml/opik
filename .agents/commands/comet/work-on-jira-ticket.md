@@ -84,24 +84,29 @@ Context read from outside the Opik repo must come from the **latest upstream sta
 
 Tool order: use local git against `origin` first. Fall back to `gh api` / GitHub code search only when no local clone exists. In a worktree-isolated session (step 6b), run each `git -C <clone> …` as its own plain command; chained or scripted git calls against another repo are refused.
 
-1. Resolve the default branch and fetch:
+1. Locate the clone. Repos are usually cloned side by side, so look for a sibling of the Opik checkout first (e.g. `<parent-of-opik>/comet-backend`), not inside it. Derive the parent from the main checkout, not the current directory, since a worktree lives under `.claude/worktrees/`:
+   ```bash
+   git rev-parse --path-format=absolute --git-common-dir   # e.g. ~/Projects/opik/.git → siblings live in ~/Projects/
+   ```
+   Confirm the match with `git -C <clone> remote get-url origin`. If it isn't there, ask the user for the path before falling back to step 5 below.
+2. Resolve the default branch and fetch:
    ```bash
    git -C <clone> fetch origin
    git -C <clone> symbolic-ref --short refs/remotes/origin/HEAD   # e.g. origin/main or origin/master
    # If origin/HEAD is unset: gh api repos/comet-ml/<repo> --jq .default_branch
    ```
-2. Check whether the clone is on the default branch and up to date:
+3. Check whether the clone is on the default branch and up to date:
    ```bash
    git -C <clone> branch --show-current
    git -C <clone> rev-list --left-right --count origin/<default>...HEAD   # "<behind> <ahead>"
    git -C <clone> status --porcelain
    ```
-3. If the clone is off the default branch or behind it, use `AskUserQuestion`. **Never switch, pull, stash, or reset without confirmation.**
+4. If the clone is off the default branch or behind it, use `AskUserQuestion`. **Never switch, pull, stash, or reset without confirmation.**
    - **Read from `origin/<default>` (Recommended)** — leave the working tree untouched and read with `git -C <clone> show origin/<default>:<path>` and `git -C <clone> grep <pattern> origin/<default> -- <pathspec>`.
    - **Switch and pull** — `git -C <clone> switch <default> && git -C <clone> pull --ff-only`. Offer only when the working tree is clean.
    - **Stash, switch and pull, re-apply** — offer instead of the previous option when the working tree is dirty. The stash stack is shared across worktrees, so never use bare `git stash` / `git stash pop`: push with a unique message, capture that entry's SHA, `git stash apply <sha>` after pulling, and drop the entry only once the apply succeeded. If the apply conflicts, stop and tell the user; the stash entry is still there.
    - **Use the local checkout as-is** — note in the plan which branch/commit the context came from and that it may be stale.
-4. Without a local clone, read from the default branch on GitHub (`gh api repos/comet-ml/<repo>/contents/<path>?ref=<default>`, GitHub code search). Don't clone silently; offer it if the ticket needs more than a few files.
+5. Without a local clone, read from the default branch on GitHub (`gh api repos/comet-ml/<repo>/contents/<path>?ref=<default>`, GitHub code search). Don't clone silently; offer it if the ticket needs more than a few files.
 
 **External dependencies**
 
