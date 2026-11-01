@@ -262,12 +262,18 @@ def filter_unsupported_params(
     ):
 
         def _warn(param: str, value: Any) -> None:
-            LOGGER.warning(
-                "Model %s does not accept %s=%s. Dropping the parameter.",
-                model_name,
-                param,
-                value,
-            )
+            if param == "temperature":
+                LOGGER.warning(
+                    "Model %s only supports temperature=1. Dropping temperature=%s.",
+                    model_name,
+                    value,
+                )
+            else:
+                LOGGER.warning(
+                    "Model %s does not support %s. Dropping the parameter.",
+                    model_name,
+                    param,
+                )
 
         litellm_util.apply_default_temperature_only_filter(
             filtered, already_warned, _warn
