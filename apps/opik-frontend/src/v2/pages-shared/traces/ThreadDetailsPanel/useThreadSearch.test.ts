@@ -31,6 +31,16 @@ describe("traceMatchesSearch", () => {
 
     expect(traceMatchesSearch(trace, "lookup_scenario")).toBe(true);
   });
+
+  it("keeps a turn only when its text yields highlight ranges", () => {
+    // "İ".toLowerCase() contains "i", but the case-insensitive regex does not match it.
+    const trace = makeTrace({ input: "İstanbul" }, { output: "" });
+    const root = container("<p>İstanbul</p>");
+
+    expect(traceMatchesSearch(trace, "i")).toBe(
+      findTextRanges([root], "i").length > 0,
+    );
+  });
 });
 
 describe("findTextRanges", () => {

@@ -15,15 +15,15 @@ const MESSAGE_CONTENT_SELECTOR = "[data-message-content]";
 const messageText = (message: unknown) =>
   isObject(message) ? JSON.stringify(message) : toString(message as string);
 
-// Matches against the prettified message, the same text Messages renders, so a kept turn
-// always has something to highlight.
+// Matches against the prettified message, the same text Messages renders, with the same
+// regex findTextRanges uses, so a kept turn always has something to highlight.
 export const traceMatchesSearch = (trace: Trace, search: string): boolean => {
-  const needle = search.toLowerCase();
+  const regex = createSearchRegex(search);
 
   return [
     prettifyMessage(trace.input).message,
     prettifyMessage(trace.output, { type: "output" }).message,
-  ].some((message) => messageText(message).toLowerCase().includes(needle));
+  ].some((message) => messageText(message).search(regex) !== -1);
 };
 
 export const findTextRanges = (roots: Element[], search: string): Range[] => {
