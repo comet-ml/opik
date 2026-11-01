@@ -411,7 +411,7 @@ def _export_all_experiments(
                     )
 
     # Batch-export all traces collected from experiments
-    traces_exported, traces_skipped = export_collected_trace_ids(
+    traces_exported, traces_skipped, traces_failed = export_collected_trace_ids(
         client,
         project_dir,
         project_name,
@@ -422,6 +422,9 @@ def _export_all_experiments(
         force,
         filter_string=filter_string,
     )
+
+    if traces_failed:
+        had_errors = True
 
     return exported, skipped, traces_exported, traces_skipped, had_errors
 

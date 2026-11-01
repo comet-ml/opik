@@ -481,7 +481,7 @@ class TestExportAllExperimentsSemaphore:
                 ),
                 patch(
                     "opik.cli.exports.all.export_collected_trace_ids",
-                    return_value=(0, 0),
+                    return_value=(0, 0, 0),
                 ),
             ):
                 (

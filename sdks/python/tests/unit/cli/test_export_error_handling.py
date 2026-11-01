@@ -58,7 +58,7 @@ class TestExportTracesByIdsRetry:
         client.search_spans.return_value = []
 
         with patch(f"{_EXPERIMENT_MODULE}._fetch_trace_data.retry.sleep"):
-            exported, skipped = export_traces_by_ids(
+            exported, skipped, failed = export_traces_by_ids(
                 client, ["t1"], tmp_path, "proj", None, "json", False, False
             )
 
@@ -85,7 +85,7 @@ class TestExportTracesByIdsRetry:
         client.search_spans.return_value = []
 
         with patch(f"{_EXPERIMENT_MODULE}._fetch_trace_data.retry.sleep"):
-            exported, skipped = export_traces_by_ids(
+            exported, skipped, failed = export_traces_by_ids(
                 client, ["t2"], tmp_path, "proj", None, "json", False, False
             )
 
@@ -106,7 +106,7 @@ class TestExportTracesByIdsRetry:
         client = MagicMock()
         client.get_trace_content.side_effect = get_trace_side_effect
 
-        exported, skipped = export_traces_by_ids(
+        exported, skipped, failed = export_traces_by_ids(
             client, ["missing-id"], tmp_path, "proj", None, "json", False, False
         )
 
@@ -121,7 +121,7 @@ class TestExportTracesByIdsRetry:
         client.get_trace_content.return_value = self._make_mock_trace("t3")
         client.search_spans.return_value = []
 
-        exported, skipped = export_traces_by_ids(
+        exported, skipped, failed = export_traces_by_ids(
             client, ["t3"], tmp_path, "proj", None, "json", False, False
         )
 
@@ -189,7 +189,7 @@ class TestExportExperimentByIdPropagatesErrors:
                 f"{_ALL_MODULE}.export_experiment_by_id",
                 side_effect=export_side_effect,
             ),
-            patch(f"{_ALL_MODULE}.export_collected_trace_ids", return_value=(0, 0)),
+            patch(f"{_ALL_MODULE}.export_collected_trace_ids", return_value=(0, 0, 0)),
         ):
             _, _, _, _, had_errors = _export_all_experiments(
                 client=client,

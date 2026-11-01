@@ -169,15 +169,16 @@ def export_collected_trace_ids(
     force: bool,
     manifest: Optional[ExportManifest] = None,
     filter_string: Optional[str] = None,
-) -> tuple[int, int]:
+) -> tuple[int, int, int]:
     """Export a collected set of trace IDs, applying the optional limit.
 
     This is the common tail of both the ``export experiment`` and ``export all``
     flows: cap ``all_trace_ids`` to *max_limit*, print a status line, then
-    delegate to :func:`export_traces_by_ids`.  Returns ``(exported, skipped)``.
+    delegate to :func:`export_traces_by_ids`.  Returns
+    ``(exported, skipped, failed)``.
     """
     if not all_trace_ids:
-        return 0, 0
+        return 0, 0, 0
     trace_ids_list = list(all_trace_ids)
     if max_limit:
         trace_ids_list = trace_ids_list[:max_limit]
@@ -210,7 +211,7 @@ def export_traces_by_ids(
     force: bool,
     manifest: Optional[ExportManifest] = None,
     filter_string: Optional[str] = None,
-) -> tuple[int, int]:
+) -> tuple[int, int, int]:
     """Export traces by their IDs using parallel batch processing.
 
     Traces are saved directly in the project directory (``project_dir``).
@@ -219,6 +220,9 @@ def export_traces_by_ids(
     Already-downloaded traces are skipped before any API call is made:
     - When *manifest* is provided its downloaded-ID set is used for the check.
     - Otherwise the project directory is scanned for existing trace files.
+
+    Returns ``(exported, skipped, failed)``, where *failed* counts traces
+    whose fetch or write raised after the retries were exhausted.
     """
     exported_count = 0
     skipped_count = 0
@@ -228,7 +232,7 @@ def export_traces_by_ids(
         trace_ids = trace_ids[:max_traces]
 
     if not trace_ids:
-        return 0, 0
+        return 0, 0, 0
 
     # Record start time before first API call so manifest.complete() can store it.
     export_start_time = datetime.now(timezone.utc).isoformat()
@@ -382,7 +386,7 @@ def export_traces_by_ids(
     if manifest and failed_count == 0:
         manifest.complete(export_start_time)
 
-    return exported_count, skipped_count
+    return exported_count, skipped_count, failed_count
 
 
 def export_experiment_by_id(
@@ -779,7 +783,7 @@ def export_experiment_by_name(
             if len(experiments) == 1
             else None
         )
-        traces_exported, traces_skipped = export_collected_trace_ids(
+        traces_exported, traces_skipped, traces_failed = export_collected_trace_ids(
             client,
             project_root,
             project_name,
@@ -791,6 +795,9 @@ def export_experiment_by_name(
             manifest=trace_manifest,
             filter_string=filter_string,
         )
+
+        if traces_failed:
+            had_errors = True
 
         # Collect statistics for summary
         stats = {
@@ -823,7 +830,7 @@ def export_experiment_by_name(
 
         if had_errors:
             console.print(
-                "[bold yellow]Export completed with errors — some datasets or prompts could not be exported.[/bold yellow]"
+                "[bold yellow]Export completed with errors — some datasets, prompts or traces could not be exported.[/bold yellow]"
             )
             sys.exit(1)
 
@@ -926,22 +933,25 @@ def export_experiment_by_name_or_id(
             # so already-downloaded traces are skipped before any API call.
             traces_exported = 0
             traces_skipped = 0
+            traces_failed = 0
             if trace_ids_collector:
                 trace_ids_list = list(trace_ids_collector)
                 if max_traces:
                     trace_ids_list = trace_ids_list[:max_traces]
                 if len(trace_ids_list) > 0:
-                    traces_exported, traces_skipped = export_traces_by_ids(
-                        client,
-                        trace_ids_list,
-                        project_root,
-                        project_name,
-                        None,
-                        format,
-                        debug,
-                        force,
-                        manifest=exp_manifest,
-                        filter_string=filter_string,
+                    traces_exported, traces_skipped, traces_failed = (
+                        export_traces_by_ids(
+                            client,
+                            trace_ids_list,
+                            project_root,
+                            project_name,
+                            None,
+                            format,
+                            debug,
+                            force,
+                            manifest=exp_manifest,
+                            filter_string=filter_string,
+                        )
                     )
 
             # Collect statistics for summary
@@ -968,9 +978,9 @@ def export_experiment_by_name_or_id(
                     f"[yellow]Experiment '{experiment.name}' (ID: {experiment.id}) already exists (use --force to re-download)[/yellow]"
                 )
 
-            if had_ds_errors:
+            if had_ds_errors or traces_failed:
                 console.print(
-                    "[bold yellow]Export completed with errors — some datasets could not be exported.[/bold yellow]"
+                    "[bold yellow]Export completed with errors — some datasets or traces could not be exported.[/bold yellow]"
                 )
                 sys.exit(1)
             return
