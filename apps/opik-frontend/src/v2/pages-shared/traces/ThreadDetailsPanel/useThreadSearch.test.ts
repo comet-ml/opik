@@ -48,6 +48,22 @@ describe("findTextRanges", () => {
     ]);
   });
 
+  it("keeps match offsets right after characters whose lowercase form is longer", () => {
+    // "İ".toLowerCase() is two code units, so offsets taken from lowercased text drift.
+    const root = container("<p>İstanbul route</p>");
+
+    const ranges = findTextRanges([root], "ROUTE");
+
+    expect(ranges.map((range) => range.toString())).toEqual(["route"]);
+  });
+
+  it("finds nothing for a blank search", () => {
+    const root = container("<p>some text</p>");
+
+    expect(findTextRanges([root], "")).toEqual([]);
+    expect(findTextRanges([root], "   ")).toEqual([]);
+  });
+
   it("does not search outside the given roots", () => {
     const root = container(
       "<div data-message-content>answer</div><button>answer</button>",

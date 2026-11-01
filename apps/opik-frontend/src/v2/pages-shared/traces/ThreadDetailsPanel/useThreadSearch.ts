@@ -4,6 +4,7 @@ import isObject from "lodash/isObject";
 import { Trace } from "@/types/traces";
 import { prettifyMessage } from "@/lib/traces";
 import { toString } from "@/lib/utils";
+import { createSearchRegex } from "@/shared/SyntaxHighlighter/utils";
 
 const MATCH_HIGHLIGHT = "thread-search-match";
 const CURRENT_MATCH_HIGHLIGHT = "thread-search-current-match";
@@ -26,23 +27,21 @@ export const traceMatchesSearch = (trace: Trace, search: string): boolean => {
 };
 
 export const findTextRanges = (roots: Element[], search: string): Range[] => {
-  const needle = search.toLowerCase();
+  if (!search.trim()) return [];
+
+  // Matching the original text (not a lowercased copy) keeps offsets valid: lowercasing
+  // can change string length (e.g. "İ"), which would misplace or overflow the ranges.
+  const regex = createSearchRegex(search);
   const ranges: Range[] = [];
 
   roots.forEach((root) => {
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
 
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-      const text = (node.nodeValue ?? "").toLowerCase();
-
-      for (
-        let index = text.indexOf(needle);
-        index !== -1;
-        index = text.indexOf(needle, index + needle.length)
-      ) {
+      for (const match of (node.nodeValue ?? "").matchAll(regex)) {
         const range = document.createRange();
-        range.setStart(node, index);
-        range.setEnd(node, index + needle.length);
+        range.setStart(node, match.index);
+        range.setEnd(node, match.index + match[0].length);
         ranges.push(range);
       }
     }
@@ -87,7 +86,7 @@ export const useThreadSearch = ({
   // search does not.
   useEffect(() => {
     setRanges(
-      container && search?.trim()
+      container && search
         ? findTextRanges(
             Array.from(container.querySelectorAll(MESSAGE_CONTENT_SELECTOR)),
             search,
