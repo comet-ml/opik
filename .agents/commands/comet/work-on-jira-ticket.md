@@ -84,7 +84,7 @@ Context read from outside the Opik repo must come from the **latest upstream sta
 
 Tool order: use local git against `origin` first. Fall back to `gh api` / GitHub code search only when no local clone exists. Run each `git -C <clone> …` as its own plain command; some agent sandboxes refuse chained or nested git calls that target another repo.
 
-1. Locate the clone. Repos are usually cloned side by side under one projects folder, so look for a sibling of the Opik root folder first (e.g. `<projects-folder>/comet-backend`). Resolve the Opik root from git rather than the current directory, which may be a worktree:
+1. Locate the clone. Repos are usually cloned side by side under one projects folder, so look for a sibling of the Opik root folder first (e.g. `<projects-folder>/<repo>`). Resolve the Opik root from git rather than the current directory, which may be a worktree:
    ```bash
    git rev-parse --path-format=absolute --git-common-dir   # e.g. ~/Projects/opik/.git → siblings live in ~/Projects/
    ```
@@ -121,7 +121,7 @@ Tool order: use local git against `origin` first. Fall back to `gh api` / GitHub
 - **Bugfix**: repro steps, root cause hypothesis, affected files, fix approach, risks, tests, verification.
 - **Feature**: user story recap, acceptance criteria, implementation plan, tests, rollout notes.
 - **HOW comment, if one exists**: weave its suggestions into the plan **after** independently reading the current code state. If the HOW conflicts with what the code looks like today, trust the code and note the divergence in your plan. The HOW is a hint from when the ticket was filed, not a contract.
-- **Outside context, if any (step 4a)**: state which ref each cross-repo file was read from (e.g. `comet-backend@origin/master`), and list any pinned-vs-latest dependency drift that affects the work.
+- **Outside context, if any (step 4a)**: state which ref each cross-repo file was read from (e.g. `<repo>@origin/master`), and list any pinned-vs-latest dependency drift that affects the work.
 - **Always reference shared + domain guidance in the right place**:
   - **Global policy**: `.agents/rules/*` (git workflow, security, code style, routing)
   - **Backend guidance**: `.agents/skills/opik-backend/*`
