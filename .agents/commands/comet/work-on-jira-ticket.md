@@ -10,6 +10,7 @@ This workflow will:
 - Verify Jira MCP availability (or instruct how to install it).
 - Fetch and parse the ticket details.
 - If not found, list your assigned **To Do** issues.
+- Read code from other comet-ml repos and external dependencies from their latest upstream state, prompting before touching any local clone.
 - Check local git status in the Opik repository and propose a branch if on `main`.
 - Suggest moving the ticket to **In Progress** if it's currently in **To Do**.
 - Validate all operations and provide clear success/failure feedback.
@@ -72,8 +73,41 @@ This workflow will:
   - **SDK only**: Python or TypeScript SDK changes
   - **Cross-component**: Changes affecting multiple layers
   - **Infrastructure**: Docker, deployment, configuration changes
-- **Identify affected areas**: Map ticket requirements to specific Opik modules and files
+- **Identify affected areas**: Map ticket requirements to specific Opik modules and files. If the ticket needs code from other comet-ml repos or from external dependencies, gather it per step 4a.
 - **Estimate complexity**: Consider if changes require database migrations, API versioning, or breaking changes
+
+#### 4a. Context From Outside the Opik Repo
+
+Context read from outside the Opik repo must come from the **latest upstream state**, not from whatever a local clone happens to have checked out or from training-time knowledge of a library. Plans built on stale context look correct and then fail in review or CI. This mirrors step 6, which fetches `origin` and branches off `origin/main` for the Opik repo itself.
+
+**Other comet-ml repos**
+
+Tool order: use local git against `origin` first. Fall back to `gh api` / GitHub code search only when no local clone exists. In a worktree-isolated session (step 6b), run each `git -C <clone> …` as its own plain command; chained or scripted git calls against another repo are refused.
+
+1. Resolve the default branch and fetch:
+   ```bash
+   git -C <clone> fetch origin
+   git -C <clone> symbolic-ref --short refs/remotes/origin/HEAD   # e.g. origin/main or origin/master
+   # If origin/HEAD is unset: gh api repos/comet-ml/<repo> --jq .default_branch
+   ```
+2. Check whether the clone is on the default branch and up to date:
+   ```bash
+   git -C <clone> branch --show-current
+   git -C <clone> rev-list --left-right --count origin/<default>...HEAD   # "<behind> <ahead>"
+   git -C <clone> status --porcelain
+   ```
+3. If the clone is off the default branch or behind it, use `AskUserQuestion`. **Never switch, pull, stash, or reset without confirmation.**
+   - **Read from `origin/<default>` (Recommended)** — leave the working tree untouched and read with `git -C <clone> show origin/<default>:<path>` and `git -C <clone> grep <pattern> origin/<default> -- <pathspec>`.
+   - **Switch and pull** — `git -C <clone> switch <default> && git -C <clone> pull --ff-only`. Offer only when the working tree is clean.
+   - **Stash, switch and pull, re-apply** — offer instead of the previous option when the working tree is dirty. The stash stack is shared across worktrees, so never use bare `git stash` / `git stash pop`: push with a unique message, capture that entry's SHA, `git stash apply <sha>` after pulling, and drop the entry only once the apply succeeded. If the apply conflicts, stop and tell the user; the stash entry is still there.
+   - **Use the local checkout as-is** — note in the plan which branch/commit the context came from and that it may be stale.
+4. Without a local clone, read from the default branch on GitHub (`gh api repos/comet-ml/<repo>/contents/<path>?ref=<default>`, GitHub code search). Don't clone silently; offer it if the ticket needs more than a few files.
+
+**External dependencies**
+
+1. Find the pinned version in the relevant manifest (`pom.xml`, `package.json` / lockfile, `pyproject.toml`, `requirements*.txt`, …).
+2. Read docs for **that** version and for the **latest upstream release**, via the library-docs MCP when available, plus release notes / changelog. Don't rely on training-time knowledge of the library.
+3. If the pinned version lags the latest release in a way that matters for the ticket (changed or deprecated API, behavior change, relevant fix), flag the drift in the plan. Don't upgrade dependencies as part of the ticket unless it asks for that.
 
 ---
 
@@ -82,6 +116,7 @@ This workflow will:
 - **Bugfix**: repro steps, root cause hypothesis, affected files, fix approach, risks, tests, verification.
 - **Feature**: user story recap, acceptance criteria, implementation plan, tests, rollout notes.
 - **HOW comment, if one exists**: weave its suggestions into the plan **after** independently reading the current code state. If the HOW conflicts with what the code looks like today, trust the code and note the divergence in your plan. The HOW is a hint from when the ticket was filed, not a contract.
+- **Outside context, if any (step 4a)**: state which ref each cross-repo file was read from (e.g. `comet-backend@origin/master`), and list any pinned-vs-latest dependency drift that affects the work.
 - **Always reference shared + domain guidance in the right place**:
   - **Global policy**: `.agents/rules/*` (git workflow, security, code style, routing)
   - **Backend guidance**: `.agents/skills/opik-backend/*`
@@ -223,6 +258,7 @@ If the `EnterWorktree` tool is not available (e.g., running in Cursor or another
 - **Confirm all steps completed**:
   - ✅ Jira MCP available and working
   - ✅ Ticket fetched and analyzed successfully
+  - ✅ Outside context (other repos, dependencies) read from latest upstream, or its staleness noted (if applicable)
   - ✅ Status updated (if applicable)
   - ✅ Feature branch created and active following Opik naming convention
   - ✅ Development environment ready
@@ -248,6 +284,11 @@ If the `EnterWorktree` tool is not available (e.g., running in Cursor or another
 - **CRITICAL SAFETY**: Always verify current branch before any commits
 - Uncommitted changes: Stash before branching, pop after branch creation
 
+### **Outside-Context Failures**
+
+- `git fetch` fails in a sibling clone (offline, auth): say so, and mark any context read from that clone as possibly stale in the plan. Don't proceed silently.
+- Stash re-apply conflicts in a sibling clone: stop, report the conflicting files, and leave the stash entry in place.
+
 ### **Status Transition Failures**
 
 - Invalid transition: Check available transitions for current status
@@ -261,13 +302,14 @@ If the `EnterWorktree` tool is not available (e.g., running in Cursor or another
 The command is successful when:
 
 1. ✅ Jira ticket is successfully fetched and analyzed
-2. ✅ Feature branch is created and active following Opik naming convention
-3. ✅ Ticket status is updated (if requested)
-4. ✅ Implementation suggestion provided based on context and Opik rules
-5. ✅ User confirmation received (proceed or decline)
-6. ✅ Implementation executed (if confirmed) or manual guidance provided (if declined)
-7. ✅ All operations complete without errors
-8. ✅ Clear next steps are provided to the user
+2. ✅ Context from other repos and dependencies comes from latest upstream, with no local clone changed without confirmation
+3. ✅ Feature branch is created and active following Opik naming convention
+4. ✅ Ticket status is updated (if requested)
+5. ✅ Implementation suggestion provided based on context and Opik rules
+6. ✅ User confirmation received (proceed or decline)
+7. ✅ Implementation executed (if confirmed) or manual guidance provided (if declined)
+8. ✅ All operations complete without errors
+9. ✅ Clear next steps are provided to the user
 
 ---
 
