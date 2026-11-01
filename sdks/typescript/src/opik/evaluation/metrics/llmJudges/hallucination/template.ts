@@ -3,6 +3,17 @@ import { FewShotExampleHallucination } from "../types";
 /**
  * Context hallucination template - evaluates if output is faithful to provided context
  */
+/**
+ * Escapes XML special characters in caller-provided values so they cannot
+ * close the data wrapper tags and inject instructions into the judge prompt.
+ */
+function escapePromptData(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
 const CONTEXT_HALLUCINATION_TEMPLATE = `You are an expert judge tasked with evaluating the faithfulness of an AI-generated answer to the given context. Analyze the provided INPUT, CONTEXT, and OUTPUT to determine if the OUTPUT contains any hallucinations or unfaithful information.
 
 Guidelines:
@@ -95,7 +106,7 @@ Reasons amount is not restricted. Output must be JSON format only.
  */
 function formatExamples(
   examples: FewShotExampleHallucination[],
-  includeContext: boolean
+  includeContext: boolean,
 ): string {
   if (examples.length === 0) {
     return "";
@@ -132,14 +143,14 @@ export function generateQueryWithContext(
   input: string,
   output: string,
   context: string[],
-  fewShotExamples: FewShotExampleHallucination[] = []
+  fewShotExamples: FewShotExampleHallucination[] = [],
 ): string {
   const examplesStr = formatExamples(fewShotExamples, true);
 
   return CONTEXT_HALLUCINATION_TEMPLATE.replace("{examples_str}", examplesStr)
-    .replace("{input}", input)
-    .replace("{context}", JSON.stringify(context))
-    .replace("{output}", output);
+    .replace("{input}", escapePromptData(input))
+    .replace("{context}", escapePromptData(JSON.stringify(context)))
+    .replace("{output}", escapePromptData(output));
 }
 
 /**
@@ -153,11 +164,11 @@ export function generateQueryWithContext(
 export function generateQueryWithoutContext(
   input: string,
   output: string,
-  fewShotExamples: FewShotExampleHallucination[] = []
+  fewShotExamples: FewShotExampleHallucination[] = [],
 ): string {
   const examplesStr = formatExamples(fewShotExamples, false);
 
   return OUTPUT_HALLUCINATION_TEMPLATE.replace("{examples_str}", examplesStr)
-    .replace("{input}", input)
-    .replace("{output}", output);
+    .replace("{input}", escapePromptData(input))
+    .replace("{output}", escapePromptData(output));
 }

@@ -1,3 +1,14 @@
+/**
+ * Escapes XML special characters in caller-provided values so they cannot
+ * close the data wrapper tags and inject instructions into the judge prompt.
+ */
+function escapePromptData(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
 const G_EVAL_COT_TEMPLATE = `*** TASK:
 Based on the following task description and evaluation criteria,
 generate a detailed Chain of Thought (CoT) that outlines the necessary Evaluation Steps
@@ -35,11 +46,11 @@ Return the output in a JSON format with the keys "score" and "reason".`;
 
 export function generateCoTPrompt(
   taskIntroduction: string,
-  evaluationCriteria: string
+  evaluationCriteria: string,
 ): string {
   return G_EVAL_COT_TEMPLATE.replace(
     "{task_introduction}",
-    taskIntroduction
+    taskIntroduction,
   ).replace("{evaluation_criteria}", evaluationCriteria);
 }
 
@@ -47,10 +58,10 @@ export function generateQueryPrompt(
   taskIntroduction: string,
   evaluationCriteria: string,
   chainOfThought: string,
-  output: string
+  output: string,
 ): string {
   return G_EVAL_QUERY_TEMPLATE.replace("{task_introduction}", taskIntroduction)
     .replace("{evaluation_criteria}", evaluationCriteria)
     .replace("{chain_of_thought}", chainOfThought)
-    .replace("{input}", output);
+    .replace("{input}", escapePromptData(output));
 }
