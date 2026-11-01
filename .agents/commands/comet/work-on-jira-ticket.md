@@ -82,9 +82,9 @@ Context read from outside the Opik repo must come from the **latest upstream sta
 
 **Other comet-ml repos**
 
-Tool order: use local git against `origin` first. Fall back to `gh api` / GitHub code search only when no local clone exists. In a worktree-isolated session (step 6b), run each `git -C <clone> …` as its own plain command; chained or scripted git calls against another repo are refused.
+Tool order: use local git against `origin` first. Fall back to `gh api` / GitHub code search only when no local clone exists. Run each `git -C <clone> …` as its own plain command; some agent sandboxes refuse chained or nested git calls that target another repo.
 
-1. Locate the clone. Repos are usually cloned side by side, so look for a sibling of the Opik checkout first (e.g. `<parent-of-opik>/comet-backend`), not inside it. Derive the parent from the main checkout, not the current directory, since a worktree lives under `.claude/worktrees/`:
+1. Locate the clone. Repos are usually cloned side by side under one projects folder, so look for a sibling of the Opik root folder first (e.g. `<projects-folder>/comet-backend`). Resolve the Opik root from git rather than the current directory, which may be a worktree:
    ```bash
    git rev-parse --path-format=absolute --git-common-dir   # e.g. ~/Projects/opik/.git → siblings live in ~/Projects/
    ```
