@@ -103,7 +103,7 @@ Tool order: use local git against `origin` first. Fall back to `gh api` / GitHub
    ```
 4. If the clone is off the default branch or behind it, use `AskUserQuestion`. **Never switch, pull, stash, or reset without confirmation.**
    - **Read from `origin/<default>` (Recommended)** — leave the working tree untouched and read with `git -C <clone> show origin/<default>:<path>` and `git -C <clone> grep <pattern> origin/<default> -- <pathspec>`.
-   - **Switch and pull** — `git -C <clone> switch <default> && git -C <clone> pull --ff-only`. Offer only when the working tree is clean.
+   - **Switch and pull** — run `git -C <clone> switch <default>`, then, only if it succeeded, `git -C <clone> pull --ff-only`. Offer only when the working tree is clean.
    - **Stash, switch and pull, re-apply** — offer instead of the previous option when the working tree is dirty. The stash stack is shared across worktrees, so never use bare `git stash` / `git stash pop`: push with a unique message, capture that entry's SHA, `git stash apply <sha>` after pulling, and drop the entry only once the apply succeeded. If the apply conflicts, stop and tell the user; the stash entry is still there.
    - **Use the local checkout as-is** — note in the plan which branch/commit the context came from and that it may be stale.
 5. Without a local clone, read from the default branch on GitHub (`gh api repos/comet-ml/<repo>/contents/<path>?ref=<default>`, GitHub code search). Don't clone silently; offer it if the ticket needs more than a few files.
