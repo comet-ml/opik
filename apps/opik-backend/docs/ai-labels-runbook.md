@@ -567,13 +567,13 @@ event that creates it: the alerts read the state gauges further down, not these.
 | `topics.runs` by `status`, `error_code` | Finished runs. Each failed run counts once: `start_failed` when the run could not start (it has no `topic_runs` row), `abandoned` when the next night's housekeeping fails a run its pod left `running`. When marking a run failed throws, the run counts with its own `error_code`; its row stays `running` until housekeeping fails it, which does not count it again. |
 | `topics.run.duration_seconds` by `phase` | Time in `window` (ClickHouse read), `kmeans`, `qwen`, `assign`, `save` (first build); `window`, `state`, `update`, `churn`, `save` (nightly update). |
 | `topics.qwen.calls` by `kind`, `outcome` | `kind` is `author`, `revise`, `verify` or `naming`; `outcome` is `ok`, `timeout`, `error` or `bad_answer`. A failed call of any kind fails the run. An author call counts after its answer is read: an author answer that cannot be read is `bad_answer`, not `ok`. A revise, verify or naming call counts `ok` when it answers; an unreadable revise answer then fails the run with `qwen_bad_answer`. |
-| `topics.topics.live` | Live topics of a project after each saved run. |
+| `topics.topics.live` | Live topics of a project after each saved run, first build or nightly update. |
 | `topics.topics.born` by `mode` | Topics born by saved runs. A few a week per project is normal; many every night means the list does not settle. |
 | `topics.topics.retired` by `reason` | `low_share`, `cap`, `merged`, `review`, `replaced`. |
-| `topics.run.churn`, `topics.run.churn_any` | Per saved nightly update, see [Churn](#churn). |
+| `topics.run.churn`, `topics.run.churn_any` | Per saved nightly update, see [Churn](#churn). They have no project attribute: the churn query under "Alerts" below names the project. |
 | `topics.save.rows` by `table` | Rows saved runs wrote. |
 | `topics.save.take_back_failures` | Failed saves whose `trace_topics` rows could not be deleted. Readers see those rows until the project's next saved run. |
-| `topics.run.other_share` | The Other share of each saved run (its `stats.other_share`). No alert: no threshold is set. |
+| `topics.run.other_share` | The Other share of each saved run, first build or nightly update (its `stats.other_share`). No alert: no threshold is set. |
 | `topics.nightly.count_failures` | Workspaces whose window count read failed. The night skips all their projects; they run the next night. |
 | `topics.nightly.budget_used_seconds` | Wall time of each night (no workspace). Near `TOPICS_NIGHTLY_BUDGET` means projects will soon be `not_reached`. |
 
@@ -600,8 +600,9 @@ table. Every pod publishes the same values: read them with `max`, never `sum`. T
 | `topics.nightly.last_night.projects` by workspace, `decision`, `reason` | Projects per decision in the latest ended night, `count_failed` included. |
 | `topics.nightly.last_night.runs` by workspace, `status` | Runs the latest ended night started, by their `topic_runs` status: `saved`, `failed` (a run that could not start counts here), `running` (marking it failed threw). |
 | `topics.nightly.last_night.failed` | 1 when the latest ended night failed (a read failed, or its pod died and the next night's housekeeping failed it), 0 when it finished. |
-| `topics.nightly.stale_projects` by workspace | Projects expected on each of the last 3 ended nights with no saved run since the first of them (a run by hand counts). Expected is any decision but a skip as `small`, `deleted` or `already_saved`: this covers `not_reached`, failed first builds and start failures. 0 for each workspace without one. |
+| `topics.nightly.stale_projects` by workspace | Projects expected on each of the last 3 ended nights with no saved run since the first of them (a run by hand counts). Expected is any decision but a skip as `small`, `deleted` or `already_saved`; a project with a list is expected every night, as a `nightly_update`. This covers `not_reached`, failed first builds and nightly updates, and start failures. 0 for each workspace without one. |
 | `topics.nightly.starved_projects` by workspace | Projects `not_reached` on each of the last 2 ended nights. 0 for each workspace without one. |
+| `topics.nightly.last_night.churn_max` by workspace | The highest `churn` (see [Churn](#churn)) of the latest ended night's saved nightly updates. No series for a workspace without one, or whose runs have a null churn (no trace labelled the night before). |
 | `topics.workspaces.mismatched` by workspace | 1 for a workspace enabled in `topic_workspaces` and not in `ai_label_workspaces`: no night runs it. |
 
 The Prometheus names replace the dots with underscores, for example `topics_nightly_stale_projects`; the counters end
@@ -619,12 +620,12 @@ gauges only, and every rule groups by `k8s_namespace_name`.
 | Night not started | No night started for 25 hours. | `max by (k8s_namespace_name) (topics_nightly_last_started_age_seconds) > 25 * 3600` | The latest nights query below. | Read the logs for `Topics night` around the cron time. A night lock left by a dead pod (`topics:nightly:lock`) blocks nights until it expires. Run the night by hand (see "Running by hand"). |
 | Night too long | A night runs longer than budget + project timeout + 30 minutes (2 h 45 m with the defaults). | `max by (k8s_namespace_name) (topics_nightly_running_seconds) > 9900` | The latest nights query below; its `running` row. | A night whose pod died stays `running` until the next night: check for a pod restart. Otherwise find the `running` run in `topic_runs` and its logs. |
 | Last night failed | The latest ended night failed: a read failed, or its pod died and the next night's housekeeping failed it. A night whose reads fail writes no project rows, so no other nightly rule sees it. | `max by (k8s_namespace_name) (topics_nightly_last_night_failed) > 0` | The latest nights query below; its `failed` row. | The ERROR `Topics night failed` (or `started by hand failed`) has the error. No ERROR: the pod died, check for a restart. Clears when the next night finishes. |
-| Stale projects | A project was expected on each of the last 3 nights and got no saved run. | `max by (k8s_namespace_name, workspace_id, workspace_name) (topics_nightly_stale_projects) > 0` | The stale-project query below. | Find its runs in `topic_runs`: failed (read `error_code`), never started (a `first_build` row with no `run_id`), or `not_reached` (the budget). |
+| Stale projects | A project was expected on each of the last 3 nights and got no saved run. | `max by (k8s_namespace_name, workspace_id, workspace_name) (topics_nightly_stale_projects) > 0` | The stale-project query below. | Find its runs in `topic_runs`: failed (read `error_code`), never started (a `first_build` or `nightly_update` row with no `run_id`), or `not_reached` (the budget). |
 | Starved projects | A project was `not_reached` on each of the last 2 nights. | `max by (k8s_namespace_name, workspace_id, workspace_name) (topics_nightly_starved_projects) > 0` | The starved-project query below. | Raise `TOPICS_NIGHTLY_BUDGET`, or split the night. |
-| Failed share | More than 20% of the latest night's runs failed, with at least 5 runs in the namespace. | See below. | The latest night query below. | Group the failures by `error_code`: `qwen_*` points at opik-inference, `window_read` and `save` at ClickHouse or MySQL. A `first_build` row with no `run_id` could not start: MySQL. |
+| Failed share | More than 20% of the latest night's runs failed, with at least 5 runs in the namespace. | See below. | The latest night query below. | Group the failures by `error_code`: `qwen_*` points at opik-inference, `window_read` and `save` at ClickHouse or MySQL. A `first_build` or `nightly_update` row with no `run_id` could not start: MySQL. |
 | Count read failed | A workspace's window count read failed in the latest night. | `max by (k8s_namespace_name, workspace_id, workspace_name) (topics_nightly_last_night_projects{decision="count_failed"}) > 0` | The latest night query below. | The WARN `Topics night count read failed, workspace '<workspace_id>'` has the ClickHouse error (often a guard trip). The workspace runs the next night. |
 | Workspace mismatch | A workspace is opted in to topics and not to ai-labels, for 1 hour. Warning. | `max by (k8s_namespace_name, workspace_id, workspace_name) (topics_workspaces_mismatched) > 0` with `for: 1h` | The mismatch query below. | Opt the workspace in to ai-labels, or out of topics. |
-| Churn | A saved nightly update moved more than 5% of the traces that were in a topic on both nights. | None yet: no gauge. | The churn query below. | Read the run's `born`, `retired` and `forced` stats and its revise answer in the logs. A merge or a replaced topic explains a one-night jump; a high churn every night means the list does not settle. |
+| Churn | A saved nightly update of the latest night moved more than 5% of the traces that were in a topic on both nights. | `max by (k8s_namespace_name, workspace_id, workspace_name) (topics_nightly_last_night_churn_max) > 0.05` | The churn query below names the project. | Read the run's `born`, `retired` and `forced` stats and its revise answer in the logs. A merge or a replaced topic explains a one-night jump; a high churn every night means the list does not settle. |
 | State gauges stale | A pod has not read the night tables for 10 minutes: the other nightly alerts are blind. | `max by (k8s_namespace_name) (topics_nightly_state_age_seconds) > 600` | `topics_nightly_state_refresh_failures_total`. | The WARN `Topics nightly gauges could not read the night tables` has the MySQL error. |
 
 The failed-share rule (a pod's series per workspace, so `max` first):
@@ -637,9 +638,9 @@ and sum by (k8s_namespace_name) (max by (k8s_namespace_name, workspace_id, statu
 
 A quiet day fires none of these but the heartbeats (Night not started, State gauges stale). A night with no project
 still writes its record. A project under the minimum, a deleted project and a project whose last saved run already
-covers the night are not expected, so they are never stale; a project with a list is expected every night. A
-workspace turned off in both opt-in tables is not counted; turned off in only one of them, it is a mismatch. With the
-job off, no gauge is published.
+covers the night are not expected, so they are never stale; a project with a list is expected every night. Churn has
+no series for a workspace without a saved nightly update. A workspace turned off in both opt-in tables is not counted;
+turned off in only one of them, it is a mismatch. With the job off, no gauge is published.
 
 ```sql
 -- MySQL: saved runs of the last day with churn over 0.05
