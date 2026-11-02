@@ -109,6 +109,14 @@ const QueryBuilderChipPopoverContent: React.FC<
     [keyConfig, valueConfig],
   );
 
+  // A default operator that takes no value (e.g. "is not empty") is already a complete filter.
+  useEffect(() => {
+    if (!value?.rows?.length && rowAppliedCheck(initialDraft)) {
+      onApply({ rows: [initialDraft] });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const commit = (next: Filter[]) => {
     setRows(next);
     const applied = next.filter(rowAppliedCheck);
