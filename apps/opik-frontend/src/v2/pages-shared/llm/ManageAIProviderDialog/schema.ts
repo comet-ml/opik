@@ -3,6 +3,7 @@ import uniq from "lodash/uniq";
 
 import {
   AUTH_SEND_AS_VALUES,
+  BEDROCK_API_VALUES,
   OPENAI_PIPELINE_MODE_VALUES,
   OpenAiPipelineMode,
   PROVIDER_TYPE,
@@ -144,6 +145,7 @@ export const createCustomProviderDetailsFormSchema = (
       providerName: z.string().optional(),
       apiKey: z.string(),
       url: z.string().url(),
+      bedrockApi: z.enum(BEDROCK_API_VALUES).optional(),
       models: z
         .string()
         .min(1, { message: "Models list is required" })
