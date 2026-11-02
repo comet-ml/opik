@@ -170,7 +170,7 @@ class GeminiClientGeneratorTest {
     @DisplayName("judge: the rule's temperature, seed and thinking level")
     void judgeSendsTemperatureSeedAndThinking() {
         var modelParameters = new LlmAsJudgeModelParameters(GEMINI_3_MODEL, 0.2, 7,
-                JsonUtils.getJsonNodeFromString("{\"thinking\": {\"level\": \"high\"}}"));
+                JsonUtils.getJsonNodeFromString("{\"thinking\": {\"level\": \"high\"}}"), null);
         var judge = GeminiTestClients.pointedAt(
                 generator.generateChat(LlmProviderClientApiConfig.builder().apiKey("test-key").build(),
                         modelParameters),
@@ -200,7 +200,7 @@ class GeminiClientGeneratorTest {
                                         .formatted(signature))));
         var judge = GeminiTestClients.pointedAt(
                 generator.generateChat(LlmProviderClientApiConfig.builder().apiKey("test-key").build(),
-                        new LlmAsJudgeModelParameters(GEMINI_3_MODEL, null, null, null)),
+                        new LlmAsJudgeModelParameters(GEMINI_3_MODEL, null, null, null, null)),
                 stubBaseUrl());
         var question = UserMessage.from("Read trace t1");
 

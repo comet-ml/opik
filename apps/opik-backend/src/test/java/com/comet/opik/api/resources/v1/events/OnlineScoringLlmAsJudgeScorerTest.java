@@ -7,6 +7,7 @@ import com.comet.opik.api.PromptType;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode;
+import com.comet.opik.api.evaluators.LlmAsJudgeModelApi;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.api.events.TraceToScoreLlmAsJudge;
 import com.comet.opik.api.resources.v1.events.tools.GetTraceSpansTool;
@@ -31,9 +32,11 @@ import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.llm.LlmModelRegistryTestUtils;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
-import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsQuestion;
-import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsRequest;
-import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsResponse;
+import com.comet.opik.infrastructure.llm.decisions.DecisionModels;
+import com.comet.opik.infrastructure.llm.decisions.DecisionsQuestion;
+import com.comet.opik.infrastructure.llm.decisions.DecisionsRequest;
+import com.comet.opik.infrastructure.llm.decisions.DecisionsResponse;
+import com.comet.opik.infrastructure.llm.openai.OpenAiDecisionsClient;
 import com.comet.opik.infrastructure.llm.openrouter.decisions.OpenRouterDecisionsClient;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.comet.opik.utils.JsonUtils;
@@ -126,6 +129,8 @@ class OnlineScoringLlmAsJudgeScorerTest {
     private com.comet.opik.domain.attachment.AttachmentService attachmentService;
     @Mock
     private OpenRouterDecisionsClient decisionsClient;
+    @Mock
+    private OpenAiDecisionsClient openAiDecisionsClient;
 
     private MockedStatic<UserFacingLoggingFactory> mockedFactory;
     private OnlineScoringLlmAsJudgeScorer scorer;
@@ -168,6 +173,8 @@ class OnlineScoringLlmAsJudgeScorerTest {
                 LlmModelRegistryTestUtils.bundledRegistry());
         TraceCompressor traceCompressor = new TraceCompressor();
 
+        lenient().when(decisionsClient.provider()).thenReturn(LlmProvider.OPEN_ROUTER);
+        lenient().when(openAiDecisionsClient.provider()).thenReturn(LlmProvider.OPEN_AI);
         scorer = new OnlineScoringLlmAsJudgeScorer(
                 onlineScoringConfig,
                 serviceTogglesConfig,
@@ -184,7 +191,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
                 opikConfiguration,
                 onlineEvaluationRecorder,
                 attachmentService,
-                new DecisionScoringService(decisionsClient, llmProviderFactory));
+                new DecisionScoringService(Set.of(decisionsClient, openAiDecisionsClient), llmProviderFactory));
     }
 
     @AfterEach
@@ -925,6 +932,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
     class DecisionModelScoringTests {
 
         private static final String JEV_MODEL = "~typesafe/jev-latest";
+        private static final String LUNA_MODEL = "gpt-6-luna";
 
         private static final String JEV_EVALUATOR_JSON = """
                 {
@@ -1052,7 +1060,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
         void promptOverContextLimitIsSkippedWithoutCallingTheModel() {
             // 4 chars per token (set in setUp): this answer alone is over the 32k-token limit.
             var message = buildJevMessage("question",
-                    RandomStringUtils.secure().nextAlphanumeric(DecisionScoringService.MAX_CONTEXT_TOKENS * 4 + 1));
+                    RandomStringUtils.secure().nextAlphanumeric(DecisionModels.JEV_MAX_CONTEXT_TOKENS * 4 + 1));
 
             scorer.score(message).block();
 
@@ -1086,6 +1094,56 @@ class OnlineScoringLlmAsJudgeScorerTest {
             // Unlike chat models on OpenRouter, a decisions model never takes the agentic path, so the
             // tool-calling provider alone doesn't trigger the fetch.
             assertThat(scorer.shouldFetchSpans(message)).isEqualTo(expected);
+        }
+
+        @Test
+        void gpt6LunaRuleOnTheDecisionsApiScoresThroughOpenAi() {
+            var lunaConfig = LlmProviderClientApiConfig.builder()
+                    .apiKey(RandomStringUtils.secure().nextAlphanumeric(16))
+                    .provider(LlmProvider.OPEN_AI)
+                    .build();
+            when(llmProviderFactory.getClientApiConfig(anyString(), eq(LUNA_MODEL))).thenReturn(lunaConfig);
+            var requestCaptor = ArgumentCaptor.forClass(DecisionsRequest.class);
+            when(openAiDecisionsClient.decide(requestCaptor.capture(), eq(lunaConfig)))
+                    .thenReturn(Mono.just(response(Map.of("q0", 0.93, "q1", 0.2))));
+
+            scorer.score(buildJevMessage(lunaCode(LlmAsJudgeModelApi.DECISIONS), "question", "answer")).block();
+
+            assertThat(requestCaptor.getValue().model()).isEqualTo(LUNA_MODEL);
+            assertThat(requestCaptor.getValue().questions()).containsOnlyKeys("q0", "q1");
+            assertThat(captureStoredScores())
+                    .extracting(FeedbackScoreBatchItem::name, score -> score.value().intValue())
+                    .containsExactly(tuple("answer_relevant", 1), tuple("answer_correct", 0));
+            verifyNoInteractions(decisionsClient);
+            verifyNoInteractions(aiProxyService);
+        }
+
+        @Test
+        void gpt6LunaRuleWithoutApiStaysOnTheChatJudge() {
+            lenient().when(onlineScoringConfig.getAgenticToolsThresholdTokens()).thenReturn(1_000_000);
+            lenient().when(llmProviderFactory.getLlmProvider(anyString())).thenReturn(LlmProvider.OPEN_AI);
+            lenient().when(llmProviderFactory.getStructuredOutputStrategy(anyString()))
+                    .thenReturn(new ToolCallingStrategy());
+            lenient().when(spanService.getByTraceIds(any())).thenReturn(Flux.empty());
+            when(aiProxyService.scoreTrace(any(), argThat(params -> LUNA_MODEL.equals(params.name())), any()))
+                    .thenReturn(ChatResponse.builder().aiMessage(AiMessage.aiMessage("""
+                            {"answer_relevant": {"score": true, "reason": "on topic"},
+                             "answer_correct": {"score": false, "reason": "wrong"}}
+                            """)).build());
+
+            scorer.score(buildJevMessage(lunaCode(null), "question", "answer")).block();
+
+            assertThat(captureStoredScores()).extracting(FeedbackScoreBatchItem::name)
+                    .containsExactly("answer_relevant", "answer_correct");
+            verifyNoInteractions(decisionsClient);
+            verifyNoInteractions(openAiDecisionsClient);
+        }
+
+        private LlmAsJudgeCode lunaCode(LlmAsJudgeModelApi api) {
+            var code = JsonUtils.readValue(JEV_EVALUATOR_JSON, LlmAsJudgeCode.class);
+            return code.toBuilder()
+                    .model(code.model().toBuilder().name(LUNA_MODEL).api(api).build())
+                    .build();
         }
 
         private List<FeedbackScoreBatchItem> captureStoredScores() {
