@@ -59,10 +59,10 @@ export interface CacheWriteTtlSpansFixtures {
 }
 
 /**
- * `claude-sonnet-4-5` is not an interchangeable pick — it is one of the 16
- * shipped price rows that publish BOTH an `above_200k_tokens` cache-creation
- * rate and an `above_1hr` one, which is the only combination where the
- * behaviour below is observable at all:
+ * `claude-sonnet-4-5-20250929-v1:0` under `bedrock` is not an interchangeable
+ * pick — it is one of the 10 shipped price rows that publish BOTH an
+ * `above_200k_tokens` cache-creation rate and an `above_1hr` one, which is the
+ * only combination where the behaviour below is observable at all:
  *
  *   input_cost_per_token                                      3e-06
  *   input_cost_per_token_above_200k_tokens                     6e-06
@@ -73,12 +73,43 @@ export interface CacheWriteTtlSpansFixtures {
  *   cache_creation_input_token_cost_above_1hr                  6e-06
  *   cache_creation_input_token_cost_above_1hr_above_200k     1.2e-05
  *
+ * WHY THIS ID AND NOT THE BARE `claude-sonnet-4-5`/`anthropic` PAIR THIS
+ * FIXTURE USED UNTIL 2.2.131. The bare row published every rate above when this
+ * fixture was written (2026-10-23) and has since lost its 200K tier entirely —
+ * LiteLLM dropped it, which opik#9068's own commit message records. Measured on
+ * staging 2.2.131: at a 300k prompt the bare model bills $1.215 (1h) against
+ * $0.99 (5m), both at BASE rates. So the above-tier pair stopped discriminating
+ * any tier at all — it was still ordered correctly, for entirely the wrong
+ * reason — and the vector the spec documents only exists on the Bedrock-dated
+ * ids. Re-pointing here reconstructs it exactly; the rates above are this row's
+ * own, read off the shipped price file.
+ *
+ * The id carries a `:0` version pin and `CostService` strips it as a FALLBACK
+ * only, after the exact key misses. The exact key is in the table, so the pin
+ * is not load-bearing — but it must stay, because it is the spelling a Bedrock
+ * client actually logs.
+ *
  * The whole prompt — fresh input plus everything cached — decides the tier
  * (`SpanCostCalculator.tierBasis`), so each pair's prompt total is what puts it
  * on one side of 200k or the other.
+ *
+ * Exported so the spec's UI half can assert the panel's model chip against the
+ * id the fixture logged rather than against a literal that would keep matching
+ * as a substring if this moved again.
  */
-const MODEL = 'claude-sonnet-4-5';
-const PROVIDER = 'anthropic';
+export const CACHE_WRITE_TTL_MODEL = 'claude-sonnet-4-5-20250929-v1:0';
+const MODEL = CACHE_WRITE_TTL_MODEL;
+/**
+ * `bedrock`, which is where the price row above lives (`litellm_provider`), and
+ * which routes the usage through `BedrockConverseUsageFormat` rather than
+ * `AnthropicUsageFormat`.
+ *
+ * That is a second behaviour this move buys rather than a cost of it: both
+ * formats read the 5m/1h split through the same `CacheWrites.of` entry point
+ * opik#9068 consolidated, and before this fixture moved, no vector in the
+ * estate reached the Converse one with a TTL split at all.
+ */
+const PROVIDER = 'bedrock';
 
 /**
  * The two cache-WRITE rates the vectors below discriminate, per tier, exactly
@@ -132,18 +163,22 @@ const ABOVE_WRITE = 100_000;
  *   above-tier-5m   200k x 6e-06 + 100k x 7.5e-06  + 1k x 2.25e-05 -> $1.9725
  *   above-tier-1h   200k x 6e-06 + 100k x 1.2e-05  + 1k x 2.25e-05 -> $2.4225
  *
- * WHAT THE ABOVE-TIER PAIR IS FOR, and why its spec is currently expected to
- * fail. `cache_creation_input_token_cost_above_1hr` is read RAW
- * (`SpanCostCalculator.anthropicCost` calls `cacheCreationInputTokenPriceAbove1hr()`
- * with no tier basis) while the 5-minute rate goes through
- * `effectiveCacheCreationInputTokenPrice(tierBasis)` — and `ModelCostData`
- * declares no field for `cache_creation_input_token_cost_above_1hr_above_200k_tokens`
- * at all, so the tiered 1h rate the price file publishes is never read. Above
- * 200k the 1h bucket therefore bills at the base 6e-06 instead of 1.2e-05,
- * which makes `above-tier-1h` come out at $1.8225: half the table's own rate,
- * and BELOW its 5-minute twin. The longer, dearer write renders as the cheaper
- * span. The expectations here are the correct ones, so the spec goes red until
- * the product is fixed and green the moment it is.
+ * WHAT THE ABOVE-TIER PAIR IS FOR. It was the estate's reproduction of a
+ * product defect until 2.2.131: `cache_creation_input_token_cost_above_1hr` was
+ * read RAW while the 5-minute rate went through
+ * `effectiveCacheCreationInputTokenPrice(tierBasis)`, and `ModelCostData`
+ * declared no field for
+ * `cache_creation_input_token_cost_above_1hr_above_200k_tokens` at all — so
+ * above 200k the 1h bucket billed at the base 6e-06 instead of 1.2e-05,
+ * `above-tier-1h` came out at $1.8225, and the longer, dearer write rendered as
+ * the CHEAPER span. opik#9068 fixed it: the tiered 1h rate is read, and above a
+ * tier that publishes none the 1h rate keeps its base ratio to the 5-minute
+ * one. Verified on staging 2.2.131 at both the API and in the panel, which is
+ * why the spec's above-tier test no longer carries `test.fail()`.
+ *
+ * The pair stays, and is the only thing that can report a regression here: the
+ * absolute amounts pin the two tiered rates, and the ordering is the claim a
+ * human would make.
  */
 const SPAN_SEEDS: Array<Omit<CacheWriteTtlSpanSeed, 'name'>> = [
   {

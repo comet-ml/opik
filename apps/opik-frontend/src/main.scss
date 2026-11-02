@@ -915,6 +915,17 @@
   }
 }
 
+// Registered from JS via CSS.highlights (thread Messages search)
+::highlight(thread-search-match) {
+  background-color: var(--search-highlight);
+  color: #000;
+}
+
+::highlight(thread-search-current-match) {
+  background-color: var(--search-current-highlight);
+  color: #000;
+}
+
 // rewrite padding for first cell for tables that takes full width with sticky behaviour
 .comet-compare-optimizations-table {
   thead[data-sticky-vertical] {
