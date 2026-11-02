@@ -103,6 +103,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -245,6 +246,7 @@ class TopicVectorsTickTest {
         config().setMaxTracesPerTick(defaults.getMaxTracesPerTick());
         config().setTickInterval(defaults.getTickInterval());
         opikConfig.getTopics().getArrival().setEnabled(true);
+        opikConfig.getTopics().getArrival().setTimeout(new TopicsConfig.ArrivalConfig().getTimeout());
     }
 
     @Test
@@ -866,6 +868,107 @@ class TopicVectorsTickTest {
                 assertThat(point.get("phase")).isEqualTo("read");
                 assertThat(point.get("error_type")).isEqualTo("IllegalStateException");
             });
+        }
+
+        @Test
+        @DisplayName("a trace_topics insert that hangs is cut at topics.arrival.timeout; the vectors stay written and "
+                + "it counts as a TimeoutException")
+        void slowInsert() {
+            var hangingDAO = mock(TraceTopicsDAO.class);
+            when(hangingDAO.insert(any())).thenReturn(Mono.never());
+            var meter = new TopicsTestMeter();
+            var tick = tickWith(new TopicsArrivalService(opikConfig.getTopics(), template, hangingDAO, meter.meter),
+                    meter);
+            opikConfig.getTopics().getArrival().setTimeout(io.dropwizard.util.Duration.seconds(1));
+            config().setEmbedBatchSize(2);
+            var workspaceId = enabledWorkspace();
+            var projectId = UUID.randomUUID();
+            var billing = topic(workspaceId, projectId, "Billing", null);
+            saveList(List.of(billing), List.of(prototype(billing, 0, intent(0))));
+            var traceIds = labelIntents(workspaceId, projectId, List.of(intent(0), intent(5), intent(500)));
+
+            var result = tick.tick(Instant.now());
+
+            assertThat(result.written()).isEqualTo(3);
+            assertThat(result.skipped()).isEmpty();
+            assertThat(vectors(workspaceId, traceIds)).hasSize(3);
+            // One cut insert per chunk of 2: 2 chunks, each step ended about 1 s after it started.
+            assertThat(meter.points("topics.arrival.failures")).hasSize(2).allSatisfy(point -> {
+                assertThat(point.get("phase")).isEqualTo("insert");
+                assertThat(point.get("error_type")).isEqualTo("TimeoutException");
+            });
+            assertThat(meter.points("topics.arrival.duration_seconds")).hasSize(2)
+                    .allSatisfy(point -> assertThat(point.value()).isBetween(0.9, 3.0));
+            assertThat(meter.points("topics.arrival.labelled")).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a topics read that hangs is cut at topics.arrival.timeout; the vectors stay written and the "
+                + "project is not read again in the tick")
+        void slowRead() {
+            var hangingTemplate = mock(TransactionTemplate.class);
+            when(hangingTemplate.inTransaction(any(TxConfig.class), any())).thenAnswer(invocation -> {
+                try {
+                    Thread.sleep(10_000);
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                }
+                return Map.of();
+            });
+            var meter = new TopicsTestMeter();
+            var tick = tickWith(new TopicsArrivalService(opikConfig.getTopics(), hangingTemplate, traceTopicsDAO,
+                    meter.meter), meter);
+            opikConfig.getTopics().getArrival().setTimeout(io.dropwizard.util.Duration.seconds(1));
+            config().setEmbedBatchSize(2);
+            var workspaceId = enabledWorkspace();
+            var projectId = UUID.randomUUID();
+            var billing = topic(workspaceId, projectId, "Billing", null);
+            saveList(List.of(billing), List.of(prototype(billing, 0, intent(0))));
+            var traceIds = labelIntents(workspaceId, projectId,
+                    List.of(intent(0), intent(5), intent(10), intent(500), intent(667)));
+
+            var result = tick.tick(Instant.now());
+
+            assertThat(result.written()).isEqualTo(5);
+            assertThat(result.skipped()).isEmpty();
+            assertThat(vectors(workspaceId, traceIds)).hasSize(5);
+            assertThat(countTraceTopicRows(workspaceId)).isZero();
+            assertThat(meter.points("topics.arrival.failures")).singleElement().satisfies(point -> {
+                assertThat(point.get("phase")).isEqualTo("read");
+                assertThat(point.get("error_type")).isEqualTo("TimeoutException");
+            });
+            assertThat(meter.points("topics.arrival.duration_seconds"))
+                    .allSatisfy(point -> assertThat(point.value()).isLessThan(3.0));
+        }
+
+        @Test
+        @DisplayName("with less than a second left before the tick's deadline, arrival reads and writes nothing and "
+                + "counts its traces as over_budget")
+        void overBudget() {
+            var dao = mock(TraceTopicsDAO.class);
+            var noTemplate = mock(TransactionTemplate.class);
+            var meter = new TopicsTestMeter();
+            var arrival = new TopicsArrivalService(opikConfig.getTopics(), noTemplate, dao, meter.meter).tick();
+            var workspaceId = UUID.randomUUID().toString();
+            var vectors = IntStream.range(0, 3)
+                    .mapToObj(i -> TopicVector.builder()
+                            .workspaceId(workspaceId)
+                            .projectId(UUID.randomUUID())
+                            .traceId(UUID.randomUUID())
+                            .traceCreatedAt(Instant.now())
+                            .embedModel(TopicVectorsTickService.EMBED_MODEL)
+                            .embedDimensions(TopicVectorsTickService.EMBED_DIMENSIONS)
+                            .text(intent(i))
+                            .vector(List.of(1f))
+                            .build())
+                    .toList();
+
+            arrival.label(workspaceId, "name", vectors, Instant.now().plusMillis(500));
+
+            verifyNoInteractions(noTemplate, dao);
+            assertThat(meter.sum("topics.arrival.labelled", "outcome", "over_budget", "workspace_id", workspaceId))
+                    .isEqualTo(3);
+            assertThat(meter.points("topics.arrival.failures")).isEmpty();
         }
     }
 

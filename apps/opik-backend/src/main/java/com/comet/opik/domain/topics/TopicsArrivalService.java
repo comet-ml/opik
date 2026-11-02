@@ -12,9 +12,14 @@ import jakarta.inject.Singleton;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.jdbi.v3.core.statement.SqlStatements;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -43,6 +48,11 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
  *
  * <p>Best effort: a failed MySQL read or {@code trace_topics} insert is logged and counted, never thrown, and changes
  * nothing in the tick. The night labels those traces.
+ *
+ * <p>Bounded in time: one step ends within {@code topics.arrival.timeout} and within the tick's deadline, whichever
+ * comes first, so arrival never holds the tick past its budget. A step with less than a second of that left does not
+ * start; its traces count as {@value #OVER_BUDGET}. The read and the insert run under that time, and a read or insert
+ * that outlasts it counts as a failure with error type {@code TimeoutException}.
  */
 @Slf4j
 @Singleton
@@ -52,10 +62,14 @@ public class TopicsArrivalService {
     static final String OTHER = "other";
     static final String NO_PROTOTYPES = "no_prototypes";
     static final String DIMENSION_MISMATCH = "dimension_mismatch";
+    static final String OVER_BUDGET = "over_budget";
 
     static final String READ = "read";
     static final String ASSIGN = "assign";
     static final String INSERT = "insert";
+
+    // MySQL's query timeout is in whole seconds: a step starts only with at least one left.
+    private static final Duration MIN_TIME = Duration.ofSeconds(1);
 
     private final TopicsConfig config;
     private final TransactionTemplate template;
@@ -92,11 +106,13 @@ public class TopicsArrivalService {
         this.labelled = meter.counterBuilder("topics.arrival.labelled")
                 .setDescription("Traces the vectors tick labelled on arrival, by outcome and workspace: topic or other "
                         + "(a trace_topics row written), no_prototypes (the project has no live topic yet), "
-                        + "dimension_mismatch (its prototypes and the vectors differ in length)")
+                        + "dimension_mismatch (its prototypes and the vectors differ in length), over_budget (less "
+                        + "than a second left of the step's time or of the tick)")
                 .build();
         this.failures = meter.counterBuilder("topics.arrival.failures")
                 .setDescription("Arrival steps that failed, by phase: read (the projects' topics in MySQL), assign, "
-                        + "insert (trace_topics); with error type and workspace. The night labels those traces")
+                        + "insert (trace_topics); with error type and workspace, TimeoutException when the step ran "
+                        + "out of time. The night labels those traces")
                 .build();
         this.duration = meter.histogramBuilder("topics.arrival.duration_seconds").setUnit("s")
                 .setDescription("Wall time of the arrival step after one vectors insert, by workspace")
@@ -158,19 +174,26 @@ public class TopicsArrivalService {
         }
 
         /**
-         * Labels the vectors one insert wrote, all of one workspace, and writes their {@code trace_topics} rows. Never
-         * throws.
+         * Labels the vectors one insert wrote, all of one workspace, and writes their {@code trace_topics} rows, within
+         * {@code topics.arrival.timeout} and before {@code tickDeadline}. Never throws.
          *
          * @param workspaceName the name the tick resolved, for the metrics: this step looks up nothing
+         * @param tickDeadline the end of the tick's budget
          */
         public void label(@NonNull String workspaceId, @NonNull String workspaceName,
-                @NonNull List<TopicVector> vectors) {
+                @NonNull List<TopicVector> vectors, @NonNull Instant tickDeadline) {
             if (!enabled || vectors.isEmpty()) {
+                return;
+            }
+            var now = Instant.now();
+            var until = min(now.plus(config.getArrival().getTimeout().toJavaDuration()), tickDeadline);
+            if (Duration.between(now, until).compareTo(MIN_TIME) < 0) {
+                count(workspaceId, workspaceName, OVER_BUDGET, vectors.size());
                 return;
             }
             long started = System.nanoTime();
             try {
-                labelChunk(workspaceId, workspaceName, vectors);
+                labelChunk(workspaceId, workspaceName, vectors, until);
             } catch (RuntimeException exception) {
                 fail(workspaceId, workspaceName, ASSIGN, exception);
                 log.warn("Topic arrival failed, workspace '{}', vectors '{}'; the night labels them", workspaceId,
@@ -181,10 +204,10 @@ public class TopicsArrivalService {
             }
         }
 
-        private void labelChunk(String workspaceId, String workspaceName, List<TopicVector> vectors) {
+        private void labelChunk(String workspaceId, String workspaceName, List<TopicVector> vectors, Instant until) {
             var byProject = vectors.stream().collect(Collectors.groupingBy(TopicVector::projectId,
                     LinkedHashMap::new, Collectors.toList()));
-            read(workspaceId, workspaceName, byProject.keySet());
+            read(workspaceId, workspaceName, byProject.keySet(), until);
             var rows = new ArrayList<TraceTopic>(vectors.size());
             int topics = 0;
             int other = 0;
@@ -236,7 +259,7 @@ public class TopicsArrivalService {
                 return;
             }
             try {
-                traceTopicsDAO.insert(rows).block();
+                traceTopicsDAO.insert(rows).timeout(left(until)).block();
             } catch (RuntimeException exception) {
                 fail(workspaceId, workspaceName, INSERT, exception);
                 log.warn("Topic arrival insert failed, workspace '{}', rows '{}'; the night labels them", workspaceId,
@@ -247,24 +270,30 @@ public class TopicsArrivalService {
             count(workspaceId, workspaceName, OTHER, other);
         }
 
-        /** Reads the topic lists of the projects this tick has not read yet, in one transaction. */
-        private void read(String workspaceId, String workspaceName, Set<UUID> projectIds) {
+        /**
+         * Reads the topic lists of the projects this tick has not read yet, in one transaction, until {@code until}.
+         * The tick stops waiting then; each query's own timeout ends the read soon after.
+         */
+        private void read(String workspaceId, String workspaceName, Set<UUID> projectIds, Instant until) {
             var toRead = projectIds.stream()
                     .filter(projectId -> !projects.containsKey(projectId) && !unusable.contains(projectId))
                     .toList();
             if (toRead.isEmpty()) {
                 return;
             }
+            var left = left(until);
+            int queryTimeout = (int) Math.max(1, left.toSeconds());
             Map<UUID, Saved> saved;
             try {
-                saved = template.inTransaction(READ_ONLY, handle -> {
+                saved = Mono.fromCallable(() -> template.inTransaction(READ_ONLY, handle -> {
+                    handle.getConfig(SqlStatements.class).setQueryTimeout(queryTimeout);
                     var dao = handle.attach(TopicDAO.class);
                     var read = new HashMap<UUID, Saved>();
                     for (var projectId : dao.findProjectsWithLiveTopics(toRead)) {
                         read.put(projectId, new Saved(dao.findLive(projectId), dao.findPrototypes(projectId)));
                     }
                     return read;
-                });
+                })).subscribeOn(Schedulers.boundedElastic()).timeout(left).block();
             } catch (RuntimeException exception) {
                 unusable.addAll(toRead);
                 fail(workspaceId, workspaceName, READ, exception);
@@ -302,6 +331,16 @@ public class TopicsArrivalService {
                 .put(stringKey("phase"), phase)
                 .put(ERROR_TYPE_KEY, ErrorMetricsResolver.errorType(error))
                 .build());
+    }
+
+    private static Instant min(Instant a, Instant b) {
+        return a.isBefore(b) ? a : b;
+    }
+
+    /** The time left until {@code until}, zero once it has passed. */
+    private static Duration left(Instant until) {
+        var left = Duration.between(Instant.now(), until);
+        return left.isNegative() ? Duration.ZERO : left;
     }
 
     private static float[] flatten(List<TopicVector> vectors, int dimensions) {

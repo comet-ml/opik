@@ -46,6 +46,12 @@ public class TopicsConfig {
         /** Runs only when {@code topics.enabled} is on too. Off: the tick reads no topics and writes no rows. */
         @JsonProperty
         private boolean enabled = true;
+
+        /** Each arrival step (the topics read and the insert after one vectors insert) ends within this. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 60, unit = TimeUnit.SECONDS)
+        private Duration timeout = Duration.seconds(5);
     }
 
     /**

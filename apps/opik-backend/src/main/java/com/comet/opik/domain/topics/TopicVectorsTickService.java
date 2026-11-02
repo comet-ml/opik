@@ -63,7 +63,7 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
  * the next tick. Workspaces are visited from an offset that moves every tick, so none is always last.
  *
  * <p>After each insert, {@link TopicsArrivalService} gives the chunk's traces their topic on arrival, best effort: it
- * throws nothing and changes none of the tick's counts.
+ * throws nothing, changes none of the tick's counts and ends before the tick's deadline.
  */
 @Slf4j
 @Singleton
@@ -86,8 +86,7 @@ public class TopicVectorsTickService {
      * next tick runs the pass again. A leader that dies mid-pass leaves it to expire with its lease.
      */
     static final Lock LONG_WINDOW_LOCK = new Lock("topics:vectors:long_window");
-    // The inserts after the last embed call (the vectors, then the arrival rows), which have no deadline of their own,
-    // still end within this past the rest.
+    // An insert after the last embed call, which has no deadline of its own, still ends within this past the rest.
     private static final Duration LEASE_SLACK = Duration.ofSeconds(5);
     // ClickHouse's max_execution_time is in whole seconds: a window read starts only with at least one left.
     private static final Duration MIN_READ_TIME = Duration.ofSeconds(1);
@@ -480,7 +479,7 @@ public class TopicVectorsTickService {
                     longWindowMissed.add(vectors.stream().filter(vector -> missed.contains(vector.traceId())).count(),
                             tally.workspace(workspaceId).build());
                 }
-                tally.arrival.label(workspaceId, tally.name(workspaceId), vectors);
+                tally.arrival.label(workspaceId, tally.name(workspaceId), vectors, deadline);
             }
         }
         return null;
