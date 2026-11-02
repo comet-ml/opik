@@ -150,4 +150,17 @@ describe("scrollRangeIntoView", () => {
     expect(scroller.scrollTo).toHaveBeenCalledWith({ top: 1610 });
     scroller.remove();
   });
+
+  it("falls back to centering the match's element when nothing scrolls", () => {
+    const root = container("<p>line <b>needle</b></p>");
+    document.body.appendChild(root);
+    const element = root.querySelector("b")!;
+    element.scrollIntoView = vi.fn();
+
+    const [range] = findTextRanges([root], "needle");
+    scrollRangeIntoView(range);
+
+    expect(element.scrollIntoView).toHaveBeenCalledWith({ block: "center" });
+    root.remove();
+  });
 });
