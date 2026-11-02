@@ -37,30 +37,30 @@ setup(
     ).read(),
     long_description_content_type="text/markdown",
     install_requires=[
-        # Cooldown caps, written by scripts/update_python_sdk_dependency_caps.py
-        # (a weekday job runs it and opens a PR):
-        # - Each library's requirements are followed by its cooldown cap: the
-        #   latest allowed version older than 3 days, so a hijacked release has
-        #   time to be caught and yanked before installs pick it up. Compatibility
-        #   caps inside the requirements (litellm's `<1.106`) are separate and
-        #   maintained by hand.
-        # - Don't edit cooldown caps by hand. After adding, removing or changing a
-        #   requirement, run from the repository root:
-        #     uv run --no-project --python 3.12 --with packaging \
-        #       python scripts/update_python_sdk_dependency_caps.py
+        # Cooldown caps: each library's requirements are followed by a `name<=X`
+        # line, its cooldown cap, so a hijacked release has time to be caught and
+        # yanked before installs pick it up. Renovate moves every cap to the
+        # newest release that is at least 3 days old (.github/renovate.json) and
+        # leaves the other lines alone.
+        # - Adding a library: add its cap right after it, at its newest release
+        #   that is at least 3 days old, with the same marker if the library is
+        #   required only on some platforms.
+        # - Removing a library: remove its cap too. A cap on its own still
+        #   installs the library.
+        # - Compatibility caps (litellm's `<1.106`) go inside the requirement,
+        #   never as a separate `name<=X` line: Renovate would move it.
         # - To ship a release that is less than 3 days old (e.g. a security fix),
-        #   raise the library's lower bound to it (`>=1.2.4`) and run the script:
-        #   with no older version allowed, the cooldown cap becomes that release.
-        # - To leave a library without a cooldown cap, so its newest release is
-        #   always allowed, add `# allow-latest: <why>` to its requirement line.
+        #   set the cap to it by hand. Renovate does this itself for a release
+        #   that fixes a published advisory.
+        # - A library without a cap always gets its newest release.
         "boto3-stubs[bedrock-runtime]>=1.34.110",
-        "boto3-stubs<=1.43.119",  # the latest version older than 3 days, released 2026-10-26
+        "boto3-stubs<=1.43.119",
         "click",
-        "click<=8.5.0",  # the latest version older than 3 days, released 2026-08-26
+        "click<=8.5.0",
         "httpx",  # some older version of openai/litellm are broken with httpx>=0.28.0
-        "httpx<=0.28.1",  # the latest version older than 3 days, released 2024-12-06
+        "httpx<=0.28.1",
         "rapidfuzz>=3.0.0,<4.0.0",
-        "rapidfuzz<=3.14.6",  # the latest version older than 3 days, released 2026-08-30
+        "rapidfuzz<=3.14.6",
         # LiteLLM dependency comments:
         # Please keep this list in sync with the one in sdks/opik_optimizer/pyproject.toml
         # - Exclude 1.82.7, 1.82.8: compromised in supply chain attack (TeamPCP)
@@ -88,25 +88,25 @@ setup(
         #   upstream actually tests 3.10 (or once we drop 3.10 -- see OPIK_7955).
         "litellm>=1.79.2,!=1.81.*,!=1.82.*,!=1.83.0,!=1.83.1,!=1.83.2,!=1.83.3,!=1.83.4,!=1.83.5,!=1.83.6,!=1.92.*,<1.97; python_version < '3.11'",
         "litellm>=1.79.2,!=1.81.*,!=1.82.*,!=1.83.0,!=1.83.1,!=1.83.2,!=1.83.3,!=1.83.4,!=1.83.5,!=1.83.6,!=1.92.*,<1.106; python_version >= '3.11'",
-        "litellm<=1.105.5",  # the latest version older than 3 days, released 2026-10-25
+        "litellm<=1.105.5",
         "openai",
-        "openai<=3.39.0",  # the latest version older than 3 days, released 2026-10-26
+        "openai<=3.39.0",
         "pydantic-settings>=2.0.0,<3.0.0,!=2.9.0",
-        "pydantic-settings<=2.16.1",  # the latest version older than 3 days, released 2026-10-20
+        "pydantic-settings<=2.16.1",
         "pydantic>=2.0.0,<3.0.0",
-        "pydantic<=2.14.1",  # the latest version older than 3 days, released 2026-10-11
+        "pydantic<=2.14.1",
         "pytest",
-        "pytest<=9.1.1",  # the latest version older than 3 days, released 2026-06-19
+        "pytest<=9.1.1",
         "rich",
-        "rich<=15.0.0",  # the latest version older than 3 days, released 2026-04-12
+        "rich<=15.0.0",
         "sentry_sdk>=2.0.0",
-        "sentry_sdk<=2.73.0",  # the latest version older than 3 days, released 2026-10-22
+        "sentry_sdk<=2.73.0",
         "tenacity",
-        "tenacity<=9.2.1",  # the latest version older than 3 days, released 2026-10-07
+        "tenacity<=9.2.1",
         "tqdm",
-        "tqdm<=4.70.1",  # the latest version older than 3 days, released 2026-09-11
+        "tqdm<=4.70.1",
         "uuid6",
-        "uuid6<=2025.0.1",  # the latest version older than 3 days, released 2025-07-04
+        "uuid6<=2025.0.1",
         # Optional accelerator for JSON encoding; see opik/json_helpers.py. Guarded
         # twice -- this marker keeps pip from attempting a source build where no
         # wheel exists, and the import there is optional, so a missing orjson costs
@@ -123,11 +123,11 @@ setup(
             " or platform_machine != 'ARM64'"
             " or python_version >= '3.11')"
         ),
-        "orjson<=3.13.0; platform_python_implementation == 'CPython' and platform_machine in 'x86_64 AMD64 aarch64 arm64 ARM64 i686 x86' and (sys_platform != 'win32' or platform_machine != 'ARM64' or python_version >= '3.11')",  # the latest version older than 3 days, released 2026-10-07
+        "orjson<=3.13.0; platform_python_implementation == 'CPython' and platform_machine in 'x86_64 AMD64 aarch64 arm64 ARM64 i686 x86' and (sys_platform != 'win32' or platform_machine != 'ARM64' or python_version >= '3.11')",
         "jinja2",
-        "jinja2<=3.1.6",  # the latest version older than 3 days, released 2025-03-05
+        "jinja2<=3.1.6",
         "watchfiles>=1.0.0,<2.0.0",
-        "watchfiles<=1.3.0",  # the latest version older than 3 days, released 2026-09-21
+        "watchfiles<=1.3.0",
         # tree-sitter is used for JS/TS syntax checking in bridge handlers.
         # Pre-built wheels are missing for musllinux_aarch64 (Alpine on ARM64),
         # and PEP 508 has no marker to distinguish musl from glibc, so we
@@ -140,19 +140,19 @@ setup(
             " platform_machine != 'aarch64'"
             " or sys_platform != 'linux'"
         ),
-        "tree-sitter<=0.26.0; platform_machine != 'aarch64' or sys_platform != 'linux'",  # the latest version older than 3 days, released 2026-06-30
+        "tree-sitter<=0.26.0; platform_machine != 'aarch64' or sys_platform != 'linux'",
         (
             "tree-sitter-javascript>=0.23,<1.0;"
             " platform_machine != 'aarch64'"
             " or sys_platform != 'linux'"
         ),
-        "tree-sitter-javascript<=0.25.0; platform_machine != 'aarch64' or sys_platform != 'linux'",  # the latest version older than 3 days, released 2025-09-01
+        "tree-sitter-javascript<=0.25.0; platform_machine != 'aarch64' or sys_platform != 'linux'",
         (
             "tree-sitter-typescript>=0.23,<1.0;"
             " platform_machine != 'aarch64'"
             " or sys_platform != 'linux'"
         ),
-        "tree-sitter-typescript<=0.23.2; platform_machine != 'aarch64' or sys_platform != 'linux'",  # the latest version older than 3 days, released 2024-11-11
+        "tree-sitter-typescript<=0.23.2; platform_machine != 'aarch64' or sys_platform != 'linux'",
     ],
     extras_require={
         "proxy": [
