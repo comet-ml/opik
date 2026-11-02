@@ -52,6 +52,17 @@ public interface TopicRunDAO {
             @Bind("errorCode") String errorCode, @Bind("errorMessage") String errorMessage,
             @Bind("stats") String stats);
 
+    /**
+     * The workspace of each run {@link #failAbandoned} is about to fail, one per run. Locks the rows, so the update in
+     * the same transaction fails exactly these.
+     */
+    @SqlQuery("""
+            SELECT workspace_id FROM topic_runs
+            WHERE status = 'running' AND started_at < :startedBefore
+            FOR UPDATE
+            """)
+    List<String> findAbandonedWorkspaceIds(@Bind("startedBefore") Instant startedBefore);
+
     /** Runs left {@code running} by a pod that died mid-run: failed with {@code abandoned}. */
     @SqlUpdate("""
             UPDATE topic_runs SET status = 'failed', finished_at = :now, error_code = 'abandoned',

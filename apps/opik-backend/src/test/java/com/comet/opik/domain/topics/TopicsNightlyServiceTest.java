@@ -1,0 +1,170 @@
+package com.comet.opik.domain.topics;
+
+import com.comet.opik.infrastructure.TopicsConfig;
+import com.comet.opik.infrastructure.lock.LockService;
+import org.jdbi.v3.core.Handle;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
+import ru.vyarus.guicey.jdbi3.tx.TxAction;
+import ru.vyarus.guicey.jdbi3.tx.TxConfig;
+
+import java.time.Instant;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.List;
+import java.util.UUID;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+/**
+ * What a night counts and records, with every store mocked: each project's decision with its reason, a failed count
+ * read, a run that cannot start and the runs housekeeping finds abandoned.
+ */
+@DisplayName("topics nightly service metrics")
+class TopicsNightlyServiceTest {
+
+    private static final String WORKSPACE_ID = "ws-1";
+    private static final String BROKEN_WORKSPACE_ID = "ws-broken";
+    private static final Instant START = Instant.parse("2026-11-02T02:00:00Z");
+
+    private final UUID small = UUID.randomUUID();
+    private final UUID deleted = UUID.randomUUID();
+    private final UUID built = UUID.randomUUID();
+    private final UUID locked = UUID.randomUUID();
+    private final UUID started = UUID.randomUUID();
+
+    private TopicsTestMeter meter;
+    private TopicWorkspaceDAO workspaceDAO;
+    private TopicRunDAO runDAO;
+    private TopicDAO topicDAO;
+    private TopicWindowDAO windowDAO;
+    private TopicsRebuildService rebuildService;
+    private TopicsNightlyService service;
+
+    @BeforeEach
+    void setUp() throws Exception {
+        meter = new TopicsTestMeter();
+        workspaceDAO = mock(TopicWorkspaceDAO.class);
+        runDAO = mock(TopicRunDAO.class);
+        topicDAO = mock(TopicDAO.class);
+        var handle = mock(Handle.class);
+        when(handle.attach(TopicWorkspaceDAO.class)).thenReturn(workspaceDAO);
+        when(handle.attach(TopicRunDAO.class)).thenReturn(runDAO);
+        when(handle.attach(TopicDAO.class)).thenReturn(topicDAO);
+        var template = mock(TransactionTemplate.class);
+        when(template.inTransaction(any(TxConfig.class), any()))
+                .thenAnswer(invocation -> invocation.<TxAction<?>>getArgument(1).execute(handle));
+
+        when(workspaceDAO.eligibleWorkspaceIds()).thenReturn(List.of(WORKSPACE_ID, BROKEN_WORKSPACE_ID));
+        when(runDAO.findAbandonedWorkspaceIds(any())).thenReturn(List.of());
+        when(topicDAO.findStates(any())).thenAnswer(invocation -> invocation.<Collection<UUID>>getArgument(0)
+                .contains(built)
+                        ? List.of(TopicProjectState.builder().projectId(built).workspaceId(WORKSPACE_ID)
+                                .build())
+                        : List.of());
+        when(topicDAO.findExistingProjectIds(eq(WORKSPACE_ID), any())).thenAnswer(invocation -> {
+            var ids = new HashSet<>(invocation.<Collection<UUID>>getArgument(1));
+            ids.remove(deleted);
+            return ids;
+        });
+        windowDAO = mock(TopicWindowDAO.class);
+        when(windowDAO.countByProject(eq(WORKSPACE_ID), isNull(), any(), any(), anyLong())).thenReturn(Flux.just(
+                new TopicWindowDAO.ProjectCount(small, 50),
+                new TopicWindowDAO.ProjectCount(deleted, 120),
+                new TopicWindowDAO.ProjectCount(built, 120),
+                new TopicWindowDAO.ProjectCount(locked, 130),
+                new TopicWindowDAO.ProjectCount(started, 140)));
+        when(windowDAO.countByProject(eq(BROKEN_WORKSPACE_ID), isNull(), any(), any(), anyLong()))
+                .thenReturn(Flux.error(new IllegalStateException("ClickHouse guard tripped")));
+
+        var lockService = mock(LockService.class);
+        when(lockService.lockUsingToken(any(), any())).thenAnswer(invocation -> Mono.just(
+                !invocation.<LockService.Lock>getArgument(0).equals(TopicsNightlyService.projectLock(locked))));
+        when(lockService.unlockUsingToken(any())).thenReturn(Mono.empty());
+
+        rebuildService = mock(TopicsRebuildService.class);
+        when(rebuildService.firstBuild(any(), anyString(), any(), any()))
+                .thenAnswer(invocation -> TopicsRebuildService.Outcome.builder().runId(invocation.getArgument(0))
+                        .status(TopicRun.Status.SAVED).build());
+
+        service = new TopicsNightlyService(new TopicsConfig(), template, windowDAO, rebuildService,
+                new TopicsMetrics(meter.meter), lockService);
+    }
+
+    @Test
+    @DisplayName("each project's decision is counted with its skip reason and workspace; a failed count read too")
+    void decisions() {
+        when(rebuildService.startRun(eq(WORKSPACE_ID), eq(started), any())).thenReturn(UUID.randomUUID());
+
+        var result = service.runNight(START);
+
+        assertThat(result.saved()).isEqualTo(1);
+        assertThat(result.skipped()).isEqualTo(4);
+        for (var reason : List.of("small", "deleted", "already_saved", "locked")) {
+            assertThat(meter.sum("topics.nightly.projects", "decision", "skip", "reason", reason, "workspace_id",
+                    WORKSPACE_ID)).as(reason).isEqualTo(1);
+        }
+        assertThat(meter.sum("topics.nightly.projects", "decision", "first_build", "workspace_id", WORKSPACE_ID))
+                .isEqualTo(1);
+        assertThat(meter.points("topics.nightly.count_failures")).singleElement()
+                .satisfies(point -> assertThat(point.get("workspace_id")).isEqualTo(BROKEN_WORKSPACE_ID));
+        assertThat(meter.points("topics.runs")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("a run that cannot start is counted once, as start_failed, and its decision is still counted")
+    void startFailure() {
+        when(rebuildService.startRun(eq(WORKSPACE_ID), eq(started), any()))
+                .thenThrow(new IllegalStateException("MySQL down"));
+
+        var result = service.runNight(START);
+
+        assertThat(result.failed()).isEqualTo(1);
+        assertThat(meter.points("topics.runs")).singleElement().satisfies(point -> {
+            assertThat(point.get("status")).isEqualTo("failed");
+            assertThat(point.get("error_code")).isEqualTo("start_failed");
+            assertThat(point.get("workspace_id")).isEqualTo(WORKSPACE_ID);
+        });
+        assertThat(meter.sum("topics.nightly.projects", "decision", "first_build")).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("housekeeping counts each run it fails as abandoned, with the run's workspace")
+    void abandonedRuns() {
+        when(rebuildService.startRun(any(), any(), any())).thenReturn(UUID.randomUUID());
+        when(runDAO.findAbandonedWorkspaceIds(any())).thenReturn(List.of(WORKSPACE_ID, WORKSPACE_ID, "ws-2"));
+        when(runDAO.failAbandoned(any(), any())).thenReturn(3);
+
+        service.runNight(START);
+
+        assertThat(meter.sum("topics.runs", "error_code", "abandoned", "workspace_id", WORKSPACE_ID)).isEqualTo(2);
+        assertThat(meter.sum("topics.runs", "error_code", "abandoned", "workspace_id", "ws-2")).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("projects the night does not reach are counted per workspace")
+    void notReached() {
+        Thread.currentThread().interrupt();
+        try {
+            var result = service.runNight(START);
+
+            assertThat(result.notReached()).isEqualTo(2);
+        } finally {
+            Thread.interrupted();
+        }
+        assertThat(meter.sum("topics.nightly.projects", "decision", "not_reached", "workspace_id", WORKSPACE_ID))
+                .isEqualTo(2);
+        assertThat(meter.points("topics.runs")).isEmpty();
+    }
+}

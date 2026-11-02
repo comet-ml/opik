@@ -82,6 +82,16 @@ public class TopicsNightlyService {
     private record Candidate(@NonNull String workspaceId, @NonNull UUID projectId, long vectors) {
     }
 
+    /** A project the night listed and skipped, with why. */
+    private record Skipped(@NonNull Candidate candidate, @NonNull String reason) {
+    }
+
+    private enum Outcome {
+        SAVED,
+        FAILED,
+        SKIPPED
+    }
+
     /**
      * How long the night's lock must last: a project may start just before the budget ends and run its whole timeout.
      */
@@ -115,21 +125,22 @@ public class TopicsNightlyService {
             for (var candidate : candidates) {
                 if (Thread.currentThread().isInterrupted() || !Instant.now().isBefore(budgetEnd)) {
                     notReached++;
+                    metrics.project(candidate.workspaceId(), TopicsMetrics.DECISION_NOT_REACHED, null);
                     continue;
                 }
                 if (!lockProject(candidate.projectId())) {
                     log.info("Topics night skipped project '{}', a run started by hand holds it",
                             candidate.projectId());
                     skipped++;
-                    metrics.project(TopicsMetrics.DECISION_SKIP, 1);
+                    metrics.project(candidate.workspaceId(), TopicsMetrics.DECISION_SKIP,
+                            TopicsMetrics.REASON_LOCKED);
                     continue;
                 }
-                metrics.project(TopicsMetrics.DECISION_FIRST_BUILD, 1);
                 try {
-                    if (runOne(executor, candidate, night)) {
-                        saved++;
-                    } else {
-                        failed++;
+                    switch (runOne(executor, candidate, night)) {
+                        case SAVED -> saved++;
+                        case FAILED -> failed++;
+                        case SKIPPED -> skipped++;
                     }
                 } finally {
                     unlockProject(candidate.projectId());
@@ -139,7 +150,6 @@ public class TopicsNightlyService {
             // Not close(): it waits for every task, and a run stopped by its timeout may ignore the interrupt.
             executor.shutdownNow();
         }
-        metrics.project(TopicsMetrics.DECISION_NOT_REACHED, notReached);
         var used = Duration.between(began, Instant.now());
         metrics.budgetUsed(used);
         log.info("Topics night '{}' finished, saved '{}', failed '{}', skipped '{}', not reached '{}', seconds '{}'",
@@ -176,7 +186,13 @@ public class TopicsNightlyService {
                 throw new ConflictException(
                         "Project '%s' already has a topic list; the nightly job updates it".formatted(projectId));
             }
-            var runId = rebuildService.startRun(workspaceId, projectId, TopicRun.Mode.FIRST_BUILD);
+            UUID runId;
+            try {
+                runId = rebuildService.startRun(workspaceId, projectId, TopicRun.Mode.FIRST_BUILD);
+            } catch (RuntimeException exception) {
+                metrics.run(workspaceId, TopicRun.Status.FAILED, TopicsMetrics.ERROR_START_FAILED);
+                throw exception;
+            }
             log.info("Topics run '{}' started by hand, workspace '{}', project '{}', night '{}'", runId, workspaceId,
                     projectId, night);
             var candidate = new Candidate(workspaceId, projectId, vectors);
@@ -271,25 +287,34 @@ public class TopicsNightlyService {
                 handle -> handle.attach(TopicDAO.class).findStates(Set.of(projectId))).isEmpty();
     }
 
-    /** True when the run was saved. */
-    private boolean runOne(ExecutorService executor, Candidate candidate, LocalDate night) {
-        UUID runId;
+    /**
+     * Builds the project under its lock. A run that cannot start (its read or its {@code topic_runs} insert fails) has
+     * no row to fail, so it is counted here, as {@code start_failed}.
+     */
+    private Outcome runOne(ExecutorService executor, Candidate candidate, LocalDate night) {
+        UUID runId = null;
         try {
             // Read again under the project's lock: a run by hand may have built it since the night listed it.
             if (hasList(candidate.projectId())) {
                 log.info("Topics night skipped project '{}', it got a topic list since the night listed it",
                         candidate.projectId());
-                return false;
+                metrics.project(candidate.workspaceId(), TopicsMetrics.DECISION_SKIP,
+                        TopicsMetrics.REASON_ALREADY_SAVED);
+                return Outcome.SKIPPED;
             }
             runId = rebuildService.startRun(candidate.workspaceId(), candidate.projectId(),
                     TopicRun.Mode.FIRST_BUILD);
         } catch (RuntimeException exception) {
             log.error("Topics run could not start, project '{}'", candidate.projectId(), exception);
-            return false;
+        }
+        metrics.project(candidate.workspaceId(), TopicsMetrics.DECISION_FIRST_BUILD, null);
+        if (runId == null) {
+            metrics.run(candidate.workspaceId(), TopicRun.Status.FAILED, TopicsMetrics.ERROR_START_FAILED);
+            return Outcome.FAILED;
         }
         log.info("Topics run '{}' started, workspace '{}', project '{}', vectors '{}'", runId,
                 candidate.workspaceId(), candidate.projectId(), candidate.vectors());
-        return run(executor, runId, candidate, night);
+        return run(executor, runId, candidate, night) ? Outcome.SAVED : Outcome.FAILED;
     }
 
     /** Runs the build on its own thread, stopped after the project timeout. True when it was saved. */
@@ -300,25 +325,25 @@ public class TopicsNightlyService {
         try {
             return future.get(timeout.toMillis(), TimeUnit.MILLISECONDS).status() == TopicRun.Status.SAVED;
         } catch (TimeoutException exception) {
-            stop(runId, future, Code.TIMEOUT, "the run outlasted topics.nightly.projectTimeout '%s'"
+            stop(runId, candidate, future, Code.TIMEOUT, "the run outlasted topics.nightly.projectTimeout '%s'"
                     .formatted(timeout));
             return false;
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
-            stop(runId, future, Code.TIMEOUT, "the nightly job was interrupted");
+            stop(runId, candidate, future, Code.TIMEOUT, "the nightly job was interrupted");
             return false;
         } catch (ExecutionException exception) {
             // firstBuild records its own failures; this is a bug in it.
             log.error("Topics run '{}' threw, project '{}'", runId, candidate.projectId(), exception.getCause());
-            stop(runId, future, Code.INTERNAL, String.valueOf(exception.getCause()));
+            stop(runId, candidate, future, Code.INTERNAL, String.valueOf(exception.getCause()));
             return false;
         }
     }
 
     /** Fails the run first, so a save racing the interrupt finds it ended and rolls back. */
-    private void stop(UUID runId, Future<?> future, Code code, String message) {
+    private void stop(UUID runId, Candidate candidate, Future<?> future, Code code, String message) {
         try {
-            if (rebuildService.fail(runId, code, message, null)) {
+            if (rebuildService.fail(runId, candidate.workspaceId(), code, message, null)) {
                 log.warn("Topics run '{}' failed, code '{}': {}", runId, code.getValue(), message);
             }
         } catch (RuntimeException exception) {
@@ -365,8 +390,8 @@ public class TopicsNightlyService {
     }
 
     /**
-     * Fills {@code candidates} with the projects to build, smallest first, and returns how many were skipped. A
-     * workspace whose count read fails is left for the next night.
+     * Fills {@code candidates} with the projects to build, smallest first, and returns how many were skipped: under
+     * {@code minVectors}, deleted, or with a list. A workspace whose count read fails is left for the next night.
      */
     private int eligible(LocalDate night, List<Candidate> candidates) {
         var nightly = config.getNightly();
@@ -374,22 +399,24 @@ public class TopicsNightlyService {
         var from = night.minusDays(nightly.getWindowDays()).atStartOfDay(ZoneOffset.UTC).toInstant();
         var workspaceIds = template.inTransaction(READ_ONLY,
                 handle -> handle.attach(TopicWorkspaceDAO.class).eligibleWorkspaceIds());
-        int small = 0;
+        var skipped = new ArrayList<Skipped>();
         var found = new ArrayList<Candidate>();
         for (var workspaceId : workspaceIds) {
             try {
                 var counts = windowDAO.countByProject(workspaceId, null, from, to, COUNT_SECONDS)
                         .collectList().block();
                 for (var count : counts) {
+                    var candidate = new Candidate(workspaceId, count.projectId(), count.traces());
                     if (count.traces() >= nightly.getMinVectors()) {
-                        found.add(new Candidate(workspaceId, count.projectId(), count.traces()));
+                        found.add(candidate);
                     } else {
-                        small++;
+                        skipped.add(new Skipped(candidate, TopicsMetrics.REASON_SMALL));
                     }
                 }
             } catch (RuntimeException exception) {
                 log.warn("Topics night count read failed, workspace '{}'; it runs the next night", workspaceId,
                         exception);
+                metrics.countFailure(workspaceId);
             }
         }
         var projectIds = found.stream().map(Candidate::projectId).collect(Collectors.toSet());
@@ -403,35 +430,45 @@ public class TopicsNightlyService {
                 Collectors.mapping(Candidate::projectId, Collectors.toSet())))
                 .forEach((workspaceId, ids) -> existing.addAll(template.inTransaction(READ_ONLY,
                         handle -> handle.attach(TopicDAO.class).findExistingProjectIds(workspaceId, ids))));
-        found.stream()
-                .filter(candidate -> !built.contains(candidate.projectId()))
-                .filter(candidate -> existing.contains(candidate.projectId()))
-                .sorted(Comparator.comparingLong(Candidate::vectors).thenComparing(Candidate::projectId))
-                .forEach(candidates::add);
-        int skipped = small + (found.size() - candidates.size());
-        metrics.project(TopicsMetrics.DECISION_SKIP, skipped);
-        return skipped;
+        for (var candidate : found) {
+            if (!existing.contains(candidate.projectId())) {
+                skipped.add(new Skipped(candidate, TopicsMetrics.REASON_DELETED));
+            } else if (built.contains(candidate.projectId())) {
+                skipped.add(new Skipped(candidate, TopicsMetrics.REASON_ALREADY_SAVED));
+            } else {
+                candidates.add(candidate);
+            }
+        }
+        candidates.sort(Comparator.comparingLong(Candidate::vectors).thenComparing(Candidate::projectId));
+        skipped.forEach(skip -> metrics.project(skip.candidate().workspaceId(), TopicsMetrics.DECISION_SKIP,
+                skip.reason()));
+        return skipped.size();
     }
 
     /**
      * Fails runs left {@code running} by a pod that died, and deletes runs past {@code runsRetention}. A run counts as
      * left only once it is older than a run can last ({@code projectTimeout} plus slack): this night holds the night
-     * lock, but a run started by hand holds only its project's lock.
+     * lock, but a run started by hand holds only its project's lock. Each run failed so is counted, as
+     * {@code abandoned}, once the transaction commits.
      */
     private void housekeeping(Instant start) {
         try {
             var retention = config.getNightly().getRunsRetention().toJavaDuration();
-            template.inTransaction(WRITE, handle -> {
+            var abandoned = template.inTransaction(WRITE, handle -> {
                 var runs = handle.attach(TopicRunDAO.class);
                 // A run younger than its timeout may be a live run started by hand: only the project lock guards it.
-                int abandoned = runs.failAbandoned(start.minus(projectLease()), Instant.now());
+                var startedBefore = start.minus(projectLease());
+                var workspaceIds = runs.findAbandonedWorkspaceIds(startedBefore);
+                int failed = runs.failAbandoned(startedBefore, Instant.now());
                 int deleted = runs.deleteStartedBefore(start.minus(retention));
-                if (abandoned > 0 || deleted > 0) {
+                if (failed > 0 || deleted > 0) {
                     log.info("Topics night housekeeping, abandoned runs failed '{}', old runs deleted '{}'",
-                            abandoned, deleted);
+                            failed, deleted);
                 }
-                return null;
+                return workspaceIds;
             });
+            abandoned.forEach(workspaceId -> metrics.run(workspaceId, TopicRun.Status.FAILED,
+                    TopicsMetrics.ERROR_ABANDONED));
         } catch (RuntimeException exception) {
             log.warn("Topics night housekeeping failed", exception);
         }
