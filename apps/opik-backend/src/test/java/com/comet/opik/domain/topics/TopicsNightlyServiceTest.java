@@ -136,8 +136,10 @@ class TopicsNightlyServiceTest {
         }
         assertThat(meter.sum("topics.nightly.projects", "decision", "first_build", "workspace_id", WORKSPACE_ID))
                 .isEqualTo(1);
-        assertThat(meter.points("topics.nightly.count_failures")).singleElement()
-                .satisfies(point -> assertThat(point.get("workspace_id")).isEqualTo(BROKEN_WORKSPACE_ID));
+        assertThat(meter.points("topics.nightly.count_failures")).singleElement().satisfies(point -> {
+            assertThat(point.get("workspace_id")).isEqualTo(BROKEN_WORKSPACE_ID);
+            assertThat(point.get("error_type")).isNotBlank();
+        });
         assertThat(meter.points("topics.runs")).isEmpty();
     }
 
@@ -282,6 +284,18 @@ class TopicsNightlyServiceTest {
         assertThatThrownBy(() -> service.runNight(START)).isInstanceOf(IllegalStateException.class);
 
         assertThat(end().outcome()).isEqualTo(TopicNight.Outcome.FAILED);
+    }
+
+    @Test
+    @DisplayName("a night whose record cannot start throws before it runs anything, and writes no end")
+    void recordStartFails() {
+        doThrow(new IllegalStateException("MySQL down")).when(nightDAO).deleteProjects(NIGHT);
+
+        assertThatThrownBy(() -> service.runNight(START)).isInstanceOf(IllegalStateException.class);
+
+        verify(rebuildService, never()).startRun(any(), any(), any());
+        verify(nightDAO, never()).insertProjects(any());
+        verify(nightDAO, never()).end(any());
     }
 
     @Test

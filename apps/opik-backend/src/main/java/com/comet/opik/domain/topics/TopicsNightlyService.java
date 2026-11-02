@@ -115,7 +115,9 @@ public class TopicsNightlyService {
     /**
      * Runs the night {@code start} falls on (UTC). The budget runs from the call, not from {@code start}, so a night
      * run late, or by hand for an earlier date, still gets all of it. The night's record ends {@code finished}, or
-     * {@code failed} when the night throws: a read of the workspaces, the lists or the projects that fails.
+     * {@code failed} when the night throws: a read of the workspaces, the lists or the projects that fails. A night
+     * whose record cannot start throws before it runs anything: a rerun of the same date would otherwise add its
+     * decisions to the earlier run's rows.
      */
     public NightResult runNight(@NonNull Instant start) {
         var began = Instant.now();
@@ -463,7 +465,7 @@ public class TopicsNightlyService {
             } catch (RuntimeException exception) {
                 log.warn("Topics night count read failed, workspace '{}'; it runs the next night", workspaceId,
                         exception);
-                record.countFailed(workspaceId);
+                record.countFailed(workspaceId, exception);
             }
         }
         // A deleted project keeps its window vectors until ClickHouse drops them: run only projects that exist.
@@ -488,8 +490,9 @@ public class TopicsNightlyService {
      * Fails runs left {@code running} by a pod that died, and deletes runs past {@code runsRetention}. A run counts as
      * left only once it is older than a run can last ({@code projectTimeout} plus slack): this night holds the night
      * lock, but a run started by hand holds only its project's lock. Each run failed so is counted, as
-     * {@code abandoned}, once the transaction commits, unless a night that finished counted it already. Then does the
-     * same for nights: fails those left {@code running} past the night's lease, and deletes those past the retention.
+     * {@code abandoned}, once the transaction commits: a run whose own failure mark threw was not counted then. Then
+     * does the same for nights: fails those left {@code running} past the night's lease, and deletes those past the
+     * retention.
      */
     private void housekeeping(Instant start) {
         try {
@@ -534,8 +537,10 @@ public class TopicsNightlyService {
 
     /**
      * The night's record in {@code topic_nights} and {@code topic_night_projects}, written as the night goes. Each
-     * decision is counted in {@code topics.nightly.projects} and written as a row. A write that fails is logged and the
-     * night goes on: the state gauges then show it, as a night that never started or one left running.
+     * decision is counted in {@code topics.nightly.projects} and written as a row. Its start must succeed, or the night
+     * does not run. A later write that fails is logged and the night goes on: the state gauges then show it, a missing
+     * end as a night left running, which the next night's housekeeping fails. The first failed write of a night is a
+     * WARN with its error, the others DEBUG, and the night's end WARNs how many failed.
      */
     private final class NightRecord {
 
@@ -544,17 +549,20 @@ public class TopicsNightlyService {
         private final Map<String, Integer> projects = new TreeMap<>();
         private int eligibleWorkspaces;
         private int countFailures;
+        private int writeFailures;
 
         NightRecord(LocalDate night, Instant startedAt) {
             this.night = night;
             this.startedAt = startedAt;
         }
 
-        /** Replaces an earlier run of the same night, its project rows included. */
+        /** Replaces an earlier run of the same night, its project rows included. Throws when it cannot. */
         void start() {
-            write("start", dao -> {
+            template.inTransaction(WRITE, handle -> {
+                var dao = handle.attach(TopicNightDAO.class);
                 dao.start(night, startedAt);
                 dao.deleteProjects(night);
+                return null;
             });
         }
 
@@ -562,9 +570,9 @@ public class TopicsNightlyService {
             eligibleWorkspaces = count;
         }
 
-        void countFailed(String workspaceId) {
+        void countFailed(String workspaceId, RuntimeException error) {
             countFailures++;
-            metrics.countFailure(workspaceId);
+            metrics.countFailure(workspaceId, error);
             write("count failure", dao -> dao.insertProjects(List.of(TopicNightProject.builder()
                     .id(idGenerator.generateId())
                     .night(night)
@@ -604,6 +612,9 @@ public class TopicsNightlyService {
                     .countFailures(countFailures)
                     .projects(counts.toString())
                     .build()));
+            if (writeFailures > 0) {
+                log.warn("Topics night '{}' could not write '{}' parts of its record", night, writeFailures);
+            }
         }
 
         private void count(Candidate candidate, String decision, String reason) {
@@ -631,7 +642,11 @@ public class TopicsNightlyService {
                     return null;
                 });
             } catch (RuntimeException exception) {
-                log.warn("Topics night '{}' could not write its record, '{}'", night, what, exception);
+                if (writeFailures++ == 0) {
+                    log.warn("Topics night '{}' could not write its record, '{}'", night, what, exception);
+                } else {
+                    log.debug("Topics night '{}' could not write its record, '{}'", night, what, exception);
+                }
             }
         }
     }
