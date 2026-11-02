@@ -273,6 +273,46 @@ class TopicsRebuildServiceTest {
     }
 
     @Test
+    @DisplayName("a first build whose algorithm labels a trace with a topic it did not return fails as invariant, "
+            + "and saves nothing")
+    void labelOutOfRangeIsInvariant() {
+        when(runDAO.markFailed(eq(runId), any(), anyString(), anyString(), any())).thenReturn(1);
+        var labels = new int[TRACES];
+        labels[0] = 1;
+        var prototype = new float[TopicsFixture.DIMENSIONS];
+        System.arraycopy(FIXTURE.vectors, 0, prototype, 0, TopicsFixture.DIMENSIONS);
+        var algorithm = new TopicAlgorithm() {
+            @Override
+            public FirstBuild firstBuild(NightWindow window, int maxTopics, Context context) {
+                return FirstBuild.builder()
+                        .topics(List
+                                .of(NewTopic.builder().name("Billing").definition("Questions about invoices").build()))
+                        .labels(labels)
+                        .topicPrototypes(List.of(prototype))
+                        .owners(List.of(0))
+                        .otherPrototypes(List.of())
+                        .build();
+            }
+
+            @Override
+            public Update update(NightState state, NightWindow window, int maxTopics, Context context) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public Optional<Arrival> arrival(List<Topic> live, List<TopicPrototype> prototypes) {
+                throw new UnsupportedOperationException();
+            }
+        };
+
+        var outcome = serviceWith.apply(algorithm).firstBuild(runId, WORKSPACE_ID, projectId, night);
+
+        assertThat(outcome.errorCode()).isEqualTo("invariant");
+        verify(topicDAO, never()).insertTopics(any());
+        verify(traceTopicsDAO, never()).insert(any());
+    }
+
+    @Test
     @DisplayName("a first build saves what its algorithm returns, with the algorithm's stats and phases; the service "
             + "makes no LLM call of its own")
     @SuppressWarnings("unchecked")
@@ -289,7 +329,8 @@ class TopicsRebuildServiceTest {
                 assertThat(window.size()).isEqualTo(TRACES);
                 context.stats().put("algorithm", "stub");
                 return context.timed("stub", () -> FirstBuild.builder()
-                        .topics(List.of(new NewTopic("Billing", "Questions about invoices")))
+                        .topics(List
+                                .of(NewTopic.builder().name("Billing").definition("Questions about invoices").build()))
                         .labels(labels)
                         .topicPrototypes(List.of(prototype))
                         .owners(List.of(0))

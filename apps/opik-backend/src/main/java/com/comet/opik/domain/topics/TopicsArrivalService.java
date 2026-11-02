@@ -11,6 +11,7 @@ import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.jdbi.v3.core.Handle;
 import org.jdbi.v3.core.statement.SqlStatements;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -28,6 +29,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
@@ -36,21 +38,23 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
 
 /**
  * Topic on arrival: right after the vectors tick writes a chunk's vectors, each trace gets a topic by the project's
- * saved list, as a {@code trace_topics} row with source {@code arrival} and an empty run id. The next night writes a
- * row for every trace of its window, and the latest row wins, so an arrival label holds until then.
+ * saved list, as a {@code trace_topics} row with source {@code arrival} and an empty run id. A later night whose window
+ * covers the trace writes its own row, and the latest row wins, so an arrival label holds until then.
  *
  * <p>The rule is the {@link TopicAlgorithm}'s ({@link TopicAlgorithm#arrival}); this service reads the saved list once
  * per project per tick, bounds the time, writes the rows and counts. With {@link KMeansTopicAlgorithm}, a trace gets
  * its nearest live prototype's topic, as the night assigns. A project whose list labels nothing yet gets no row; its
- * traces wait for its first build.
+ * traces wait for its first build. A trace whose summary the night would skip (only whitespace) gets no row either.
  *
- * <p>Best effort: a failed MySQL read or {@code trace_topics} insert is logged and counted, never thrown, and changes
- * nothing in the tick. The night labels those traces.
+ * <p>Best effort: a failure is logged and counted, never thrown, and the tick writes and counts its vectors as without
+ * arrival. The night labels those traces. After a failed read or insert, arrival stops for the rest of the tick, so a
+ * failing MySQL or ClickHouse costs the tick at most one step's time; a project whose rule fails is skipped for the rest
+ * of the tick. The traces it then skips count as {@value #AFTER_FAILURE}.
  *
  * <p>Bounded in time: one step ends within {@code topics.arrival.timeout} and within the tick's deadline, whichever
  * comes first, so arrival never holds the tick past its budget. A step with less than a second of that left does not
- * start; its traces count as {@value #OVER_BUDGET}. The read and the insert run under that time, and a read or insert
- * that outlasts it counts as a failure with error type {@code TimeoutException}.
+ * start, or does not insert; its traces count as {@value #OVER_BUDGET}. A read or insert that outlasts it counts as a
+ * failure with error type {@code TimeoutException}.
  */
 @Slf4j
 @Singleton
@@ -60,13 +64,15 @@ public class TopicsArrivalService {
     static final String OTHER = "other";
     static final String NO_PROTOTYPES = "no_prototypes";
     static final String DIMENSION_MISMATCH = "dimension_mismatch";
+    static final String NO_TEXT = "no_text";
     static final String OVER_BUDGET = "over_budget";
+    static final String AFTER_FAILURE = "after_failure";
 
     static final String READ = "read";
     static final String ASSIGN = "assign";
     static final String INSERT = "insert";
 
-    // MySQL's query timeout is in whole seconds: a step starts only with at least one left.
+    // MySQL's query timeout is in whole seconds: a step starts, and inserts, only with at least one left.
     private static final Duration MIN_TIME = Duration.ofSeconds(1);
 
     private final TopicsConfig config;
@@ -97,16 +103,18 @@ public class TopicsArrivalService {
         this.labelled = meter.counterBuilder("topics.arrival.labelled")
                 .setDescription("Traces the vectors tick labelled on arrival, by outcome and workspace: topic or other "
                         + "(a trace_topics row written), no_prototypes (the project's list labels nothing yet), "
-                        + "dimension_mismatch (its list and the vectors differ in length), over_budget (less "
-                        + "than a second left of the step's time or of the tick)")
+                        + "dimension_mismatch (its list and the vectors differ in length), no_text (a summary the "
+                        + "night skips), over_budget (less than a second left of the step's time or of the tick), "
+                        + "after_failure (arrival stopped for the tick, or the project's rule failed, earlier in it)")
                 .build();
         this.failures = meter.counterBuilder("topics.arrival.failures")
-                .setDescription("Arrival steps that failed, by phase: read (the projects' topics in MySQL), assign, "
-                        + "insert (trace_topics); with error type and workspace, TimeoutException when the step ran "
-                        + "out of time. The night labels those traces")
+                .setDescription("Arrival steps that failed, by phase: read (the projects' topics in MySQL), assign "
+                        + "(the algorithm's rule), insert (trace_topics); with error type and workspace, "
+                        + "TimeoutException when the step ran out of time. The night labels those traces")
                 .build();
         this.duration = meter.histogramBuilder("topics.arrival.duration_seconds").setUnit("s")
-                .setDescription("Wall time of the arrival step after one vectors insert, by workspace")
+                .setDescription("Wall time of the arrival step after one vectors insert, by workspace; steps that "
+                        + "do not start are not recorded")
                 .build();
     }
 
@@ -119,11 +127,13 @@ public class TopicsArrivalService {
     public final class Tick {
 
         private final boolean enabled;
-        // Per project read this tick, its arrival rule, or empty when its list labels nothing yet. A project whose read
-        // or rule failed is in neither map: it is not read again this tick.
+        // Per project read this tick: its arrival rule, or empty when its list labels nothing yet. A project whose
+        // read or rule failed is in unusable instead, and is not read again this tick.
         private final Map<UUID, Optional<TopicAlgorithm.Arrival>> projects = new HashMap<>();
         private final Set<UUID> unusable = new HashSet<>();
         private final Set<UUID> mismatchLogged = new HashSet<>();
+        // Set by a failed read or insert: arrival does nothing more this tick.
+        private boolean stopped;
 
         private Tick(boolean enabled) {
             this.enabled = enabled;
@@ -141,6 +151,10 @@ public class TopicsArrivalService {
             if (!enabled || vectors.isEmpty()) {
                 return;
             }
+            if (stopped) {
+                count(workspaceId, workspaceName, AFTER_FAILURE, vectors.size());
+                return;
+            }
             var now = Instant.now();
             var until = min(now.plus(config.getArrival().getTimeout().toJavaDuration()), tickDeadline);
             if (Duration.between(now, until).compareTo(MIN_TIME) < 0) {
@@ -152,7 +166,7 @@ public class TopicsArrivalService {
                 labelChunk(workspaceId, workspaceName, vectors, until);
             } catch (RuntimeException exception) {
                 fail(workspaceId, workspaceName, ASSIGN, exception);
-                log.warn("Topic arrival failed, workspace '{}', vectors '{}'; the night labels them", workspaceId,
+                log.warn("Topic arrival failed, the night labels them, workspace '{}', vectors '{}'", workspaceId,
                         vectors.size(), exception);
             } finally {
                 duration.record((System.nanoTime() - started) / 1e9,
@@ -163,38 +177,58 @@ public class TopicsArrivalService {
         private void labelChunk(String workspaceId, String workspaceName, List<TopicVector> vectors, Instant until) {
             var byProject = vectors.stream().collect(Collectors.groupingBy(TopicVector::projectId,
                     LinkedHashMap::new, Collectors.toList()));
-            read(workspaceId, workspaceName, byProject.keySet(), until);
+            // A project that fails in this chunk is counted by its failure; one that failed before, by after_failure.
+            var failedBefore = Set.copyOf(unusable);
+            if (!read(workspaceId, workspaceName, byProject.keySet(), until)) {
+                return;
+            }
             var rows = new ArrayList<TraceTopic>(vectors.size());
             int topics = 0;
             int other = 0;
             for (var entry : byProject.entrySet()) {
                 var projectId = entry.getKey();
+                var group = entry.getValue();
                 if (unusable.contains(projectId)) {
+                    if (failedBefore.contains(projectId)) {
+                        count(workspaceId, workspaceName, AFTER_FAILURE, group.size());
+                    }
                     continue;
                 }
-                var group = entry.getValue();
                 var arrival = projects.get(projectId).orElse(null);
                 if (arrival == null) {
                     count(workspaceId, workspaceName, NO_PROTOTYPES, group.size());
                     continue;
                 }
-                var assignable = group.stream()
+                var withText = group.stream()
+                        .filter(vector -> !TopicText.pythonStrip(vector.text()).isEmpty())
+                        .toList();
+                count(workspaceId, workspaceName, NO_TEXT, group.size() - withText.size());
+                var assignable = withText.stream()
                         .filter(vector -> vector.vector().size() == arrival.dimensions())
                         .toList();
-                if (assignable.size() < group.size()) {
-                    count(workspaceId, workspaceName, DIMENSION_MISMATCH, group.size() - assignable.size());
+                if (assignable.size() < withText.size()) {
+                    count(workspaceId, workspaceName, DIMENSION_MISMATCH, withText.size() - assignable.size());
                     if (mismatchLogged.add(projectId)) {
                         log.warn("Topic arrival skipped vectors of another length than the prototypes, workspace '{}', "
                                 + "project '{}', prototypes '{}', vectors '{}'", workspaceId, projectId,
-                                arrival.dimensions(), group.size() - assignable.size());
+                                arrival.dimensions(), withText.size() - assignable.size());
                     }
                 }
                 if (assignable.isEmpty()) {
                     continue;
                 }
-                var topicIds = arrival.label(flatten(assignable, arrival.dimensions()));
-                Preconditions.checkState(topicIds.length == assignable.size(),
-                        "the arrival rule labelled '%s' of '%s' vectors", topicIds.length, assignable.size());
+                UUID[] topicIds;
+                try {
+                    topicIds = arrival.label(flatten(assignable, arrival.dimensions()));
+                    Preconditions.checkState(topicIds.length == assignable.size(),
+                            "the arrival rule labelled '%s' of '%s' vectors", topicIds.length, assignable.size());
+                } catch (RuntimeException exception) {
+                    unusable.add(projectId);
+                    fail(workspaceId, workspaceName, ASSIGN, exception);
+                    log.warn("Topic arrival rule failed, not labelling the project this tick, workspace '{}', "
+                            + "project '{}'", workspaceId, projectId, exception);
+                    continue;
+                }
                 for (int i = 0; i < assignable.size(); i++) {
                     var vector = assignable.get(i);
                     rows.add(TraceTopic.builder()
@@ -216,12 +250,18 @@ public class TopicsArrivalService {
             if (rows.isEmpty()) {
                 return;
             }
+            var left = left(until);
+            if (left.compareTo(MIN_TIME) < 0) {
+                count(workspaceId, workspaceName, OVER_BUDGET, rows.size());
+                return;
+            }
             try {
-                traceTopicsDAO.insert(rows).timeout(left(until)).block();
+                traceTopicsDAO.insert(rows).timeout(left).block();
             } catch (RuntimeException exception) {
+                stopped = true;
                 fail(workspaceId, workspaceName, INSERT, exception);
-                log.warn("Topic arrival insert failed, workspace '{}', rows '{}'; the night labels them", workspaceId,
-                        rows.size(), exception);
+                log.warn("Topic arrival insert failed, arrival stops for this tick, workspace '{}', rows '{}'",
+                        workspaceId, rows.size(), exception);
                 return;
             }
             count(workspaceId, workspaceName, TOPIC, topics);
@@ -229,35 +269,34 @@ public class TopicsArrivalService {
         }
 
         /**
-         * Reads the topic lists of the projects this tick has not read yet, in one transaction, until {@code until}.
-         * The tick stops waiting then; each query's own timeout ends the read soon after.
+         * Reads the topic lists of the projects this tick has not read yet, in one transaction, until {@code until},
+         * and builds their rules. The tick stops waiting then. The read itself stops soon after: each query's timeout
+         * is the time left, rounded up to a second, and no query starts after {@code until}. A failed read stops
+         * arrival for the tick and returns false; a project whose rule fails is unusable for the tick.
          */
-        private void read(String workspaceId, String workspaceName, Set<UUID> projectIds, Instant until) {
+        private boolean read(String workspaceId, String workspaceName, Set<UUID> projectIds, Instant until) {
             var toRead = projectIds.stream()
                     .filter(projectId -> !projects.containsKey(projectId) && !unusable.contains(projectId))
                     .toList();
             if (toRead.isEmpty()) {
-                return;
+                return true;
             }
-            var left = left(until);
-            int queryTimeout = (int) Math.max(1, left.toSeconds());
             Map<UUID, Saved> saved;
             try {
                 saved = Mono.fromCallable(() -> template.inTransaction(READ_ONLY, handle -> {
-                    handle.getConfig(SqlStatements.class).setQueryTimeout(queryTimeout);
-                    var dao = handle.attach(TopicDAO.class);
                     var read = new HashMap<UUID, Saved>();
-                    for (var projectId : dao.findProjectsWithLiveTopics(toRead)) {
-                        read.put(projectId, new Saved(dao.findLive(projectId), dao.findPrototypes(projectId)));
+                    for (var projectId : dao(handle, until).findProjectsWithLiveTopics(toRead)) {
+                        var live = dao(handle, until).findLive(projectId);
+                        read.put(projectId, new Saved(live, dao(handle, until).findPrototypes(projectId)));
                     }
                     return read;
-                })).subscribeOn(Schedulers.boundedElastic()).timeout(left).block();
+                })).subscribeOn(Schedulers.boundedElastic()).timeout(left(until)).block();
             } catch (RuntimeException exception) {
-                unusable.addAll(toRead);
+                stopped = true;
                 fail(workspaceId, workspaceName, READ, exception);
-                log.warn("Topic arrival read failed, workspace '{}', projects '{}'; not labelling them this tick",
+                log.warn("Topic arrival read failed, arrival stops for this tick, workspace '{}', projects '{}'",
                         workspaceId, toRead.size(), exception);
-                return;
+                return false;
             }
             for (var projectId : toRead) {
                 var project = saved.get(projectId);
@@ -270,11 +309,25 @@ public class TopicsArrivalService {
                 } catch (RuntimeException exception) {
                     unusable.add(projectId);
                     fail(workspaceId, workspaceName, ASSIGN, exception);
-                    log.warn("Topic arrival can't build its rule from the saved list, workspace '{}', project '{}'; "
-                            + "not labelling it this tick", workspaceId, projectId, exception);
+                    log.warn("Topic arrival rule failed, not labelling the project this tick, workspace '{}', "
+                            + "project '{}'", workspaceId, projectId, exception);
                 }
             }
+            return true;
         }
+    }
+
+    /**
+     * The topics DAO for one more query of the read: its timeout is the time left until {@code until}, rounded up so
+     * that the tick's own timeout, not MySQL's, ends a slow step. Throws once {@code until} has passed.
+     */
+    private static TopicDAO dao(Handle handle, Instant until) {
+        long millis = Duration.between(Instant.now(), until).toMillis();
+        if (millis <= 0) {
+            throw new IllegalStateException(new TimeoutException("the arrival step's time ran out during its read"));
+        }
+        handle.getConfig(SqlStatements.class).setQueryTimeout((int) ((millis + 999) / 1000));
+        return handle.attach(TopicDAO.class);
     }
 
     private void count(String workspaceId, String workspaceName, String outcome, int traces) {

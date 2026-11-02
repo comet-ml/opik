@@ -63,7 +63,10 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
  * the next tick. Workspaces are visited from an offset that moves every tick, so none is always last.
  *
  * <p>After each insert, {@link TopicsArrivalService} gives the chunk's traces their topic on arrival, best effort: it
- * throws nothing, changes none of the tick's counts and ends before the tick's deadline.
+ * throws nothing, adds nothing to the tick's written or skipped counts and ends before the tick's deadline. Its time
+ * comes out of the tick's budget: milliseconds per chunk when MySQL and ClickHouse answer, at most one
+ * {@code topics.arrival.timeout} per tick when they do not, as arrival stops for the tick after a failed read or
+ * insert.
  */
 @Slf4j
 @Singleton
@@ -255,7 +258,7 @@ public class TopicVectorsTickService {
                 .setDescription("Wall time of one embed call, by outcome (ok or the error code) and workspace")
                 .build();
         this.phaseDuration = meter.histogramBuilder("topics.vectors.tick.phase_seconds").setUnit("s")
-                .setDescription("Duration of each tick phase: find, embed")
+                .setDescription("Duration of each tick phase: find, embed (with the arrival steps)")
                 .build();
     }
 

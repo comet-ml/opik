@@ -208,13 +208,14 @@ public class TopicsRebuildService {
             stats.put("provisional", n < PROVISIONAL_BELOW);
 
             var built = algorithm.firstBuild(window, MAX_TOPICS, this);
+            checkShape(built, n);
             var topics = topics(built);
             var prototypes = prototypes(built, topics);
-            checkInvariants(topics, prototypes, built.labels(), n);
+            checkInvariants(topics, prototypes);
 
             int other = 0;
             for (int label : built.labels()) {
-                other += label == PrototypeAssigner.OTHER ? 1 : 0;
+                other += label == TopicAlgorithm.OTHER ? 1 : 0;
             }
             stats.put("topics", topics.size());
             stats.put("other_share", (double) other / n);
@@ -256,8 +257,8 @@ public class TopicsRebuildService {
             int other = 0;
             for (int i = 0; i < n; i++) {
                 int label = updated.labels()[i];
-                other += label == PrototypeAssigner.OTHER ? 1 : 0;
-                labels[i] = label == PrototypeAssigner.OTHER ? TraceTopic.OTHER : state.topic(label).getId();
+                other += label == TopicAlgorithm.OTHER ? 1 : 0;
+                labels[i] = label == TopicAlgorithm.OTHER ? TraceTopic.OTHER : state.topic(label).getId();
                 traceIds[i] = rows.get(i).traceId();
             }
             var previous = timed("churn", () -> readPreviousLabels(saved.projectState().lastRunId()));
@@ -555,7 +556,7 @@ public class TopicsRebuildService {
         private List<Topic> topics(TopicAlgorithm.FirstBuild built) {
             var sizes = new int[built.topics().size()];
             for (int label : built.labels()) {
-                if (label != PrototypeAssigner.OTHER) {
+                if (label != TopicAlgorithm.OTHER) {
                     sizes[label]++;
                 }
             }
@@ -603,8 +604,30 @@ public class TopicsRebuildService {
                     .build();
         }
 
+        /** D5, the indexes: every label and owner names a topic of the list, before the list is made from them. */
+        private void checkShape(TopicAlgorithm.FirstBuild built, int n) {
+            int topics = built.topics().size();
+            if (built.labels().length != n) {
+                throw invariant("'%s' labels for '%s' traces".formatted(built.labels().length, n));
+            }
+            for (int label : built.labels()) {
+                if (label != TopicAlgorithm.OTHER && (label < 0 || label >= topics)) {
+                    throw invariant("a trace labelled '%s' with '%s' topics".formatted(label, topics));
+                }
+            }
+            if (built.owners().size() != built.topicPrototypes().size()) {
+                throw invariant("'%s' owners for '%s' topic prototypes".formatted(built.owners().size(),
+                        built.topicPrototypes().size()));
+            }
+            for (int owner : built.owners()) {
+                if (owner < 0 || owner >= topics) {
+                    throw invariant("a prototype owned by '%s' with '%s' topics".formatted(owner, topics));
+                }
+            }
+        }
+
         /** D5: what must hold before anything is written. */
-        private void checkInvariants(List<Topic> topics, List<TopicPrototype> prototypes, int[] labels, int n) {
+        private void checkInvariants(List<Topic> topics, List<TopicPrototype> prototypes) {
             if (topics.size() > MAX_TOPICS) {
                 throw invariant("'%s' topics, at most '%s'".formatted(topics.size(), MAX_TOPICS));
             }
@@ -625,14 +648,6 @@ public class TopicsRebuildService {
                 if (values.length != DIMENSIONS || Math.abs(Math.sqrt(norm) - 1) > UNIT_TOLERANCE) {
                     throw invariant("prototype '%s' has '%s' values and norm '%s'".formatted(prototype.position(),
                             values.length, Math.sqrt(norm)));
-                }
-            }
-            if (labels.length != n) {
-                throw invariant("'%s' labels for '%s' traces".formatted(labels.length, n));
-            }
-            for (int label : labels) {
-                if (label != PrototypeAssigner.OTHER && (label < 0 || label >= topics.size())) {
-                    throw invariant("a trace labelled '%s' with '%s' topics".formatted(label, topics.size()));
                 }
             }
         }
@@ -699,7 +714,7 @@ public class TopicsRebuildService {
                         .projectId(projectId)
                         .traceId(rows.get(i).traceId())
                         .traceCreatedAt(rows.get(i).traceCreatedAt())
-                        .topicId(labels[i] == PrototypeAssigner.OTHER ? TraceTopic.OTHER : topics.get(labels[i]).id())
+                        .topicId(labels[i] == TopicAlgorithm.OTHER ? TraceTopic.OTHER : topics.get(labels[i]).id())
                         .source(TraceTopic.Source.NIGHT)
                         .runId(runId.toString())
                         .build());

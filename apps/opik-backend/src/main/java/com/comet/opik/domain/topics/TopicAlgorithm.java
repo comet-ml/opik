@@ -23,16 +23,26 @@ import java.util.function.Supplier;
  * <p>What an algorithm leaves is the saved list: topics, their prototype vectors, and known-Other prototypes. The
  * labels a night returns should be the ones its {@link #arrival} rule gives with the list it leaves; otherwise a trace's
  * topic on arrival and its topic after the night disagree.
+ *
+ * <p>The service checks a night's result before it writes anything, and fails the run with error code
+ * {@code invariant} when it breaks one of these rules: at most {@code maxTopics} live topics; every name not blank and
+ * not catch-all ({@link AuthorApplier#isCatchAll}: other, misc, general and the like); every prototype a unit vector of
+ * {@value TopicsRebuildService#DIMENSIONS} values; one label per window trace, each a live topic or {@link #OTHER};
+ * for a first build, each owner a topic of the list and each topic born tonight; for an update, the
+ * {@link NightInvariants} rules (no topic renamed, none retired and live, new ones born tonight).
  */
 @ImplementedBy(KMeansTopicAlgorithm.class)
 public interface TopicAlgorithm {
+
+    /** The label of a trace in no topic. */
+    int OTHER = -1;
 
     /**
      * Builds the first list of a project that has none.
      *
      * @param maxTopics the most topics the list may hold
      */
-    FirstBuild firstBuild(@NonNull NightWindow window, int maxTopics, @NonNull Context context);
+    FirstBuild firstBuild(NightWindow window, int maxTopics, Context context);
 
     /**
      * Updates the saved list for tonight's window: changes {@code state} in place (topics born, revived and retired,
@@ -40,7 +50,7 @@ public interface TopicAlgorithm {
      *
      * @param maxTopics the most live topics the list may hold
      */
-    Update update(@NonNull NightState state, @NonNull NightWindow window, int maxTopics, @NonNull Context context);
+    Update update(NightState state, NightWindow window, int maxTopics, Context context);
 
     /**
      * The rule topic on arrival labels new traces with, from the list the last night saved. Empty when that list labels
@@ -50,7 +60,7 @@ public interface TopicAlgorithm {
      * @param live the project's live topics
      * @param prototypes the project's saved prototypes by position: those of every topic it kept, and known Other
      */
-    Optional<Arrival> arrival(@NonNull List<Topic> live, @NonNull List<TopicPrototype> prototypes);
+    Optional<Arrival> arrival(List<Topic> live, List<TopicPrototype> prototypes);
 
     /**
      * A project's arrival rule for one tick. It runs on the vectors tick's thread, inside the tick's budget, so it must
@@ -66,7 +76,7 @@ public interface TopicAlgorithm {
          *
          * @param vectors rows of {@link #dimensions()} values each
          */
-        UUID[] label(@NonNull float[] vectors);
+        UUID[] label(float[] vectors);
     }
 
     /** What a run gives its algorithm: the LLM, the phase timer and the run's stats. */
@@ -79,31 +89,32 @@ public interface TopicAlgorithm {
          *
          * @param tag names the call in its request id, metrics and logs, and picks its deadline
          */
-        <T> T generate(@NonNull String tag, @NonNull String prompt, @NonNull JsonNode schema, int maxTokens,
-                @NonNull Function<JsonNode, T> read);
+        <T> T generate(String tag, String prompt, JsonNode schema, int maxTokens, Function<JsonNode, T> read);
 
         /** Runs {@code action} as a phase of the run: its seconds go to the run's stats and to the phase metric. */
-        <T> T timed(@NonNull String phase, @NonNull Supplier<T> action);
+        <T> T timed(String phase, Supplier<T> action);
 
         /** The run's stats, saved on its {@code topic_runs} row; an algorithm adds its own. */
         ObjectNode stats();
     }
 
     /** A new topic, before it has an id. */
+    @Builder(toBuilder = true)
     record NewTopic(@NonNull String name, @NonNull String definition) {
     }
 
     /**
      * A first list. {@code labels[i]} is the index in {@code topics} of window trace i's topic, or
-     * {@link PrototypeAssigner#OTHER}. The prototypes are saved in this order: {@code topicPrototypes}, each owned by the
-     * topic at the same index of {@code owners}, then {@code otherPrototypes}.
+     * {@link #OTHER}. The prototypes are saved in this order: {@code topicPrototypes}, each owned by the topic at the same
+     * index of {@code owners}, then {@code otherPrototypes}.
      */
-    @Builder
+    @Builder(toBuilder = true)
     record FirstBuild(@NonNull List<NewTopic> topics, @NonNull int[] labels, @NonNull List<float[]> topicPrototypes,
             @NonNull List<Integer> owners, @NonNull List<float[]> otherPrototypes) {
     }
 
-    /** {@code labels[i]} is the index in the state of window trace i's topic, or {@link PrototypeAssigner#OTHER}. */
+    /** {@code labels[i]} is the index in the state of window trace i's topic, or {@link #OTHER}. */
+    @Builder(toBuilder = true)
     record Update(@NonNull int[] labels) {
     }
 }

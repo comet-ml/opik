@@ -248,7 +248,7 @@ fails. Every series also carries `k8s_namespace_name`: group by it.
 | `topics.vectors.read.failures` by `phase`, `error_type`, workspace | Failed ClickHouse reads: `find` (one workspace's window read, for example a guard trip) or `summaries` (one workspace's summary read). `error_type` is the root cause's class name. |
 | `topics.vectors.embed.failures` by `http_status`, `code`, `error_type`, workspace | Failed embed calls. 429 `quota_exceeded` means the embed pool is full. Do not alert on it alone: a failure backs off one workspace for one tick, and the next tick retries. |
 | `topics.vectors.embed.duration_seconds` by `outcome`, workspace | Wall time per embed call: `ok`, or the error code. |
-| `topics.vectors.tick.phase_seconds` by `phase` | Time in `find` (ClickHouse window reads) and `embed` (summary reads, embed calls and inserts). |
+| `topics.vectors.tick.phase_seconds` by `phase` | Time in `find` (ClickHouse window reads) and `embed` (summary reads, embed calls, inserts and the arrival steps; see `topics.arrival.duration_seconds`). |
 | `topics.vectors.long_window.missed` by workspace | Vectors the long-window pass wrote for statuses older than the short window: rows normal ticks missed, for example after an outage longer than the window. Above zero outside a backfill or an outage means normal ticks miss rows. |
 
 The window read leaves out a done status whose latest output is missing, of another task version, or empty or only
@@ -792,22 +792,32 @@ arrival rows: it compares only the rows of its own runs, by `run_id`.
 | `TOPICS_ARRIVAL_ENABLED` | `true` | Labels traces on arrival. Needs `TOPICS_ENABLED=true`. Off: the tick reads no topic list and writes no `trace_topics` row. |
 | `TOPICS_ARRIVAL_TIMEOUT` | `5s` | The most time one arrival step (the topic read and the `trace_topics` insert after one vectors insert) can take. 1s to 60s. |
 
-To turn it off, set `TOPICS_ARRIVAL_ENABLED=false` and restart. Vectors still flow. Rows already written stay until the
-next night writes its rows.
+To turn it off, set `TOPICS_ARRIVAL_ENABLED=false` and restart. Vectors still flow. Rows already written stay until a
+night whose window covers their traces writes its rows.
 
 ### Failures
 
-Arrival is best effort. A failed MySQL read, a failed assignment or a failed `trace_topics` insert logs a WARN
-(`Topic arrival ... failed`) and adds 1 to `topics.arrival.failures`. The vectors stay written, the tick goes on, and its
-`written` and `skipped` counts do not change. The next night labels those traces. The tick does not read a failed
-project again; the next tick does.
+Arrival is best effort. A failed MySQL read, a failed rule or a failed `trace_topics` insert logs a WARN
+(`Topic arrival ... failed`) and adds 1 to `topics.arrival.failures`. The vectors stay written, the tick goes on, and
+arrival adds nothing to its `written` and `skipped` counts. The next night labels those traces.
+
+- After a failed read or insert, arrival stops for the rest of the tick. The traces of the later chunks count as
+  `after_failure`, with no WARN. The next tick tries again.
+- After a failed rule, only that project is skipped for the rest of the tick, also as `after_failure`.
+
+Arrival's time comes out of the tick's budget. With MySQL and ClickHouse healthy, it takes milliseconds per chunk.
+When they hang, the first step runs out of time, fails, and stops arrival: the tick loses at most one
+`TOPICS_ARRIVAL_TIMEOUT`. A high `topics.vectors.tick.phase_seconds{phase="embed"}` with a low
+`topics.vectors.embed.duration_seconds` points here: check `topics.arrival.duration_seconds`.
 
 Arrival never holds the tick past its budget. One step ends within `TOPICS_ARRIVAL_TIMEOUT` and before the tick's
 budget (`TOPICS_VECTORS_TICK_BUDGET`) ends, whichever comes first:
 
-- A read or insert that runs out of that time is a failure with `error_type` `TimeoutException`. A hung MySQL query also
-  stops on its own query timeout.
-- With less than 1s of that time left, the step does not start. Its traces count as `over_budget`, with no WARN.
+- A read or insert that runs out of that time is a failure with `error_type` `TimeoutException`. Each MySQL query of the
+  read has the time left as its query timeout, rounded up to a second, and no query starts after the step's end, so the
+  read stops soon after the tick stops waiting.
+- With less than 1s of that time left, the step does not start, or does not insert. Its traces count as `over_budget`,
+  with no WARN.
 
 ### What to watch
 
@@ -815,7 +825,7 @@ Every series has `workspace_id` and `workspace_name`.
 
 | Metric | Prometheus name | Meaning |
 |---|---|---|
-| `topics.arrival.labelled` by `outcome` | `topics_arrival_labelled_total` | Traces per outcome. `topic` and `other`: a row was written. `no_prototypes`: the project has no live topic, no row. `dimension_mismatch`: the vector length differs from the prototypes', no row, one WARN per project per tick. `over_budget`: less than 1s left, no row. |
+| `topics.arrival.labelled` by `outcome` | `topics_arrival_labelled_total` | Traces per outcome. `topic` and `other`: a row was written. `no_prototypes`: the project has no live topic, no row. `dimension_mismatch`: the vector length differs from the prototypes', no row, one WARN per project per tick. `no_text`: the summary is only whitespace, which the night skips too, no row. `over_budget`: less than 1s left, no row. `after_failure`: arrival stopped for the tick, or the project's rule failed, earlier in the tick, no row. |
 | `topics.arrival.failures` by `phase`, `error_type` | `topics_arrival_failures_total` | Failed steps. `read`: the projects' lists in MySQL. `assign`: the algorithm could not make its rule from the saved list, or the rule failed. `insert`: the `trace_topics` insert. `error_type` `TimeoutException`: the step ran out of time. |
 | `topics.arrival.duration_seconds` | `topics_arrival_duration_seconds` | Wall time of the arrival step after one vectors insert, a native histogram. |
 

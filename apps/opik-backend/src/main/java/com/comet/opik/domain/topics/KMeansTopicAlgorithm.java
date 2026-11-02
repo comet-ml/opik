@@ -88,7 +88,7 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
         }
         var revived = stats.putArray("revived");
         result.revived().forEach(t -> revived.add(state.topic(t).getName()));
-        return new Update(result.labels());
+        return Update.builder().labels(result.labels()).build();
     }
 
     /**
@@ -156,7 +156,8 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
         var otherPrototypes = applied.other().stream().map(group -> centre(centres, group, d)).toList();
         var assigner = new PrototypeAssigner(topicPrototypes, owners, otherPrototypes, d);
         var firstBuild = FirstBuild.builder()
-                .topics(applied.topics().stream().map(topic -> new NewTopic(topic.name(), topic.definition()))
+                .topics(applied.topics().stream()
+                        .map(topic -> NewTopic.builder().name(topic.name()).definition(topic.definition()).build())
                         .toList())
                 .labels(assigner.assign(vectors))
                 .topicPrototypes(topicPrototypes)
