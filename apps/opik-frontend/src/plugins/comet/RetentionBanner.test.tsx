@@ -138,6 +138,20 @@ describe("RetentionBanner", () => {
       expect(screen.queryByRole("link")).toBeNull();
     });
 
+    it("lists two admins without a trailing ellipsis", () => {
+      givenRole(ORGANIZATION_ROLE_TYPE.member);
+      givenMembers(
+        member("owner", ORGANIZATION_ROLE_TYPE.admin),
+        member("co-owner", ORGANIZATION_ROLE_TYPE.admin),
+      );
+
+      renderBanner();
+
+      expect(screen.getByRole("region")).toHaveTextContent(
+        "Ask your organization admins (owner, co-owner) to update the payment details.",
+      );
+    });
+
     it("waits for the organization members before rendering", () => {
       hooks.useOrganizationMembers.mockReturnValue({ data: undefined });
 

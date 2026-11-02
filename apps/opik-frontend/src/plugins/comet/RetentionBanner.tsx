@@ -58,11 +58,12 @@ const RetentionBanner = ({ onChangeHeight, hidden }: RetentionBannerProps) => {
     },
   );
 
-  const firstThreeAdmins = useMemo(() => {
-    return organizationMembers
-      ?.filter?.((m) => m.role === ORGANIZATION_ROLE_TYPE.admin)
-      .slice(0, 3);
+  const admins = useMemo(() => {
+    return organizationMembers?.filter?.(
+      (m) => m.role === ORGANIZATION_ROLE_TYPE.admin,
+    );
   }, [organizationMembers]);
+  const firstThreeAdmins = admins?.slice(0, 3);
 
   // Billing only offers Free to a single admin whose other members are all Opik-only; offering the
   // downgrade to anyone else would lead to a disabled option.
@@ -114,7 +115,7 @@ const RetentionBanner = ({ onChangeHeight, hidden }: RetentionBannerProps) => {
             {idx !== firstThreeAdmins.length - 1 && ", "}
           </React.Fragment>
         ))}
-        {!isOneAdmin && "..."})
+        {(admins?.length ?? 0) > 3 && "..."})
       </>
     );
   };
