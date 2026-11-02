@@ -90,9 +90,7 @@ class ModelPriceResolverTest {
         assertThat(match.customRow()).isEqualTo(row);
         assertThat(match.nameForm()).isEqualTo(NameForm.DATE_STRIPPED);
         assertThat(match.price().inputPrice()).isEqualByComparingTo("0.000001");
-        assertThat(match.price().cacheReadInputTokenPrice())
-                .isEqualByComparingTo(
-                        ModelPriceTable.get("gpt-5-mini-2025-08-07", "openai").cacheReadInputTokenPrice());
+        assertThat(match.price().cacheReadInputTokenPrice()).isEqualByComparingTo("2.5E-8");
     }
 
     @Test
@@ -130,7 +128,9 @@ class ModelPriceResolverTest {
 
         var match = ModelPriceResolver.resolve("gpt-5-mini", GATEWAY_HOST, layers(row)).orElseThrow();
 
-        assertThat(match.price()).isSameAs(ModelPriceTable.get("gpt-5-mini", "azure"));
+        assertThat(match.price().inputPrice()).isEqualByComparingTo("2.5E-7");
+        assertThat(match.price().outputPrice()).isEqualByComparingTo("0.000002");
+        assertThat(match.price().cacheReadInputTokenPrice()).isEqualByComparingTo("2.5E-8");
         assertThat(match.provider()).isEqualTo(GATEWAY_HOST);
         assertThat(match.customRow()).isEqualTo(row);
     }
