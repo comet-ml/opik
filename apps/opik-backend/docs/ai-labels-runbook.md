@@ -464,10 +464,12 @@ Each night writes its record as it goes:
 
 | Table | What |
 |---|---|
-| `topic_nights` | One row per night (the UTC date): `started_at`, `finished_at`, `outcome` (`running`, `finished`, or `failed` when a read of the workspaces, lists or projects failed), `eligible_workspaces`, `count_failures`, and `projects` (JSON, projects per decision). Written when the night starts and when it ends, also with no project. A night run again for the same date replaces its row and its project rows. A night whose start write fails does not run: no rows are mixed with an earlier run of the date, and "Night not started" sees it. Later write failures are a WARN for the first of the night (`Topics night '<night>' could not write its record`), DEBUG for the rest, and a WARN with their count at the night's end. |
+| `topic_nights` | One row per night (the UTC date): `started_at`, `finished_at`, `outcome` (`running`, `finished`, or `failed` when a read of the workspaces, lists or projects failed), `eligible_workspaces`, `count_failures`, and `projects` (JSON, projects per decision). Written when the night starts and when it ends, also with no project. A night run again for the same date replaces its row and its project rows. |
 | `topic_night_projects` | One row per project the night looked at, skips included: `workspace_id`, `project_id`, `vectors`, `decision`, `reason`, `run_id` (null when no run started). A workspace whose count read failed has one row with a null `project_id` and decision `count_failed`. |
 
-A record write that fails logs a WARN (`could not write its record`) and the night goes on.
+A night whose start write fails does not run, so a rerun of a date never mixes its rows with the earlier run's; if
+starts keep failing, "Night not started" fires. A later record write that fails logs a WARN (`could not write its record`) for the first
+of the night, DEBUG for the rest, and a WARN with their count at the night's end; the night goes on.
 
 The state gauges come from these tables. Each pod reads them once a minute and keeps the result; a scrape reads no
 table. Every pod publishes the same values: read them with `max`, never `sum`. They are published only while
