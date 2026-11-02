@@ -6,6 +6,13 @@ import {
   LLMJudgeDetailsThreadFormSchema,
   LLMJudgeDetailsTraceFormSchema,
 } from "./schema";
+import { getRuleUIType } from "./helpers";
+import {
+  EVALUATORS_RULE_TYPE,
+  EvaluatorsRule,
+  LLMJudgeObject,
+  UI_EVALUATORS_RULE_TYPE,
+} from "@/types/automations";
 import {
   LLM_JUDGE,
   LLM_MESSAGE_ROLE,
@@ -14,6 +21,7 @@ import {
 } from "@/types/llm";
 
 const DECISION_MODEL = "~typesafe/jev-latest";
+const LUNA_MODEL = "gpt-6-luna";
 
 const userMessage = (content: string): LLMMessage => ({
   id: content,
@@ -206,16 +214,43 @@ describe("Decision model rule validation", () => {
 
     expect(result.success).toBe(true);
   });
+
+  it("applies the decision model rules to gpt-6-luna only on the Decisions API", () => {
+    const numericScore = [
+      {
+        name: "quality",
+        type: LLM_SCHEMA_TYPE.INTEGER,
+        description: "Rate it",
+        unsaved: false,
+      },
+    ];
+
+    const chatJudge = LLMJudgeDetailsTraceFormSchema.safeParse(
+      decisionModelDetails({ model: LUNA_MODEL, schema: numericScore }),
+    );
+    const decisionsJudge = LLMJudgeDetailsTraceFormSchema.safeParse(
+      decisionModelDetails({
+        model: LUNA_MODEL,
+        api: "decisions",
+        schema: numericScore,
+      }),
+    );
+
+    expect(chatJudge.success).toBe(true);
+    expect(issueMessages(decisionsJudge)).toContain(
+      "Decision models only support Boolean scores",
+    );
+  });
 });
 
 describe("Decision model rule on save", () => {
-  it("sends the model name only and no budget", () => {
+  it("sends the model name with the Decisions API and no budget", () => {
     const object = convertLLMJudgeDataToLLMJudgeObject(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       decisionModelDetails() as any,
     );
 
-    expect(object.model).toEqual({ name: DECISION_MODEL });
+    expect(object.model).toEqual({ name: DECISION_MODEL, api: "decisions" });
     expect(object.max_cost_usd).toBeNull();
     expect(object.schema).toHaveLength(1);
     expect(object.messages).toEqual([
@@ -224,5 +259,57 @@ describe("Decision model rule on save", () => {
         content: "Question: {{question}}\nAnswer: {{answer}}",
       }),
     ]);
+  });
+});
+
+describe("gpt-6-luna rule on save", () => {
+  it("sends the Decisions API for a Decision model rule only", () => {
+    const decisionsRule = convertLLMJudgeDataToLLMJudgeObject(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      decisionModelDetails({ model: LUNA_MODEL, api: "decisions" }) as any,
+    );
+    const chatRule = convertLLMJudgeDataToLLMJudgeObject(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      decisionModelDetails({ model: LUNA_MODEL }) as any,
+    );
+
+    expect(decisionsRule.model).toEqual({ name: LUNA_MODEL, api: "decisions" });
+    expect(chatRule.model.name).toBe(LUNA_MODEL);
+    expect(chatRule.model.api).toBeUndefined();
+  });
+});
+
+describe("Rule type of a saved rule", () => {
+  const judgeRule = (model: LLMJudgeObject["model"]) =>
+    ({
+      type: EVALUATORS_RULE_TYPE.llm_judge,
+      code: { model, messages: [], schema: [] },
+    }) as unknown as EvaluatorsRule;
+
+  it.each([
+    [
+      "Jev without api",
+      { name: DECISION_MODEL },
+      UI_EVALUATORS_RULE_TYPE.decision_model,
+    ],
+    [
+      "Jev with api",
+      { name: DECISION_MODEL, api: "decisions" },
+      UI_EVALUATORS_RULE_TYPE.decision_model,
+    ],
+    [
+      "gpt-6-luna with api",
+      { name: LUNA_MODEL, api: "decisions" },
+      UI_EVALUATORS_RULE_TYPE.decision_model,
+    ],
+    [
+      "gpt-6-luna without api",
+      { name: LUNA_MODEL },
+      UI_EVALUATORS_RULE_TYPE.llm_judge,
+    ],
+  ])("%s", (_, model, expected) => {
+    expect(getRuleUIType(judgeRule(model as LLMJudgeObject["model"]))).toBe(
+      expected,
+    );
   });
 });

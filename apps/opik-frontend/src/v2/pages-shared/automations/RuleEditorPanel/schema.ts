@@ -7,6 +7,7 @@ import isEmpty from "lodash/isEmpty";
 import isPlainObject from "lodash/isPlainObject";
 import {
   LLMJudgeObject,
+  LLMJudgeModelApi,
   EVALUATORS_RULE_SCOPE,
   UI_EVALUATORS_RULE_TYPE,
   EVALUATORS_RULE_TYPE,
@@ -160,6 +161,7 @@ export const FiltersSchema = z
 
 type LLMJudgeRefineData = {
   model: string;
+  api?: LLMJudgeModelApi;
   messages: LLMMessage[];
   variables: Record<string, string>;
   parsingVariablesError?: boolean;
@@ -214,7 +216,7 @@ const refineDecisionModelRule = (
   ctx: z.RefinementCtx,
   scope: EVALUATORS_RULE_SCOPE,
 ) => {
-  if (!isDecisionModel(data.model) || !data.messages.length) {
+  if (!isDecisionModel(data.model, data.api) || !data.messages.length) {
     return;
   }
 
@@ -280,6 +282,8 @@ const LLMJudgeBaseSchema = z.object({
       required_error: "Model is required",
     })
     .min(1, { message: "Model is required" }),
+  // Set by Decision model rules: gpt-6-luna is a chat model too, so its rules say which API to call.
+  api: z.literal("decisions").optional(),
   config: z.object({
     temperature: z.number().optional(),
     seed: z
@@ -475,7 +479,7 @@ export const LLMJudgeDetailsThreadFormSchema = LLMJudgeBaseSchema.extend({
   variables: z.record(z.string(), z.string()),
 }).superRefine((data, ctx) => {
   requirePrompt(data, ctx);
-  if (isDecisionModel(data.model)) {
+  if (isDecisionModel(data.model, data.api)) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       message:
@@ -885,6 +889,7 @@ export const convertLLMJudgeObjectToLLMJudgeData = (data: LLMJudgeObject) => {
     : rawConfig;
   return {
     model,
+    api: data.model?.api,
     config,
     template: LLM_JUDGE.custom,
     messages: convertProviderToLLMMessages(data.messages),
@@ -914,9 +919,9 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
     name: data.model as PROVIDER_MODEL_TYPE,
   };
 
-  if (isDecisionModel(data.model)) {
+  if (isDecisionModel(data.model, data.api)) {
     return {
-      model,
+      model: { ...model, api: "decisions" },
       messages: convertLLMToProviderMessages(data.messages),
       variables: data.variables,
       schema: data.schema,

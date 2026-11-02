@@ -138,6 +138,7 @@ export const DEFAULT_LLM_AS_JUDGE_DATA = {
 const DECISION_MODEL_DEFAULT_DATA = {
   ...EMPTY_JUDGE_DATA,
   model: DECISION_MODELS[0].value,
+  api: "decisions" as const,
 };
 
 export const DEFAULT_DECISION_MODEL_DATA = {
