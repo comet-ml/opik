@@ -42,7 +42,8 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
  * scrape only reads the kept values, and ages are computed then from kept timestamps. Every pod publishes the same
  * values: aggregate them with {@code max}. Workspace names are resolved when MySQL is read, never in a callback. Nothing
  * is published while the nightly job is off, nor before the first night ever, except the refresher's own heartbeat
- * ({@code state_age_seconds}), which is published whenever the job is on. A read that fails keeps the last values and
+ * ({@code state_age_seconds}) and the age since the last start, which counts from the refresher's start until a night
+ * starts: both are published whenever the job is on. A read that fails keeps the last values and
  * counts in {@code state_refresh_failures}.
  *
  * <p>A gauge is one name, a description, and a list of series built at refresh: one more is a query and a
@@ -131,9 +132,11 @@ public class TopicsNightlyGauges implements Managed {
                         .filter(__ -> enabled())
                         .ifPresent(from -> measurement.record(secondsSince(from))));
         meter.gaugeBuilder(LAST_STARTED_AGE).setUnit("s")
-                .setDescription("Seconds since the latest night started, scheduled or by hand")
-                .buildWithCallback(measurement -> current()
-                        .ifPresent(state -> measurement.record(secondsSince(state.lastStartedAt()))));
+                .setDescription("Seconds since the latest night started, scheduled or by hand; before the first night "
+                        + "ever, since this pod started reading, so a first night that never starts is seen too")
+                .buildWithCallback(measurement -> current().map(Snapshot::lastStartedAt)
+                        .or(() -> Optional.ofNullable(began).filter(__ -> enabled()))
+                        .ifPresent(from -> measurement.record(secondsSince(from))));
         meter.gaugeBuilder(RUNNING).setUnit("s")
                 .setDescription("Seconds the oldest night still running has run; 0 when none runs. A night whose pod "
                         + "died stays running until the next night's housekeeping fails it")
