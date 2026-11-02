@@ -139,6 +139,41 @@ def test_jsonable_encoder__numpy_scalar__encoded_as_json_number_or_bool(
 @pytest.mark.parametrize(
     "obj,expected",
     [
+        (np.longdouble(1.5), 1.5),
+        (np.clongdouble(1 + 2j), "(1+2j)"),
+        (np.complex128(1 + 2j), "(1+2j)"),
+        (np.complex64(1 + 2j), "(1+2j)"),
+    ],
+)
+def test_jsonable_encoder__numpy_extended_and_complex_scalars__encoded_as_number_or_text(
+    obj, expected
+):
+    assert jsonable_encoder.encode(obj) == expected
+
+
+@pytest.mark.parametrize(
+    "obj,expected",
+    [
+        (np.float16("nan"), "nan"),
+        (np.float16("inf"), "inf"),
+        (np.float32("nan"), "nan"),
+        (np.float32("inf"), "inf"),
+        (np.float32("-inf"), "-inf"),
+        (np.float64("nan"), "nan"),
+        (np.float64("-inf"), "-inf"),
+        (np.longdouble("inf"), "inf"),
+    ],
+)
+def test_jsonable_encoder__numpy_non_finite_float__encoded_as_text(obj, expected):
+    assert jsonable_encoder.encode(obj) == expected
+    assert json.dumps(jsonable_encoder.encode(obj), allow_nan=False) == (
+        f'"{expected}"'
+    )
+
+
+@pytest.mark.parametrize(
+    "obj,expected",
+    [
         (
             date(2020, 1, 1),
             "2020-01-01",
