@@ -77,8 +77,11 @@ class ModelPriceServiceImpl implements ModelPriceService {
             var validation = validate(request);
             var result = transactionTemplate.inTransaction(WRITE, handle -> store.replaceAll(handle, organizationId,
                     validation.rows(), request.expectedVersion(), userName));
-            log.info("Replaced model prices, organization '{}', version '{}', saved '{}'", organizationId,
-                    result.version(), result.saved());
+            if (result.saved()) {
+                log.info("Replaced model prices, organization '{}', version '{}'", organizationId, result.version());
+            } else {
+                log.info("Model prices unchanged, organization '{}', version '{}'", organizationId, result.version());
+            }
             return result.withWarnings(validation.warnings());
         }).subscribeOn(Schedulers.boundedElastic());
     }

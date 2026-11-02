@@ -50,7 +50,7 @@ class ModelPriceStore {
             @NonNull List<CustomModelPriceValidator.ValidRow> rows, @Nullable Long expectedVersion,
             @NonNull String userName) {
         var dao = handle.attach(ModelPriceDAO.class);
-        dao.insertListIfMissing(organizationId, userName);
+        dao.lockOrCreateList(organizationId, userName);
         long current = dao.lockList(organizationId).version();
         checkExpectedVersion(expectedVersion, current);
         var diff = ModelPriceDiff.of(dao.findRows(organizationId), rows, newId);

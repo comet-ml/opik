@@ -14,6 +14,8 @@ import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 import org.jdbi.v3.stringtemplate4.UseStringTemplateEngine;
 
+import javax.annotation.Nullable;
+
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -31,12 +33,16 @@ interface ModelPriceDAO {
     record ListHeader(long version, int rowCount) {
     }
 
-    record HistoryEntry(UUID id, UUID rowId, String action, String beforeRow, String afterRow) {
+    // A created row has no before, a deleted row no after.
+    record HistoryEntry(UUID id, UUID rowId, String action, @Nullable String beforeRow, @Nullable String afterRow) {
     }
 
-    @SqlUpdate("INSERT IGNORE INTO model_price_lists (organization_id, created_by, last_updated_by)" +
-            " VALUES (:organizationId, :userName, :userName)")
-    void insertListIfMissing(@Bind("organizationId") String organizationId, @Bind("userName") String userName);
+    // Not INSERT IGNORE: on an existing row that takes a shared lock, and two saves holding one each then deadlock on
+    // the FOR UPDATE below. ON DUPLICATE KEY UPDATE takes the exclusive lock at once, so the second save waits.
+    @SqlUpdate("INSERT INTO model_price_lists (organization_id, created_by, last_updated_by)" +
+            " VALUES (:organizationId, :userName, :userName)" +
+            " ON DUPLICATE KEY UPDATE version = version")
+    void lockOrCreateList(@Bind("organizationId") String organizationId, @Bind("userName") String userName);
 
     @SqlQuery("SELECT version, row_count FROM model_price_lists WHERE organization_id = :organizationId FOR UPDATE")
     ListHeader lockList(@Bind("organizationId") String organizationId);
@@ -49,7 +55,9 @@ interface ModelPriceDAO {
     void updateList(@Bind("organizationId") String organizationId, @Bind("version") long version,
             @Bind("rowCount") int rowCount, @Bind("userName") String userName);
 
-    @SqlQuery("SELECT * FROM model_prices WHERE organization_id = :organizationId ORDER BY model_name, provider")
+    @SqlQuery("SELECT id, model_name, provider, kind, input_price, output_price, cache_read_price, cache_write_price," +
+            " alias_model_name, alias_provider, note, created_at, created_by, last_updated_at, last_updated_by" +
+            " FROM model_prices WHERE organization_id = :organizationId ORDER BY model_name, provider")
     List<ModelPriceRow> findRows(@Bind("organizationId") String organizationId);
 
     @SqlBatch("INSERT INTO model_prices (id, organization_id, model_name, provider, kind, input_price, output_price," +

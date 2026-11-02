@@ -15,6 +15,10 @@ import org.testcontainers.mysql.MySQLContainer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -53,7 +57,7 @@ class ModelPriceStoreTest {
 
     private List<String> historyActions(String organizationId, long listVersion) {
         return jdbi.withHandle(handle -> handle.createQuery("SELECT action FROM model_prices_history"
-                + " WHERE organization_id = :organizationId AND list_version = :listVersion ORDER BY action")
+                + " WHERE organization_id = :organizationId AND list_version = :listVersion")
                 .bind("organizationId", organizationId)
                 .bind("listVersion", listVersion)
                 .mapTo(String.class)
@@ -87,7 +91,7 @@ class ModelPriceStoreTest {
         assertThat(list.version()).isEqualTo(1);
         assertThat(list.rows()).extracting(CustomModelPrice::modelName).containsExactly("gpt-5-mini", "team-mini");
         assertThat(list.rows().getFirst().inputPerMillion()).isEqualByComparingTo("1.00");
-        assertThat(historyActions(organizationId, 1)).containsExactly("created", "created");
+        assertThat(historyActions(organizationId, 1)).containsExactlyInAnyOrder("created", "created");
     }
 
     @Test
@@ -120,9 +124,33 @@ class ModelPriceStoreTest {
 
         assertThat(result.version()).isEqualTo(2);
         assertThat(result.diff().unchanged()).hasSize(1);
-        assertThat(historyActions(organizationId, 2)).containsExactly("created", "deleted", "updated");
+        assertThat(historyActions(organizationId, 2)).containsExactlyInAnyOrder("created", "deleted", "updated");
         assertThat(load(organizationId).rows()).extracting(CustomModelPrice::modelName)
                 .containsExactly("gpt-4o", "gpt-5-mini", "o3");
+    }
+
+    @Test
+    void concurrentReplaceAllsOfOneListRunOneAfterTheOther() throws Exception {
+        var organizationId = UUID.randomUUID().toString();
+        replace(organizationId, TWO_ROWS, null);
+        int saves = 4;
+        var start = new CyclicBarrier(saves);
+
+        try (var executor = Executors.newFixedThreadPool(saves)) {
+            var results = IntStream.range(0, saves)
+                    .mapToObj(index -> executor.submit(() -> {
+                        start.await();
+                        return replace(organizationId, """
+                                [{"model": "o%d", "provider": "openai", "kind": "fixed", "input_price": "1.00"}]
+                                """.formatted(index), null);
+                    }))
+                    .toList();
+            for (var result : results) {
+                assertThat(result.get(60, TimeUnit.SECONDS).saved()).isTrue();
+            }
+        }
+
+        assertThat(load(organizationId).version()).isEqualTo(1 + saves);
     }
 
     @Test
