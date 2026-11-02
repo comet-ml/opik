@@ -15,18 +15,20 @@ class TopicsWorkspaceNamesTest {
     private static final Instant NOW = Instant.parse("2026-11-02T00:00:00Z");
 
     @Test
-    @DisplayName("The name is looked up once per TTL and paired with the id")
+    @DisplayName("The name is looked up once per TTL, paired with the id, and refreshed after the TTL")
     void nameIsCached() {
         var calls = new AtomicInteger();
-        var names = new TopicsWorkspaceNames(id -> {
-            calls.incrementAndGet();
-            return "name-" + id;
-        }, Clock.fixed(NOW, ZoneOffset.UTC));
+        var clock = new MutableClock(NOW);
+        var names = new TopicsWorkspaceNames(id -> "name-" + id + "-" + calls.incrementAndGet(), clock);
 
-        assertThat(names.name("ws")).isEqualTo("name-ws");
+        assertThat(names.name("ws")).isEqualTo("name-ws-1");
         assertThat(names.of("ws").get(TopicsWorkspaceNames.WORKSPACE_ID)).isEqualTo("ws");
-        assertThat(names.of("ws").get(TopicsWorkspaceNames.WORKSPACE_NAME)).isEqualTo("name-ws");
+        assertThat(names.of("ws").get(TopicsWorkspaceNames.WORKSPACE_NAME)).isEqualTo("name-ws-1");
         assertThat(calls).hasValue(1);
+
+        clock.now = NOW.plus(TopicsWorkspaceNames.NAME_TTL);
+        assertThat(names.name("ws")).isEqualTo("name-ws-2");
+        assertThat(calls).hasValue(2);
     }
 
     @Test
