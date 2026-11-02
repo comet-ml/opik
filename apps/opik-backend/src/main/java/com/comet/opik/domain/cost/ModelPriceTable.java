@@ -382,7 +382,7 @@ public class ModelPriceTable {
             return SpanCostCalculator::textGenerationCost;
         }
 
-        return SpanCostCalculator::defaultCost;
+        return SpanCostCalculator.DEFAULT_COST_CALCULATOR;
     }
 
     private static boolean isPositive(BigDecimal value) {
