@@ -53,12 +53,17 @@ public interface TopicRunDAO {
             @Bind("stats") String stats);
 
     /**
-     * The workspace of each run {@link #failAbandoned} is about to fail, one per run. Locks the rows, so the update in
-     * the same transaction fails exactly these.
+     * The workspace of each run {@link #failAbandoned} is about to fail that is not counted yet, one per run. A run of a
+     * night that finished was counted by that night, even when its row is still {@code running}: marking it failed
+     * threw. Locks the runs' rows, so the update in the same transaction fails these.
      */
     @SqlQuery("""
-            SELECT workspace_id FROM topic_runs
-            WHERE status = 'running' AND started_at < :startedBefore
+            SELECT r.workspace_id FROM topic_runs r
+            WHERE r.status = 'running' AND r.started_at < :startedBefore
+            AND NOT EXISTS (
+                SELECT 1 FROM topic_night_projects np
+                JOIN topic_nights n ON n.night = np.night AND n.outcome = 'finished'
+                WHERE np.run_id = r.run_id)
             FOR UPDATE
             """)
     List<String> findAbandonedWorkspaceIds(@Bind("startedBefore") Instant startedBefore);

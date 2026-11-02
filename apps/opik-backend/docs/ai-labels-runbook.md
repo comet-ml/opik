@@ -295,7 +295,7 @@ or to Other. It writes:
 | `TOPICS_NIGHTLY_WINDOW_DAYS` | `30` | The window, in whole UTC days before the night. |
 | `TOPICS_NIGHTLY_MAX_VECTORS` | `30000` | A larger window keeps its newest traces. |
 | `TOPICS_NIGHTLY_QWEN_DEADLINE` | `120s` | The deadline of the Qwen call. The call uses the `batch` lane, which takes up to 300s. |
-| `TOPICS_NIGHTLY_RUNS_RETENTION` | `90d` | `topic_runs` rows are deleted after this. |
+| `TOPICS_NIGHTLY_RUNS_RETENTION` | `90d` | `topic_runs` rows and the night records (`topic_nights`, `topic_night_projects`) are deleted after this. |
 
 To turn it off, set `TOPICS_NIGHTLY_ENABLED=false` and restart. Saved lists stay.
 
@@ -311,7 +311,8 @@ running reads the workspaces once, at its start, so it still runs the workspace'
   the night endpoint answers `409` until the lock expires. To finish the night sooner, delete the Redis key
   `topics:nightly:lock` and call the night endpoint (see "Running by hand").
 - The night first fails runs left `running` by an earlier night (`error_code = 'abandoned'`), and deletes runs older
-  than the retention.
+  than the retention. It does the same for the night records: a night left `running` past the night lock's lease is
+  set to `failed`, and records older than the retention are deleted.
 - It counts each enabled workspace's projects in the window, drops those under `TOPICS_NIGHTLY_MIN_VECTORS` and those
   with a saved list, and runs the rest smallest first, one at a time.
 - Each run holds the Redis lock `topics:project:<project_id>`, so a run started by hand and the night never build the
@@ -410,20 +411,135 @@ DELETE FROM topic_project_states WHERE project_id = '<project_id>';
 
 ### What to watch
 
+Every metric of one workspace's work has `workspace_id` and `workspace_name` (the name falls back to the id). These
+counters and histograms are for the dashboard. A nightly series starts on the night's pod, so `increase()` misses the
+event that creates it: the alerts read the state gauges further down, not these.
+
 | Metric | Meaning |
 |---|---|
-| `topics.nightly.projects` by `decision` | Projects the night looked at: `skip` (under the minimum, a list already built, or held by a run started by hand), `first_build`, `not_reached` (the budget ran out: they run the next night). `not_reached` above zero means the budget is too short. |
-| `topics.runs` by `status`, `error_code` | Finished runs. |
+| `topics.nightly.projects` by `decision`, `reason` | Projects the night looked at: `skip` with a `reason` (`small`: under the minimum; `deleted`; `already_saved`: a list already built; `locked`: held by a run started by hand), `first_build`, `not_reached` (the budget ran out: they run the next night). `not_reached` above zero means the budget is too short. |
+| `topics.runs` by `status`, `error_code` | Finished runs. Each failed run counts once: `start_failed` when the run could not start (it has no `topic_runs` row), `abandoned` when the next night's housekeeping fails a run its pod left `running`. When marking a run failed throws, the run counts with its own `error_code`; its row stays `running` until housekeeping fails it, which does not count it again. |
 | `topics.run.duration_seconds` by `phase` | Time in `window` (ClickHouse read), `kmeans`, `qwen`, `assign`, `save`. |
-| `topics.qwen.calls` by `outcome` | `ok`, `timeout`, `error`, `bad_answer`. |
+| `topics.qwen.calls` by `outcome` | `ok`, `timeout`, `error`, `bad_answer`. A call counts after its answer is read: an answer that cannot be read is `bad_answer`, not `ok`. |
 | `topics.save.rows` by `table` | Rows saved runs wrote. |
-| `topics.nightly.budget_used_seconds` | Wall time of each night. Near `TOPICS_NIGHTLY_BUDGET` means projects will soon be `not_reached`. |
+| `topics.save.take_back_failures` | Failed saves whose `trace_topics` rows could not be deleted. Readers see those rows until the project's next saved run. |
+| `topics.run.other_share` | The Other share of each saved run (its `stats.other_share`). No alert: no threshold is set. |
+| `topics.nightly.count_failures` | Workspaces whose window count read failed. The night skips all their projects; they run the next night. |
+| `topics.nightly.budget_used_seconds` | Wall time of each night (no workspace). Near `TOPICS_NIGHTLY_BUDGET` means projects will soon be `not_reached`. |
+
+Each night writes its record as it goes:
+
+| Table | What |
+|---|---|
+| `topic_nights` | One row per night (the UTC date): `started_at`, `finished_at`, `outcome` (`running`, `finished`, or `failed` when a read of the workspaces, lists or projects failed), `eligible_workspaces`, `count_failures`, and `projects` (JSON, projects per decision). Written when the night starts and when it ends, also with no project. A night run again for the same date replaces its row and its project rows. |
+| `topic_night_projects` | One row per project the night looked at, skips included: `workspace_id`, `project_id`, `vectors`, `decision`, `reason`, `run_id` (null when no run started). A workspace whose count read failed has one row with a null `project_id` and decision `count_failed`. |
+
+A record write that fails logs a WARN (`could not write its record`) and the night goes on.
+
+The state gauges come from these tables. Each pod reads them once a minute and keeps the result; a scrape reads no
+table. Every pod publishes the same values: read them with `max`, never `sum`. They are published only while
+`TOPICS_ENABLED` and `TOPICS_NIGHTLY_ENABLED` are on, and only from the first night on, except the heartbeat
+`state_age_seconds`. A workspace counts only while it is opted in to both topics and ai-labels.
+
+| Gauge | Value |
+|---|---|
+| `topics.nightly.state_age_seconds` | Seconds since this pod last read the night tables; before its first good read, since it started trying. Published whenever the job is on, also before the first night. Above a few minutes, every other state gauge is stale. |
+| `topics.nightly.state_refresh_failures` | A counter: failed reads of the night tables (WARN `could not read the night tables`). Set to 0 at startup when the job is on. |
+| `topics.nightly.last_started_age_seconds` | Seconds since the latest night started, scheduled or by hand. |
+| `topics.nightly.running_seconds` | Age of the oldest night still `running`; 0 when none. A night whose pod died stays `running` until the next night's housekeeping fails it. |
+| `topics.nightly.last_night.projects` by workspace, `decision`, `reason` | Projects per decision in the latest ended night, `count_failed` included. |
+| `topics.nightly.last_night.runs` by workspace, `status` | Runs the latest ended night started, by their `topic_runs` status: `saved`, `failed` (a run that could not start counts here), `running` (marking it failed threw). |
+| `topics.nightly.stale_projects` by workspace | Projects expected on each of the last 3 ended nights with no saved run since the first of them (a run by hand counts). Expected is any decision but a skip as `small`, `deleted` or `already_saved`: this covers `not_reached`, failed first builds and start failures. 0 for each workspace without one. |
+| `topics.nightly.starved_projects` by workspace | Projects `not_reached` on each of the last 2 ended nights. 0 for each workspace without one. |
+| `topics.workspaces.mismatched` by workspace | 1 for a workspace enabled in `topic_workspaces` and not in `ai_label_workspaces`: no night runs it. |
+
+The Prometheus names replace the dots with underscores, for example `topics_nightly_stale_projects`; the counters end
+in `_total`.
 
 ClickHouse queries of the job have a `log_comment` that starts with `topics:`.
+
+### Alerts
+
+The rules live in comet-monitoring as a PrometheusRule, armed per environment, not in this repo. They read the state
+gauges only, and every rule groups by `k8s_namespace_name`.
+
+| Alert | Condition | PromQL | Check | First step |
+|---|---|---|---|---|
+| Night not started | No night started for 25 hours. | `max by (k8s_namespace_name) (topics_nightly_last_started_age_seconds) > 25 * 3600` | The latest nights query below. | Read the logs for `Topics night` around the cron time. A night lock left by a dead pod (`topics:nightly:lock`) blocks nights until it expires. Run the night by hand (see "Running by hand"). |
+| Night too long | A night runs longer than budget + project timeout + 30 minutes (2 h 45 m with the defaults). | `max by (k8s_namespace_name) (topics_nightly_running_seconds) > 9900` | The latest nights query below; its `running` row. | A night whose pod died stays `running` until the next night: check for a pod restart. Otherwise find the `running` run in `topic_runs` and its logs. |
+| Stale projects | A project was expected on each of the last 3 nights and got no saved run. | `max by (k8s_namespace_name, workspace_id, workspace_name) (topics_nightly_stale_projects) > 0` | The stale-project query below. | Find its runs in `topic_runs`: failed (read `error_code`), never started (a `first_build` row with no `run_id`), or `not_reached` (the budget). |
+| Starved projects | A project was `not_reached` on each of the last 2 nights. | `max by (k8s_namespace_name, workspace_id, workspace_name) (topics_nightly_starved_projects) > 0` | The starved-project query below. | Raise `TOPICS_NIGHTLY_BUDGET`, or split the night. |
+| Failed share | More than 20% of the latest night's runs failed, with at least 5 runs in the namespace. | See below. | The latest night query below. | Group the failures by `error_code`: `qwen_*` points at opik-inference, `window_read` and `save` at ClickHouse or MySQL. A `first_build` row with no `run_id` could not start: MySQL. |
+| Count read failed | A workspace's window count read failed in the latest night. | `max by (k8s_namespace_name, workspace_id, workspace_name) (topics_nightly_last_night_projects{decision="count_failed"}) > 0` | The latest night query below. | The WARN `Topics night count read failed, workspace '<workspace_id>'` has the ClickHouse error (often a guard trip). The workspace runs the next night. |
+| Workspace mismatch | A workspace is opted in to topics and not to ai-labels, for 1 hour. Warning. | `max by (k8s_namespace_name, workspace_id, workspace_name) (topics_workspaces_mismatched) > 0` with `for: 1h` | The mismatch query below. | Opt the workspace in to ai-labels, or out of topics. |
+| State gauges stale | A pod has not read the night tables for 10 minutes: the other nightly alerts are blind. | `max by (k8s_namespace_name) (topics_nightly_state_age_seconds) > 600` | `topics_nightly_state_refresh_failures_total`. | The WARN `Topics nightly gauges could not read the night tables` has the MySQL error. |
+
+The failed-share rule (a pod's series per workspace, so `max` first):
+
+```promql
+sum by (k8s_namespace_name) (max by (k8s_namespace_name, workspace_id, status) (topics_nightly_last_night_runs{status="failed"}))
+  / sum by (k8s_namespace_name) (max by (k8s_namespace_name, workspace_id, status) (topics_nightly_last_night_runs)) > 0.2
+and sum by (k8s_namespace_name) (max by (k8s_namespace_name, workspace_id, status) (topics_nightly_last_night_runs)) >= 5
+```
+
+A quiet day fires none of these but the heartbeats (Night not started, State gauges stale). A night with no project
+still writes its record. A project under the minimum, a deleted project and a project with a list are not expected, so
+they are never stale. A workspace turned off in both opt-in tables is not counted; turned off in only one of them, it
+is a mismatch. With the job off, no gauge is published.
+
+```sql
+-- MySQL: the latest nights
+SELECT night, outcome, started_at, finished_at, eligible_workspaces, count_failures, projects
+FROM topic_nights
+ORDER BY started_at DESC
+LIMIT 5;
+
+-- MySQL: the latest ended night, per workspace, decision and run outcome
+SELECT np.workspace_id, np.decision, np.reason, r.status, r.error_code, COUNT(*) AS projects
+FROM topic_night_projects np
+LEFT JOIN topic_runs r ON r.run_id = np.run_id
+WHERE np.night = (SELECT night FROM topic_nights WHERE outcome <> 'running' ORDER BY started_at DESC LIMIT 1)
+GROUP BY np.workspace_id, np.decision, np.reason, r.status, r.error_code;
+
+-- MySQL: stale projects: expected on each of the last 3 ended nights, no saved run since the first of them
+WITH nights AS (
+    SELECT night, started_at FROM topic_nights WHERE outcome <> 'running' ORDER BY started_at DESC LIMIT 3
+)
+SELECT np.workspace_id, np.project_id, GROUP_CONCAT(DISTINCT np.decision) AS decisions
+FROM topic_night_projects np
+JOIN nights n ON n.night = np.night
+WHERE np.project_id IS NOT NULL AND np.decision <> 'count_failed'
+  AND NOT (np.decision = 'skip' AND np.reason IN ('small', 'deleted', 'already_saved'))
+  AND NOT EXISTS (SELECT 1 FROM topic_runs r
+                  WHERE r.project_id = np.project_id AND r.status = 'saved'
+                    AND r.started_at >= (SELECT MIN(started_at) FROM nights))
+GROUP BY np.workspace_id, np.project_id
+HAVING COUNT(DISTINCT np.night) = 3;
+
+-- MySQL: starved projects: not_reached on each of the last 2 ended nights
+WITH nights AS (
+    SELECT night FROM topic_nights WHERE outcome <> 'running' ORDER BY started_at DESC LIMIT 2
+)
+SELECT np.workspace_id, np.project_id, MAX(np.vectors) AS vectors
+FROM topic_night_projects np
+JOIN nights n ON n.night = np.night
+WHERE np.decision = 'not_reached'
+GROUP BY np.workspace_id, np.project_id
+HAVING COUNT(DISTINCT np.night) = 2;
+
+-- MySQL: workspaces opted in to topics and not to ai-labels
+SELECT t.workspace_id
+FROM topic_workspaces t
+LEFT JOIN ai_label_workspaces a ON a.workspace_id = t.workspace_id
+WHERE t.enabled = TRUE AND (a.workspace_id IS NULL OR a.enabled = FALSE);
+```
+
+The gauges also leave out workspaces no longer opted in and deleted projects; these queries do not.
 
 ### Deletes
 
 A `trace_topics` row lives as long as its trace, as for `topic_vectors`: retention and the trace-delete cascade delete
 both. Deleting a project deletes its MySQL rows too: `topics`, `topic_prototypes`, `topic_project_states` and
-`topic_runs`, since names, definitions and prototypes come from its traces. `topic_runs` rows go after 90 days anyway.
+`topic_runs`, since names, definitions and prototypes come from its traces. `topic_runs` rows go after 90 days anyway,
+and so do the night records (`topic_nights`, `topic_night_projects`); a project's night rows stay until then.
 Deleting a workspace does not delete its MySQL rows, as for `ai_labels`.

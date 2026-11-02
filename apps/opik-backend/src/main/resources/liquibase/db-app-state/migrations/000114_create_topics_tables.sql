@@ -1,6 +1,6 @@
 --liquibase formatted sql
 --changeset yaroslavb:000114_create_topics_tables
---comment: Create topics, topic_prototypes, topic_project_states and topic_runs: a project's topic list and the nightly runs that build it (OPIK-8987)
+--comment: Create topics, topic_prototypes, topic_project_states, topic_runs, topic_nights and topic_night_projects: a project's topic list, the nightly runs that build it, and what each night decided (OPIK-8987)
 
 -- One row per topic a project's nightly run created. An id is never reused: a renamed or merged topic keeps its id, a
 -- retired one keeps its row with retired_at set. inactive_since, low_nights, lo7 and hi7 are the lifecycle streaks of
@@ -93,6 +93,54 @@ CREATE TABLE topic_runs
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
 
+-- One row per night of the nightly job (the UTC date it runs for): written 'running' when the night starts and again
+-- when it ends, also when it looked at no project. A night run again for the same date, by hand, replaces the row and
+-- the date's topic_night_projects rows. outcome is 'failed' when the night threw, or when a pod that died left it
+-- 'running' (the next night's housekeeping fails it). projects counts the night's projects per decision, as a JSON
+-- object. The state gauges read this table; rows go after topics.nightly.runsRetention.
+CREATE TABLE topic_nights
+(
+    night               DATE                                   NOT NULL,
+    started_at          TIMESTAMP(6)                           NOT NULL,
+    finished_at         TIMESTAMP(6)                           NULL,
+    outcome             ENUM ('running', 'finished', 'failed') NOT NULL,
+    eligible_workspaces INT                                    NOT NULL DEFAULT 0,
+    count_failures      INT                                    NOT NULL DEFAULT 0,
+    projects            JSON                                   NULL,
+
+    PRIMARY KEY (night),
+    -- The latest nights, for the state gauges.
+    INDEX topic_nights_started_idx (started_at)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_unicode_ci;
+
+-- One row per project a night looked at, skipped ones included, written when the night decides it. decision is
+-- first_build, skip (reason small, deleted, locked or already_saved) or not_reached; run_id is the run the night started,
+-- null when none started. A workspace whose count read failed gets one row with decision count_failed and no project.
+-- vectors is the project's window count. Rows go with their night.
+CREATE TABLE topic_night_projects
+(
+    id           CHAR(36)     NOT NULL,
+    night        DATE         NOT NULL,
+    workspace_id VARCHAR(150) NOT NULL,
+    project_id   CHAR(36)     NULL,
+    vectors      BIGINT       NULL,
+    decision     VARCHAR(32)  NOT NULL,
+    reason       VARCHAR(32)  NULL,
+    run_id       CHAR(36)     NULL,
+
+    PRIMARY KEY (id),
+    -- A night's projects per workspace: the state gauges and the runbook.
+    INDEX topic_night_projects_night_idx (night, workspace_id),
+    -- Housekeeping: whether an abandoned run's night saw it end.
+    INDEX topic_night_projects_run_idx (run_id)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_unicode_ci;
+
+--rollback DROP TABLE IF EXISTS topic_night_projects;
+--rollback DROP TABLE IF EXISTS topic_nights;
 --rollback DROP TABLE IF EXISTS topic_runs;
 --rollback DROP TABLE IF EXISTS topic_project_states;
 --rollback DROP TABLE IF EXISTS topic_prototypes;

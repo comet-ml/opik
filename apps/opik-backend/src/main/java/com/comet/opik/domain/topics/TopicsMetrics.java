@@ -53,6 +53,7 @@ public class TopicsMetrics {
     private final DoubleHistogram budgetUsed;
     private final LongCounter countFailures;
     private final LongCounter takeBackFailures;
+    private final DoubleHistogram otherShare;
 
     @Inject
     public TopicsMetrics(@NonNull TopicsWorkspaceNames names) {
@@ -94,6 +95,11 @@ public class TopicsMetrics {
                 .setDescription("Failed saves whose trace_topics rows could not be deleted: readers see them until "
                         + "the project's next saved run")
                 .build();
+        // No unit: "1" would add a _ratio suffix to the Prometheus name.
+        this.otherShare = meter.histogramBuilder("topics.run.other_share")
+                .setDescription("Share of a saved run's window traces labelled Other, the stats.other_share of its "
+                        + "topic_runs row")
+                .build();
     }
 
     /** {@code reason} is null for a decision other than skip. */
@@ -131,6 +137,10 @@ public class TopicsMetrics {
 
     void takeBackFailure(@NonNull String workspaceId) {
         takeBackFailures.add(1, names.of(workspaceId));
+    }
+
+    void otherShare(@NonNull String workspaceId, double share) {
+        otherShare.record(share, names.of(workspaceId));
     }
 
     void budgetUsed(@NonNull Duration duration) {

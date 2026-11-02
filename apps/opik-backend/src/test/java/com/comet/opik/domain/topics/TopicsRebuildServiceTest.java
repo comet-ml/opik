@@ -7,11 +7,13 @@ import com.comet.opik.infrastructure.inference.InferenceJson;
 import com.comet.opik.infrastructure.inference.ItemResponse.GenerateResponse;
 import com.comet.opik.infrastructure.inference.ItemResponse.GenerateResult;
 import com.comet.opik.infrastructure.inference.Usage;
+import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.jdbi.v3.core.Handle;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
@@ -33,6 +35,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -178,6 +181,23 @@ class TopicsRebuildServiceTest {
         });
         assertThat(meter.sum("topics.save.rows", "table", "trace_topics", "workspace_id", WORKSPACE_ID))
                 .isEqualTo(TRACES);
+    }
+
+    @Test
+    @DisplayName("a saved run records the Other share it saved in its stats, once, with its workspace")
+    void otherShareIsTheSavedValue() throws Exception {
+        answer(FIXTURE.answer);
+
+        service.firstBuild(runId, WORKSPACE_ID, projectId, night);
+
+        var stats = ArgumentCaptor.forClass(String.class);
+        verify(runDAO).markSaved(eq(runId), any(), stats.capture());
+        double saved = JsonUtils.getMapper().readTree(stats.getValue()).get("other_share").asDouble();
+        assertThat(meter.points("topics.run.other_share")).singleElement().satisfies(point -> {
+            assertThat(point.value()).isEqualTo(saved);
+            assertThat(point.get("workspace_id")).isEqualTo(WORKSPACE_ID);
+            assertThat(point.get("workspace_name")).isEqualTo(WORKSPACE_NAME);
+        });
     }
 
     private void answer(JsonNode output) {

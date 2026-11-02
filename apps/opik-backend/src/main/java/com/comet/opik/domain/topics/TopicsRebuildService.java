@@ -539,6 +539,8 @@ public class TopicsRebuildService {
             metrics.saved(workspaceId, "trace_topics", traceTopics.size());
             metrics.saved(workspaceId, "topics", topics.size());
             metrics.saved(workspaceId, "topic_prototypes", prototypes.size());
+            // The value the run saved in its stats, not computed again.
+            metrics.otherShare(workspaceId, stats.path("other_share").asDouble());
             log.info("Topics run '{}' saved, project '{}', trace topics '{}', topics '{}', prototypes '{}'", runId,
                     projectId, traceTopics.size(), topics.size(), prototypes.size());
         }

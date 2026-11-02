@@ -1,35 +1,46 @@
 package com.comet.opik.domain.topics;
 
+import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.lock.LockService;
 import org.jdbi.v3.core.Handle;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import ru.vyarus.guicey.jdbi3.tx.TxAction;
 import ru.vyarus.guicey.jdbi3.tx.TxConfig;
 
+import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.atLeast;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
  * What a night counts and records, with every store mocked: each project's decision with its reason, a failed count
- * read, a run that cannot start and the runs housekeeping finds abandoned.
+ * read, a run that cannot start, the runs housekeeping finds abandoned, and the night's record.
  */
 @DisplayName("topics nightly service metrics")
 class TopicsNightlyServiceTest {
@@ -37,6 +48,7 @@ class TopicsNightlyServiceTest {
     private static final String WORKSPACE_ID = "ws-1";
     private static final String BROKEN_WORKSPACE_ID = "ws-broken";
     private static final Instant START = Instant.parse("2026-11-02T02:00:00Z");
+    private static final LocalDate NIGHT = LocalDate.of(2026, 11, 2);
 
     private final UUID small = UUID.randomUUID();
     private final UUID deleted = UUID.randomUUID();
@@ -48,6 +60,7 @@ class TopicsNightlyServiceTest {
     private TopicWorkspaceDAO workspaceDAO;
     private TopicRunDAO runDAO;
     private TopicDAO topicDAO;
+    private TopicNightDAO nightDAO;
     private TopicWindowDAO windowDAO;
     private TopicsRebuildService rebuildService;
     private TopicsNightlyService service;
@@ -58,10 +71,12 @@ class TopicsNightlyServiceTest {
         workspaceDAO = mock(TopicWorkspaceDAO.class);
         runDAO = mock(TopicRunDAO.class);
         topicDAO = mock(TopicDAO.class);
+        nightDAO = mock(TopicNightDAO.class);
         var handle = mock(Handle.class);
         when(handle.attach(TopicWorkspaceDAO.class)).thenReturn(workspaceDAO);
         when(handle.attach(TopicRunDAO.class)).thenReturn(runDAO);
         when(handle.attach(TopicDAO.class)).thenReturn(topicDAO);
+        when(handle.attach(TopicNightDAO.class)).thenReturn(nightDAO);
         var template = mock(TransactionTemplate.class);
         when(template.inTransaction(any(TxConfig.class), any()))
                 .thenAnswer(invocation -> invocation.<TxAction<?>>getArgument(1).execute(handle));
@@ -98,8 +113,11 @@ class TopicsNightlyServiceTest {
                 .thenAnswer(invocation -> TopicsRebuildService.Outcome.builder().runId(invocation.getArgument(0))
                         .status(TopicRun.Status.SAVED).build());
 
+        var idGenerator = mock(IdGenerator.class);
+        when(idGenerator.generateId()).thenAnswer(invocation -> UUID.randomUUID());
+
         service = new TopicsNightlyService(new TopicsConfig(), template, windowDAO, rebuildService,
-                new TopicsMetrics(meter.meter), lockService);
+                new TopicsMetrics(meter.meter), lockService, idGenerator);
     }
 
     @Test
@@ -166,5 +184,101 @@ class TopicsNightlyServiceTest {
         assertThat(meter.sum("topics.nightly.projects", "decision", "not_reached", "workspace_id", WORKSPACE_ID))
                 .isEqualTo(2);
         assertThat(meter.points("topics.runs")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("the night's record: a row per project with its decision, reason and run, and the night's counts")
+    void nightRecord() {
+        var runId = UUID.randomUUID();
+        when(rebuildService.startRun(eq(WORKSPACE_ID), eq(started), any())).thenReturn(runId);
+
+        service.runNight(START);
+
+        verify(nightDAO).start(eq(NIGHT), any());
+        verify(nightDAO).deleteProjects(NIGHT);
+        assertThat(rows()).extracting(TopicNightProject::projectId, TopicNightProject::decision,
+                TopicNightProject::reason, TopicNightProject::runId)
+                .containsExactlyInAnyOrder(
+                        tuple(null, "count_failed", null, null),
+                        tuple(small, "skip", "small", null),
+                        tuple(deleted, "skip", "deleted", null),
+                        tuple(built, "skip", "already_saved", null),
+                        tuple(locked, "skip", "locked", null),
+                        tuple(started, "first_build", null, runId));
+        assertThat(rows()).allSatisfy(row -> assertThat(row.night()).isEqualTo(NIGHT));
+        assertThat(end()).satisfies(night -> {
+            assertThat(night.outcome()).isEqualTo(TopicNight.Outcome.FINISHED);
+            assertThat(night.eligibleWorkspaces()).isEqualTo(2);
+            assertThat(night.countFailures()).isEqualTo(1);
+            assertThat(night.projects()).isEqualTo("{\"first_build\":1,\"skip\":4}");
+        });
+    }
+
+    @Test
+    @DisplayName("a night with no workspace still writes its record, finished with no project")
+    void emptyNight() {
+        when(workspaceDAO.eligibleWorkspaceIds()).thenReturn(List.of());
+
+        service.runNight(START);
+
+        verify(nightDAO).start(eq(NIGHT), any());
+        verify(nightDAO, never()).insertProjects(any());
+        assertThat(end()).satisfies(night -> {
+            assertThat(night.outcome()).isEqualTo(TopicNight.Outcome.FINISHED);
+            assertThat(night.eligibleWorkspaces()).isZero();
+            assertThat(night.projects()).isEqualTo("{}");
+        });
+    }
+
+    @Test
+    @DisplayName("a night whose read of the workspaces fails ends its record failed, and still throws")
+    void failedNight() {
+        when(workspaceDAO.eligibleWorkspaceIds()).thenThrow(new IllegalStateException("MySQL down"));
+
+        assertThatThrownBy(() -> service.runNight(START)).isInstanceOf(IllegalStateException.class);
+
+        assertThat(end().outcome()).isEqualTo(TopicNight.Outcome.FAILED);
+    }
+
+    @Test
+    @DisplayName("a record write that fails is logged and the night goes on")
+    void recordWriteFails() {
+        when(rebuildService.startRun(eq(WORKSPACE_ID), eq(started), any())).thenReturn(UUID.randomUUID());
+        doThrow(new IllegalStateException("MySQL down")).when(nightDAO).insertProjects(any());
+
+        var result = service.runNight(START);
+
+        assertThat(result.saved()).isEqualTo(1);
+        assertThat(meter.sum("topics.nightly.projects", "decision", "first_build")).isEqualTo(1);
+        assertThat(end().outcome()).isEqualTo(TopicNight.Outcome.FINISHED);
+    }
+
+    @Test
+    @DisplayName("housekeeping fails nights left running past the night's lease and deletes nights past the retention")
+    void nightHousekeeping() {
+        var before = Instant.now();
+
+        service.runNight(START);
+
+        var startedBefore = ArgumentCaptor.forClass(Instant.class);
+        verify(nightDAO).failAbandoned(startedBefore.capture(), any());
+        assertThat(startedBefore.getValue()).isBetween(before.minus(service.lease()), Instant.now()
+                .minus(service.lease()));
+        var cutoff = LocalDate.ofInstant(before.minus(Duration.ofDays(90)), ZoneOffset.UTC);
+        verify(nightDAO).deleteNightsBefore(cutoff);
+        verify(nightDAO).deleteProjectsBefore(cutoff);
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<TopicNightProject> rows() {
+        ArgumentCaptor<List<TopicNightProject>> rows = ArgumentCaptor.forClass(List.class);
+        verify(nightDAO, atLeast(0)).insertProjects(rows.capture());
+        return rows.getAllValues().stream().flatMap(List::stream).toList();
+    }
+
+    private TopicNight end() {
+        var night = ArgumentCaptor.forClass(TopicNight.class);
+        verify(nightDAO).end(night.capture());
+        return night.getValue();
     }
 }
