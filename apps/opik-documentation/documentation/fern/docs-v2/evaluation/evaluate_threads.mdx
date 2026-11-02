@@ -188,7 +188,7 @@ filter_string='id = "0197ad2a" AND start_time > "2024-01-01T00:00:00Z"'
 **Supported filter fields and operators**
 
 The `evaluate_threads` function supports the following filter fields in the `filter_string` using Opik Query Language (OQL).
-All fields and operators are the same as those supported by `search_traces` and `search_spans`:
+All fields and operators are the same as those supported by `search_traces` and `search_spans`, except `comments`, which `search_spans` does not support:
 
 | Field                     | Type       | Operators                                                                   |
 | ------------------------- | ---------- | --------------------------------------------------------------------------- |
