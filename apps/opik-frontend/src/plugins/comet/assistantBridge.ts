@@ -55,6 +55,13 @@ export function createHostListeners(): HostListeners {
   };
 }
 
+/** Drops every console subscription, once the iframe document that made them is gone. */
+export function clearHostListeners(
+  listenersRef: MutableRefObject<HostListeners>,
+) {
+  Object.values(listenersRef.current).forEach((set) => set.clear());
+}
+
 /** A request made before the console subscribed (sidebar closed or still loading), delivered once it does. */
 export interface PendingRequest<T> {
   data: T;
@@ -310,12 +317,12 @@ export const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
 /**
  * Emit a host event to all subscribed sidebar listeners.
  *
- * Listeners are console closures that can outlive their iframe (see the
- * eviction note in `subscribe`; multi-subscriber events are never evicted). In
- * a detached frame Chromium returns `null` for `localStorage`, so such a
- * closure throws "Cannot read properties of null (reading 'setItem')" — and
- * these calls run inside host React effects, where an uncaught throw takes the
- * whole route down. Isolate each listener so the console can never crash the host.
+ * Listeners are console closures. `AssistantSidebar` drops them when their
+ * iframe document goes away, but one that slips through runs against a dead
+ * frame, where Chromium returns `null` for `localStorage`; it then throws
+ * "Cannot read properties of null (reading 'setItem')" from inside a host
+ * click handler or effect, and an uncaught throw there takes the whole route
+ * down. Isolate each listener so the console can never crash the host.
  */
 export function emitHostEvent<E extends keyof HostEventMap>(
   listenersRef: MutableRefObject<HostListeners>,

@@ -51,6 +51,7 @@ import {
 } from "@/constants/assistantSidebar";
 import useExplainStore from "@/plugins/comet/explain/explainStore";
 import {
+  clearHostListeners,
   createBridge,
   createHostListeners,
   dropStalePending,
@@ -403,28 +404,56 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
     emitHostEvent(listenersRef, "context:changed", context);
   }, [context]);
 
-  // Notify sidebar of visibility on mount. No "closed" event on unmount: the
-  // only listeners are this instance's iframe, which React has already removed
-  // by the time the cleanup runs, and the console persists the flag to its
-  // (by then null) localStorage.
+  // Notify sidebar of visibility on mount. No "closed" event on unmount: its
+  // only listeners belong to this instance's iframe, which is already gone.
   useEffect(() => {
     emitHostEvent(listenersRef, "visibility:changed", { isOpen: true });
   }, []);
+
+  // Console subscriptions live exactly as long as the iframe document that made
+  // them. A document that goes away (the iframe removed while the pod is not
+  // ready, or navigated/reloaded in place) never runs the console's own
+  // cleanup, so its closures would stay in `listenersRef` and run against a
+  // dead frame on the next emit. Drop them on iframe removal and on `pagehide`.
+  const clearConsoleListeners = useCallback(
+    () => clearHostListeners(listenersRef),
+    [],
+  );
+  const watchIframeDocument = useCallback(
+    (e: Event) => {
+      try {
+        (e.currentTarget as HTMLIFrameElement).contentWindow?.addEventListener(
+          "pagehide",
+          clearConsoleListeners,
+          { once: true },
+        );
+      } catch {
+        // A cross-origin console (local dev) can't reach window.opikBridge, so it has no listeners to drop.
+      }
+    },
+    [clearConsoleListeners],
+  );
 
   // Prevent host FocusScope from trapping focus when the iframe gains focus.
   // Radix's FocusScope yanks focus back when it leaves a dialog — stopping
   // propagation on the iframe's focusin keeps it away from document-level listeners.
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
-  const setIframeRef = useCallback((node: HTMLIFrameElement | null) => {
-    const prev = iframeRef.current;
-    if (prev) {
-      prev.removeEventListener("focusin", stopPropagation);
-    }
-    iframeRef.current = node;
-    if (node) {
-      node.addEventListener("focusin", stopPropagation);
-    }
-  }, []);
+  const setIframeRef = useCallback(
+    (node: HTMLIFrameElement | null) => {
+      const prev = iframeRef.current;
+      if (prev) {
+        prev.removeEventListener("focusin", stopPropagation);
+        prev.removeEventListener("load", watchIframeDocument);
+        clearConsoleListeners();
+      }
+      iframeRef.current = node;
+      if (node) {
+        node.addEventListener("focusin", stopPropagation);
+        node.addEventListener("load", watchIframeDocument);
+      }
+    },
+    [clearConsoleListeners, watchIframeDocument],
+  );
 
   // On the page surface, the iframe fills the whole main area, so clicks
   // inside Ollie never bubble to the parent document. Detect the resulting
