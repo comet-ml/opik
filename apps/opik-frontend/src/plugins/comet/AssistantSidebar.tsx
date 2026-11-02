@@ -403,12 +403,12 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
     emitHostEvent(listenersRef, "context:changed", context);
   }, [context]);
 
-  // Notify sidebar of visibility on mount/unmount
+  // Notify sidebar of visibility on mount. No "closed" event on unmount: the
+  // only listeners are this instance's iframe, which React has already removed
+  // by the time the cleanup runs, and the console persists the flag to its
+  // (by then null) localStorage.
   useEffect(() => {
     emitHostEvent(listenersRef, "visibility:changed", { isOpen: true });
-    return () => {
-      emitHostEvent(listenersRef, "visibility:changed", { isOpen: false });
-    };
   }, []);
 
   // Prevent host FocusScope from trapping focus when the iframe gains focus.

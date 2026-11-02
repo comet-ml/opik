@@ -307,14 +307,27 @@ export const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
   },
 });
 
-/** Emit a host event to all subscribed sidebar listeners. */
+/**
+ * Emit a host event to all subscribed sidebar listeners.
+ *
+ * Listeners are console closures that can outlive their iframe (see the
+ * eviction note in `subscribe`; multi-subscriber events are never evicted). In
+ * a detached frame Chromium returns `null` for `localStorage`, so such a
+ * closure throws "Cannot read properties of null (reading 'setItem')" — and
+ * these calls run inside host React effects, where an uncaught throw takes the
+ * whole route down. Isolate each listener so the console can never crash the host.
+ */
 export function emitHostEvent<E extends keyof HostEventMap>(
   listenersRef: MutableRefObject<HostListeners>,
   event: E,
   data: HostEventMap[E],
 ) {
   for (const listener of listenersRef.current[event]) {
-    (listener as (d: HostEventMap[E]) => void)(data);
+    try {
+      (listener as (d: HostEventMap[E]) => void)(data);
+    } catch (error) {
+      console.error(`[AssistantBridge] "${event}" listener failed`, error);
+    }
   }
 }
 
