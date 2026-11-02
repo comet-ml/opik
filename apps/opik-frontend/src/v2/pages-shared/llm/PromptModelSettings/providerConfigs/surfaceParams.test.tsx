@@ -88,10 +88,22 @@ describe("controls an evaluator rule cannot store", () => {
     expect(
       screen.queryByTestId("maxConcurrentRequests-input"),
     ).not.toBeInTheDocument();
-    expect(screen.queryByText("Reasoning effort")).not.toBeInTheDocument();
     expect(
       screen.queryByTestId("maxCompletionTokens-input"),
     ).not.toBeInTheDocument();
+  });
+
+  it("keeps the OpenAI reasoning effort, which a rule stores in custom_parameters", () => {
+    renderPanel(
+      <OpenAIModelConfigs
+        configs={OPEN_AI_CONFIG}
+        model={PROVIDER_MODEL_TYPE.GPT_5_4}
+        onChange={vi.fn()}
+        unsupportedParams={RULE_UNSUPPORTED_PARAMS}
+      />,
+    );
+
+    expect(screen.getByText("Reasoning effort")).toBeInTheDocument();
   });
 
   it("drops them from the custom panel", () => {
@@ -195,10 +207,10 @@ describe("a panel left with no control", () => {
     expect(screen.queryByTestId("temperature-input")).not.toBeInTheDocument();
   });
 
-  it("renders nothing for an OpenAI reasoning model on a rule", () => {
+  it("renders only the effort for an OpenAI reasoning model on a rule", () => {
     // The OpenAI panel shows max output tokens whenever the config carries the key, and a rule's
     // config never does: it holds only temperature and seed.
-    const { container } = renderPanel(
+    renderPanel(
       <OpenAIModelConfigs
         configs={{ temperature: 0.4 }}
         model={PROVIDER_MODEL_TYPE.GPT_6_ASTRA}
@@ -207,7 +219,11 @@ describe("a panel left with no control", () => {
       />,
     );
 
-    expect(container.firstChild).toBeNull();
+    expect(screen.getByText("Reasoning effort")).toBeInTheDocument();
+    expect(screen.queryByText("Temperature")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("maxCompletionTokens-input"),
+    ).not.toBeInTheDocument();
   });
 
   // A rule's config holds only temperature and seed, which PromptModelConfigs casts to the full

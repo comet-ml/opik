@@ -10,6 +10,7 @@ import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import usePluginsStore from "@/store/PluginsStore";
 import useOllieCredits from "@/api/ollie/useOllieCredits";
 import useCanProposeArtifacts from "@/hooks/useCanProposeArtifacts";
+import { useIsAssistantOpen } from "@/store/AppStore";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { AnnotationQueueAnnotatorView } from "@/types/annotation-queues";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
@@ -30,8 +31,28 @@ import {
 } from "./annotatorViewData";
 import DefaultThreadView from "./DefaultThreadView";
 import DefaultTraceView from "./DefaultTraceView";
+import AnnotatorViewSampleLabel from "./AnnotatorViewSampleLabel";
 
 const DRAFTING_TIMEOUT_MS = 120_000;
+
+const ollieChats = new Map<
+  string,
+  { entryId: string; sessionId?: string; html: string | null; details: string }
+>();
+
+const useTrackOllieSession = (chatKeyRef: React.MutableRefObject<string>) => {
+  const unsubscribe = useRef<() => void>();
+  useEffect(() => () => unsubscribe.current?.(), []);
+  return useCallback(() => {
+    unsubscribe.current?.();
+    unsubscribe.current = window.opikBridge?.subscribeConversationStarted?.(
+      ({ entryId, sessionId }) => {
+        const chat = ollieChats.get(chatKeyRef.current);
+        if (chat && chat.entryId === entryId) chat.sessionId = sessionId;
+      },
+    );
+  }, [chatKeyRef]);
+};
 
 export type AnnotatorViewOllieState =
   | "none"
@@ -76,7 +97,7 @@ const useAnnotatorViewEditor = ({
     queueId,
     enabled: open && isThreadScope,
   });
-  const { sampleIndex, setSampleIndex, fromProject, isPending } = isThreadScope
+  const { sampleIndex, setSampleIndex, isPending } = isThreadScope
     ? threadSamples
     : traceSamples;
 
@@ -90,10 +111,16 @@ const useAnnotatorViewEditor = ({
                 : undefined;
             return {
               key: thread.id,
-              label: `Thread: ${
-                formatThreadDateRange(thread.start_time, thread.end_time) ??
-                thread.id
-              }`,
+              label: (
+                <AnnotatorViewSampleLabel
+                  scope="thread"
+                  name={
+                    formatThreadDateRange(thread.start_time, thread.end_time) ??
+                    thread.id
+                  }
+                  id={thread.id}
+                />
+              ),
               data: traces
                 ? toAnnotatorThreadViewData(thread, traces)
                 : undefined,
@@ -102,7 +129,13 @@ const useAnnotatorViewEditor = ({
           })
         : traceSamples.samples.map((trace) => ({
             key: trace.id,
-            label: `Trace: ${trace.name}`,
+            label: (
+              <AnnotatorViewSampleLabel
+                scope="trace"
+                name={trace.name}
+                id={trace.id}
+              />
+            ),
             data: toAnnotatorTraceViewData(trace),
             fallback: <DefaultTraceView trace={trace} />,
           })),
@@ -124,6 +157,26 @@ const useAnnotatorViewEditor = ({
     assistantAvailable &&
     canProposeArtifacts;
   const { data: hasCredits } = useOllieCredits();
+  const isAssistantOpen = useIsAssistantOpen();
+  const isOllieOpen = ollieEnabled && isAssistantOpen;
+  const chatKey = `annotator_view:${projectId}:${queueId ?? "new"}:${scope}`;
+  const chatKeyRef = useRef(chatKey);
+  chatKeyRef.current = chatKey;
+  const hasStartedOllie = useRef(false);
+  const trackOllieSession = useTrackOllieSession(chatKeyRef);
+  useEffect(() => {
+    if (open) return;
+    if (!queueId) {
+      for (const key of ollieChats.keys()) {
+        if (key.startsWith(`annotator_view:${projectId}:new:`)) {
+          ollieChats.delete(key);
+        }
+      }
+    }
+    if (!hasStartedOllie.current) return;
+    hasStartedOllie.current = false;
+    window.opikBridge?.setOpen?.(false);
+  }, [open, projectId, queueId]);
 
   const [isDrafting, setIsDrafting] = useState(false);
   const [flashKey, setFlashKey] = useState(0);
@@ -137,6 +190,8 @@ const useAnnotatorViewEditor = ({
   const onApply = useCallback(
     (html: string, kitVersion: number, summary: string) => {
       apply(html, kitVersion, summary);
+      const chat = ollieChats.get(chatKeyRef.current);
+      if (chat) chat.html = html;
       stopDrafting();
       setFlashKey((key) => key + 1);
     },
@@ -176,7 +231,26 @@ const useAnnotatorViewEditor = ({
 
   const startOllie = (fixError?: string) => {
     const action = fixError ? "fix" : hasView ? "edit" : "design";
+    const currentHtml = hasView ? draft.html : null;
+    const details = JSON.stringify([
+      queueName,
+      instructions,
+      feedbackDefinitionNames,
+    ]);
+    const chat = ollieChats.get(chatKey);
+    const sessionId =
+      action !== "fix" && chat?.html === currentHtml && chat.details === details
+        ? chat.sessionId
+        : undefined;
     const entryId = uuidv4();
+    trackOllieSession();
+    ollieChats.set(chatKey, {
+      entryId,
+      sessionId,
+      html: currentHtml,
+      details,
+    });
+    if (!isOllieOpen) hasStartedOllie.current = true;
     trackEvent(OpikEvent.ANNOTATION_QUEUE_VIEW_OLLIE_CLICKED, {
       entry_id: entryId,
       project_id: projectId,
@@ -205,6 +279,7 @@ const useAnnotatorViewEditor = ({
       origin: "annotator_view",
       entryId,
       artifact: { kind: ANNOTATOR_VIEW_ARTIFACT, context },
+      sessionId,
     });
     if (action !== "fix") return;
     setIsDrafting(true);
@@ -222,10 +297,9 @@ const useAnnotatorViewEditor = ({
     sampleIndex,
     setSampleIndex,
     isSamplesPending: isPending,
-    fromProject,
     scope,
-    hasQueue: Boolean(queueId),
     ollieState,
+    isOllieOpen,
     startOllie,
     flashKey,
   };

@@ -364,7 +364,7 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
 
   const isEdit = Boolean(defaultQueue);
   const title = isEdit ? "Edit annotation queue" : "Create annotation queue";
-  const submitText = isEdit ? "Update queue" : "Create queue";
+  const submitText = isEdit ? "Save changes" : "Create queue";
 
   const getQueue = useCallback(() => {
     const formData = form.getValues();
@@ -472,10 +472,10 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
             variant="form"
             title={
               page === "preview" ? (
-                <span className="flex items-center gap-1.5">
+                <span className="flex items-center gap-1">
                   <button
                     type="button"
-                    className="text-muted-slate hover:text-foreground"
+                    className="hover:text-muted-slate"
                     onClick={() => setPage("form")}
                   >
                     {title}
@@ -503,12 +503,10 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
         }
       >
         {page === "preview" && (
-          <div className="min-h-0 flex-1 overflow-y-auto py-3 pl-[19px] pr-5">
-            <AnnotatorViewPreviewPage
-              editor={annotatorViewEditor}
-              onBack={() => setPage("form")}
-            />
-          </div>
+          <AnnotatorViewPreviewPage
+            editor={annotatorViewEditor}
+            onBack={() => setPage("form")}
+          />
         )}
         <div
           className={cn(
@@ -837,7 +835,6 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                   editor={annotatorViewEditor}
                   onPreview={() => setPage("preview")}
                   onStartOllie={startAnnotatorViewOllie}
-                  isVisible={page === "form"}
                 />
               )}
             </form>

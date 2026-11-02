@@ -849,6 +849,9 @@ def evaluate_experiment(
             of the `score` method in metrics that you need to find out which keys
             are mandatory in `task`-returned dictionary.
 
+            Re-scoring runs no task, so `BaseMetric` metrics that use `task_span`
+            are skipped with a warning. Use `evaluate()` to score them.
+
         scoring_functions: List of scorer functions to be executed during evaluation.
             Each scorer function includes a scoring method that accepts predefined
             arguments supplied by the evaluation engine:
@@ -856,6 +859,8 @@ def evaluate_experiment(
             - dataset_item — a dictionary containing the dataset item content,
             - task_outputs — a dictionary containing the LLM task output.
             - task_span - the data collected during the LLM task execution [optional].
+              Re-scoring runs no task, so scoring functions that use `task_span`
+              are skipped with a warning. Use `evaluate()` to score them.
 
         scoring_threads: amount of thread workers to run scoring metrics.
 

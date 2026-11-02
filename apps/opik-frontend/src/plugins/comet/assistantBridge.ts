@@ -113,6 +113,9 @@ export interface BridgeRefs {
     (data: SidebarEventMap["dashboard:updated"]) => void
   >;
   lastRunnerState: MutableRefObject<RunnerBridgeState | null>;
+  conversationStartedListeners: MutableRefObject<
+    Set<(data: SidebarEventMap["conversation:started"]) => void>
+  >;
   pendingChartEdit?: MutableRefObject<PendingRequest<ChartEditRequest> | null>;
   pendingConversation?: MutableRefObject<PendingRequest<
     HostEventMap["conversation:start"]
@@ -252,6 +255,11 @@ export const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
           applyArtifact(data as SidebarEventMap["artifact:proposed"]),
         );
         break;
+      case "conversation:started":
+        refs.conversationStartedListeners.current.forEach((listener) =>
+          listener(data as SidebarEventMap["conversation:started"]),
+        );
+        break;
       case "runner:request-pair":
         refs.onRequestPair.current(
           data as SidebarEventMap["runner:request-pair"],
@@ -290,6 +298,13 @@ export const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
     useExplainStore.subscribe((state, previous) => {
       if (state.capabilities !== previous.capabilities) listener();
     }),
+  setOpen: (open) => refs.onRequestVisibility.current(open),
+  subscribeConversationStarted: (listener) => {
+    refs.conversationStartedListeners.current.add(listener);
+    return () => {
+      refs.conversationStartedListeners.current.delete(listener);
+    };
+  },
 });
 
 /** Emit a host event to all subscribed sidebar listeners. */

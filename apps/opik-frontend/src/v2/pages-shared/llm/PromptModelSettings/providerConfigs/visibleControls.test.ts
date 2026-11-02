@@ -75,7 +75,7 @@ describe("hasVisibleControls", () => {
     ).toBe(true);
   });
 
-  it("is false for an OpenAI reasoning model on a rule", () => {
+  it("is true for an OpenAI reasoning model on a rule, for its effort", () => {
     expect(
       hasVisibleControls(
         PROVIDER_TYPE.OPEN_AI,
@@ -83,7 +83,7 @@ describe("hasVisibleControls", () => {
         RULE_CONFIG,
         RULE_UNSUPPORTED_PARAMS,
       ),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("is true for an OpenAI model that takes temperature on a rule", () => {
@@ -352,7 +352,7 @@ describe("the OpenRouter panel on a model with OpenRouter's lists", () => {
     ).toEqual(shown);
   });
 
-  it("hides the effort on a surface that cannot store it", () => {
+  it("hides the effort only on a surface that cannot store it", () => {
     setLatestModelFlags(
       new Map([
         [
@@ -371,9 +371,16 @@ describe("the OpenRouter panel on a model with OpenRouter's lists", () => {
       getOpenRouterVisibleControls({
         model: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO,
         configs: { temperature: 0 },
-        supports: createSupports(RULE_UNSUPPORTED_PARAMS),
+        supports: createSupports(new Set(["reasoningEffort"])),
       }).reasoningEffort,
     ).toBe(false);
+    expect(
+      getOpenRouterVisibleControls({
+        model: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO,
+        configs: { temperature: 0 },
+        supports: createSupports(RULE_UNSUPPORTED_PARAMS),
+      }).reasoningEffort,
+    ).toBe(true);
   });
 });
 

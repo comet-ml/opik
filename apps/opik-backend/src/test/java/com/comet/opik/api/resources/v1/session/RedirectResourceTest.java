@@ -43,7 +43,6 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.util.Base64;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -67,7 +66,6 @@ class RedirectResourceTest {
     private static final String API_KEY = UUID.randomUUID().toString();
     private static final String NON_EXISTING_WORKSPACE_NAME = UUID.randomUUID().toString();
     private static final String WORKSPACE_NAME = UUID.randomUUID().toString();
-    private static final String TRACE_REDIRECT_URL = "%s/%s/projects/%s/traces?tab=logs&logsType=traces&trace=%s";
     private static final String DATASET_REDIRECT_URL = "%s/%s/datasets/%s/items";
     private static final String EXPERIMENT_REDIRECT_URL = "%s/%s/experiments/%s/compare?experiments=%s";
     private static final String OPTIMIZATION_REDIRECT_URL = "%s/%s/optimizations/%s/compare?optimizations=%s";
@@ -180,8 +178,8 @@ class RedirectResourceTest {
                 workspaceNameForRedirectRequest, getBaseUrlEncoded(), expectedStatus);
         if (expectedStatus == 303) {
             assertThat(redirectURL).isEqualTo(
-                    TRACE_REDIRECT_URL.formatted(wireMock.runtimeInfo().getHttpBaseUrl(), workspaceName,
-                            trace.projectId(), trace.id()));
+                    redirectResourceClient.expectedProjectRedirectUrl(wireMock.runtimeInfo().getHttpBaseUrl(),
+                            workspaceName, trace.projectId(), trace.id()));
         }
     }
 
@@ -266,7 +264,6 @@ class RedirectResourceTest {
     }
 
     private String getBaseUrlEncoded() {
-        String path = wireMock.runtimeInfo().getHttpBaseUrl() + "/api";
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(path.getBytes());
+        return redirectResourceClient.encodedBackendPath(wireMock.runtimeInfo().getHttpBaseUrl());
     }
 }

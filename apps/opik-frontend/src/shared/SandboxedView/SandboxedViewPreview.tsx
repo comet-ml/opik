@@ -2,13 +2,14 @@ import React, { useState } from "react";
 import { AlertCircle, ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
 import { Alert, AlertDescription } from "@/ui/alert";
 import { Button } from "@/ui/button";
+import { Separator } from "@/ui/separator";
 import Loader from "@/shared/Loader/Loader";
 import { KitPack } from "./kit/loadKit";
 import SandboxedView from "./SandboxedView";
 
 export type SandboxedViewSample = {
   key: string;
-  label: string;
+  label: React.ReactNode;
   data: unknown;
   fallback: React.ReactNode;
 };
@@ -66,26 +67,30 @@ const SandboxedViewPreview: React.FC<SandboxedViewPreviewProps> = ({
   };
 
   return (
-    <div className="overflow-hidden rounded-md border border-border">
-      <div className="flex h-9 items-center justify-between gap-2 border-b border-border bg-soft-background px-3">
-        <span className="comet-body-xs-accented truncate">{sample.label}</span>
+    <div className="flex flex-col gap-2">
+      <div className="flex h-6 items-center justify-between gap-2 px-0.5">
+        {sample.label}
         {samples.length > 1 && (
-          <div className="flex shrink-0 items-center gap-1">
+          <div className="flex shrink-0 items-center gap-0.5 text-muted-slate">
             <Button
+              type="button"
               variant="minimal"
-              size="icon-2xs"
+              size="icon-3xs"
+              className="text-muted-slate"
               aria-label="Previous sample"
               disabled={sampleIndex === 0}
               onClick={() => onSampleIndexChange(sampleIndex - 1)}
             >
               <ChevronLeft />
             </Button>
-            <span className="comet-body-xs text-muted-slate">
+            <span className="comet-body-xs">
               {sampleIndex + 1} of {samples.length}
             </span>
             <Button
+              type="button"
               variant="minimal"
-              size="icon-2xs"
+              size="icon-3xs"
+              className="text-muted-slate"
               aria-label="Next sample"
               disabled={sampleIndex >= samples.length - 1}
               onClick={() => onSampleIndexChange(sampleIndex + 1)}
@@ -95,12 +100,9 @@ const SandboxedViewPreview: React.FC<SandboxedViewPreviewProps> = ({
           </div>
         )}
       </div>
+      <Separator className="my-1" />
       {error && (
-        <Alert
-          variant="destructive"
-          size="sm"
-          className="rounded-none border-x-0 border-t-0"
-        >
+        <Alert variant="destructive" size="sm">
           <AlertCircle />
           <AlertDescription className="flex items-center justify-between gap-2">
             <span>
@@ -120,7 +122,7 @@ const SandboxedViewPreview: React.FC<SandboxedViewPreviewProps> = ({
           </AlertDescription>
         </Alert>
       )}
-      <div className="p-3">{renderBody()}</div>
+      {renderBody()}
     </div>
   );
 };

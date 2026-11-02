@@ -1,0 +1,9 @@
+profiles:
+  responses-only:
+    onlyRoute: response_api
+models:
+  openai:
+    - id: o3
+      params:
+        routes:
+          responses_api: {onlyRoute: chat_api}

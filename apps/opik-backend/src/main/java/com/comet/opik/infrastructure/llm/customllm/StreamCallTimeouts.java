@@ -1,24 +1,33 @@
 package com.comet.opik.infrastructure.llm.customllm;
 
 import com.comet.opik.infrastructure.http.BodyDeadline;
+import jakarta.ws.rs.core.HttpHeaders;
 import lombok.AccessLevel;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import okhttp3.Interceptor;
+import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
+import okhttp3.Request;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.math.NumberUtils;
 
 import java.io.IOException;
 import java.net.SocketTimeoutException;
 import java.time.Duration;
+import java.util.Arrays;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 
 /**
- * The timeouts of a call that may be a stream, as the JDK client applied them: the read timeout bounds the wait for
- * the response headers, and once a stream's headers arrived, the stream read timeout bounds each read of its body.
+ * The timeouts of a call that may be a stream. A call that isn't a stream waits for its response headers up to the
+ * read timeout, as the JDK client did. A stream waits for them up to the longer of the read timeout and the stream read
+ * timeout, as a provider can hold its headers while the model reasons, which is silence as much as a pause in the body;
+ * once a stream's headers arrived, the stream read timeout bounds each read of its body.
  *
  * <p>A network interceptor, so the header wait starts once the connection is established and connecting stays
  * bounded by the connect timeout alone. The client's own read timeout, which OkHttp applies to each read, is
@@ -31,19 +40,28 @@ import java.util.function.Predicate;
 @RequiredArgsConstructor(access = AccessLevel.PRIVATE)
 public final class StreamCallTimeouts implements Interceptor {
 
+    private static final String EVENT_STREAM_TYPE = "text";
+    private static final String EVENT_STREAM_SUBTYPE = "event-stream";
+    private static final String QUALITY = "q";
+
     private final Duration readTimeout;
     private final Duration streamReadTimeout;
+    private final Predicate<Request> asksForStream;
     private final Predicate<Response> isStream;
 
     /** For a client that makes only streaming calls. */
     public static StreamCallTimeouts forStreams(@NonNull Duration readTimeout, @NonNull Duration streamReadTimeout) {
-        return new StreamCallTimeouts(readTimeout, streamReadTimeout, response -> true);
+        return new StreamCallTimeouts(readTimeout, streamReadTimeout, request -> true, response -> true);
     }
 
-    /** For a client that makes both kinds of calls: only an event stream's body takes the stream read timeout. */
+    /**
+     * For a client that makes both kinds of calls: only a call that accepts an event stream waits for its headers as a
+     * stream, and only an event stream's body takes the stream read timeout.
+     */
     public static StreamCallTimeouts forEventStreams(@NonNull Duration readTimeout,
             @NonNull Duration streamReadTimeout) {
-        return new StreamCallTimeouts(readTimeout, streamReadTimeout, StreamCallTimeouts::isEventStream);
+        return new StreamCallTimeouts(readTimeout, streamReadTimeout, StreamCallTimeouts::acceptsEventStream,
+                StreamCallTimeouts::isEventStream);
     }
 
     /**
@@ -77,16 +95,20 @@ public final class StreamCallTimeouts implements Interceptor {
     }
 
     private Response withHeaderDeadline(Chain chain) throws IOException {
-        if (readTimeout.isZero()) {
-            return chain.proceed(chain.request());
+        var request = chain.request();
+        var headerTimeout = asksForStream.test(request)
+                ? clientReadTimeout(readTimeout, streamReadTimeout)
+                : readTimeout;
+        if (headerTimeout.isZero()) {
+            return chain.proceed(request);
         }
         var call = chain.call();
-        try (var deadline = BodyDeadline.closing(call::cancel, readTimeout)) {
+        try (var deadline = BodyDeadline.closing(call::cancel, headerTimeout)) {
             try {
-                return chain.proceed(chain.request());
+                return chain.proceed(request);
             } catch (IOException exception) {
                 if (deadline.expired()) {
-                    var timedOut = new SocketTimeoutException("the response headers took longer than the read timeout");
+                    var timedOut = new SocketTimeoutException("the response headers took longer than their timeout");
                     timedOut.initCause(exception);
                     throw timedOut;
                 }
@@ -95,8 +117,25 @@ public final class StreamCallTimeouts implements Interceptor {
         }
     }
 
+    /** A media type that doesn't parse is skipped, so a malformed Accept takes the shorter deadline. */
+    private static boolean acceptsEventStream(Request request) {
+        return request.headers(HttpHeaders.ACCEPT).stream()
+                .flatMap(accept -> Arrays.stream(StringUtils.split(accept, ',')))
+                .map(mediaType -> MediaType.parse(mediaType.trim()))
+                .filter(Objects::nonNull)
+                .anyMatch(StreamCallTimeouts::isAcceptedEventStream);
+    }
+
+    // OkHttp lowercases the type and subtype; an absent quality is 1, and one that isn't a number counts as 0
+    private static boolean isAcceptedEventStream(MediaType mediaType) {
+        var quality = mediaType.parameter(QUALITY);
+        return EVENT_STREAM_TYPE.equals(mediaType.type())
+                && EVENT_STREAM_SUBTYPE.equals(mediaType.subtype())
+                && (quality == null || NumberUtils.toDouble(quality) > 0);
+    }
+
     private static boolean isEventStream(Response response) {
         var contentType = Optional.ofNullable(response.body()).map(ResponseBody::contentType);
-        return contentType.filter(type -> "event-stream".equalsIgnoreCase(type.subtype())).isPresent();
+        return contentType.filter(type -> EVENT_STREAM_SUBTYPE.equals(type.subtype())).isPresent();
     }
 }
