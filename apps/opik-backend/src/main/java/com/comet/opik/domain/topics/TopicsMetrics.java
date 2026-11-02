@@ -2,7 +2,6 @@ package com.comet.opik.domain.topics;
 
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
-import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.DoubleHistogram;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.Meter;
@@ -49,6 +48,7 @@ public class TopicsMetrics {
     private static final AttributeKey<String> KIND = stringKey("kind");
     private static final AttributeKey<String> OUTCOME = stringKey("outcome");
     private static final AttributeKey<String> TABLE = stringKey("table");
+    private static final AttributeKey<String> MODE = stringKey("mode");
 
     private final TopicsWorkspaceNames names;
     private final LongCounter projects;
@@ -158,20 +158,21 @@ public class TopicsMetrics {
         qwenCalls.add(1, names.builder(workspaceId).put(KIND, kind).put(OUTCOME, outcome).build());
     }
 
-    void topics(TopicRun.Mode mode, int live, int bornTonight) {
-        liveTopics.record(live);
+    void topics(@NonNull String workspaceId, @NonNull TopicRun.Mode mode, int live, int bornTonight) {
+        liveTopics.record(live, names.of(workspaceId));
         if (bornTonight > 0) {
-            born.add(bornTonight, Attributes.of(stringKey("mode"), mode.getValue()));
+            born.add(bornTonight, names.builder(workspaceId).put(MODE, mode.getValue()).build());
         }
     }
 
-    void retired(String reason) {
-        retired.add(1, Attributes.of(stringKey("reason"), reason));
+    void retired(@NonNull String workspaceId, @NonNull String reason) {
+        retired.add(1, names.builder(workspaceId).put(REASON, reason).build());
     }
 
-    void churn(TopicChurn.Churn value) {
-        churn.record(value.churn());
-        churnAny.record(value.churnAny());
+    void churn(@NonNull String workspaceId, @NonNull TopicChurn.Churn value) {
+        var attributes = names.of(workspaceId);
+        churn.record(value.churn(), attributes);
+        churnAny.record(value.churnAny(), attributes);
     }
 
     void saved(@NonNull String workspaceId, @NonNull String table, long rows) {

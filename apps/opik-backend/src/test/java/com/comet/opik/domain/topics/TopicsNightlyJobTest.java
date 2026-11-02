@@ -318,6 +318,16 @@ class TopicsNightlyJobTest {
                     assertThat(stats.path("churn_any").isNumber()).isTrue();
                 });
         assertThat(state(built).rebuilds()).isEqualTo(2);
+        // The nightly update's night row, with its run: the state gauges count it as a run of that night.
+        var updateRunId = nightlyRun(built).runId();
+        template.inTransaction(READ_ONLY, handle -> {
+            var nights = handle.attach(TopicNightDAO.class);
+            assertThat(nights.findByNight(night().plusDays(1)).outcome()).isEqualTo(TopicNight.Outcome.FINISHED);
+            assertThat(nights.findProjects(night().plusDays(1))).filteredOn(row -> built.equals(row.projectId()))
+                    .extracting(TopicNightProject::decision, TopicNightProject::reason, TopicNightProject::runId)
+                    .containsExactly(tuple("nightly_update", null, updateRunId));
+            return null;
+        });
     }
 
     @Test

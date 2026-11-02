@@ -34,6 +34,7 @@ import java.util.List;
 @RegisterConstructorMapper(TopicNightDAO.ProjectCount.class)
 @RegisterConstructorMapper(TopicNightDAO.RunCount.class)
 @RegisterConstructorMapper(TopicNightDAO.WorkspaceCount.class)
+@RegisterConstructorMapper(TopicNightDAO.WorkspaceChurn.class)
 public interface TopicNightDAO {
 
     /** Keeps the rows of workspaces still opted in to topics and to ai-labels; {@code np} is the night project. */
@@ -52,6 +53,9 @@ public interface TopicNightDAO {
     }
 
     record WorkspaceCount(@NonNull String workspaceId, long projects) {
+    }
+
+    record WorkspaceChurn(@NonNull String workspaceId, double churn) {
     }
 
     /** The night's row as it starts. A night run again for the same date replaces the earlier row. */
@@ -132,8 +136,9 @@ public interface TopicNightDAO {
     /**
      * Projects that were expected on every one of {@code nights} and got no saved run since {@code from}, the earliest
      * night's start: a run by hand counts. Expected is any decision but a skip as {@code small}, {@code deleted} or
-     * {@code already_saved}: quiet projects, gone ones and ones with a current list are left out. So are projects
-     * deleted since.
+     * {@code already_saved}: quiet projects, gone ones and ones whose last saved run already covered the night are left
+     * out. A project with a list is expected every night, as a {@code nightly_update}. Projects deleted since are left
+     * out too.
      */
     @SqlQuery("SELECT np.workspace_id, COUNT(*) AS projects FROM ("
             + "SELECT workspace_id, project_id FROM topic_night_projects "
@@ -147,6 +152,17 @@ public interface TopicNightDAO {
             + "GROUP BY np.workspace_id")
     List<WorkspaceCount> countStale(@BindList("nights") Collection<LocalDate> nights,
             @Bind("nightCount") int nightCount, @Bind("from") Instant from);
+
+    /**
+     * The highest {@code stats.churn} of the night's saved nightly updates, per workspace. A workspace without one, or
+     * whose runs have a null churn (no trace labelled the night before), has no row.
+     */
+    @SqlQuery("SELECT np.workspace_id, MAX(CAST(JSON_EXTRACT(r.stats, '$.churn') AS DOUBLE)) AS churn "
+            + "FROM topic_night_projects np JOIN topic_runs r ON r.run_id = np.run_id " + ELIGIBLE
+            + "WHERE np.night = :night AND np.decision = 'nightly_update' AND r.status = 'saved' "
+            + "AND JSON_TYPE(JSON_EXTRACT(r.stats, '$.churn')) IN ('DOUBLE', 'DECIMAL', 'INTEGER', 'UNSIGNED INTEGER') "
+            + "GROUP BY np.workspace_id")
+    List<WorkspaceChurn> maxChurn(@Bind("night") LocalDate night);
 
     /** Projects {@code not_reached} on every one of {@code nights}, still existing. */
     @SqlQuery("SELECT np.workspace_id, COUNT(*) AS projects FROM ("

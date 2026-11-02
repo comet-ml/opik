@@ -216,6 +216,49 @@ class TopicsNightlyServiceTest {
     }
 
     @Test
+    @DisplayName("a project with live topics gets a nightly update: its decision, run and night row say so")
+    void nightlyUpdate() {
+        when(topicDAO.findProjectsWithLiveTopics(any())).thenAnswer(invocation -> invocation
+                .<Collection<UUID>>getArgument(0).contains(started) ? List.of(started) : List.of());
+        var runId = UUID.randomUUID();
+        when(rebuildService.startRun(WORKSPACE_ID, started, TopicRun.Mode.NIGHTLY_UPDATE)).thenReturn(runId);
+
+        var result = service.runNight(START);
+
+        assertThat(result.saved()).isEqualTo(1);
+        verify(rebuildService).run(runId, WORKSPACE_ID, started, NIGHT, TopicRun.Mode.NIGHTLY_UPDATE);
+        assertThat(meter.sum("topics.nightly.projects", "decision", "nightly_update", "workspace_id", WORKSPACE_ID))
+                .isEqualTo(1);
+        assertThat(meter.sum("topics.nightly.projects", "decision", "first_build")).isZero();
+        assertThat(rows()).filteredOn(row -> started.equals(row.projectId())).singleElement().satisfies(row -> {
+            assertThat(row.decision()).isEqualTo("nightly_update");
+            assertThat(row.reason()).isNull();
+            assertThat(row.runId()).isEqualTo(runId);
+            assertThat(row.workspaceId()).isEqualTo(WORKSPACE_ID);
+        });
+        assertThat(end().projects()).isEqualTo("{\"nightly_update\":1,\"skip\":4}");
+    }
+
+    @Test
+    @DisplayName("a nightly update that cannot start is counted once, as start_failed, under its own decision")
+    void nightlyUpdateStartFailure() {
+        when(topicDAO.findProjectsWithLiveTopics(any())).thenReturn(List.of(started));
+        when(rebuildService.startRun(WORKSPACE_ID, started, TopicRun.Mode.NIGHTLY_UPDATE))
+                .thenThrow(new IllegalStateException("MySQL down"));
+
+        var result = service.runNight(START);
+
+        assertThat(result.failed()).isEqualTo(1);
+        assertThat(meter.points("topics.runs")).singleElement()
+                .satisfies(point -> assertThat(point.get("error_code")).isEqualTo("start_failed"));
+        assertThat(rows()).filteredOn(row -> started.equals(row.projectId())).singleElement()
+                .satisfies(row -> {
+                    assertThat(row.decision()).isEqualTo("nightly_update");
+                    assertThat(row.runId()).isNull();
+                });
+    }
+
+    @Test
     @DisplayName("a night with no workspace still writes its record, finished with no project")
     void emptyNight() {
         when(workspaceDAO.eligibleWorkspaceIds()).thenReturn(List.of());

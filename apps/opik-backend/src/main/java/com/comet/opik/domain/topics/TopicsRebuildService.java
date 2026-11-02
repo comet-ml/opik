@@ -387,7 +387,7 @@ public class TopicsRebuildService {
                 return null;
             });
             if (churn != null) {
-                metrics.churn(churn);
+                metrics.churn(workspaceId, churn);
             }
         }
 
@@ -829,7 +829,7 @@ public class TopicsRebuildService {
             metrics.saved(workspaceId, "trace_topics", traceTopics.size());
             metrics.saved(workspaceId, "topics", topics.size());
             metrics.saved(workspaceId, "topic_prototypes", prototypes.size());
-            metrics.topics(TopicRun.Mode.FIRST_BUILD, topics.size(), topics.size());
+            metrics.topics(workspaceId, TopicRun.Mode.FIRST_BUILD, topics.size(), topics.size());
             // The value the run saved in its stats, not computed again.
             metrics.otherShare(workspaceId, stats.path("other_share").asDouble());
             log.info("Topics run '{}' saved, project '{}', trace topics '{}', topics '{}', prototypes '{}'", runId,
@@ -933,9 +933,11 @@ public class TopicsRebuildService {
             metrics.saved(workspaceId, "trace_topics", traceTopics.size());
             metrics.saved(workspaceId, "topics", inserted.size() + updated.size());
             metrics.saved(workspaceId, "topic_prototypes", prototypes.size());
-            metrics.topics(TopicRun.Mode.NIGHTLY_UPDATE, state.liveCount(), bornTonight);
+            metrics.topics(workspaceId, TopicRun.Mode.NIGHTLY_UPDATE, state.liveCount(), bornTonight);
             state.getTopics().stream().filter(topic -> night.equals(topic.getRetiredAt()))
-                    .forEach(topic -> metrics.retired(topic.getRetiredReason().value()));
+                    .forEach(topic -> metrics.retired(workspaceId, topic.getRetiredReason().value()));
+            // The value the run saved in its stats, not computed again.
+            metrics.otherShare(workspaceId, stats.path("other_share").asDouble());
             log.info("Topics run '{}' saved, project '{}', trace topics '{}', topics inserted '{}', updated '{}', "
                     + "prototypes '{}'", runId, projectId, traceTopics.size(), inserted.size(), updated.size(),
                     prototypes.size());
