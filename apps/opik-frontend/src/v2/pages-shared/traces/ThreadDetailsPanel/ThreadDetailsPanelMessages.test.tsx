@@ -342,6 +342,9 @@ class FakeHighlight {
   constructor(...ranges: Range[]) {
     this.ranges = ranges;
   }
+  add(range: Range) {
+    this.ranges.push(range);
+  }
 }
 
 // The trace id of the message each registered range sits in.

@@ -1,6 +1,11 @@
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import { Trace } from "@/types/traces";
-import { findTextRanges, traceMatchesSearch } from "./useThreadSearch";
+import {
+  createMatchHighlight,
+  findTextRanges,
+  scrollRangeIntoView,
+  traceMatchesSearch,
+} from "./useThreadSearch";
 
 const makeTrace = (input: Trace["input"], output: Trace["output"]): Trace =>
   ({ id: "trace-1", input, output }) as Trace;
@@ -40,6 +45,19 @@ describe("traceMatchesSearch", () => {
     expect(traceMatchesSearch(trace, "i")).toBe(
       findTextRanges([root], "i").length > 0,
     );
+  });
+
+  // JsonView renders keys and values unescaped; stringified JSON doubles backslashes and
+  // escapes quotes, which hid turns whose visible text matched.
+  it("matches structured values as they are rendered, not as escaped JSON", () => {
+    const trace = makeTrace(
+      { path: "C:\\Users\\bob\\report.txt", mode: "read" },
+      { reply: 'say "hi"', status: "sent" },
+    );
+
+    expect(traceMatchesSearch(trace, "C:\\Users")).toBe(true);
+    expect(traceMatchesSearch(trace, 'say "hi"')).toBe(true);
+    expect(traceMatchesSearch(trace, "mode")).toBe(true);
   });
 
   it("matches nothing for a blank search, like findTextRanges", () => {
@@ -92,5 +110,44 @@ describe("findTextRanges", () => {
     );
 
     expect(ranges).toHaveLength(1);
+  });
+});
+
+describe("createMatchHighlight", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  // A one- or two-letter search on a large thread yields hundreds of thousands of matches;
+  // spreading them into `new Highlight(...)` threw a RangeError and unmounted the panel.
+  it("holds more matches than fit in a function call's arguments", () => {
+    vi.stubGlobal("Highlight", class extends Set<Range> {});
+    const ranges = Array.from({ length: 500_000 }, () => ({}) as Range);
+
+    expect(createMatchHighlight(ranges).size).toBe(ranges.length);
+  });
+});
+
+describe("scrollRangeIntoView", () => {
+  it("centers the match itself inside the scroll container", () => {
+    const scroller = container("<p>line<br>needle</p>");
+    scroller.style.overflowY = "auto";
+    Object.defineProperties(scroller, {
+      scrollHeight: { value: 4000 },
+      clientHeight: { value: 400 },
+      scrollTop: { value: 1000, writable: true },
+    });
+    scroller.getBoundingClientRect = () => ({ top: 100 }) as DOMRect;
+    scroller.scrollTo = vi.fn() as typeof scroller.scrollTo;
+    document.body.appendChild(scroller);
+
+    const [range] = findTextRanges([scroller], "needle");
+    range.getBoundingClientRect = () => ({ top: 900, height: 20 }) as DOMRect;
+
+    scrollRangeIntoView(range);
+
+    // 1000 + (900 - 100) - (400 - 20) / 2
+    expect(scroller.scrollTo).toHaveBeenCalledWith({ top: 1610 });
+    scroller.remove();
   });
 });

@@ -12,8 +12,18 @@ const CURRENT_MATCH_HIGHLIGHT = "thread-search-current-match";
 // never count as matches.
 const MESSAGE_CONTENT_SELECTOR = "[data-message-content]";
 
-const messageText = (message: unknown) =>
-  isObject(message) ? JSON.stringify(message) : toString(message as string);
+// The strings Messages renders for a message. JsonView shows a structured message's keys and
+// values unescaped, so its stringified JSON would miss text like `C:\Users` or `say "hi"`.
+const messageTexts = (message: unknown): string[] => {
+  if (Array.isArray(message)) return message.flatMap(messageTexts);
+  if (isObject(message)) {
+    return Object.entries(message).flatMap(([key, value]) => [
+      key,
+      ...messageTexts(value),
+    ]);
+  }
+  return [toString(message as string)];
+};
 
 // Matches against the prettified message, the same text Messages renders, with the same
 // regex findTextRanges uses, so a kept turn always has something to highlight.
@@ -25,7 +35,9 @@ export const traceMatchesSearch = (trace: Trace, search: string): boolean => {
   return [
     prettifyMessage(trace.input).message,
     prettifyMessage(trace.output, { type: "output" }).message,
-  ].some((message) => messageText(message).search(regex) !== -1);
+  ]
+    .flatMap(messageTexts)
+    .some((text) => text.search(regex) !== -1);
 };
 
 export const findTextRanges = (roots: Element[], search: string): Range[] => {
@@ -63,6 +75,49 @@ const revealRange = (range: Range) => {
   }
 };
 
+const getScrollParent = (element: Element | null): Element | null => {
+  for (let node = element; node; node = node.parentElement) {
+    const { overflowY } = getComputedStyle(node);
+    if (
+      (overflowY === "auto" || overflowY === "scroll") &&
+      node.scrollHeight > node.clientHeight
+    ) {
+      return node;
+    }
+  }
+  return null;
+};
+
+// Centers the match itself, not its element: a long plain-text message is a single text node,
+// so scrolling its element would leave every match in it at the same position.
+export const scrollRangeIntoView = (range: Range) => {
+  const element = range.startContainer.parentElement;
+  const scroller = getScrollParent(element);
+
+  if (!scroller) {
+    element?.scrollIntoView({ block: "center" });
+    return;
+  }
+
+  const rect = range.getBoundingClientRect();
+  const box = scroller.getBoundingClientRect();
+  scroller.scrollTo({
+    top:
+      scroller.scrollTop +
+      rect.top -
+      box.top -
+      (scroller.clientHeight - rect.height) / 2,
+  });
+};
+
+// Adds ranges one at a time: passing them as constructor arguments overflows the call stack
+// once a short search matches a few hundred thousand times.
+export const createMatchHighlight = (ranges: Range[]) => {
+  const highlight = new Highlight();
+  ranges.forEach((range) => highlight.add(range));
+  return highlight;
+};
+
 const getHighlightRegistry = () =>
   typeof CSS !== "undefined" &&
   "highlights" in CSS &&
@@ -98,21 +153,31 @@ export const useThreadSearch = ({
     setCurrentIndex(0);
   }, [container, search, traces]);
 
+  // Kept apart from the current match so ↑/↓ doesn't rebuild the highlight of every match.
+  useEffect(() => {
+    const registry = getHighlightRegistry();
+    if (!registry || !ranges.length) return;
+
+    registry.set(MATCH_HIGHLIGHT, createMatchHighlight(ranges));
+
+    return () => {
+      registry.delete(MATCH_HIGHLIGHT);
+    };
+  }, [ranges]);
+
   useEffect(() => {
     const current = ranges[currentIndex];
     if (!current) return;
 
     revealRange(current);
-    current.startContainer.parentElement?.scrollIntoView({ block: "center" });
+    scrollRangeIntoView(current);
 
     const registry = getHighlightRegistry();
     if (!registry) return;
 
-    registry.set(MATCH_HIGHLIGHT, new Highlight(...ranges));
     registry.set(CURRENT_MATCH_HIGHLIGHT, new Highlight(current));
 
     return () => {
-      registry.delete(MATCH_HIGHLIGHT);
       registry.delete(CURRENT_MATCH_HIGHLIGHT);
     };
   }, [ranges, currentIndex]);
