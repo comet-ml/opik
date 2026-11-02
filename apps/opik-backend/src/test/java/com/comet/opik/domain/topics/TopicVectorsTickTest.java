@@ -94,6 +94,7 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -412,7 +413,8 @@ class TopicVectorsTickTest {
         embedStub.delay = Duration.ofSeconds(3);
         var meter = new TopicVectorsTickServiceTest.TestMeter();
         var metered = new TopicVectorsTickService(opikConfig.getTopics(), opikConfig.getAiLabels(), template,
-                vectorsDAO, inferenceClient, lockService, taskRegistry, meter.meter);
+                vectorsDAO, inferenceClient, lockService, taskRegistry, TopicVectorsTickServiceTest.names(),
+                meter.meter);
 
         var result = metered.tick(Instant.now());
 
@@ -422,9 +424,11 @@ class TopicVectorsTickTest {
         var attributes = ArgumentCaptor.forClass(Attributes.class);
         verify(meter.counter("topics.vectors.embed.failures")).add(eq(1L), attributes.capture());
         assertThat(attributes.getValue().get(stringKey("code"))).isIn("upstream_error", "out_of_time");
+        assertThat(attributes.getValue().get(stringKey("workspace_name"))).isEqualTo("name-" + workspaceId);
         verify(meter.counter("topics.vectors.skipped"))
-                .add(4, Attributes.of(stringKey("reason"), TopicVectorsTickService.EMBED_FAILED));
-        verify(meter.counter("topics.vectors.written"), never()).add(anyLong());
+                .add(4, TopicVectorsTickServiceTest.workspace(workspaceId)
+                        .put(stringKey("reason"), TopicVectorsTickService.EMBED_FAILED).build());
+        verify(meter.counter("topics.vectors.written"), never()).add(anyLong(), any());
     }
 
     @Test
@@ -435,7 +439,8 @@ class TopicVectorsTickTest {
         labelTraces(workspaceId, 3, 1);
         var meter = new TopicVectorsTickServiceTest.TestMeter();
         var metered = new TopicVectorsTickService(opikConfig.getTopics(), opikConfig.getAiLabels(), template,
-                vectorsDAO, inferenceClient, lockService, taskRegistry, meter.meter);
+                vectorsDAO, inferenceClient, lockService, taskRegistry, TopicVectorsTickServiceTest.names(),
+                meter.meter);
         var find = config().getFind();
         var maxRowsToRead = find.getMaxRowsToRead();
         find.setMaxRowsToRead(1);
@@ -457,6 +462,7 @@ class TopicVectorsTickTest {
         verify(meter.counter("topics.vectors.read.failures")).add(eq(1L), attributes.capture());
         assertThat(attributes.getValue().get(stringKey("phase"))).isEqualTo("find");
         assertThat(attributes.getValue().get(stringKey("workspace_id"))).isEqualTo(workspaceId);
+        assertThat(attributes.getValue().get(stringKey("workspace_name"))).isEqualTo("name-" + workspaceId);
         assertThat(attributes.getValue().get(stringKey("error_type"))).isNotBlank();
 
         assertThat(metered.tick(Instant.now()).written()).isEqualTo(3);

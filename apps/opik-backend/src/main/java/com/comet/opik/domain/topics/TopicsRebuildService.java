@@ -45,6 +45,7 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.CancellationException;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Supplier;
 
@@ -94,6 +95,12 @@ public class TopicsRebuildService {
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull TopicsMetrics metrics;
 
+    /**
+     * Runs counted failed when their mark threw, so a later mark of the same run (its timeout and its own thread race)
+     * does not count it again; that mark removes the entry. Only a mark that throws adds one, a rare MySQL error.
+     */
+    private final Set<UUID> countedOnError = ConcurrentHashMap.newKeySet();
+
     /** How a run ended. {@code errorCode} is null for a saved run. */
     @Builder(toBuilder = true)
     public record Outcome(@NonNull UUID runId, @NonNull TopicRun.Status status, String errorCode) {
@@ -118,13 +125,23 @@ public class TopicsRebuildService {
 
     /**
      * Fails the run unless it already ended. Returns false when it had: the run was saved, or failed by its own thread
-     * and its timeout both.
+     * and its timeout both. Counts the run in {@code topics.runs} once: when this mark fails it, or when the mark throws,
+     * since the run failed whether or not its row says so. Not when the run had already ended: that counted it.
      */
-    public boolean fail(@NonNull UUID runId, @NonNull Code code, @NonNull String message, String stats) {
-        int updated = template.inTransaction(WRITE, handle -> handle.attach(TopicRunDAO.class).markFailed(runId,
-                Instant.now(), code.getValue(), StringUtils.truncate(message, TopicRun.MAX_ERROR_MESSAGE), stats));
-        if (updated == 1) {
-            metrics.run(TopicRun.Status.FAILED, code.getValue());
+    public boolean fail(@NonNull UUID runId, @NonNull String workspaceId, @NonNull Code code, @NonNull String message,
+            String stats) {
+        int updated;
+        try {
+            updated = template.inTransaction(WRITE, handle -> handle.attach(TopicRunDAO.class).markFailed(runId,
+                    Instant.now(), code.getValue(), StringUtils.truncate(message, TopicRun.MAX_ERROR_MESSAGE), stats));
+        } catch (RuntimeException exception) {
+            if (countedOnError.add(runId)) {
+                metrics.run(workspaceId, TopicRun.Status.FAILED, code.getValue());
+            }
+            throw exception;
+        }
+        if (!countedOnError.remove(runId) && updated == 1) {
+            metrics.run(workspaceId, TopicRun.Status.FAILED, code.getValue());
         }
         return updated == 1;
     }
@@ -486,7 +503,7 @@ public class TopicsRebuildService {
             // The prompt holds trace-derived text: DEBUG only.
             log.debug("Topics run '{}' {} prompt, project '{}':\n{}", runId, tag, projectId, prompt);
             var output = call(kind, runId + ":" + tag, prompt, schema, maxTokens, deadline);
-            metrics.qwen(kind, "ok");
+            metrics.qwen(workspaceId, kind, "ok");
             return output == null ? NullNode.getInstance() : output;
         }
 
@@ -522,11 +539,12 @@ public class TopicsRebuildService {
             var output = call(AUTHOR_KIND, runId.toString(), prompt, TopicPrompts.AUTHOR_SCHEMA, QWEN_MAX_TOKENS,
                     config.getNightly().getQwenDeadline().toJavaDuration());
             try {
+                // Counted once the answer is read: an answer that cannot be read is bad_answer, not ok.
                 var answer = AuthorAnswer.parse(output);
-                metrics.qwen(AUTHOR_KIND, "ok");
+                metrics.qwen(workspaceId, AUTHOR_KIND, "ok");
                 return answer;
             } catch (TopicsRunException exception) {
-                metrics.qwen(AUTHOR_KIND, "bad_answer");
+                metrics.qwen(workspaceId, AUTHOR_KIND, "bad_answer");
                 throw exception;
             }
         }
@@ -559,7 +577,7 @@ public class TopicsRebuildService {
                 if (exception.isSchemaViolation()) {
                     // The service checks the answer against the schema: a cut or off-schema answer comes back so.
                     entry.put("outcome", "bad_answer");
-                    metrics.qwen(kind, "bad_answer");
+                    metrics.qwen(workspaceId, kind, "bad_answer");
                     throw new TopicsRunException(Code.QWEN_BAD_ANSWER,
                             "the Qwen %s answer breaks the schema, status '%s'"
                                     .formatted(kind, exception.getHttpStatus()),
@@ -567,7 +585,7 @@ public class TopicsRebuildService {
                 }
                 boolean timeout = isTimeout(exception);
                 entry.put("outcome", timeout ? "timeout" : "error");
-                metrics.qwen(kind, timeout ? "timeout" : "error");
+                metrics.qwen(workspaceId, kind, timeout ? "timeout" : "error");
                 throw new TopicsRunException(timeout ? Code.QWEN_TIMEOUT : Code.QWEN_ERROR,
                         "the Qwen %s call failed, code '%s', status '%s'".formatted(kind, exception.getCode(),
                                 exception.getHttpStatus()),
@@ -575,12 +593,12 @@ public class TopicsRebuildService {
             } catch (RuntimeException exception) {
                 // Not an unreadable answer: the call itself failed (a bad request, an interrupt).
                 entry.put("outcome", "error");
-                metrics.qwen(kind, "error");
+                metrics.qwen(workspaceId, kind, "error");
                 throw new TopicsRunException(Code.QWEN_ERROR, "the Qwen %s call failed".formatted(kind), exception);
             }
             if (response == null || response.result() == null || response.usage() == null) {
                 entry.put("outcome", "error");
-                metrics.qwen(kind, "error");
+                metrics.qwen(workspaceId, kind, "error");
                 throw new TopicsRunException(Code.QWEN_ERROR,
                         "the Qwen %s call answered without a result or usage".formatted(kind));
             }
@@ -716,6 +734,7 @@ public class TopicsRebuildService {
             try {
                 traceTopicsDAO.deleteByRunId(workspaceId, projectId, runId).block();
             } catch (RuntimeException exception) {
+                metrics.takeBackFailure(workspaceId);
                 log.warn("Topics run '{}' could not delete its trace_topics rows after a failed save, project '{}'",
                         runId, projectId, exception);
             } finally {
@@ -806,11 +825,13 @@ public class TopicsRebuildService {
                 takeBack(attempted);
                 throw new TopicsRunException(Code.SAVE, "the save failed", exception);
             }
-            metrics.run(TopicRun.Status.SAVED, null);
-            metrics.saved("trace_topics", traceTopics.size());
-            metrics.saved("topics", topics.size());
-            metrics.saved("topic_prototypes", prototypes.size());
+            metrics.run(workspaceId, TopicRun.Status.SAVED, null);
+            metrics.saved(workspaceId, "trace_topics", traceTopics.size());
+            metrics.saved(workspaceId, "topics", topics.size());
+            metrics.saved(workspaceId, "topic_prototypes", prototypes.size());
             metrics.topics(TopicRun.Mode.FIRST_BUILD, topics.size(), topics.size());
+            // The value the run saved in its stats, not computed again.
+            metrics.otherShare(workspaceId, stats.path("other_share").asDouble());
             log.info("Topics run '{}' saved, project '{}', trace topics '{}', topics '{}', prototypes '{}'", runId,
                     projectId, traceTopics.size(), topics.size(), prototypes.size());
         }
@@ -908,10 +929,10 @@ public class TopicsRebuildService {
                 takeBack(attempted);
                 throw new TopicsRunException(Code.SAVE, "the save failed", exception);
             }
-            metrics.run(TopicRun.Status.SAVED, null);
-            metrics.saved("trace_topics", traceTopics.size());
-            metrics.saved("topics", inserted.size() + updated.size());
-            metrics.saved("topic_prototypes", prototypes.size());
+            metrics.run(workspaceId, TopicRun.Status.SAVED, null);
+            metrics.saved(workspaceId, "trace_topics", traceTopics.size());
+            metrics.saved(workspaceId, "topics", inserted.size() + updated.size());
+            metrics.saved(workspaceId, "topic_prototypes", prototypes.size());
             metrics.topics(TopicRun.Mode.NIGHTLY_UPDATE, state.liveCount(), bornTonight);
             state.getTopics().stream().filter(topic -> night.equals(topic.getRetiredAt()))
                     .forEach(topic -> metrics.retired(topic.getRetiredReason().value()));
@@ -925,7 +946,7 @@ public class TopicsRebuildService {
             var message = StringUtils.defaultIfBlank(ExceptionUtils.getMessage(exception), code.getValue());
             log.warn("Topics run '{}' failed, project '{}', code '{}'", runId, projectId, code.getValue(), exception);
             try {
-                fail(runId, code, message, stats.toString());
+                fail(runId, workspaceId, code, message, stats.toString());
             } catch (RuntimeException markException) {
                 log.error("Topics run '{}' could not be marked failed, project '{}'", runId, projectId,
                         markException);
@@ -940,7 +961,7 @@ public class TopicsRebuildService {
             } finally {
                 var duration = Duration.ofNanos(System.nanoTime() - started);
                 seconds.put(phase, duration.toMillis() / 1000.0);
-                metrics.phase(phase, duration);
+                metrics.phase(workspaceId, phase, duration);
             }
         }
 

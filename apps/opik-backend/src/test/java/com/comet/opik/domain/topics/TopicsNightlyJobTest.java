@@ -73,6 +73,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 
 /**
  * The topics nightly job against real ClickHouse, MySQL and Redis, with opik-inference's {@code /v1/generate} stubbed
@@ -234,6 +235,20 @@ class TopicsNightlyJobTest {
             assertThat(stats.path("seconds").has("kmeans")).isTrue();
         });
         var runId = run.getFirst().runId();
+
+        // The night's record, which the state gauges read.
+        template.inTransaction(READ_ONLY, handle -> {
+            var nights = handle.attach(TopicNightDAO.class);
+            assertThat(nights.findByNight(night()).outcome()).isEqualTo(TopicNight.Outcome.FINISHED);
+            assertThat(nights.findProjects(night())).filteredOn(row -> workspaceId.equals(row.workspaceId()))
+                    .extracting(TopicNightProject::projectId, TopicNightProject::decision, TopicNightProject::reason,
+                            TopicNightProject::runId)
+                    .containsExactlyInAnyOrder(
+                            tuple(built, "first_build", null, runId),
+                            tuple(small, "skip", "small", null),
+                            tuple(deleted, "skip", "deleted", null));
+            return null;
+        });
 
         var topics = topics(built);
         assertThat(topics).isNotEmpty().hasSizeLessThanOrEqualTo(TopicsRebuildService.MAX_TOPICS);

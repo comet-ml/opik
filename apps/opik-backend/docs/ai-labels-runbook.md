@@ -234,22 +234,52 @@ FROM (
 
 ### What to watch
 
+Every metric but `topics.vectors.ticks` and `topics.vectors.tick.phase_seconds` carries `workspace_id` and
+`workspace_name`. The name comes from the React service, once an hour per pod, and is the workspace id when the lookup
+fails. Every series also carries `k8s_namespace_name`: group by it.
+
 | Metric | Meaning |
 |---|---|
-| `topics.vectors.oldest_unvectored_seconds` by `workspace_id` | Age of the oldest done label without a vector that the last tick found in its window. The headline. It grows when the job falls behind or stops. Only the pod that ticked within the last two tick intervals publishes it, so read it with `max` across pods. A workspace whose window read failed, or was not reached, has no value for that tick: watch `topics.vectors.read.failures` with it. It sees only the window: after an outage longer than the short window it stays near the window's length until the long-window pass runs. |
-| `topics.vectors.written` | Vectors stored. |
-| `topics.vectors.skipped` by `reason` | `missing_summary` (the output row the window read saw was gone or of another task version by the summary read, which usually clears on the next tick; a WARN per workspace per tick names the count and the oldest trace), `embed_failed` (the call failed, or the workspace backed off: the next tick retries), `invalid_vector` (a missing, null, zero or wrong-dimension vector), `over_budget` (not enough of the tick left to start a call: the next tick continues), `insert_failed` (the ClickHouse insert failed: the next tick embeds them again), `read_failed` (the summary read failed: the next tick reads them again). |
-| `topics.vectors.read.failures` by `phase`, `workspace_id`, `error_type` | Failed ClickHouse reads: `find` (one workspace's window read, for example a guard trip) or `summaries` (one workspace's summary read). `error_type` is the root cause's class name. |
-| `topics.vectors.embed.failures` by `http_status`, `code`, `error_type` | Failed embed calls. 429 `quota_exceeded` means the embed pool is full. |
-| `topics.vectors.embed.duration_seconds` by `outcome` | Wall time per embed call: `ok`, or the error code. |
+| `topics.vectors.oldest_unvectored_seconds` by workspace | Age of the oldest done label without a vector that the last tick found in its window. The headline. It grows when the job falls behind or stops. Only the pod that ticked within the last two tick intervals publishes it, so read it with `max` across pods. A workspace whose window read failed, or was not reached, has no value for that tick: watch `topics.vectors.read.failures` and `topics.vectors.workspaces_not_read` with it. It sees only the window: after an outage longer than the short window it stays near the window's length until the long-window pass runs. Once a day the long-window tick can show a spike up to the long window: rows normal ticks missed. |
+| `topics.vectors.ticks` by `outcome` | Firings of the job, per pod: `ran`; `not_due` (a tick ran less than one interval ago: most firings with several pods); `lock_held` (another pod holds `topics:vectors:leader`: every firing on a pod that is not the leader); `failed` (the tick threw: the log has `Topic vectors tick failed`). Summed over pods, about one `ran` per tick interval. Each outcome starts at 0 on every pod with topics on. No `ran` while every pod counts `lock_held` means a tick stuck past its lease, or Redis down: the lock service then takes the same path and logs `Failed to acquire lock, executing fallback action`. |
+| `topics.vectors.workspaces_not_read` by workspace | Enabled workspaces a tick did not read because its budget ran out (one WARN per tick). They have no lag value for that tick. The offset moves by one workspace per tick, so the same workspaces can stay unread for many ticks in a row. Counted every tick: too many enabled workspaces, or slow window reads (see `topics.vectors.tick.phase_seconds{phase="find"}`). |
+| `topics.vectors.written` by workspace | Vectors stored. |
+| `topics.vectors.skipped` by `reason`, workspace | `missing_summary` (the output row the window read saw was gone or of another task version by the summary read, which usually clears on the next tick; a WARN per workspace per tick names the count and the oldest trace), `embed_failed` (the call failed, or the workspace backed off: the next tick retries), `invalid_vector` (a missing, null, zero or wrong-dimension vector), `over_budget` (not enough of the tick left to start a call: the next tick continues), `insert_failed` (the ClickHouse insert failed: the next tick embeds them again), `read_failed` (the summary read failed: the next tick reads them again). |
+| `topics.vectors.read.failures` by `phase`, `error_type`, workspace | Failed ClickHouse reads: `find` (one workspace's window read, for example a guard trip) or `summaries` (one workspace's summary read). `error_type` is the root cause's class name. |
+| `topics.vectors.embed.failures` by `http_status`, `code`, `error_type`, workspace | Failed embed calls. 429 `quota_exceeded` means the embed pool is full. Do not alert on it alone: a failure backs off one workspace for one tick, and the next tick retries. |
+| `topics.vectors.embed.duration_seconds` by `outcome`, workspace | Wall time per embed call: `ok`, or the error code. |
 | `topics.vectors.tick.phase_seconds` by `phase` | Time in `find` (ClickHouse window reads) and `embed` (summary reads, embed calls and inserts). |
-| `topics.vectors.long_window.missed` | Vectors the long-window pass wrote for statuses older than the short window: rows normal ticks missed, for example after an outage longer than the window. Above zero outside a backfill or an outage means normal ticks miss rows. |
+| `topics.vectors.long_window.missed` by workspace | Vectors the long-window pass wrote for statuses older than the short window: rows normal ticks missed, for example after an outage longer than the window. Above zero outside a backfill or an outage means normal ticks miss rows. |
 
 The window read leaves out a done status whose latest output is missing, of another task version, or empty or only
 whitespace. Such a status gets no vector and is not counted, and it does not take a place in the per-workspace cap, so
 it never holds back newer traces.
 
 ClickHouse queries of the job have a `log_comment` that starts with `topics:`.
+
+### Alerts
+
+The rules live in comet-monitoring as a PrometheusRule, armed per environment, not in this repo. None fires on a
+quiet day: a workspace with no new traces reports 0, and a disabled workspace, or a deployment with topics off,
+publishes no series.
+
+| Alert | PromQL | Drill down |
+|---|---|---|
+| Vectors lag | `min_over_time(max by (k8s_namespace_name, workspace_id, workspace_name) (topics_vectors_oldest_unvectored_seconds)[15m:1m]) > 1800` | Run "Checking that vectors flow" for the workspace. Then `topics.vectors.skipped` by reason and `topics.vectors.embed.failures` for it: a trace that fails every tick (`invalid_vector`, or `embed_failed` with a 4xx) holds the age up until its status leaves the window. Many workspaces at once: opik-inference, or the tick budget (`over_budget`). |
+| Vectors tick stopped | `sum by (k8s_namespace_name) (increase(topics_vectors_ticks_total{outcome="ran"}[10m])) == 0` | `topics.vectors.ticks` by outcome. `failed`: the backend log line `Topic vectors tick failed`. Only `lock_held`: Redis, or a tick stuck past its lease (the TTL of the Redis key `topics:vectors:leader`). Only `not_due`: the TTL of `topics:vectors:tick`. |
+| Vectors workspace not read | `sum by (k8s_namespace_name, workspace_id, workspace_name) (increase({__name__=~"topics_vectors_workspaces_not_read_total\|topics_vectors_read_failures_total", phase=~"find\|"}[15m])) >= 10` | The workspace's window read failed, or the tick budget ran out before it, on most ticks of the last 15 minutes. `topics.vectors.read.failures` by `error_type` for it: ClickHouse timeouts or guards on a large workspace. Only `workspaces_not_read`: the tick budget is too short for the enabled workspaces, or one slow workspace ahead of it in the rotation. |
+
+- **Vectors lag.** `min_over_time` over 15 minutes ignores the daily long-window spike and one slow tick, so the alert
+  fires about 15 minutes after the lag first passes the threshold. The threshold, 30 minutes, is 15 times the 2-minute
+  target and far above a healthy value (under two tick intervals). It is not measured on prod yet. It must stay under
+  24 hours: the window caps the gauge. A workspace with no value (its read fails, or the budget never reaches it) is
+  invisible to this alert: "Vectors workspace not read" covers it.
+- **Vectors tick stopped.** The heartbeat. The lag gauge disappears when the job stops, so the lag alert resolves
+  instead of firing; this one fires. Every outcome starts at 0 when a pod starts the job, so `increase()` loses at most
+  the pod's first firing, not the ticks after a deploy.
+- **Vectors workspace not read.** The heartbeat of one workspace: its lag series disappears exactly when its read
+  fails or is never reached. Both counters carry the workspace, and the tick runs every minute, so 10 in 15 minutes
+  means most ticks missed it; the first increment a new series loses does not matter at that rate.
 
 ### Deletes
 
@@ -295,7 +325,7 @@ or to Other. It writes:
 | `TOPICS_NIGHTLY_WINDOW_DAYS` | `30` | The window, in whole UTC days before the night. |
 | `TOPICS_NIGHTLY_MAX_VECTORS` | `30000` | A larger window keeps its newest traces. |
 | `TOPICS_NIGHTLY_QWEN_DEADLINE` | `120s` | The deadline of the first build's author call and the nightly update's revise call. The verify (60s) and naming (30s) deadlines are fixed. Every call uses the `batch` lane, which takes up to 300s. |
-| `TOPICS_NIGHTLY_RUNS_RETENTION` | `90d` | `topic_runs` rows are deleted after this. |
+| `TOPICS_NIGHTLY_RUNS_RETENTION` | `90d` | `topic_runs` rows and the night records (`topic_nights`, `topic_night_projects`) are deleted after this. |
 
 To turn it off, set `TOPICS_NIGHTLY_ENABLED=false` and restart. Saved lists stay and freeze at their last saved night.
 This is also the rollback of the nightly update.
@@ -312,9 +342,11 @@ running reads the workspaces once, at its start, so it still runs the workspace'
   the night endpoint answers `409` until the lock expires. To finish the night sooner, delete the Redis key
   `topics:nightly:lock` and call the night endpoint (see "Running by hand").
 - The night first fails runs left `running` by an earlier night (`error_code = 'abandoned'`), and deletes runs older
-  than the retention.
+  than the retention. It does the same for the night records: a night left `running` past the night lock's lease is
+  set to `failed`, and records older than the retention are deleted.
 - It counts each enabled workspace's projects in the window, drops those under `TOPICS_NIGHTLY_MIN_VECTORS`, and runs
-  the rest smallest first, one at a time: a `nightly_update` for a project with live topics, else a `first_build`.
+  the rest smallest first, one at a time: a `nightly_update` for a project with live topics, else a `first_build`. A
+  project whose last saved run already covers the night (a run by hand) is skipped.
 - Each run holds the Redis lock `topics:project:<project_id>`, so a run started by hand and the night never build the
   same project at once.
 - A first build under 1,000 traces is saved with `"provisional": true` in its stats.
@@ -525,30 +557,89 @@ DELETE FROM topic_project_states WHERE project_id = '<project_id>';
 
 ### What to watch
 
+Every metric of one workspace's work has `workspace_id` and `workspace_name` (the name falls back to the id). These
+counters and histograms are for the dashboard. A nightly series starts on the night's pod, so `increase()` misses the
+event that creates it: the alerts read the state gauges further down, not these.
+
 | Metric | Meaning |
 |---|---|
-| `topics.nightly.projects` by `decision` | Projects the night looked at: `skip` (under the minimum, or held by a run started by hand), `first_build`, `nightly_update`, `not_reached` (the budget ran out: they run the next night). `not_reached` above zero means the budget is too short. |
-| `topics.runs` by `status`, `error_code` | Finished runs. |
+| `topics.nightly.projects` by `decision`, `reason` | Projects the night looked at: `skip` with a `reason` (`small`: under the minimum; `deleted`; `already_saved`: its last saved run already covers the night; `locked`: held by a run started by hand, or Redis is down), `first_build`, `nightly_update`, `not_reached` (the budget ran out: they run the next night). `not_reached` above zero means the budget is too short. |
+| `topics.runs` by `status`, `error_code` | Finished runs. Each failed run counts once: `start_failed` when the run could not start (it has no `topic_runs` row), `abandoned` when the next night's housekeeping fails a run its pod left `running`. When marking a run failed throws, the run counts with its own `error_code`; its row stays `running` until housekeeping fails it, which does not count it again. |
 | `topics.run.duration_seconds` by `phase` | Time in `window` (ClickHouse read), `kmeans`, `qwen`, `assign`, `save` (first build); `window`, `state`, `update`, `churn`, `save` (nightly update). |
-| `topics.qwen.calls` by `kind`, `outcome` | `kind` is `author`, `revise`, `verify` or `naming`; `outcome` is `ok`, `timeout`, `error` or `bad_answer`. A failed call of any kind fails the run. |
+| `topics.qwen.calls` by `kind`, `outcome` | `kind` is `author`, `revise`, `verify` or `naming`; `outcome` is `ok`, `timeout`, `error` or `bad_answer`. A failed call of any kind fails the run. An author call counts after its answer is read: an author answer that cannot be read is `bad_answer`, not `ok`. A revise, verify or naming call counts `ok` when it answers; an unreadable revise answer then fails the run with `qwen_bad_answer`. |
 | `topics.topics.live` | Live topics of a project after each saved run. |
 | `topics.topics.born` by `mode` | Topics born by saved runs. A few a week per project is normal; many every night means the list does not settle. |
 | `topics.topics.retired` by `reason` | `low_share`, `cap`, `merged`, `review`, `replaced`. |
 | `topics.run.churn`, `topics.run.churn_any` | Per saved nightly update, see [Churn](#churn). |
 | `topics.save.rows` by `table` | Rows saved runs wrote. |
-| `topics.nightly.budget_used_seconds` | Wall time of each night. Near `TOPICS_NIGHTLY_BUDGET` means projects will soon be `not_reached`. |
+| `topics.save.take_back_failures` | Failed saves whose `trace_topics` rows could not be deleted. Readers see those rows until the project's next saved run. |
+| `topics.run.other_share` | The Other share of each saved run (its `stats.other_share`). No alert: no threshold is set. |
+| `topics.nightly.count_failures` | Workspaces whose window count read failed. The night skips all their projects; they run the next night. |
+| `topics.nightly.budget_used_seconds` | Wall time of each night (no workspace). Near `TOPICS_NIGHTLY_BUDGET` means projects will soon be `not_reached`. |
+
+Each night writes its record as it goes:
+
+| Table | What |
+|---|---|
+| `topic_nights` | One row per night (the UTC date): `started_at`, `finished_at`, `outcome` (`running`, `finished`, or `failed` when a read of the workspaces, lists or projects failed), `eligible_workspaces`, `count_failures`, and `projects` (JSON, projects per decision). Written when the night starts and when it ends, also with no project. A night run again for the same date replaces its row and its project rows. |
+| `topic_night_projects` | One row per project the night looked at, skips included: `workspace_id`, `project_id`, `vectors`, `decision`, `reason`, `run_id` (null when no run started). A workspace whose count read failed has one row with a null `project_id` and decision `count_failed`. |
+
+A record write that fails logs a WARN (`could not write its record`) and the night goes on.
+
+The state gauges come from these tables. Each pod reads them once a minute and keeps the result; a scrape reads no
+table. Every pod publishes the same values: read them with `max`, never `sum`. They are published only while
+`TOPICS_ENABLED` and `TOPICS_NIGHTLY_ENABLED` are on, and only from the first night on, except the heartbeat
+`state_age_seconds`. A workspace counts only while it is opted in to both topics and ai-labels.
+
+| Gauge | Value |
+|---|---|
+| `topics.nightly.state_age_seconds` | Seconds since this pod last read the night tables; before its first good read, since it started trying. Published whenever the job is on, also before the first night. Above a few minutes, every other state gauge is stale. |
+| `topics.nightly.state_refresh_failures` | A counter: failed reads of the night tables (WARN `could not read the night tables`). Set to 0 at startup when the job is on. |
+| `topics.nightly.last_started_age_seconds` | Seconds since the latest night started, scheduled or by hand. |
+| `topics.nightly.running_seconds` | Age of the oldest night still `running`; 0 when none. A night whose pod died stays `running` until the next night's housekeeping fails it. |
+| `topics.nightly.last_night.projects` by workspace, `decision`, `reason` | Projects per decision in the latest ended night, `count_failed` included. |
+| `topics.nightly.last_night.runs` by workspace, `status` | Runs the latest ended night started, by their `topic_runs` status: `saved`, `failed` (a run that could not start counts here), `running` (marking it failed threw). |
+| `topics.nightly.last_night.failed` | 1 when the latest ended night failed (a read failed, or its pod died and the next night's housekeeping failed it), 0 when it finished. |
+| `topics.nightly.stale_projects` by workspace | Projects expected on each of the last 3 ended nights with no saved run since the first of them (a run by hand counts). Expected is any decision but a skip as `small`, `deleted` or `already_saved`: this covers `not_reached`, failed first builds and start failures. 0 for each workspace without one. |
+| `topics.nightly.starved_projects` by workspace | Projects `not_reached` on each of the last 2 ended nights. 0 for each workspace without one. |
+| `topics.workspaces.mismatched` by workspace | 1 for a workspace enabled in `topic_workspaces` and not in `ai_label_workspaces`: no night runs it. |
+
+The Prometheus names replace the dots with underscores, for example `topics_nightly_stale_projects`; the counters end
+in `_total`.
 
 ClickHouse queries of the job have a `log_comment` that starts with `topics:`.
 
 ### Alerts
 
-| Alert | Condition | Check | First step |
-|---|---|---|---|
-| Churn | `churn` over 0.05 on any project's saved run. | The churn query below. | Read the run's `born`, `retired` and `forced` stats and its revise answer in the logs. A merge or a replaced topic explains a one-night jump; a high churn every night means the list does not settle. |
-| Failed runs | More than 20% of a night's finished runs failed. | `topics.runs` by `status`, or the failed-share query below. A run whose pod died is failed as `abandoned` only by the next night. | Group the failures by `error_code`: `qwen_*` points at opik-inference, `window_read` and `save` at ClickHouse or MySQL. |
-| No saved run | A project with a list has no `saved` run for 3 nights. | The stale-project query below. | Find its runs in `topic_runs`: failed (read `error_code`), never started (`not_reached`: the budget), or skipped (under `TOPICS_NIGHTLY_MIN_VECTORS`: quiet traffic, no action). |
+The rules live in comet-monitoring as a PrometheusRule, armed per environment, not in this repo. They read the state
+gauges only, and every rule groups by `k8s_namespace_name`.
 
-`topics.run.churn` has no project attribute: use it for the trend, and the SQL for which project.
+| Alert | Condition | PromQL | Check | First step |
+|---|---|---|---|---|
+| Night not started | No night started for 25 hours. | `max by (k8s_namespace_name) (topics_nightly_last_started_age_seconds) > 25 * 3600` | The latest nights query below. | Read the logs for `Topics night` around the cron time. A night lock left by a dead pod (`topics:nightly:lock`) blocks nights until it expires. Run the night by hand (see "Running by hand"). |
+| Night too long | A night runs longer than budget + project timeout + 30 minutes (2 h 45 m with the defaults). | `max by (k8s_namespace_name) (topics_nightly_running_seconds) > 9900` | The latest nights query below; its `running` row. | A night whose pod died stays `running` until the next night: check for a pod restart. Otherwise find the `running` run in `topic_runs` and its logs. |
+| Last night failed | The latest ended night failed: a read failed, or its pod died and the next night's housekeeping failed it. A night whose reads fail writes no project rows, so no other nightly rule sees it. | `max by (k8s_namespace_name) (topics_nightly_last_night_failed) > 0` | The latest nights query below; its `failed` row. | The ERROR `Topics night failed` (or `started by hand failed`) has the error. No ERROR: the pod died, check for a restart. Clears when the next night finishes. |
+| Stale projects | A project was expected on each of the last 3 nights and got no saved run. | `max by (k8s_namespace_name, workspace_id, workspace_name) (topics_nightly_stale_projects) > 0` | The stale-project query below. | Find its runs in `topic_runs`: failed (read `error_code`), never started (a `first_build` row with no `run_id`), or `not_reached` (the budget). |
+| Starved projects | A project was `not_reached` on each of the last 2 nights. | `max by (k8s_namespace_name, workspace_id, workspace_name) (topics_nightly_starved_projects) > 0` | The starved-project query below. | Raise `TOPICS_NIGHTLY_BUDGET`, or split the night. |
+| Failed share | More than 20% of the latest night's runs failed, with at least 5 runs in the namespace. | See below. | The latest night query below. | Group the failures by `error_code`: `qwen_*` points at opik-inference, `window_read` and `save` at ClickHouse or MySQL. A `first_build` row with no `run_id` could not start: MySQL. |
+| Count read failed | A workspace's window count read failed in the latest night. | `max by (k8s_namespace_name, workspace_id, workspace_name) (topics_nightly_last_night_projects{decision="count_failed"}) > 0` | The latest night query below. | The WARN `Topics night count read failed, workspace '<workspace_id>'` has the ClickHouse error (often a guard trip). The workspace runs the next night. |
+| Workspace mismatch | A workspace is opted in to topics and not to ai-labels, for 1 hour. Warning. | `max by (k8s_namespace_name, workspace_id, workspace_name) (topics_workspaces_mismatched) > 0` with `for: 1h` | The mismatch query below. | Opt the workspace in to ai-labels, or out of topics. |
+| Churn | A saved nightly update moved more than 5% of the traces that were in a topic on both nights. | None yet: no gauge. | The churn query below. | Read the run's `born`, `retired` and `forced` stats and its revise answer in the logs. A merge or a replaced topic explains a one-night jump; a high churn every night means the list does not settle. |
+| State gauges stale | A pod has not read the night tables for 10 minutes: the other nightly alerts are blind. | `max by (k8s_namespace_name) (topics_nightly_state_age_seconds) > 600` | `topics_nightly_state_refresh_failures_total`. | The WARN `Topics nightly gauges could not read the night tables` has the MySQL error. |
+
+The failed-share rule (a pod's series per workspace, so `max` first):
+
+```promql
+sum by (k8s_namespace_name) (max by (k8s_namespace_name, workspace_id, status) (topics_nightly_last_night_runs{status="failed"}))
+  / sum by (k8s_namespace_name) (max by (k8s_namespace_name, workspace_id, status) (topics_nightly_last_night_runs)) > 0.2
+and sum by (k8s_namespace_name) (max by (k8s_namespace_name, workspace_id, status) (topics_nightly_last_night_runs)) >= 5
+```
+
+A quiet day fires none of these but the heartbeats (Night not started, State gauges stale). A night with no project
+still writes its record. A project under the minimum, a deleted project and a project whose last saved run already
+covers the night are not expected, so they are never stale; a project with a list is expected every night. A
+workspace turned off in both opt-in tables is not counted; turned off in only one of them, it is a mismatch. With the
+job off, no gauge is published.
 
 ```sql
 -- MySQL: saved runs of the last day with churn over 0.05
@@ -559,22 +650,58 @@ FROM topic_runs
 WHERE status = 'saved' AND mode = 'nightly_update' AND started_at >= NOW() - INTERVAL 1 DAY
   AND JSON_EXTRACT(stats, '$.churn') > 0.05;
 
--- MySQL: the failed share of the runs started since midnight UTC
-SELECT SUM(status = 'failed') / NULLIF(SUM(status <> 'running'), 0) AS failed_share
-FROM topic_runs
-WHERE started_at >= UTC_DATE();
+-- MySQL: the latest nights
+SELECT night, outcome, started_at, finished_at, eligible_workspaces, count_failures, projects
+FROM topic_nights
+ORDER BY started_at DESC
+LIMIT 5;
 
--- MySQL: projects with a list and no saved run for 3 nights, in workspaces still opted in
-SELECT s.project_id, s.workspace_id, s.last_success_at
-FROM topic_project_states s
-JOIN topic_workspaces t ON t.workspace_id = s.workspace_id AND t.enabled = TRUE
-JOIN ai_label_workspaces a ON a.workspace_id = s.workspace_id AND a.enabled = TRUE
-WHERE s.last_success_at < UTC_DATE() - INTERVAL 2 DAY;
+-- MySQL: the latest ended night, per workspace, decision and run outcome
+SELECT np.workspace_id, np.decision, np.reason, r.status, r.error_code, COUNT(*) AS projects
+FROM topic_night_projects np
+LEFT JOIN topic_runs r ON r.run_id = np.run_id
+WHERE np.night = (SELECT night FROM topic_nights WHERE outcome <> 'running' ORDER BY started_at DESC LIMIT 1)
+GROUP BY np.workspace_id, np.decision, np.reason, r.status, r.error_code;
+
+-- MySQL: stale projects: expected on each of the last 3 ended nights, no saved run since the first of them
+WITH nights AS (
+    SELECT night, started_at FROM topic_nights WHERE outcome <> 'running' ORDER BY started_at DESC LIMIT 3
+)
+SELECT np.workspace_id, np.project_id, GROUP_CONCAT(DISTINCT np.decision) AS decisions
+FROM topic_night_projects np
+JOIN nights n ON n.night = np.night
+WHERE np.project_id IS NOT NULL AND np.decision <> 'count_failed'
+  AND NOT (np.decision = 'skip' AND np.reason IN ('small', 'deleted', 'already_saved'))
+  AND NOT EXISTS (SELECT 1 FROM topic_runs r
+                  WHERE r.project_id = np.project_id AND r.status = 'saved'
+                    AND r.started_at >= (SELECT MIN(started_at) FROM nights))
+GROUP BY np.workspace_id, np.project_id
+HAVING COUNT(DISTINCT np.night) = 3;
+
+-- MySQL: starved projects: not_reached on each of the last 2 ended nights
+WITH nights AS (
+    SELECT night FROM topic_nights WHERE outcome <> 'running' ORDER BY started_at DESC LIMIT 2
+)
+SELECT np.workspace_id, np.project_id, MAX(np.vectors) AS vectors
+FROM topic_night_projects np
+JOIN nights n ON n.night = np.night
+WHERE np.decision = 'not_reached'
+GROUP BY np.workspace_id, np.project_id
+HAVING COUNT(DISTINCT np.night) = 2;
+
+-- MySQL: workspaces opted in to topics and not to ai-labels
+SELECT t.workspace_id
+FROM topic_workspaces t
+LEFT JOIN ai_label_workspaces a ON a.workspace_id = t.workspace_id
+WHERE t.enabled = TRUE AND (a.workspace_id IS NULL OR a.enabled = FALSE);
 ```
+
+The gauges also leave out workspaces no longer opted in and deleted projects; these queries do not.
 
 ### Deletes
 
 A `trace_topics` row lives as long as its trace, as for `topic_vectors`: retention and the trace-delete cascade delete
 both. Deleting a project deletes its MySQL rows too: `topics`, `topic_prototypes`, `topic_project_states` and
-`topic_runs`, since names, definitions and prototypes come from its traces. `topic_runs` rows go after 90 days anyway.
+`topic_runs`, since names, definitions and prototypes come from its traces. `topic_runs` rows go after 90 days anyway,
+and so do the night records (`topic_nights`, `topic_night_projects`); a project's night rows stay until then.
 Deleting a workspace does not delete its MySQL rows, as for `ai_labels`.
