@@ -10,11 +10,13 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -149,6 +151,50 @@ class TopicsNightlyFixtureTest {
         expected.get("lifecycle_share").fields().forEachRemaining(entry -> expectedShares.put(
                 Long.parseLong(entry.getKey()), entry.getValue().asDouble()));
         assertThat(shares).isEqualTo(expectedShares);
+    }
+
+    @ParameterizedTest(name = "night {0}")
+    @ValueSource(ints = {0, 1, 2, 3})
+    @DisplayName("topic on arrival, by a night's saved topics and prototypes, gives every window trace the night's label")
+    void arrivalEqualsTheNight(int q) {
+        var night = fixture.night(q);
+        var projectId = UUID.randomUUID();
+        var live = new ArrayList<Topic>();
+        for (var topic : night.expected.get("topics")) {
+            if (topic.get("retired_at").isNull()) {
+                live.add(Topic.builder()
+                        .id(TopicsNightlyFixture.id(topic.get("id").asLong()))
+                        .workspaceId("workspace")
+                        .projectId(projectId)
+                        .name(topic.get("name").asText())
+                        .definition(topic.get("definition").asText())
+                        .born(LocalDate.parse(topic.get("born").asText()))
+                        .build());
+            }
+        }
+        var owners = TopicsFixture.ints(night.expected.get("prototype_owners"));
+        var vectors = night.prototypes();
+        var rows = new ArrayList<TopicPrototype>();
+        for (int p = 0; p < owners.length; p++) {
+            rows.add(TopicPrototype.builder()
+                    .id(UUID.randomUUID())
+                    .workspaceId("workspace")
+                    .projectId(projectId)
+                    .position(p)
+                    .topicId(owners[p] < 0 ? null : TopicsNightlyFixture.id(owners[p]))
+                    .vector(TopicPrototype.encode(TopicsNightlyFixture.row(vectors, p)))
+                    .build());
+        }
+
+        var prototypes = TopicsArrivalService.prototypes(live, rows).orElseThrow();
+        var labels = prototypes.assigner().assign(night.nightWindow().vectors());
+
+        var topics = new long[labels.length];
+        for (int i = 0; i < labels.length; i++) {
+            var topicId = prototypes.topicId(labels[i]);
+            topics[i] = topicId.equals(TraceTopic.OTHER) ? -1 : TopicsNightlyFixture.counter(topicId);
+        }
+        assertThat(topics).containsExactly(longs(night.expected.get("final_labels")));
     }
 
     /** The recorded k-means for the request; the request's points, k, seed and warm start match the stand's. */

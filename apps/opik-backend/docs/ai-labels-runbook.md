@@ -746,3 +746,81 @@ both. Deleting a project deletes its MySQL rows too: `topics`, `topic_prototypes
 `topic_runs`, since names, definitions and prototypes come from its traces. `topic_runs` rows go after 90 days anyway,
 and so do the night records (`topic_nights`, `topic_night_projects`); a project's night rows stay until then.
 Deleting a workspace does not delete its MySQL rows, as for `ai_labels`.
+
+## Topic on arrival
+
+After each insert of topic vectors, the vectors tick gives those traces a topic at once: the topic of the nearest
+prototype in the project's saved list. A trace then has a topic before the next night. Arrival runs inside the tick, so
+it needs `TOPICS_ENABLED=true`, and it runs only with `TOPICS_ARRIVAL_ENABLED=true` (the default).
+
+### What it writes
+
+- One `trace_topics` row per trace, with `source = 'arrival'`, an empty `run_id`, and the topic's id, or the all-zeros
+  id for Other.
+- It assigns by the saved list as the last night left it: the prototypes of live topics, then the known-Other ones, in
+  their saved order, with the night's rules. A known-Other prototype within 0.95 cosine of a topic prototype is not
+  used. A trace under 0.75 cosine to every topic prototype, or nearest to a known-Other prototype, gets Other.
+- The prototypes of dormant and retired topics are not used. Only a night brings a retired topic back.
+- A project without live topics gets no row. Its traces wait for its first build.
+- Each tick reads a project's list from MySQL once, and only for the projects in the vectors it wrote.
+
+### Why the night overwrites it
+
+The next night writes a row for every trace of its window, with `source = 'night'`. Readers take the latest row per
+trace by `updated_at`, which ClickHouse sets at insert. The night's row comes later, so it wins. When both rows have the
+same `updated_at`, the night's row still wins: readers sort by `run_id DESC`, and the arrival `run_id` is empty.
+
+The night writes rows only for its window: the traces created in the 30 whole UTC days before it, the newest 30,000 at
+most. A trace outside the window keeps its arrival row. Examples: a trace created after midnight UTC keeps it until the
+night after; a trace a backfill vectored, older than the window, keeps it.
+
+A tick that runs while a night saves the same project can insert its rows after the night's rows, from the list before
+that night. Those rows hold until the following night.
+
+### Turning it off
+
+| Env var | Default | Meaning |
+|---|---|---|
+| `TOPICS_ARRIVAL_ENABLED` | `true` | Labels traces on arrival. Needs `TOPICS_ENABLED=true`. Off: the tick reads no topic list and writes no `trace_topics` row. |
+
+To turn it off, set `TOPICS_ARRIVAL_ENABLED=false` and restart. Vectors still flow. Rows already written stay until the
+next night writes its rows.
+
+### Failures
+
+Arrival is best effort. A failed MySQL read, a failed assignment or a failed `trace_topics` insert logs a WARN
+(`Topic arrival ... failed`) and adds 1 to `topics.arrival.failures`. The vectors stay written, the tick goes on, and its
+`written` and `skipped` counts do not change. The next night labels those traces. The tick does not read a failed
+project again; the next tick does.
+
+### What to watch
+
+Every series has `workspace_id` and `workspace_name`.
+
+| Metric | Prometheus name | Meaning |
+|---|---|---|
+| `topics.arrival.labelled` by `outcome` | `topics_arrival_labelled_total` | Traces per outcome. `topic` and `other`: a row was written. `no_prototypes`: the project has no live topic, no row. `dimension_mismatch`: the vector length differs from the prototypes', no row, one WARN per project per tick. |
+| `topics.arrival.failures` by `phase`, `error_type` | `topics_arrival_failures_total` | Failed steps. `read`: the projects' lists in MySQL. `assign`: the saved prototypes could not be used. `insert`: the `trace_topics` insert. |
+| `topics.arrival.duration_seconds` | `topics_arrival_duration_seconds` | Wall time of the arrival step after one vectors insert, a native histogram. |
+
+No alert reads them: a trace that arrival misses gets its topic from the next night.
+
+### Checking a project's arrival rows
+
+```sql
+-- ClickHouse: the project's traces whose current topic came from arrival, newest first
+SELECT trace_id, trace_created_at, topic_id, updated_at
+FROM (
+    SELECT trace_id, trace_created_at, topic_id, source, updated_at
+    FROM trace_topics
+    WHERE workspace_id = '<workspace_id>'
+      AND project_id = '<project_id>'
+    ORDER BY workspace_id, project_id, trace_id, updated_at DESC, run_id DESC
+    LIMIT 1 BY workspace_id, project_id, trace_id
+)
+WHERE source = 'arrival'
+ORDER BY trace_created_at DESC
+LIMIT 100;
+```
+
+The all-zeros `topic_id` is Other. The other ids are `topics.id` in MySQL.

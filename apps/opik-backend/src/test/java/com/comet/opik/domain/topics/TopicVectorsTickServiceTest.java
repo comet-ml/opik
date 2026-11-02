@@ -212,7 +212,7 @@ class TopicVectorsTickServiceTest {
                 return Mono.just((long) rows.size());
             });
             service = new TopicVectorsTickService(config, new AiLabelsConfig(), template, dao, client, lockService,
-                    registry, names(), meter.meter);
+                    registry, names(), noArrival(), meter.meter);
         }
 
         @Test
@@ -706,7 +706,7 @@ class TopicVectorsTickServiceTest {
                     registry, new TopicsWorkspaceNames(id -> {
                         lookups.incrementAndGet();
                         return "name-" + id;
-                    }, Clock.systemUTC()), meter.meter);
+                    }, Clock.systemUTC()), noArrival(), meter.meter);
             stub(List.of(candidate(UUID.randomUUID(), 1, NOW.minusSeconds(5))), candidate -> "intent");
 
             assertThat(service.tick(NOW).written()).isOne();
@@ -727,7 +727,7 @@ class TopicVectorsTickServiceTest {
             service = new TopicVectorsTickService(config, new AiLabelsConfig(), template, dao, client, lockService,
                     registry, new TopicsWorkspaceNames(id -> {
                         throw new IllegalStateException("react service down");
-                    }, Clock.systemUTC()), meter.meter);
+                    }, Clock.systemUTC()), noArrival(), meter.meter);
             stub(List.of(candidate(UUID.randomUUID(), 1, NOW.minusSeconds(5))), candidate -> "intent");
 
             assertThat(service.tick(NOW).written()).isOne();
@@ -749,7 +749,7 @@ class TopicVectorsTickServiceTest {
             names.name("b");
             looked.clear();
             service = new TopicVectorsTickService(config, new AiLabelsConfig(), template, dao, client, lockService,
-                    registry, names, meter.meter);
+                    registry, names, noArrival(), meter.meter);
             when(template.inTransaction(any(TxConfig.class), any())).thenReturn(List.of("a", "b", "c"));
             when(registry.find(TopicVectorsTickService.TASK)).thenReturn(java.util.Optional.of(earlyTask()));
             var budget = config.getVectors().getTickBudget().toJavaDuration();
@@ -933,6 +933,14 @@ class TopicVectorsTickServiceTest {
     /** Workspace names as the tests expect them: {@code name-} and the id, never failing. */
     static TopicsWorkspaceNames names() {
         return new TopicsWorkspaceNames(workspaceId -> "name-" + workspaceId, Clock.systemUTC());
+    }
+
+    /** Arrival off: these tests cover the vectors alone; {@link TopicVectorsTickTest} covers arrival. */
+    static TopicsArrivalService noArrival() {
+        var config = new TopicsConfig();
+        config.getArrival().setEnabled(false);
+        return new TopicsArrivalService(config, mock(TransactionTemplate.class), mock(TraceTopicsDAO.class),
+                new TopicsTestMeter().meter);
     }
 
     /** Both workspace attributes, with the name {@link #names()} gives. */

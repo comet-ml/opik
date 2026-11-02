@@ -61,6 +61,9 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
  * window missed; the pass stays on, tick after tick, until one of its ticks drains it. Work per tick is bounded per
  * workspace by {@code maxTracesPerTick}, oldest first, and in total by the tick budget; what is left is found again by
  * the next tick. Workspaces are visited from an offset that moves every tick, so none is always last.
+ *
+ * <p>After each insert, {@link TopicsArrivalService} gives the chunk's traces their topic on arrival, best effort: it
+ * throws nothing and changes none of the tick's counts.
  */
 @Slf4j
 @Singleton
@@ -83,7 +86,8 @@ public class TopicVectorsTickService {
      * next tick runs the pass again. A leader that dies mid-pass leaves it to expire with its lease.
      */
     static final Lock LONG_WINDOW_LOCK = new Lock("topics:vectors:long_window");
-    // An insert after the last embed call, which has no deadline of its own, still ends within this past the rest.
+    // The inserts after the last embed call (the vectors, then the arrival rows), which have no deadline of their own,
+    // still end within this past the rest.
     private static final Duration LEASE_SLACK = Duration.ofSeconds(5);
     // ClickHouse's max_execution_time is in whole seconds: a window read starts only with at least one left.
     private static final Duration MIN_READ_TIME = Duration.ofSeconds(1);
@@ -96,6 +100,7 @@ public class TopicVectorsTickService {
     private final LockService lockService;
     private final AiLabelTaskRegistry registry;
     private final TopicsWorkspaceNames workspaceNames;
+    private final TopicsArrivalService arrivalService;
 
     /**
      * The oldest done status without a vector, per workspace, as this pod's latest tick found it, and when. Only the
@@ -145,6 +150,7 @@ public class TopicVectorsTickService {
         private final Map<String, Integer> skipped = new HashMap<>();
         // Looked up once per tick, before the workspace's window read, so no later step waits on the name service.
         private final Map<String, String> names = new HashMap<>();
+        private final TopicsArrivalService.Tick arrival = arrivalService.tick();
         private int written;
         // Candidates were left for the next tick for want of time, a read, a back-off or an insert.
         private boolean cut;
@@ -191,15 +197,17 @@ public class TopicVectorsTickService {
     public TopicVectorsTickService(@NonNull @Config("topics") TopicsConfig config,
             @NonNull @Config("aiLabels") AiLabelsConfig aiLabelsConfig, @NonNull TransactionTemplate template,
             @NonNull TopicVectorsDAO dao, @NonNull InferenceClient client, @NonNull LockService lockService,
-            @NonNull AiLabelTaskRegistry registry, @NonNull TopicsWorkspaceNames workspaceNames) {
-        this(config, aiLabelsConfig, template, dao, client, lockService, registry, workspaceNames,
+            @NonNull AiLabelTaskRegistry registry, @NonNull TopicsWorkspaceNames workspaceNames,
+            @NonNull TopicsArrivalService arrivalService) {
+        this(config, aiLabelsConfig, template, dao, client, lockService, registry, workspaceNames, arrivalService,
                 GlobalOpenTelemetry.get().getMeter("opik.topics"));
     }
 
     TopicVectorsTickService(@NonNull TopicsConfig config, @NonNull AiLabelsConfig aiLabelsConfig,
             @NonNull TransactionTemplate template, @NonNull TopicVectorsDAO dao, @NonNull InferenceClient client,
             @NonNull LockService lockService, @NonNull AiLabelTaskRegistry registry,
-            @NonNull TopicsWorkspaceNames workspaceNames, @NonNull Meter meter) {
+            @NonNull TopicsWorkspaceNames workspaceNames, @NonNull TopicsArrivalService arrivalService,
+            @NonNull Meter meter) {
         this.config = config;
         this.aiLabelsConfig = aiLabelsConfig;
         this.template = template;
@@ -208,6 +216,7 @@ public class TopicVectorsTickService {
         this.lockService = lockService;
         this.registry = registry;
         this.workspaceNames = workspaceNames;
+        this.arrivalService = arrivalService;
 
         meter.gaugeBuilder("topics.vectors.oldest_unvectored_seconds").setUnit("s")
                 .setDescription("Age of the oldest done trace_summary without a vector, per enabled workspace, as the "
@@ -471,6 +480,7 @@ public class TopicVectorsTickService {
                     longWindowMissed.add(vectors.stream().filter(vector -> missed.contains(vector.traceId())).count(),
                             tally.workspace(workspaceId).build());
                 }
+                tally.arrival.label(workspaceId, tally.name(workspaceId), vectors);
             }
         }
         return null;
