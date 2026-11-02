@@ -1,0 +1,45 @@
+## Custom Annotator Views for Annotation Queues
+
+Annotation queues can now use a custom annotator view. Instead of raw JSON code blocks, each trace or thread is laid out around the decision the reviewer has to make — for example the customer email next to the agent reply, or the numbers that break a rule — so reviews are faster and less error-prone. On Opik Cloud, [Ollie](/ollie) writes and refines the view next to a live preview that uses real items from the queue; open a queue, click **Edit**, and use the **Annotator view** section. If a stored view can't be loaded, the queue falls back to the default view. Custom views can also be set through the MCP server.
+
+<Frame>
+  <img src="/img/evaluation/annotation_queue_warranty_view.png" alt="A custom warranty review view showing a headlamp's coverage timeline, customer report, agent resolution and policy reference" />
+</Frame>
+
+[Learn more in the annotation queues docs](/evaluation/annotation_queues).
+
+## Cohere Integration
+
+Opik now has a native integration for the [Cohere](https://cohere.com/) Python SDK. Wrap your client with `track_cohere` and every `chat()` and `chat_stream()` call, from the sync and async clients, is logged with its messages, response, model and token usage, so Command models show up alongside the rest of your traces.
+
+[Learn more in the Cohere integration docs](/integrations/cohere).
+
+## Bug Fixes & Improvements
+
+- **Run Playground experiments on the server** — Experiments on regular datasets can be started and stopped from the Playground and keep running on the server; picked metrics, stop progress and results stay on screen. Runs on an empty dataset or test suite are blocked up front, and rate-limit or role-rejection errors say what to do next.
+- **Better Playground editing** — Run with Cmd/Ctrl+Enter (only the prompt you're in), duplicate any variant, start from a blank variant, load and save Text or Chat prompts, hide columns in the dataset and test suite table, and keep unsaved edits to a library prompt when you leave. If the Playground crashes, a recovery screen offers **Reset** and **Copy details**.
+- **New online evaluation rule editor** — Rules are created and edited in a sidebar with start cards for new rules, and OpenAI and OpenRouter reasoning effort can be chosen per rule. New rules default to GPT 5.5, and judges work in tool mode on newer GPT-5, Claude 5.5 and Gemini 3 models.
+- **Claude Haiku 5.5 and Sonnet 5.5** are available in the Playground and online evaluation, and model settings panels are drawn from the model catalog for Anthropic and OpenAI. Sampling settings and penalties that Gemini 3+ and Vertex AI models refuse are dropped automatically.
+- **View old dataset and test suite versions without restoring them.**
+- **Route OpenTelemetry traces to a project** with the `opik.project_name` attribute.
+- **Environment filter on the Threads tab**, and a toggle to hide internal traces in thread Messages.
+- **Ollie widgets on dashboards** — Dashboard editing and Ollie widgets are easier to find from **Add widget**.
+- **Redis Sentinel support for self-hosting** — Set `OPIK_REDIS_SENTINEL_ENABLED`, `OPIK_REDIS_SENTINEL_MASTER_NAME` and `OPIK_REDIS_SENTINEL_NODES` (plus optional username/password) and the backend follows the master on failover.
+- **Database migrations exit non-zero on failure**, so failed upgrades are visible to your orchestrator.
+- **More accurate pricing** — Every prompt-size tier and 1-hour cache writes are priced on all providers, span cost breakdowns are supported, and OTel spans that report the provider as its API host are priced.
+- **Projects clean up after themselves** — Deleting a project deletes its traces and spans.
+- **Provider connections are safer** — LLM provider base URLs and custom headers are validated, and credentials are required when a `base_url` changes.
+- **Thread search** returns matching threads together with all of their traces, and long thread messages wrap instead of being cut off.
+- **SDK fixes** — `run_simulation` logs to the given `project_name`; blank `OPIK_API_KEY` is treated as unconfigured; UI links are built from the configured URL; a zero flush timeout is treated as expired; failed dataset and prompt exports are reported as errors; Together 3.x is supported; the Google ADK root agent stays the trace on google-adk 2.13.0; Bedrock `invoke_model` Claude and Nova streams keep tool calls; and TypeScript OpenAI streamed parallel tool calls stay separate.
+- **Project-scoped pages open in the entity's own project**, and creating a project with an existing name shows a clear error.
+
+## Performance Improvements
+
+- **Faster thread, trace and span reads** — Reads are bounded to the weeks they touch via `span_weeks`, thread searches run once per query outside `FINAL`, and the project trace KPI cards read `traces_filtered` once.
+- **Optimization lists paginate before aggregating**, so large workspaces load faster.
+
+---
+
+And much more! 👉 [See full commit log on GitHub](https://github.com/comet-ml/opik/compare/2.2.103...2.2.137)
+
+_Releases_: `2.2.104` through `2.2.137`
