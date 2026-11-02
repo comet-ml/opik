@@ -196,7 +196,7 @@ class ProjectServiceImpl implements ProjectService {
         String workspaceId = requestContext.get().getWorkspaceId();
         // Stripped like trace and span creation (WorkspaceUtils.getProjectName), so both resolve to the same project.
         // Implicit creation keeps the name its caller resolved, so its lookup and insert agree.
-        var strippedProject = project.toBuilder().name(project.name().strip()).build();
+        var strippedProject = project.toBuilder().name(WorkspaceUtils.stripProjectName(project)).build();
 
         return createProject(strippedProject, projectId, userName, workspaceId);
     }
