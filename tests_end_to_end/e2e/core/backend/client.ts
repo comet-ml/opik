@@ -4766,17 +4766,29 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       traceId: string;
       size?: number;
     }): Promise<SpanReadPage> {
-      const { status, message, json } = await rawFetch('GET', '/v1/private/spans', {
-        query: new URLSearchParams({
-          project_id: args.projectId,
-          trace_id: args.traceId,
-          page: '1',
-          size: String(args.size ?? 100),
-        }),
-      });
-      if (status !== 200) {
-        throw new Error(`listSpansPage(trace ${args.traceId}): expected 200, got ${status}: ${message}`);
-      }
+      // `withRateLimitRetry` with `listLogsPage`'s longer ladder, for its
+      // reason: the spans listing is limited per workspace, and most callers
+      // poll this as an ingestion check inside an `expect.poll`, which does not
+      // swallow a 429.
+      const { json } = await withRateLimitRetry(
+        async () => {
+          const result = await rawFetch('GET', '/v1/private/spans', {
+            query: new URLSearchParams({
+              project_id: args.projectId,
+              trace_id: args.traceId,
+              page: '1',
+              size: String(args.size ?? 100),
+            }),
+          });
+          if (result.status !== 200) {
+            throw new Error(
+              `listSpansPage(trace ${args.traceId}): expected 200, got ${result.status}: ${result.message}`,
+            );
+          }
+          return result;
+        },
+        [2_000, 5_000, 10_000, 20_000, 30_000, 30_000, 30_000],
+      );
       const page = json as {
         total?: number;
         content?: Array<{
@@ -6517,15 +6529,18 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     async listTraceIds(
       args: { projectId: string; filters?: BackendFilter[]; size?: number } & ReadWindow,
     ): Promise<string[]> {
-      const page = await opik.api.traces.getTracesByProject({
-        projectId: args.projectId,
-        size: args.size ?? 200,
-        page: 1,
-        truncate: true,
-        ...(args.filters?.length ? { filters: JSON.stringify(args.filters) } : {}),
-        ...(args.fromTime ? { fromTime: args.fromTime } : {}),
-        ...(args.toTime ? { toTime: args.toTime } : {}),
-      });
+      // The traces listing is limited per workspace like the spans one.
+      const page = await withRateLimitRetry(() =>
+        opik.api.traces.getTracesByProject({
+          projectId: args.projectId,
+          size: args.size ?? 200,
+          page: 1,
+          truncate: true,
+          ...(args.filters?.length ? { filters: JSON.stringify(args.filters) } : {}),
+          ...(args.fromTime ? { fromTime: args.fromTime } : {}),
+          ...(args.toTime ? { toTime: args.toTime } : {}),
+        }),
+      );
       return (page.content ?? []).map((t) => String(t.id));
     },
 
