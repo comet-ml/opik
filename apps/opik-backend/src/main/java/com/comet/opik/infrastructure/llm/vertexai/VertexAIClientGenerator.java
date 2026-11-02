@@ -11,6 +11,7 @@ import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
 import com.comet.opik.infrastructure.llm.LlmProviderLangChainMapper;
 import com.comet.opik.infrastructure.llm.RemoteMediaInliner;
+import com.comet.opik.infrastructure.llm.SharedTokenCache;
 import com.comet.opik.infrastructure.llm.VideoMimeTypeUtils;
 import com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException;
 import com.comet.opik.utils.JsonUtils;
@@ -72,25 +73,29 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
             .writeTimeout(Duration.ZERO)
             .build();
 
+    private static final String TOKEN_CACHE_KEY_FORMAT = "vertex_ai_token:%s";
+
     /**
-     * Scoped credentials per service-account key, keyed by the key's SHA-256. The credentials hold the OAuth token and
-     * refresh it themselves before it expires, so a call on a cached key makes no token request. Two workspaces share
-     * an entry only by holding the same private key, which is what the token stands for anyway.
+     * Scoped credentials per service-account key, keyed by the SHA-256 of the scope and the key file. They hold the
+     * OAuth token between refreshes, and refresh it through the token cache every pod shares. Two workspaces share an
+     * entry only by holding the same private key, which is what the token stands for anyway.
      */
-    private final Cache<String, ServiceAccountCredentials> credentialsByKey;
+    private final Cache<String, SharedTokenServiceAccountCredentials> scopedCredentialsByKeyHash;
+    private final SharedTokenCache tokenCache;
 
     public VertexAIClientGenerator(@NonNull LlmProviderClientConfig clientConfig,
             @NonNull LlmModelRegistryService registryService,
             @NonNull RemoteMediaInliner remoteMediaInliner,
-            @NonNull VideoMimeTypeUtils videoMimeTypeUtils) {
+            @NonNull VideoMimeTypeUtils videoMimeTypeUtils,
+            @NonNull SharedTokenCache tokenCache) {
         this.clientConfig = clientConfig;
         this.registryService = registryService;
         this.remoteMediaInliner = remoteMediaInliner;
         this.videoMimeTypeUtils = videoMimeTypeUtils;
-        var vertexAIClient = clientConfig.getVertexAIClient();
-        this.credentialsByKey = CacheBuilder.newBuilder()
-                .maximumSize(vertexAIClient.credentialsCacheMaximumSize())
-                .expireAfterAccess(vertexAIClient.credentialsCacheExpireAfterAccess().toJavaDuration())
+        this.tokenCache = tokenCache;
+        this.scopedCredentialsByKeyHash = CacheBuilder.newBuilder()
+                .expireAfterAccess(
+                        clientConfig.getVertexAIClient().credentialsCacheExpireAfterAccess().toJavaDuration())
                 .build();
     }
 
@@ -230,7 +235,7 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
         var credentials = credentialsFor(config.apiKey());
         var builder = Client.builder()
                 .vertexAI(true)
-                .project(credentials.getProjectId())
+                .project(credentials.projectId())
                 .credentials(credentials);
 
         location.ifPresent(builder::location);
@@ -252,17 +257,19 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
                 .build();
     }
 
-    private ServiceAccountCredentials credentialsFor(String apiKey) {
-        var keyHash = Hashing.sha256().hashString(apiKey, StandardCharsets.UTF_8).toString();
+    private SharedTokenServiceAccountCredentials credentialsFor(String apiKey) {
+        var keyHash = Hashing.sha256()
+                .hashString(clientConfig.getVertexAIClient().scope() + "\n" + apiKey, StandardCharsets.UTF_8)
+                .toString();
         try {
-            return credentialsByKey.get(keyHash, () -> loadCredentials(apiKey));
+            return scopedCredentialsByKeyHash.get(keyHash, () -> loadCredentials(apiKey, keyHash));
         } catch (UncheckedExecutionException | ExecutionException e) {
             Throwables.throwIfUnchecked(e.getCause());
             throw failWithError((Exception) e.getCause());
         }
     }
 
-    private ServiceAccountCredentials loadCredentials(String apiKey) throws IOException {
+    private SharedTokenServiceAccountCredentials loadCredentials(String apiKey, String keyHash) throws IOException {
         var credentials = ServiceAccountCredentials.fromStream(
                 new ByteArrayInputStream(apiKey.getBytes(StandardCharsets.UTF_8)));
 
@@ -272,7 +279,9 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
         }
 
         // createScoped on service-account credentials returns service-account credentials
-        return (ServiceAccountCredentials) credentials.createScoped(clientConfig.getVertexAIClient().scope());
+        var scoped = (ServiceAccountCredentials) credentials.createScoped(clientConfig.getVertexAIClient().scope());
+        return new SharedTokenServiceAccountCredentials(scoped, tokenCache, TOKEN_CACHE_KEY_FORMAT.formatted(keyHash),
+                clientConfig.getVertexAIClient());
     }
 
     @Override

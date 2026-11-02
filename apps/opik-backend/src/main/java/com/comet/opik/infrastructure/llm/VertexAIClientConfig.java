@@ -1,12 +1,14 @@
 package com.comet.opik.infrastructure.llm;
 
 import io.dropwizard.util.Duration;
+import io.dropwizard.validation.MaxDuration;
 import io.dropwizard.validation.MinDuration;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
-import jakarta.validation.constraints.Positive;
 import lombok.Builder;
 
 import java.net.URI;
@@ -32,8 +34,10 @@ import java.util.concurrent.TimeUnit;
  * {@code tokenUris} lists the only {@code token_uri} values a service-account key may carry: the credentials refresh by
  * posting to it, and the key file is user-supplied.
  * <p>
- * The credentials cache keeps one set of credentials per service-account key, so that the OAuth token they fetch is
- * reused until it expires instead of fetched again for every call.
+ * The credentials cache keeps one set of credentials per service-account key in memory, for
+ * {@code credentialsCacheExpireAfterAccess} after its last call. Their OAuth token is shared by every pod through
+ * Redis: it is refreshed once its remaining lifetime drops below {@code tokenCacheRefreshFraction} of the whole, under a
+ * cross-pod lock whose lease is {@code tokenCacheLockTimeout}.
  */
 @Builder(toBuilder = true)
 public record VertexAIClientConfig(
@@ -41,6 +45,7 @@ public record VertexAIClientConfig(
         Map<@Pattern(regexp = "[a-z0-9-]+", message = "must be a lower-case location such as 'global'") String, //
                 @Pattern(regexp = "(https://)?[A-Za-z0-9.-]+(:\\d+)?/?", message = "must be a host or https URL such as 'https://aiplatform.googleapis.com'") String> multiRegionApiEndpoints,
         @NotEmpty Set<@NotNull URI> tokenUris,
-        @Positive long credentialsCacheMaximumSize,
-        @NotNull @MinDuration(value = 1, unit = TimeUnit.SECONDS) Duration credentialsCacheExpireAfterAccess) {
+        @NotNull @MinDuration(value = 1, unit = TimeUnit.SECONDS) @MaxDuration(value = 1, unit = TimeUnit.DAYS) Duration credentialsCacheExpireAfterAccess,
+        @DecimalMin("0.0") @DecimalMax("0.99") double tokenCacheRefreshFraction,
+        @NotNull @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS) @MaxDuration(value = 1, unit = TimeUnit.MINUTES) Duration tokenCacheLockTimeout) {
 }

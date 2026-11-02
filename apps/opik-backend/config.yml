@@ -1760,13 +1760,16 @@ llmProviderClient:
     tokenUris:
       - ${LLM_PROVIDER_VERTEXAI_TOKEN_URI:-https://oauth2.googleapis.com/token}
       - https://accounts.google.com/o/oauth2/token
-    # Default: 1000
-    # Description: Most service-account keys whose credentials, and so whose OAuth token, are kept between calls
-    credentialsCacheMaximumSize: ${LLM_PROVIDER_VERTEXAI_CREDENTIALS_CACHE_MAXIMUM_SIZE:-1000}
-    # Default: 1h
-    # Description: How long a key's credentials are kept after its last call. The token they hold refreshes itself
-    # before it expires, so this only bounds how long an unused key stays in memory
-    credentialsCacheExpireAfterAccess: ${LLM_PROVIDER_VERTEXAI_CREDENTIALS_CACHE_EXPIRE_AFTER_ACCESS:-1h}
+    # Default: 15m
+    # Description: How long a service-account key's credentials are kept in memory after its last call. Capped at 1d
+    credentialsCacheExpireAfterAccess: ${LLM_PROVIDER_VERTEXAI_CREDENTIALS_CACHE_EXPIRE_AFTER_ACCESS:-15m}
+    # Default: 0.25
+    # Description: Refresh the OAuth token shared by every pod once its remaining lifetime drops below this fraction
+    # of the total lifetime. It is always refreshed at least 5 minutes before it expires
+    tokenCacheRefreshFraction: ${LLM_PROVIDER_VERTEXAI_TOKEN_CACHE_REFRESH_FRACTION:-0.25}
+    # Default: 15s
+    # Description: Lease time for the cross-pod single-flight lock around an OAuth token fetch. Capped at 1m
+    tokenCacheLockTimeout: ${LLM_PROVIDER_VERTEXAI_TOKEN_CACHE_LOCK_TIMEOUT:-15s}
 
 # Configuration for cache manager
 cacheManager:

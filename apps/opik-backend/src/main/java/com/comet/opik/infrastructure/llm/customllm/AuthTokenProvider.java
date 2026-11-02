@@ -2,9 +2,9 @@ package com.comet.opik.infrastructure.llm.customllm;
 
 import com.comet.opik.api.EncryptedAuthConfig;
 import com.comet.opik.api.ProviderAuthConfig;
-import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.LlmProviderTokenAuthConfig;
 import com.comet.opik.infrastructure.http.BodyDeadline;
+import com.comet.opik.infrastructure.llm.SharedTokenCache;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.comet.opik.infrastructure.net.DestinationGuardDnsResolver;
@@ -35,7 +35,6 @@ import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.glassfish.jersey.client.ClientProperties;
-import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.io.IOException;
@@ -60,13 +59,10 @@ import static org.apache.commons.lang3.StringUtils.isNotBlank;
  * Executes a custom provider's {@link ProviderAuthConfig} recipe and manages the resulting
  * short-lived bearer's lifecycle.
  *
- * <p>Tokens are cached in Redis — one bucket per provider, AES-GCM-encrypted, shared by every
- * backend pod — so a deployment makes roughly one fetch per refresh window regardless of pod count.
- * The cache key includes a hash of the recipe: any config edit is an instant deployment-wide cache
- * miss, no invalidation signal needed. A token is refreshed lazily, on the request path, once its
- * remaining lifetime drops inside the proportional refresh window. Cold-cache bursts collapse into
- * a single fetch via the distributed lock; on any Redis failure the provider degrades to a direct
- * fetch rather than failing the LLM call.
+ * <p>Tokens are cached through {@link SharedTokenCache}, one bucket per provider, shared by every
+ * backend pod. The cache key includes a hash of the recipe: any config edit is an instant
+ * deployment-wide cache miss, no invalidation signal needed. A token is refreshed lazily, on the
+ * request path, once its remaining lifetime drops inside the proportional refresh window.
  *
  * <p>Every error message thrown from here is user-facing by contract: upstream status and body are
  * surfaced (never a generic "auth failed"), with credential values redacted.
@@ -98,8 +94,7 @@ public class AuthTokenProvider {
             (self-hosted deployments with internal auth services can set \
             LLM_PROVIDER_TOKEN_AUTH_DESTINATION_GUARD=relaxed)""";
 
-    private final @NonNull StringRedisClient redisClient;
-    private final @NonNull LockService lockService;
+    private final @NonNull SharedTokenCache tokenCache;
     private final @NonNull LlmProviderTokenAuthConfig config;
     private final DestinationGuard destinationGuard;
     private final Client client;
@@ -110,8 +105,7 @@ public class AuthTokenProvider {
     @Inject
     public AuthTokenProvider(@NonNull StringRedisClient redisClient, @NonNull LockService lockService,
             @NonNull @Config("llmProviderTokenAuth") LlmProviderTokenAuthConfig config, @NonNull Client client) {
-        this.redisClient = redisClient;
-        this.lockService = lockService;
+        this.tokenCache = new SharedTokenCache(redisClient, lockService);
         this.config = config;
         this.destinationGuard = DestinationGuard.builder().mode(config.getDestinationGuard()).build();
         this.client = client;
@@ -136,45 +130,23 @@ public class AuthTokenProvider {
     public String bearer(@NonNull String workspaceId, @NonNull UUID providerId,
             @NonNull EncryptedAuthConfig authConfig) {
         String cacheKey = cacheKey(providerId, authConfig);
-        String cached = readCache(cacheKey);
-        if (cached != null) {
-            recordRequestMetric(workspaceId, providerId, "cache_hit");
-            return cached;
-        }
-
+        SharedTokenCache.Result result;
         try {
-            String token = lockService
-                    .executeWithLockCustomExpire(
-                            new LockService.Lock(cacheKey + ":fetch-lock"),
-                            Mono.fromCallable(() -> refreshUnderLock(cacheKey, authConfig)),
-                            Duration.ofMillis(config.getLockTimeout().toMilliseconds()))
-                    .block(Duration.ofMillis(
-                            config.getLockTimeout().toMilliseconds() + config.getFetchTimeout().toMilliseconds()));
-            if (token != null) {
-                recordRequestMetric(workspaceId, providerId, "fetched");
-                return token;
-            }
-            // Empty result = we gave up waiting for the lock holder, who has likely written the
-            // token by now — re-read before fetching. Distinct metric so a rising rate can flag
-            // a mistuned lockTimeout. Known gap: if the holder's fetch failed, waiters still
-            // fall through and fetch directly.
-            String refreshed = readCache(cacheKey);
-            if (refreshed != null) {
-                recordRequestMetric(workspaceId, providerId, "lock_timeout_recovered");
-                return refreshed;
-            }
-            log.warn("Timed out waiting for the token fetch lock for provider '{}'; fetching directly", providerId);
+            result = tokenCache.get(cacheKey,
+                    Duration.ofMillis(config.getLockTimeout().toMilliseconds()),
+                    Duration.ofMillis(config.getFetchTimeout().toMilliseconds()),
+                    () -> toCached(fetchToken(authConfig.value())));
         } catch (AuthTokenException exception) {
             recordRequestMetric(workspaceId, providerId, "failed");
             throw exception;
-        } catch (RuntimeException exception) {
-            log.warn("Token cache unavailable for provider '{}'; falling back to a direct fetch", providerId,
-                    exception);
         }
-
-        String token = fetchToken(authConfig.value()).token();
-        recordRequestMetric(workspaceId, providerId, "degraded_direct");
-        return token;
+        recordRequestMetric(workspaceId, providerId, switch (result.outcome()) {
+            case CACHE_HIT -> "cache_hit";
+            case FETCHED -> "fetched";
+            case LOCK_TIMEOUT_RECOVERED -> "lock_timeout_recovered";
+            case DEGRADED_DIRECT -> "degraded_direct";
+        });
+        return result.value();
     }
 
     /**
@@ -186,51 +158,16 @@ public class AuthTokenProvider {
     public void invalidateAfterGatewayRejection(@NonNull String workspaceId, @NonNull UUID providerId,
             @NonNull EncryptedAuthConfig authConfig) {
         recordRequestMetric(workspaceId, providerId, "gateway_rejected");
-        String cacheKey = cacheKey(providerId, authConfig);
-        try {
-            redisClient.getBucket(cacheKey).delete();
-        } catch (RuntimeException exception) {
-            log.warn("Failed to invalidate cached token for provider '{}'", providerId, exception);
-        }
-    }
-
-    private String refreshUnderLock(String cacheKey, EncryptedAuthConfig authConfig) {
-        // another pod may have refreshed while this one waited on the lock
-        String cached = readCache(cacheKey);
-        if (cached != null) {
-            return cached;
-        }
-        FetchedToken fetched = fetchToken(authConfig.value());
-        writeCache(cacheKey, fetched);
-        return fetched.token();
-    }
-
-    private String readCache(String cacheKey) {
-        try {
-            String encrypted = redisClient.getBucket(cacheKey).get();
-            return encrypted == null ? null : EncryptionUtils.decryptGcm(encrypted);
-        } catch (RuntimeException exception) {
-            log.warn("Failed to read the cached token for key '{}': {}", cacheKey, exception.getMessage());
-            return null;
-        }
+        tokenCache.invalidate(cacheKey(providerId, authConfig));
     }
 
     /**
-     * The bucket's own TTL is the refresh point ({@code lifetime * (1 - refreshFraction)}), so
-     * freshness is simply key existence and Redis's clock is the single source of truth.
+     * The bucket's own TTL is the refresh point ({@code lifetime * (1 - refreshFraction)}); a resolved
+     * lifetime of 0 (the fallback for a reply that states none) means: don't cache.
      */
-    private void writeCache(String cacheKey, FetchedToken fetched) {
+    private SharedTokenCache.Fetched toCached(FetchedToken fetched) {
         long refreshPointMs = (long) (fetched.ttlSeconds() * 1_000 * (1 - config.getRefreshFraction()));
-        // a resolved lifetime of 0 (the fallback for a reply that states none) means: don't cache
-        if (refreshPointMs <= 0) {
-            return;
-        }
-        try {
-            redisClient.getBucket(cacheKey)
-                    .set(EncryptionUtils.encryptGcm(fetched.token()), Duration.ofMillis(refreshPointMs));
-        } catch (RuntimeException exception) {
-            log.warn("Failed to cache the token for key '{}'; the token is still returned", cacheKey, exception);
-        }
+        return new SharedTokenCache.Fetched(fetched.token(), Duration.ofMillis(refreshPointMs));
     }
 
     private String cacheKey(UUID providerId, EncryptedAuthConfig authConfig) {
