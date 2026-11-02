@@ -17,7 +17,7 @@ import {
  * although Sonnet 4.6 allows 128000. The ceiling now comes from the model's own
  * `max_output_tokens` in the bundled pricing data, falling back to those old
  * caps for a model the data does not list; the floor is 1, or 16 on an OpenAI
- * key set to the Responses API.
+ * key set to the Responses API and on any OpenAI reasoning model.
  *
  * Both halves are asserted on both surfaces, because they can regress apart and
  * each failure is user-visible but silent:
@@ -156,7 +156,14 @@ test.describe(
         await test.step(`${REGISTRY_MODEL.openAiReasoning} is offered a different ceiling`, async () => {
           await playground.selectModel(0, REGISTRY_MODEL.openAiReasoning);
           const range = await readRangeAndAssertClamp(page, playground, 'gpt-5-mini');
-          expect(range.min, 'the floor does not move with the model').toBe(1);
+          // Pinned like the Responses API floor below: it is the hand-written
+          // `openai-reasoning` profile in llm-models-curated.yaml, not the
+          // generated pricing data. Reasoning tokens count against the limit,
+          // so OpenAI answers a lower cap with a 400 on Chat Completions too.
+          expect(
+            range.min,
+            'a reasoning model floors at 16 even on a Chat Completions key',
+          ).toBe(16);
           // The discriminator for the whole test: two models, two ceilings. A
           // build reading a single constant — whatever its value — passes every
           // absolute comparison above and fails this one.

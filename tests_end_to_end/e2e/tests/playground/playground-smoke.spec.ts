@@ -39,14 +39,12 @@ test.describe('Playground — smoke', { tag: ['@t1-smoke', '@llm-daily', '@area:
       await expect(playground.loadedSourcePill()).toBeVisible();
       await playground.waitForRunReady({ expectedRows: 3 });
 
-      // The frontend queues experiment creation independently of the trace/span
-      // batches that paint the result rows, so the POST can land before or well
-      // after the table finishes rendering. Latch it BEFORE clicking Re-run —
+      // A dataset run creates its experiment server-side, from the one
+      // `/experiments/execute` request Re-run sends. Latch it BEFORE clicking —
       // registering afterwards races the request and can miss it entirely.
-      // Match the collection endpoint exactly: `items` and `finish` share the prefix.
       experimentCreated = page.waitForResponse(
         (r) =>
-          /\/v1\/private\/experiments\/?$/.test(new URL(r.url()).pathname) &&
+          /\/v1\/private\/experiments\/execute$/.test(new URL(r.url()).pathname) &&
           r.request().method() === 'POST' &&
           r.ok(),
         { timeout: 120_000 },
