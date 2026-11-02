@@ -86,6 +86,8 @@ describe("buildTraceChipDefinitions", () => {
       operators: ["is_not_empty", "is_empty"],
       defaultOperator: "is_not_empty",
     });
+    expect(comments).not.toHaveProperty("key");
+    expect(comments).not.toHaveProperty("value");
   });
 
   it("keeps trace and span feedback scores as separate chips", () => {

@@ -38,6 +38,22 @@ class FilterQueryBuilderCommentsTest {
         assertThat(actual).contains("((%s))".formatted(expected));
     }
 
+    static Stream<Arguments> commentsFilterIgnoredByOtherStrategies() {
+        return Stream.of(
+                arguments(FilterStrategy.TRACE_THREAD, trace(Operator.IS_NOT_EMPTY)),
+                arguments(FilterStrategy.SPAN, trace(Operator.IS_NOT_EMPTY)),
+                arguments(FilterStrategy.TRACE, thread(Operator.IS_NOT_EMPTY)),
+                arguments(FilterStrategy.SPAN, thread(Operator.IS_NOT_EMPTY)));
+    }
+
+    @ParameterizedTest(name = "{0} {1}")
+    @MethodSource
+    void commentsFilterIgnoredByOtherStrategies(FilterStrategy strategy, Filter filter) {
+        var actual = FilterQueryBuilder.toAnalyticsDbFilters(List.of(filter), strategy);
+
+        assertThat(actual).isEmpty();
+    }
+
     private static TraceFilter trace(Operator operator) {
         return TraceFilter.builder().field(TraceField.COMMENTS).operator(operator).value("").build();
     }

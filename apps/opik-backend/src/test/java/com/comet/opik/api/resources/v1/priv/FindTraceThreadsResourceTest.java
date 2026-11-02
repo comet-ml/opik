@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.AnnotationQueue;
 import com.comet.opik.api.AnnotationQueueReference;
+import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.Project;
@@ -1129,8 +1130,8 @@ class FindTraceThreadsResourceTest {
             var commentedThreadModelId = traceResourceClient
                     .getTraceThread(commentedThreadId, projectId, apiKey, workspaceName)
                     .threadModelId();
-            threadCommentResourceClient.generateAndCreateComment(commentedThreadModelId, apiKey, workspaceName,
-                    HttpStatus.SC_CREATED);
+            var comment = threadCommentResourceClient.generateAndCreateComment(commentedThreadModelId, apiKey,
+                    workspaceName, HttpStatus.SC_CREATED);
 
             var commentedThread = traceResourceClient.getTraceThread(commentedThreadId, projectId, apiKey,
                     workspaceName);
@@ -1158,6 +1159,12 @@ class FindTraceThreadsResourceTest {
             assertThreadPage(null, projectId, List.of(otherThread), List.of(isEmptyFilter), Map.of(), apiKey,
                     workspaceName);
             assertTheadStream(null, projectId, apiKey, workspaceName, List.of(otherThread), List.of(isEmptyFilter));
+
+            threadCommentResourceClient.deleteComments(BatchDelete.builder().ids(Set.of(comment.id())).build(),
+                    apiKey, workspaceName);
+
+            assertThreadPage(null, projectId, List.of(), List.of(isNotEmptyFilter), Map.of(), apiKey, workspaceName);
+            assertTheadStream(null, projectId, apiKey, workspaceName, List.of(), List.of(isNotEmptyFilter));
         }
 
         private Stream<Arguments> getSourceFilterTestArguments() {
