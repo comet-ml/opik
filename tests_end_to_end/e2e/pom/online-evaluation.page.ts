@@ -2,6 +2,7 @@ import { test, type Page, type Locator } from '@playwright/test';
 import { expect } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 import { assertAllowedModelDisplayName } from '@e2e/core/llm-model-policy';
+import { waitForAssistantSidebarLoaded } from './assistant-sidebar';
 
 export type EvaluatorType = 'LLM-as-a-Judge' | 'Decision model' | 'Code evaluator';
 
@@ -69,6 +70,7 @@ export class OnlineEvaluationPage {
     await this.page.goto(
       `${env.baseUrl}/${env.workspace}/projects/${projectId}/online-evaluation`,
     );
+    await waitForAssistantSidebarLoaded(this.page);
   }
 
   /** Resolves once either the empty state or a real rule row is on screen. */

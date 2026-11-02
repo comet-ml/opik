@@ -3,6 +3,7 @@ import { test, expect } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 import { TraceLogsSidebarPage } from './trace-logs-sidebar.page';
 import { PromptLibraryMenu } from './prompt-library-menu';
+import { waitForAssistantSidebarLoaded } from './assistant-sidebar';
 import { assertAllowedModelDisplayName } from '@e2e/core/llm-model-policy';
 
 export type OptimizerName = 'GEPA optimizer' | 'Hierarchical Reflective';
@@ -68,6 +69,7 @@ export class OptimizationStudioPage {
         `${env.baseUrl}/${env.workspace}/projects/${this.projectId}/optimizations/new`,
       );
       await this.newRunPanel().waitFor();
+      await waitForAssistantSidebarLoaded(this.page);
     });
   }
 
@@ -529,6 +531,7 @@ export class OptimizationStudioPage {
           `?new=true&rerun=${optimizationId}`,
       );
       await this.newRunPanel().waitFor();
+      await waitForAssistantSidebarLoaded(this.page);
       await this.waitForModelResolved();
     });
   }
@@ -548,6 +551,7 @@ export class OptimizationStudioPage {
         `${env.baseUrl}/${env.workspace}/projects/${this.projectId}/optimizations?new=true`,
       );
       await this.newRunPanel().waitFor();
+      await waitForAssistantSidebarLoaded(this.page);
       await this.waitForModelResolved();
     });
   }

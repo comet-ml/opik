@@ -4,6 +4,7 @@ import { loadEnvConfig } from '../config/env.config';
 import { assertAllowedModelDisplayName } from '@e2e/core/llm-model-policy';
 import { PromptLibraryMenu } from './prompt-library-menu';
 import { readRecordedToasts, startRecordingToasts } from './toast-recorder';
+import { waitForAssistantSidebarLoaded } from './assistant-sidebar';
 
 export type RunExperimentSourceMode = 'dataset' | 'test_suite';
 
@@ -189,45 +190,8 @@ export class PlaygroundPage {
         .waitFor({ state: 'visible' });
       // Variant card "A" should be mounted with its model picker.
       await this.modelPicker(0).waitFor({ state: 'visible' });
-      await this.waitForAssistantSidebarLoaded();
+      await waitForAssistantSidebarLoaded(this.page);
     });
-  }
-
-  /**
-   * Wait out the Ollie sidebar's load. Its iframe focuses its own chat box when it
-   * mounts, a few seconds after navigation, and the host treats focus moving into
-   * that iframe as a click outside (`AssistantSidebar.tsx`), so any select or popover
-   * open at that moment closes under the spec.
-   *
-   * Bounded rather than required: a collapsed sidebar never takes focus, and a spec
-   * that is not about Ollie must not fail for it.
-   */
-  private async waitForAssistantSidebarLoaded(): Promise<void> {
-    if (!loadEnvConfig().features.ollie) return;
-    const shown = await this.page
-      .getByTestId('ollie-assistant-iframe')
-      .waitFor({ state: 'visible', timeout: 15_000 })
-      .then(
-        () => true,
-        () => false,
-      );
-    if (!shown) return;
-    const tookFocus = await this.page
-      .waitForFunction(
-        () => document.activeElement?.getAttribute('data-testid') === 'ollie-assistant-iframe',
-        undefined,
-        { timeout: 30_000 },
-      )
-      .then(
-        () => true,
-        () => false,
-      );
-    if (!tookFocus) {
-      test.info().annotations.push({
-        type: 'warning',
-        description: 'the Ollie sidebar did not take focus within 30s; continuing without it',
-      });
-    }
   }
 
   async configureVariant(index: number, cfg: PlaygroundVariantConfig): Promise<void> {
