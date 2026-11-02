@@ -18,6 +18,8 @@ const messageText = (message: unknown) =>
 // Matches against the prettified message, the same text Messages renders, with the same
 // regex findTextRanges uses, so a kept turn always has something to highlight.
 export const traceMatchesSearch = (trace: Trace, search: string): boolean => {
+  if (!search.trim()) return false;
+
   const regex = createSearchRegex(search);
 
   return [

@@ -277,19 +277,23 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
   const visibleTraces = useVisibleTraces(traces, traceId);
   const hiddenTracesCount = traces.length - visibleTraces.length;
 
+  // A whitespace-only search is no search, so the thread is not narrowed to turns that
+  // have nothing to highlight.
+  const searchTerm = search?.trim();
+
   // Like the trace tree search: the thread narrows to the turns that match.
   const searchedTraces = useMemo(
     () =>
-      search
-        ? visibleTraces.filter((trace) => traceMatchesSearch(trace, search))
+      searchTerm
+        ? visibleTraces.filter((trace) => traceMatchesSearch(trace, searchTerm))
         : visibleTraces,
-    [visibleTraces, search],
+    [visibleTraces, searchTerm],
   );
 
   const [messagesNode, setMessagesNode] = useState<HTMLDivElement | null>(null);
   const { findNext, findPrev } = useThreadSearch({
     container: messagesNode,
-    search: search ?? undefined,
+    search: searchTerm,
     traces: searchedTraces,
   });
 
@@ -562,7 +566,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
               <div style={bodyStyle} ref={setMessagesNode}>
                 {traces.length > 0 && !visibleTraces.length ? (
                   <NoData message={ONLY_INTERNAL_CALLS_MESSAGE} icon={null} />
-                ) : search && !searchedTraces.length ? (
+                ) : searchTerm && !searchedTraces.length ? (
                   <NoData message={NO_SEARCH_MATCHES_MESSAGE} icon={null} />
                 ) : (
                   <TraceMessages

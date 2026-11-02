@@ -41,6 +41,13 @@ describe("traceMatchesSearch", () => {
       findTextRanges([root], "i").length > 0,
     );
   });
+
+  it("matches nothing for a blank search, like findTextRanges", () => {
+    const trace = makeTrace({ input: "two  spaces" }, { output: "" });
+
+    expect(traceMatchesSearch(trace, "")).toBe(false);
+    expect(traceMatchesSearch(trace, "  ")).toBe(false);
+  });
 });
 
 describe("findTextRanges", () => {

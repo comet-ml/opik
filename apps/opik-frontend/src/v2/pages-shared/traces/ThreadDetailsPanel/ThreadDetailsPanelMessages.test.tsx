@@ -419,6 +419,29 @@ describe("ThreadDetailsPanel search", () => {
     expect(current()).toEqual(["trace-3"]);
   });
 
+  it("ignores surrounding whitespace, and treats a blank search as no search", () => {
+    searchFor("  trace-2  ");
+
+    const { unmount } = renderPanel();
+
+    expect(renderedMessages()).toEqual([turn("trace-2")]);
+    unmount();
+
+    searchFor("   ");
+
+    renderPanel();
+
+    expect(renderedMessages()).toEqual([
+      turn("trace-1"),
+      turn("trace-2"),
+      turn("trace-3"),
+    ]);
+    expect(
+      screen.queryByText("No messages match your search"),
+    ).not.toBeInTheDocument();
+    expect(registry.size).toBe(0);
+  });
+
   it("does not count the per-message action buttons as matches", () => {
     searchFor("Trace");
 
