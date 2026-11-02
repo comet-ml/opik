@@ -773,6 +773,18 @@ export class OptimizationStudioPage {
   }
 
   /**
+   * Whether the prompt model mounts a parameters gear at all.
+   *
+   * `PromptModelConfigs` renders nothing for a model with no control to set on
+   * this surface — the cloud free model is one — so `readModelParameters` would
+   * wait on a trigger that never comes. Read after `waitForModelResolved`: the
+   * gear renders in the same pass as the resolved model.
+   */
+  async hasModelParameters(): Promise<boolean> {
+    return (await this.modelParametersTrigger().count()) > 0;
+  }
+
+  /**
    * Open the prompt model's parameters popover and read every slider it mounts,
    * by control id, then close it again.
    *

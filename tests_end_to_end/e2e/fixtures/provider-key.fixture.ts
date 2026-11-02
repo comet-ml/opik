@@ -95,10 +95,9 @@ export type UnresponsiveProviderSeed = UnreachableProviderSeed;
  * depends on WHICH it is must not use this: `relaxed` refuses at connect, so
  * there is no provider body to quote, while `strict` answers a 4xx a scorer
  * can report. What holds on both — and what every current caller actually
- * needs — is that the call fails immediately and spends nothing. This is why
- * the two URLs are not merged: `notFoundProviderBaseUrl` promises a SPECIFIC
- * body (Opik's own 404 JSON), which no public host can honour, so it stays
- * loopback-only and `createPermanentlyFailing` stays `relaxed`-only with it.
+ * needs — is that the call fails immediately and spends nothing.
+ * `createPermanentlyFailing` differs in answering an HTTP 404 on both, never a
+ * refused connect.
  *
  * A blackholed address (`192.0.2.1`) would also be stored everywhere, but it
  * fails by TIMING OUT — that turns a one-second failure into a connect-timeout
@@ -181,8 +180,10 @@ export interface ProviderKeysFixture {
    * For specs about what Opik does when a provider REFUSES, which is otherwise
    * awkward to stage: a real provider needs credentials, and the suite's mock
    * gateway only exists on the test runner, so a remote backend can never reach
-   * it (see `mockAuthSkipReason`). This one has no such gate — see
-   * `notFoundProviderBaseUrl` for how.
+   * it (see `mockAuthSkipReason`). This one has no such gate: Opik's own
+   * `notFoundProviderBaseUrl` where the destination guard is `relaxed`, and
+   * `PUBLIC_NOT_FOUND_BASE_URL` where it is `strict`, so the 404 body differs
+   * by deployment and a caller must not quote it.
    */
   createPermanentlyFailing(seed: FailingProviderSeed): Promise<string>;
   /**
@@ -311,9 +312,11 @@ export const test = baseTest.extend<ProviderKeyFixtures>({
         await createProviderKey({
           provider: 'custom-llm',
           provider_name: providerName,
-          base_url: notFoundProviderBaseUrl,
-          // Never presented to a real provider — the request 404s at routing —
-          // but the field is required for a provider that is not in token mode.
+          base_url: guardRefusesInternalDestinations()
+            ? PUBLIC_NOT_FOUND_BASE_URL
+            : notFoundProviderBaseUrl,
+          // Never accepted anywhere — the request 404s at routing — but the
+          // field is required for a provider that is not in token mode.
           api_key: 'not-a-real-key',
           configuration: { models: qualifiedModel },
         });

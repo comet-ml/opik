@@ -906,11 +906,29 @@ export class OnlineEvaluationPage {
     return this.panel.locator('button[role="combobox"]:has([data-testid="decision-model-select"])');
   }
 
+  /**
+   * Open the decision-model select and return its listbox.
+   *
+   * Retried as a whole: the editor remounts the select while its queries
+   * settle, which closes a listbox that had just opened and detaches its
+   * options mid-click (seen on staging 2.2.138).
+   */
+  async openDecisionModelSelect(): Promise<Locator> {
+    const listbox = this.page.getByRole('listbox');
+    await expect(async () => {
+      if (!(await listbox.isVisible())) await this.decisionModelSelect.click({ timeout: 2_000 });
+      await expect(listbox).toBeVisible({ timeout: 2_000 });
+    }).toPass({ timeout: 15_000 });
+    return listbox;
+  }
+
   async chooseDecisionModel(model: string): Promise<void> {
     return test.step(`choose the decision model "${model}"`, async () => {
-      await this.decisionModelSelect.click();
-      await this.page.getByRole('option', { name: model, exact: true }).click();
-      await expect(this.decisionModelSelect).toHaveText(model);
+      await expect(async () => {
+        const listbox = await this.openDecisionModelSelect();
+        await listbox.getByRole('option', { name: model, exact: true }).click({ timeout: 2_000 });
+        await expect(this.decisionModelSelect).toHaveText(model, { timeout: 2_000 });
+      }).toPass({ timeout: 30_000 });
     });
   }
 

@@ -177,20 +177,13 @@ export function guardRefusesInternalDestinations(): boolean {
  * succeeding.
  *
  * Deliberately not httpbin.org or any other public status echo: a permanent test
- * must not depend on a third party being up, and an external body would also be
- * empty, which the scorer renders as a blank error reason.
+ * must not depend on a third party being up.
  *
- * KNOWN LIMITATION, and not fixable without giving up what this URL is for: it
- * only works where the destination guard is `relaxed`. Under `strict` a
- * loopback `base_url` is refused on save, so `createPermanentlyFailing` cannot
- * seed at all — see `guardRefusesInternalDestinations`. Substituting a public
- * host would not rescue it either, because the whole value here is that the
- * 404 body is OPIK'S OWN (`{"code":404,"message":"HTTP 404 Not Found"}`), which
- * is what the one spec on this path quotes; any other host answers a body of
- * its own. Fixing it needs a reachable always-404 route inside the deployment,
- * which is a deployment change rather than a test one. `unreachableBaseUrl` in
- * the provider-key fixture is strict-safe because it promises only that the
- * call fails fast, never what the failure says.
+ * Only where the destination guard is `relaxed`: under `strict` a loopback
+ * `base_url` is refused on save (see `guardRefusesInternalDestinations`), so
+ * `createPermanentlyFailing` falls back to {@link PUBLIC_NOT_FOUND_BASE_URL}
+ * there. The two answer different 404 bodies, which no caller may quote: the
+ * online-scoring log reports a provider failure by error type only.
  */
 export const notFoundProviderBaseUrl = `${backendSelfUrl}/qa-no-such-llm-endpoint`;
 
@@ -215,8 +208,7 @@ export const notFoundProviderBaseUrl = `${backendSelfUrl}/qa-no-such-llm-endpoin
  * permanent and cannot start succeeding.
  *
  * Only ever used where the caller needs the call to fail quickly and cheaply,
- * never where it needs a particular error BODY — that is
- * `notFoundProviderBaseUrl`, and see the limitation recorded on it.
+ * never where it needs a particular error BODY.
  *
  * Override with `OPIK_PUBLIC_NOT_FOUND_BASE_URL` for a `strict` deployment that
  * has its own reachable always-4xx host, which is strictly better than this.
