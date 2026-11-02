@@ -191,21 +191,9 @@ class BedrockConverseTest {
     }
 
     @ParameterizedTest
-    @CsvSource({
-            "throttlingException, 429, true",
-            "modelStreamErrorException, 424, true",
-            "someUndocumentedException, 500, false"})
-    void reportsAnExceptionSentInsideTheStreamWithItsStatusAndOnlyADocumentedMessage(String exceptionType,
-            int status, boolean documented) {
-        var sentMessage = "Too many requests, please wait before trying again.";
-        bedrock.stubFor(post(urlEqualTo(STREAM_PATH)).willReturn(aResponse()
-                .withHeader("Content-Type", "application/vnd.amazon.eventstream")
-                .withBody(concat(
-                        event("contentBlockDelta", "{\"contentBlockIndex\": 0, \"delta\": {\"text\": \"Dub\"}}"),
-                        frame(Map.of(AwsEventStreamParser.MESSAGE_TYPE, "exception",
-                                AwsEventStreamParser.EXCEPTION_TYPE, exceptionType),
-                                JsonUtils.writeValueAsString(Map.of("message", sentMessage)))))));
-        var stream = stream();
+    @CsvSource({"throttlingException, 429", "modelStreamErrorException, 424"})
+    void reportsADocumentedExceptionSentInsideTheStreamWithItsStatusAndMessage(String exceptionType, int status) {
+        var stream = streamEndingWithException(exceptionType, "Too many requests, please wait before trying again.");
 
         assertThat(stream.done()).failsWithin(10, TimeUnit.SECONDS).withThrowableThat()
                 .havingRootCause().isInstanceOf(HttpException.class);
@@ -213,9 +201,32 @@ class BedrockConverseTest {
                 .getLlmProviderError(stream.done().exceptionNow());
         assertThat(error).hasValueSatisfying(message -> {
             assertThat(message.getCode()).isEqualTo(status);
-            assertThat(message.getMessage())
-                    .isEqualTo(documented ? sentMessage : UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
+            assertThat(message.getMessage()).isEqualTo("Too many requests, please wait before trying again.");
         });
+    }
+
+    @Test
+    void hidesTheTextOfAnUndocumentedExceptionSentInsideTheStream() {
+        var stream = streamEndingWithException("someUndocumentedException", "Denied by gateway.internal:8443");
+
+        assertThat(stream.done()).failsWithin(10, TimeUnit.SECONDS);
+        var error = serviceProvider.getService(config())
+                .getLlmProviderError(stream.done().exceptionNow());
+        assertThat(error).hasValueSatisfying(message -> {
+            assertThat(message.getCode()).isEqualTo(500);
+            assertThat(message.getMessage()).isEqualTo(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
+        });
+    }
+
+    private Stream streamEndingWithException(String exceptionType, String exceptionMessage) {
+        bedrock.stubFor(post(urlEqualTo(STREAM_PATH)).willReturn(aResponse()
+                .withHeader("Content-Type", "application/vnd.amazon.eventstream")
+                .withBody(concat(
+                        event("contentBlockDelta", "{\"contentBlockIndex\": 0, \"delta\": {\"text\": \"Dub\"}}"),
+                        frame(Map.of(AwsEventStreamParser.MESSAGE_TYPE, "exception",
+                                AwsEventStreamParser.EXCEPTION_TYPE, exceptionType),
+                                JsonUtils.writeValueAsString(Map.of("message", exceptionMessage)))))));
+        return stream();
     }
 
     @Test
