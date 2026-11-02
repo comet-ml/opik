@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.llm.openai;
 
 import com.comet.opik.domain.llm.LlmProviderFactory;
+import com.comet.opik.domain.llm.ProviderErrorMessageValidator;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.http.OneShotRequestBodies;
 import com.comet.opik.infrastructure.llm.LlmServiceProvider;
@@ -66,8 +67,9 @@ public class OpenAIModule extends AbstractModule {
     @ProvidesIntoSet
     @Singleton
     public DecisionsClient decisionsClient(
-            @NonNull @Named("openaiGenerator") OpenAIClientGenerator clientGenerator) {
-        return new OpenAiDecisionsClient(clientGenerator);
+            @NonNull @Named("openaiGenerator") OpenAIClientGenerator clientGenerator,
+            @NonNull ProviderErrorMessageValidator errorMessageValidator) {
+        return new OpenAiDecisionsClient(clientGenerator, errorMessageValidator);
     }
 
     @Provides

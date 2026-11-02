@@ -1114,7 +1114,8 @@ class OnlineScoringLlmAsJudgeScorerTest {
             assertThat(captureStoredScores())
                     .extracting(FeedbackScoreBatchItem::name, score -> score.value().intValue())
                     .containsExactly(tuple("answer_relevant", 1), tuple("answer_correct", 0));
-            verifyNoInteractions(decisionsClient);
+            // Picking the client asks every client for its provider, in the set's unspecified order.
+            verify(decisionsClient, never()).decide(any(), any());
             verifyNoInteractions(aiProxyService);
         }
 
