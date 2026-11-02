@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bedrockUrlForApi } from "@/lib/provider";
+import { bedrockUrlForApi, normalizeBedrockApi } from "@/lib/provider";
 import { BedrockApi } from "@/types/providers";
 
 describe("bedrockUrlForApi", () => {
@@ -50,5 +50,19 @@ describe("bedrockUrlForApi", () => {
     "not a url",
   ])("keeps %s as typed", (url) => {
     expect(bedrockUrlForApi(url, "converse")).toBe(url);
+  });
+});
+
+describe("normalizeBedrockApi", () => {
+  it.each([
+    ["converse", "converse"],
+    [" Converse ", "converse"],
+    ["ANTHROPIC_MESSAGES", "anthropic_messages"],
+    ["unknown", "chat_completions"],
+    ["", "chat_completions"],
+    [undefined, "chat_completions"],
+    [null, "chat_completions"],
+  ])("reads %j as %s, as the backend does", (stored, expected) => {
+    expect(normalizeBedrockApi(stored)).toBe(expected);
   });
 });

@@ -234,7 +234,7 @@ Amazon Bedrock provides access to foundation models from leading AI companies li
 
 - **Chat Completions (OpenAI-compatible)**: the [OpenAI Chat Completions API](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-chat-completions.html), for models such as gpt-oss, Mistral and Qwen. Check the [supported models documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-chat-completions.html#inference-chat-completions-supported-models) before configuring.
 - **Anthropic Messages (Claude)**: the [Anthropic Messages API](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-messages-api.html), for Claude models. Bedrock does not serve Claude through Chat Completions, so Claude models need this option.
-- **Converse (Amazon Nova and others)**: the [Converse API](https://docs.aws.amazon.com/bedrock/latest/userguide/conversation-inference.html), Bedrock's own API, which every model family supports. Amazon Nova models need this option.
+- **Converse (Amazon Nova and others)**: the [Converse API](https://docs.aws.amazon.com/bedrock/latest/userguide/conversation-inference.html), Bedrock's own API for text and chat models. Embedding and image generation models don't support it; each model's card in [Models at a glance](https://docs.aws.amazon.com/bedrock/latest/userguide/model-cards.html) lists the APIs it supports. Amazon Nova models need this option.
 
 To use several kinds of models, add one Bedrock provider for each API.
 

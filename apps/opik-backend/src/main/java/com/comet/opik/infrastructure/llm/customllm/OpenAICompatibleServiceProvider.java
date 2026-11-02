@@ -30,9 +30,6 @@ class OpenAICompatibleServiceProvider implements LlmServiceProvider {
 
     private static final String ANTHROPIC_API_KEY_HEADER = "x-api-key";
 
-    // Never sent: in token mode the fetched token replaces the x-api-key header that carries it.
-    private static final String TOKEN_MODE_API_KEY = "replaced-by-fetched-token";
-
     private final CustomLlmClientGenerator clientGenerator;
     private final AnthropicClientGenerator anthropicClientGenerator;
     private final LlmModelRegistryService registryService;
@@ -51,43 +48,46 @@ class OpenAICompatibleServiceProvider implements LlmServiceProvider {
 
     @Override
     public LlmProviderService getService(@NonNull LlmProviderClientApiConfig config) {
-        if (BedrockApi.of(config) == BedrockApi.CONVERSE) {
-            return new BedrockConverseProvider(newConverseClient(config), providerName(config));
-        }
-        if (BedrockApi.of(config) == BedrockApi.ANTHROPIC_MESSAGES) {
-            var messagesConfig = toAnthropicMessagesConfig(config);
-            var client = anthropicClientGenerator.newClient(messagesConfig,
-                    clientGenerator.newHttpClientBuilder(messagesConfig));
-            return new BedrockAnthropicProvider(new LlmProviderAnthropic(client, registryService),
-                    providerName(config));
-        }
-        // Ollama keys land here as well, not in OllamaServiceProvider: all three store their models under the
-        // custom-llm/ prefix, so the factory routes them as CUSTOM_LLM and only the key's own type tells them apart.
-        return new CustomLlmProvider(
-                clientGenerator.newCustomLlmClient(config), config.configuration(), config.provider());
+        return switch (BedrockApi.of(config)) {
+            case CONVERSE -> new BedrockConverseProvider(newConverseClient(config), providerName(config));
+            case ANTHROPIC_MESSAGES -> {
+                var messagesConfig = toAnthropicMessagesConfig(config);
+                var client = anthropicClientGenerator.newClient(messagesConfig,
+                        clientGenerator.newHttpClientBuilder(messagesConfig));
+                yield new BedrockAnthropicMessagesProvider(new LlmProviderAnthropic(client, registryService),
+                        providerName(config));
+            }
+            // Ollama keys land here as well, not in OllamaServiceProvider: all three store their models under the
+            // custom-llm/ prefix, so the factory routes them as CUSTOM_LLM and only the key's own type tells them
+            // apart.
+            case CHAT_COMPLETIONS -> new CustomLlmProvider(
+                    clientGenerator.newCustomLlmClient(config), config.configuration(), config.provider());
+        };
     }
 
     @Override
     public ChatModel getLanguageModel(LlmProviderClientApiConfig config,
             LlmAsJudgeModelParameters modelParameters) {
-        if (BedrockApi.of(config) == BedrockApi.CONVERSE) {
-            var modelId = BedrockApi.modelId(modelParameters.name(), providerName(config));
-            return new BedrockConverseChatModel(newConverseClient(config), modelId,
-                    ChatRequestParameters.builder()
-                            .modelName(modelId)
-                            .temperature(modelParameters.temperature())
-                            .build(),
-                    modelParameters.customParameters());
-        }
-        if (BedrockApi.of(config) == BedrockApi.ANTHROPIC_MESSAGES) {
-            var messagesConfig = toAnthropicMessagesConfig(config);
-            var bedrockModelParameters = modelParameters.toBuilder()
-                    .name(BedrockApi.modelId(modelParameters.name(), providerName(config)))
-                    .build();
-            return anthropicClientGenerator.newChatModel(messagesConfig, bedrockModelParameters,
-                    clientGenerator.newHttpClientBuilder(messagesConfig));
-        }
-        return clientGenerator.generateChat(config, modelParameters);
+        return switch (BedrockApi.of(config)) {
+            case CONVERSE -> {
+                var modelId = BedrockApi.modelId(modelParameters.name(), providerName(config));
+                yield new BedrockConverseChatModel(newConverseClient(config), modelId,
+                        ChatRequestParameters.builder()
+                                .modelName(modelId)
+                                .temperature(modelParameters.temperature())
+                                .build(),
+                        modelParameters.customParameters());
+            }
+            case ANTHROPIC_MESSAGES -> {
+                var messagesConfig = toAnthropicMessagesConfig(config);
+                var bedrockModelParameters = modelParameters.toBuilder()
+                        .name(BedrockApi.modelId(modelParameters.name(), providerName(config)))
+                        .build();
+                yield anthropicClientGenerator.newChatModel(messagesConfig, bedrockModelParameters,
+                        clientGenerator.newHttpClientBuilder(messagesConfig));
+            }
+            case CHAT_COMPLETIONS -> clientGenerator.generateChat(config, modelParameters);
+        };
     }
 
     private BedrockConverseClient newConverseClient(LlmProviderClientApiConfig config) {
@@ -112,7 +112,9 @@ class OpenAICompatibleServiceProvider implements LlmServiceProvider {
         if (StringUtils.isBlank(configuration.get(InterceptingHttpClient.AUTH_HEADER_NAME_CONFIG_KEY))) {
             configuration.put(InterceptingHttpClient.AUTH_HEADER_NAME_CONFIG_KEY, ANTHROPIC_API_KEY_HEADER);
         }
-        return builder.configuration(configuration).apiKey(TOKEN_MODE_API_KEY).build();
+        // The Anthropic client refuses a blank key and always sends it as x-api-key.
+        return builder.configuration(configuration).apiKey(InterceptingHttpClient.TOKEN_MODE_PLACEHOLDER_KEY)
+                .build();
     }
 
     private static String providerName(LlmProviderClientApiConfig config) {

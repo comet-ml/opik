@@ -12,7 +12,7 @@ import java.util.Optional;
 import java.util.function.Consumer;
 
 @RequiredArgsConstructor
-class BedrockAnthropicProvider implements LlmProviderService {
+class BedrockAnthropicMessagesProvider implements LlmProviderService {
 
     private final @NonNull LlmProviderService anthropic;
     private final String providerName;

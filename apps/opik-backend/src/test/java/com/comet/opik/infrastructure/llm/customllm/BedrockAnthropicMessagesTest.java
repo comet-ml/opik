@@ -198,6 +198,28 @@ class BedrockAnthropicMessagesTest {
     }
 
     @Test
+    void sendsOnlyTheFetchedTokenInTokenModeWithAnotherAuthHeader() {
+        when(authTokenProvider.bearer(any(), any(), any())).thenReturn("fetched-token");
+        var config = config("/anthropic").toBuilder()
+                .apiKey(null)
+                .configuration(Map.of(
+                        "provider_name", PROVIDER_NAME,
+                        "models", OPIK_MODEL,
+                        BedrockApi.CONFIG_KEY, "anthropic_messages",
+                        InterceptingHttpClient.AUTH_HEADER_NAME_CONFIG_KEY, "api-key"))
+                .authConfig(EncryptedAuthConfig.fromCiphertext("ciphertext"))
+                .providerId(UUID.randomUUID())
+                .workspaceId("workspace")
+                .build();
+
+        serviceProvider.getService(config).generate(request(1024), "workspace");
+
+        bedrock.verify(1, postRequestedFor(urlEqualTo(MESSAGES_PATH))
+                .withHeader("api-key", equalTo("fetched-token"))
+                .withHeader("x-api-key", absent()));
+    }
+
+    @Test
     void judgesThroughTheAnthropicMessagesRouteWithTheBareModelId() {
         var judge = serviceProvider.getLanguageModel(config("/anthropic"),
                 LlmAsJudgeModelParameters.builder().name(OPIK_MODEL).build());

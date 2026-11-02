@@ -25,6 +25,9 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
@@ -38,6 +41,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.zip.CRC32;
 
+import static com.comet.opik.domain.llm.ChatCompletionService.UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
 import static com.comet.opik.infrastructure.llm.LlmModelRegistryTestUtils.bundledRegistry;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
@@ -186,15 +190,21 @@ class BedrockConverseTest {
         assertThat(last.usage().totalTokens()).isEqualTo(15);
     }
 
-    @Test
-    void reportsAnExceptionSentInsideTheStreamWithItsStatusAndMessage() {
+    @ParameterizedTest
+    @CsvSource({
+            "throttlingException, 429, true",
+            "modelStreamErrorException, 424, true",
+            "someUndocumentedException, 500, false"})
+    void reportsAnExceptionSentInsideTheStreamWithItsStatusAndOnlyADocumentedMessage(String exceptionType,
+            int status, boolean documented) {
+        var sentMessage = "Too many requests, please wait before trying again.";
         bedrock.stubFor(post(urlEqualTo(STREAM_PATH)).willReturn(aResponse()
                 .withHeader("Content-Type", "application/vnd.amazon.eventstream")
                 .withBody(concat(
                         event("contentBlockDelta", "{\"contentBlockIndex\": 0, \"delta\": {\"text\": \"Dub\"}}"),
                         frame(Map.of(AwsEventStreamParser.MESSAGE_TYPE, "exception",
-                                AwsEventStreamParser.EXCEPTION_TYPE, "throttlingException"),
-                                "{\"message\": \"Too many requests, please wait before trying again.\"}")))));
+                                AwsEventStreamParser.EXCEPTION_TYPE, exceptionType),
+                                JsonUtils.writeValueAsString(Map.of("message", sentMessage)))))));
         var stream = stream();
 
         assertThat(stream.done()).failsWithin(10, TimeUnit.SECONDS).withThrowableThat()
@@ -202,8 +212,9 @@ class BedrockConverseTest {
         var error = serviceProvider.getService(config())
                 .getLlmProviderError(stream.done().exceptionNow());
         assertThat(error).hasValueSatisfying(message -> {
-            assertThat(message.getCode()).isEqualTo(429);
-            assertThat(message.getMessage()).isEqualTo("Too many requests, please wait before trying again.");
+            assertThat(message.getCode()).isEqualTo(status);
+            assertThat(message.getMessage())
+                    .isEqualTo(documented ? sentMessage : UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
         });
     }
 
@@ -252,6 +263,8 @@ class BedrockConverseTest {
     @Test
     void mapsBedrocksErrorBodyToItsStatusAndMessage() {
         bedrock.stubFor(post(urlEqualTo(CONVERSE_PATH)).willReturn(aResponse().withStatus(400)
+                .withHeader("x-amzn-ErrorType",
+                        "ValidationException:http://internal.amazon.com/coral/com.amazon.bedrock/")
                 .withBody("{\"message\": \"Malformed input request, please reformat your input and try again.\"}")));
         var service = serviceProvider.getService(config());
 
@@ -262,6 +275,23 @@ class BedrockConverseTest {
             assertThat(message.getCode()).isEqualTo(400);
             assertThat(message.getMessage())
                     .isEqualTo("Malformed input request, please reformat your input and try again.");
+        });
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", "SomeGatewayException:http://gateway.internal/"})
+    void hidesTheTextOfAnErrorBedrockDoesNotDocument(String errorType) {
+        var response = aResponse().withStatus(403).withBody("{\"Message\": \"Denied by gateway.internal:8443\"}");
+        bedrock.stubFor(post(urlEqualTo(CONVERSE_PATH)).willReturn(
+                errorType.isEmpty() ? response : response.withHeader("x-amzn-ErrorType", errorType)));
+        var service = serviceProvider.getService(config());
+
+        var thrown = catchThrowable(
+                () -> service.generate(request(List.of(OpikUserMessage.from("Hi")), 10), "workspace"));
+
+        assertThat(service.getLlmProviderError(thrown)).hasValueSatisfying(message -> {
+            assertThat(message.getCode()).isEqualTo(403);
+            assertThat(message.getMessage()).isEqualTo(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
         });
     }
 

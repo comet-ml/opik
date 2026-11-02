@@ -64,6 +64,14 @@ public class ProviderErrorMessageValidator {
         GOOGLE(Set.of(
                 "INVALID_ARGUMENT", "FAILED_PRECONDITION", "UNAUTHENTICATED", "PERMISSION_DENIED", "NOT_FOUND",
                 "RESOURCE_EXHAUSTED", "CANCELLED", "UNKNOWN", "INTERNAL", "UNAVAILABLE", "DEADLINE_EXCEEDED")),
+        /**
+         * https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html#API_runtime_Converse_Errors
+         * and .../API_runtime_ConverseStream.html; the x-amzn-ErrorType header, or :exception-type in a stream.
+         */
+        BEDROCK(Set.of(
+                "AccessDeniedException", "InternalServerException", "ModelErrorException", "ModelNotReadyException",
+                "ModelStreamErrorException", "ModelTimeoutException", "ResourceNotFoundException",
+                "ServiceUnavailableException", "ThrottlingException", "ValidationException")),
         /** https://openrouter.ai/docs/api-reference/errors; error.code */
         OPENROUTER(Set.of(
                 "400", "401", "402", "403", "404", "408", "412", "413", "422", "429", "500", "502", "503", "504"));

@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.llm.customllm;
 
 import com.comet.opik.domain.llm.MessageContentNormalizer;
+import com.comet.opik.domain.llm.ProviderErrorMessageValidator.DocumentedErrors;
 import com.comet.opik.domain.llm.langchain4j.OpikContent;
 import com.comet.opik.domain.llm.langchain4j.OpikUserMessage;
 import com.comet.opik.infrastructure.llm.CustomParametersOverrides;
@@ -14,6 +15,7 @@ import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.Content;
 import dev.langchain4j.data.message.ImageContent;
 import dev.langchain4j.data.message.TextContent;
+import dev.langchain4j.exception.HttpException;
 import dev.langchain4j.model.chat.request.ChatRequestParameters;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.openai.internal.chat.AssistantMessage;
@@ -45,6 +47,12 @@ import static com.comet.opik.domain.llm.ChatCompletionService.UNEXPECTED_ERROR_C
 
 @UtilityClass
 class BedrockConverseMapper {
+
+    /**
+     * Bedrock names the error only in this header, as {@code ValidationException:http://internal.amazon.com/...};
+     * the body is just {@code {"message": ...}}.
+     */
+    static final String ERROR_TYPE_HEADER = "x-amzn-ErrorType";
 
     private static final String ASSISTANT = "assistant";
     private static final String USER = "user";
@@ -178,6 +186,12 @@ class BedrockConverseMapper {
                 .completionTokens(intOrNull(usage, "outputTokens"))
                 .totalTokens(intOrNull(usage, "totalTokens"))
                 .build();
+    }
+
+    boolean isDocumented(HttpException exception) {
+        return exception instanceof HttpResponseException response
+                && DocumentedErrors.BEDROCK.documents(
+                        StringUtils.substringBefore(response.header(ERROR_TYPE_HEADER).orElse(null), ":"));
     }
 
     String errorMessage(String body) {

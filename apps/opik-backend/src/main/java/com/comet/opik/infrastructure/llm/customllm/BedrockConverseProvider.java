@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.llm.customllm;
 
 import com.comet.opik.domain.llm.LlmProviderService;
+import com.comet.opik.domain.llm.ProviderErrorMessageValidator;
 import com.comet.opik.infrastructure.llm.CustomParametersOverrides;
 import com.comet.opik.infrastructure.llm.LlmProviderLangChainMapper;
 import com.comet.opik.infrastructure.llm.OpenAiCompatFinishReasons;
@@ -56,8 +57,11 @@ class BedrockConverseProvider implements LlmProviderService {
     public Optional<ErrorMessage> getLlmProviderError(@NonNull Throwable throwable) {
         if (throwable instanceof HttpException exception && exception.statusCode() >= 400
                 && exception.statusCode() < 600) {
-            return Optional.of(new ErrorMessage(exception.statusCode(),
-                    BedrockConverseMapper.errorMessage(exception.getMessage())));
+            var error = new ErrorMessage(exception.statusCode(),
+                    BedrockConverseMapper.errorMessage(exception.getMessage()));
+            return Optional.of(BedrockConverseMapper.isDocumented(exception)
+                    ? error
+                    : ProviderErrorMessageValidator.withoutProviderText(error));
         }
         return LlmProviderLangChainMapper.INSTANCE.getCustomLlmErrorObject(throwable, log);
     }

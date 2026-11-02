@@ -150,9 +150,9 @@ export const DEFAULT_BEDROCK_API: BedrockApi = "chat_completions";
 export const normalizeBedrockApi = (
   value: string | undefined | null,
 ): BedrockApi => {
-  const lowered = value?.toLowerCase();
-  return (BEDROCK_API_VALUES as readonly string[]).includes(lowered ?? "")
-    ? (lowered as BedrockApi)
+  const normalized = value?.trim().toLowerCase();
+  return (BEDROCK_API_VALUES as readonly string[]).includes(normalized ?? "")
+    ? (normalized as BedrockApi)
     : DEFAULT_BEDROCK_API;
 };
 

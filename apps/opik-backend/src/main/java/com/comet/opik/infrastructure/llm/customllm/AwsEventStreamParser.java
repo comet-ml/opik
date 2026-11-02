@@ -6,6 +6,7 @@ import dev.langchain4j.http.client.sse.ServerSentEvent;
 import dev.langchain4j.http.client.sse.ServerSentEventListener;
 import dev.langchain4j.http.client.sse.ServerSentEventParser;
 import lombok.NonNull;
+import org.apache.commons.lang3.StringUtils;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -13,6 +14,7 @@ import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.zip.CRC32;
 
@@ -87,13 +89,14 @@ class AwsEventStreamParser implements ServerSentEventParser {
     }
 
     // An exception frame carries the same {"message": ...} body as a non-2xx response, so both reach callers as an
-    // HttpException with the status that response would have had.
+    // HttpException with the status and the error type header that response would have had.
     private static HttpException toException(Map<String, String> headers, String payload) {
         var type = headers.getOrDefault(EXCEPTION_TYPE, headers.getOrDefault(ERROR_CODE, ""));
         var body = payload.isBlank()
                 ? JsonUtils.writeValueAsString(Map.of("message", headers.getOrDefault(ERROR_MESSAGE, type)))
                 : payload;
-        return new HttpException(statusOf(type), body);
+        return new HttpResponseException(statusOf(type), body,
+                Map.of(BedrockConverseMapper.ERROR_TYPE_HEADER, List.of(StringUtils.capitalize(type))));
     }
 
     private static int statusOf(String exceptionType) {
@@ -102,6 +105,7 @@ class AwsEventStreamParser implements ServerSentEventParser {
             case "accessDeniedException" -> 403;
             case "resourceNotFoundException" -> 404;
             case "throttlingException" -> 429;
+            case "modelStreamErrorException" -> 424;
             case "serviceUnavailableException" -> 503;
             default -> 500;
         };
