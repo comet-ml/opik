@@ -398,6 +398,18 @@ export interface ExperimentRefDetail {
   id: string;
   name: string;
   datasetId: string | null;
+  /**
+   * The project the experiment's traces were written to.
+   *
+   * Nullable because the wire genuinely makes it optional, and a caller that
+   * cares has to assert the absence away rather than compare against a
+   * substituted default. It is the field that says WHICH project a
+   * `project_name` on the write resolved to — the whole subject of
+   * `resolveProjectIdOrCreate` (opik#9161), and unobservable anywhere else: an
+   * execute that created two projects for one name would still answer 202 with
+   * the right number of experiments.
+   */
+  projectId: string | null;
 }
 
 /**
@@ -4158,6 +4170,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         id: String(match.id),
         name: match.name as string,
         datasetId: match.datasetId ? String(match.datasetId) : null,
+        projectId: match.projectId ? String(match.projectId) : null,
       };
     },
 
@@ -4170,6 +4183,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
           id: String(e.id),
           name: e.name as string,
           datasetId: e.datasetId ? String(e.datasetId) : null,
+          projectId: e.projectId ? String(e.projectId) : null,
         }));
     },
 
@@ -4190,6 +4204,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         id: String(e.id),
         name: e.name as string,
         datasetId: e.datasetId ? String(e.datasetId) : null,
+        projectId: e.projectId ? String(e.projectId) : null,
       }));
     },
 
@@ -4225,6 +4240,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         id: String(experiment.id),
         name,
         datasetId: experiment.datasetId ? String(experiment.datasetId) : null,
+        projectId: experiment.projectId ? String(experiment.projectId) : null,
       };
     },
 
