@@ -6,6 +6,7 @@ import weakref
 from typing import (
     Any,
     AsyncGenerator,
+    Awaitable,
     Callable,
     Generator,
     List,
@@ -183,6 +184,15 @@ class SyncTrackedGenerator(BaseTrackedGenerator[YieldType]):
         return self
 
     def __next__(self) -> YieldType:
+        return self._advance(lambda: next(self._generator))
+
+    def send(self, value: Any) -> YieldType:
+        return self._advance(lambda: self._generator.send(value))
+
+    def throw(self, *args: Any) -> YieldType:
+        return self._advance(lambda: self._generator.throw(*args))
+
+    def _advance(self, step: Callable[[], YieldType]) -> YieldType:
         try:
             self._ensure_span_and_trace_created()
             assert self._created_span_data is not None
@@ -190,7 +200,7 @@ class SyncTrackedGenerator(BaseTrackedGenerator[YieldType]):
             with context_storage.temporary_context(
                 self._created_span_data, self._created_trace_data
             ):
-                value = next(self._generator)
+                value = step()
                 self._accumulated_values.append(value)
                 return value
         except StopIteration:
@@ -257,6 +267,15 @@ class AsyncTrackedGenerator(BaseTrackedGenerator[YieldType]):
         return self
 
     async def __anext__(self) -> YieldType:
+        return await self._advance(lambda: self._generator.__anext__())
+
+    async def asend(self, value: Any) -> YieldType:
+        return await self._advance(lambda: self._generator.asend(value))
+
+    async def athrow(self, *args: Any) -> YieldType:
+        return await self._advance(lambda: self._generator.athrow(*args))
+
+    async def _advance(self, step: Callable[[], Awaitable[YieldType]]) -> YieldType:
         try:
             self._ensure_span_and_trace_created()
             assert self._created_span_data is not None
@@ -266,7 +285,7 @@ class AsyncTrackedGenerator(BaseTrackedGenerator[YieldType]):
             with context_storage.temporary_context(
                 self._created_span_data, self._created_trace_data
             ):
-                value = await self._generator.__anext__()
+                value = await step()
                 self._accumulated_values.append(value)
                 return value
         except StopAsyncIteration:

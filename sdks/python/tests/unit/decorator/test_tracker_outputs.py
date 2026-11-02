@@ -1,4 +1,5 @@
 import asyncio
+import collections.abc
 import contextlib
 import dataclasses
 import functools
@@ -952,6 +953,71 @@ def test_track__function_returns_generator__consumed_after_tracked_parent_return
 
     assert len(fake_backend.trace_trees) == 1
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_track__function_returns_generator__send_and_throw__forwarded_to_generator(
+    fake_backend,
+):
+    def echo():
+        received = yield "ready"
+        try:
+            yield f" got-{received}"
+        except ValueError:
+            yield " recovered"
+
+    @tracker.track
+    def f(x):
+        return echo()
+
+    generator = f("generator-input")
+    assert isinstance(generator, collections.abc.Generator)
+    assert next(generator) == "ready"
+    assert generator.send("ping") == " got-ping"
+    assert generator.throw(ValueError) == " recovered"
+    with pytest.raises(StopIteration):
+        next(generator)
+
+    tracker.flush_tracker()
+
+    assert len(fake_backend.trace_trees) == 1
+    assert_equal(
+        _expected_generator_trace("ready got-ping recovered"),
+        fake_backend.trace_trees[0],
+    )
+
+
+def test_track__function_returns_async_generator__asend_and_athrow__forwarded_to_generator(
+    fake_backend,
+):
+    async def echo():
+        received = yield "ready"
+        try:
+            yield f" got-{received}"
+        except ValueError:
+            yield " recovered"
+
+    @tracker.track
+    def f(x):
+        return echo()
+
+    async def consume():
+        generator = f("generator-input")
+        assert isinstance(generator, collections.abc.AsyncGenerator)
+        assert await generator.__anext__() == "ready"
+        assert await generator.asend("ping") == " got-ping"
+        assert await generator.athrow(ValueError) == " recovered"
+        with pytest.raises(StopAsyncIteration):
+            await generator.__anext__()
+
+    asyncio.run(consume())
+
+    tracker.flush_tracker()
+
+    assert len(fake_backend.trace_trees) == 1
+    assert_equal(
+        _expected_generator_trace("ready got-ping recovered"),
+        fake_backend.trace_trees[0],
+    )
 
 
 def test_track__wrapper_turns_generator_into_list__tracked_as_normal_function(
