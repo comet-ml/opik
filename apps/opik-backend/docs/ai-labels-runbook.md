@@ -267,7 +267,7 @@ publishes no series.
 |---|---|---|
 | Vectors lag | `min_over_time(max by (k8s_namespace_name, workspace_id, workspace_name) (topics_vectors_oldest_unvectored_seconds)[15m:1m]) > 1800` | Run "Checking that vectors flow" for the workspace. Then `topics.vectors.skipped` by reason and `topics.vectors.embed.failures` for it: a trace that fails every tick (`invalid_vector`, or `embed_failed` with a 4xx) holds the age up until its status leaves the window. Many workspaces at once: opik-inference, or the tick budget (`over_budget`). |
 | Vectors tick stopped | `sum by (k8s_namespace_name) (increase(topics_vectors_ticks_total{outcome="ran"}[10m])) == 0` | `topics.vectors.ticks` by outcome. `failed`: the backend log line `Topic vectors tick failed`. Only `lock_held`: Redis, or a tick stuck past its lease (the TTL of the Redis key `topics:vectors:leader`). Only `not_due`: the TTL of `topics:vectors:tick`. |
-| Vectors workspace not read | `sum by (k8s_namespace_name, workspace_id, workspace_name) (increase({__name__=~"topics_vectors_workspaces_not_read_total\|topics_vectors_read_failures_total", phase=~"find\|"}[15m])) >= 10` | The workspace's window read failed, or the tick budget ran out before it, on most ticks of the last 15 minutes. `topics.vectors.read.failures` by `error_type` for it: ClickHouse timeouts or guards on a large workspace. Only `workspaces_not_read`: the tick budget is too short for the enabled workspaces, or one slow workspace ahead of it in the rotation. |
+| Vectors workspace not read | `sum by (k8s_namespace_name, workspace_id) (increase({__name__=~"topics_vectors_workspaces_not_read_total\|topics_vectors_read_failures_total", phase=~"find\|"}[15m])) >= 10` | The workspace's window read failed, or the tick budget ran out before it, on most ticks of the last 15 minutes. `topics.vectors.read.failures` by `error_type` for it: ClickHouse timeouts or guards on a large workspace. Only `workspaces_not_read`: the tick budget is too short for the enabled workspaces, or one slow workspace ahead of it in the rotation. |
 
 - **Vectors lag.** `min_over_time` over 15 minutes ignores the daily long-window spike and one slow tick, so the alert
   fires about 15 minutes after the lag first passes the threshold. The threshold, 30 minutes, is 15 times the 2-minute
@@ -279,7 +279,10 @@ publishes no series.
   the pod's first firing, not the ticks after a deploy.
 - **Vectors workspace not read.** The heartbeat of one workspace: its lag series disappears exactly when its read
   fails or is never reached. Both counters carry the workspace, and the tick runs every minute, so 10 in 15 minutes
-  means most ticks missed it; the first increment a new series loses does not matter at that rate.
+  means most ticks missed it; the first increment a new series loses does not matter at that rate. It groups by
+  `workspace_id` alone: while a name lookup falls back to the id, the same workspace has two `workspace_name` values,
+  and grouping by both would split the count under the threshold. Find the name on the lag panel or in the opt-in
+  table.
 
 ### Deletes
 
@@ -595,7 +598,7 @@ table. Every pod publishes the same values: read them with `max`, never `sum`. T
 |---|---|
 | `topics.nightly.state_age_seconds` | Seconds since this pod last read the night tables; before its first good read, since it started trying. Published whenever the job is on, also before the first night. Above a few minutes, every other state gauge is stale. |
 | `topics.nightly.state_refresh_failures` | A counter: failed reads of the night tables (WARN `could not read the night tables`). Set to 0 at startup when the job is on. |
-| `topics.nightly.last_started_age_seconds` | Seconds since the latest night started, scheduled or by hand. |
+| `topics.nightly.last_started_age_seconds` | Seconds since the latest night started, scheduled or by hand. Before the first night ever, seconds since the pod started reading. |
 | `topics.nightly.running_seconds` | Age of the oldest night still `running`; 0 when none. A night whose pod died stays `running` until the next night's housekeeping fails it. |
 | `topics.nightly.last_night.projects` by workspace, `decision`, `reason` | Projects per decision in the latest ended night, `count_failed` included. |
 | `topics.nightly.last_night.runs` by workspace, `status` | Runs the latest ended night started, by their `topic_runs` status: `saved`, `failed` (a run that could not start counts here), `running` (marking it failed threw). |
@@ -617,7 +620,7 @@ gauges only, and every rule groups by `k8s_namespace_name`.
 
 | Alert | Condition | PromQL | Check | First step |
 |---|---|---|---|---|
-| Night not started | No night started for 25 hours. | `max by (k8s_namespace_name) (topics_nightly_last_started_age_seconds) > 25 * 3600` | The latest nights query below. | Read the logs for `Topics night` around the cron time. A night lock left by a dead pod (`topics:nightly:lock`) blocks nights until it expires. Run the night by hand (see "Running by hand"). |
+| Night not started | No night started for 25 hours. Before the first night ever, the age counts from the pod's start, so a first night that never starts fires too. | `max by (k8s_namespace_name) (topics_nightly_last_started_age_seconds) > 25 * 3600` | The latest nights query below. | Read the logs for `Topics night` around the cron time. A night lock left by a dead pod (`topics:nightly:lock`) blocks nights until it expires. Run the night by hand (see "Running by hand"). |
 | Night too long | A night runs longer than budget + project timeout + 30 minutes (2 h 45 m with the defaults). | `max by (k8s_namespace_name) (topics_nightly_running_seconds) > 9900` | The latest nights query below; its `running` row. | A night whose pod died stays `running` until the next night: check for a pod restart. Otherwise find the `running` run in `topic_runs` and its logs. |
 | Last night failed | The latest ended night failed: a read failed, or its pod died and the next night's housekeeping failed it. A night whose reads fail writes no project rows, so no other nightly rule sees it. | `max by (k8s_namespace_name) (topics_nightly_last_night_failed) > 0` | The latest nights query below; its `failed` row. | The ERROR `Topics night failed` (or `started by hand failed`) has the error. No ERROR: the pod died, check for a restart. Clears when the next night finishes. |
 | Stale projects | A project was expected on each of the last 3 nights and got no saved run. | `max by (k8s_namespace_name, workspace_id, workspace_name) (topics_nightly_stale_projects) > 0` | The stale-project query below. | Find its runs in `topic_runs`: failed (read `error_code`), never started (a `first_build` or `nightly_update` row with no `run_id`), or `not_reached` (the budget). |

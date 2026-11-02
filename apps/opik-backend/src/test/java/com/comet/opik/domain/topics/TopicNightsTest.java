@@ -294,14 +294,17 @@ class TopicNightsTest {
     }
 
     @Test
-    @DisplayName("before the first night only the heartbeat is published, and the failure counter is set to 0")
+    @DisplayName("before the first night only the heartbeat and the age since the refresher started are published, "
+            + "and the failure counter is set to 0")
     void beforeFirstNight() {
         refresh();
+        clock.advance(Duration.ofHours(26));
 
-        assertThat(gauge(TopicsNightlyGauges.STATE_AGE)).isZero();
+        assertThat(gauge(TopicsNightlyGauges.STATE_AGE)).isEqualTo(Duration.ofHours(26).toSeconds());
+        assertThat(gauge(TopicsNightlyGauges.LAST_STARTED_AGE)).isEqualTo(Duration.ofHours(26).toSeconds());
         assertThat(meter.points(TopicsNightlyGauges.STATE_REFRESH_FAILURES)).singleElement()
                 .satisfies(point -> assertThat(point.value()).isZero());
-        for (var name : List.of(TopicsNightlyGauges.LAST_STARTED_AGE, TopicsNightlyGauges.RUNNING,
+        for (var name : List.of(TopicsNightlyGauges.RUNNING,
                 TopicsNightlyGauges.LAST_NIGHT_PROJECTS, TopicsNightlyGauges.LAST_NIGHT_FAILED,
                 TopicsNightlyGauges.LAST_NIGHT_CHURN_MAX, TopicsNightlyGauges.STALE_PROJECTS,
                 TopicsNightlyGauges.MISMATCHED)) {
