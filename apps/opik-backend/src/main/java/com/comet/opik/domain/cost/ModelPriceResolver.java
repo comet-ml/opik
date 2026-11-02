@@ -13,7 +13,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
-import java.util.stream.Stream;
 
 /**
  * Finds the price for a model name and provider. The organization's rows come first: every spelling of the name under
@@ -123,19 +122,24 @@ class ModelPriceResolver {
         if (!layers.hasRows()) {
             return Optional.empty();
         }
-        for (String candidateProvider : withAnyProvider(lookupOrder)) {
-            for (Map.Entry<String, NameForm> spelling : spellings.entrySet()) {
-                CustomModelPrice row = layers.find(spelling.getKey(), candidateProvider);
-                if (row != null && (followAliases || row.kind() == CustomModelPrice.Kind.FIXED)) {
-                    return Optional.of(new CustomMatch(row, candidateProvider, spelling.getValue()));
-                }
+        for (String candidateProvider : lookupOrder) {
+            Optional<CustomMatch> match = findCustomUnder(layers, candidateProvider, spellings, followAliases);
+            if (match.isPresent()) {
+                return match;
+            }
+        }
+        return findCustomUnder(layers, CustomModelPrice.ANY_PROVIDER, spellings, followAliases);
+    }
+
+    private Optional<CustomMatch> findCustomUnder(PriceLayers layers, String provider,
+            Map<String, NameForm> spellings, boolean followAliases) {
+        for (Map.Entry<String, NameForm> spelling : spellings.entrySet()) {
+            CustomModelPrice row = layers.find(spelling.getKey(), provider);
+            if (row != null && (followAliases || row.kind() == CustomModelPrice.Kind.FIXED)) {
+                return Optional.of(new CustomMatch(row, provider, spelling.getValue()));
             }
         }
         return Optional.empty();
-    }
-
-    private List<String> withAnyProvider(List<String> lookupOrder) {
-        return Stream.concat(lookupOrder.stream(), Stream.of(CustomModelPrice.ANY_PROVIDER)).toList();
     }
 
     // Duplicates are dropped by exact string, never ignoring case: most price keys are lower case, so a name that
