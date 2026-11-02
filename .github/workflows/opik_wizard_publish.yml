@@ -65,7 +65,7 @@ jobs:
         uses: actions/setup-node@v7
         with:
           # npm trusted publishing (OIDC) requires Node >= 22.14.0 and npm >= 11.5.1.
-          node-version: "22.14.0"
+          node-version: "22.23.4"
           registry-url: "https://registry.npmjs.org"
 
       - name: Setup npm
@@ -74,7 +74,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
         with:
-          version: 10.34.5
+          version: 10.34.9
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
