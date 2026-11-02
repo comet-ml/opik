@@ -1,5 +1,11 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, within } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import {
+  render,
+  screen,
+  fireEvent,
+  within,
+  waitFor,
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { QueryParamProvider } from "use-query-params";
 import { WindowHistoryAdapter } from "use-query-params/adapters/window";
@@ -112,7 +118,7 @@ const renderPanel = (props: { traceId?: string } = {}) => {
     defaultOptions: { queries: { retry: false } },
   });
 
-  return render(
+  const ui = () => (
     <QueryClientProvider client={queryClient}>
       <QueryParamProvider adapter={WindowHistoryAdapter}>
         <PermissionsProvider value={DEFAULT_PERMISSIONS}>
@@ -129,8 +135,12 @@ const renderPanel = (props: { traceId?: string } = {}) => {
           </TooltipProvider>
         </PermissionsProvider>
       </QueryParamProvider>
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
+  const result = render(ui());
+
+  // The window adapter doesn't re-render on its own; this stands in for the router.
+  return { ...result, rerenderPanel: () => result.rerender(ui()) };
 };
 
 const INTERNAL_TOOLTIP =
@@ -323,5 +333,154 @@ describe("ThreadDetailsPanel messages", () => {
     expect(
       screen.queryByText("Only internal calls in this thread"),
     ).not.toBeInTheDocument();
+  });
+});
+
+// Records what the panel registers with CSS.highlights, which happy-dom does not implement.
+class FakeHighlight {
+  ranges: Range[];
+  constructor(...ranges: Range[]) {
+    this.ranges = ranges;
+  }
+}
+
+// The trace id of the message each registered range sits in.
+const highlightedMessages = (
+  registry: Map<string, FakeHighlight>,
+  name: string,
+) =>
+  (registry.get(name)?.ranges ?? []).map(
+    (range) =>
+      range.startContainer.parentElement
+        ?.closest("[data-trace-message-id]")
+        ?.getAttribute("data-trace-message-id"),
+  );
+
+const searchFor = (value: string) =>
+  window.history.replaceState(
+    null,
+    "",
+    `/?thread_panel_search=${encodeURIComponent(value)}`,
+  );
+
+describe("ThreadDetailsPanel search", () => {
+  let registry: Map<string, FakeHighlight>;
+
+  beforeEach(() => {
+    localStorage.clear();
+    window.history.replaceState(null, "", "/");
+    mocks.traces = [
+      makeTrace("trace-1"),
+      makeTrace("trace-2"),
+      makeTrace("trace-3"),
+    ];
+    mocks.thread = makeThread(6);
+    registry = new Map();
+    vi.stubGlobal("Highlight", FakeHighlight);
+    vi.stubGlobal("CSS", { highlights: registry });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState(null, "", "/");
+  });
+
+  it("narrows Messages to the turns that match and highlights each match", () => {
+    searchFor("trace-2");
+
+    renderPanel();
+
+    expect(renderedMessages()).toEqual([turn("trace-2")]);
+    expect(highlightedMessages(registry, "thread-search-match")).toEqual([
+      "trace-2",
+      "trace-2",
+    ]);
+  });
+
+  it("steps through matches with the arrow keys, wrapping at both ends", () => {
+    searchFor("answer");
+
+    renderPanel();
+
+    const input = screen.getByPlaceholderText("Search messages");
+    const current = () =>
+      highlightedMessages(registry, "thread-search-current-match");
+
+    expect(current()).toEqual(["trace-1"]);
+
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    expect(current()).toEqual(["trace-2"]);
+
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    expect(current()).toEqual(["trace-1"]);
+
+    fireEvent.keyDown(input, { key: "ArrowUp" });
+    expect(current()).toEqual(["trace-3"]);
+  });
+
+  it("ignores surrounding whitespace, and treats a blank search as no search", () => {
+    searchFor("  trace-2  ");
+
+    const { unmount } = renderPanel();
+
+    expect(renderedMessages()).toEqual([turn("trace-2")]);
+    unmount();
+
+    searchFor("   ");
+
+    renderPanel();
+
+    expect(renderedMessages()).toEqual([
+      turn("trace-1"),
+      turn("trace-2"),
+      turn("trace-3"),
+    ]);
+    expect(
+      screen.queryByText("No messages match your search"),
+    ).not.toBeInTheDocument();
+    expect(registry.size).toBe(0);
+  });
+
+  it("does not count the per-message action buttons as matches", () => {
+    searchFor("Trace");
+
+    renderPanel();
+
+    expect(highlightedMessages(registry, "thread-search-match")).toEqual([
+      "trace-1",
+      "trace-1",
+      "trace-2",
+      "trace-2",
+      "trace-3",
+      "trace-3",
+    ]);
+  });
+
+  it("explains an empty result, and clearing the search shows every turn again", async () => {
+    searchFor("no such keyword");
+
+    const { rerenderPanel } = renderPanel();
+
+    expect(renderedMessages()).toEqual([]);
+    expect(
+      screen.getByText("No messages match your search"),
+    ).toBeInTheDocument();
+
+    fireEvent.keyDown(screen.getByPlaceholderText("Search messages"), {
+      key: "Escape",
+    });
+
+    await waitFor(() =>
+      expect(window.location.search).toBe("?thread_panel_search="),
+    );
+    rerenderPanel();
+
+    expect(renderedMessages()).toEqual([
+      turn("trace-1"),
+      turn("trace-2"),
+      turn("trace-3"),
+    ]);
+    expect(registry.size).toBe(0);
   });
 });
