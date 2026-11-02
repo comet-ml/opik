@@ -73,7 +73,7 @@ public record ModelPrice(
                 .inputAudioTokenPrice(BigDecimal.ZERO)
                 .outputAudioTokenPrice(BigDecimal.ZERO)
                 .outputReasoningTokenPrice(BigDecimal.ZERO)
-                .calculator(SpanCostCalculator::defaultCost)
+                .calculator(SpanCostCalculator.DEFAULT_COST_CALCULATOR)
                 .promptTiers(List.of());
     }
 
