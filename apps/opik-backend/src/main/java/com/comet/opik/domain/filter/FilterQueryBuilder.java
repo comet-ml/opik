@@ -148,9 +148,8 @@ public class FilterQueryBuilder {
     public static final String THREAD_ANNOTATION_QUEUE_IDS_ANALYTICS_DB = "ttaqi.annotation_queue_ids";
     private static final String EXPERIMENT_ID_DB = "experiment_id";
     // Comments reference the trace id and the thread model id (not the user-facing thread id)
-    private static final String TRACE_COMMENTS_ENTITY_ID_DB = "id";
-    private static final String THREAD_COMMENTS_ENTITY_ID_DB = "thread_model_id";
-    private static final String COMMENTS_ENTITY_IDS_SUBQUERY = "(SELECT entity_id FROM comments WHERE workspace_id = :workspace_id)";
+    private static final String TRACE_HAS_COMMENTS_DB = "id IN (SELECT entity_id FROM comments WHERE workspace_id = :workspace_id AND entity_type = 'trace')";
+    private static final String THREAD_HAS_COMMENTS_DB = "thread_model_id IN (SELECT entity_id FROM comments WHERE workspace_id = :workspace_id AND entity_type = 'thread')";
     private static final String WEBHOOK_URL_DB = "webhook_url";
     private static final String ALERT_TYPE_DB = "alert_type";
     private static final String ENABLED_DB = "enabled";
@@ -331,7 +330,7 @@ public class FilterQueryBuilder {
                             FieldType.ENUM,
                             "empty(%1$s)",
                             FieldType.COMMENTS,
-                            "%1$s NOT IN " + COMMENTS_ENTITY_IDS_SUBQUERY)))
+                            "NOT (%1$s)")))
                     .put(Operator.IS_NOT_EMPTY, new EnumMap<>(Map.of(
                             FieldType.FEEDBACK_SCORES_NUMBER,
                             "empty(arrayFilter(element -> (element = lower(:filterKey%2$d)), groupArray(lower(name)))) = 0",
@@ -346,7 +345,7 @@ public class FilterQueryBuilder {
                             FieldType.ENUM,
                             "notEmpty(%1$s)",
                             FieldType.COMMENTS,
-                            "%1$s IN " + COMMENTS_ENTITY_IDS_SUBQUERY)))
+                            "%1$s")))
                     .put(Operator.IN, new EnumMap<>(Map.of(
                             FieldType.ENUM, "%1$s IN :filter%2$d",
                             FieldType.STRING_LIST, "%1$s IN :filter%2$d")))
@@ -382,7 +381,7 @@ public class FilterQueryBuilder {
                     .put(TraceField.ERROR_INFO, ERROR_INFO_DB)
                     .put(TraceField.ERROR_TYPE, ERROR_TYPE_DB)
                     .put(TraceField.ANNOTATION_QUEUE_IDS, ANNOTATION_QUEUE_IDS_ANALYTICS_DB)
-                    .put(TraceField.COMMENTS, TRACE_COMMENTS_ENTITY_ID_DB)
+                    .put(TraceField.COMMENTS, TRACE_HAS_COMMENTS_DB)
                     .put(TraceField.EXPERIMENT_ID, EXPERIMENT_ID_DB)
                     .put(TraceField.EXPERIMENT_IDS, EXPERIMENT_ID_DB)
                     .put(TraceField.CREATED_AT, CREATED_AT_DB)
@@ -406,7 +405,7 @@ public class FilterQueryBuilder {
                     .put(TraceThreadField.STATUS, STATUS_DB)
                     .put(TraceThreadField.TAGS, TAGS_DB)
                     .put(TraceThreadField.ANNOTATION_QUEUE_IDS, THREAD_ANNOTATION_QUEUE_IDS_ANALYTICS_DB)
-                    .put(TraceThreadField.COMMENTS, THREAD_COMMENTS_ENTITY_ID_DB)
+                    .put(TraceThreadField.COMMENTS, THREAD_HAS_COMMENTS_DB)
                     .put(TraceThreadField.SOURCE, SOURCE_DB)
                     .put(TraceThreadField.ENVIRONMENT, ENVIRONMENT_DB)
                     .build());

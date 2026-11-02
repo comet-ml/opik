@@ -18,16 +18,16 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 class FilterQueryBuilderCommentsTest {
 
-    private static final String COMMENTS_SUBQUERY = "(SELECT entity_id FROM comments WHERE workspace_id = :workspace_id)";
+    private static final String TRACE_HAS_COMMENTS = "id IN (SELECT entity_id FROM comments WHERE workspace_id = :workspace_id AND entity_type = 'trace')";
+    private static final String THREAD_HAS_COMMENTS = "thread_model_id IN (SELECT entity_id FROM comments WHERE workspace_id = :workspace_id AND entity_type = 'thread')";
 
     static Stream<Arguments> commentsFilter() {
         return Stream.of(
-                arguments(FilterStrategy.TRACE, trace(Operator.IS_NOT_EMPTY), "id IN " + COMMENTS_SUBQUERY),
-                arguments(FilterStrategy.TRACE, trace(Operator.IS_EMPTY), "id NOT IN " + COMMENTS_SUBQUERY),
-                arguments(FilterStrategy.TRACE_THREAD, thread(Operator.IS_NOT_EMPTY),
-                        "thread_model_id IN " + COMMENTS_SUBQUERY),
+                arguments(FilterStrategy.TRACE, trace(Operator.IS_NOT_EMPTY), TRACE_HAS_COMMENTS),
+                arguments(FilterStrategy.TRACE, trace(Operator.IS_EMPTY), "NOT (%s)".formatted(TRACE_HAS_COMMENTS)),
+                arguments(FilterStrategy.TRACE_THREAD, thread(Operator.IS_NOT_EMPTY), THREAD_HAS_COMMENTS),
                 arguments(FilterStrategy.TRACE_THREAD, thread(Operator.IS_EMPTY),
-                        "thread_model_id NOT IN " + COMMENTS_SUBQUERY));
+                        "NOT (%s)".formatted(THREAD_HAS_COMMENTS)));
     }
 
     @ParameterizedTest(name = "{0} {1}")
