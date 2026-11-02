@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset yaroslavb:000143_create_topic_vectors
+--changeset yaroslavb:000148_create_topic_vectors
 --comment: Create topic_vectors, the bge-small vector of each labeled trace's intent: one row per (trace, task_version) (OPIK-8981)
 
 -- topic_vectors holds, for every trace with a done trace_summary in ai_label_status, the vector of its summary text as

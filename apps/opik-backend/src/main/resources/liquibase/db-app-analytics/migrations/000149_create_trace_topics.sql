@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset yaroslavb:000144_create_trace_topics
+--changeset yaroslavb:000149_create_trace_topics
 --comment: Create trace_topics, the topic of each trace as the nightly run (and later the arrival path) assigned it (OPIK-8987)
 
 -- trace_topics holds one row per trace and assignment: every nightly run inserts a row for every trace of its window,
