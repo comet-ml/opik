@@ -295,7 +295,7 @@ class TopicsNightlyJobTest {
             var body = json(request.getBodyAsString());
             assertThat(body.path("org_id").asText()).isEqualTo(workspaceId);
             assertThat(body.path("lane").asText()).isEqualTo("batch");
-            assertThat(body.path("max_tokens").asInt()).isEqualTo(TopicsRebuildService.QWEN_MAX_TOKENS);
+            assertThat(body.path("max_tokens").asInt()).isEqualTo(KMeansTopicAlgorithm.QWEN_MAX_TOKENS);
             assertThat(body.path("schema")).isEqualTo(TopicPrompts.AUTHOR_SCHEMA);
             // The service decodes the keys in schema order: the topics before Other.
             assertThat(request.getBodyAsString())

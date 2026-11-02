@@ -38,7 +38,6 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -46,6 +45,7 @@ import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
@@ -53,11 +53,11 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
 /**
  * One project's run of the nightly job, in one of two modes. The first build (stage 2a), for a project without live
- * topics: read the window of vectors, merge identical texts, k-means them into fine groups, have Qwen name topics over
- * the groups, assign every window trace to its nearest prototype, check the invariants and save. The nightly update
- * (stage 2b), for a project with live topics: read the window and the saved list, run {@link NightlyUpdate}, compute
- * the churn against last night's labels, check {@link NightInvariants} and save. Synchronous: the nightly job calls it
- * on its own thread, one project at a time.
+ * topics: read the window of vectors, have the {@link TopicAlgorithm} build the list, check the invariants and save.
+ * The nightly update (stage 2b), for a project with live topics: read the window and the saved list, have the algorithm
+ * update the list, check {@link NightInvariants}, compute the churn against last night's labels and save. Everything
+ * around the algorithm is here: the reads, its LLM calls (deadlines, metrics, stats), the checks, the save. Synchronous:
+ * the nightly job calls it on its own thread, one project at a time.
  *
  * <p>The save writes {@code trace_topics} first, then one MySQL transaction: the new topics, the project's prototypes
  * (replaced), its state and the run as {@code saved}. A failure before the save writes nothing but the failed run; a
@@ -73,15 +73,9 @@ public class TopicsRebuildService {
     static final int MAX_TOPICS = 10;
     private static final List<String> REVIVABLE = Arrays.stream(NightState.RetiredReason.values())
             .filter(NightState.RetiredReason::isRevivable).map(NightState.RetiredReason::value).toList();
-    static final int MIN_GROUPS = 15;
-    static final int MAX_GROUPS = 50;
-    static final int TEXTS_PER_GROUP = 60;
-    static final int RECENT_DAYS = 7;
-    static final int QWEN_MAX_TOKENS = 2500;
     /** A first build over fewer traces is marked provisional in its stats. */
     static final int PROVISIONAL_BELOW = 1_000;
     static final double UNIT_TOLERANCE = 1e-3;
-    static final String AUTHOR_KIND = "author";
     /** Stage 2b D5: the revise deadline is {@code topics.nightly.qwenDeadline}. */
     static final Duration VERIFY_DEADLINE = Duration.ofSeconds(60);
     static final Duration NAMING_DEADLINE = Duration.ofSeconds(30);
@@ -93,6 +87,7 @@ public class TopicsRebuildService {
     private final @NonNull InferenceClient client;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull TopicsMetrics metrics;
+    private final @NonNull TopicAlgorithm algorithm;
 
     /** How a run ended. {@code errorCode} is null for a saved run. */
     @Builder(toBuilder = true)
@@ -178,8 +173,8 @@ public class TopicsRebuildService {
         }
     }
 
-    /** One run's state while it builds: the stats it records and the phase timings. */
-    private final class Run {
+    /** One run's state while it builds: the stats it records and the phase timings. The algorithm's context. */
+    private final class Run implements TopicAlgorithm.Context {
 
         private final UUID runId;
         private final String workspaceId;
@@ -208,75 +203,33 @@ public class TopicsRebuildService {
                     .findStates(List.of(projectId)).stream().findFirst());
             var rows = timed("window", this::readWindow);
             int n = rows.size();
-            var texts = new String[n];
-            var vectors = new float[n * DIMENSIONS];
-            var recent = new boolean[n];
-            var recentFrom = night.minusDays(RECENT_DAYS).atStartOfDay(ZoneOffset.UTC).toInstant();
-            var versions = new TreeMap<Long, Integer>();
-            for (int i = 0; i < n; i++) {
-                var row = rows.get(i);
-                texts[i] = row.text();
-                System.arraycopy(row.vector(), 0, vectors, i * DIMENSIONS, DIMENSIONS);
-                recent[i] = !row.traceCreatedAt().isBefore(recentFrom);
-                versions.merge(row.taskVersion(), 1, Integer::sum);
-            }
-            var versionShares = stats.putObject("task_version_shares");
-            versions.forEach((version, count) -> versionShares.put(String.valueOf(version), (double) count / n));
-
-            var merged = IntentMerger.merge(texts, vectors, DIMENSIONS);
-            int unique = merged.size();
-            int k = Math.min(Math.min(MAX_GROUPS, Math.max(MIN_GROUPS, unique / TEXTS_PER_GROUP)), unique);
-            // The seed is the project's saved nights: 0 for the first build.
-            long seed = 0;
-            var weights = new double[unique];
-            for (int u = 0; u < unique; u++) {
-                weights[u] = merged.weights()[u];
-            }
-            var fit = timed("kmeans", () -> KMeans.fit(merged.vectors(), weights, DIMENSIONS, k, seed));
-            var groupOf = new int[n];
-            for (int i = 0; i < n; i++) {
-                groupOf[i] = fit.labels()[merged.inverse()[i]];
-            }
+            var window = window(rows);
             stats.put("vectors", n);
-            stats.put("unique_texts", unique);
-            stats.put("k", k);
-            stats.put("seed", seed);
-            stats.put("kmeans_inertia", fit.inertia());
-            stats.put("kmeans_iterations", fit.iterations());
             stats.put("provisional", n < PROVISIONAL_BELOW);
 
-            var groups = GroupSummaries.summarize(texts, vectors, groupOf, fit.centres(), recent, DIMENSIONS);
-            var prompt = TopicPrompts.author(groups, MAX_TOPICS);
-            // The prompt and the answer hold trace-derived text: DEBUG only, never in production logs by default.
-            log.debug("Topics run '{}' author prompt, project '{}':\n{}", runId, projectId, prompt);
-            var answer = timed("qwen", () -> author(prompt));
-            var applied = AuthorApplier.apply(answer, groups, MAX_TOPICS);
-
-            var assigned = timed("assign", () -> assign(applied, fit.centres(), vectors, n));
-            var topics = topics(applied, assigned.labels());
-            var prototypes = prototypes(assigned, topics);
-            checkInvariants(topics, prototypes, assigned.labels(), n);
+            var built = algorithm.firstBuild(window, MAX_TOPICS, this);
+            var topics = topics(built);
+            var prototypes = prototypes(built, topics);
+            checkInvariants(topics, prototypes, built.labels(), n);
 
             int other = 0;
-            for (int label : assigned.labels()) {
+            for (int label : built.labels()) {
                 other += label == PrototypeAssigner.OTHER ? 1 : 0;
             }
             stats.put("topics", topics.size());
             stats.put("other_share", (double) other / n);
-            stats.put("other_groups", applied.other().size());
-            stats.put("gated_other", assigned.assigner().gatedOther());
             stats.put("prototypes", prototypes.size());
             stats.set("seconds", seconds);
             log.info("Topics run '{}' built, project '{}', window ['{}', '{}'), vectors '{}', unique texts '{}', "
                     + "k '{}', seed '{}', topic sizes '{}', Other share '{}', seconds '{}'", runId, projectId, from, to,
-                    n, unique, k, seed, topics.stream().map(Topic::size).toList(),
-                    TopicText.fixed((double) other / n, 3), seconds);
+                    n, stats.path("unique_texts"), stats.path("k"), stats.path("seed"),
+                    topics.stream().map(Topic::size).toList(), TopicText.fixed((double) other / n, 3), seconds);
             // Topic names come from trace text: DEBUG only.
             log.debug("Topics run '{}' topics, project '{}': '{}'", runId, projectId,
                     topics.stream().map(topic -> topic.name() + " (" + topic.size() + ")").toList());
 
             timed("save", () -> {
-                save(rows, assigned.labels(), topics, prototypes);
+                save(rows, built.labels(), topics, prototypes);
                 return null;
             });
         }
@@ -285,21 +238,7 @@ public class TopicsRebuildService {
             stats.put("mode", TopicRun.Mode.NIGHTLY_UPDATE.getValue());
             var rows = timed("window", this::readWindow);
             int n = rows.size();
-            var texts = new String[n];
-            var vectors = new float[n * DIMENSIONS];
-            var createdAt = new Instant[n];
-            var traceIds = new UUID[n];
-            var versions = new TreeMap<Long, Integer>();
-            for (int i = 0; i < n; i++) {
-                var row = rows.get(i);
-                texts[i] = row.text();
-                System.arraycopy(row.vector(), 0, vectors, i * DIMENSIONS, DIMENSIONS);
-                createdAt[i] = row.traceCreatedAt();
-                traceIds[i] = row.traceId();
-                versions.merge(row.taskVersion(), 1, Integer::sum);
-            }
-            var versionShares = stats.putObject("task_version_shares");
-            versions.forEach((version, count) -> versionShares.put(String.valueOf(version), (double) count / n));
+            var window = window(rows);
             stats.put("vectors", n);
 
             var saved = timed("state", this::readState);
@@ -307,41 +246,24 @@ public class TopicsRebuildService {
             var state = saved.state();
             stats.put("rebuilds_before", state.getRebuilds());
             stats.put("topics_before", state.liveCount());
-            var window = NightWindow.builder().texts(texts).vectors(vectors).createdAt(createdAt).from(from)
-                    .night(to).dimensions(DIMENSIONS).build();
 
-            var result = timed("update", () -> NightlyUpdate.run(state, window, MAX_TOPICS,
-                    NightClusterer.KMEANS, this::generate));
-            NightInvariants.check(state, saved.names(), saved.retired(), result.labels(), n, MAX_TOPICS,
+            var updated = timed("update", () -> algorithm.update(state, window, MAX_TOPICS, this));
+            NightInvariants.check(state, saved.names(), saved.retired(), updated.labels(), n, MAX_TOPICS,
                     DIMENSIONS);
 
             var labels = new UUID[n];
+            var traceIds = new UUID[n];
             int other = 0;
             for (int i = 0; i < n; i++) {
-                int label = result.labels()[i];
+                int label = updated.labels()[i];
                 other += label == PrototypeAssigner.OTHER ? 1 : 0;
                 labels[i] = label == PrototypeAssigner.OTHER ? TraceTopic.OTHER : state.topic(label).getId();
+                traceIds[i] = rows.get(i).traceId();
             }
             var previous = timed("churn", () -> readPreviousLabels(saved.projectState().lastRunId()));
             var churn = TopicChurn.of(previous, traceIds, labels);
 
-            stats.put("review_night", result.reviewNight());
-            stats.put("review", result.review());
-            stats.put("unassigned", result.unassigned());
-            stats.put("candidates", result.candidates().size());
-            stats.put("big", result.big().size());
-            if (result.verified() != null) {
-                stats.put("verify_pairs", result.verified().pairs().size());
-                stats.put("verify_failed", result.verified().failed());
-            }
-            if (result.forced() != null) {
-                var forced = stats.putObject("forced");
-                result.forced().forEach(outcome -> forced.put(outcome.result().name().toLowerCase(Locale.ROOT),
-                        forced.path(outcome.result().name().toLowerCase(Locale.ROOT)).asInt() + 1));
-            }
             var born = stats.putArray("born");
-            var revived = stats.putArray("revived");
-            result.revived().forEach(t -> revived.add(state.topic(t).getName()));
             var retired = stats.putObject("retired");
             for (var topic : state.getTopics()) {
                 if (!saved.names().containsKey(topic.getId())) {
@@ -361,12 +283,13 @@ public class TopicsRebuildService {
             log.info("Topics run '{}' updated, project '{}', window ['{}', '{}'), vectors '{}', review '{}', "
                     + "unassigned '{}', candidates '{}', big '{}', born '{}', revived '{}', retired '{}', topics '{}', "
                     + "Other share "
-                    + "'{}', churn '{}', seconds '{}'", runId, projectId, from, to, n, result.review(),
-                    result.unassigned(), result.candidates().size(), result.big().size(), born.size(),
-                    revived.size(), retired,
+                    + "'{}', churn '{}', seconds '{}'", runId, projectId, from, to, n, stats.path("review"),
+                    stats.path("unassigned"), stats.path("candidates"), stats.path("big"), born.size(),
+                    stats.path("revived").size(), retired,
                     state.liveCount(), TopicText.fixed((double) other / n, 3), churn, seconds);
             // Topic names come from trace text: DEBUG only.
-            log.debug("Topics run '{}' born, project '{}': '{}', revived '{}'", runId, projectId, born, revived);
+            log.debug("Topics run '{}' born, project '{}': '{}', revived '{}'", runId, projectId, born,
+                    stats.path("revived"));
 
             timed("save", () -> {
                 saveUpdate(rows, labels, state, saved, born.size());
@@ -375,6 +298,26 @@ public class TopicsRebuildService {
             if (churn != null) {
                 metrics.churn(workspaceId, churn);
             }
+        }
+
+        /** The window the algorithm reads, in the rows' order; adds the task versions' shares to the stats. */
+        private NightWindow window(List<TopicWindowRow> rows) {
+            int n = rows.size();
+            var texts = new String[n];
+            var vectors = new float[n * DIMENSIONS];
+            var createdAt = new Instant[n];
+            var versions = new TreeMap<Long, Integer>();
+            for (int i = 0; i < n; i++) {
+                var row = rows.get(i);
+                texts[i] = row.text();
+                System.arraycopy(row.vector(), 0, vectors, i * DIMENSIONS, DIMENSIONS);
+                createdAt[i] = row.traceCreatedAt();
+                versions.merge(row.taskVersion(), 1, Integer::sum);
+            }
+            var versionShares = stats.putObject("task_version_shares");
+            versions.forEach((version, count) -> versionShares.put(String.valueOf(version), (double) count / n));
+            return NightWindow.builder().texts(texts).vectors(vectors).createdAt(createdAt).from(from).night(to)
+                    .dimensions(DIMENSIONS).build();
         }
 
         /**
@@ -471,11 +414,13 @@ public class TopicsRebuildService {
         }
 
         /**
-         * {@link NightLlm} for the nightly update: the revise deadline is {@code qwenDeadline}, verify and naming have
-         * their own (D5). A failed call throws and fails the run, whichever call it is; the project keeps yesterday's
-         * list.
+         * The algorithm's LLM call: verify and naming have their own deadlines (D5), every other call
+         * {@code qwenDeadline}. A failed call throws and fails the run, whichever call it is; the project keeps
+         * yesterday's list.
          */
-        private JsonNode generate(String tag, String prompt, JsonNode schema, int maxTokens) {
+        @Override
+        public <T> T generate(@NonNull String tag, @NonNull String prompt, @NonNull JsonNode schema, int maxTokens,
+                @NonNull Function<JsonNode, T> read) {
             var kind = switch (tag) {
                 case ForcedBirth.NAMING_TAG, ForcedBirth.NAMING_NEW_TAG -> "naming";
                 case ForcedBirth.VERIFY_TAG -> "verify";
@@ -489,8 +434,23 @@ public class TopicsRebuildService {
             // The prompt holds trace-derived text: DEBUG only.
             log.debug("Topics run '{}' {} prompt, project '{}':\n{}", runId, tag, projectId, prompt);
             var output = call(kind, runId + ":" + tag, prompt, schema, maxTokens, deadline);
+            T answer;
+            try {
+                // Counted once the answer is read: an answer that cannot be read is bad_answer, not ok.
+                answer = read.apply(output == null ? NullNode.getInstance() : output);
+            } catch (TopicsRunException exception) {
+                if (exception.getCode() == Code.QWEN_BAD_ANSWER) {
+                    metrics.qwen(workspaceId, kind, "bad_answer");
+                }
+                throw exception;
+            }
             metrics.qwen(workspaceId, kind, "ok");
-            return output == null ? NullNode.getInstance() : output;
+            return answer;
+        }
+
+        @Override
+        public ObjectNode stats() {
+            return stats;
         }
 
         private List<TopicWindowRow> readWindow() {
@@ -519,20 +479,6 @@ public class TopicsRebuildService {
                 throw new TopicsRunException(Code.WINDOW_READ, "the window has no usable vector");
             }
             return kept;
-        }
-
-        private AuthorAnswer author(String prompt) {
-            var output = call(AUTHOR_KIND, runId.toString(), prompt, TopicPrompts.AUTHOR_SCHEMA, QWEN_MAX_TOKENS,
-                    config.getNightly().getQwenDeadline().toJavaDuration());
-            try {
-                // Counted once the answer is read: an answer that cannot be read is bad_answer, not ok.
-                var answer = AuthorAnswer.parse(output);
-                metrics.qwen(workspaceId, AUTHOR_KIND, "ok");
-                return answer;
-            } catch (TopicsRunException exception) {
-                metrics.qwen(workspaceId, AUTHOR_KIND, "bad_answer");
-                throw exception;
-            }
         }
 
         /**
@@ -606,30 +552,16 @@ public class TopicsRebuildService {
             return output;
         }
 
-        private Assigned assign(AuthorApplier.Applied applied, float[] centres, float[] vectors, int n) {
-            var topicPrototypes = new ArrayList<float[]>();
-            var owners = new ArrayList<Integer>();
-            for (int t = 0; t < applied.topics().size(); t++) {
-                for (int group : applied.topics().get(t).groups()) {
-                    topicPrototypes.add(centre(centres, group));
-                    owners.add(t);
-                }
-            }
-            var otherPrototypes = applied.other().stream().map(group -> centre(centres, group)).toList();
-            var assigner = new PrototypeAssigner(topicPrototypes, owners, otherPrototypes, DIMENSIONS);
-            return new Assigned(assigner, assigner.assign(vectors), topicPrototypes, owners, otherPrototypes);
-        }
-
-        private List<Topic> topics(AuthorApplier.Applied applied, int[] labels) {
-            var sizes = new int[applied.topics().size()];
-            for (int label : labels) {
+        private List<Topic> topics(TopicAlgorithm.FirstBuild built) {
+            var sizes = new int[built.topics().size()];
+            for (int label : built.labels()) {
                 if (label != PrototypeAssigner.OTHER) {
                     sizes[label]++;
                 }
             }
             var topics = new ArrayList<Topic>(sizes.length);
             for (int t = 0; t < sizes.length; t++) {
-                var topic = applied.topics().get(t);
+                var topic = built.topics().get(t);
                 topics.add(Topic.builder()
                         .id(idGenerator.generateId())
                         .workspaceId(workspaceId)
@@ -647,14 +579,14 @@ public class TopicsRebuildService {
          * The topic prototypes, then every known-Other one. The 0.95 gate drops an Other prototype near a topic from
          * tonight's assignment only: it is saved, as on the stand, and the next night's update assigns with it.
          */
-        private List<TopicPrototype> prototypes(Assigned assigned, List<Topic> topics) {
+        private List<TopicPrototype> prototypes(TopicAlgorithm.FirstBuild built, List<Topic> topics) {
             var prototypes = new ArrayList<TopicPrototype>(
-                    assigned.topicPrototypes().size() + assigned.otherPrototypes().size());
-            for (int p = 0; p < assigned.topicPrototypes().size(); p++) {
-                prototypes.add(prototype(prototypes.size(), topics.get(assigned.owners().get(p)).id(),
-                        assigned.topicPrototypes().get(p)));
+                    built.topicPrototypes().size() + built.otherPrototypes().size());
+            for (int p = 0; p < built.topicPrototypes().size(); p++) {
+                prototypes.add(prototype(prototypes.size(), topics.get(built.owners().get(p)).id(),
+                        built.topicPrototypes().get(p)));
             }
-            for (var vector : assigned.otherPrototypes()) {
+            for (var vector : built.otherPrototypes()) {
                 prototypes.add(prototype(prototypes.size(), null, vector));
             }
             return prototypes;
@@ -942,7 +874,8 @@ public class TopicsRebuildService {
             return Outcome.builder().runId(runId).status(TopicRun.Status.FAILED).errorCode(code.getValue()).build();
         }
 
-        private <T> T timed(String phase, Supplier<T> action) {
+        @Override
+        public <T> T timed(@NonNull String phase, @NonNull Supplier<T> action) {
             long started = System.nanoTime();
             try {
                 return action.get();
@@ -958,20 +891,9 @@ public class TopicsRebuildService {
         }
     }
 
-    /** The assignment, and the prototypes it was built from: the gated known-Other ones are saved too. */
-    private record Assigned(PrototypeAssigner assigner, int[] labels, List<float[]> topicPrototypes,
-            List<Integer> owners, List<float[]> otherPrototypes) {
-    }
-
     /** The list a nightly update read: its state, the project's row, the names read by id, the ids retired before. */
     private record SavedList(NightState state, TopicProjectState projectState, Map<UUID, String> names,
             List<UUID> retired) {
-    }
-
-    private static float[] centre(float[] centres, int group) {
-        var centre = new float[DIMENSIONS];
-        System.arraycopy(centres, group * DIMENSIONS, centre, 0, DIMENSIONS);
-        return centre;
     }
 
     private static boolean isTimeout(InferenceException exception) {
