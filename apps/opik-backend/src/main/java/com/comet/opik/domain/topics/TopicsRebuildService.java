@@ -33,11 +33,9 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.CancellationException;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Supplier;
 
@@ -79,12 +77,6 @@ public class TopicsRebuildService {
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull TopicsMetrics metrics;
 
-    /**
-     * Runs counted failed when their mark threw, so a later mark of the same run (its timeout and its own thread race)
-     * does not count it again; that mark removes the entry. Only a mark that throws adds one, a rare MySQL error.
-     */
-    private final Set<UUID> countedOnError = ConcurrentHashMap.newKeySet();
-
     /** How a run ended. {@code errorCode} is null for a saved run. */
     @Builder(toBuilder = true)
     public record Outcome(@NonNull UUID runId, @NonNull TopicRun.Status status, String errorCode) {
@@ -109,22 +101,15 @@ public class TopicsRebuildService {
 
     /**
      * Fails the run unless it already ended. Returns false when it had: the run was saved, or failed by its own thread
-     * and its timeout both. Counts the run in {@code topics.runs} once: when this mark fails it, or when the mark throws,
-     * since the run failed whether or not its row says so. Not when the run had already ended: that counted it.
+     * and its timeout both. Counts the run in {@code topics.runs} only when this mark ends its row. A mark that throws
+     * leaves the row {@code running} and counts nothing: the next night's housekeeping fails the row and counts it, as
+     * {@code abandoned}, so every run is counted once, by the write that ends it.
      */
     public boolean fail(@NonNull UUID runId, @NonNull String workspaceId, @NonNull Code code, @NonNull String message,
             String stats) {
-        int updated;
-        try {
-            updated = template.inTransaction(WRITE, handle -> handle.attach(TopicRunDAO.class).markFailed(runId,
-                    Instant.now(), code.getValue(), StringUtils.truncate(message, TopicRun.MAX_ERROR_MESSAGE), stats));
-        } catch (RuntimeException exception) {
-            if (countedOnError.add(runId)) {
-                metrics.run(workspaceId, TopicRun.Status.FAILED, code.getValue());
-            }
-            throw exception;
-        }
-        if (!countedOnError.remove(runId) && updated == 1) {
+        int updated = template.inTransaction(WRITE, handle -> handle.attach(TopicRunDAO.class).markFailed(runId,
+                Instant.now(), code.getValue(), StringUtils.truncate(message, TopicRun.MAX_ERROR_MESSAGE), stats));
+        if (updated == 1) {
             metrics.run(workspaceId, TopicRun.Status.FAILED, code.getValue());
         }
         return updated == 1;
@@ -445,7 +430,7 @@ public class TopicsRebuildService {
             try {
                 traceTopicsDAO.deleteByRunId(workspaceId, projectId, runId).block();
             } catch (RuntimeException exception) {
-                metrics.takeBackFailure(workspaceId);
+                metrics.takeBackFailure(workspaceId, exception);
                 log.warn("Topics run '{}' could not delete its trace_topics rows after a failed save, project '{}'",
                         runId, projectId, exception);
             } finally {

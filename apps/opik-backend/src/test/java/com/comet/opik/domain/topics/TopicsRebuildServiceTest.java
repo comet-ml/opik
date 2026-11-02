@@ -115,18 +115,20 @@ class TopicsRebuildServiceTest {
     }
 
     @Test
-    @DisplayName("a mark that throws counts the run with its own code, and a later mark of the same run does not")
-    void markThatThrowsCountsOnce() {
+    @DisplayName("a mark that throws counts nothing, as the run's row stays running; the mark that ends the row "
+            + "counts it once")
+    void markThatThrowsCountsNothing() {
         when(runDAO.markFailed(eq(runId), any(), anyString(), anyString(), any()))
                 .thenThrow(new IllegalStateException("MySQL down"))
                 .thenReturn(1);
 
         assertThatThrownBy(() -> service.fail(runId, WORKSPACE_ID, TopicsRunException.Code.QWEN_ERROR, "m", null))
                 .isInstanceOf(IllegalStateException.class);
-        assertThat(service.fail(runId, WORKSPACE_ID, TopicsRunException.Code.TIMEOUT, "m", null)).isTrue();
+        assertThat(meter.points("topics.runs")).isEmpty();
 
+        assertThat(service.fail(runId, WORKSPACE_ID, TopicsRunException.Code.TIMEOUT, "m", null)).isTrue();
         assertThat(meter.points("topics.runs")).singleElement()
-                .satisfies(point -> assertThat(point.get("error_code")).isEqualTo("qwen_error"));
+                .satisfies(point -> assertThat(point.get("error_code")).isEqualTo("timeout"));
     }
 
     @Test
@@ -160,8 +162,10 @@ class TopicsRebuildServiceTest {
 
         assertThat(outcome.errorCode()).isEqualTo("save");
         assertThat(meter.sum("topics.qwen.calls", "outcome", "ok")).isEqualTo(1);
-        assertThat(meter.points("topics.save.take_back_failures")).singleElement()
-                .satisfies(point -> assertThat(point.get("workspace_id")).isEqualTo(WORKSPACE_ID));
+        assertThat(meter.points("topics.save.take_back_failures")).singleElement().satisfies(point -> {
+            assertThat(point.get("workspace_id")).isEqualTo(WORKSPACE_ID);
+            assertThat(point.get("error_type")).isNotBlank();
+        });
         assertThat(meter.sum("topics.runs", "status", "failed", "error_code", "save")).isEqualTo(1);
         assertThat(meter.sum("topics.runs", "status", "saved")).isZero();
         assertThat(meter.points("topics.save.rows")).isEmpty();

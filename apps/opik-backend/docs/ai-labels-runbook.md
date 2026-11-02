@@ -451,20 +451,20 @@ event that creates it: the alerts read the state gauges further down, not these.
 | Metric | Meaning |
 |---|---|
 | `topics.nightly.projects` by `decision`, `reason` | Projects the night looked at: `skip` with a `reason` (`small`: under the minimum; `deleted`; `already_saved`: a list already built; `locked`: held by a run started by hand), `first_build`, `not_reached` (the budget ran out: they run the next night). `not_reached` above zero means the budget is too short. |
-| `topics.runs` by `status`, `error_code` | Finished runs. Each failed run counts once: `start_failed` when the run could not start (it has no `topic_runs` row), `abandoned` when the next night's housekeeping fails a run its pod left `running`. When marking a run failed throws, the run counts with its own `error_code`; its row stays `running` until housekeeping fails it, which does not count it again. |
+| `topics.runs` by `status`, `error_code` | Finished runs. Each failed run counts once: `start_failed` when the run could not start (it has no `topic_runs` row), `abandoned` when the next night's housekeeping fails a run left `running`. A run is counted by the write that ends its row: when marking a run failed throws, its row stays `running` and nothing counts it until housekeeping fails it as `abandoned`. |
 | `topics.run.duration_seconds` by `phase` | Time in `window` (ClickHouse read), `kmeans`, `qwen`, `assign`, `save`. |
 | `topics.qwen.calls` by `outcome` | `ok`, `timeout`, `error`, `bad_answer`. A call counts after its answer is read: an answer that cannot be read is `bad_answer`, not `ok`. |
 | `topics.save.rows` by `table` | Rows saved runs wrote. |
-| `topics.save.take_back_failures` | Failed saves whose `trace_topics` rows could not be deleted. Readers see those rows until the project's next saved run. |
+| `topics.save.take_back_failures` by workspace, `error_type` | Failed saves whose `trace_topics` rows could not be deleted. Readers see those rows until the project's next saved run. |
 | `topics.run.other_share` | The Other share of each saved run (its `stats.other_share`). No alert: no threshold is set. |
-| `topics.nightly.count_failures` | Workspaces whose window count read failed. The night skips all their projects; they run the next night. |
+| `topics.nightly.count_failures` by workspace, `error_type` | Workspaces whose window count read failed. The night skips all their projects; they run the next night. |
 | `topics.nightly.budget_used_seconds` | Wall time of each night (no workspace). Near `TOPICS_NIGHTLY_BUDGET` means projects will soon be `not_reached`. |
 
 Each night writes its record as it goes:
 
 | Table | What |
 |---|---|
-| `topic_nights` | One row per night (the UTC date): `started_at`, `finished_at`, `outcome` (`running`, `finished`, or `failed` when a read of the workspaces, lists or projects failed), `eligible_workspaces`, `count_failures`, and `projects` (JSON, projects per decision). Written when the night starts and when it ends, also with no project. A night run again for the same date replaces its row and its project rows. |
+| `topic_nights` | One row per night (the UTC date): `started_at`, `finished_at`, `outcome` (`running`, `finished`, or `failed` when a read of the workspaces, lists or projects failed), `eligible_workspaces`, `count_failures`, and `projects` (JSON, projects per decision). Written when the night starts and when it ends, also with no project. A night run again for the same date replaces its row and its project rows. A night whose start write fails does not run: no rows are mixed with an earlier run of the date, and "Night not started" sees it. Later write failures are a WARN for the first of the night (`Topics night '<night>' could not write its record`), DEBUG for the rest, and a WARN with their count at the night's end. |
 | `topic_night_projects` | One row per project the night looked at, skips included: `workspace_id`, `project_id`, `vectors`, `decision`, `reason`, `run_id` (null when no run started). A workspace whose count read failed has one row with a null `project_id` and decision `count_failed`. |
 
 A record write that fails logs a WARN (`could not write its record`) and the night goes on.

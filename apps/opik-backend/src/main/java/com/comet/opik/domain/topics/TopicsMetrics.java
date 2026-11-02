@@ -1,5 +1,6 @@
 package com.comet.opik.domain.topics;
 
+import com.comet.opik.infrastructure.metrics.ErrorMetricsResolver;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.metrics.DoubleHistogram;
@@ -12,6 +13,7 @@ import lombok.NonNull;
 import java.time.Clock;
 import java.time.Duration;
 
+import static com.comet.opik.infrastructure.metrics.ErrorMetricsResolver.ERROR_TYPE_KEY;
 import static io.opentelemetry.api.common.AttributeKey.stringKey;
 
 /**
@@ -89,11 +91,12 @@ public class TopicsMetrics {
                 .setDescription("Wall time of the night, from its start to its last run's end")
                 .build();
         this.countFailures = meter.counterBuilder("topics.nightly.count_failures")
-                .setDescription("Workspaces whose window count read failed: the night skips all their projects")
+                .setDescription("Workspaces whose window count read failed, by error_type: the night skips all "
+                        + "their projects")
                 .build();
         this.takeBackFailures = meter.counterBuilder("topics.save.take_back_failures")
-                .setDescription("Failed saves whose trace_topics rows could not be deleted: readers see them until "
-                        + "the project's next saved run")
+                .setDescription("Failed saves whose trace_topics rows could not be deleted, by error_type: readers "
+                        + "see them until the project's next saved run")
                 .build();
         // No unit: "1" would add a _ratio suffix to the Prometheus name.
         this.otherShare = meter.histogramBuilder("topics.run.other_share")
@@ -131,12 +134,14 @@ public class TopicsMetrics {
         saveRows.add(rows, names.builder(workspaceId).put(TABLE, table).build());
     }
 
-    void countFailure(@NonNull String workspaceId) {
-        countFailures.add(1, names.of(workspaceId));
+    void countFailure(@NonNull String workspaceId, @NonNull Throwable error) {
+        countFailures.add(1,
+                names.builder(workspaceId).put(ERROR_TYPE_KEY, ErrorMetricsResolver.errorType(error)).build());
     }
 
-    void takeBackFailure(@NonNull String workspaceId) {
-        takeBackFailures.add(1, names.of(workspaceId));
+    void takeBackFailure(@NonNull String workspaceId, @NonNull Throwable error) {
+        takeBackFailures.add(1,
+                names.builder(workspaceId).put(ERROR_TYPE_KEY, ErrorMetricsResolver.errorType(error)).build());
     }
 
     void otherShare(@NonNull String workspaceId, double share) {

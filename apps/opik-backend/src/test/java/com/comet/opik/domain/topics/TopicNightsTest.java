@@ -303,21 +303,24 @@ class TopicNightsTest {
     }
 
     @Test
-    @DisplayName("an abandoned run of a night that finished was counted by that night; others are not")
+    @DisplayName("every run left running before the cutoff is abandoned, one workspace per run, whatever night it "
+            + "belongs to: a run whose failure mark threw was not counted then")
     void abandoned() {
         var old = NIGHT.minusDays(1).atTime(2, 0).toInstant(ZoneOffset.UTC);
-        var counted = runAt(WORKSPACE_ID, project(WORKSPACE_ID), "running", old);
+        var ofFinishedNight = runAt(WORKSPACE_ID, project(WORKSPACE_ID), "running", old);
         var ofFailedNight = runAt(WORKSPACE_ID, project(WORKSPACE_ID), "running", old);
         runAt("ws-2", project("ws-2"), "running", old);
+        runAt("ws-3", project("ws-3"), "running", clock.instant());
+        runAt("ws-4", project("ws-4"), "failed", old);
         ended(NIGHT.minusDays(1), TopicNight.Outcome.FINISHED);
-        row(NIGHT.minusDays(1), WORKSPACE_ID, null, "first_build", null, counted);
+        row(NIGHT.minusDays(1), WORKSPACE_ID, null, "first_build", null, ofFinishedNight);
         ended(NIGHT.minusDays(2), TopicNight.Outcome.FAILED);
         row(NIGHT.minusDays(2), WORKSPACE_ID, null, "first_build", null, ofFailedNight);
 
         var workspaceIds = jdbi.inTransaction(handle -> handle.attach(TopicRunDAO.class)
                 .findAbandonedWorkspaceIds(clock.instant()));
 
-        assertThat(workspaceIds).containsExactlyInAnyOrder(WORKSPACE_ID, "ws-2");
+        assertThat(workspaceIds).containsExactlyInAnyOrder(WORKSPACE_ID, WORKSPACE_ID, "ws-2");
     }
 
     @Test
