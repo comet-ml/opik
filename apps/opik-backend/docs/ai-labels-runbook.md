@@ -339,6 +339,40 @@ running reads the workspaces once, at its start, so it still runs the workspace'
 
 ### How a night runs
 
+Where a night stops and where it goes on:
+
+```mermaid
+flowchart TD
+    A["Cron fires on every pod"] --> B{"Takes topics:nightly:lock?"}
+    B -->|no| B1["Another pod runs the night"]
+    B -->|yes| C["Start the record: topic_nights row running,<br/>delete the date's topic_night_projects rows"]
+    C -->|write fails| C1["The night does not run<br/>(ERROR Topics night failed)"]
+    C -->|ok| D["Housekeeping: fail abandoned runs and nights,<br/>delete past the retention"]
+    D --> E["Read the eligible workspaces,<br/>count each one's projects in the window"]
+    E -->|workspaces read fails| E1["Record ends failed; the night throws"]
+    E -->|a workspace count fails| E2["count_failed row;<br/>the workspace runs the next night"]
+    E --> F["Skip rows: small, deleted, already_saved"]
+    E --> G["Projects to build, smallest first"]
+    G --> H{"Next project, budget left?"}
+    H -->|budget out| H1["not_reached rows for the rest"]
+    H -->|none left| M["Record ends finished"]
+    H1 --> M
+    H -->|yes| I{"Takes topics:project lock?"}
+    I -->|no| I1["Skip row: locked"]
+    I -->|yes| I2{"Built by hand since listed?"}
+    I2 -->|yes| I3["Skip row: already_saved"]
+    I2 -->|no| J["Start the run: topic_runs row"]
+    J -->|fails| J1["first_build row, no run_id (start_failed)"]
+    J -->|ok| K["First build, within the project timeout"]
+    K --> L["first_build row with run_id: saved or failed"]
+    L --> H
+    I1 --> H
+    I3 --> H
+    J1 --> H
+```
+
+Every record write after the start is best-effort: a failed one is logged and the night goes on (see "What to watch").
+
 - Every pod fires the job on the cron. The first to take the Redis lock `topics:nightly:lock` runs the night and keeps
   the lock until it expires (budget + project timeout + 5 minutes), so no other pod runs the same night. If that pod
   dies during the night (a deploy), the rest of the night waits for the next night: the cron does not fire again, and
