@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   convertLLMJudgeDataToLLMJudgeObject,
+  convertLLMJudgeObjectToLLMJudgeData,
   LLMJudgeDetailsSpanFormSchema,
   LLMJudgeDetailsThreadFormSchema,
   LLMJudgeDetailsTraceFormSchema,
@@ -276,6 +277,24 @@ describe("gpt-6-luna rule on save", () => {
     expect(decisionsRule.model).toEqual({ name: LUNA_MODEL, api: "decisions" });
     expect(chatRule.model.name).toBe(LUNA_MODEL);
     expect(chatRule.model.api).toBeUndefined();
+  });
+});
+
+describe("Jev rule saved before api existed", () => {
+  it("stays a Decision rule when switched to GPT 6 Luna", () => {
+    const opened = convertLLMJudgeObjectToLLMJudgeData({
+      model: { name: DECISION_MODEL },
+      messages: [],
+      variables: {},
+      schema: [],
+    } as unknown as LLMJudgeObject);
+
+    const saved = convertLLMJudgeDataToLLMJudgeObject(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      { ...opened, model: LUNA_MODEL } as any,
+    );
+
+    expect(saved.model).toEqual({ name: LUNA_MODEL, api: "decisions" });
   });
 });
 

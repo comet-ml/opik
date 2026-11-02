@@ -889,7 +889,10 @@ export const convertLLMJudgeObjectToLLMJudgeData = (data: LLMJudgeObject) => {
     : rawConfig;
   return {
     model,
-    api: data.model?.api,
+    // Jev rules saved before api existed have none; give them one so that switching the model keeps the Decisions API.
+    api:
+      data.model?.api ??
+      (isDecisionModel(model) ? ("decisions" as const) : undefined),
     config,
     template: LLM_JUDGE.custom,
     messages: convertProviderToLLMMessages(data.messages),
