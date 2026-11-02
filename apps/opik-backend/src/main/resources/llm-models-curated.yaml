@@ -79,31 +79,7 @@ profiles:
     presencePenalty: {accepted: false}
 models:
   openai:
-  - id: o1
-    params:
-      effort:
-        accepted: true
-        levels: [low, medium, high]
-        default: medium
-  - id: o1-2024-12-17
-    params:
-      effort:
-        accepted: true
-        levels: [low, medium, high]
-        default: medium
   - id: o3
-    params:
-      effort:
-        accepted: true
-        levels: [low, medium, high]
-        default: medium
-  - id: o3-mini
-    params:
-      effort:
-        accepted: true
-        levels: [low, medium, high]
-        default: medium
-  - id: o4-mini
     params:
       effort:
         accepted: true
@@ -480,7 +456,6 @@ models:
   - {id: gemini-flash-latest-high-res-exp, profile: gemini-no-sampling}
   - {id: gemini-omni-1.1-flash, profile: gemini-no-sampling}
   - {id: gemini-3-pro-image, profile: gemini-no-sampling}
-  - {id: gemini-3-pro-image-preview, profile: gemini-no-sampling}
   - id: gemini-3-pro-preview
     profile: gemini-no-sampling
     params:
@@ -489,7 +464,6 @@ models:
         levels: [low, high]
         default: high
   - {id: gemini-3.1-flash-image, profile: gemini-no-sampling}
-  - {id: gemini-3.1-flash-image-preview, profile: gemini-no-sampling}
   - {id: gemini-3.1-flash-lite-image, profile: gemini-no-sampling}
   - id: gemini-3.1-flash-lite-preview
     profile: gemini-no-sampling
@@ -501,7 +475,6 @@ models:
   - {id: gemini-3.1-flash-tts-preview, profile: gemini-no-sampling}
   - {id: gemini-3.8-flash-lite-tts, profile: gemini-no-sampling}
   - {id: gemini-3.8-flash-tts, profile: gemini-no-sampling}
-  - {id: gemini-omni-flash-preview, profile: gemini-no-sampling}
   vertex-ai:
   - id: gemini-3.8-flash
     profile: gemini-no-sampling

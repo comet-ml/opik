@@ -1,10 +1,5 @@
 package com.comet.opik.api.resources.v1.priv;
 
-import ch.qos.logback.classic.Level;
-import ch.qos.logback.classic.Logger;
-import ch.qos.logback.classic.spi.ILoggingEvent;
-import ch.qos.logback.classic.spi.ThrowableProxyUtil;
-import ch.qos.logback.core.read.ListAppender;
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.api.ProviderApiKeyUpdate;
@@ -29,6 +24,8 @@ import com.comet.opik.domain.llm.langchain4j.OpikUserMessage;
 import com.comet.opik.domain.llm.langchain4j.VideoUrl;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.LlmProviderClientConfig;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.llm.antropic.AnthropicModelName;
 import com.comet.opik.infrastructure.llm.gemini.GeminiModelName;
@@ -38,9 +35,14 @@ import com.comet.opik.infrastructure.llm.vertexai.VertexAIModelName;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder;
+import com.github.tomakehurst.wiremock.http.Fault;
+import com.github.tomakehurst.wiremock.stubbing.Scenario;
 import com.github.tomakehurst.wiremock.verification.LoggedRequest;
+import com.google.inject.Injector;
 import com.redis.testcontainers.RedisContainer;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
+import dev.langchain4j.model.openai.internal.chat.ChatCompletionResponse;
 import dev.langchain4j.model.openai.internal.chat.Content;
 import dev.langchain4j.model.openai.internal.chat.ContentType;
 import dev.langchain4j.model.openai.internal.chat.ImageUrl;
@@ -66,7 +68,6 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.slf4j.LoggerFactory;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -94,6 +95,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import java.util.zip.GZIPOutputStream;
 
@@ -166,9 +168,10 @@ class ChatCompletionsResourceTest {
     private ChatCompletionsClient chatCompletionsClient;
     private LlmProviderApiKeyResourceClient llmProviderApiKeyResourceClient;
     private ClientSupport clientSupport;
+    private LlmProviderClientConfig llmProviderClientConfig;
 
     @BeforeAll
-    void setUpAll(ClientSupport clientSupport) {
+    void setUpAll(ClientSupport clientSupport, Injector injector) {
 
         ClientSupportUtils.config(clientSupport);
         mockTargetWorkspace(WORKSPACE_NAME, WORKSPACE_ID);
@@ -176,6 +179,7 @@ class ChatCompletionsResourceTest {
         this.chatCompletionsClient = new ChatCompletionsClient(clientSupport);
         this.llmProviderApiKeyResourceClient = new LlmProviderApiKeyResourceClient(clientSupport);
         this.clientSupport = clientSupport;
+        this.llmProviderClientConfig = injector.getInstance(OpikConfiguration.class).getLlmProviderClient();
     }
 
     private void mockTargetWorkspace(String workspaceName, String workspaceId) {
@@ -431,12 +435,6 @@ class ChatCompletionsResourceTest {
         private static final String MODEL = "custom-llm/" + CUSTOM_PROVIDER_NAME + "/" + DEPLOYMENT;
         private static final String CHAT_COMPLETIONS_REGEX = ".*/chat/completions.*";
         private static final String CHAT_COMPLETIONS_PATH = "/v1/private/chat/completions";
-        /**
-         * The provider calls made, counted after the plain request and again after the stream: the plain request is
-         * attempted three times under ChatCompletionService's retry policy, and the stream once.
-         */
-        private static final List<Integer> EXPECTED_PROVIDER_CALLS = List.of(3, 4);
-
         @BeforeEach
         void resetUpstreamStubs() {
             // WireMock matches most-recently-registered first; reset between tests so
@@ -557,50 +555,42 @@ class ChatCompletionsResourceTest {
             return WIRE_MOCK.server().findAll(postRequestedFor(urlPathMatching(CHAT_COMPLETIONS_REGEX))).size();
         }
 
-        /** Every Opik log event while {@code call} runs, debug included, with its throwable rendered. */
-        private List<String> opikLogEventsOf(Runnable call) {
-            var logger = (Logger) LoggerFactory.getLogger("com.comet.opik");
-            var appender = new ListAppender<ILoggingEvent>();
-            var previousLevel = logger.getLevel();
-            appender.start();
-            logger.addAppender(appender);
-            logger.setLevel(Level.DEBUG);
-            try {
-                call.run();
-            } finally {
-                logger.detachAppender(appender);
-                logger.setLevel(previousLevel);
-            }
-            return appender.list.stream()
-                    .map(event -> event.getThrowableProxy() == null
-                            ? event.getFormattedMessage()
-                            : "%s%n%s".formatted(event.getFormattedMessage(),
-                                    ThrowableProxyUtil.asString(event.getThrowableProxy())))
-                    .toList();
-        }
-
+        /**
+         * The provider calls made are counted after the plain request and again after the stream: the plain request
+         * is attempted three times under ChatCompletionService's retry policy when its status is transient, and once
+         * when it is not; the stream once.
+         */
         private Stream<Arguments> providerTextIsNeverLogged() {
             var marker = "upstream-marker-%s".formatted(RandomStringUtils.secure().nextAlphanumeric(16));
             var generic = new ErrorMessage(HttpStatus.SC_BAD_GATEWAY, UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
             return Stream.of(
                     // not a provider error: neither returned nor logged
                     arguments(HttpStatus.SC_BAD_GATEWAY, "text/html", "<html><body>%s</body></html>".formatted(marker),
-                            marker, generic, generic),
+                            marker, generic, generic, List.of(3, 4)),
                     // a documented provider error: its validated message is returned, but never logged
                     arguments(HttpStatus.SC_BAD_REQUEST, "application/json",
                             JsonUtils.writeValueAsString(Map.of("error", Map.of("message", marker, "type",
                                     "invalid_request_error"))),
                             marker,
                             new ErrorMessage(HttpStatus.SC_BAD_REQUEST, marker),
-                            new ErrorMessage(HttpStatus.SC_BAD_REQUEST, marker, "Custom Provider error")));
+                            new ErrorMessage(HttpStatus.SC_BAD_REQUEST, marker, "Custom Provider error"),
+                            List.of(1, 2)),
+                    // a status no retry can change, with a body that isn't a provider error
+                    arguments(HttpStatus.SC_NOT_FOUND, "text/html", "<html><body>%s</body></html>".formatted(marker),
+                            marker, new ErrorMessage(HttpStatus.SC_NOT_FOUND, UNEXPECTED_ERROR_CALLING_LLM_PROVIDER),
+                            new ErrorMessage(HttpStatus.SC_NOT_FOUND, UNEXPECTED_ERROR_CALLING_LLM_PROVIDER),
+                            List.of(1, 2)));
         }
 
-        /** The provider's reply reaches the server logs neither as a message nor through a logged throwable. */
+        /**
+         * The provider's reply reaches the server logs neither as a message nor through a logged throwable, from any
+         * logger, the libraries' included.
+         */
         @ParameterizedTest
         @MethodSource
         @DisplayName("what a provider answers is never written to the server logs, streamed or not")
         void providerTextIsNeverLogged(int upstreamStatus, String contentType, String upstreamBody, String marker,
-                ErrorMessage expectedError, ErrorMessage expectedStreamedError) {
+                ErrorMessage expectedError, ErrorMessage expectedStreamedError, List<Integer> expectedProviderCalls) {
             var workspaceName = RandomStringUtils.randomAlphanumeric(20);
             mockTargetWorkspace(workspaceName, UUID.randomUUID().toString());
             createCustomProvider(workspaceName);
@@ -614,7 +604,7 @@ class ChatCompletionsResourceTest {
             var actualErrors = new ArrayList<ErrorMessage>();
             var actualProviderCalls = new ArrayList<Integer>();
 
-            var actualEvents = opikLogEventsOf(() -> {
+            var actualEvents = LogCaptureUtils.logEventsOf(() -> {
                 actualErrors.add(chatCompletionsClient.create(API_KEY, workspaceName, request,
                         expectedError.getCode()));
                 actualProviderCalls.add(providerCalls());
@@ -624,8 +614,143 @@ class ChatCompletionsResourceTest {
             });
 
             assertThat(actualErrors).isEqualTo(List.of(expectedError, expectedStreamedError));
-            assertThat(actualProviderCalls).isEqualTo(EXPECTED_PROVIDER_CALLS);
+            assertThat(actualProviderCalls).isEqualTo(expectedProviderCalls);
             assertThat(actualEvents).isNotEmpty().noneMatch(event -> event.contains(marker));
+        }
+
+        /**
+         * Runs {@code test} with a retry budget of {@code maxRetries}, read by the service on every call, and restores
+         * the configured one after it.
+         */
+        private void withRetryBudget(int maxRetries, Runnable test) {
+            var configuredRetries = llmProviderClientConfig.getMaxAttempts();
+            llmProviderClientConfig.setMaxAttempts(maxRetries);
+            try {
+                test.run();
+            } finally {
+                llmProviderClientConfig.setMaxAttempts(configuredRetries);
+            }
+        }
+
+        private Stream<Arguments> aTransientFailureIsRetriedUpToTheBudget() {
+            var failures = List.of(
+                    named("an upstream 500", aResponse()
+                            .withStatus(HttpStatus.SC_INTERNAL_SERVER_ERROR)
+                            .withHeader("Content-Type", "text/plain")
+                            .withBody(RandomStringUtils.secure().nextAlphanumeric(20))),
+                    named("a connection reset", aResponse().withFault(Fault.CONNECTION_RESET_BY_PEER)));
+            return failures.stream()
+                    .flatMap(failure -> Stream.of(1, 2).map(maxRetries -> arguments(failure, maxRetries)));
+        }
+
+        /**
+         * A failure another attempt can fix is retried: the provider fails every attempt the budget allows to fail,
+         * and the last one succeeds. The budget can't be 0, as the configuration requires at least 1.
+         */
+        @ParameterizedTest(name = "{0}, maxRetries={1}")
+        @MethodSource
+        @DisplayName("a transient provider failure is retried up to the retry budget")
+        void aTransientFailureIsRetriedUpToTheBudget(ResponseDefinitionBuilder failure, int maxRetries) {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            mockTargetWorkspace(workspaceName, UUID.randomUUID().toString());
+            createCustomProvider(workspaceName);
+            var scenario = UUID.randomUUID().toString();
+            var successBody = """
+                    {"id":"chatcmpl-%s","object":"chat.completion","created":%d,"model":"gpt-4o",\
+                    "choices":[{"index":0,"message":{"role":"assistant","content":"%s"},"finish_reason":"stop"}]}"""
+                    .formatted(RandomStringUtils.secure().nextAlphanumeric(10), System.currentTimeMillis() / 1000,
+                            RandomStringUtils.secure().nextAlphanumeric(20));
+            IntStream.range(0, maxRetries).forEach(failed -> WIRE_MOCK.server().stubFor(
+                    post(urlPathMatching(CHAT_COMPLETIONS_REGEX))
+                            .inScenario(scenario)
+                            .whenScenarioStateIs(failed == 0 ? Scenario.STARTED : "failed %d".formatted(failed))
+                            .willReturn(failure)
+                            .willSetStateTo("failed %d".formatted(failed + 1))));
+            WIRE_MOCK.server().stubFor(post(urlPathMatching(CHAT_COMPLETIONS_REGEX))
+                    .inScenario(scenario)
+                    .whenScenarioStateIs("failed %d".formatted(maxRetries))
+                    .willReturn(okJson(successBody)));
+            var request = ChatCompletionRequest.builder().stream(false).model(MODEL).addUserMessage("ping").build();
+            var expectedResponse = JsonUtils.readValue(successBody, ChatCompletionResponse.class);
+            var expectedProviderCalls = maxRetries + 1;
+
+            withRetryBudget(maxRetries, () -> {
+                var actualResponse = chatCompletionsClient.create(API_KEY, workspaceName, request);
+
+                assertThat(actualResponse).isEqualTo(expectedResponse);
+                assertThat(providerCalls()).isEqualTo(expectedProviderCalls);
+            });
+        }
+
+        /**
+         * A failure that isn't recognised as transient fails on its first attempt, whatever the budget, as another one
+         * could repeat a call the provider already acted on: here a reply that can't be parsed.
+         */
+        @ParameterizedTest(name = "maxRetries={0}")
+        @ValueSource(ints = {1, 2})
+        @DisplayName("a failure that isn't transient is not retried")
+        void aFailureThatIsNotTransientIsNotRetried(int maxRetries) {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            mockTargetWorkspace(workspaceName, UUID.randomUUID().toString());
+            createCustomProvider(workspaceName);
+            WIRE_MOCK.server().stubFor(post(urlPathMatching(CHAT_COMPLETIONS_REGEX))
+                    .willReturn(aResponse()
+                            .withStatus(HttpStatus.SC_OK)
+                            .withHeader("Content-Type", "application/json")
+                            .withBody("{\"choices\": %s".formatted(RandomStringUtils.secure().nextAlphanumeric(20)))));
+            var request = ChatCompletionRequest.builder().stream(false).model(MODEL).addUserMessage("ping").build();
+            var expectedError = new ErrorMessage(HttpStatus.SC_INTERNAL_SERVER_ERROR,
+                    UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
+            var expectedProviderCalls = 1;
+
+            withRetryBudget(maxRetries, () -> {
+                var actualError = chatCompletionsClient.create(API_KEY, workspaceName, request,
+                        HttpStatus.SC_INTERNAL_SERVER_ERROR);
+
+                assertThat(actualError).isEqualTo(expectedError);
+                assertThat(providerCalls()).isEqualTo(expectedProviderCalls);
+            });
+        }
+
+        /**
+         * A provider that resets the connection once it took the request may have acted on it. A transport failure is
+         * transient, so ChatCompletionService's retry budget sends the request again, but the HTTP client never does
+         * on its own: the provider sees one request per attempt, the first one sent on the connection the previous
+         * call left pooled, and one for the stream, which isn't retried.
+         */
+        @ParameterizedTest(name = "maxRetries={0}")
+        @ValueSource(ints = {1, 2})
+        @DisplayName("a connection reset after the request is sent costs one provider call per attempt")
+        void aConnectionResetCostsOneProviderCallPerAttempt(int maxRetries) {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            mockTargetWorkspace(workspaceName, UUID.randomUUID().toString());
+            createCustomProvider(workspaceName);
+            WIRE_MOCK.server().stubFor(post(urlPathMatching(CHAT_COMPLETIONS_REGEX)).willReturn(okJson(SUCCESS_BODY)));
+            var request = ChatCompletionRequest.builder().stream(false).model(MODEL).addUserMessage("ping").build();
+            var streamed = ChatCompletionRequest.builder().stream(true).model(MODEL).addUserMessage("ping").build();
+            var expectedError = new ErrorMessage(HttpStatus.SC_INTERNAL_SERVER_ERROR,
+                    UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
+            var expectedProviderCalls = List.of(1, maxRetries + 2, maxRetries + 3);
+            var actualProviderCalls = new ArrayList<Integer>();
+
+            withRetryBudget(maxRetries, () -> {
+                chatCompletionsClient.create(API_KEY, workspaceName, request);
+                actualProviderCalls.add(providerCalls());
+                WIRE_MOCK.server().stubFor(post(urlPathMatching(CHAT_COMPLETIONS_REGEX))
+                        .willReturn(aResponse().withFault(Fault.CONNECTION_RESET_BY_PEER)));
+
+                var actualError = chatCompletionsClient.create(API_KEY, workspaceName, request,
+                        HttpStatus.SC_INTERNAL_SERVER_ERROR);
+                actualProviderCalls.add(providerCalls());
+                var actualStreamedErrors = chatCompletionsClient.createAndGetStreamedError(API_KEY, workspaceName,
+                        streamed);
+                actualProviderCalls.add(providerCalls());
+
+                assertThat(actualError).isEqualTo(expectedError);
+                assertThat(actualStreamedErrors).containsExactly(expectedError);
+            });
+
+            assertThat(actualProviderCalls).isEqualTo(expectedProviderCalls);
         }
 
         /**
@@ -1411,8 +1536,10 @@ class ChatCompletionsResourceTest {
             WIRE_MOCK.server().resetAll();
         }
 
+        /** What every provider answers in this class, which must reach the caller only, never the server logs. */
+        private final String message = "provider says %s".formatted(RandomStringUtils.secure().nextAlphanumeric(16));
+
         private Stream<Arguments> openAiErrors() {
-            var message = "provider says " + UUID.randomUUID();
             return Stream.of(
                     arguments(named("documented code", HttpStatus.SC_UNAUTHORIZED), "application/json",
                             openAiError(message, "invalid_request_error", "invalid_api_key"),
@@ -1445,7 +1572,6 @@ class ChatCompletionsResourceTest {
         }
 
         private Stream<Arguments> anthropicErrors() {
-            var message = "provider says " + UUID.randomUUID();
             return Stream.of(
                     arguments(named("documented type", HttpStatus.SC_NOT_FOUND), "application/json",
                             anthropicError("not_found_error", message),
@@ -1454,7 +1580,10 @@ class ChatCompletionsResourceTest {
                             anthropicError("proxy_error", message),
                             new ErrorMessage(HttpStatus.SC_BAD_REQUEST, UNEXPECTED_ERROR_CALLING_LLM_PROVIDER)),
                     arguments(named("unparseable body", HttpStatus.SC_BAD_REQUEST), "text/plain", message,
-                            new ErrorMessage(HttpStatus.SC_BAD_REQUEST, UNEXPECTED_ERROR_CALLING_LLM_PROVIDER)));
+                            new ErrorMessage(HttpStatus.SC_BAD_REQUEST, UNEXPECTED_ERROR_CALLING_LLM_PROVIDER)),
+                    arguments(named("documented server error", HttpStatus.SC_INTERNAL_SERVER_ERROR),
+                            "application/json", anthropicError("api_error", message),
+                            new ErrorMessage(HttpStatus.SC_INTERNAL_SERVER_ERROR, message)));
         }
 
         @ParameterizedTest(name = "Anthropic {0}")
@@ -1502,17 +1631,23 @@ class ChatCompletionsResourceTest {
             assertThat(actualStreamedErrors).containsExactly(expectedError);
         }
 
+        /** The caller gets the expected error, streamed or not, and nothing the provider answered is logged. */
         private void assertErrors(String workspaceName, String model, ErrorMessage expectedError) {
             var request = ChatCompletionRequest.builder().stream(false).model(model).maxCompletionTokens(100)
                     .addUserMessage("ping").build();
-            var actualError = chatCompletionsClient.create(API_KEY, workspaceName, request, expectedError.getCode());
-            assertThat(actualError).isEqualTo(expectedError);
-
             var streamed = ChatCompletionRequest.builder().stream(true).model(model).maxCompletionTokens(100)
                     .addUserMessage("ping").build();
-            var actualStreamedErrors = chatCompletionsClient.createAndGetStreamedError(API_KEY, workspaceName,
-                    streamed);
-            assertThat(actualStreamedErrors).containsExactly(expectedError);
+            var actualErrors = new ArrayList<ErrorMessage>();
+
+            var actualEvents = LogCaptureUtils.logEventsOf(() -> {
+                actualErrors.add(chatCompletionsClient.create(API_KEY, workspaceName, request,
+                        expectedError.getCode()));
+                actualErrors.addAll(chatCompletionsClient.createAndGetStreamedError(API_KEY, workspaceName,
+                        streamed));
+            });
+
+            assertThat(actualErrors).isEqualTo(List.of(expectedError, expectedError));
+            assertThat(actualEvents).isNotEmpty().noneMatch(event -> event.contains(message));
         }
 
         private String prepareWorkspace(LlmProvider provider, String baseUrl) {

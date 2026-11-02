@@ -252,9 +252,9 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
 
     /**
      * The SDK's timeout is a whole-call timeout, which would end a stream after that long however lively it is, and it
-     * is the read timeout too. A stream has no whole-call timeout; the read timeout bounds its headers and the stream
-     * read timeout each read of its body, see {@link StreamCallTimeouts}, so the SDK's read timeout is set to fire
-     * before neither. All of it is the call's own, set on no connection another call shares.
+     * is the read timeout too. A stream has no whole-call timeout; the longer of the read timeout and the stream read
+     * timeout bounds its headers, and the stream read timeout each read of its body, see {@link StreamCallTimeouts}, so
+     * the SDK's read timeout is set to the longer of the two. All of it is the call's own, set on no connection another call shares.
      */
     private Timeout streamingTimeout() {
         var connectTimeout = Optional.ofNullable(llmProviderClientConfig.getConnectTimeout());

@@ -4,6 +4,11 @@ import SideBar from "@/v2/layout/SideBar/SideBar";
 import TopBar from "@/v2/layout/TopBar/TopBar";
 import useLocalStorageState from "use-local-storage-state";
 import usePluginsStore from "@/store/PluginsStore";
+import {
+  useAssistantSidebarWidth,
+  useIsAssistantOpen,
+  useSetAssistantSidebarWidth,
+} from "@/store/AppStore";
 import WelcomeWizardDialog from "@/v2/pages-shared/WelcomeWizard/WelcomeWizardDialog";
 import useWelcomeWizardStatus from "@/api/welcome-wizard/useWelcomeWizardStatus";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
@@ -14,9 +19,7 @@ import SilentErrorBoundary from "@/shared/SilentErrorBoundary/SilentErrorBoundar
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { useIsPhone } from "@/hooks/useIsPhone";
 import {
-  ASSISTANT_SIDEBAR_COLLAPSED_WIDTH,
   getStoredAssistantSidebarWidth,
-  isAssistantSidebarOpen,
   setAssistantSidebarOpen,
 } from "@/constants/assistantSidebar";
 import DemoProjectBanner from "@/v2/layout/DemoProjectBanner/DemoProjectBanner";
@@ -41,11 +44,8 @@ const PageLayout = () => {
     ? noticeBannerHeight
     : retentionBannerHeight + demoBannerHeight + mcpBannerHeight;
   const [showWelcomeWizard, setShowWelcomeWizard] = useState(false);
-  const [assistantSidebarWidth, setAssistantSidebarWidth] = useState(() =>
-    isAssistantSidebarOpen()
-      ? getStoredAssistantSidebarWidth()
-      : ASSISTANT_SIDEBAR_COLLAPSED_WIDTH,
-  );
+  const assistantSidebarWidth = useAssistantSidebarWidth();
+  const setAssistantSidebarWidth = useSetAssistantSidebarWidth();
 
   const welcomeWizardEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.WELCOME_WIZARD_ENABLED,
@@ -71,8 +71,7 @@ const PageLayout = () => {
   const { isPhone } = useIsPhone();
   const isSmall = useMediaQuery(`(max-width: ${1023 + assistantWidth}px)`);
 
-  const isAssistantOpen =
-    assistantSidebarWidth > ASSISTANT_SIDEBAR_COLLAPSED_WIDTH;
+  const isAssistantOpen = useIsAssistantOpen();
   // On phones the assistant renders as a fixed overlay when open and is
   // fully unmounted when collapsed. The layout var stays 0px so
   // `.comet-content-inset`'s calc resolves correctly.
@@ -82,7 +81,7 @@ const PageLayout = () => {
   const handleOpenAssistant = useCallback(() => {
     setAssistantSidebarOpen(true);
     setAssistantSidebarWidth(getStoredAssistantSidebarWidth());
-  }, []);
+  }, [setAssistantSidebarWidth]);
 
   const expanded = isPhone
     ? false

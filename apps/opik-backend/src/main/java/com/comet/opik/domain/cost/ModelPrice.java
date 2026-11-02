@@ -6,6 +6,7 @@ import lombok.NonNull;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -26,24 +27,19 @@ public record ModelPrice(
         @NonNull List<PromptTier> promptTiers) {
 
     /**
-     * Whole-prompt tier thresholds for the {@code *_above_NNNk_tokens} rates published by
-     * LiteLLM. When the total prompt strictly exceeds a threshold the tier's rate replaces the
-     * base rate wholesale (matches LiteLLM's {@code _get_token_base_cost}). Reachable models
-     * today: OpenRouter's Qwen3 and ByteDance Seed rows at 128K, Gemini 2.5 Pro / Claude Sonnet 4.5
-     * at 200K, GPT-5.4 / GPT-5.5 (openai and azure) at 272K.
+     * A whole-prompt tier threshold of the {@code *_above_NNNk_tokens} rates published by LiteLLM. When the total
+     * prompt strictly exceeds a threshold the tier's rate replaces the base rate wholesale (matches LiteLLM's
+     * {@code _get_token_base_cost}). The price file's own thresholds are used, from 32K to 512K today.
      */
-    public static final int TIER_THRESHOLD_128K = 128_000;
-
     public static final int TIER_THRESHOLD_200K = 200_000;
 
-    public static final int TIER_THRESHOLD_272K = 272_000;
-
     /**
-     * One prompt-size tier for a model: the threshold plus each rate the tier overrides. Any
-     * rate left at {@link BigDecimal#ZERO} means "this tier does not override that rate — fall
-     * through to a lower tier or the base rate." LiteLLM publishes the four rates below at 200K
-     * but only {@code input}/{@code output} at 128K and 272K, so cache fields on those tiers
-     * are typically zero and correctly no-op via {@link #applicableTier}.
+     * One prompt-size tier for a model: the threshold plus each rate the tier overrides, as most tiers publish only some
+     * of them. A rate left at {@link BigDecimal#ZERO} isn't overridden, and what replaces it depends on the rate. The
+     * input, output, cache-read and five-minute write rates fall through to a lower tier that publishes them, then to
+     * the base rate. The one-hour write rate falls through to a lower tier too, but without one it's the base one-hour
+     * rate scaled like the five-minute rate, and never below that five-minute rate. The reasoning and audio rates, which
+     * no tier publishes, scale with the text rates the same way ({@link SpanCostCalculator#scaledToTier}).
      */
     @Builder(toBuilder = true)
     public record PromptTier(
@@ -51,7 +47,13 @@ public record ModelPrice(
             @NonNull BigDecimal inputPrice,
             @NonNull BigDecimal outputPrice,
             @NonNull BigDecimal cacheCreationInputTokenPrice,
-            @NonNull BigDecimal cacheReadInputTokenPrice) {
+            @NonNull BigDecimal cacheReadInputTokenPrice,
+            BigDecimal cacheCreationInputTokenPriceAbove1hr) {
+
+        public PromptTier {
+            cacheCreationInputTokenPriceAbove1hr = Objects.requireNonNullElse(cacheCreationInputTokenPriceAbove1hr,
+                    BigDecimal.ZERO);
+        }
     }
 
     /**
@@ -103,7 +105,7 @@ public record ModelPrice(
      * requested rate is greater than zero. Highest applicable tier wins; zero-valued rates never
      * suppress a lower tier's rate or the base rate.
      */
-    private Optional<BigDecimal> applicableTier(int totalPromptTokens, Function<PromptTier, BigDecimal> rate) {
+    Optional<BigDecimal> applicableTier(int totalPromptTokens, Function<PromptTier, BigDecimal> rate) {
         return promptTiers.stream()
                 .filter(tier -> totalPromptTokens > tier.threshold())
                 .map(rate)

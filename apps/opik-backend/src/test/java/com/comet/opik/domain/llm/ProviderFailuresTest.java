@@ -2,10 +2,18 @@ package com.comet.opik.domain.llm;
 
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
+
+import javax.net.ssl.SSLHandshakeException;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.net.ConnectException;
+import java.net.NoRouteToHostException;
 import java.net.SocketTimeoutException;
+import java.net.UnknownHostException;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -38,6 +46,25 @@ class ProviderFailuresTest {
         assertRedacted(actual.getCause(), inner);
         assertThat(actual.getCause().getCause()).isNull();
         assertThat(ProviderFailures.rootType(outer)).isEqualTo(IOException.class.getSimpleName());
+    }
+
+    static Stream<Throwable> connectFailures() {
+        return Stream.of(
+                new ConnectException(RandomStringUtils.secure().nextAlphanumeric(20)),
+                new NoRouteToHostException(RandomStringUtils.secure().nextAlphanumeric(20)),
+                new SSLHandshakeException(RandomStringUtils.secure().nextAlphanumeric(20)),
+                new UnknownHostException(RandomStringUtils.secure().nextAlphanumeric(20)));
+    }
+
+    /** Whether, where and how a destination could be reached would tell a caller about the network it is on. */
+    @ParameterizedTest
+    @MethodSource("connectFailures")
+    void redactedDropsTheMessageOfAFailureToConnect(Throwable root) {
+        var failure = new UncheckedIOException(new IOException(root));
+
+        var actual = ProviderFailures.redacted(failure);
+
+        assertRedacted(actual.getCause().getCause(), root);
     }
 
     private static void assertRedacted(Throwable actual, Throwable expected) {

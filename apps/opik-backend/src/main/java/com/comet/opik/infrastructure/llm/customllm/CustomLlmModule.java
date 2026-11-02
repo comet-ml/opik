@@ -2,7 +2,9 @@ package com.comet.opik.infrastructure.llm.customllm;
 
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
+import com.comet.opik.infrastructure.http.OneShotRequestBodies;
 import com.comet.opik.infrastructure.llm.LlmServiceProvider;
+import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.comet.opik.infrastructure.net.DestinationGuardDns;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.google.inject.AbstractModule;
@@ -42,8 +44,12 @@ public class CustomLlmModule extends AbstractModule {
     @Named("llmHttpClient")
     public OkHttpClient llmHttpClient(@NonNull @Config("llmProviderClient") LlmProviderClientConfig config,
             @NonNull ProviderBaseUrlGuard providerBaseUrlGuard) {
-        return newLlmHttpClient(config, DestinationGuardDns.clientBuilder(providerBaseUrlGuard.destinationGuard())
-                .protocols(List.of(Protocol.HTTP_1_1)));
+        return llmHttpClient(config, providerBaseUrlGuard.destinationGuard());
+    }
+
+    /** As {@link #llmHttpClient(LlmProviderClientConfig, ProviderBaseUrlGuard)}, resolving through {@code guard}. */
+    static OkHttpClient llmHttpClient(@NonNull LlmProviderClientConfig config, @NonNull DestinationGuard guard) {
+        return newLlmHttpClient(config, DestinationGuardDns.clientBuilder(guard).protocols(List.of(Protocol.HTTP_1_1)));
     }
 
     /** The HTTP client builder every langchain4j model is given, over the shared client. */
@@ -69,9 +75,10 @@ public class CustomLlmModule extends AbstractModule {
     }
 
     /**
-     * The rest keeps what the JDK client did: no redirects, no retry of a request on a broken connection, which could
-     * send a model call twice, and daemon threads. Each model's client derives from this one, so all of them share its
-     * connection pool and dispatcher.
+     * The rest keeps what the JDK client did: no redirects, no request sent twice, which could repeat a model call, and
+     * daemon threads. Unlike it, a host's next address is tried when connecting to one fails, see
+     * {@link OneShotRequestBodies}. Each model's client derives from this one, so all of them share its connection
+     * pool and dispatcher.
      *
      * <p>The dispatcher runs at most the configured number of asynchronous calls, overall and per host, and queues the
      * rest itself. It hands a call to the executor only while under that limit, and there are at least as many threads
@@ -92,10 +99,9 @@ public class CustomLlmModule extends AbstractModule {
         var dispatcher = new Dispatcher(executor);
         dispatcher.setMaxRequests(config.getHttpClientMaxRequests());
         dispatcher.setMaxRequestsPerHost(config.getHttpClientMaxRequestsPerHost());
-        return builder
+        return OneShotRequestBodies.failOverWithoutResending(builder)
                 .followRedirects(false)
                 .followSslRedirects(false)
-                .retryOnConnectionFailure(false)
                 .dispatcher(dispatcher)
                 .build();
     }

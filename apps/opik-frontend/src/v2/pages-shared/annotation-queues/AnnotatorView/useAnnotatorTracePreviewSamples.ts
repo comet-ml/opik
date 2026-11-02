@@ -63,7 +63,6 @@ const useAnnotatorTracePreviewSamples = ({
     sample: samples[currentIndex],
     sampleIndex: currentIndex,
     setSampleIndex,
-    fromProject: !fromQueue,
     isPending:
       (useQueueSample && isQueuePending) ||
       (useProjectSample && isProjectPending),

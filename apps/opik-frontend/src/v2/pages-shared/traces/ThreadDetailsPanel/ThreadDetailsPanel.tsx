@@ -524,13 +524,6 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
             <ThreadMessagesSkeleton />
           ) : (
             <MediaProvider media={media}>
-              {media.length > 0 && (
-                <div className="mb-4 px-4">
-                  <Accordion type="multiple" defaultValue={["attachments"]}>
-                    <AttachmentsList media={media} />
-                  </Accordion>
-                </div>
-              )}
               <div style={bodyStyle}>
                 {traces.length > 0 && !visibleTraces.length ? (
                   <NoData message={ONLY_INTERNAL_CALLS_MESSAGE} icon={null} />
@@ -539,6 +532,17 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
                     traces={visibleTraces}
                     handleOpenTrace={handleOpenTrace}
                     traceId={traceId}
+                    content={
+                      media.length > 0 && (
+                        <Accordion
+                          type="multiple"
+                          defaultValue={["attachments"]}
+                          className="mb-2"
+                        >
+                          <AttachmentsList media={media} />
+                        </Accordion>
+                      )
+                    }
                   />
                 )}
               </div>

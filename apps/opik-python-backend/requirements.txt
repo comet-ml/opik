@@ -40,6 +40,6 @@ gepa==0.1.4
 # Transitive via opik-optimizer, pinned for reproducibility. No longer built from source:
 # 1.94.2 was the first release publishing musllinux wheels, so the Alpine builder installs
 # a prebuilt abi3 wheel and the Rust toolchain no longer has to compile it.
-litellm==1.103.0
+litellm==1.103.1
 pyrate-limiter>=3.0.0,<4.0.0
 python-jsonpath>=2.0.0,<3.0.0

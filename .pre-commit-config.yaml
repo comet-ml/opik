@@ -314,6 +314,19 @@ repos:
         pass_filenames: false
 
   # ---------------------------------------------------------------------------
+  # Self-check: run_db_migrations.sh is the backend-migrations init container, so
+  # its exit code decides whether the backend starts. Stubbed java, no JVM.
+  # ---------------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: run-db-migrations-script-tests
+        name: 🧪 run_db_migrations script tests
+        entry: apps/opik-backend/test_run_db_migrations.sh
+        language: system
+        files: ^apps/opik-backend/(run_db_migrations|test_run_db_migrations)\.sh$
+        pass_filenames: false
+
+  # ---------------------------------------------------------------------------
   # Frontend (apps/opik-frontend) — eslint --fix on changed files; whole-project
   # typecheck (tsc can't be per-file: path aliases + cross-file inference).
   # language: system → uses the repo's own node_modules; files-gated to src.
