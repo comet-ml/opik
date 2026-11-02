@@ -23,7 +23,7 @@ on:
           type: boolean
           required: false
           default: false
-          description: Only check that PyPI Trusted Publishing accepts this workflow; build and upload nothing
+          description: Only run the release preflight checks (PyPI Trusted Publishing, dependency age caps); build and upload nothing
         preflight_non_blocking:
           type: boolean
           required: false
@@ -43,7 +43,7 @@ on:
           type: boolean
           required: false
           default: false
-          description: Only check that PyPI Trusted Publishing accepts this workflow; build and upload nothing
+          description: Only run the release preflight checks (PyPI Trusted Publishing, dependency age caps); build and upload nothing
         preflight_non_blocking:
           type: boolean
           required: false
@@ -55,6 +55,8 @@ on:
         - 'main'
         paths:
           - "sdks/python/**"
+          - "sdks/dependency-age-exceptions.txt"
+          - ".github/scripts/cap_dependency_age.py"
 
 # PyPI Trusted Publishing (OIDC): no stored token. id-token: write is per job,
 # and callers must grant it too — permissions only narrow down a call chain.
@@ -71,8 +73,11 @@ jobs:
             id-token: write
         timeout-minutes: 5
         steps:
+        # Step-level timeout: a job timeout fails the job despite continue-on-error,
+        # so a hung PyPI would block the release even with preflight_non_blocking.
         - name: PyPI Trusted Publishing preflight
           continue-on-error: ${{ inputs.preflight_non_blocking }}
+          timeout-minutes: 3
           run: |
             set -euo pipefail
             # Tokens go via stdin, never argv; a 200 body holds a live upload
@@ -93,13 +98,39 @@ jobs:
             fi
             echo "OK: PyPI accepts this workflow as a Trusted Publisher for opik."
 
+    # Runs the cap checks before release.yaml pushes the tag, so a release whose
+    # dependencies can't be capped stops before anything is tagged.
+    dependency-cap-preflight:
+        if: inputs.preflight_only
+        runs-on: ubuntu-latest
+        timeout-minutes: 8
+        steps:
+        - name: Checkout
+          uses: actions/checkout@v7
+
+        - name: Set up Python 3.10
+          uses: actions/setup-python@v7
+          with:
+                python-version: "3.10"
+
+        # Step-level timeout, as in pypi-oidc-preflight; pip is bootstrapped as in build-and-publish.
+        - name: Check dependency age caps
+          continue-on-error: ${{ inputs.preflight_non_blocking }}
+          timeout-minutes: 4
+          run: |
+            python3 -m pip install --only-binary :all: --require-hashes \
+              -r <(echo "pip==26.2.2 --hash=sha256:fd7f4dfa8190e014013b9f08f3e973f4e4c26ffd179a204895533a7254813a70")
+            python3 -m pip install --only-binary :all: --uploaded-prior-to P7D packaging
+            python3 .github/scripts/cap_dependency_age.py sdks/python/setup.py \
+              --exceptions sdks/dependency-age-exceptions.txt --check
+
     build-and-publish:
         if: ${{ !inputs.preflight_only }}
         runs-on: ubuntu-latest
         permissions:
             contents: read
             id-token: write
-        timeout-minutes: 5
+        timeout-minutes: 10
         steps:
         - name: Setup
           id: setup
@@ -123,14 +154,34 @@ jobs:
           with:
                 python-version: "3.10"
 
+        # This job can mint a PyPI upload token, so its build tools get the same 7-day rule
+        # as the SDK's dependencies and the build runs with --no-isolation to use them.
+        # --uploaded-prior-to needs pip >= 26.1 and the runner's is older, so pip itself comes from
+        # one hash-pinned file. --upgrade replaces a setuptools bundled with the runner's Python.
+        - name: Install build tools at least 7 days old
+          run: |
+                python3 -m pip install --only-binary :all: --require-hashes \
+                  -r <(echo "pip==26.2.2 --hash=sha256:fd7f4dfa8190e014013b9f08f3e973f4e4c26ffd179a204895533a7254813a70")
+                python3 -m pip install --only-binary :all: --upgrade --uploaded-prior-to P7D build packaging setuptools
+
+        - name: Cap dependencies by release age
+          run: |
+                python3 .github/scripts/cap_dependency_age.py sdks/python/setup.py \
+                  --exceptions sdks/dependency-age-exceptions.txt
+
         - name: Build pip package
           env:
             INPUT_VERSION: ${{ inputs.version }}
           run: |
                 cd sdks/python
-                pip3 install -U pip build
                 if [[ "${INPUT_VERSION}" != "" ]]; then export VERSION="${INPUT_VERSION}";fi
-                python3 -m build --sdist --wheel --outdir dist/ .
+                python3 -m build --no-isolation --sdist --wheel --outdir dist/ .
+
+        # --only-binary: building a dependency from source to read its metadata would
+        # run its code in a job that can publish to PyPI.
+        - name: Check the capped dependencies resolve
+          run: |
+                pip3 install --dry-run --only-binary :all: sdks/python/dist/*.whl
 
         - name: Publish package distributions to PyPI
           if: inputs.is_release

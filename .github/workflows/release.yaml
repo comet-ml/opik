@@ -19,7 +19,7 @@ on:
         type: boolean
         required: false
         default: false
-        description: "Don't block the release when the PyPI Trusted Publishing preflight fails (e.g. a PyPI outage). Re-publish the SDK afterwards by dispatching build_and_publish_sdk.yaml."
+        description: "Don't block the release when the SDK preflight (PyPI Trusted Publishing, dependency age caps) fails (e.g. a PyPI outage). Re-publish the SDK afterwards by dispatching build_and_publish_sdk.yaml."
   workflow_call: #  in order to make this action been called from outside
     inputs:
       reuse_existing_tag:
@@ -31,7 +31,7 @@ on:
         type: boolean
         required: false
         default: false
-        description: "Don't block the release when the PyPI Trusted Publishing preflight fails (e.g. a PyPI outage). Re-publish the SDK afterwards by dispatching build_and_publish_sdk.yaml."
+        description: "Don't block the release when the SDK preflight (PyPI Trusted Publishing, dependency age caps) fails (e.g. a PyPI outage). Re-publish the SDK afterwards by dispatching build_and_publish_sdk.yaml."
     outputs:
       version:
         description: 'The release version'
@@ -52,8 +52,9 @@ jobs:
         run: |
           echo "version=$(cat version.txt)" | tee -a "$GITHUB_OUTPUT"
 
-  # Fail before tagging if PyPI won't accept the SDK upload: a tag pushed
-  # ahead of a failed publish is what broke the opik-hermes release.
+  # Fail before tagging if PyPI won't accept the SDK upload or its dependencies
+  # can't be capped by age: a tag pushed ahead of a failed publish is what
+  # broke the opik-hermes release.
   sdk-pypi-preflight:
     needs:
       - set-version

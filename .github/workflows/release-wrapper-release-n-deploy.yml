@@ -17,7 +17,7 @@ on:
         type: boolean
         default: false
       ignore_pypi_preflight_failure:
-        description: "Don't block the release when the PyPI Trusted Publishing preflight fails (e.g. a PyPI outage). Re-publish the SDK afterwards by dispatching build_and_publish_sdk.yaml."
+        description: "Don't block the release when the SDK preflight (PyPI Trusted Publishing, dependency age caps) fails (e.g. a PyPI outage). Re-publish the SDK afterwards by dispatching build_and_publish_sdk.yaml."
         required: false
         type: boolean
         default: false

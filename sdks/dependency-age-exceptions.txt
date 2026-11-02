@@ -1,0 +1,6 @@
+# Dependency versions the SDK release builds may use before they are 7 days old.
+# One <package>==<version> per line, with the reason as a trailing comment.
+# An entry admits exactly its version: it can raise a requirement's cap or lift the
+# exclusion of a fresh backport, while other fresh versions stay excluded. It stops
+# mattering once its version is 7 days old and can be removed at any time.
+# Read by .github/scripts/cap_dependency_age.py.

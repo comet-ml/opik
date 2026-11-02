@@ -19,7 +19,7 @@ on:
 jobs:
     build-and-publish:
         runs-on: ubuntu-latest
-        timeout-minutes: 5
+        timeout-minutes: 10
         env:
           HF_HUB_ENABLE_PROGRESS_BARS: "0"
           HF_HUB_DISABLE_TELEMETRY: "1"
@@ -27,16 +27,36 @@ jobs:
         - name: Checkout
           uses: actions/checkout@v7
 
-        - name: Set up Python 3.9
+        - name: Set up Python 3.12
           uses: actions/setup-python@v7
           with:
-                python-version: 3.9
+                python-version: "3.12"
+
+        # This job can mint a PyPI upload token, so its build tools get the same 7-day rule
+        # as the SDK's dependencies and the build runs with --no-isolation to use them.
+        # --uploaded-prior-to needs pip >= 26.1 and the runner's is older, so pip itself comes from
+        # one hash-pinned file. --upgrade replaces a setuptools bundled with the runner's Python.
+        - name: Install build tools at least 7 days old
+          run: |
+                python3 -m pip install --only-binary :all: --require-hashes \
+                  -r <(echo "pip==26.2.2 --hash=sha256:fd7f4dfa8190e014013b9f08f3e973f4e4c26ffd179a204895533a7254813a70")
+                python3 -m pip install --only-binary :all: --upgrade --uploaded-prior-to P7D build packaging setuptools
+
+        - name: Cap dependencies by release age
+          run: |
+                python3 .github/scripts/cap_dependency_age.py sdks/opik_optimizer/pyproject.toml \
+                  --exceptions sdks/dependency-age-exceptions.txt
 
         - name: Build pip package
           run: |
                 cd sdks/opik_optimizer
-                pip3 install -U pip build
-                python3 -m build --sdist --wheel --outdir dist/ .
+                python3 -m build --no-isolation --sdist --wheel --outdir dist/ .
+
+        # --only-binary: building a dependency from source to read its metadata would
+        # run its code in a job that can publish to PyPI.
+        - name: Check the capped dependencies resolve
+          run: |
+                pip3 install --dry-run --only-binary :all: sdks/opik_optimizer/dist/*.whl
 
         - name: Publish package distributions to PyPI
           uses: pypa/gh-action-pypi-publish@v1.14.2

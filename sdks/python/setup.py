@@ -36,6 +36,8 @@ setup(
         os.path.join(HERE, "..", "..", "README.md"), encoding="utf-8"
     ).read(),
     long_description_content_type="text/markdown",
+    # Release builds limit each requirement to versions at least 7 days old;
+    # see .github/scripts/cap_dependency_age.py.
     install_requires=[
         "boto3-stubs[bedrock-runtime]>=1.34.110",
         "click",

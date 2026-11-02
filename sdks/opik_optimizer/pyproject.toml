@@ -8,6 +8,8 @@ authors = [
 license = {text = "Apache 2.0"}
 readme = "README.md"
 requires-python = ">=3.10,<3.15"
+# Release builds limit each requirement to versions at least 7 days old;
+# see .github/scripts/cap_dependency_age.py.
 dependencies = [
     "datasets",
     "deap>=1.4.3",
