@@ -13,10 +13,12 @@ import com.comet.opik.utils.ClientDisconnectedException;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.github.tomakehurst.wiremock.http.Fault;
+import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.exception.InvalidRequestException;
 import dev.langchain4j.model.chat.request.ChatRequest;
+import dev.langchain4j.model.chat.request.ToolChoice;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
@@ -60,6 +62,7 @@ import java.security.KeyPairGenerator;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -368,6 +371,24 @@ class VertexAIClientGeneratorTest {
                     .build());
 
             assertThat(resolvedEndpoint(config, "global")).isEqualTo("https://aiplatform.googleapis.com");
+        }
+
+        /**
+         * The shipped configuration overrides no endpoint, so the multi-regions take the SDK's own, which has to stay
+         * the one the overrides used to default to.
+         */
+        @ParameterizedTest
+        @CsvSource({
+                "global,https://aiplatform.googleapis.com",
+                "eu,https://aiplatform.eu.rep.googleapis.com",
+                "us,https://aiplatform.us.rep.googleapis.com"})
+        void multiRegionsWithoutAnOverrideKeepTheirFormerDefault(String location, String expectedEndpoint) {
+            var config = TestConfigUtils.loadConfigTest().getLlmProviderClient();
+            config.setVertexAIClient(config.getVertexAIClient().toBuilder()
+                    .tokenUris(Set.of(URI.create("http://" + wireMockHost() + TOKEN_PATH)))
+                    .build());
+
+            assertThat(resolvedEndpoint(config, location)).isEqualTo(expectedEndpoint);
         }
 
         /**
@@ -753,6 +774,81 @@ class VertexAIClientGeneratorTest {
                     .findParents("functionCall");
             assertThat(sentCalls).hasSize(1);
             assertThat(sentCalls.getFirst().path("thoughtSignature").asText()).isEqualTo(signature);
+        }
+    }
+
+    @Nested
+    @DisplayName("Credentials")
+    class Credentials {
+
+        @Test
+        @DisplayName("calls on the same key fetch one OAuth token between them")
+        void callsOnTheSameKeyShareOneToken() {
+            var generator = new VertexAIClientGenerator(clientConfig(), registry, LlmTestClients.REMOTE_MEDIA_INLINER,
+                    LlmTestClients.VIDEO_MIME_TYPE_UTILS);
+
+            completeVia(generator, "global");
+            completeVia(generator, "global");
+
+            wireMock.server().verify(1, postRequestedFor(urlPathMatching(TOKEN_PATH)));
+            wireMock.server().verify(2, postRequestedFor(urlPathMatching(GENERATE_CONTENT_PATH)));
+        }
+
+        @Test
+        @DisplayName("each key fetches its own OAuth token and calls its own project")
+        void eachKeyFetchesItsOwnToken() throws Exception {
+            var otherProject = "other-" + RandomStringUtils.secure().nextAlphabetic(8).toLowerCase(Locale.ROOT);
+            var generator = new VertexAIClientGenerator(clientConfig(), registry, LlmTestClients.REMOTE_MEDIA_INLINER,
+                    LlmTestClients.VIDEO_MIME_TYPE_UTILS);
+            var otherKey = LlmProviderClientApiConfig.builder()
+                    .apiKey(serviceAccountJson(otherProject))
+                    .configuration(Map.of("location", "global"))
+                    .build();
+
+            completeVia(generator, "global");
+            try (var client = (CloseableVertexAiChatModel) generator.generate(otherKey,
+                    ChatCompletionRequest.builder().model(MODEL).build())) {
+                client.chat(UserMessage.from("hello"));
+            }
+
+            wireMock.server().verify(2, postRequestedFor(urlPathMatching(TOKEN_PATH)));
+            wireMock.server().verify(1, postRequestedFor(urlPathMatching(
+                    ".*/projects/" + PROJECT_ID + "/locations/global/.*")));
+            wireMock.server().verify(1, postRequestedFor(urlPathMatching(
+                    ".*/projects/" + otherProject + "/locations/global/.*")));
+        }
+    }
+
+    @Nested
+    @DisplayName("Tool choice")
+    class ToolChoices {
+
+        /** The old Vertex AI module refused any tool choice but AUTO before sending, which failed the evaluation. */
+        @Test
+        @DisplayName("a required tool choice reaches Vertex AI as function-calling mode ANY")
+        void requiredToolChoiceIsSentAsAny() {
+            var tool = ToolSpecification.builder().name("read").description("Reads a trace").build();
+            var config = LlmProviderClientApiConfig.builder()
+                    .apiKey(serviceAccountJson)
+                    .configuration(Map.of("location", "global"))
+                    .build();
+
+            try (var client = (CloseableVertexAiChatModel) new VertexAIClientGenerator(clientConfig(), registry,
+                    LlmTestClients.REMOTE_MEDIA_INLINER, LlmTestClients.VIDEO_MIME_TYPE_UTILS)
+                    .generateChat(config, new LlmAsJudgeModelParameters(MODEL, null, null, null))) {
+                client.chat(ChatRequest.builder()
+                        .messages(UserMessage.from("Read trace t1"))
+                        .toolSpecifications(tool)
+                        .toolChoice(ToolChoice.REQUIRED)
+                        .build());
+            }
+
+            var requests = wireMock.server().findAll(postRequestedFor(urlPathMatching(GENERATE_CONTENT_PATH)));
+            assertThat(requests).hasSize(1);
+            var actualToolConfig = JsonUtils.getJsonNodeFromString(requests.getFirst().getBodyAsString())
+                    .path("toolConfig");
+            assertThat(actualToolConfig)
+                    .isEqualTo(JsonUtils.getJsonNodeFromString("{\"functionCallingConfig\": {\"mode\": \"ANY\"}}"));
         }
     }
 

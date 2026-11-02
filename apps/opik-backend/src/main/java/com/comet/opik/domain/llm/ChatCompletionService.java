@@ -10,9 +10,8 @@ import com.comet.opik.infrastructure.net.DestinationGuardDns;
 import com.comet.opik.utils.ChunkedOutputHandlers;
 import com.comet.opik.utils.HttpStatusRetryability;
 import com.fasterxml.jackson.core.JacksonException;
-import com.google.api.gax.rpc.ApiException;
-import com.google.api.gax.rpc.StatusCode;
 import com.google.common.base.Throwables;
+import com.google.genai.errors.ApiException;
 import com.openai.errors.OpenAIRetryableException;
 import com.openai.errors.OpenAIServiceException;
 import dev.langchain4j.data.message.AiMessage;
@@ -197,7 +196,7 @@ public class ChatCompletionService {
             }
             throw new ServerErrorException(detail, status, cause);
         } finally {
-            // Close the Vertex client (reused across retries) to release its GAX threads; other providers self-reclaim.
+            // Release whatever a closeable client (reused across retries) holds; other providers self-reclaim.
             if (languageModelClient instanceof AutoCloseable closeable) {
                 try {
                     closeable.close();
@@ -275,8 +274,7 @@ public class ChatCompletionService {
         return ExceptionUtils.getThrowableList(throwable).stream()
                 .anyMatch(cause -> cause instanceof RetriableException
                         || cause instanceof OpenAIRetryableException
-                        || cause instanceof AuthTokenException tokenFailure && tokenFailure.isRetriable()
-                        || cause instanceof ApiException apiException && apiException.isRetryable());
+                        || cause instanceof AuthTokenException tokenFailure && tokenFailure.isRetriable());
     }
 
     /**
@@ -319,7 +317,7 @@ public class ChatCompletionService {
 
     /**
      * langchain4j raises {@link UnsupportedFeatureException} when the request asks for a capability the selected
-     * provider does not implement — e.g. {@code ToolChoice.REQUIRED} against Vertex AI Gemini. The provider is never
+     * provider does not implement. The provider is never
      * reached, so {@code getLlmProviderError} has nothing to map and the call used to surface as a 500. That is
      * misleading on two counts: nothing failed server-side, and no amount of retrying can make it succeed. Report it
      * as a 400 so clients get an actionable error and the online-scoring consumers treat it as terminal instead of
@@ -429,27 +427,27 @@ public class ChatCompletionService {
 
     /**
      * Walks the cause chain like {@link #findUnsupportedFeature}, so the status is found whether the provider client
-     * throws bare or wraps. {@link HttpException} is searched for across the whole chain before any typed exception
-     * is considered, because it carries the upstream code verbatim: langchain4j's
-     * {@code ExceptionMapper} raises {@code InternalServerException(HttpException(503))}, and taking the outermost
-     * match would collapse that 503 into the flat 500 the typed exception implies.
+     * throws bare or wraps. A wire status, an {@link HttpException} or the Vertex AI SDK's {@link ApiException}, is
+     * searched for across the whole chain before any typed exception is considered, because it carries the upstream
+     * code verbatim: langchain4j's {@code ExceptionMapper} raises {@code InternalServerException(HttpException(503))},
+     * and taking the outermost match would collapse that 503 into the flat 500 the typed exception implies.
      *
      * <p>Review finding on #8170 asked whether an outer wrapper's status can shadow a nested provider one, since
      * {@code ExceptionUtils} lists the chain outermost-first. It cannot: {@code HttpException}'s only constructor is
-     * {@code (int, String)}, so it never carries a cause and is always terminal in the chain. At most one can appear,
-     * and the {@code findFirst} here is therefore not a precedence choice between rival wire statuses.
+     * {@code (int, String)}, and the Vertex AI SDK builds its {@code ApiException} from a response without a cause, so
+     * either is terminal in the chain. At most one can appear, and the {@code findFirst} here is therefore not a
+     * precedence choice between rival wire statuses.
      */
     private Optional<Integer> findProviderHttpStatus(Throwable throwable) {
         List<Throwable> chain = ExceptionUtils.getThrowableList(throwable);
 
         // Filtered at EACH stage, not once at the end. Filtering only the winner lets a non-error
         // HttpException anywhere in the chain (a 302, or a synthetic 0) satisfy findFirst, suppress the
-        // typed fallback, and then be discarded -- losing the real status. That matters most for VertexAI
-        // and the OpenAI Responses SDK, whose statuses come only from that fallback.
+        // typed fallback, and then be discarded -- losing the real status. That matters most for the OpenAI
+        // Responses SDK, whose statuses come only from that fallback.
         return chain.stream()
-                .filter(HttpException.class::isInstance)
-                .map(HttpException.class::cast)
-                .map(HttpException::statusCode)
+                .map(ChatCompletionService::wireStatusOf)
+                .flatMap(Optional::stream)
                 .filter(ChatCompletionService::isErrorStatus)
                 .findFirst()
                 .or(() -> chain.stream()
@@ -472,30 +470,13 @@ public class ChatCompletionService {
         return family == Response.Status.Family.CLIENT_ERROR || family == Response.Status.Family.SERVER_ERROR;
     }
 
-    /**
-     * VertexAI is one of two providers whose client raises no {@link HttpException}: the Google Cloud SDK throws GAX
-     * {@code ApiException}, which is also not a {@code NonRetriableException}, so without this a permanent Vertex
-     * failure consumed the whole retry budget. The status is GAX's own transport-neutral translation, identical for
-     * the gRPC and HTTP-JSON transports, rather than a table of our own.
-     *
-     * <p>An exception GAX marks retryable yields no status, so <em>within this method</em> the mapping can only
-     * prevent a drop, never cause one. That costs reporting fidelity — such a failure is reported as a flat 500
-     * rather than, say, the 503 GAX translated — and it is kept deliberately: returning the status regardless would
-     * let a GAX-retryable client-error code that {@link HttpStatusRetryability} does not carve out (ABORTED maps to
-     * 409, for instance) be classified permanent, and both this fail-fast and {@code BaseRedisSubscriber} would then
-     * drop an evaluation GAX itself says is worth retrying. Trading a precise status for that is not worth it. Scoped deliberately: {@link #findProviderHttpStatus} consults a real
-     * {@code HttpException} in the chain first, and a wire status legitimately outranks GAX's {@code isRetryable},
-     * which is a configured judgment rather than something the server said. Not reachable for VertexAI in any case —
-     * {@code VertexAiGeminiChatModel} goes through the Google Cloud SDK and never produces a langchain4j
-     * {@code HttpException} — but that is the intended precedence if it ever were.
-     */
-    private static Optional<Integer> gaxHttpStatus(ApiException apiException) {
-        if (apiException.isRetryable()) {
-            return Optional.empty();
-        }
-        return Optional.ofNullable(apiException.getStatusCode())
-                .map(StatusCode::getCode)
-                .map(StatusCode.Code::getHttpStatusCode);
+    /** The status the provider sent, as the HTTP client or the Vertex AI SDK recorded it. */
+    private static Optional<Integer> wireStatusOf(Throwable throwable) {
+        return switch (throwable) {
+            case HttpException httpException -> Optional.of(httpException.statusCode());
+            case ApiException apiException -> Optional.of(apiException.code());
+            default -> Optional.empty();
+        };
     }
 
     /**
@@ -511,7 +492,6 @@ public class ChatCompletionService {
             case TimeoutException ignored -> Optional.of(Response.Status.REQUEST_TIMEOUT.getStatusCode());
             case RateLimitException ignored -> Optional.of(Response.Status.TOO_MANY_REQUESTS.getStatusCode());
             case InternalServerException ignored -> Optional.of(Response.Status.INTERNAL_SERVER_ERROR.getStatusCode());
-            case ApiException apiException -> gaxHttpStatus(apiException);
             case OpenAIServiceException responsesException -> Optional.of(responsesException.statusCode());
             default -> Optional.empty();
         };
