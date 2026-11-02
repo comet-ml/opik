@@ -5,12 +5,10 @@ import com.comet.opik.api.ProviderAuthConfig;
 import com.comet.opik.infrastructure.LlmProviderTokenAuthConfig;
 import com.comet.opik.infrastructure.http.BodyDeadline;
 import com.comet.opik.infrastructure.llm.SharedTokenCache;
-import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.comet.opik.infrastructure.net.DestinationGuardDnsResolver;
 import com.comet.opik.infrastructure.net.DestinationGuardException;
 import com.comet.opik.infrastructure.net.RefusedHostException;
-import com.comet.opik.infrastructure.redis.StringRedisClient;
 import com.comet.opik.utils.HttpStatusRetryability;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -103,9 +101,9 @@ public class AuthTokenProvider {
     private final LongHistogram fetchDurationMs;
 
     @Inject
-    public AuthTokenProvider(@NonNull StringRedisClient redisClient, @NonNull LockService lockService,
+    public AuthTokenProvider(@NonNull SharedTokenCache tokenCache,
             @NonNull @Config("llmProviderTokenAuth") LlmProviderTokenAuthConfig config, @NonNull Client client) {
-        this.tokenCache = new SharedTokenCache(redisClient, lockService);
+        this.tokenCache = tokenCache;
         this.config = config;
         this.destinationGuard = DestinationGuard.builder().mode(config.getDestinationGuard()).build();
         this.client = client;

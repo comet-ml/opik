@@ -14,6 +14,12 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Date;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /**
  * Service-account credentials whose OAuth token is fetched once for every pod and shared through
@@ -23,10 +29,20 @@ import java.util.Objects;
  * The token's own expiry travels with it, so every pod refreshes against the real expiry. The bucket is evicted at
  * least {@link #MIN_REFRESH_AHEAD} before that expiry, ahead of the auth library's own refresh margin: otherwise a pod
  * refreshing near the end would be handed back the same expiring token from Redis.
+ *
+ * <p>The fetch itself is bounded by {@link #FETCH_SHARE_OF_LEASE} of the lock's lease, which is not renewed: the auth
+ * library's own timeouts and retries can run past it, and a holder still fetching after its lease would let a waiter
+ * take the lock and fetch a second token.
  */
 final class SharedTokenServiceAccountCredentials extends GoogleCredentials {
 
     static final Duration MIN_REFRESH_AHEAD = Duration.ofMinutes(5);
+
+    /** The rest of the lease is left for writing the token to Redis. */
+    static final double FETCH_SHARE_OF_LEASE = 0.8;
+
+    // A fetch past its deadline is abandoned rather than waited for, and its thread ends at the library's own timeout.
+    private static final Executor FETCHES = Executors.newVirtualThreadPerTaskExecutor();
 
     private record CachedToken(@NonNull String token, long expiresAtEpochMillis) {
     }
@@ -66,13 +82,40 @@ final class SharedTokenServiceAccountCredentials extends GoogleCredentials {
     private SharedTokenCache.Fetched fetch() {
         AccessToken token;
         try {
-            token = delegate.refreshAccessToken();
+            token = fetchWithinLease();
         } catch (IOException exception) {
             throw new UncheckedIOException(exception);
         }
         var expiresAt = Objects.requireNonNull(token.getExpirationTime(), "Google token without an expiry").toInstant();
         var value = JsonUtils.valueToTree(new CachedToken(token.getTokenValue(), expiresAt.toEpochMilli())).toString();
         return new SharedTokenCache.Fetched(value, cacheFor(Duration.between(Instant.now(), expiresAt)));
+    }
+
+    private AccessToken fetchWithinLease() throws IOException {
+        var deadline = Duration.ofMillis((long) (lockTimeout.toMillis() * FETCH_SHARE_OF_LEASE));
+        var fetch = CompletableFuture.supplyAsync(() -> {
+            try {
+                return delegate.refreshAccessToken();
+            } catch (IOException exception) {
+                throw new UncheckedIOException(exception);
+            }
+        }, FETCHES);
+        try {
+            return fetch.get(deadline.toMillis(), TimeUnit.MILLISECONDS);
+        } catch (TimeoutException exception) {
+            fetch.cancel(true);
+            throw new IOException("Fetching the Vertex AI OAuth token took longer than '%s'".formatted(deadline),
+                    exception);
+        } catch (InterruptedException exception) {
+            fetch.cancel(true);
+            Thread.currentThread().interrupt();
+            throw new IOException("Interrupted while fetching the Vertex AI OAuth token", exception);
+        } catch (ExecutionException exception) {
+            if (exception.getCause() instanceof UncheckedIOException failure) {
+                throw failure.getCause();
+            }
+            throw new IOException("Fetching the Vertex AI OAuth token failed", exception.getCause());
+        }
     }
 
     private Duration cacheFor(Duration lifetime) {
