@@ -5,8 +5,8 @@ import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
 
 export const ExperimentStatus: core.serialization.Schema<serializers.ExperimentStatus.Raw, OpikApi.ExperimentStatus> =
-    core.serialization.enum_(["running", "completed", "cancelled"]);
+    core.serialization.enum_(["running", "completed", "cancelled", "failed"]);
 
 export declare namespace ExperimentStatus {
-    export type Raw = "running" | "completed" | "cancelled";
+    export type Raw = "running" | "completed" | "cancelled" | "failed";
 }

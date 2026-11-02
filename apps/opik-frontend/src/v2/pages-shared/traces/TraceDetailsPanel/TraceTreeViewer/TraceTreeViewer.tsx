@@ -138,13 +138,8 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
     });
 
     spans.forEach((span: Span) => {
-      const directParentKey = span.parent_span_id;
-
-      if (!directParentKey) {
-        lookup[trace.id].children?.push(lookup[span.id]);
-      } else if (lookup[directParentKey]) {
-        lookup[directParentKey].children?.push(lookup[span.id]);
-      }
+      const parent = lookup[span.parent_span_id] ?? lookup[trace.id];
+      parent.children?.push(lookup[span.id]);
     });
 
     setTree(retVal);

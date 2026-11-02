@@ -28,6 +28,7 @@ export const TraceSearchStreamRequestPublicExcludeItem = {
     VisibilityMode: "visibility_mode",
     Providers: "providers",
     Experiment: "experiment",
+    AnnotationQueues: "annotation_queues",
     Source: "source",
     Environment: "environment",
 } as const;

@@ -1,0 +1,304 @@
+name: 🚦 External PR Policy
+
+# Enforces the pull request policy for external contributors (anyone without
+# write access to this repository). See "Pull request policy for external
+# contributors" in CONTRIBUTING.md and the contributing overview docs page.
+#
+#   1. An external contributor can have at most MAX_OPEN_PRS open PRs. A PR
+#      opened (or reopened by its author) above that limit is closed.
+#   2. An external PR is closed when the author has not responded for
+#      STALE_DAYS after our latest review. Reviews from maintainers and from
+#      the bots in REVIEW_BOTS count. A warning comment is posted after
+#      WARN_DAYS, and a PR is never closed less than
+#      STALE_DAYS - WARN_DAYS days after that warning.
+#
+# Maintainers can add the EXEMPT_LABEL label to keep a PR out of rule 2.
+
+on:
+  pull_request_target: # zizmor: ignore[dangerous-triggers]
+    types: [opened, reopened]
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Only log what the stale check would do (no comments, no closing)"
+        type: boolean
+        default: true
+
+permissions: {}
+
+env:
+  MAX_OPEN_PRS: "3"
+  STALE_DAYS: "14"
+  WARN_DAYS: "10"
+  EXEMPT_LABEL: "keep-open"
+  # Comma-separated bot logins whose reviews count as a review for rule 2.
+  REVIEW_BOTS: "baz-reviewer[bot]"
+  POLICY_URL: "https://www.comet.com/docs/opik/contributing/overview#pull-request-policy-for-external-contributors"
+
+jobs:
+  open-pr-limit:
+    name: Limit open PRs per external contributor
+    if: github.event_name == 'pull_request_target'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+
+    permissions:
+      pull-requests: write
+      issues: write
+
+    steps:
+      - name: Close PRs above the open PR limit
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const pr = context.payload.pull_request;
+            const author = pr.user.login;
+            const maxOpen = Number(process.env.MAX_OPEN_PRS);
+
+            const isMaintainer = async (login) => {
+              try {
+                const { data } = await github.rest.repos.getCollaboratorPermissionLevel({
+                  owner,
+                  repo,
+                  username: login,
+                });
+                return ["admin", "write"].includes(data.permission);
+              } catch (err) {
+                if (err.status === 404) return false;
+                throw err;
+              }
+            };
+
+            if (pr.user.type === "Bot" || (await isMaintainer(author))) {
+              core.info(`PR #${pr.number}: ${author} is a bot or maintainer, policy does not apply`);
+              return;
+            }
+
+            if (context.payload.action === "reopened" && context.payload.sender.login !== author) {
+              core.info(`PR #${pr.number}: reopened by ${context.payload.sender.login}, not the author`);
+              return;
+            }
+
+            const open = await github.paginate(github.rest.pulls.list, {
+              owner,
+              repo,
+              state: "open",
+              per_page: 100,
+            });
+            const others = open.filter((p) => p.user.login === author && p.number !== pr.number);
+
+            const ahead =
+              context.payload.action === "opened" ? others.filter((p) => p.number < pr.number) : others;
+
+            core.info(`PR #${pr.number}: ${author} has ${others.length} other open PR(s), ${ahead.length} counted`);
+            if (ahead.length < maxOpen) return;
+
+            const list = ahead
+              .sort((a, b) => a.number - b.number)
+              .map((p) => `- #${p.number}`)
+              .join("\n");
+
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: pr.number,
+              body: [
+                "<!-- external-pr-policy:open-pr-limit -->",
+                `Thanks for your contribution, @${author}!`,
+                "",
+                `External contributors can have up to ${maxOpen} open pull requests at a time, so that we can give each one a proper review. You already have ${ahead.length} open:`,
+                "",
+                list,
+                "",
+                "We closed this pull request for now. When one of your other pull requests is merged or closed, you can open a new pull request for this change, or ask a maintainer to reopen this one.",
+                "",
+                `See our [pull request policy](${process.env.POLICY_URL}) for details.`,
+              ].join("\n"),
+            });
+
+            await github.rest.pulls.update({ owner, repo, pull_number: pr.number, state: "closed" });
+            core.info(`PR #${pr.number}: closed (over the limit of ${maxOpen} open PRs)`);
+
+  stale-after-review:
+    name: Close external PRs with no response after review
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    concurrency:
+      group: ${{ github.workflow }}-stale-after-review
+      cancel-in-progress: false
+
+    permissions:
+      pull-requests: write
+      issues: write
+
+    steps:
+      - name: Warn and close stale external PRs
+        uses: actions/github-script@v9
+        env:
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const DAY_MS = 24 * 60 * 60 * 1000;
+            const staleDays = Number(process.env.STALE_DAYS);
+            const warnDays = Number(process.env.WARN_DAYS);
+            const exemptLabel = process.env.EXEMPT_LABEL;
+            const policyUrl = process.env.POLICY_URL;
+            const reviewBots = process.env.REVIEW_BOTS.split(",").map((login) => login.trim());
+            const dryRun = process.env.DRY_RUN === "true";
+            const WARNING_MARKER = "<!-- external-pr-policy:stale-warning -->";
+            const CLOSE_MARKER = "<!-- external-pr-policy:stale-close -->";
+            const now = Date.now();
+
+            const permissionCache = new Map();
+            const isMaintainer = async (user) => {
+              if (!user || user.type !== "User") return false;
+              if (!permissionCache.has(user.login)) {
+                let maintainer = false;
+                try {
+                  const { data } = await github.rest.repos.getCollaboratorPermissionLevel({
+                    owner,
+                    repo,
+                    username: user.login,
+                  });
+                  maintainer = ["admin", "write"].includes(data.permission);
+                } catch (err) {
+                  if (err.status !== 404) throw err;
+                }
+                permissionCache.set(user.login, maintainer);
+              }
+              return permissionCache.get(user.login);
+            };
+
+            const latest = (dates) => dates.filter(Boolean).reduce((max, d) => Math.max(max, Date.parse(d)), 0);
+            const days = (ms) => (ms / DAY_MS).toFixed(1);
+
+            const open = await github.paginate(github.rest.pulls.list, {
+              owner,
+              repo,
+              state: "open",
+              per_page: 100,
+            });
+
+            for (const pr of open) {
+              const author = pr.user.login;
+              if (pr.user.type === "Bot" || (await isMaintainer(pr.user))) continue;
+              if (pr.labels.some((l) => l.name === exemptLabel)) {
+                core.info(`PR #${pr.number}: has the ${exemptLabel} label, skipped`);
+                continue;
+              }
+
+              const reviews = await github.paginate(github.rest.pulls.listReviews, {
+                owner,
+                repo,
+                pull_number: pr.number,
+                per_page: 100,
+              });
+              let reviewsWithNewThreads = new Set();
+              if (reviews.some((r) => reviewBots.includes(r.user?.login))) {
+                const reviewComments = await github.paginate(github.rest.pulls.listReviewComments, {
+                  owner,
+                  repo,
+                  pull_number: pr.number,
+                  per_page: 100,
+                });
+                reviewsWithNewThreads = new Set(
+                  reviewComments.filter((c) => !c.in_reply_to_id).map((c) => c.pull_request_review_id)
+                );
+              }
+              const isActionableBotReview = (review) =>
+                review.state !== "COMMENTED" || review.body?.trim() || reviewsWithNewThreads.has(review.id);
+
+              const ourReviews = [];
+              let lastMaintainerReviewAt = 0;
+              for (const review of reviews) {
+                if (review.state === "PENDING" || !review.submitted_at) continue;
+                if (reviewBots.includes(review.user?.login)) {
+                  if (isActionableBotReview(review)) ourReviews.push(review);
+                } else if (await isMaintainer(review.user)) {
+                  ourReviews.push(review);
+                  lastMaintainerReviewAt = Math.max(lastMaintainerReviewAt, Date.parse(review.submitted_at));
+                }
+              }
+              if (ourReviews.length === 0) continue;
+
+              const lastReview = ourReviews.reduce((a, b) =>
+                Date.parse(b.submitted_at) > Date.parse(a.submitted_at) ? b : a
+              );
+              if (lastReview.state === "APPROVED") continue;
+              const reviewedAt = Date.parse(lastReview.submitted_at);
+
+              const comments = await github.paginate(github.rest.issues.listComments, {
+                owner,
+                repo,
+                issue_number: pr.number,
+                per_page: 100,
+              });
+              const commits = await github.paginate(github.rest.pulls.listCommits, {
+                owner,
+                repo,
+                pull_number: pr.number,
+                per_page: 100,
+              });
+
+              const lastAuthorActivity = latest([
+                ...reviews.filter((r) => r.user?.login === author).map((r) => r.submitted_at),
+                ...comments.filter((c) => c.user?.login === author).map((c) => c.created_at),
+                ...commits.map((c) => c.commit.committer?.date),
+              ]);
+              if (lastAuthorActivity > reviewedAt) continue;
+              if (lastMaintainerReviewAt && lastAuthorActivity > lastMaintainerReviewAt) continue;
+              if (comments.some((c) => c.body?.includes(CLOSE_MARKER) && Date.parse(c.created_at) > reviewedAt)) continue;
+
+              const idleMs = now - reviewedAt;
+              const warnedAt = latest(
+                comments
+                  .filter((c) => c.body?.includes(WARNING_MARKER) && Date.parse(c.created_at) > reviewedAt)
+                  .map((c) => c.created_at)
+              );
+
+              if (!warnedAt) {
+                if (idleMs < warnDays * DAY_MS) continue;
+                core.info(`PR #${pr.number}: no response ${days(idleMs)} days after review, warning${dryRun ? " (dry run)" : ""}`);
+                if (dryRun) continue;
+                await github.rest.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number: pr.number,
+                  body: [
+                    WARNING_MARKER,
+                    `Hi @${author}, we reviewed this pull request ${Math.floor(idleMs / DAY_MS)} days ago and have not heard back since.`,
+                    "",
+                    `External pull requests with no update for ${staleDays} days after a review are closed automatically. To keep this pull request open, push a change or reply here within the next ${staleDays - warnDays} days.`,
+                    "",
+                    `See our [pull request policy](${policyUrl}) for details.`,
+                  ].join("\n"),
+                });
+                continue;
+              }
+
+              const closeAt = Math.max(reviewedAt + staleDays * DAY_MS, warnedAt + (staleDays - warnDays) * DAY_MS);
+              if (now < closeAt) continue;
+
+              core.info(`PR #${pr.number}: no response ${days(idleMs)} days after review, closing${dryRun ? " (dry run)" : ""}`);
+              if (dryRun) continue;
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: pr.number,
+                body: [
+                  CLOSE_MARKER,
+                  `Hi @${author}, we closed this pull request because it had no update for ${staleDays} days after our review.`,
+                  "",
+                  "Thanks for your contribution. If you want to continue this work, ask a maintainer to reopen this pull request or open a new one.",
+                  "",
+                  `See our [pull request policy](${policyUrl}) for details.`,
+                ].join("\n"),
+              });
+              await github.rest.pulls.update({ owner, repo, pull_number: pr.number, state: "closed" });
+            }

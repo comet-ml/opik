@@ -22,7 +22,7 @@ AG2's primary advantage is its multi-agent conversation patterns and autonomous 
 To use the AG2 integration with Opik, you will need to have the following
 packages installed:
 
-```bash
+```bash wordWrap
 pip install -U "ag2[openai]" opik opentelemetry-sdk opentelemetry-instrumentation-openai opentelemetry-instrumentation-threading opentelemetry-exporter-otlp
 ```
 
@@ -79,7 +79,7 @@ configure the OpenTelemetry integration:
     If you are self-hosting Opik, you will need to set the following environment
     variables:
 
-    ```bash
+    ```bash wordWrap
     export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
     ```
 
@@ -87,7 +87,7 @@ configure the OpenTelemetry integration:
         To log the traces to a specific project, you can add the `projectName`
         parameter to the `OTEL_EXPORTER_OTLP_HEADERS` environment variable:
 
-        ```bash
+        ```bash wordWrap
         export OTEL_EXPORTER_OTLP_HEADERS='projectName=<your-project-name>'
         ```
 
@@ -100,7 +100,7 @@ configure the OpenTelemetry integration:
 
 The example below shows how to use the AG2 integration with Opik:
 
-```python
+```python wordWrap
 ## First we will configure the OpenTelemetry
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter

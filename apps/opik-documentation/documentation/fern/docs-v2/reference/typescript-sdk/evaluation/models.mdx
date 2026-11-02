@@ -17,7 +17,7 @@ The TypeScript SDK provides flexible model configuration through direct integrat
 
 The TypeScript SDK supports three ways to configure models for evaluation and prompt generation:
 
-1. **Model ID strings** - Simple string identifiers (e.g., `"gpt-5-nano"`, `"claude-3-5-sonnet-latest"`)
+1. **Model ID strings** - Simple string identifiers (e.g., `"gpt-5-nano"`, `"claude-sonnet-4-6"`)
 2. **LanguageModel instances** - Pre-configured Vercel AI SDK models with custom settings
 3. **OpikBaseModel implementations** - Custom model integrations for unsupported providers
 
@@ -27,7 +27,7 @@ The TypeScript SDK supports three ways to configure models for evaluation and pr
 
 The simplest approach is to pass a model ID string directly:
 
-```typescript
+```typescript wordWrap
 import { evaluatePrompt } from "opik";
 import { Hallucination } from "opik";
 
@@ -43,7 +43,7 @@ await evaluatePrompt({
 await evaluatePrompt({
   dataset,
   messages: [{ role: "user", content: "{{input}}" }],
-  model: "claude-3-5-sonnet-latest",
+  model: "claude-sonnet-4-6",
   projectName: "my-project",
 });
 
@@ -63,7 +63,7 @@ const metric = new Hallucination({ model: "gpt-5-nano" });
 
 For advanced scenarios, use LanguageModel instances from Vercel AI SDK:
 
-```typescript
+```typescript wordWrap
 import { openai } from "@ai-sdk/openai";
 import { evaluatePrompt } from "opik";
 
@@ -84,7 +84,7 @@ await evaluatePrompt({
 
 All LLM Judge metrics support these generation parameters directly in the constructor:
 
-```typescript
+```typescript wordWrap
 import { Hallucination } from "opik";
 
 const metric = new Hallucination({
@@ -104,7 +104,7 @@ const score = await metric.score({
 
 For advanced generation parameters, use `modelSettings`:
 
-```typescript
+```typescript wordWrap
 import { Hallucination } from "opik";
 
 const metric = new Hallucination({
@@ -124,7 +124,7 @@ const metric = new Hallucination({
 
 The `evaluatePrompt` function supports only `temperature` and `seed`:
 
-```typescript
+```typescript wordWrap
 import { evaluatePrompt } from "opik";
 import { Hallucination, AnswerRelevance } from "opik";
 
@@ -156,7 +156,7 @@ OpenAI models are supported through the `@ai-sdk/openai` package.
 
 **Example model IDs**:
 
-```typescript
+```typescript wordWrap
 "gpt-5-nano";
 "gpt-5-mini";
 "gpt-5";
@@ -164,7 +164,7 @@ OpenAI models are supported through the `@ai-sdk/openai` package.
 
 **Usage**:
 
-```typescript
+```typescript wordWrap
 import { evaluatePrompt } from "opik";
 
 await evaluatePrompt({
@@ -183,18 +183,18 @@ Anthropic's Claude models are supported through the `@ai-sdk/anthropic` package.
 
 **Example model IDs**:
 
-```typescript
-"claude-3-5-sonnet-latest";
-"claude-3-5-haiku-latest";
+```typescript wordWrap
+"claude-sonnet-4-6";
+"claude-haiku-4-5";
 ```
 
 **Usage**:
 
-```typescript
+```typescript wordWrap
 await evaluatePrompt({
   dataset,
   messages: [{ role: "user", content: "{{input}}" }],
-  model: "claude-3-5-sonnet-latest",
+  model: "claude-sonnet-4-6",
   projectName: "my-project",
 });
 ```
@@ -207,14 +207,14 @@ Google's Gemini models are supported through the `@ai-sdk/google` package.
 
 **Example model IDs**:
 
-```typescript
+```typescript wordWrap
 "gemini-2.0-flash";
 "gemini-1.5-pro";
 ```
 
 **Usage**:
 
-```typescript
+```typescript wordWrap
 await evaluatePrompt({
   dataset,
   messages: [{ role: "user", content: "{{input}}" }],
@@ -231,7 +231,7 @@ For a complete list of available models, see the [Vercel AI SDK Google provider 
 
 For advanced scenarios requiring full Vercel AI SDK features (such as structured outputs, custom headers, or provider-specific parameters), create `LanguageModel` instances directly:
 
-```typescript
+```typescript wordWrap
 import { openai } from "@ai-sdk/openai";
 import { anthropic } from "@ai-sdk/anthropic";
 import { evaluatePrompt } from "opik";
@@ -242,7 +242,7 @@ const genModel = openai("gpt-5-nano", {
   structuredOutputs: true, // Provider-specific feature
 });
 
-const evalModel = anthropic("claude-3-5-sonnet-latest");
+const evalModel = anthropic("claude-sonnet-4-6");
 
 // Use different models for generation and evaluation
 await evaluatePrompt({
@@ -262,13 +262,13 @@ LLM Judge metrics accept model configuration:
 
 ### With Model ID String
 
-```typescript
+```typescript wordWrap
 import { Hallucination, AnswerRelevance } from "opik";
 
 // Use different models for different metrics
 const hallucinationMetric = new Hallucination({ model: "gpt-5-nano" });
 const relevanceMetric = new AnswerRelevance({
-  model: "claude-3-5-sonnet-latest",
+  model: "claude-sonnet-4-6",
 });
 
 await evaluatePrompt({
@@ -282,7 +282,7 @@ await evaluatePrompt({
 
 ### With LanguageModel Instance
 
-```typescript
+```typescript wordWrap
 import { openai } from "@ai-sdk/openai";
 import { Hallucination } from "opik";
 
@@ -306,7 +306,7 @@ For unsupported providers, implement the `OpikBaseModel` interface:
 
 ### OpikBaseModel Interface
 
-```typescript
+```typescript wordWrap
 abstract class OpikBaseModel {
   constructor(public readonly modelName: string) {}
 
@@ -324,7 +324,7 @@ abstract class OpikBaseModel {
 
 ### Example Implementation
 
-```typescript
+```typescript wordWrap
 import { OpikBaseModel, OpikMessage } from "opik";
 
 class CustomProviderModel extends OpikBaseModel {
@@ -395,7 +395,7 @@ The SDK automatically resolves models in this order:
 3. **If OpikBaseModel is provided**: Uses the custom implementation
 4. **If undefined**: Defaults to `"gpt-5-nano"`
 
-```typescript
+```typescript wordWrap
 // String → Auto-detected as OpenAI
 model: "gpt-5-nano";
 
@@ -416,7 +416,7 @@ model: undefined;
 
 For most use cases, use model ID strings directly:
 
-```typescript
+```typescript wordWrap
 import { Hallucination } from "opik";
 
 const metric = new Hallucination({ model: "gpt-5-nano" });
@@ -428,17 +428,17 @@ The Opik SDK handles model configuration internally for optimal evaluation perfo
 
 Choose models based on task requirements:
 
-```typescript
+```typescript wordWrap
 // Complex reasoning: GPT-5, Claude Sonnet
 model: "gpt-5";
-model: "claude-3-5-sonnet-latest";
+model: "claude-sonnet-4-6";
 
 // Fast responses: GPT-5-nano, Gemini Flash
 model: "gpt-5-nano";
 model: "gemini-2.0-flash";
 
 // Long context: Claude, Gemini
-model: "claude-3-5-sonnet-latest"; // 200K context
+model: "claude-sonnet-4-6"; // 1M context
 model: "gemini-1.5-pro"; // 1M context
 ```
 
@@ -446,7 +446,7 @@ model: "gemini-1.5-pro"; // 1M context
 
 Optimize costs by using different models:
 
-```typescript
+```typescript wordWrap
 await evaluatePrompt({
   dataset,
   messages: [{ role: "user", content: "{{input}}" }],
@@ -462,7 +462,7 @@ await evaluatePrompt({
 
 Set up environment variables for each provider:
 
-```bash
+```bash wordWrap
 # OpenAI
 export OPENAI_API_KEY="sk-..."
 
@@ -477,7 +477,7 @@ export GOOGLE_API_KEY="..."
 
 Use appropriate worker counts to avoid rate limits:
 
-```typescript
+```typescript wordWrap
 await evaluatePrompt({
   dataset,
   messages: [{ role: "user", content: "{{input}}" }],
@@ -491,7 +491,7 @@ await evaluatePrompt({
 
 ### API Key Not Found
 
-```typescript
+```typescript wordWrap
 // Error: API key not found for provider
 
 // Solution: Set environment variable
@@ -500,7 +500,7 @@ process.env.OPENAI_API_KEY = "sk-...";
 
 ### Model Not Supported
 
-```typescript
+```typescript wordWrap
 // Error: Unsupported model ID
 
 // Solution: Use custom implementation
@@ -511,7 +511,7 @@ class MyModel extends OpikBaseModel {
 
 ### Rate Limit Errors
 
-```typescript
+```typescript wordWrap
 // Error: Rate limit exceeded
 
 // Solution: Reduce worker count

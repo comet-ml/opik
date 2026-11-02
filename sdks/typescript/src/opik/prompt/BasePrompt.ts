@@ -264,8 +264,13 @@ export abstract class BasePrompt {
    * Fetches and returns complete version history, sorted by creation date (newest first).
    * Automatically handles pagination to fetch all versions.
    *
+   * To look at a prompt's history without writing code, AI coding assistants connected to the
+   * Opik MCP server can call `read("prompt", name)`, which returns the prompt together with its
+   * versions, or page through them with `list("prompt_version", prompt_id=...)`.
+   *
    * @param options - Optional filtering, sorting, and search parameters
    * @returns Promise resolving to array of all PromptVersion instances for this prompt
+   * @see https://www.comet.com/docs/opik/mcp-server
    */
   async getVersions(options?: {
     search?: string;

@@ -348,6 +348,19 @@ describe("projectName contract tests", () => {
       );
     });
 
+    it("createPrompt passes resolved projectName to retrievePromptVersion", async () => {
+      await client.createPrompt({
+        name: "prompt-name",
+        prompt: "Hello {{name}}",
+        projectName: EXPLICIT_PROJECT,
+      });
+
+      expect(client.api.prompts.retrievePromptVersion).toHaveBeenCalledWith(
+        expect.objectContaining({ projectName: EXPLICIT_PROJECT }),
+        expect.anything()
+      );
+    });
+
     it("createPrompt uses default projectName when not specified", async () => {
       await client.createPrompt({
         name: "prompt-name",

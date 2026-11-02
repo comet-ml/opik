@@ -22,6 +22,10 @@ public class CorsFactory {
     public static final String OPIK_ACTUAL_MODEL_HEADER = "X-Opik-Actual-Model";
     public static final String OPIK_PROVIDER_HEADER = "X-Opik-Provider";
 
+    // Anonymous client identifiers the SDKs and frontend send, used to count active clients
+    public static final String OPIK_CLIENT_ID_HEADER = "X-Opik-Client-Id";
+    public static final String OPIK_BROWSER_ID_HEADER = "X-Opik-Browser-Id";
+
     private static final Set<String> ALLOWED_HEADERS = Set.of(
             HttpHeaders.AUTHORIZATION,
             HttpHeaders.CONTENT_TYPE,
@@ -32,6 +36,8 @@ public class CorsFactory {
             COMET_USERNAME_HEADER,
             COMET_REACT_VER_HEADER,
             RequestContext.WORKSPACE_HEADER,
+            OPIK_CLIENT_ID_HEADER,
+            OPIK_BROWSER_ID_HEADER,
             // used by FE team to test Optimization Studio locally vs remote BE
             RequestContext.OPIK_API_KEY);
 

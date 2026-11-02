@@ -19,7 +19,7 @@ To use G-Eval, supply two pieces of information:
 The judge responds with an **integer between 0 and 10**. Opik divides that value by 10 so callers receive a score between 0.0 and 1.0. We recommend packaging the full scenario (prompt, context, answer, etc.) inside a single string and passing it via the `output` argument; any other keyword arguments are ignored by the metric interface.
 
 <CodeBlocks>
-```python title="Python" language="python"
+```python title="Python" language="python" wordWrap
 from opik.evaluation.metrics import GEval
 
 metric = GEval(
@@ -35,7 +35,7 @@ OUTPUT: Paris is the capital of France.
 metric.score(output=payload)
 ````
 
-```typescript title="TypeScript" language="typescript"
+```typescript title="TypeScript" language="typescript" wordWrap
 import { GEval } from "opik/evaluation/metrics";
 
 const metric = new GEval({
@@ -71,7 +71,7 @@ Opik ships opinionated presets for common evaluation needs. Each class inherits 
 Flags statements that may be non-factual, non-compliant, or risky (e.g. finance, healthcare, legal). This judge is useful when you need an automated review step before customer-facing responses are sent, or when auditing historical conversations for policy breaches.
 
 <CodeBlocks>
-```python title="Python" language="python"
+```python title="Python" language="python" wordWrap
 from opik.evaluation.metrics import ComplianceRiskJudge
 
 metric = ComplianceRiskJudge(model="gpt-4o-mini")
@@ -84,7 +84,7 @@ score = metric.score(output=payload)
 print(score.value, score.reason)
 ````
 
-```typescript title="TypeScript" language="typescript"
+```typescript title="TypeScript" language="typescript" wordWrap
 import { ComplianceRiskJudge } from "opik/evaluation/metrics";
 
 const metric = new ComplianceRiskJudge({ model: "gpt-4o-mini" });
@@ -105,7 +105,7 @@ Inspect `score.reason` for granular rationales and route risky cases accordingly
 `PromptUncertaintyJudge` estimates how ambiguous a user prompt is before it reaches your model. Run it on raw user messages to prioritise agent hand-offs or to warn users when the request is ill-posed.
 
 <CodeBlocks>
-```python title="Python" language="python"
+```python title="Python" language="python" wordWrap
 from opik.evaluation.metrics import PromptUncertaintyJudge
 
 prompt = "Summarise the attached 400 page contract in one sentence and guarantee there are no mistakes."
@@ -114,7 +114,7 @@ uncertainty = PromptUncertaintyJudge().score(prompt=prompt)
 print(uncertainty.value)
 ````
 
-```typescript title="TypeScript" language="typescript"
+```typescript title="TypeScript" language="typescript" wordWrap
 import { PromptUncertaintyJudge } from "opik/evaluation/metrics";
 
 const prompt = "Summarise the attached 400 page contract in one sentence and guarantee there are no mistakes.";
@@ -131,7 +131,7 @@ Use the score to highlight prompts that may confuse downstream models; the judge
 Checks whether a generated summary is faithful to the source material. This is the right choice when a downstream workflow consumes summaries and you need to enforce factual alignment with the source document.
 
 <CodeBlocks>
-```python title="Python" language="python"
+```python title="Python" language="python" wordWrap
 from opik.evaluation.metrics import SummarizationConsistencyJudge
 
 metric = SummarizationConsistencyJudge(model="gpt-4o")
@@ -144,7 +144,7 @@ score = metric.score(output=payload)
 print(score.value, score.reason)
 ````
 
-```typescript title="TypeScript" language="typescript"
+```typescript title="TypeScript" language="typescript" wordWrap
 import { SummarizationConsistencyJudge } from "opik/evaluation/metrics";
 
 const metric = new SummarizationConsistencyJudge({ model: "gpt-4o" });
@@ -165,7 +165,7 @@ Pair this metric with alerts or automated rollbacks when the score drops below a
 Scores the structure, clarity, and organisation of a summary. Use it when you optimise for human readability or want to catch summaries that are factually right but poorly written.
 
 <CodeBlocks>
-```python title="Python" language="python"
+```python title="Python" language="python" wordWrap
 from opik.evaluation.metrics import SummarizationCoherenceJudge
 
 metric = SummarizationCoherenceJudge()
@@ -174,7 +174,7 @@ score = metric.score(output="""SUMMARY: First... Secondly... Finally...""")
 print(score.value, score.reason)
 ````
 
-```typescript title="TypeScript" language="typescript"
+```typescript title="TypeScript" language="typescript" wordWrap
 import { SummarizationCoherenceJudge } from "opik/evaluation/metrics";
 
 const metric = new SummarizationCoherenceJudge();
@@ -191,7 +191,7 @@ High scores correlate with summaries that maintain logical ordering and concise 
 Examines how helpful an assistant reply is in the context of the preceding dialogue. Helpful for agent tuning or support chat routing where you want to surface conversations that require escalation.
 
 <CodeBlocks>
-```python title="Python" language="python"
+```python title="Python" language="python" wordWrap
 from opik.evaluation.metrics import DialogueHelpfulnessJudge
 
 transcript = """USER: How do I reset my password?
@@ -204,7 +204,7 @@ score = DialogueHelpfulnessJudge().score(output=transcript)
 print(score.value, score.reason)
 ````
 
-```typescript title="TypeScript" language="typescript"
+```typescript title="TypeScript" language="typescript" wordWrap
 import { DialogueHelpfulnessJudge } from "opik/evaluation/metrics";
 
 const transcript = `USER: How do I reset my password?
@@ -225,7 +225,7 @@ Low scores typically indicate the assistant ignored prior context or refused to 
 Determines whether an answer directly addresses the user’s question. Ideal for dataset regression tests where each sample has a clear question/answer pair.
 
 <CodeBlocks>
-```python title="Python" language="python"
+```python title="Python" language="python" wordWrap
 from opik.evaluation.metrics import QARelevanceJudge
 
 metric = QARelevanceJudge()
@@ -238,7 +238,7 @@ score = metric.score(output=payload)
 print(score.value, score.reason)
 ````
 
-```typescript title="TypeScript" language="typescript"
+```typescript title="TypeScript" language="typescript" wordWrap
 import { QARelevanceJudge } from "opik/evaluation/metrics";
 
 const metric = new QARelevanceJudge();
@@ -259,7 +259,7 @@ Combine with hallucination metrics to distinguish totally off-topic answers from
 Evaluates if an agent fulfilled its assigned high-level task. Works well for long-running workflows where success is defined by end-state rather than a single response.
 
 <CodeBlocks>
-```python title="Python" language="python"
+```python title="Python" language="python" wordWrap
 from opik.evaluation.metrics import AgentTaskCompletionJudge
 
 trace_summary = "Agent gathered quotes, compared options, and booked travel."
@@ -267,7 +267,7 @@ score = AgentTaskCompletionJudge().score(output=trace_summary)
 print(score.value, score.reason)
 ````
 
-```typescript title="TypeScript" language="typescript"
+```typescript title="TypeScript" language="typescript" wordWrap
 import { AgentTaskCompletionJudge } from "opik/evaluation/metrics";
 
 const traceSummary = "Agent gathered quotes, compared options, and booked travel.";
@@ -283,7 +283,7 @@ Use the reason text to inspect which sub-goals the judge believed were satisfied
 Assesses whether an agent invoked tools appropriately and interpreted outputs correctly. Especially useful for production agents integrating external APIs.
 
 <CodeBlocks>
-```python title="Python" language="python"
+```python title="Python" language="python" wordWrap
 from opik.evaluation.metrics import AgentToolCorrectnessJudge
 
 call_trace = "Tool weather_api called with city='Paris' but response ignored."
@@ -291,7 +291,7 @@ score = AgentToolCorrectnessJudge().score(output=call_trace)
 print(score.value, score.reason)
 ````
 
-```typescript title="TypeScript" language="typescript"
+```typescript title="TypeScript" language="typescript" wordWrap
 import { AgentToolCorrectnessJudge } from "opik/evaluation/metrics";
 
 const callTrace = "Tool weather_api called with city='Paris' but response ignored.";
@@ -306,7 +306,7 @@ Lower scores suggest the agent mis-handled tool results or skipped required invo
 ### Trajectory Accuracy
 Scores whether an agent’s trajectory (series of states or actions) matches the expected path. Use it to audit reinforcement-learning agents or scripted flows that should follow specific checkpoints.
 
-```python title="Trajectory accuracy"
+```python title="Trajectory accuracy" wordWrap
 from opik.evaluation.metrics import TrajectoryAccuracy
 
 expected = ["start", "search_docs", "summarise", "respond"]
@@ -321,7 +321,7 @@ This metric highlights missing or out-of-order actions so you can tighten guardr
 
 `LLMJuriesJudge` is an ensemble wrapper that averages the outputs of multiple judge metrics. This is useful when you want to combine bespoke criteria—e.g. take the mean of hallucination, helpfulness, and compliance scores.
 
-```python
+```python wordWrap
 from opik.evaluation.metrics import LLMJuriesJudge, Hallucination, ComplianceRiskJudge
 
 jury = LLMJuriesJudge([
@@ -347,10 +347,10 @@ Refer to [Conversation-level GEval Metrics](/evaluation/metrics/g_eval_conversat
 All GEval-derived metrics expose the `model` parameter so you can switch the underlying LLM. For example:
 
 <CodeBlocks>
-```python title="Python" language="python"
+```python title="Python" language="python" wordWrap
 from opik.evaluation.metrics import ComplianceRiskJudge
 
-metric = ComplianceRiskJudge(model="bedrock/anthropic.claude-3-sonnet-20240229-v1:0")
+metric = ComplianceRiskJudge(model="bedrock/us.anthropic.claude-sonnet-4-6")
 
 payload = """INPUT: What is the capital of France?
 OUTPUT: The capital of France is Paris. It is famous for its iconic Eiffel Tower and rich cultural heritage.
@@ -359,12 +359,12 @@ OUTPUT: The capital of France is Paris. It is famous for its iconic Eiffel Tower
 score = metric.score(output=payload)
 ````
 
-```typescript title="TypeScript" language="typescript"
+```typescript title="TypeScript" language="typescript" wordWrap
 import { ComplianceRiskJudge } from "opik/evaluation/metrics";
 import { anthropic } from "@ai-sdk/anthropic";
 
 const metric = new ComplianceRiskJudge({ 
-  model: anthropic("claude-3-5-sonnet-latest") 
+  model: anthropic("claude-sonnet-4-6") 
 });
 
 const payload = `INPUT: What is the capital of France?

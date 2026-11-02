@@ -20,7 +20,7 @@ import {
   EvaluatorsRule,
 } from "@/types/automations";
 import Loader from "@/shared/Loader/Loader";
-import AddEditRuleDialog from "@/v2/pages-shared/automations/AddEditRuleDialog/AddEditRuleDialog";
+import RuleEditorPanel from "@/v2/pages-shared/automations/RuleEditorPanel/RuleEditorPanel";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
 type ManualEvaluationEntityType = "trace" | "thread" | "span";
@@ -131,8 +131,9 @@ const RunEvaluationDialog: React.FunctionComponent<
   );
 
   const handleCreateRule = useCallback(() => {
+    handleOpenChange(false);
     setOpenCreateRuleDialog(true);
-  }, []);
+  }, [handleOpenChange]);
 
   const renderEmptyState = () => {
     return (
@@ -260,16 +261,14 @@ const RunEvaluationDialog: React.FunctionComponent<
       : entityType === "thread"
         ? "Threads"
         : "Spans";
-  const isRunDisabled =
-    selectedRuleIds.size === 0 || manualEvaluationMutation.isPending;
-
-  // Map entityType to EVALUATORS_RULE_SCOPE
   const ruleScope =
     entityType === "trace"
       ? EVALUATORS_RULE_SCOPE.trace
       : entityType === "thread"
         ? EVALUATORS_RULE_SCOPE.thread
         : EVALUATORS_RULE_SCOPE.span;
+  const isRunDisabled =
+    selectedRuleIds.size === 0 || manualEvaluationMutation.isPending;
 
   return (
     <>
@@ -312,7 +311,7 @@ const RunEvaluationDialog: React.FunctionComponent<
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <AddEditRuleDialog
+      <RuleEditorPanel
         open={openCreateRuleDialog}
         setOpen={setOpenCreateRuleDialog}
         projectId={projectId}

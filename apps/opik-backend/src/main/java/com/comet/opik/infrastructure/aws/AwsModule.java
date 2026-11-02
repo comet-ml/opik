@@ -1,22 +1,38 @@
 package com.comet.opik.infrastructure.aws;
 
+import com.comet.opik.infrastructure.AlertsEventBridgeConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.S3Config;
+import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.google.inject.Provides;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.client.Client;
 import lombok.NonNull;
+import org.apache.commons.lang3.StringUtils;
 import ru.vyarus.dropwizard.guice.module.support.DropwizardAwareModule;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.AwsCredentialsProviderChain;
+import software.amazon.awssdk.auth.credentials.ContainerCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.WebIdentityTokenFileCredentialsProvider;
+import software.amazon.awssdk.awscore.retry.AwsRetryStrategy;
 import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.eventbridge.EventBridgeClient;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3Configuration;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 
 import java.net.URI;
+import java.time.Duration;
+import java.util.Optional;
 
 public class AwsModule extends DropwizardAwareModule<OpikConfiguration> {
+
+    static final Duration EVENT_BRIDGE_CALL_ATTEMPT_TIMEOUT = Duration.ofSeconds(2);
+    static final Duration EVENT_BRIDGE_CALL_TIMEOUT = Duration.ofSeconds(8);
+    // A local credentials service; fetching runs inside EVENT_BRIDGE_CALL_TIMEOUT, so this must stay well under it
+    static final Duration CUSTOMER_CREDENTIALS_TIMEOUT = Duration.ofSeconds(2);
 
     @Provides
     @Singleton
@@ -65,5 +81,58 @@ public class AwsModule extends DropwizardAwareModule<OpikConfiguration> {
         }
 
         return builder.build();
+    }
+
+    @Provides
+    @Singleton
+    public Optional<EventBridgeClient> eventBridgeClient(@Config("serviceToggles") ServiceTogglesConfig toggles,
+            @Config("alertsEventBridge") AlertsEventBridgeConfig config, @NonNull Client client) {
+        if (!toggles.isEventBridgeAlertsEnabled()) {
+            return Optional.empty();
+        }
+
+        // Retries are bounded by the publisher, which also retries throttled entries of partial failures
+        var builder = EventBridgeClient.builder()
+                .credentialsProvider(eventBridgeCredentialsProvider(config, client))
+                .overrideConfiguration(override -> override.retryStrategy(AwsRetryStrategy.doNotRetry())
+                        .apiCallAttemptTimeout(EVENT_BRIDGE_CALL_ATTEMPT_TIMEOUT)
+                        // Backstop: bounds the whole call, including signing and credential resolution that happen
+                        // outside an attempt
+                        .apiCallTimeout(EVENT_BRIDGE_CALL_TIMEOUT));
+
+        eventBridgeRegion(config).ifPresent(builder::region);
+
+        return Optional.of(builder.build());
+    }
+
+    /**
+     * On a SageMaker Partner AI App, only the customer-credentials endpoint, with no fallback: every other source
+     * there resolves to the partner account, which the customer's bus denies.
+     *
+     * <p>Otherwise IRSA and EKS Pod Identity first, then the default chain. Not the shared S3 provider: the default
+     * chain reads AWS_ACCESS_KEY_ID before web identity, so a deployment with static S3 keys there (e.g. MinIO) would
+     * sign PutEvents with them and never assume the role it was given for EventBridge.
+     */
+    static AwsCredentialsProvider eventBridgeCredentialsProvider(@NonNull AlertsEventBridgeConfig config,
+            @NonNull Client client) {
+        if (StringUtils.isNotBlank(config.getCustomerCredentialsEndpoint())) {
+            return new CustomerCredentialsProvider(config.getCustomerCredentialsEndpoint(),
+                    CUSTOMER_CREDENTIALS_TIMEOUT, client);
+        }
+
+        return AwsCredentialsProviderChain.builder()
+                .credentialsProviders(
+                        WebIdentityTokenFileCredentialsProvider.create(),
+                        ContainerCredentialsProvider.builder().build(),
+                        DefaultCredentialsProvider.create())
+                .build();
+    }
+
+    static Optional<Region> eventBridgeRegion(@NonNull AlertsEventBridgeConfig config) {
+        if (StringUtils.isNotBlank(config.getRegion())) {
+            return Optional.of(Region.of(config.getRegion()));
+        }
+
+        return config.getEventBusArnRegion().map(Region::of);
     }
 }

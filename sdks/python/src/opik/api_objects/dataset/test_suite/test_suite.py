@@ -398,6 +398,12 @@ class TestSuite:
 
         Returns:
             A list of item dictionaries.
+
+        Note:
+            To look at a test suite's items without writing code, AI coding assistants
+            connected to the Opik MCP server can call
+            ``list("dataset_item", dataset_id=...)``.
+            See https://www.comet.com/docs/opik/mcp-server
         """
         return [
             converters.dataset_item_to_suite_item_dict(item)
@@ -680,9 +686,11 @@ class TestSuite:
                 an ``"id"`` key.
         """
         for item in items:
-            if "id" not in item:
+            if not str(item.get("id") or "").strip():
+                # covers a missing id as well as None / whitespace-only ids,
+                # which SkipValidation would otherwise carry into the request
                 raise opik_exceptions.DatasetItemUpdateOperationRequiresItemId(
-                    "Missing id for test suite item to update: %s", item
+                    f"Missing id for test suite item to update: {item}"
                 )
 
         self.insert(items, deduplication=deduplication)

@@ -385,6 +385,7 @@ class TestTheSavedOpikConfiguration:
             opik_url="https://www.comet.com/",
             workspace="acme-ai",
             source="your Opik configuration",
+            hosts=(),
         )
         assert run.setup.call_args.args[0]["api_key"] == "key"
 
@@ -805,16 +806,325 @@ class TestHostFlag:
             patch.object(
                 mcp_cli.configure_cli, "run_interactive_configure"
             ) as configure_spy,
+            # No local Opik either, whatever runs on this machine.
+            patch.object(
+                mcp_cli.opik_rest_helpers, "is_instance_active", return_value=False
+            ),
             patch.object(mcp_cli.assistants, "setup") as setup_spy,
         ):
             result = runner.invoke(cli, ["mcp", "configure", "--ai-client", "codex"])
 
         assert result.exit_code != 0
         # A named client gets past the terminal gate, so the next thing missing is
-        # Opik's own configuration — and that message names its own remedy.
-        assert "OPIK_API_KEY" in result.output, "the error must name the remedy"
+        # which Opik to connect to — and that message names the flag that says it.
+        assert (
+            "opik mcp configure --ai-client codex --deployment cloud" in result.output
+        ), "the error must name the remedy"
         configure_spy.assert_not_called()
         setup_spy.assert_not_called()
+
+
+def _run_unattended(
+    args, *, saved=None, local_opik_answers=False, outcome=assistants.NOTHING_DONE
+):
+    """`opik mcp configure` with no terminal; returns the result and setup's params.
+
+    ``saved`` is the Opik configuration on disk, none by default; ``outcome`` is
+    what the install step reports.
+    """
+    runner = CliRunner()
+    setup_spy = Mock(return_value=outcome)
+    track_spy = Mock()
+    with (
+        patch.object(
+            mcp_cli.opik_config,
+            "OpikConfig",
+            side_effect=lambda **values: (
+                saved
+                if saved is not None and not values
+                else _config(**{"api_key": None, **values})
+            ),
+        ),
+        patch.object(mcp_cli.interactive_helpers, "is_interactive", return_value=False),
+        patch.object(mcp_cli.mcp_targets, "detected_targets", return_value=[]),
+        patch.object(
+            mcp_cli.opik_rest_helpers,
+            "is_instance_active",
+            return_value=local_opik_answers,
+        ) as ping_spy,
+        patch.object(mcp_cli.assistants, "setup", setup_spy),
+        patch.object(mcp_cli.account_identity, "event_properties", return_value={}),
+        patch.object(mcp_cli.analytics, "track_event", track_spy),
+    ):
+        result = runner.invoke(
+            cli, ["mcp", "configure", "--ai-client", "claude-code", *args]
+        )
+
+    params = setup_spy.call_args.args[0] if setup_spy.called else None
+    return SimpleNamespace(result=result, params=params, ping=ping_spy, track=track_spy)
+
+
+@pytest.mark.usefixtures("configure_opik_not_configured")
+class TestDeploymentFlag:
+    """`--deployment` says which Opik without a config file or a terminal."""
+
+    def test_cloud__the_hosted_server_with_no_api_key(self):
+        run = _run_unattended(["--deployment", "cloud"])
+
+        assert run.result.exit_code == 0, run.result.output
+        assert run.params["api_key"] is None
+        assert run.params["api_url"] == mcp_cli.opik_config.OPIK_URL_CLOUD
+        assert run.params["use_local"] is False
+        assert run.params["self_hosted_comet"] is False
+        assert run.track.call_args_list[0].kwargs["deployment_flag"] == "cloud"
+
+    def test_cloud__replaces_the_saved_configuration(self):
+        """The flag answers the question the saved config would."""
+        run = _run_unattended(
+            ["--deployment", "cloud"],
+            saved=_config(
+                api_key="saved-key", url_override="http://localhost:5173/api/"
+            ),
+        )
+
+        assert run.result.exit_code == 0, run.result.output
+        assert run.params["api_key"] is None
+        assert run.params["use_local"] is False
+
+    def test_checks_certificates_even_if_the_saved_opik_did_not(self):
+        """The saved setting was for the saved Opik, not the one named now."""
+        run = _run_unattended(
+            ["--deployment", "cloud"],
+            saved=_config(api_key="saved-key", check_tls_certificate=False),
+        )
+
+        assert run.result.exit_code == 0, run.result.output
+        assert run.params["check_tls_certificate"] is True
+
+    @pytest.mark.parametrize(
+        "args",
+        [
+            ["--deployment", "cloud", "--url", "https://x.example"],
+            ["--deployment", "cloud", "--workspace", "ws"],
+            ["--deployment", "local", "--workspace", "ws"],
+            ["--url", "http://localhost:5173"],
+            # The workspace is not guessed: one of several would be the wrong one.
+            ["--deployment", "self-hosted", "--url", "https://comet.example.com"],
+            ["--deployment", "self-hosted", "--workspace", "ws"],
+            # Parsed as given, it reported a down Opik at `localhost:///`.
+            ["--deployment", "local", "--url", "localhost:5173"],
+            # No host: it failed later, as a connection error.
+            ["--deployment", "local", "--url", "http://"],
+            # From an unset variable, say: it was taken for no --url at all.
+            ["--deployment", "local", "--url", ""],
+            ["--deployment", "cloud", "--workspace", ""],
+        ],
+    )
+    def test_flags_that_do_not_go_together__refused_before_the_run_starts(self, args):
+        """A typo is a usage error, not a failed run in the funnel."""
+        run = _run_unattended(args)
+
+        assert run.result.exit_code == 2
+        run.track.assert_not_called()
+        assert run.params is None
+
+    @pytest.mark.parametrize(
+        "args, api_url",
+        [
+            ([], "http://localhost:5173/api/"),
+            (
+                ["--url", "http://opik.internal:8080/api"],
+                "http://opik.internal:8080/api/",
+            ),
+        ],
+    )
+    def test_local__no_api_key_and_the_address_checked(self, args, api_url):
+        run = _run_unattended(["--deployment", "local", *args], local_opik_answers=True)
+
+        assert run.result.exit_code == 0, run.result.output
+        assert run.params["use_local"] is True
+        assert run.params["api_key"] is None
+        assert run.params["api_url"] == api_url
+        assert run.ping.call_args.args == (run.params["base_url"],)
+
+    def test_local__nothing_answering__stops_before_writing(self):
+        run = _run_unattended(["--deployment", "local"], local_opik_answers=False)
+
+        assert run.result.exit_code != 0
+        assert "No Opik answers at http://localhost:5173/" in run.result.output
+        assert run.params is None
+
+    def test_self_hosted__key_and_workspace_from_the_environment(self, monkeypatch):
+        monkeypatch.setenv("OPIK_API_KEY", "env-key")
+        monkeypatch.setenv("OPIK_WORKSPACE", "env-ws")
+        run = _run_unattended(
+            ["--deployment", "self-hosted", "--url", "https://comet.acme.com"]
+        )
+
+        assert run.result.exit_code == 0, run.result.output
+        assert run.params["api_key"] == "env-key"
+        assert run.params["workspace"] == "env-ws"
+        assert run.params["self_hosted_comet"] is True
+        assert run.params["api_url"] == "https://comet.acme.com/opik/api/"
+        assert "env-key" not in run.result.output
+
+    def test_self_hosted__no_api_key__names_the_variable(self):
+        run = _run_unattended(
+            [
+                "--deployment",
+                "self-hosted",
+                "--url",
+                "https://comet.acme.com",
+                "--workspace",
+                "team-ws",
+            ]
+        )
+
+        assert run.result.exit_code != 0
+        assert "OPIK_API_KEY" in run.result.output
+        assert run.params is None
+
+
+@pytest.mark.usefixtures("configure_opik_not_configured")
+class TestUnattendedWithoutConfig:
+    """No ~/.opik.config, no key, no terminal: what `--ai-client` alone does."""
+
+    def test_a_local_opik_that_answers_is_used(self):
+        run = _run_unattended([], local_opik_answers=True)
+
+        assert run.result.exit_code == 0, run.result.output
+        assert run.params["use_local"] is True
+        assert run.params["api_url"] == "http://localhost:5173/api/"
+        # Said, with the way to pick another — the client included, which a run
+        # without a terminal cannot do without.
+        assert "localhost:5173" in run.result.output
+        assert (
+            "opik mcp configure --ai-client claude-code "
+            "--deployment <cloud|local|self-hosted>"
+        ) in " ".join(run.result.output.split())
+
+    def test_nothing_answering__lists_each_deployment_with_the_named_client(self):
+        run = _run_unattended([], local_opik_answers=False)
+
+        assert run.result.exit_code != 0
+        for deployment in ("cloud", "local", "self-hosted"):
+            assert (
+                f"opik mcp configure --ai-client claude-code --deployment {deployment}"
+                in run.result.output
+            )
+        assert "ask them which one rather than picking it" in " ".join(
+            run.result.output.split()
+        )
+        assert run.params is None
+
+    def test_a_saved_opik_without_a_key__asks_for_the_key_not_localhost(
+        self, monkeypatch
+    ):
+        """It names an Opik, so a local one that happens to answer is not it."""
+        monkeypatch.setenv("OPIK_URL_OVERRIDE", "https://comet.acme.com/opik/api/")
+        run = _run_unattended([], local_opik_answers=True)
+
+        assert run.result.exit_code != 0
+        assert "OPIK_URL_OVERRIDE names an Opik but no API key" in run.result.output
+        assert "--deployment cloud" in run.result.output
+        assert run.params is None
+
+    def test_ignore_opik_config__names_the_flag_that_works_without_a_terminal(self):
+        run = _run_unattended(["--ignore-opik-config"])
+
+        assert run.result.exit_code != 0
+        assert "--deployment" in run.result.output
+        assert run.params is None
+
+
+class TestUnattendedEnding:
+    """Without a terminal, the run ends on what is left in each client."""
+
+    def test_the_next_steps_then_a_new_session(self):
+        outcome = assistants.NOTHING_DONE._replace(
+            clients=1,
+            registered_clients=("claude-code",),
+            next_steps=("Claude Code: signed in; check with `claude mcp list`.",),
+        )
+        with (
+            patch.object(
+                mcp_cli.interactive_helpers, "is_interactive", return_value=False
+            ),
+            install_view.console.capture() as capture,
+        ):
+            mcp_cli._perform_handoff(
+                mcp_cli._resolve_handoff(mcp_cli._opik_cloud_params(), outcome)
+            )
+
+        out = " ".join(capture.get().split())
+        assert "Claude Code: signed in; check with `claude mcp list`." in out
+        assert out.index("claude mcp list") < out.index("Start a new session")
+
+    @pytest.mark.usefixtures("configure_opik_not_configured")
+    def test_a_failed_connection_check__ends_on_not_working_and_exits_1(self):
+        """The agent that ran it reads the exit status and the last line."""
+        outcome = assistants.NOTHING_DONE._replace(
+            clients=1,
+            registered_clients=("claude-code",),
+            verified=False,
+            next_steps=("Claude Code: signed in; check with `claude mcp list`.",),
+        )
+        with install_view.console.capture() as capture:
+            run = _run_unattended([], local_opik_answers=True, outcome=outcome)
+
+        assert run.result.exit_code == 1, run.result.output
+        out = " ".join(capture.get().split())
+        assert out.endswith(
+            "Not working yet: Opik MCP is added, but the connection check above "
+            "failed. Fix what it names, such as the URL, the API key or a VPN, "
+            "then run this command again."
+        )
+        assert "Start a new session" not in out
+        # Reported before the exit, as any finished run is.
+        result_event = run.track.call_args_list[-1].kwargs
+        assert result_event["verification_succeeded"] is False
+        assert result_event["handoff"] == "no_terminal"
+
+    @pytest.mark.usefixtures("configure_opik_not_configured")
+    def test_a_passing_connection_check__exits_0(self):
+        outcome = assistants.NOTHING_DONE._replace(
+            clients=1, registered_clients=("claude-code",), verified=True
+        )
+        with install_view.console.capture() as capture:
+            run = _run_unattended([], local_opik_answers=True, outcome=outcome)
+
+        assert run.result.exit_code == 0, run.result.output
+        out = " ".join(capture.get().split())
+        assert "Start a new session" in out
+        assert "Not working yet" not in out
+
+
+class TestAiClientAlias:
+    def test_claude__is_claude_code(self):
+        runner = CliRunner()
+        with (
+            patch.object(
+                mcp_cli.opik_config, "OpikConfig", return_value=_config(api_key="key")
+            ),
+            patch.object(
+                mcp_cli.interactive_helpers, "is_interactive", return_value=True
+            ),
+            patch.object(mcp_cli.assistants, "setup") as setup_spy,
+        ):
+            result = runner.invoke(
+                cli,
+                [
+                    "mcp",
+                    "configure",
+                    "--ai-client",
+                    "claude",
+                    "--ai-client",
+                    "claude-code",
+                ],
+            )
+
+        assert result.exit_code == 0, result.output
+        assert setup_spy.call_args.kwargs["host_keys"] == ["claude-code"]
 
 
 class TestDelegatesToTheSharedStep:
@@ -977,7 +1287,7 @@ class TestResultEventCarriesTheHandoff:
             patch.object(
                 mcp_cli.mcp_targets,
                 "find_target",
-                return_value=SimpleNamespace(display_name="Claude Code"),
+                return_value=mcp_cli.mcp_targets.find_target("claude-code"),
             ),
             patch.object(mcp_cli.assistants, "setup", return_value=outcome),
             patch.object(mcp_cli.account_identity, "event_properties", return_value={}),

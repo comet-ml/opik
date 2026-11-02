@@ -9,13 +9,17 @@ import {
 } from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/visibleControls";
 import {
   LLMOpenAIConfigsType,
+  OpenAiPipelineMode,
+  OpenAIReasoningEffort,
   PROVIDER_MODEL_TYPE,
-  ReasoningEffort,
+  PROVIDER_TYPE,
 } from "@/types/providers";
 import { DEFAULT_OPEN_AI_CONFIGS } from "@/constants/llm";
 import {
+  getMaxCompletionTokensRange,
   getOpenAIReasoningEffortOptions,
   resolveEffort,
+  resolveMaxCompletionTokens,
   resolveSamplingParams,
 } from "@/lib/modelUtils";
 import { ModelConfigParam } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
@@ -34,6 +38,7 @@ interface OpenAIModelSettingsProps {
   model?: PROVIDER_MODEL_TYPE | "";
   onChange: (configs: Partial<LLMOpenAIConfigsType>) => void;
   unsupportedParams?: ReadonlySet<ModelConfigParam>;
+  openAiPipelineMode?: OpenAiPipelineMode;
 }
 
 const OpenAIModelConfigs = ({
@@ -41,14 +46,25 @@ const OpenAIModelConfigs = ({
   model,
   onChange,
   unsupportedParams,
+  openAiPipelineMode,
 }: OpenAIModelSettingsProps) => {
   const { temperature, topP } = resolveSamplingParams(model ?? "", configs);
-  const { reasoningEffort } = resolveEffort(model ?? "", configs);
+  const { reasoningEffort } = resolveEffort(
+    model ?? "",
+    configs,
+    openAiPipelineMode,
+  );
   const visible = getOpenAIVisibleControls({
     model,
     configs,
     supports: createSupports(unsupportedParams),
+    openAiPipelineMode,
   });
+  const maxCompletionTokensRange = getMaxCompletionTokensRange(
+    PROVIDER_TYPE.OPEN_AI,
+    model ?? "",
+    openAiPipelineMode,
+  );
 
   if (!isAnyControlVisible(visible)) return null;
 
@@ -60,7 +76,7 @@ const OpenAIModelConfigs = ({
           onChange={(v) => onChange({ temperature: v })}
           id="temperature"
           min={0}
-          max={1}
+          max={2}
           step={0.01}
           defaultValue={DEFAULT_OPEN_AI_CONFIGS.TEMPERATURE}
           label="Temperature"
@@ -72,16 +88,24 @@ const OpenAIModelConfigs = ({
 
       {visible.maxCompletionTokens && (
         <SliderInputControl
-          value={configs.maxCompletionTokens}
+          value={resolveMaxCompletionTokens(
+            PROVIDER_TYPE.OPEN_AI,
+            model ?? "",
+            configs.maxCompletionTokens,
+            openAiPipelineMode,
+          )}
           onChange={(v) => onChange({ maxCompletionTokens: v })}
           id="maxCompletionTokens"
-          min={0}
-          max={128000}
+          min={maxCompletionTokensRange.min}
+          max={maxCompletionTokensRange.max}
           step={1}
+          integer
           defaultValue={DEFAULT_OPEN_AI_CONFIGS.MAX_COMPLETION_TOKENS}
           label="Max output tokens"
           tooltip={
-            <PromptModelSettingsTooltipContent text="The maximum number of tokens to generate shared between the prompt and completion. The exact limit varies by model. (One token is roughly 4 characters for standard English text)." />
+            <PromptModelSettingsTooltipContent
+              text={`The maximum number of tokens the model can generate in its response. The prompt does not count toward it. On reasoning models, reasoning tokens count toward it too, so a low limit can leave the response empty. The exact limit varies by model. The minimum is ${maxCompletionTokensRange.min}. (One token is roughly 4 characters for standard English text).`}
+            />
           }
         />
       )}
@@ -107,8 +131,8 @@ const OpenAIModelConfigs = ({
           value={configs.frequencyPenalty}
           onChange={(v) => onChange({ frequencyPenalty: v })}
           id="frequencyPenalty"
-          min={0}
-          max={1}
+          min={-2}
+          max={2}
           step={0.01}
           defaultValue={DEFAULT_OPEN_AI_CONFIGS.FREQUENCY_PENALTY}
           label="Frequency penalty"
@@ -123,8 +147,8 @@ const OpenAIModelConfigs = ({
           value={configs.presencePenalty}
           onChange={(v) => onChange({ presencePenalty: v })}
           id="presencePenalty"
-          min={0}
-          max={1}
+          min={-2}
+          max={2}
           step={0.01}
           defaultValue={DEFAULT_OPEN_AI_CONFIGS.PRESENCE_PENALTY}
           label="Presence penalty"
@@ -144,7 +168,7 @@ const OpenAIModelConfigs = ({
           </div>
           <Select
             value={reasoningEffort}
-            onValueChange={(value: ReasoningEffort) =>
+            onValueChange={(value: OpenAIReasoningEffort) =>
               onChange({ reasoningEffort: value })
             }
           >
@@ -152,11 +176,13 @@ const OpenAIModelConfigs = ({
               <SelectValue placeholder="Select reasoning effort" />
             </SelectTrigger>
             <SelectContent>
-              {getOpenAIReasoningEffortOptions(model).map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>
-                  {opt.label}
-                </SelectItem>
-              ))}
+              {getOpenAIReasoningEffortOptions(model, openAiPipelineMode).map(
+                (opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ),
+              )}
             </SelectContent>
           </Select>
         </div>

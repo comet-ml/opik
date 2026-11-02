@@ -16,6 +16,7 @@ import ResizableSidePanel from "@/shared/ResizableSidePanel/ResizableSidePanel";
 import ResizableSidePanelTopBar from "@/shared/ResizableSidePanel/ResizableSidePanelTopBar";
 import ResizableSidePanelArrowNavigation from "@/shared/ResizableSidePanel/ResizableSidePanelArrowNavigation";
 import DatasetItemActionsDropdown from "@/v2/pages-shared/datasets/DatasetItemActionsDropdown/DatasetItemActionsDropdown";
+import ViewInExperimentButton from "@/v2/pages-shared/datasets/ViewInExperimentButton/ViewInExperimentButton";
 import { useToast } from "@/ui/use-toast";
 import Loader from "@/shared/Loader/Loader";
 import TagListRenderer from "@/shared/TagListRenderer/TagListRenderer";
@@ -176,6 +177,9 @@ const TestSuiteItemPanelLayout: React.FC<TestSuiteItemPanelLayoutProps> = ({
           <ResizableSidePanelArrowNavigation
             horizontalNavigation={horizontalNavigation}
           />
+          {!isNewItem && (
+            <ViewInExperimentButton datasetItemId={datasetItemId} />
+          )}
         </ResizableSidePanelTopBar>
       }
       onClose={onClose}

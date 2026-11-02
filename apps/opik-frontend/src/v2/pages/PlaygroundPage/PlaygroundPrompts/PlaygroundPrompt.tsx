@@ -5,7 +5,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { FileTerminal, Trash, Save } from "lucide-react";
+import { CopyPlus, FileTerminal, Trash, Save } from "lucide-react";
 import last from "lodash/last";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -17,21 +17,35 @@ import {
 } from "@/types/providers";
 import { Button } from "@/ui/button";
 import { Separator } from "@/ui/separator";
+import { useToast } from "@/ui/use-toast";
 
-import { getDefaultConfigByProvider } from "@/lib/playground";
-import { updateProviderConfig } from "@/lib/modelUtils";
+import {
+  generateDefaultPrompt,
+  getDefaultConfigByProvider,
+  restoreMissingProviderAndConfigKeys,
+} from "@/lib/playground";
+import { updateProviderConfig, withShownThinkingLevel } from "@/lib/modelUtils";
 import {
   PLAYGROUND_LAST_PICKED_MODEL,
   PLAYGROUND_PROMPT_COLORS,
 } from "@/constants/llm";
 import usePromptBadgeColor from "@/v2/pages/PlaygroundPage/PlaygroundPrompts/usePromptBadgeColor";
-import { generateDefaultLLMPromptMessage, getNextMessageType } from "@/lib/llm";
+import {
+  convertMessageToMessagesJson,
+  generateDefaultLLMPromptMessage,
+  getNextMessageType,
+  parsePromptVersionContent,
+  parsePromptVersionRole,
+} from "@/lib/llm";
 import LLMPromptMessages from "@/v2/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
 import PromptModelSelect from "@/v2/pages-shared/llm/PromptModelSelect/PromptModelSelect";
 import { cn, getAlphabetLetter } from "@/lib/utils";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import PromptModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/PromptModelConfigs";
+import { BACKEND_RUN_UNSUPPORTED_PARAMS } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
+import { usePlaygroundDataset } from "@/hooks/usePlaygroundDataset";
 import {
+  useAddPrompt,
   useDatasetVariables,
   useDatasetSampleData,
   useDeletePrompt,
@@ -43,33 +57,48 @@ import {
 } from "@/store/PlaygroundStore";
 import useLastPickedModel from "@/hooks/useLastPickedModel";
 import {
+  DropdownModelCheck,
   ModelResolver,
   ProviderResolver,
 } from "@/hooks/useLLMProviderModelsData";
 import { useActiveProjectId } from "@/store/AppStore";
 import { usePermissions } from "@/contexts/PermissionsContext";
-import PromptLibraryMenu from "@/v2/pages-shared/llm/PromptLibraryMenu/PromptLibraryMenu";
+import PromptLibraryMenu, {
+  PromptLibrarySelection,
+} from "@/v2/pages-shared/llm/PromptLibraryMenu/PromptLibraryMenu";
 import LoadedPromptDisplay from "@/v2/pages-shared/llm/LoadedPromptDisplay/LoadedPromptDisplay";
 import AddNewPromptVersionDialog from "@/v2/pages-shared/llm/LLMPromptMessages/AddNewPromptVersionDialog";
-import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
+import useMessageTextPrompt from "@/v2/pages-shared/llm/LLMPromptMessages/useMessageTextPrompt";
+import { PromptVersion, PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import {
+  PROMPT_LOAD_FAILED_TOAST,
+  PROMPT_LOAD_TOOLTIP,
+  PROMPT_NO_SAVED_PROMPTS_TOOLTIP,
   PROMPT_SAVE_AS_CHAT_TOOLTIP,
+  PROMPT_SAVE_AS_TEXT_TOOLTIP,
   PROMPT_UNSAVED_TOOLTIP,
 } from "@/constants/prompts";
+import useProjectPromptsList from "@/api/prompts/useProjectPromptsList";
+import { useFetchPrompt } from "@/api/prompts/usePromptById";
+import { useFetchPromptVersion } from "@/api/prompts/usePromptVersionById";
 import useLoadChatPrompt from "@/hooks/useLoadChatPrompt";
 import usePromptVersionLabel from "@/hooks/usePromptVersionLabel";
 import PlaygroundRunButton from "@/v2/pages/PlaygroundPage/PlaygroundRunButton";
+import useOpenAiPipelineMode from "@/hooks/useOpenAiPipelineMode";
 
 interface PlaygroundPromptProps {
   workspaceName: string;
   index: number;
   promptId: string;
   providerKeys: COMPOSED_PROVIDER_TYPE[];
-  isPendingProviderKeys: boolean;
+  hasLoadedProviderKeys: boolean;
+  hasRegistryModels: boolean;
   providerResolver: ProviderResolver;
   modelResolver: ModelResolver;
+  isDropdownModel: DropdownModelCheck;
   onRun?: () => void;
   onStop?: () => void;
+  onCheckAgain?: () => void;
 }
 
 const PlaygroundPrompt = ({
@@ -77,21 +106,29 @@ const PlaygroundPrompt = ({
   promptId,
   index,
   providerKeys,
-  isPendingProviderKeys,
+  hasLoadedProviderKeys,
+  hasRegistryModels,
   providerResolver,
   modelResolver,
+  isDropdownModel,
   onRun,
   onStop,
+  onCheckAgain,
 }: PlaygroundPromptProps) => {
   const checkedIfModelIsValidRef = useRef(false);
+  const cardRef = useRef<HTMLDivElement>(null);
   const activeProjectId = useActiveProjectId();
+  const { datasetId } = usePlaygroundDataset();
+  const isBackendRun = !!datasetId;
   const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   const prompt = usePromptById(promptId);
   const promptCount = usePromptCount();
   const datasetVariables = useDatasetVariables();
   const datasetSampleData = useDatasetSampleData();
   const providerValidationTrigger = useProviderValidationTrigger();
+  const openAiPipelineMode = useOpenAiPipelineMode(workspaceName);
 
   const [, setLastPickedModel] = useLastPickedModel({
     key: PLAYGROUND_LAST_PICKED_MODEL,
@@ -100,6 +137,7 @@ const PlaygroundPrompt = ({
   const { model, messages, configs, name } = prompt;
 
   const updatePrompt = useUpdatePrompt();
+  const addPrompt = useAddPrompt();
   const deletePrompt = useDeletePrompt();
   const updateOutput = useUpdateOutput();
 
@@ -109,6 +147,8 @@ const PlaygroundPrompt = ({
 
   const [showSaveChatPromptDialog, setShowSaveChatPromptDialog] =
     useState(false);
+  const [showSaveTextPromptDialog, setShowSaveTextPromptDialog] =
+    useState(false);
   const [lastImportedPromptName, setLastImportedPromptName] =
     useState<string>("");
   const [isChatLibraryOpen, setIsChatLibraryOpen] = useState(false);
@@ -116,10 +156,34 @@ const PlaygroundPrompt = ({
   const selectedChatPromptId = prompt?.loadedChatPromptId;
   const selectedChatPromptVersionId = prompt?.loadedChatPromptVersionId;
 
+  const fetchPrompt = useFetchPrompt();
+  const fetchPromptVersion = useFetchPromptVersion();
+
+  const { data: projectPromptsPage } = useProjectPromptsList(
+    { projectId: activeProjectId!, page: 1, size: 1 },
+    { enabled: canViewPrompts && Boolean(activeProjectId) },
+  );
+  const hasNoSavedPrompts = projectPromptsPage?.total === 0;
+
+  // A chat prompt's versions must stay chat, so a variant linked to one keeps
+  // saving as chat even when it is down to a single message.
+  const savesAsTextPrompt = !selectedChatPromptId && messages.length === 1;
+  const textPromptMessage = savesAsTextPrompt ? messages[0] : undefined;
+  const {
+    promptData: textPromptData,
+    hasUnsavedChanges: hasUnsavedTextPromptChanges,
+  } = useMessageTextPrompt(textPromptMessage);
+
   const handleChatPromptMessagesLoaded = useCallback(
-    (newMessages: LLMMessage[], promptName: string) => {
+    (newMessages: LLMMessage[], promptName: string, versionId: string) => {
       setLastImportedPromptName(promptName);
-      updatePrompt(promptId, { messages: newMessages });
+      // Pinning the version keeps a newer library version from being applied
+      // over unsaved edits later.
+      updatePrompt(promptId, {
+        messages: newMessages,
+        loadedChatPromptVersionId: versionId,
+        appliedChatPromptVersionId: versionId,
+      });
     },
     [promptId, updatePrompt],
   );
@@ -128,6 +192,7 @@ const PlaygroundPrompt = ({
     updatePrompt(promptId, {
       loadedChatPromptId: undefined,
       loadedChatPromptVersionId: undefined,
+      appliedChatPromptVersionId: undefined,
     });
   }, [promptId, updatePrompt]);
 
@@ -140,6 +205,7 @@ const PlaygroundPrompt = ({
   } = useLoadChatPrompt({
     selectedChatPromptId,
     selectedChatPromptVersionId,
+    appliedChatPromptVersionId: prompt?.appliedChatPromptVersionId,
     messages,
     onMessagesLoaded: handleChatPromptMessagesLoaded,
     onPromptUnavailable: handleChatPromptUnavailable,
@@ -207,15 +273,23 @@ const PlaygroundPrompt = ({
   const handleUpdateModel = useCallback(
     (newModel: PROVIDER_MODEL_TYPE, newProvider: COMPOSED_PROVIDER_TYPE) => {
       let newConfigs: LLMPromptConfigsType;
+      // The picker reports the bare provider type ("custom-llm"), while `provider` is the row's
+      // key ("custom-llm:mock"). Compared as is, two models of one Custom LLM, Ollama or Bedrock
+      // row would look like a provider change and lose every setting.
+      const newRowProvider =
+        providerResolver(newModel, newProvider) || newProvider;
 
-      if (newProvider !== provider) {
+      if (newRowProvider !== provider) {
         // Provider changed: Reset to default configs for the new provider
         newConfigs = getDefaultConfigByProvider(newProvider, newModel);
       } else {
         // Model changed within same provider: Adjust existing configs if needed
-        const adjustedConfigs = updateProviderConfig(configs, {
+        const shownConfigs = withShownThinkingLevel(model, configs);
+        const adjustedConfigs = updateProviderConfig(shownConfigs, {
           model: newModel,
           provider: newProvider,
+          openAiPipelineMode,
+          previousModel: model,
         });
         newConfigs = adjustedConfigs || configs;
       }
@@ -227,7 +301,16 @@ const PlaygroundPrompt = ({
       });
       setLastPickedModel(newModel);
     },
-    [updatePrompt, promptId, provider, configs, setLastPickedModel],
+    [
+      updatePrompt,
+      promptId,
+      provider,
+      model,
+      providerResolver,
+      configs,
+      setLastPickedModel,
+      openAiPipelineMode,
+    ],
   );
 
   const handleAddProvider = useCallback(
@@ -265,7 +348,14 @@ const PlaygroundPrompt = ({
 
   useEffect(() => {
     // on init, to check if a prompt has a model from valid providers: (f.e., remove a provider after setting a model)
-    if (!checkedIfModelIsValidRef.current && !isPendingProviderKeys) {
+    // A failed request is not an empty answer: without the registry's models every stored model looks
+    // unknown, and without the keys every provider looks removed, so the model would be swapped or cleared.
+    // The check waits until both have really loaded, even after one has failed.
+    if (
+      !checkedIfModelIsValidRef.current &&
+      hasLoadedProviderKeys &&
+      hasRegistryModels
+    ) {
       checkedIfModelIsValidRef.current = true;
 
       const newModel = modelResolver(model, providerKeys);
@@ -278,18 +368,36 @@ const PlaygroundPrompt = ({
           configs: getDefaultConfigByProvider(newProvider, newModel),
         });
 
-        updateOutput(promptId, "", { value: null });
+        updateOutput(promptId, {
+          value: null,
+          error: undefined,
+          errorHint: undefined,
+        });
+      } else {
+        const restored = restoreMissingProviderAndConfigKeys(
+          prompt,
+          providerResolver,
+        );
+
+        if (restored !== prompt) {
+          updatePrompt(promptId, {
+            provider: restored.provider,
+            configs: restored.configs,
+          });
+        }
       }
     }
   }, [
     providerKeys,
-    isPendingProviderKeys,
+    hasLoadedProviderKeys,
+    hasRegistryModels,
     providerResolver,
     modelResolver,
     updateOutput,
     updatePrompt,
     promptId,
     model,
+    prompt,
   ]);
 
   const handleImportChatPrompt = useCallback(
@@ -297,14 +405,109 @@ const PlaygroundPrompt = ({
       updatePrompt(promptId, {
         loadedChatPromptId: loadedPromptId,
         loadedChatPromptVersionId: loadedVersionId,
+        appliedChatPromptVersionId: undefined,
       });
     },
     [promptId, updatePrompt],
   );
 
-  const handleSaveChatPrompt = useCallback(() => {
-    setShowSaveChatPromptDialog(true);
-  }, []);
+  const handleImportTextPrompt = useCallback(
+    async (textPromptId: string, versionId?: string) => {
+      let version: PromptVersion | undefined;
+      try {
+        version = versionId
+          ? await fetchPromptVersion({ versionId })
+          : (await fetchPrompt({ promptId: textPromptId })).latest_version;
+      } catch {
+        toast(PROMPT_LOAD_FAILED_TOAST);
+        return;
+      }
+
+      if (!version) return;
+
+      updatePrompt(promptId, {
+        messages: [
+          generateDefaultLLMPromptMessage({
+            role: parsePromptVersionRole(version) ?? LLM_MESSAGE_ROLE.user,
+            content: parsePromptVersionContent(version),
+            promptId: textPromptId,
+            promptVersionId: version.id,
+          }),
+        ],
+      });
+    },
+    [fetchPrompt, fetchPromptVersion, promptId, toast, updatePrompt],
+  );
+
+  const handleLibrarySelect = useCallback(
+    ({
+      promptId: libraryPromptId,
+      versionId,
+      templateStructure,
+    }: PromptLibrarySelection) => {
+      if (templateStructure === PROMPT_TEMPLATE_STRUCTURE.TEXT) {
+        handleImportTextPrompt(libraryPromptId, versionId);
+      } else {
+        handleImportChatPrompt(libraryPromptId, versionId);
+      }
+    },
+    [handleImportChatPrompt, handleImportTextPrompt],
+  );
+
+  const handleSavePrompt = useCallback(() => {
+    if (savesAsTextPrompt) {
+      setShowSaveTextPromptDialog(true);
+    } else {
+      setShowSaveChatPromptDialog(true);
+    }
+  }, [savesAsTextPrompt]);
+
+  const handleTextPromptSaved = useCallback(
+    (version: PromptVersion) => {
+      setShowSaveTextPromptDialog(false);
+      const [firstMessage, ...otherMessages] = messages;
+
+      updatePrompt(promptId, {
+        messages: [
+          {
+            ...firstMessage,
+            promptId: version.prompt_id,
+            content: parsePromptVersionContent(version),
+            promptVersionId: version.id,
+          },
+          ...otherMessages,
+        ],
+      });
+    },
+    [messages, promptId, updatePrompt],
+  );
+
+  const handleDuplicatePrompt = useCallback(() => {
+    const copy = generateDefaultPrompt({
+      initPrompt: { ...prompt, skipInitialPromptLoad: true },
+      setupProviders: providerKeys,
+      providerResolver,
+      modelResolver,
+      isDropdownModel,
+    });
+    addPrompt(copy, index + 1);
+
+    requestAnimationFrame(() => {
+      cardRef.current?.nextElementSibling?.scrollIntoView({
+        behavior: "smooth",
+        inline: "nearest",
+        block: "nearest",
+      });
+    });
+  }, [
+    prompt,
+    providerKeys,
+    providerResolver,
+    modelResolver,
+    isDropdownModel,
+    addPrompt,
+    index,
+  ]);
 
   const handleImproveAccept = useCallback(
     (messageId: string, improvedContent: LLMMessage["content"]) => {
@@ -320,11 +523,10 @@ const PlaygroundPrompt = ({
     () => ({
       model,
       provider,
-      configs,
       workspaceName,
       onAccept: handleImproveAccept,
     }),
-    [model, provider, configs, workspaceName, handleImproveAccept],
+    [model, provider, workspaceName, handleImproveAccept],
   );
 
   const promptColor =
@@ -332,10 +534,26 @@ const PlaygroundPrompt = ({
 
   const badgeColor = usePromptBadgeColor(promptId, promptColor);
 
+  const showPromptLibraryAction =
+    Boolean(selectedChatPromptId) || canViewPrompts;
+  const linkedLibraryPromptId = savesAsTextPrompt
+    ? textPromptMessage?.promptId
+    : selectedChatPromptId;
+  const canSavePrompt =
+    hasMessageContent &&
+    (linkedLibraryPromptId
+      ? canEditPrompts || canCreatePrompts
+      : canCreatePrompts);
+  const hasUnsavedPromptChanges = savesAsTextPrompt
+    ? hasUnsavedTextPromptChanges
+    : hasUnsavedChatPromptChanges;
+
   return (
     <div
+      ref={cardRef}
       data-testid="playground-variant-card"
       data-variant-index={index}
+      data-prompt-id={promptId}
       className="group/prompt flex min-w-[var(--min-prompt-width)] max-w-[var(--max-prompt-width)] flex-1 flex-col overflow-hidden border-r"
     >
       <div className="flex h-10 items-center justify-between overflow-hidden border-b px-4">
@@ -367,7 +585,11 @@ const PlaygroundPrompt = ({
             model={model}
             configs={configs}
             onChange={handleUpdateConfig}
-            size="icon-xs"
+            openAiPipelineMode={openAiPipelineMode}
+            unsupportedParams={
+              isBackendRun ? BACKEND_RUN_UNSUPPORTED_PARAMS : undefined
+            }
+            size="icon-2xs"
             variant="ghost"
           />
         </div>
@@ -399,20 +621,33 @@ const PlaygroundPrompt = ({
               onClear={() => handleImportChatPrompt(undefined, undefined)}
             />
           ) : (
-            canViewPrompts && (
+            canViewPrompts &&
+            (hasNoSavedPrompts ? (
+              <TooltipWrapper content={PROMPT_NO_SAVED_PROMPTS_TOOLTIP}>
+                <Button
+                  variant="minimal"
+                  size="icon-2xs"
+                  disabled
+                  // A disabled button gets no pointer events, so without this
+                  // its tooltip would never open.
+                  style={{ pointerEvents: "auto" }}
+                  data-testid="load-prompt-button"
+                >
+                  <FileTerminal />
+                </Button>
+              </TooltipWrapper>
+            ) : (
               <PromptLibraryMenu
                 projectId={activeProjectId!}
-                filterByTemplateStructure={PROMPT_TEMPLATE_STRUCTURE.CHAT}
-                onSelect={({ promptId: pId, versionId }) =>
-                  handleImportChatPrompt(pId, versionId)
-                }
+                chooseTemplateStructure
+                onSelect={handleLibrarySelect}
                 onOpenChange={setIsChatLibraryOpen}
                 trigger={
                   <div>
-                    <TooltipWrapper content="Load prompt">
+                    <TooltipWrapper content={PROMPT_LOAD_TOOLTIP}>
                       <Button
                         variant="minimal"
-                        size="icon-sm"
+                        size="icon-2xs"
                         data-testid="load-prompt-button"
                       >
                         <FileTerminal />
@@ -421,46 +656,57 @@ const PlaygroundPrompt = ({
                   </div>
                 }
               />
-            )
+            ))
           )}
 
           <div className="flex shrink-0 items-center">
-            {hasMessageContent &&
-              (selectedChatPromptId
-                ? canEditPrompts || canCreatePrompts
-                : canCreatePrompts) && (
-                <TooltipWrapper
-                  content={
-                    hasUnsavedChatPromptChanges
-                      ? PROMPT_UNSAVED_TOOLTIP
+            {canSavePrompt && (
+              <TooltipWrapper
+                content={
+                  hasUnsavedPromptChanges
+                    ? PROMPT_UNSAVED_TOOLTIP
+                    : savesAsTextPrompt
+                      ? PROMPT_SAVE_AS_TEXT_TOOLTIP
                       : PROMPT_SAVE_AS_CHAT_TOOLTIP
-                  }
+                }
+              >
+                <Button
+                  variant="minimal"
+                  size="icon-2xs"
+                  onClick={handleSavePrompt}
+                  data-testid="playground-save-prompt-button"
                 >
-                  <Button
-                    variant="minimal"
-                    size="icon-sm"
-                    onClick={handleSaveChatPrompt}
-                    data-testid="playground-save-prompt-button"
-                  >
-                    <Save />
-                  </Button>
-                </TooltipWrapper>
-              )}
+                  <Save />
+                </Button>
+              </TooltipWrapper>
+            )}
+
+            {(showPromptLibraryAction || canSavePrompt) && (
+              <Separator orientation="vertical" className="mx-1 h-4" />
+            )}
 
             {promptCount > 1 && (
-              <>
-                <Separator orientation="vertical" className="mx-1 h-4" />
-                <TooltipWrapper content="Remove prompt">
-                  <Button
-                    variant="minimal"
-                    size="icon-sm"
-                    onClick={() => deletePrompt(promptId)}
-                  >
-                    <Trash />
-                  </Button>
-                </TooltipWrapper>
-              </>
+              <TooltipWrapper content="Remove prompt">
+                <Button
+                  variant="minimal"
+                  size="icon-2xs"
+                  onClick={() => deletePrompt(promptId)}
+                >
+                  <Trash />
+                </Button>
+              </TooltipWrapper>
             )}
+
+            <TooltipWrapper content="Duplicate variant">
+              <Button
+                variant="minimal"
+                size="icon-2xs"
+                onClick={handleDuplicatePrompt}
+                data-testid="playground-duplicate-variant-button"
+              >
+                <CopyPlus />
+              </Button>
+            </TooltipWrapper>
           </div>
         </div>
       </div>
@@ -474,6 +720,8 @@ const PlaygroundPrompt = ({
           jsonTreeData={datasetSampleData}
           hidePromptActions={false}
           improvePromptConfig={improvePromptConfig}
+          autoFocusFirstMessage={index === 0}
+          shiftEnterInsertsNewline
         />
       </div>
 
@@ -482,6 +730,7 @@ const PlaygroundPrompt = ({
           promptId={promptId}
           onRun={onRun}
           onStop={onStop}
+          onCheckAgain={onCheckAgain}
           className="flex items-center justify-end border-t px-4 py-2"
         />
       )}
@@ -500,6 +749,7 @@ const PlaygroundPrompt = ({
             updatePrompt(promptId, {
               loadedChatPromptId: savedPromptId,
               loadedChatPromptVersionId: version.id,
+              appliedChatPromptVersionId: version.id,
             });
 
             const newChatPromptKey = `${savedPromptId}-${version.id}`;
@@ -514,6 +764,20 @@ const PlaygroundPrompt = ({
           }
         }}
       />
+
+      {textPromptMessage && (
+        <AddNewPromptVersionDialog
+          open={showSaveTextPromptDialog}
+          setOpen={setShowSaveTextPromptDialog}
+          prompt={textPromptData}
+          template={convertMessageToMessagesJson(textPromptMessage)}
+          metadata={{
+            created_from: "opik_ui",
+            type: "messages_json",
+          }}
+          onSave={handleTextPromptSaved}
+        />
+      )}
     </div>
   );
 };

@@ -4,6 +4,11 @@ import SideBar from "@/v2/layout/SideBar/SideBar";
 import TopBar from "@/v2/layout/TopBar/TopBar";
 import useLocalStorageState from "use-local-storage-state";
 import usePluginsStore from "@/store/PluginsStore";
+import {
+  useAssistantSidebarWidth,
+  useIsAssistantOpen,
+  useSetAssistantSidebarWidth,
+} from "@/store/AppStore";
 import WelcomeWizardDialog from "@/v2/pages-shared/WelcomeWizard/WelcomeWizardDialog";
 import useWelcomeWizardStatus from "@/api/welcome-wizard/useWelcomeWizardStatus";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
@@ -14,13 +19,13 @@ import SilentErrorBoundary from "@/shared/SilentErrorBoundary/SilentErrorBoundar
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { useIsPhone } from "@/hooks/useIsPhone";
 import {
-  ASSISTANT_SIDEBAR_COLLAPSED_WIDTH,
   getStoredAssistantSidebarWidth,
-  isAssistantSidebarOpen,
   setAssistantSidebarOpen,
 } from "@/constants/assistantSidebar";
 import DemoProjectBanner from "@/v2/layout/DemoProjectBanner/DemoProjectBanner";
 import McpAnnouncementBanner from "@/v2/layout/McpAnnouncementBanner/McpAnnouncementBanner";
+import NoticeBanner from "@/v2/layout/NoticeBanner/NoticeBanner";
+import { useNoticeBanner } from "@/v2/layout/NoticeBanner/useNoticeBanner";
 
 const PageLayout = () => {
   const [hostContainer, setHostContainer] = useState<HTMLDivElement | null>(
@@ -32,14 +37,15 @@ const PageLayout = () => {
   const [retentionBannerHeight, setRetentionBannerHeight] = useState(0);
   const [demoBannerHeight, setDemoBannerHeight] = useState(0);
   const [mcpBannerHeight, setMcpBannerHeight] = useState(0);
-  const bannerHeight =
-    retentionBannerHeight + demoBannerHeight + mcpBannerHeight;
+  const [noticeBannerHeight, setNoticeBannerHeight] = useState(0);
+  const noticeBanner = useNoticeBanner();
+  const noticeBannerVisible = Boolean(noticeBanner.notice);
+  const bannerHeight = noticeBannerVisible
+    ? noticeBannerHeight
+    : retentionBannerHeight + demoBannerHeight + mcpBannerHeight;
   const [showWelcomeWizard, setShowWelcomeWizard] = useState(false);
-  const [assistantSidebarWidth, setAssistantSidebarWidth] = useState(() =>
-    isAssistantSidebarOpen()
-      ? getStoredAssistantSidebarWidth()
-      : ASSISTANT_SIDEBAR_COLLAPSED_WIDTH,
-  );
+  const assistantSidebarWidth = useAssistantSidebarWidth();
+  const setAssistantSidebarWidth = useSetAssistantSidebarWidth();
 
   const welcomeWizardEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.WELCOME_WIZARD_ENABLED,
@@ -65,8 +71,7 @@ const PageLayout = () => {
   const { isPhone } = useIsPhone();
   const isSmall = useMediaQuery(`(max-width: ${1023 + assistantWidth}px)`);
 
-  const isAssistantOpen =
-    assistantSidebarWidth > ASSISTANT_SIDEBAR_COLLAPSED_WIDTH;
+  const isAssistantOpen = useIsAssistantOpen();
   // On phones the assistant renders as a fixed overlay when open and is
   // fully unmounted when collapsed. The layout var stays 0px so
   // `.comet-content-inset`'s calc resolves correctly.
@@ -76,7 +81,7 @@ const PageLayout = () => {
   const handleOpenAssistant = useCallback(() => {
     setAssistantSidebarOpen(true);
     setAssistantSidebarWidth(getStoredAssistantSidebarWidth());
-  }, []);
+  }, [setAssistantSidebarWidth]);
 
   const expanded = isPhone
     ? false
@@ -128,14 +133,26 @@ const PageLayout = () => {
             ref={setHostContainer}
             className="relative min-w-0 flex-1 overflow-hidden [transform:translateZ(0)]"
           >
+            <NoticeBanner
+              {...noticeBanner}
+              onChangeHeight={setNoticeBannerHeight}
+            />
+            {/* Hidden, not unmounted: these banners keep state and side effects. */}
             {RetentionBanner ? (
-              <RetentionBanner onChangeHeight={setRetentionBannerHeight} />
+              <RetentionBanner
+                onChangeHeight={setRetentionBannerHeight}
+                hidden={noticeBannerVisible}
+              />
             ) : null}
             <McpAnnouncementBanner
               onChangeHeight={setMcpBannerHeight}
               retentionBannerVisible={retentionBannerHeight > 0}
+              hidden={noticeBannerVisible}
             />
-            <DemoProjectBanner onChangeHeight={setDemoBannerHeight} />
+            <DemoProjectBanner
+              onChangeHeight={setDemoBannerHeight}
+              hidden={noticeBannerVisible}
+            />
 
             <SideBar
               expanded={expanded}

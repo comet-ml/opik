@@ -88,6 +88,13 @@ check_empty "non-.py optimizer file omits ruff (types: gate)" \
 out=$(printf 'sdks/python/src/opik/foo.py\n' | python3 scripts/precommit-detect-hooks.py .pre-commit-config.yaml)
 check "emits a skipped array"          '"skipped"'   "$out"
 check "java is skipped on a py change" 'spotless'    "$(printf '%s' "$out" | python3 -c 'import json,sys; print(" ".join(s["id"] for s in json.load(sys.stdin)["skipped"]))')"
+# swagger-resolve gates on spec inputs only (main sources/resources + pom), and
+# needs the java toolchain to compile.
+out=$(printf 'apps/opik-backend/src/main/resources/openapi_template.yml\n' | python3 scripts/precommit-detect-hooks.py .pre-commit-config.yaml)
+check "spec input emits swagger-resolve"  '"id": "swagger-resolve"'  "$out"
+check "swagger-resolve provisions java"   '"toolchain": "java"'      "$out"
+check_empty "test-only java omits swagger-resolve" \
+	"$(printf 'apps/opik-backend/src/test/java/com/comet/opik/FooTest.java\n' | python3 scripts/precommit-detect-hooks.py .pre-commit-config.yaml | leg_ids | grep -o 'swagger-resolve' || true)"
 
 echo "precommit-hook-desc.py:"
 # Single shared resolver both tables use. Substring match, TSV order honoured

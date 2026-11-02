@@ -179,10 +179,11 @@ class AgentInsightsClient:
         *,
         project_id: str,
         status: AgentInsightsIssueUpdateStatus,
+        close_note: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
-        Moves an issue through its lifecycle: open, resolved or closed
+        Moves an issue through its lifecycle: open, resolved or closed. close_note is kept only with closed; any other status clears it
 
         Parameters
         ----------
@@ -191,6 +192,9 @@ class AgentInsightsClient:
         project_id : str
 
         status : AgentInsightsIssueUpdateStatus
+
+        close_note : typing.Optional[str]
+            Why the issue is closed as not useful. Stored only with status closed; any other status clears it
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -206,7 +210,7 @@ class AgentInsightsClient:
         client.agent_insights.update_agent_insights_issue(issue_id='issue_id', project_id='project_id', status="open", )
         """
         _response = self._raw_client.update_agent_insights_issue(
-            issue_id, project_id=project_id, status=status, request_options=request_options
+            issue_id, project_id=project_id, status=status, close_note=close_note, request_options=request_options
         )
         return _response.data
 
@@ -382,10 +386,11 @@ class AsyncAgentInsightsClient:
         *,
         project_id: str,
         status: AgentInsightsIssueUpdateStatus,
+        close_note: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
-        Moves an issue through its lifecycle: open, resolved or closed
+        Moves an issue through its lifecycle: open, resolved or closed. close_note is kept only with closed; any other status clears it
 
         Parameters
         ----------
@@ -394,6 +399,9 @@ class AsyncAgentInsightsClient:
         project_id : str
 
         status : AgentInsightsIssueUpdateStatus
+
+        close_note : typing.Optional[str]
+            Why the issue is closed as not useful. Stored only with status closed; any other status clears it
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -412,6 +420,6 @@ class AsyncAgentInsightsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.update_agent_insights_issue(
-            issue_id, project_id=project_id, status=status, request_options=request_options
+            issue_id, project_id=project_id, status=status, close_note=close_note, request_options=request_options
         )
         return _response.data

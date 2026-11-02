@@ -3,6 +3,7 @@
 import type * as OpikApi from "../../api/index.js";
 import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
+import { AnnotationQueueReferencePublic } from "./AnnotationQueueReferencePublic.js";
 import { CommentPublic } from "./CommentPublic.js";
 import { ErrorInfoPublic } from "./ErrorInfoPublic.js";
 import { ExperimentItemReferencePublic } from "./ExperimentItemReferencePublic.js";
@@ -52,6 +53,10 @@ export const TracePublic: core.serialization.ObjectSchema<serializers.TracePubli
         hasToolSpans: core.serialization.property("has_tool_spans", core.serialization.boolean().optional()),
         providers: core.serialization.list(core.serialization.string()).optional(),
         experiment: ExperimentItemReferencePublic.optional(),
+        annotationQueues: core.serialization.property(
+            "annotation_queues",
+            core.serialization.list(AnnotationQueueReferencePublic).optional(),
+        ),
         source: TracePublicSource.optional(),
         environment: core.serialization.string().optional(),
     });
@@ -87,6 +92,7 @@ export declare namespace TracePublic {
         has_tool_spans?: boolean | null;
         providers?: string[] | null;
         experiment?: ExperimentItemReferencePublic.Raw | null;
+        annotation_queues?: AnnotationQueueReferencePublic.Raw[] | null;
         source?: TracePublicSource.Raw | null;
         environment?: string | null;
     }

@@ -5,6 +5,7 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
+from .annotation_queue_reference import AnnotationQueueReference
 from .comment import Comment
 from .error_info import ErrorInfo
 from .experiment_item_reference import ExperimentItemReference
@@ -66,6 +67,11 @@ class Trace(UniversalBaseModel):
     """
 
     experiment: typing.Optional[ExperimentItemReference] = None
+    annotation_queues: typing.Optional[typing.List[AnnotationQueueReference]] = pydantic.Field(default=None)
+    """
+    Annotation queues this trace is currently an item of
+    """
+
     source: typing.Optional[TraceSource] = None
     environment: typing.Optional[str] = None
 

@@ -22,7 +22,7 @@ Autogen's primary advantage is its enterprise-ready architecture with built-in l
 To use the Autogen integration with Opik, you will need to have the following
 packages installed:
 
-```bash
+```bash wordWrap
 pip install -U "autogen-agentchat" "autogen-ext[openai]" opik opentelemetry-sdk opentelemetry-instrumentation-openai opentelemetry-exporter-otlp
 ```
 
@@ -79,7 +79,7 @@ configure the OpenTelemetry integration:
     If you are self-hosting Opik, you will need to set the following environment
     variables:
 
-    ```bash
+    ```bash wordWrap
     export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
     ```
 
@@ -87,7 +87,7 @@ configure the OpenTelemetry integration:
         To log the traces to a specific project, you can add the `projectName`
         parameter to the `OTEL_EXPORTER_OTLP_HEADERS` environment variable:
 
-        ```bash
+        ```bash wordWrap
         export OTEL_EXPORTER_OTLP_HEADERS='projectName=<your-project-name>'
         ```
 
@@ -107,7 +107,7 @@ compatible tools, you can learn more about it here:
 In the example below, we will focus on the `autogen_agentchat` library that is a
 little easier to use:
 
-```python
+```python wordWrap
 # First we will configure the OpenTelemetry
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import (

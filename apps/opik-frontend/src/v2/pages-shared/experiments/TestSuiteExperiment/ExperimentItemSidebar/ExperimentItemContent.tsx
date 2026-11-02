@@ -3,7 +3,7 @@ import sortBy from "lodash/sortBy";
 import groupBy from "lodash/groupBy";
 import isFunction from "lodash/isFunction";
 import { Database, ListTree } from "lucide-react";
-import { Link } from "@tanstack/react-router";
+import { Link, useLocation } from "@tanstack/react-router";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -209,6 +209,7 @@ export const ExperimentItemContent: React.FC<ExperimentItemContentProps> = ({
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const activeProjectId = useActiveProjectId();
+  const { href: currentHref } = useLocation();
 
   const itemsByExperiment = useMemo(
     () => groupBy(experimentItems, "experiment_id"),
@@ -242,7 +243,10 @@ export const ExperimentItemContent: React.FC<ExperimentItemContentProps> = ({
                 projectId: activeProjectId!,
                 suiteId: datasetId,
               }}
-              search={datasetItemId ? { row: datasetItemId } : {}}
+              search={{
+                ...(datasetItemId ? { row: datasetItemId } : {}),
+                from: currentHref,
+              }}
               onClick={(e) => e.stopPropagation()}
             >
               <Tag

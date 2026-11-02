@@ -25,7 +25,7 @@ When using the Opik Optimizer, there are two distinct models to configure:
 | **ChatPrompt model** | The model that executes your prompt during evaluation | Use the same model as your production application |
 | **Optimizer model** | The model that analyzes failures and generates improved prompts | Use the most capable model available for best results |
 
-```python
+```python wordWrap
 from opik_optimizer import ChatPrompt, MetaPromptOptimizer
 
 # ChatPrompt model - this is the model your prompt runs on
@@ -47,10 +47,10 @@ optimizer = MetaPromptOptimizer(
 
 All models use the LiteLLM format: `provider/model-name`
 
-```python
+```python wordWrap
 # Examples of the LiteLLM model format
 model="openai/gpt-4o"                          # OpenAI
-model="anthropic/claude-3-5-sonnet-20241022"   # Anthropic
+model="anthropic/claude-sonnet-4-6"            # Anthropic
 model="gemini/gemini-2.0-flash"                # Google Gemini
 model="azure/my-deployment-name"               # Azure OpenAI
 model="ollama/llama3"                          # Ollama (local)
@@ -64,7 +64,7 @@ model="openrouter/google/gemini-2.0-flash"     # OpenRouter
     ### OpenAI
 
     **Environment Variable:**
-    ```bash
+    ```bash wordWrap
     export OPENAI_API_KEY="sk-..."
     ```
 
@@ -76,7 +76,7 @@ model="openrouter/google/gemini-2.0-flash"     # OpenRouter
     - `openai/o3-mini` - Efficient reasoning model
 
     **Example:**
-    ```python
+    ```python wordWrap
     from opik_optimizer import ChatPrompt, MetaPromptOptimizer
 
     prompt = ChatPrompt(
@@ -95,17 +95,17 @@ model="openrouter/google/gemini-2.0-flash"     # OpenRouter
     ### Anthropic (Claude)
 
     **Environment Variable:**
-    ```bash
+    ```bash wordWrap
     export ANTHROPIC_API_KEY="sk-ant-..."
     ```
 
     **Available Models:**
-    - `anthropic/claude-3-5-sonnet-20241022` - Best balance of speed and capability
-    - `anthropic/claude-3-opus-20240229` - Most capable
-    - `anthropic/claude-3-haiku-20240307` - Fastest
+    - `anthropic/claude-sonnet-4-6` - Best balance of speed and capability
+    - `anthropic/claude-opus-4-7` - Most capable
+    - `anthropic/claude-haiku-4-5` - Fastest
 
     **Example:**
-    ```python
+    ```python wordWrap
     from opik_optimizer import ChatPrompt, MetaPromptOptimizer
 
     prompt = ChatPrompt(
@@ -113,10 +113,10 @@ model="openrouter/google/gemini-2.0-flash"     # OpenRouter
             {"role": "system", "content": "You are a helpful assistant."},
             {"role": "user", "content": "{question}"}
         ],
-        model="anthropic/claude-3-5-sonnet-20241022"
+        model="anthropic/claude-sonnet-4-6"
     )
 
-    optimizer = MetaPromptOptimizer(model="anthropic/claude-3-5-sonnet-20241022")
+    optimizer = MetaPromptOptimizer(model="anthropic/claude-sonnet-4-6")
     ```
   </Tab>
 
@@ -124,7 +124,7 @@ model="openrouter/google/gemini-2.0-flash"     # OpenRouter
     ### Google Gemini
 
     **Environment Variable:**
-    ```bash
+    ```bash wordWrap
     export GOOGLE_API_KEY="..."
     # or
     export GEMINI_API_KEY="..."
@@ -141,7 +141,7 @@ model="openrouter/google/gemini-2.0-flash"     # OpenRouter
     - `gemini/gemini-1.5-flash-8b` - Lightweight model
 
     **Example:**
-    ```python
+    ```python wordWrap
     from opik_optimizer import ChatPrompt, MetaPromptOptimizer
 
     prompt = ChatPrompt(
@@ -156,7 +156,7 @@ model="openrouter/google/gemini-2.0-flash"     # OpenRouter
     ```
 
     **Complete Gemini Example:**
-    ```python
+    ```python wordWrap
     import os
     from opik_optimizer import ChatPrompt, MetaPromptOptimizer
     from opik.evaluation.metrics import LevenshteinRatio
@@ -210,20 +210,20 @@ model="openrouter/google/gemini-2.0-flash"     # OpenRouter
     ### Azure OpenAI
 
     **Environment Variables:**
-    ```bash
+    ```bash wordWrap
     export AZURE_API_KEY="..."
     export AZURE_API_BASE="https://your-resource.openai.azure.com"
     export AZURE_API_VERSION="2024-02-15-preview"
     ```
 
     **Model Format:**
-    ```python
+    ```python wordWrap
     # Use your deployment name
     model="azure/your-deployment-name"
     ```
 
     **Example:**
-    ```python
+    ```python wordWrap
     from opik_optimizer import ChatPrompt, MetaPromptOptimizer
 
     prompt = ChatPrompt(
@@ -247,7 +247,7 @@ model="openrouter/google/gemini-2.0-flash"     # OpenRouter
     3. Ollama runs on `http://localhost:11434` by default
 
     **Environment Variable (optional):**
-    ```bash
+    ```bash wordWrap
     export OLLAMA_API_BASE="http://localhost:11434"
     ```
 
@@ -258,7 +258,7 @@ model="openrouter/google/gemini-2.0-flash"     # OpenRouter
     - `ollama/phi3` - Microsoft Phi-3
 
     **Example:**
-    ```python
+    ```python wordWrap
     from opik_optimizer import ChatPrompt, MetaPromptOptimizer
 
     prompt = ChatPrompt(
@@ -280,20 +280,20 @@ model="openrouter/google/gemini-2.0-flash"     # OpenRouter
     OpenRouter provides access to multiple providers through a single API.
 
     **Environment Variable:**
-    ```bash
+    ```bash wordWrap
     export OPENROUTER_API_KEY="sk-or-..."
     ```
 
     **Model Format:**
-    ```python
+    ```python wordWrap
     # Format: openrouter/provider/model
     model="openrouter/google/gemini-2.0-flash"
-    model="openrouter/anthropic/claude-3-5-sonnet"
+    model="openrouter/anthropic/claude-sonnet-4.6"
     model="openrouter/meta-llama/llama-3-70b-instruct"
     ```
 
     **Example:**
-    ```python
+    ```python wordWrap
     from opik_optimizer import ChatPrompt, MetaPromptOptimizer
 
     prompt = ChatPrompt(
@@ -304,7 +304,7 @@ model="openrouter/google/gemini-2.0-flash"     # OpenRouter
         model="openrouter/google/gemini-2.0-flash"
     )
 
-    optimizer = MetaPromptOptimizer(model="openrouter/anthropic/claude-3-5-sonnet")
+    optimizer = MetaPromptOptimizer(model="openrouter/anthropic/claude-sonnet-4.6")
     ```
   </Tab>
 </Tabs>
@@ -324,7 +324,7 @@ model="openrouter/google/gemini-2.0-flash"     # OpenRouter
 
 You can pass additional parameters to control model behavior:
 
-```python
+```python wordWrap
 from opik_optimizer import ChatPrompt, MetaPromptOptimizer
 
 # Configure model parameters for the ChatPrompt
@@ -355,7 +355,7 @@ optimizer = MetaPromptOptimizer(
 
 You can use different providers for the ChatPrompt and Optimizer:
 
-```python
+```python wordWrap
 from opik_optimizer import ChatPrompt, MetaPromptOptimizer
 
 # Use a cost-effective model for prompt evaluation
@@ -374,7 +374,7 @@ optimizer = MetaPromptOptimizer(
 ```
 
 <Tip>
-  **Recommendation:** Use a capable model like `gpt-4o` or `claude-3-5-sonnet` for the optimizer, even if your production application uses a smaller model. The optimizer only runs during development, so the cost is minimal compared to the quality improvements you'll achieve.
+  **Recommendation:** Use a capable model like `gpt-4o` or `claude-sonnet-4-6` for the optimizer, even if your production application uses a smaller model. The optimizer only runs during development, so the cost is minimal compared to the quality improvements you'll achieve.
 </Tip>
 
 ## Troubleshooting
@@ -382,7 +382,7 @@ optimizer = MetaPromptOptimizer(
 <AccordionGroup>
   <Accordion title="AuthenticationError: Invalid API key">
     Ensure your API key is correctly set in the environment:
-    ```bash
+    ```bash wordWrap
     # Check if the key is set
     echo $OPENAI_API_KEY
     
@@ -393,7 +393,7 @@ optimizer = MetaPromptOptimizer(
 
   <Accordion title="Model not found">
     Verify the model name follows the LiteLLM format `provider/model-name`:
-    ```python
+    ```python wordWrap
     # ✅ Correct
     model="openai/gpt-4o"
     model="gemini/gemini-2.0-flash"

@@ -27,6 +27,7 @@ public record UsageByWorkspaceProjectUserResponse(
     public record WorkspaceProjectUserCount(
             @NonNull String workspaceId,
             @NonNull UUID projectId,
+            String projectName,
             @NonNull String user,
             long count) {
     }

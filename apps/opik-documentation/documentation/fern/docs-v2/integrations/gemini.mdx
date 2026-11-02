@@ -27,7 +27,7 @@ Opik also supports [Google VertexAI](https://cloud.google.com/vertex-ai?hl=en), 
 
 First, ensure you have both `opik` and `google-genai` packages installed:
 
-```bash
+```bash wordWrap
 pip install opik google-genai
 ```
 
@@ -46,13 +46,13 @@ In order to configure Gemini, you will need to have your Gemini API Key. See the
 
 You can set it as an environment variable:
 
-```bash
+```bash wordWrap
 export GOOGLE_API_KEY="YOUR_API_KEY"
 ```
 
 Or set it programmatically:
 
-```python
+```python wordWrap
 import os
 import getpass
 
@@ -64,7 +64,7 @@ if "GOOGLE_API_KEY" not in os.environ:
 
 In order to log the LLM calls to Opik, you will need to wrap the Gemini client with `track_genai`. When making calls with that wrapped client, all calls will be logged to Opik:
 
-```python
+```python wordWrap
 from google import genai
 from opik.integrations.genai import track_genai
 
@@ -91,7 +91,7 @@ print(response.text)
 
 To use Opik with VertexAI, configure the `google-genai` client for VertexAI and wrap it with `track_genai`:
 
-```python
+```python wordWrap
 from google import genai
 from opik.integrations.genai import track_genai
 
@@ -123,7 +123,7 @@ print(response.text)
 
 If you have multiple steps in your LLM pipeline, you can use the `@track` decorator to log the traces for each step. If Gemini is called within one of these steps, the LLM call will be associated with that corresponding step:
 
-```python
+```python wordWrap
 from opik import track
 
 @track
@@ -170,7 +170,7 @@ This makes it easy to:
 
 The `track_genai` wrapper also supports Google's Veo video generation API. When you generate videos, Opik automatically tracks the video creation process and logs the generated video as an attachment when you save it.
 
-```python
+```python wordWrap
 import os
 import time
 import opik

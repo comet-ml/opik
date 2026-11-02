@@ -74,8 +74,8 @@ test.describe(
             await playground.waitForLoadedPromptVersion(promptName, 'v1');
           });
 
-          await test.step('Edit the first message in the Playground', async () => {
-            await playground.editFirstMessage(editedContent);
+          await test.step('Edit the user message in the Playground', async () => {
+            await playground.editUserMessage(editedContent);
           });
 
           await test.step('Save the prompt back to the library (update existing)', async () => {

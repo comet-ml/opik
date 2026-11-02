@@ -253,7 +253,7 @@ def export_single_prompt(
 
     except Exception as e:
         console.print(f"[red]Error exporting prompt {prompt.name}: {e}[/red]")
-        return 0
+        raise
 
 
 def export_prompt_by_name(
@@ -305,8 +305,10 @@ def export_prompt_by_name(
                 if debug:
                     debug_print(f"Found Prompt by direct lookup: {prompt.name}", debug)
             except Exception as e:
-                console.print(f"[red]Prompt '{name}' not found: {e}[/red]")
-                return
+                # get_prompt returns None for a missing prompt, so an exception
+                # here is a failed lookup, not "not found".
+                console.print(f"[red]Error retrieving prompt '{name}': {e}[/red]")
+                raise
 
         if prompt is None:
             console.print(f"[red]Prompt '{name}' not found[/red]")

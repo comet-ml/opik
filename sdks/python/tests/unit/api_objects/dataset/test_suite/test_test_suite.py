@@ -7,6 +7,7 @@ import tempfile
 import pytest
 from unittest import mock
 
+from opik import exceptions as opik_exceptions
 from opik.api_objects.dataset.test_suite import test_suite
 from opik.api_objects.dataset.test_suite import suite_result_constructor
 from opik.api_objects.dataset.test_suite import types as suite_types
@@ -1069,3 +1070,36 @@ class TestImportExport:
         assert inserted[0].execution_policy is not None
         assert inserted[0].execution_policy.runs_per_item == 3
         assert inserted[0].execution_policy.pass_threshold == 2
+
+
+@pytest.mark.parametrize(
+    ("label", "item"),
+    [
+        ("missing", {"data": {"key": "value"}}),
+        ("none", {"id": None, "data": {"key": "value"}}),
+        ("blank", {"id": "   ", "data": {"key": "value"}}),
+    ],
+)
+def test_update__item_without_usable_id__raises_with_item_in_message(label, item):
+    # The item uses the suite item contract's own keys ("data", ...) so the
+    # guard — not a schema check — is what raises. A None or whitespace-only
+    # id would slip a SkipValidation-typed value into the update request.
+    mock_dataset = mock.Mock()
+    # the write funnel TestSuite.insert() uses; set on the mock explicitly
+    # because Mock raises on __dunder__-style names reached via __getattr__
+    mock_dataset.__internal_api__insert_items_as_dataclasses__ = mock.Mock()
+    write_funnel = mock_dataset.__internal_api__insert_items_as_dataclasses__
+
+    suite = test_suite.TestSuite(
+        name="test-suite",
+        dataset_=mock_dataset,
+    )
+
+    with pytest.raises(
+        opik_exceptions.DatasetItemUpdateOperationRequiresItemId,
+        match=r"^Missing id for test suite item to update: \{.*'data'",
+    ):
+        suite.update([item])
+
+    # update() must fail before any write funnel is reached
+    write_funnel.assert_not_called()

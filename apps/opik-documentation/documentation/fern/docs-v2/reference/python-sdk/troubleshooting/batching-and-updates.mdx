@@ -20,7 +20,7 @@ This only affects the low-level client API (`client.trace()`, `client.span()`, `
 
 The safest way to create and manage spans and traces is through the [`@track` decorator or `start_as_current_span` context manager](/tracing/advanced/log_traces). These handle the full lifecycle — creation, data capture, and finalization — in a single operation with no separate update step.
 
-```python
+```python wordWrap
 import opik
 
 # Using the @track decorator
@@ -38,7 +38,7 @@ with opik.start_as_current_span(name="my_span") as span:
 
 If you need to use the low-level client API, you can call `client.trace()` or `client.span()` again with the same ID and the complete data. The backend treats each create request as an upsert — if a trace or span with that ID already exists, the new payload overwrites the previous one entirely. This avoids the race condition because you are not relying on a separate update arriving after the original create.
 
-```python
+```python wordWrap
 import datetime
 import opik
 
@@ -68,7 +68,7 @@ This also works for spans — call `client.span()` with the same `id` and `trace
 
 If your workflow requires creating spans and then updating them shortly after (for example, to add output data that is only available after an async operation completes), you can disable batching. This ensures each create request is sent immediately, so subsequent updates will always find the span on the server.
 
-```python
+```python wordWrap
 import opik
 
 client = opik.Opik(batching=False)
@@ -89,13 +89,13 @@ Disabling batching reduces ingestion throughput. Only use this option if you nee
 
 If you are calling `.end()` or `.update()` well after creation (for example, after a long-running operation completes), the batched create will have already been flushed and there is no risk of data loss. In this case, you can suppress the warning by setting an environment variable:
 
-```bash
+```bash wordWrap
 export OPIK_SUPPRESS_BATCHING_UPDATE_WARNING=true
 ```
 
 Or in your Opik configuration file (`~/.opik.config`):
 
-```ini
+```ini wordWrap
 [opik]
 suppress_batching_update_warning = true
 ```

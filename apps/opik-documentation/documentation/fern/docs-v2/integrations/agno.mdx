@@ -22,7 +22,7 @@ Agno's primary advantage is its minimal overhead and efficient execution, making
 To use the Agno integration with Opik, you will need to have the following
 packages installed:
 
-```bash
+```bash wordWrap
 pip install -U agno openai opentelemetry-sdk opentelemetry-exporter-otlp openinference-instrumentation-agno yfinance
 ```
 
@@ -79,7 +79,7 @@ configure the OpenTelemetry integration:
     If you are self-hosting Opik, you will need to set the following environment
     variables:
 
-    ```bash
+    ```bash wordWrap
     export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
     ```
 
@@ -87,7 +87,7 @@ configure the OpenTelemetry integration:
         To log the traces to a specific project, you can add the `projectName`
         parameter to the `OTEL_EXPORTER_OTLP_HEADERS` environment variable:
 
-        ```bash
+        ```bash wordWrap
         export OTEL_EXPORTER_OTLP_HEADERS='projectName=<your-project-name>'
         ```
 
@@ -100,7 +100,7 @@ configure the OpenTelemetry integration:
 
 The example below shows how to use the Agno integration with Opik:
 
-```python
+```python wordWrap
 from agno.agent import Agent
 from agno.models.openai import OpenAIChat
 from agno.tools.yfinance import YFinanceTools

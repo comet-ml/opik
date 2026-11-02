@@ -288,7 +288,10 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
                                     trigger.eventType(),
                                     List.of(payload.eventId()),
                                     List.of(payload.json()),
-                                    List.of("system"))); // System user for automated alerts
+                                    List.of("system"), // System user for automated alerts
+                                    // eventId is generated once per firing and the job never reprocesses a firing
+                                    "%s:%s".formatted(alert.id(), payload.eventId()),
+                                    payload.firedAt()));
                 })
                 .contextWrite(context -> AsyncUtils.setRequestContext(context, "system", alert.workspaceId()))
                 .subscribeOn(Schedulers.boundedElastic());
@@ -322,9 +325,10 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
                 : config.threshold();
     }
 
-    private PayloadAndId buildAndSerializePayload(Alert alert, AlertTrigger trigger, TriggerConfigGroup group,
+    private PayloadAndFiringTime buildAndSerializePayload(Alert alert, AlertTrigger trigger, TriggerConfigGroup group,
             List<ConditionResult> results) {
         String eventId = idGenerator.generateId().toString();
+        Instant firedAt = Instant.now();
 
         List<MetricsAlertPayload.Condition> conditions = results.stream()
                 .map(r -> {
@@ -372,7 +376,7 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
                 .build();
 
         String payloadJson = JsonUtils.writeValueAsString(metricsPayload);
-        return new PayloadAndId(eventId, payloadJson);
+        return new PayloadAndFiringTime(eventId, payloadJson, firedAt);
     }
 
     private boolean compareMetric(BigDecimal metricValue, BigDecimal threshold, Operator operator) {
@@ -478,7 +482,7 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
     private record IndexedTriggerConfig(Integer groupIndex, TriggerConfig config) {
     }
 
-    private record PayloadAndId(String eventId, String json) {
+    private record PayloadAndFiringTime(String eventId, String json, Instant firedAt) {
     }
 
     @RequiredArgsConstructor

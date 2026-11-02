@@ -9,10 +9,12 @@ export const PromptTokensDetails: core.serialization.ObjectSchema<
     OpikApi.PromptTokensDetails
 > = core.serialization.object({
     cachedTokens: core.serialization.number().optional(),
+    cacheWriteTokens: core.serialization.number().optional(),
 });
 
 export declare namespace PromptTokensDetails {
     export interface Raw {
         cachedTokens?: number | null;
+        cacheWriteTokens?: number | null;
     }
 }

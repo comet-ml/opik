@@ -33,7 +33,7 @@ Portkey provides enterprise-grade features for managing LLM API access, includin
 
 First, ensure you have `opik`, `openai`, and `portkey-ai` packages installed:
 
-```bash
+```bash wordWrap
 pip install opik openai portkey-ai
 ```
 
@@ -52,14 +52,14 @@ You'll need a Portkey API key and virtual keys for your LLM providers. You can g
 
 Set your API keys as environment variables:
 
-```bash
+```bash wordWrap
 export PORTKEY_API_KEY="YOUR_PORTKEY_API_KEY"
 export PORTKEY_VIRTUAL_KEY="YOUR_PORTKEY_VIRTUAL_KEY"
 ```
 
 Or set them programmatically:
 
-```python
+```python wordWrap
 import os
 import getpass
 
@@ -76,7 +76,7 @@ Since Portkey provides an OpenAI-compatible API, we can use the [Opik OpenAI SDK
 
 ### Simple LLM Call
 
-```python
+```python wordWrap
 import os
 from opik.integrations.openai import track_openai
 from openai import OpenAI
@@ -113,7 +113,7 @@ print(response.choices[0].message.content)
 
 If you have multiple steps in your LLM pipeline, you can use the `@track` decorator to log the traces for each step. If Portkey is called within one of these steps, the LLM call will be associated with that corresponding step:
 
-```python
+```python wordWrap
 import os
 from opik import track
 from opik.integrations.openai import track_openai

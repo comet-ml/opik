@@ -35,9 +35,15 @@ interface DashboardStoreState {
   onAddEditWidgetCallback:
     | ((params: AddEditWidgetCallbackParams) => void)
     | null;
+  onAddWidgetToTemplate:
+    | ((sectionId: string, widget: DashboardWidget) => void)
+    | null;
   widgetResolver: WidgetResolver | null;
   previewWidget: DashboardWidget | null;
   readOnly: boolean;
+  // Widget ids the server has; null until the dashboard is loaded. Owned by the persistence hook, so clearing the
+  // dashboard on a reload keeps them.
+  savedWidgetIds: string[] | null;
 }
 
 interface DashboardActions {
@@ -77,12 +83,17 @@ interface DashboardActions {
     callback: ((params: AddEditWidgetCallbackParams) => void) | null,
   ) => void;
 
+  setOnAddWidgetToTemplate: (
+    callback: ((sectionId: string, widget: DashboardWidget) => void) | null,
+  ) => void;
+
   setWidgetResolver: (resolver: WidgetResolver | null) => void;
 
   setPreviewWidget: (widget: DashboardWidget | null) => void;
   updatePreviewWidget: (data: Partial<DashboardWidget>) => void;
 
   setReadOnly: (readOnly: boolean) => void;
+  setSavedWidgetIds: (ids: string[] | null) => void;
 
   clearDashboard: () => void;
 
@@ -126,9 +137,11 @@ export const useDashboardStore = create<DashboardStore>()(
         lastModified: initialDashboard.lastModified,
         runtimeConfig: {},
         onAddEditWidgetCallback: null,
+        onAddWidgetToTemplate: null,
         widgetResolver: null,
         previewWidget: null,
         readOnly: false,
+        savedWidgetIds: null,
 
         addSection: (title?: string) => {
           const newSection = generateEmptySection(title);
@@ -404,6 +417,14 @@ export const useDashboardStore = create<DashboardStore>()(
           );
         },
 
+        setOnAddWidgetToTemplate: (callback) => {
+          set(
+            { onAddWidgetToTemplate: callback },
+            false,
+            "setOnAddWidgetToTemplate",
+          );
+        },
+
         setWidgetResolver: (resolver) => {
           set({ widgetResolver: resolver }, false, "setWidgetResolver");
         },
@@ -428,6 +449,10 @@ export const useDashboardStore = create<DashboardStore>()(
 
         setReadOnly: (readOnly) => {
           set({ readOnly }, false, "setReadOnly");
+        },
+
+        setSavedWidgetIds: (savedWidgetIds) => {
+          set({ savedWidgetIds }, false, "setSavedWidgetIds");
         },
 
         clearDashboard: () => {
@@ -530,6 +555,8 @@ export const selectSetWidgetResolver = (state: DashboardStore) =>
 
 export const selectPreviewWidget = (state: DashboardStore) =>
   state.previewWidget;
+export const selectSavedWidgetIds = (state: DashboardStore) =>
+  state.savedWidgetIds;
 export const selectSetPreviewWidget = (state: DashboardStore) =>
   state.setPreviewWidget;
 
@@ -537,4 +564,6 @@ export const selectUpdatePreviewWidget = (state: DashboardStore) =>
   state.updatePreviewWidget;
 
 export const selectReadOnly = (state: DashboardStore) => state.readOnly;
+export const selectSetOnAddWidgetToTemplate = (state: DashboardStore) =>
+  state.setOnAddWidgetToTemplate;
 export const selectSetReadOnly = (state: DashboardStore) => state.setReadOnly;

@@ -13,13 +13,17 @@ import {
   getStorageKeyType,
 } from "./constants";
 import { ExpandingFeedbackScoreRow } from "./types";
-import { mapFeedbackScoresToRowsWithExpanded } from "./utils";
+import {
+  getHasDeletableFeedbackScoreRow,
+  mapFeedbackScoresToRowsWithExpanded,
+} from "./utils";
 import { ExpandedState, ColumnSizingState } from "@tanstack/react-table";
 import { generateActionsColumDef } from "@/shared/DataTable/utils";
 import ActionsCell from "./cells/ActionsCell";
 import DeleteFeedbackScoreValueDialog from "./DeleteFeedbackScoreValueDialog";
 import { useFeedbackScoreDeletePreference } from "./hooks/useFeedbackScoreDeletePreference";
 import useLocalStorageState from "use-local-storage-state";
+import { useLoggedInUserNameOrOpenSourceDefaultUser } from "@/store/AppStore";
 
 export type FeedbackScoreTableProps = {
   onDeleteFeedbackScore?: (
@@ -67,6 +71,7 @@ const FeedbackScoreTable: React.FunctionComponent<FeedbackScoreTableProps> = ({
   const [rowToDelete, setRowToDelete] =
     React.useState<ExpandingFeedbackScoreRow | null>(null);
   const [dontAskAgain] = useFeedbackScoreDeletePreference();
+  const currentUserName = useLoggedInUserNameOrOpenSourceDefaultUser();
 
   const finalSelectedColumns = selectedColumns ?? defaultSelectedColumns;
   const finalColumnsOrder = columnsOrder ?? defaultSelectedColumns;
@@ -78,6 +83,12 @@ const FeedbackScoreTable: React.FunctionComponent<FeedbackScoreTableProps> = ({
       isAggregatedSpanScores,
     );
   }, [feedbackScores, entityType, isAggregatedSpanScores]);
+
+  // Delete only renders on the current user's own scores; without any, the
+  // column would be a blank strip stretched by the fixed table layout.
+  const showActionsColumn =
+    Boolean(onDeleteFeedbackScore) &&
+    getHasDeletableFeedbackScoreRow(rows, currentUserName);
 
   const handleDeleteClick = React.useCallback(
     (row: ExpandingFeedbackScoreRow) => {
@@ -118,8 +129,7 @@ const FeedbackScoreTable: React.FunctionComponent<FeedbackScoreTableProps> = ({
       }),
     ];
 
-    // Only add actions column if deletion is enabled
-    if (onDeleteFeedbackScore) {
+    if (showActionsColumn) {
       baseColumns.push(
         generateActionsColumDef({
           cell: ActionsCell,
@@ -135,7 +145,7 @@ const FeedbackScoreTable: React.FunctionComponent<FeedbackScoreTableProps> = ({
     finalSelectedColumns,
     finalColumnsOrder,
     handleDeleteClick,
-    onDeleteFeedbackScore,
+    showActionsColumn,
     isAggregatedSpanScores,
   ]);
 

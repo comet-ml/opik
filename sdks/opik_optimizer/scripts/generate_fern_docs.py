@@ -316,7 +316,7 @@ class ClassInspector:
                 lines.append(",\n".join(param_lines))
             lines.append(")")
 
-        lines = ["```python"] + lines + ["```\n"]
+        lines = ["```python wordWrap"] + lines + ["```\n"]
         return "\n".join(lines)
 
     def to_render_string(self) -> str:
@@ -418,7 +418,7 @@ The SDK provides several optimizer classes that all inherit from `BaseOptimizer`
 All optimizers implement these core methods with identical signatures:
 
 ### optimize_prompt()
-```python
+```python wordWrap
 def optimize_prompt(
     self,
     prompt: ChatPrompt | dict[str, ChatPrompt],
@@ -447,7 +447,7 @@ The following parameters are deprecated and will be removed in future versions:
 
 ### Example Migration
 
-```python
+```python wordWrap
 # ❌ Deprecated
 optimizer = FewShotBayesianOptimizer(
     model="gpt-4o-mini",

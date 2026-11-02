@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.redaction;
 
+import com.comet.opik.infrastructure.auth.MatchedTemplatePathResolver;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.annotation.Priority;
 import jakarta.inject.Inject;
@@ -71,7 +72,10 @@ public class RedactionRequestFilter implements ContainerRequestFilter {
         if (!redactionService.isEnabled()) {
             return;
         }
-        if (!coversPath(context.getUriInfo().getRequestUri().getPath())) {
+        boolean covered = MatchedTemplatePathResolver.resolve(context.getUriInfo())
+                .map(RedactionRequestFilter::coversPath)
+                .orElse(true);
+        if (!covered) {
             return;
         }
 

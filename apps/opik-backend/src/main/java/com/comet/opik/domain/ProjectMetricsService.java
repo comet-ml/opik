@@ -14,10 +14,12 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
@@ -75,9 +77,8 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
                 .then(Mono.defer(() -> Mono.just(request.toBuilder()
                         // Enrich request with UUID bounds derived from time parameters for efficient ID-based filtering
                         .uuidFromTime(instantToUUIDMapper.toLowerBound(request.intervalStart()))
-                        // Use current time as default end time when intervalEnd is null to enable WITH FILL clause
-                        .uuidToTime(instantToUUIDMapper.toUpperBound(
-                                request.intervalEnd() != null ? request.intervalEnd() : Instant.now()))
+                        // No requested end means no upper id bound, so far-future ids count like they do in the list
+                        .uuidToTime(instantToUUIDMapper.toUpperBound(request.intervalEnd()))
                         .build())))
                 .flatMap(enrichedRequest -> getMetricHandler(enrichedRequest.metricType())
                         .apply(projectId, enrichedRequest)
@@ -97,7 +98,7 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
                 .interval(request.interval());
 
         if (request.hasBreakdown()) {
-            builder.results(processBreakdownEntries(entries));
+            builder.results(processBreakdownEntries(entries, request.metricType()));
         } else {
             builder.results(entriesToResults(entries));
         }
@@ -105,7 +106,8 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
         return builder.build();
     }
 
-    private List<ProjectMetricResponse.Results<Number>> processBreakdownEntries(List<ProjectMetricsDAO.Entry> entries) {
+    private List<ProjectMetricResponse.Results<Number>> processBreakdownEntries(List<ProjectMetricsDAO.Entry> entries,
+            MetricType metricType) {
         if (entries.isEmpty()) {
             return List.of();
         }
@@ -143,15 +145,34 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
 
         // Add "Others" group if there are remaining groups beyond the limit
         if (!otherGroups.isEmpty()) {
-            List<ProjectMetricsDAO.Entry> othersEntries = otherGroups.stream()
-                    .flatMap(group -> entriesByGroup.get(group).stream())
-                    .map(entry -> ProjectMetricsDAO.Entry.builder()
-                            .name(entry.name())
-                            .time(entry.time())
-                            .value(entry.value())
-                            .groupName(BreakdownQueryBuilder.OTHERS_GROUP_NAME)
-                            .build())
-                    .toList();
+            var overflowEntries = otherGroups.stream()
+                    .flatMap(group -> entriesByGroup.get(group).stream());
+            List<ProjectMetricsDAO.Entry> othersEntries;
+            if (metricType == MetricType.SPAN_COST || metricType == MetricType.COST) {
+                // Cost is additive. Keep one exact decimal sum per bucket, ordered by time.
+                Map<Instant, BigDecimal> costsByTime = new TreeMap<>();
+                overflowEntries.forEach(entry -> costsByTime.merge(entry.time(),
+                        entry.value() == null ? BigDecimal.ZERO : (BigDecimal) entry.value(),
+                        BigDecimal::add));
+                String name = entriesByGroup.get(otherGroups.getFirst()).getFirst().name();
+                othersEntries = costsByTime.entrySet().stream()
+                        .map(entry -> ProjectMetricsDAO.Entry.builder()
+                                .name(name)
+                                .time(entry.getKey())
+                                .value(entry.getValue())
+                                .groupName(BreakdownQueryBuilder.OTHERS_GROUP_NAME)
+                                .build())
+                        .toList();
+            } else {
+                othersEntries = overflowEntries
+                        .map(entry -> ProjectMetricsDAO.Entry.builder()
+                                .name(entry.name())
+                                .time(entry.time())
+                                .value(entry.value())
+                                .groupName(BreakdownQueryBuilder.OTHERS_GROUP_NAME)
+                                .build())
+                        .toList();
+            }
             resultGroups.put(BreakdownQueryBuilder.OTHERS_GROUP_NAME, othersEntries);
         }
 

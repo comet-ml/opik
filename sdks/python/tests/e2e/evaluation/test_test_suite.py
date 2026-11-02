@@ -780,11 +780,8 @@ def test_get_or_create_test_suite__with_tags__tags_persisted(
     assert suite.get_tags() == ["v1"]
 
 
-@pytest.mark.skipif(
-    not environment.has_openai_api_key(), reason="OPENAI_API_KEY is not set"
-)
 def test_test_suite__insert_batch__all_items_persisted(
-    opik_client: opik.Opik, dataset_name: str, experiment_name: str
+    opik_client: opik.Opik, dataset_name: str
 ):
     """
     Test that insert() adds multiple items in a single batch.
@@ -813,31 +810,15 @@ def test_test_suite__insert_batch__all_items_persisted(
         ]
     )
 
-    def task(item: Dict[str, Any]) -> Dict[str, Any]:
-        answers = {
-            "What is the capital of France?": "Paris",
-            "What is the capital of Germany?": "Berlin",
-            "What is the capital of Spain?": "Madrid",
-        }
-        question = item["input"]["question"]
-        return {"input": item["input"], "output": answers.get(question, "Unknown")}
-
-    # opik.run_tests must handle flushing
-    suite_result = opik.run_tests(
-        test_suite=suite,
-        task=task,
-        experiment_name=experiment_name,
-        verbose=0,
-    )
-    verifiers.verify_test_suite_result(
-        opik_client=opik_client,
-        suite_result=suite_result,
-        items_total=3,
-        items_passed=3,
-        experiment_items_count=3,
-        total_feedback_scores=3,
-        expected_score_names={assertion},
-    )
+    items = suite.get_items()
+    assert len(items) == 3
+    assert {item["data"]["input"]["question"] for item in items} == {
+        "What is the capital of France?",
+        "What is the capital of Germany?",
+        "What is the capital of Spain?",
+    }
+    for item in items:
+        assert item["assertions"] == [assertion]
 
 
 # =============================================================================

@@ -5,6 +5,7 @@ import com.google.genai.Client;
 import com.google.genai.types.HttpOptions;
 import dev.langchain4j.model.chat.ChatModel;
 import lombok.experimental.UtilityClass;
+import okhttp3.OkHttpClient;
 
 /** Reads back the {@link Client} that a generated model is bound to, and the endpoint it settled on. */
 @UtilityClass
@@ -31,6 +32,18 @@ class VertexAITestClients {
     static int timeoutOf(ChatModel model) {
         return httpOptionsOf(model).timeout()
                 .orElseThrow(() -> new AssertionError("Client settled on no timeout"));
+    }
+
+    /** The HTTP client {@code client} makes its calls on. */
+    static OkHttpClient httpClientOf(Client client) {
+        try {
+            var apiClientField = Client.class.getDeclaredField("apiClient");
+            apiClientField.setAccessible(true);
+            return ((ApiClient) apiClientField.get(client)).httpClient();
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError("Could not read the client's HTTP client; the SDK's internals may have changed",
+                    e);
+        }
     }
 
     // The SDK settles these at construction and exposes them only on the internal ApiClient, hence the reflection.

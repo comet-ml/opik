@@ -1,6 +1,6 @@
 <clickhouse>
-    <!-- The system log tables buffer and flush on a 7.5s default. Tests that read system.query_log or
-         system.part_log straight after the statement that wrote to them would otherwise have to force a
+    <!-- The system log tables buffer and flush on a 7.5s default. Tests that read system.query_log,
+         system.part_log or system.text_log straight after the statement that wrote to them would otherwise have to force a
          SYSTEM FLUSH LOGS, which pushes only what has already reached the buffer and so races the rows it is
          meant to reveal. Shortening the interval lets those tests simply poll instead.
 
@@ -13,4 +13,7 @@
     <part_log>
         <flush_interval_milliseconds>200</flush_interval_milliseconds>
     </part_log>
+    <text_log>
+        <flush_interval_milliseconds>200</flush_interval_milliseconds>
+    </text_log>
 </clickhouse>

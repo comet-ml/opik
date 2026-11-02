@@ -32,7 +32,7 @@ We provide multiple ways to develop the backend. Choose the approach that best f
 
     <Tabs>
       <Tab title="Linux/Mac">
-        ```bash
+        ```bash wordWrap
         # From repository root - restart everything
         scripts/dev-runner.sh --be-only-restart
 
@@ -41,7 +41,7 @@ We provide multiple ways to develop the backend. Choose the approach that best f
         ```
       </Tab>
       <Tab title="Windows">
-        ```powershell
+        ```powershell wordWrap
         # From repository root - restart everything
         scripts\dev-runner.ps1 --be-only-restart
 
@@ -70,7 +70,7 @@ We provide multiple ways to develop the backend. Choose the approach that best f
 
     <Tabs>
       <Tab title="Linux/Mac">
-        ```bash
+        ```bash wordWrap
         # From repository root
         ./opik.sh --build
 
@@ -79,7 +79,7 @@ We provide multiple ways to develop the backend. Choose the approach that best f
         ```
       </Tab>
       <Tab title="Windows">
-        ```powershell
+        ```powershell wordWrap
         # From repository root
         .\opik.ps1 --build
 
@@ -108,18 +108,18 @@ We provide multiple ways to develop the backend. Choose the approach that best f
     <Tabs>
       <Tab title="Linux/Mac">
         1. **Start infrastructure services:** The backend relies on Clickhouse, MySQL, and Redis etc.
-           ```bash
+           ```bash wordWrap
            ./opik.sh --infra --port-mapping
            ```
 
         2. **Build the backend:**
-           ```bash
+           ```bash wordWrap
            cd apps/opik-backend
            mvn clean install
            ```
 
         3. **Run database migrations:**
-           ```bash
+           ```bash wordWrap
            # MySQL migrations
            java -jar target/opik-backend-*.jar db migrate config.yml
 
@@ -128,24 +128,24 @@ We provide multiple ways to develop the backend. Choose the approach that best f
            ```
 
         4. **Start the backend:**
-           ```bash
+           ```bash wordWrap
            java -jar target/opik-backend-*.jar server config.yml
            ```
       </Tab>
       <Tab title="Windows">
         1. **Start infrastructure services:** The backend relies on Clickhouse, MySQL, and Redis etc.
-           ```powershell
+           ```powershell wordWrap
            .\opik.ps1 --infra --port-mapping
            ```
 
         2. **Build the backend:**
-           ```powershell
+           ```powershell wordWrap
            cd apps\opik-backend
            mvn clean install
            ```
 
         3. **Run database migrations:**
-           ```powershell
+           ```powershell wordWrap
            # MySQL migrations
            java -jar target\opik-backend-*.jar db migrate config.yml
 
@@ -154,7 +154,7 @@ We provide multiple ways to develop the backend. Choose the approach that best f
            ```
 
         4. **Start the backend:**
-           ```powershell
+           ```powershell wordWrap
            java -jar target\opik-backend-*.jar server config.yml
            ```
       </Tab>
@@ -179,13 +179,13 @@ We use Spotless for code formatting. Before submitting a PR, please ensure your 
   <Tab value="Using dev-runner" title="Using dev-runner (Recommended)">
     <Tabs>
       <Tab title="Linux/Mac">
-        ```bash
+        ```bash wordWrap
         # From repository root
         scripts/dev-runner.sh --lint-be
         ```
       </Tab>
       <Tab title="Windows">
-        ```powershell
+        ```powershell wordWrap
         # From repository root
         scripts\dev-runner.ps1 --lint-be
         ```
@@ -193,7 +193,7 @@ We use Spotless for code formatting. Before submitting a PR, please ensure your 
     </Tabs>
   </Tab>
   <Tab value="Manual Maven" title="Manual Maven">
-    ```bash
+    ```bash wordWrap
     cd apps/opik-backend
     mvn spotless:apply
     ```
@@ -206,7 +206,7 @@ Our CI (Continuous Integration) will check formatting using `mvn spotless:check`
 
 Ensure your changes pass all backend tests:
 
-```bash
+```bash wordWrap
 cd apps/opik-backend
 mvn test
 ```
@@ -236,13 +236,13 @@ After implementing your changes, ensuring tests pass, and code is formatted, com
       <Tab value="Using dev-runner" title="Using dev-runner (Recommended)">
         <Tabs>
           <Tab title="Linux/Mac">
-            ```bash
+            ```bash wordWrap
             # From repository root
             scripts/dev-runner.sh --migrate
             ```
           </Tab>
           <Tab title="Windows">
-            ```powershell
+            ```powershell wordWrap
             # From repository root
             scripts\dev-runner.ps1 --migrate
             ```
@@ -295,7 +295,7 @@ After implementing your changes, ensuring tests pass, and code is formatted, com
 
   <Accordion title="Accessing ClickHouse Directly">
     You can query the ClickHouse REST endpoint directly. For example, to get the version:
-    ```bash
+    ```bash wordWrap
     echo 'SELECT version()' | curl -H 'X-ClickHouse-User: opik' -H 'X-ClickHouse-Key: opik' 'http://localhost:8123/' -d @-
     ```
     Sample output: `23.8.15.35`

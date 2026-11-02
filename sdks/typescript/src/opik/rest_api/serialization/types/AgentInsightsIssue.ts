@@ -26,6 +26,9 @@ export const AgentInsightsIssue: core.serialization.ObjectSchema<
     firstSeen: core.serialization.property("first_seen", core.serialization.string().optional()),
     lastSeen: core.serialization.property("last_seen", core.serialization.string().optional()),
     daysReported: core.serialization.property("days_reported", core.serialization.number().optional()),
+    closeNote: core.serialization.property("close_note", core.serialization.string().optional()),
+    statusChangedBy: core.serialization.property("status_changed_by", core.serialization.string().optional()),
+    statusChangedAt: core.serialization.property("status_changed_at", core.serialization.date().optional()),
     createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
     createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
     lastUpdatedBy: core.serialization.property("last_updated_by", core.serialization.string().optional()),
@@ -50,6 +53,9 @@ export declare namespace AgentInsightsIssue {
         first_seen?: string | null;
         last_seen?: string | null;
         days_reported?: number | null;
+        close_note?: string | null;
+        status_changed_by?: string | null;
+        status_changed_at?: string | null;
         created_by?: string | null;
         created_at?: string | null;
         last_updated_by?: string | null;

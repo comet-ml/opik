@@ -11,8 +11,7 @@ import java.util.Collection;
 import java.util.Map;
 
 /**
- * Value helpers shared by the {@code JSONEachRow} row mappers behind
- * {@code bulkInsert.v2ClientEnabled}.
+ * Value helpers shared by the {@code JSONEachRow} row mappers.
  *
  * <p>Every converted write path hits the same question per column: an absent value is sometimes a JSON
  * null, sometimes an omitted field, and the two are not interchangeable. A <b>Nullable</b> column wants

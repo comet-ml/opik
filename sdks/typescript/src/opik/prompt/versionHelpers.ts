@@ -14,16 +14,19 @@ import fastDeepEqual from "fast-deep-equal";
  *
  * @param api - The REST API prompts client
  * @param name - The prompt name
+ * @param projectName - The project the prompt belongs to
  * @param requestOptions - Optional request configuration
  * @returns Promise resolving to the latest version or null if not found
  */
 export async function fetchLatestPromptVersion(
   api: PromptsClient,
   name: string,
+  projectName: string | undefined,
   requestOptions?: RequestOptions
 ): Promise<OpikApi.PromptVersionDetail | null> {
   try {
-    return await api.retrievePromptVersion({ name }, requestOptions);
+    // Scoped like the create: without the project, the backend resolves the name to another project's prompt
+    return await api.retrievePromptVersion({ name, projectName }, requestOptions);
   } catch (error) {
     // 404 means prompt doesn't exist yet (first-time creation)
     if (isNotFoundError(error)) {

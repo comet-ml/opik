@@ -27,7 +27,7 @@ The framework provides everything from simple chat agents to complex multi-agent
 
 To use the Microsoft Agent Framework .NET integration with Opik, you will need to have the Agent Framework and the required OpenTelemetry packages installed:
 
-```bash
+```bash wordWrap
 # Agent Framework (2 packages)
 dotnet add package Microsoft.Agents.AI --prerelease
 dotnet add package Microsoft.Extensions.AI.OpenAI --prerelease
@@ -43,7 +43,7 @@ dotnet add package OpenTelemetry.Instrumentation.Http
 
 You will also need to configure your OpenAI API key:
 
-```bash
+```bash wordWrap
 export OPENAI_API_KEY=<your-openai-api-key>
 ```
 
@@ -101,7 +101,7 @@ In addition, you will need to set the following environment variables to configu
     If you are self-hosting Opik, you will need to set the following environment
     variables:
 
-    ```bash
+    ```bash wordWrap
     export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel/v1/traces
     export OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
     ```
@@ -110,7 +110,7 @@ In addition, you will need to set the following environment variables to configu
         To log the traces to a specific project, you can add the `projectName`
         parameter to the `OTEL_EXPORTER_OTLP_HEADERS` environment variable:
 
-        ```bash
+        ```bash wordWrap
         export OTEL_EXPORTER_OTLP_HEADERS="projectName=<your-project-name>"
         ```
 
@@ -123,7 +123,7 @@ In addition, you will need to set the following environment variables to configu
 
 The Microsoft Agent Framework has built-in OpenTelemetry instrumentation. You need to configure the OpenTelemetry SDK to use HTTP/Protobuf protocol and export to Opik. Here's a complete example:
 
-```csharp
+```csharp wordWrap
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
@@ -192,7 +192,7 @@ await host.StopAsync();
 **Important**: The .NET OpenTelemetry SDK requires explicitly setting `OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf` to use HTTP with Protocol Buffers. If not set, it defaults to gRPC which is not supported by Opik's endpoint.
 
 You can also configure this programmatically:
-```csharp
+```csharp wordWrap
 .AddOtlpExporter(options =>
 {
     options.Protocol = OtlpExportProtocol.HttpProtobuf;

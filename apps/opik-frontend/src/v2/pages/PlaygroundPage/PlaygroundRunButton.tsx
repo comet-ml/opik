@@ -1,15 +1,28 @@
 import React from "react";
-import { Pause, Play } from "lucide-react";
+import { Loader2, Pause, Play, RotateCcw } from "lucide-react";
 
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { Button } from "@/ui/button";
-import { useIsPromptRunning, usePromptById } from "@/store/PlaygroundStore";
-import { hasUnsupportedMedia } from "@/lib/playground";
+import {
+  useDatasetType,
+  useIsPromptRunning,
+  useIsResumingRun,
+  usePromptById,
+  useDatasetItemsTotal,
+  useIsStopping,
+  useIsWatchLapsed,
+  useHasRunProgress,
+} from "@/store/PlaygroundStore";
+import { canRunMessages, hasUnsupportedMedia } from "@/lib/playground";
+import { STILL_RUNNING_REFRESH_MESSAGE } from "@/constants/experiments";
+import { usePlaygroundDataset } from "@/hooks/usePlaygroundDataset";
+import { DATASET_TYPE } from "@/types/datasets";
 
 interface PlaygroundRunButtonProps {
   promptId: string;
   onRun: () => void;
   onStop: () => void;
+  onCheckAgain?: () => void;
   className?: string;
 }
 
@@ -17,27 +30,50 @@ const PlaygroundRunButton = ({
   promptId,
   onRun,
   onStop,
+  onCheckAgain,
   className,
 }: PlaygroundRunButtonProps) => {
   const prompt = usePromptById(promptId);
   const isPromptRunning = useIsPromptRunning(promptId);
+  const isResumingRun = useIsResumingRun();
+  const isStopping = useIsStopping(promptId);
+  const isWatchLapsed = useIsWatchLapsed(promptId);
+  const hasRunProgress = useHasRunProgress();
 
-  const hasEmptyMessages = prompt?.messages.some(
-    (m) => !m.content || m.content.length === 0,
-  );
+  const showsWatchLapsed = isWatchLapsed && !hasRunProgress && !!onCheckAgain;
+
+  const { datasetId, itemsTotal } = usePlaygroundDataset();
+  const datasetType = useDatasetType();
+  const datasetItemsTotal = useDatasetItemsTotal();
+
+  const hasUnrunnableMessages = !!prompt && !canRunMessages(prompt.messages);
   const hasMediaCompatibilityIssue = !!prompt && hasUnsupportedMedia(prompt);
+  const isDatasetEmpty = !!datasetId && itemsTotal === 0;
+  // Zero rows is a real state, not a loading one: a filter can exclude everything
+  const hasNoDatasetItems = !!datasetId && datasetItemsTotal === 0;
   const isPromptRunDisabled =
-    !prompt?.model || !!hasEmptyMessages || hasMediaCompatibilityIssue;
+    isResumingRun ||
+    !prompt?.model ||
+    hasUnrunnableMessages ||
+    hasMediaCompatibilityIssue ||
+    isDatasetEmpty ||
+    hasNoDatasetItems;
 
   let promptRunDisabledReason: string | null = null;
   if (!prompt?.model) {
     promptRunDisabledReason = "Please select an LLM model for this prompt";
-  } else if (hasEmptyMessages) {
+  } else if (hasUnrunnableMessages) {
     promptRunDisabledReason =
       "Message is empty. Please add some text to proceed";
   } else if (hasMediaCompatibilityIssue) {
     promptRunDisabledReason =
       "This prompt contains media but the selected model doesn't support media input";
+  } else if (isDatasetEmpty) {
+    const datasetLabel =
+      datasetType === DATASET_TYPE.TEST_SUITE ? "test suite" : "dataset";
+    promptRunDisabledReason = `This ${datasetLabel} version has no items. Add items or select another version to run an experiment`;
+  } else if (hasNoDatasetItems) {
+    promptRunDisabledReason = "No dataset items match the current filters";
   }
 
   return (
@@ -46,7 +82,28 @@ const PlaygroundRunButton = ({
         className ?? "flex items-center justify-end border-b px-4 py-2"
       }
     >
-      {isPromptRunning ? (
+      {showsWatchLapsed && (
+        <>
+          <span className="comet-body-s mr-2 text-light-slate">
+            {STILL_RUNNING_REFRESH_MESSAGE}
+          </span>
+          <Button
+            variant="secondary"
+            size="2xs"
+            className="mr-2 shrink-0"
+            onClick={onCheckAgain}
+          >
+            <RotateCcw className="mr-1 size-3.5" />
+            Refresh
+          </Button>
+        </>
+      )}
+      {isStopping ? (
+        <Button size="2xs" variant="outline" disabled>
+          <Loader2 className="mr-1 size-3.5 animate-spin" />
+          Stopping...
+        </Button>
+      ) : isPromptRunning ? (
         <Button size="2xs" variant="outline" onClick={onStop}>
           <Pause className="mr-1 size-3.5" />
           Stop

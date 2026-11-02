@@ -26,7 +26,7 @@ This is particularly useful for prompt engineering workflows where you want to q
 
 ## Function Signature
 
-```typescript
+```typescript wordWrap
 function evaluatePrompt(
   options: EvaluatePromptOptions
 ): Promise<EvaluationResult>;
@@ -34,7 +34,7 @@ function evaluatePrompt(
 
 ### EvaluatePromptOptions
 
-```typescript
+```typescript wordWrap
 interface EvaluatePromptOptions extends Omit<EvaluateOptions, "task"> {
   // Required parameters
   dataset: Dataset;
@@ -62,7 +62,7 @@ interface EvaluatePromptOptions extends Omit<EvaluateOptions, "task"> {
 - **Type**: `Dataset`
 - **Description**: The dataset to evaluate prompts against. Each dataset item will be used to format the message templates and generate responses.
 
-```typescript
+```typescript wordWrap
 const dataset = await client.getOrCreateDataset("my-dataset", "Evaluation dataset", "my-project");
 ```
 
@@ -71,7 +71,7 @@ const dataset = await client.getOrCreateDataset("my-dataset", "Evaluation datase
 - **Type**: `OpikMessage[]`
 - **Description**: Array of message templates with `{{placeholders}}` that will be formatted with dataset variables.
 
-```typescript
+```typescript wordWrap
 messages: [
   { role: "system", content: "You are a helpful assistant" },
   { role: "user", content: "Translate to {{language}}: {{text}}" },
@@ -85,11 +85,11 @@ messages: [
 - **Type**: `SupportedModelId | LanguageModel | OpikBaseModel`
 - **Default**: `"gpt-5-nano"`
 - **Description**: The language model to use for generation. Can be:
-  - Model ID string (e.g., `"gpt-5-nano"`, `"claude-3-5-sonnet-latest"`, `"gemini-2.0-flash"`)
+  - Model ID string (e.g., `"gpt-5-nano"`, `"claude-sonnet-4-6"`, `"gemini-2.0-flash"`)
   - Pre-configured `LanguageModel` instance from Vercel AI SDK
   - Custom `OpikBaseModel` implementation
 
-```typescript
+```typescript wordWrap
 // Using model ID string
 model: "gpt-5-nano";
 
@@ -105,7 +105,7 @@ model: customModel;
 - **Default**: `"mustache"`
 - **Description**: Template engine to use for variable substitution in message content.
 
-```typescript
+```typescript wordWrap
 // Mustache syntax (default)
 templateType: "mustache";
 messages: [{ role: "user", content: "Hello {{name}}" }];
@@ -120,7 +120,7 @@ messages: [{ role: "user", content: "Hello {{ name }}" }];
 - **Type**: `BaseMetric[]`
 - **Description**: Array of metrics to evaluate the generated outputs. Can include both heuristic and LLM Judge metrics.
 
-```typescript
+```typescript wordWrap
 import { ExactMatch, Hallucination } from "opik";
 
 scoringMetrics: [new ExactMatch(), new Hallucination()];
@@ -131,7 +131,7 @@ scoringMetrics: [new ExactMatch(), new Hallucination()];
 - **Type**: `string`
 - **Description**: Name for the experiment. If not provided, a name will be auto-generated.
 
-```typescript
+```typescript wordWrap
 experimentName: "Prompt Evaluation - Translation Task";
 ```
 
@@ -140,7 +140,7 @@ experimentName: "Prompt Evaluation - Translation Task";
 - **Type**: `Record<string, unknown>`
 - **Description**: Additional metadata to store with the experiment. The function automatically adds `prompt_template` and `model` to this configuration.
 
-```typescript
+```typescript wordWrap
 experimentConfig: {
   temperature: 0.7,
   max_tokens: 1000,
@@ -153,7 +153,7 @@ experimentConfig: {
 - **Type**: `Prompt[]`
 - **Description**: Array of Opik Prompt objects to link to this experiment. Useful for tracking which prompt versions were used.
 
-```typescript
+```typescript wordWrap
 const prompt = await client.createPrompt({
   name: "translation-prompt",
   prompt: "Translate to {{language}}: {{text}}",
@@ -167,7 +167,7 @@ prompts: [prompt];
 - **Type**: `string`
 - **Description**: Name of the Opik project to log traces to.
 
-```typescript
+```typescript wordWrap
 projectName: "prompt-engineering";
 ```
 
@@ -176,7 +176,7 @@ projectName: "prompt-engineering";
 - **Type**: `number`
 - **Description**: Maximum number of dataset items to evaluate. Useful for quick testing.
 
-```typescript
+```typescript wordWrap
 nbSamples: 10; // Only evaluate first 10 items
 ```
 
@@ -185,7 +185,7 @@ nbSamples: 10; // Only evaluate first 10 items
 - **Type**: `Record<string, string>`
 - **Description**: Maps metric parameter names to dataset/output field names when they don't match.
 
-```typescript
+```typescript wordWrap
 scoringKeyMapping: {
   input: "question", // Map 'input' param to 'question' field
   expected: "reference_answer", // Map 'expected' param to 'reference_answer' field
@@ -196,7 +196,7 @@ scoringKeyMapping: {
 
 Returns a `Promise<EvaluationResult>` containing:
 
-```typescript
+```typescript wordWrap
 interface EvaluationResult {
   experimentId: string; // ID of created experiment
   experimentName: string; // Name of experiment
@@ -210,7 +210,7 @@ interface EvaluationResult {
 
 Simple prompt evaluation with default settings:
 
-```typescript
+```typescript wordWrap
 import { Opik, evaluatePrompt } from "opik";
 
 const client = new Opik();
@@ -249,7 +249,7 @@ console.log(`Evaluated ${result.testResults.length} items`);
 
 Evaluate prompts with automatic scoring:
 
-```typescript
+```typescript wordWrap
 import { evaluatePrompt } from "opik";
 import { Hallucination, ExactMatch } from "opik";
 
@@ -288,7 +288,7 @@ await evaluatePrompt({
 
 Use LanguageModel instances for provider-specific features:
 
-```typescript
+```typescript wordWrap
 import { openai } from "@ai-sdk/openai";
 import { evaluatePrompt } from "opik";
 
@@ -311,19 +311,19 @@ await evaluatePrompt({
 
 The function supports models from multiple providers:
 
-```typescript
+```typescript wordWrap
 // OpenAI
 model: "gpt-5-nano";
 
 // Anthropic
-model: "claude-3-5-sonnet-latest";
+model: "claude-sonnet-4-6";
 
 // Google Gemini
 model: "gemini-2.0-flash";
 
 // Or use provider-specific LanguageModel instances
 import { anthropic } from "@ai-sdk/anthropic";
-const claude = anthropic("claude-3-5-sonnet-latest");
+const claude = anthropic("claude-sonnet-4-6");
 model: claude;
 ```
 
@@ -331,7 +331,7 @@ model: claude;
 
 Track which prompt versions are used in evaluations:
 
-```typescript
+```typescript wordWrap
 import { Opik, evaluatePrompt } from "opik";
 
 const client = new Opik();
@@ -360,7 +360,7 @@ await evaluatePrompt({
 
 #### Mustache Templates (Default)
 
-```typescript
+```typescript wordWrap
 await evaluatePrompt({
   dataset,
   messages: [
@@ -376,7 +376,7 @@ await evaluatePrompt({
 
 #### Jinja2 Templates
 
-```typescript
+```typescript wordWrap
 await evaluatePrompt({
   dataset,
   messages: [
@@ -394,7 +394,7 @@ await evaluatePrompt({
 
 Map dataset fields to metric parameter names:
 
-```typescript
+```typescript wordWrap
 // Dataset has: { question: "...", reference_answer: "..." }
 // Metric expects: { input: "...", expected: "..." }
 
@@ -414,7 +414,7 @@ await evaluatePrompt({
 
 Evaluate only a subset of the dataset for quick iteration:
 
-```typescript
+```typescript wordWrap
 await evaluatePrompt({
   dataset,
   messages: [{ role: "user", content: "{{prompt}}" }],
@@ -443,7 +443,7 @@ The function automatically enriches experiment configuration with:
 
 You can add additional metadata via `experimentConfig`:
 
-```typescript
+```typescript wordWrap
 experimentConfig: {
   // Auto-added by evaluatePrompt:
   // prompt_template: [{ role: 'user', content: '...' }]
@@ -463,7 +463,7 @@ experimentConfig: {
 
 Begin with basic prompt evaluation, then add metrics as needed:
 
-```typescript
+```typescript wordWrap
 // Step 1: Basic evaluation to see outputs
 await evaluatePrompt({
   dataset,
@@ -484,7 +484,7 @@ await evaluatePrompt({
 
 Make it easy to find and compare experiments:
 
-```typescript
+```typescript wordWrap
 experimentName: "Translation - GPT-4o - v2.3 - 2025-01-15";
 ```
 
@@ -492,7 +492,7 @@ experimentName: "Translation - GPT-4o - v2.3 - 2025-01-15";
 
 Link evaluations to prompt versions for better tracking:
 
-```typescript
+```typescript wordWrap
 const prompt = await client.createPrompt({
   name: "qa-prompt",
   prompt: "Answer: {{question}}",
@@ -511,7 +511,7 @@ await evaluatePrompt({
 
 Use `nbSamples` for quick iteration before full evaluation:
 
-```typescript
+```typescript wordWrap
 // Quick test with 10 samples
 await evaluatePrompt({
   dataset,
@@ -533,7 +533,7 @@ await evaluatePrompt({
 
 Structure your prompts with clear system messages:
 
-```typescript
+```typescript wordWrap
 messages: [
   {
     role: "system",
@@ -551,7 +551,7 @@ messages: [
 
 The function validates inputs and throws errors for common issues:
 
-```typescript
+```typescript wordWrap
 try {
   await evaluatePrompt({
     dataset,

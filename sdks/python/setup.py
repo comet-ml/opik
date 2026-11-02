@@ -51,6 +51,9 @@ setup(
         # - Exclude 1.92.*: core completion() eagerly imports litellm.proxy modules that require
         #   fastapi/orjson (proxy-only extras), so any completion crashes without litellm[proxy].
         #   Reverted in 1.93. See litellm/main.py -> responses.mcp.litellm_proxy_mcp_handler.
+        # - Cap at <1.106: completion() with tools imports litellm.proxy MCP modules that need the
+        #   `mcp` package (a proxy-only extra), so any tool call fails with "No module named 'mcp'".
+        #   Still broken in 1.107.0rc1. Lift once https://github.com/BerriAI/litellm/issues/46045 is fixed.
         # - Cap Python 3.10 at <1.97: litellm declares requires-python >=3.10 but ships 3.11+
         #   typing, and every recent break has been 3.10-only with a distinct root cause:
         #     1.97.*     Message model unconstructible -- the nested forward reference
@@ -64,7 +67,7 @@ setup(
         #   The cap is the standing guard; 3.11+ deliberately stays uncapped. Lift it once
         #   upstream actually tests 3.10 (or once we drop 3.10 -- see OPIK_7955).
         "litellm>=1.79.2,!=1.81.*,!=1.82.*,!=1.83.0,!=1.83.1,!=1.83.2,!=1.83.3,!=1.83.4,!=1.83.5,!=1.83.6,!=1.92.*,<1.97; python_version < '3.11'",
-        "litellm>=1.79.2,!=1.81.*,!=1.82.*,!=1.83.0,!=1.83.1,!=1.83.2,!=1.83.3,!=1.83.4,!=1.83.5,!=1.83.6,!=1.92.*; python_version >= '3.11'",
+        "litellm>=1.79.2,!=1.81.*,!=1.82.*,!=1.83.0,!=1.83.1,!=1.83.2,!=1.83.3,!=1.83.4,!=1.83.5,!=1.83.6,!=1.92.*,<1.106; python_version >= '3.11'",
         "openai",
         "pydantic-settings>=2.0.0,<3.0.0,!=2.9.0",
         "pydantic>=2.0.0,<3.0.0",

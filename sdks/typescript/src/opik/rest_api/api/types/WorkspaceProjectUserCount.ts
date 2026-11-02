@@ -3,6 +3,7 @@
 export interface WorkspaceProjectUserCount {
     workspaceId?: string;
     projectId?: string;
+    projectName?: string;
     user?: string;
     count?: number;
 }

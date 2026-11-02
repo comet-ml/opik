@@ -11,12 +11,11 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * Builds the {@code JSONEachRow} row for a dataset item version, for the write path behind
- * {@code bulkInsert.v2ClientEnabled}.
+ * Builds the {@code JSONEachRow} row for a dataset item version.
  *
- * <p>The counterpart of {@code BATCH_INSERT_ITEMS}' parameter binding in {@code DatasetItemVersionDAO}:
- * the two must produce identical cells, since the toggle is meant to be safe to flip either way on a
- * running install. This is the widest bulk write in the codebase — 22 columns, 17 of them per-row — so
+ * <p>Replaced the parameter binding of {@code DatasetItemVersionDAO}'s former R2DBC insert, and must
+ * write the same cells it did. This is the widest bulk write in the codebase — 22 columns, 17 of them
+ * per-row — so
  * it is where the driver's per-name linear scan costs the most.
  *
  * <p>Column handling that has to match the binder rather than merely look reasonable:

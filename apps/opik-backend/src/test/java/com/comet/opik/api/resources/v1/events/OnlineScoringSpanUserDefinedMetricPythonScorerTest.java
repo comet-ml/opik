@@ -56,6 +56,12 @@ import static org.mockito.Mockito.when;
 @DisplayName("OnlineScoringSpanUserDefinedMetricPythonScorer Tests")
 class OnlineScoringSpanUserDefinedMetricPythonScorerTest {
 
+    // Restated independently and byte-identical to the trace scorer's copy: that is what makes one search
+    // catch both scorers, so a divergence between them fails here rather than passing quietly.
+    private static final String UNRESOLVED_ARGUMENTS_LOG = "None of the metric's declared arguments resolved,"
+            + " so there is no data to evaluate. Check the declared paths against the input, output and"
+            + " metadata present on the entity. {} '{}', rule '{}', unresolved arguments: {}";
+
     @Mock
     private OnlineScoringConfig onlineScoringConfig;
 
@@ -81,13 +87,15 @@ class OnlineScoringSpanUserDefinedMetricPythonScorerTest {
 
     private OnlineScoringSpanUserDefinedMetricPythonScorer scorer;
     private MockedStatic<UserFacingLoggingFactory> mockedFactory;
+    private Logger userFacingLogger;
 
     @BeforeEach
     void setUp() {
         // Mock the static UserFacingLoggingFactory.getLogger method
+        userFacingLogger = mock(Logger.class);
         mockedFactory = mockStatic(UserFacingLoggingFactory.class);
         mockedFactory.when(() -> UserFacingLoggingFactory.getLogger(any(Class.class)))
-                .thenReturn(mock(Logger.class));
+                .thenReturn(userFacingLogger);
 
         // Mock OnlineScoringConfig to return stream configuration for span_user_defined_metric_python
         OnlineScoringConfig.StreamConfiguration streamConfig = new OnlineScoringConfig.StreamConfiguration();
@@ -188,6 +196,10 @@ class OnlineScoringSpanUserDefinedMetricPythonScorerTest {
                     .projectName("test-project")
                     .traceId(UUID.randomUUID())
                     .name("test-span")
+                    // The declared paths must actually resolve, or the scorer short-circuits before the
+                    // evaluator and this test stops covering what it means to.
+                    .input(JsonUtils.getMapper().valueToTree(Map.of("input", "question")))
+                    .output(JsonUtils.getMapper().valueToTree(Map.of("output", "answer")))
                     .build();
 
             SpanUserDefinedMetricPythonCode code = new SpanUserDefinedMetricPythonCode(
@@ -252,6 +264,8 @@ class OnlineScoringSpanUserDefinedMetricPythonScorerTest {
                     .projectName(projectName)
                     .traceId(ID_GENERATOR.generateId())
                     .name("span-" + RandomStringUtils.secure().nextAlphanumeric(10))
+                    .input(JsonUtils.getMapper().valueToTree(Map.of("input", "question")))
+                    .output(JsonUtils.getMapper().valueToTree(Map.of("output", "answer")))
                     .build();
 
             SpanUserDefinedMetricPythonCode code = SpanUserDefinedMetricPythonCode.builder()
@@ -303,6 +317,50 @@ class OnlineScoringSpanUserDefinedMetricPythonScorerTest {
         }
 
         @Test
+        @DisplayName("Should report unresolved arguments instead of calling the evaluator")
+        void shouldReportUnresolvedArgumentsInsteadOfCallingTheEvaluator() {
+            // Same defect as the trace scorer: fields the span does not carry resolve to an empty map, and
+            // the evaluator must not be called with it.
+            UUID spanId = ID_GENERATOR.generateId();
+            String ruleName = "rule-" + RandomStringUtils.secure().nextAlphanumeric(10);
+
+            Span span = Span.builder()
+                    .id(spanId)
+                    .projectId(ID_GENERATOR.generateId())
+                    .projectName("project-" + RandomStringUtils.secure().nextAlphanumeric(10))
+                    .traceId(ID_GENERATOR.generateId())
+                    .name("span-" + RandomStringUtils.secure().nextAlphanumeric(10))
+                    .input(JsonUtils.getMapper().valueToTree(Map.of("question", "q")))
+                    .output(JsonUtils.getMapper().valueToTree(Map.of("answer", "a")))
+                    .build();
+
+            SpanUserDefinedMetricPythonCode code = SpanUserDefinedMetricPythonCode.builder()
+                    .metric("def score(expects_sql, plan): return []")
+                    .arguments(Map.of("expects_sql", "input.expects_sql", "plan", "output.execution_plan"))
+                    .build();
+
+            SpanToScoreUserDefinedMetricPython message = SpanToScoreUserDefinedMetricPython.builder()
+                    .span(span)
+                    .ruleId(ID_GENERATOR.generateId())
+                    .ruleName(ruleName)
+                    .code(code)
+                    .workspaceId(ID_GENERATOR.generateId().toString())
+                    .userName("user-" + RandomStringUtils.secure().nextAlphanumeric(10))
+                    .build();
+
+            scorer.score(message).block();
+
+            verify(pythonEvaluatorService, never()).evaluate(any(), anyMap());
+            verify(userFacingLogger).warn(
+                    eq(UNRESOLVED_ARGUMENTS_LOG),
+                    eq("spanId"),
+                    eq(spanId),
+                    eq(ruleName),
+                    eq("'expects_sql' -> 'input.expects_sql', 'plan' -> 'output.execution_plan'"));
+            verify(feedbackScoreService, never()).scoreBatchOfSpans(anyList());
+        }
+
+        @Test
         @DisplayName("Should handle multiple score results")
         void shouldHandleMultipleScoreResults() {
             // Given
@@ -315,11 +373,13 @@ class OnlineScoringSpanUserDefinedMetricPythonScorerTest {
                     .projectName("test-project")
                     .traceId(UUID.randomUUID())
                     .name("test-span")
+                    .input(JsonUtils.getMapper().valueToTree(Map.of("input", "question")))
+                    .output(JsonUtils.getMapper().valueToTree(Map.of("output", "answer")))
                     .build();
 
             SpanUserDefinedMetricPythonCode code = new SpanUserDefinedMetricPythonCode(
                     "def score(input, output): return [...]",
-                    Map.of());
+                    Map.of("input", "input.input", "output", "output.output"));
 
             SpanToScoreUserDefinedMetricPython message = SpanToScoreUserDefinedMetricPython.builder()
                     .span(span)

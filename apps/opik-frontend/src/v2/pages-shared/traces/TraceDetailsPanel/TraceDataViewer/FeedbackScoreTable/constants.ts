@@ -105,7 +105,7 @@ export const NON_CONFIGURABLE_COLUMNS: ColumnData<ExpandingFeedbackScoreRow>[] =
       id: FeedbackScoreTableColumns.KEY,
       label: "Key",
       type: COLUMN_TYPE.string,
-      size: 100,
+      size: 140,
       cell: NameCell as never,
     },
   ];
@@ -122,7 +122,7 @@ export const CONFIGURABLE_COLUMNS: ColumnData<ExpandingFeedbackScoreRow>[] = [
     id: FeedbackScoreTableColumns.TYPE,
     label: "Type",
     type: COLUMN_TYPE.string,
-    size: 100,
+    size: 80,
     cell: TypeCell as never,
   },
   {
@@ -130,20 +130,20 @@ export const CONFIGURABLE_COLUMNS: ColumnData<ExpandingFeedbackScoreRow>[] = [
     label: "Score",
     type: COLUMN_TYPE.string,
     cell: ValueCell as never,
-    size: 100,
+    size: 70,
   },
   {
     id: FeedbackScoreTableColumns.REASON,
     label: "Reason",
     type: COLUMN_TYPE.string,
     cell: ReasonCell as never,
-    size: 100,
+    size: 260,
   },
   {
     id: FeedbackScoreTableColumns.CREATED_BY,
     label: "Scored by",
     type: COLUMN_TYPE.string,
     cell: AuthorCell as never,
-    size: 100,
+    size: 120,
   },
 ];

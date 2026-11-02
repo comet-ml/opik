@@ -63,7 +63,7 @@ The optimizer intelligently balances exploration (trying diverse parameters) wit
 
 ### Basic Configuration
 
-```python
+```python wordWrap
 from opik_optimizer import ParameterOptimizer
 from opik_optimizer.algorithms.parameter_optimizer.parameter_search_space import (
     ParameterSearchSpace,
@@ -79,7 +79,7 @@ optimizer = ParameterOptimizer(
 
 ### Advanced Configuration
 
-```python
+```python wordWrap
 optimizer = ParameterOptimizer(
     model="openai/gpt-4",
     default_n_trials=50,        # More trials for thorough optimization
@@ -105,7 +105,7 @@ The key parameters are:
 
 ### Basic Example
 
-```python
+```python wordWrap
 from opik_optimizer import ParameterOptimizer, ChatPrompt
 from opik_optimizer.algorithms.parameter_optimizer.parameter_search_space import (
     ParameterSearchSpace,
@@ -173,7 +173,7 @@ print(f"Parameter importance: {results.details['parameter_importance']}")
 
 ### Advanced Example with Custom Parameters
 
-```python
+```python wordWrap
 # Optimize more parameters including model selection
 parameter_space = ParameterSearchSpace(
     parameters=[
@@ -230,7 +230,7 @@ The `ParameterSearchSpace` defines which parameters to optimize and their valid 
 
 ### Float Parameters
 
-```python
+```python wordWrap
 {
     "name": "temperature",
     "distribution": "float",
@@ -243,7 +243,7 @@ The `ParameterSearchSpace` defines which parameters to optimize and their valid 
 
 ### Integer Parameters
 
-```python
+```python wordWrap
 {
     "name": "max_tokens",
     "distribution": "int",
@@ -256,17 +256,17 @@ The `ParameterSearchSpace` defines which parameters to optimize and their valid 
 
 ### Categorical Parameters
 
-```python
+```python wordWrap
 {
     "name": "model",
     "distribution": "categorical",
-    "choices": ["gpt-4o-mini", "gpt-4o", "claude-3-haiku"]
+    "choices": ["gpt-4o-mini", "gpt-4o", "claude-haiku-4-5"]
 }
 ```
 
 ### Boolean Parameters
 
-```python
+```python wordWrap
 {
     "name": "stream",
     "distribution": "bool"
@@ -277,7 +277,7 @@ The `ParameterSearchSpace` defines which parameters to optimize and their valid 
 
 You can optimize nested parameters in `model_parameters`:
 
-```python
+```python wordWrap
 {
     "name": "model_parameters.response_format.type",
     "distribution": "categorical",
@@ -293,7 +293,7 @@ including locally hosted models.
 
 ### Configuration Example using LiteLLM model string
 
-```python
+```python wordWrap
 optimizer = ParameterOptimizer(
     model="openai/gpt-4o-mini",  # Using OpenAI via LiteLLM
     default_n_trials=30,
@@ -338,7 +338,7 @@ optimizer = ParameterOptimizer(
    - Instead, use `evaluate_prompt()` on a held-out test dataset after optimization completes
    - This confirms that optimized parameters generalize to unseen data
    - Example:
-     ```python
+     ```python wordWrap
      # After optimization
      from opik.evaluation import evaluate_prompt
      

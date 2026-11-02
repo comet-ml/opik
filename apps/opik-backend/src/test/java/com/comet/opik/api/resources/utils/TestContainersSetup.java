@@ -31,7 +31,7 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
 public class TestContainersSetup {
 
     public final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-    public final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer();
+    public final MySQLContainer MYSQL;
     public final GenericContainer<?> ZOOKEEPER = ClickHouseContainerUtils.newZookeeperContainer();
     public final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer(ZOOKEEPER);
     public final WireMockUtils.WireMockRuntime wireMock;
@@ -42,6 +42,15 @@ public class TestContainersSetup {
     }
 
     public TestContainersSetup(EventBus mockEventBus) {
+        this(mockEventBus, true);
+    }
+
+    /**
+     * @param reusableMySql {@code false} gives this setup its own MySQL rather than the one reused across test
+     *                      classes, for tests that must not see rows other classes left behind.
+     */
+    public TestContainersSetup(EventBus mockEventBus, boolean reusableMySql) {
+        MYSQL = MySQLContainerUtils.newMySQLContainer(reusableMySql);
         Startables.deepStart(REDIS, MYSQL, CLICKHOUSE, ZOOKEEPER).join();
 
         wireMock = WireMockUtils.startWireMock();

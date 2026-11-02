@@ -93,10 +93,55 @@ class TestRichInstallView:
     def test_done__sign_in_needed__is_the_one_thing_it_still_says(self, view):
         installer = view.RichInstallView()
         installer.plan("Opik Cloud", "Hosted server", needs_sign_in=True)
-        with view.console.capture() as capture:
+        with (
+            mock.patch.object(
+                view.interactive_helpers, "is_interactive", return_value=True
+            ),
+            view.console.capture() as capture,
+        ):
             installer.done()
 
         assert "Signing in" in capture.get()
+
+    def test_done__without_a_terminal__says_nothing(self, view):
+        """The run ends on each client's next step instead, which also names its
+        own sign-in command; the generic hint says every client prompts."""
+        installer = view.RichInstallView()
+        installer.plan("Opik Cloud", "Hosted server", needs_sign_in=True)
+        installer.sign_in_failed(["Codex"])
+        with (
+            mock.patch.object(
+                view.interactive_helpers, "is_interactive", return_value=False
+            ),
+            view.console.capture() as capture,
+        ):
+            installer.done()
+
+        assert capture.get() == ""
+
+    def test_sign_in__without_a_terminal__runs_on_a_pseudo_terminal(self, view):
+        """An agent's shell has no terminal, but the user's browser is there."""
+        with (
+            mock.patch.object(
+                view.interactive_helpers, "is_interactive", return_value=False
+            ),
+            mock.patch.object(
+                view.terminal_session, "run_unattended", return_value=0
+            ) as unattended,
+            mock.patch.object(view.terminal_session, "run") as handover,
+            mock.patch.object(view.RichInstallView, "step") as step,
+        ):
+            returncode = view.RichInstallView().sign_in(
+                "Claude Code", ["claude", "mcp", "login", "opik-mcp"]
+            )
+
+        assert returncode == 0
+        unattended.assert_called_once_with(
+            ["claude", "mcp", "login", "opik-mcp"], timeout_seconds=60
+        )
+        handover.assert_not_called()
+        # Said while it waits: otherwise a minute of blank screen.
+        assert "waiting for the sign-in in your browser" in step.call_args.args[0]
 
     def test_done__does_not_say_done(self, view):
         """The run goes on to the suggested first prompt, so it is not done yet."""
@@ -682,8 +727,11 @@ class TestTheConfigureEndingLinksTheProject:
 
 
 class TestTheEndingAfterAFailedSignIn:
-    def test_ends_on_the_step_left__not_on_done(self, terminal):
+    def test_ends_on_the_step_left__not_on_done(self, terminal, monkeypatch):
         rich_view, recorder = terminal
+        monkeypatch.setattr(
+            rich_view.interactive_helpers, "is_interactive", lambda: True
+        )
         view = rich_view.RichInstallView()
         view.sign_in_failed(["Claude Code"])
 
@@ -724,8 +772,13 @@ class TestTheSavedConnection:
     def _render(*args):
         from opik.cli import install_view as rich_view
 
-        with rich_view.console.capture() as capture:
-            rich_view.render_connection(*args)
+        with (
+            mock.patch.object(
+                rich_view.interactive_helpers, "is_interactive", return_value=True
+            ),
+            rich_view.console.capture() as capture,
+        ):
+            rich_view.render_connection(*args, hosts=())
         return [line.rstrip() for line in capture.get().splitlines()]
 
     def test_saved__the_opik__its_workspace__and_where_they_came_from(self):

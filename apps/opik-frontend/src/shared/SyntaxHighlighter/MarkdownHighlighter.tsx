@@ -5,10 +5,10 @@ import { useMarkdownSearch } from "@/shared/SyntaxHighlighter/hooks/useMarkdownS
 import { cn, isStringMarkdown } from "@/lib/utils";
 import LinkifyText from "@/shared/LinkifyText/LinkifyText";
 import ReactMarkdown from "react-markdown";
-import rehypeRaw from "rehype-raw";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "node_modules/remark-gfm/lib";
 import { isNull } from "lodash";
+import { MARKDOWN_REHYPE_PLUGINS } from "@/lib/markdown";
 import SyntaxHighlighterSearch from "@/shared/SyntaxHighlighter/SyntaxHighlighterSearch";
 
 export interface MarkdownHighlighterProps {
@@ -55,7 +55,7 @@ const MarkdownHighlighter: React.FC<MarkdownHighlighterProps> = ({
         <ReactMarkdown
           className={cn("prose dark:prose-invert comet-markdown")}
           remarkPlugins={[remarkBreaks, remarkGfm, searchPlugin]}
-          rehypePlugins={[rehypeRaw]}
+          rehypePlugins={MARKDOWN_REHYPE_PLUGINS}
         >
           {codeOutput.message}
         </ReactMarkdown>

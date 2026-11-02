@@ -14,7 +14,6 @@ export interface UseModelSelectionParams {
   persistenceKey: string;
   defaultModel?: string;
   defaultProvider?: COMPOSED_PROVIDER_TYPE | "";
-  defaultConfigs?: LLMPromptConfigsType;
 }
 
 export interface ModelSelectProps {
@@ -39,7 +38,6 @@ const useModelSelection = ({
   persistenceKey,
   defaultModel,
   defaultProvider,
-  defaultConfigs,
 }: UseModelSelectionParams): UseModelSelectionResult => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
@@ -55,37 +53,42 @@ const useModelSelection = ({
     return providerKeysData?.content?.map((c) => c.ui_composed_provider) || [];
   }, [providerKeysData]);
 
-  const { calculateModelProvider, calculateDefaultModel } =
+  const { calculateModelProvider, calculateDefaultModel, isDropdownModel } =
     useLLMProviderModelsData();
 
   const { model, provider, configs } = useMemo(() => {
-    if (lastPickedModel) {
-      const lastPickedProvider = calculateModelProvider(
-        lastPickedModel,
-        defaultProvider,
-      );
-      if (lastPickedProvider && providerKeys.includes(lastPickedProvider)) {
-        return {
-          model: lastPickedModel,
-          provider: lastPickedProvider,
-          configs: getDefaultConfigByProvider(
-            lastPickedProvider,
-            lastPickedModel,
-          ),
-        };
-      }
+    const lastPickedProvider = calculateModelProvider(
+      lastPickedModel,
+      defaultProvider,
+    );
+    const rememberedModel = isDropdownModel(lastPickedModel, lastPickedProvider)
+      ? lastPickedModel
+      : "";
+
+    if (rememberedModel && providerKeys.includes(lastPickedProvider)) {
+      return {
+        model: rememberedModel,
+        provider: lastPickedProvider,
+        configs: getDefaultConfigByProvider(
+          lastPickedProvider,
+          rememberedModel,
+        ),
+      };
     }
 
     if (defaultModel && defaultProvider) {
       return {
         model: defaultModel as PROVIDER_MODEL_TYPE | "",
         provider: defaultProvider,
-        configs: defaultConfigs ?? getDefaultConfigByProvider(defaultProvider),
+        configs: getDefaultConfigByProvider(
+          defaultProvider,
+          defaultModel as PROVIDER_MODEL_TYPE,
+        ),
       };
     }
 
     const calculatedModel = calculateDefaultModel(
-      lastPickedModel,
+      rememberedModel,
       providerKeys,
     ) as PROVIDER_MODEL_TYPE | "";
     const calculatedProvider = calculateModelProvider(
@@ -102,9 +105,9 @@ const useModelSelection = ({
     providerKeys,
     calculateModelProvider,
     calculateDefaultModel,
+    isDropdownModel,
     defaultModel,
     defaultProvider,
-    defaultConfigs,
   ]);
 
   const handleModelChange = useCallback(

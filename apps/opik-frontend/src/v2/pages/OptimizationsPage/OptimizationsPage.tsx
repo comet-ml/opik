@@ -38,6 +38,7 @@ import { useOptimizationsView } from "@/hooks/useOptimizationsView";
 import { useOptimizationsExistence } from "@/hooks/useOptimizationsExistence";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import NewRunSidebar from "@/v2/pages/OptimizationsPage/OptimizationsNewPage/NewRunSidebar";
+import { ITEM_SOURCE_LABEL } from "@/v2/pages-shared/experiments/ItemSourceCell";
 import {
   DEFAULT_COLUMNS,
   DEFAULT_COLUMNS_ORDER,
@@ -133,7 +134,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
       definitions.push({
         id: COLUMN_DATASET_ID,
         field: COLUMN_DATASET_ID,
-        label: "Test suite",
+        label: ITEM_SOURCE_LABEL,
         kind: "single-select",
         columnType: COLUMN_TYPE.string,
         operator: "=",

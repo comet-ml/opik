@@ -9,10 +9,16 @@ import MarkdownPreview from "@/shared/MarkdownPreview/MarkdownPreview";
 import LikeFeedback from "@/v2/pages-shared/traces/TraceMessages/LikeFeedback";
 import { Separator } from "@/ui/separator";
 import { Button } from "@/ui/button";
+import { Tag } from "@/ui/tag";
+import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import { isSpanHiddenByDefault } from "@/v2/pages-shared/traces/spanVisibility";
 import { USER_FEEDBACK_NAME } from "@/constants/shared";
 import { prettifyMessage } from "@/lib/traces";
 import { toString } from "@/lib/utils";
 import { useJsonViewTheme } from "@/hooks/useJsonViewTheme";
+
+const INTERNAL_TRACE_TOOLTIP =
+  "Internal call (e.g. title generation), hidden by default";
 
 type TraceMessageProps = {
   trace: Trace;
@@ -24,6 +30,9 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
   handleOpenTrace,
 }) => {
   const jsonViewTheme = useJsonViewTheme();
+  // Same flag that hides the trace by default. Once revealed, it is badged so it is not
+  // read as a conversation turn.
+  const isInternal = isSpanHiddenByDefault(trace);
 
   const userFeedback = useMemo(() => {
     return (trace.feedback_scores ?? []).find(
@@ -39,7 +48,7 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
         <JsonView
           src={message}
           {...jsonViewTheme}
-          className="comet-code"
+          className="comet-code [overflow-wrap:anywhere]"
           collapseStringsAfterLength={10000}
           enableClipboard={false}
         />
@@ -58,7 +67,7 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
       return (
         <JsonView
           src={message}
-          className="comet-code"
+          className="comet-code [overflow-wrap:anywhere]"
           {...jsonViewTheme}
           collapseStringsAfterLength={10000}
           enableClipboard={false}
@@ -74,7 +83,7 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
   return (
     <div className="flex flex-col gap-2" data-trace-message-id={trace.id}>
       <div className="flex justify-end pl-16">
-        <div className="rounded-t-xl rounded-bl-xl bg-[var(--message-input-background)] px-4 py-2">
+        <div className="min-w-0 rounded-t-xl rounded-bl-xl bg-[var(--message-input-background)] px-4 py-2">
           {input}
         </div>
       </div>
@@ -102,6 +111,20 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
               Tool calls
               <ArrowUpRight className="ml-1 size-3" />
             </Button>
+          )}
+          {isInternal && (
+            <TooltipWrapper content={INTERNAL_TRACE_TOOLTIP}>
+              <Tag
+                variant="gray"
+                size="sm"
+                className="ml-1"
+                role="note"
+                tabIndex={0}
+                aria-label={INTERNAL_TRACE_TOOLTIP}
+              >
+                Internal
+              </Tag>
+            </TooltipWrapper>
           )}
         </div>
       </div>

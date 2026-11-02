@@ -12,6 +12,8 @@ import string
 import importlib
 from typing import Any, Dict
 
+import opik.config
+
 from . import environment, package_version
 
 LOGGER = logging.getLogger(__name__)
@@ -123,7 +125,9 @@ def collect_tags_once() -> Dict[str, Any]:
         "aws_lambda": environment.in_aws_lambda(),
         "github_actions": environment.in_github_actions(),
         "pytest": environment.in_pytest(),
-        "installation_type": environment.get_installation_type(),
+        "installation_type": environment.get_installation_type(
+            opik.config.OpikConfig()
+        ),
     }
 
     return result

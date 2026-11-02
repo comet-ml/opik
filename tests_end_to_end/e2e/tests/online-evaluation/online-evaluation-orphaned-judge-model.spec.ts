@@ -15,18 +15,19 @@ import { OnlineEvaluationPage } from '@e2e/pom/online-evaluation.page';
  * `PromptModelSelect` handles this by falling back to the raw stored value:
  * `groupOptions.find(m => m.value === selectedValue)?.label ?? value`. The
  * failure if that fallback went away is a blank picker reading "Select an LLM
- * model" — and then the next ordinary save, which the user believes changes
- * nothing, writes whatever the form had instead. The rule silently starts judging
+ * model", and then the next ordinary save, which the user believes leaves the
+ * model alone, writes whatever the form had instead. The rule silently starts judging
  * with a different model, at a different price, and nothing anywhere says so.
  *
  * Two claims, in the order they matter:
  *
- *  1. The dialog HYDRATES the orphaned id — the trigger reads exactly the stored
+ *  1. The editor HYDRATES the orphaned id: the trigger reads exactly the stored
  *     string, not the placeholder and not some other model's label. Asserted as
  *     exact equality, which is what tells "went blank", "substituted another
  *     model" and "rendered the id" apart; a non-emptiness check would pass for
  *     two of the three.
- *  2. Saving the rule with NO edits sends that id back verbatim and persists it.
+ *  2. Saving the rule without touching the model sends that id back verbatim
+ *     and persists it.
  *     This is the half `online-evaluation-edit-rule-preserves-model-parameters.
  *     spec.ts` cannot make: that spec's model IS in the picker, so its round trip
  *     never exercises the fallback path at all.
@@ -113,7 +114,7 @@ test.describe(
   { tag: ['@t2-cuj', '@area:online-evaluation'] },
   () => {
     test(
-      'The edit dialog renders a stored model id that is in no option list, rather than going blank',
+      'The editor renders a stored model id that is in no option list, rather than going blank',
       { tag: ['@cap:online-evaluation.edit-rule'] },
       async ({ project, backendClient, testNamespace, automationRulesCleanup, page }) => {
         const seeded = await test.step('Seed a disabled judge rule per unlisted model id', async () =>
@@ -162,7 +163,7 @@ test.describe(
 
         for (const rule of seeded) {
           await test.step(`The '${rule.key}' rule's picker reads exactly '${rule.model}'`, async () => {
-            await onlineEval.openEditRuleDialogByName(rule.name);
+            await onlineEval.openEditRulePanelByName(rule.name);
             // Not a containment and not a non-emptiness check: the three ways
             // this breaks are a blank picker, a SUBSTITUTED model and a truncated
             // id, and only an end-anchored match on the stored string tells all
@@ -173,7 +174,7 @@ test.describe(
               onlineEval.modelPicker,
               `an id in no option list must fall back to the stored value, not to '${EMPTY_PICKER_TEXT}' and not to another model`,
             ).toHaveText(pickerShows(rule.model));
-            await onlineEval.cancelDialog();
+            await onlineEval.cancelPanel();
           });
         }
 
@@ -182,7 +183,7 @@ test.describe(
             const model = await backendClient.getLlmJudgeModel(rule.id);
             expect(
               model.name,
-              `opening and cancelling the '${rule.key}' dialog must not write`,
+              `opening and cancelling the '${rule.key}' editor must not write`,
             ).toBe(rule.model);
           }
         });
@@ -190,15 +191,15 @@ test.describe(
     );
 
     test(
-      'Saving the rule with no edits sends the unlisted model id back verbatim',
+      'Saving the rule without touching the model sends the unlisted model id back verbatim',
       { tag: ['@cap:online-evaluation.edit-rule'] },
       async ({ project, backendClient, testNamespace, automationRulesCleanup, page }) => {
         // The half that matters for data, and the one the existing
         // preserves-model-parameters spec cannot reach: its model IS in the
-        // picker, so the fallback path never runs there. Pressing "Update rule"
-        // having changed nothing is the most ordinary gesture on this page, and
-        // it is exactly where a form that could not map its own hydrated value
-        // serializes something else instead.
+        // picker, so the fallback path never runs there. Saving after an edit
+        // elsewhere is the most ordinary gesture on this page, and it is exactly
+        // where a form that could not map its own hydrated value serializes
+        // something else instead.
         const ruleName = `${testNamespace}-orphaned-save`;
 
         const ruleId = await test.step('Seed a disabled judge rule on the orphaned model id', async () =>
@@ -221,11 +222,11 @@ test.describe(
 
         const onlineEval = new OnlineEvaluationPage(page);
 
-        await test.step('Open the rule in the edit dialog', async () => {
+        await test.step('Open the rule in the editor', async () => {
           await onlineEval.goto(project.id);
           await onlineEval.waitForReady();
           await expect(onlineEval.ruleRow(ruleName)).toHaveCount(1);
-          await onlineEval.openEditRuleDialogByName(ruleName);
+          await onlineEval.openEditRulePanelByName(ruleName);
           // The save below only means something once the form has hydrated: a
           // submit fired before the model reached the picker would be testing an
           // empty form, and a PATCH carrying the id back would be impossible
@@ -233,28 +234,22 @@ test.describe(
           await expect(onlineEval.modelPicker).toHaveText(pickerShows(ORPHANED_MODEL));
         });
 
-        const update = await test.step('Press "Update rule" without editing anything', async () => {
+        const update = await test.step('Enable the rule and save, leaving the model alone', async () => {
           // Armed before the click: the request is in flight the moment the
-          // dialog submits, so subscribing afterwards would race it.
+          // editor submits, so subscribing afterwards would race it. Enabling is
+          // safe: the rule stays at a zero sampling rate.
           const patched = page.waitForRequest(
             (request) => request.method() === 'PATCH' && isRuleUpdate(request.url(), ruleId),
           );
-          // The response, not just the dispatch. `AddEditRuleDialog` calls
-          // setOpen(false) outside the mutation's callbacks, so the dialog hides
-          // the moment the PATCH is sent — waiting for it to close is no barrier,
-          // and the persisted read below would otherwise be free to observe the
-          // pre-save value and pass on a backend that rewrote the model.
           const answered = page.waitForResponse(
             (response) =>
               response.request().method() === 'PATCH' && isRuleUpdate(response.url(), ruleId),
           );
-          await onlineEval.submitRuleDialog();
+          await onlineEval.toggleEnabled();
+          await onlineEval.submitPanel();
           const request = await patched;
           const response = await answered;
-          expect(
-            response.ok(),
-            `the unedited save was accepted (got ${response.status()})`,
-          ).toBe(true);
+          expect(response.ok(), `the save was accepted (got ${response.status()})`).toBe(true);
           return request;
         });
 
@@ -268,19 +263,19 @@ test.describe(
           };
           const sent = body.code?.model?.name;
           expect(sent, 'the update payload names a model').toBeDefined();
-          expect(sent, 'an unedited save must send the stored id back unchanged').toBe(
+          expect(sent, 'a save that never touched the model must send the stored id back').toBe(
             ORPHANED_MODEL,
           );
         });
 
         await test.step('And the rule still names it afterwards', async () => {
           const model = await backendClient.getLlmJudgeModel(ruleId);
-          expect(model.name, 'the unedited save did not change the model').toBe(ORPHANED_MODEL);
+          expect(model.name, 'the save did not change the model').toBe(ORPHANED_MODEL);
         });
 
-        await test.step('The rule is still listed, in the state it started in', async () => {
+        await test.step('The rule is still listed, now enabled and still at 0%', async () => {
           await expect(onlineEval.ruleRow(ruleName)).toHaveCount(1);
-          await expect(onlineEval.ruleStatusCell(ruleName, 'Disabled')).toBeVisible();
+          await expect(onlineEval.ruleStatusCell(ruleName, 'Enabled')).toBeVisible();
           await expect(onlineEval.ruleSamplingRateCell(ruleName, '0%')).toBeVisible();
         });
       },

@@ -21,6 +21,7 @@ def aggregate(
                     openai_responses.ResponseCompletedEvent,
                     openai_responses.ResponseErrorEvent,
                     openai_responses.ResponseIncompleteEvent,
+                    openai_responses.ResponseFailedEvent,
                 ),
             )
         ]
@@ -35,8 +36,12 @@ def aggregate(
             )
             return None
 
-        response = completed_event[0].response
-        return response
+        for event in completed_event:
+            response = getattr(event, "response", None)
+            if response is not None:
+                return response
+
+        return None
     except Exception as exception:
         LOGGER.error(
             logging_messages.FAILED_TO_PARSE_OPENAI_STREAM_CONTENT,

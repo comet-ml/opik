@@ -36,7 +36,7 @@ Opik integrates with Harbor to log traces for all trial executions, including:
 
 First, ensure you have both `opik` and `harbor` installed:
 
-```bash
+```bash wordWrap
 pip install opik harbor
 ```
 
@@ -59,7 +59,7 @@ The easiest way to use Harbor with Opik is through the `opik harbor` CLI command
 
 ### Basic Usage
 
-```bash
+```bash wordWrap
 # Run a benchmark with Opik tracking
 opik harbor run -d terminal-bench@head -a terminus_2 -m gpt-4.1
 
@@ -69,7 +69,7 @@ opik harbor run -c config.yaml
 
 ### Specifying Project Name
 
-```bash
+```bash wordWrap
 # Set project name via environment variable
 export OPIK_PROJECT_NAME=my-benchmark
 opik harbor run -d swebench@lite
@@ -79,7 +79,7 @@ opik harbor run -d swebench@lite
 
 All Harbor CLI commands are available as subcommands:
 
-```bash
+```bash wordWrap
 # Run a job (alias for jobs start)
 opik harbor run [HARBOR_OPTIONS]
 
@@ -93,7 +93,7 @@ opik harbor trials start -p ./my-task -a terminus_2
 
 ### CLI Help
 
-```bash
+```bash wordWrap
 # View available options
 opik harbor --help
 opik harbor run --help
@@ -103,7 +103,7 @@ opik harbor run --help
 
 Here's a complete example running a SWE-bench evaluation with Opik tracking:
 
-```bash
+```bash wordWrap
 # Configure Opik
 opik configure
 
@@ -114,7 +114,7 @@ export OPIK_PROJECT_NAME=swebench-claude-sonnet
 opik harbor run \
     -d swebench-lite@head \
     -a claude-code \
-    -m claude-3-5-sonnet-20241022
+    -m claude-sonnet-4-6
 ```
 
 ## Custom Agents
@@ -130,7 +130,7 @@ For details on implementing custom agents, see the [Harbor Agents documentation]
 
 To run a custom agent with Opik tracking, use the `--agent-import-path` flag:
 
-```bash
+```bash wordWrap
 opik harbor run -d "terminal-bench@head" --agent-import-path path.to.agent:MyCustomAgent
 ```
 
@@ -138,7 +138,7 @@ opik harbor run -d "terminal-bench@head" --agent-import-path path.to.agent:MyCus
 
 When building custom agents, you can use Opik's `@track` decorator on methods within your agent implementation. These decorated functions will automatically be captured as spans within the trial trace, giving you detailed visibility into your agent's internal logic:
 
-```python
+```python wordWrap
 from harbor.agents.base import BaseAgent
 from opik import track
 

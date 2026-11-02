@@ -66,7 +66,6 @@ import com.google.inject.AbstractModule;
 import com.redis.testcontainers.RedisContainer;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessageType;
-import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.ws.rs.core.MediaType;
@@ -105,6 +104,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -113,6 +113,7 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.api.LogItem.LogLevel;
 import static com.comet.opik.api.LogItem.LogPage;
+import static com.comet.opik.api.resources.utils.AutomationRuleEvaluatorTestUtils.answerEveryJudgeCall;
 import static com.comet.opik.api.resources.utils.AutomationRuleEvaluatorTestUtils.getPrimaryProjectId;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
@@ -129,9 +130,6 @@ import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.when;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Automation Rule Evaluators Resource Test")
@@ -434,6 +432,7 @@ class AutomationRuleEvaluatorsResourceTest {
                 String sessionToken, boolean isAuthorized, String workspaceName) {
             var projectId = generator.generate();
             var ruleEvaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .triggerScope(EvalTriggerScope.PRODUCTION)
                     .projectIds(Set.of(projectId))
                     .build();
             try (var actualResponse = evaluatorsResourceClient.createEvaluatorWithSessionToken(
@@ -467,6 +466,7 @@ class AutomationRuleEvaluatorsResourceTest {
 
             IntStream.range(0, samplesToCreate).forEach(i -> {
                 var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                        .triggerScope(EvalTriggerScope.PRODUCTION)
                         .projectIds(Set.of(projectId))
                         .build();
                 evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
@@ -528,6 +528,7 @@ class AutomationRuleEvaluatorsResourceTest {
                             .orElse(Set.of()));
 
             var updatedEvaluator = factory.manufacturePojo(AutomationRuleEvaluatorUpdateLlmAsJudge.class).toBuilder()
+                    .triggerScope(EvalTriggerScope.PRODUCTION)
                     .projectIds(projectIds)
                     .build();
             try (var actualResponse = evaluatorsResourceClient.updateEvaluatorWithSessionToken(
@@ -573,14 +574,17 @@ class AutomationRuleEvaluatorsResourceTest {
             var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY,
                     WORKSPACE_NAME);
             var evaluator1 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .triggerScope(EvalTriggerScope.PRODUCTION)
                     .projectIds(Set.of(projectId))
                     .build();
             var evalId1 = evaluatorsResourceClient.createEvaluator(evaluator1, WORKSPACE_NAME, API_KEY);
             var evaluator2 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .triggerScope(EvalTriggerScope.PRODUCTION)
                     .projectIds(Set.of(projectId))
                     .build();
             var evalId2 = evaluatorsResourceClient.createEvaluator(evaluator2, WORKSPACE_NAME, API_KEY);
             var evaluator3 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .triggerScope(EvalTriggerScope.PRODUCTION)
                     .projectIds(Set.of(projectId))
                     .build();
             evaluatorsResourceClient.createEvaluator(evaluator3, WORKSPACE_NAME, API_KEY);
@@ -623,12 +627,11 @@ class AutomationRuleEvaluatorsResourceTest {
                 String sessionToken, boolean isAuthorized, String workspaceName, LlmProviderFactory llmProviderFactory)
                 throws JsonProcessingException {
             var chatResponse = ChatResponse.builder().aiMessage(AiMessage.from(VALID_AI_MSG_TXT)).build();
-            when(llmProviderFactory.getLanguageModel(anyString(), any())
-                    .chat(any(ChatRequest.class)))
-                    .thenAnswer(invocationOnMock -> chatResponse);
+            answerEveryJudgeCall(llmProviderFactory, invocationOnMock -> chatResponse);
             var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(36);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
             var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .triggerScope(EvalTriggerScope.PRODUCTION)
                     .code(OBJECT_MAPPER.readValue(LLM_AS_A_JUDGE_EVALUATOR,
                             AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode.class))
                     .samplingRate(1f)
@@ -1610,12 +1613,11 @@ class AutomationRuleEvaluatorsResourceTest {
         @Test
         void getLogsLlmAsJudgeScorer(LlmProviderFactory llmProviderFactory) throws JsonProcessingException {
             var chatResponse = ChatResponse.builder().aiMessage(AiMessage.from(VALID_AI_MSG_TXT)).build();
-            when(llmProviderFactory.getLanguageModel(anyString(), any())
-                    .chat(any(ChatRequest.class)))
-                    .thenAnswer(invocationOnMock -> chatResponse);
+            answerEveryJudgeCall(llmProviderFactory, invocationOnMock -> chatResponse);
             var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(36);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
             var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .triggerScope(EvalTriggerScope.PRODUCTION)
                     .code(OBJECT_MAPPER.readValue(LLM_AS_A_JUDGE_EVALUATOR,
                             AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode.class))
                     .samplingRate(1f)
@@ -1643,13 +1645,12 @@ class AutomationRuleEvaluatorsResourceTest {
         @Test
         void getLogsTraceThreadLlmAsJudgeScorer(LlmProviderFactory llmProviderFactory) throws JsonProcessingException {
             var chatResponse = ChatResponse.builder().aiMessage(AiMessage.from(VALID_AI_MSG_TXT)).build();
-            when(llmProviderFactory.getLanguageModel(anyString(), any())
-                    .chat(any(ChatRequest.class)))
-                    .thenAnswer(invocationOnMock -> chatResponse);
+            answerEveryJudgeCall(llmProviderFactory, invocationOnMock -> chatResponse);
 
             var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(36);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
             var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorTraceThreadLlmAsJudge.class).toBuilder()
+                    .triggerScope(EvalTriggerScope.PRODUCTION)
                     .code(OBJECT_MAPPER.readValue(LLM_AS_A_JUDGE_EVALUATOR,
                             AutomationRuleEvaluatorTraceThreadLlmAsJudge.TraceThreadLlmAsJudgeCode.class))
                     .samplingRate(1f)
@@ -1705,6 +1706,7 @@ class AutomationRuleEvaluatorsResourceTest {
             var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(36);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
             var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorUserDefinedMetricPython.class).toBuilder()
+                    .triggerScope(EvalTriggerScope.PRODUCTION)
                     .code(AutomationRuleEvaluatorUserDefinedMetricPython.UserDefinedMetricPythonCode.builder()
                             .metric(USER_DEFINED_METRIC)
                             .arguments(Map.of(
@@ -1737,6 +1739,75 @@ class AutomationRuleEvaluatorsResourceTest {
         }
 
         @Test
+        void getLogsUserDefinedMetricPythonScorerWhenNoDeclaredArgumentResolves() throws JsonProcessingException {
+            // Deliberately no WireMock stub: the scorer must not call the evaluator at all, and if it did
+            // the unstubbed endpoint would 404 into the ERROR log the assertions below reject.
+            var ruleName = "rule-" + RandomStringUtils.secure().nextAlphanumeric(36);
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(36);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorUserDefinedMetricPython.class).toBuilder()
+                    .triggerScope(EvalTriggerScope.PRODUCTION)
+                    .name(ruleName)
+                    .code(AutomationRuleEvaluatorUserDefinedMetricPython.UserDefinedMetricPythonCode.builder()
+                            .metric(USER_DEFINED_METRIC)
+                            .arguments(Map.of(
+                                    "expects_sql", "input.expects_sql",
+                                    "plan", "output.execution_plan"))
+                            .build())
+                    .samplingRate(1f)
+                    .filters(List.of())
+                    .projectIds(Set.of(projectId))
+                    .build();
+            var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+
+            // Carries neither declared path, so every argument resolves to null and the map comes back empty.
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(projectId)
+                    .projectName(projectName) // Backend uses projectName, not projectId!
+                    .source(null)
+                    .threadId(null) // Must be null for trace-level evaluation
+                    .input(OBJECT_MAPPER.readTree("""
+                            {
+                                "question": "how many rows?"
+                            }
+                            """))
+                    .output(OBJECT_MAPPER.readTree("""
+                            {
+                                "response": "abc"
+                            }
+                            """))
+                    .build();
+            traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
+
+            // Asserted as the fully rendered line, which is what actually lands in the table.
+            var expectedMessage = ("None of the metric's declared arguments resolved, so there is no data to"
+                    + " evaluate. Check the declared paths against the input, output and metadata present on the"
+                    + " entity. traceId '%s', rule '%s', unresolved arguments: 'expects_sql' ->"
+                    + " 'input.expects_sql', 'plan' -> 'output.execution_plan'").formatted(trace.id(), ruleName);
+
+            // Explicit window: these logs reach ClickHouse through an async batching appender, so under load
+            // the write outruns Awaitility's 10s default and times out on a correct result.
+            Awaitility.await().atMost(60, TimeUnit.SECONDS).pollInterval(500, TimeUnit.MILLISECONDS)
+                    .untilAsserted(() -> {
+                        var logPage = evaluatorsResourceClient.getLogs(id, WORKSPACE_NAME, API_KEY);
+
+                        // The line has to survive the round-trip into the log table and come back off the API.
+                        assertThat(logPage.content()).anySatisfy(log -> {
+                            assertThat(log.level()).isEqualTo(LogLevel.WARN);
+                            assertThat(log.ruleId()).isEqualTo(id);
+                            assertThat(log.markers()).isEqualTo(Map.of("trace_id", trace.id().toString()));
+                            assertThat(log.message()).isEqualTo(expectedMessage);
+                        });
+
+                        // A user-configuration mismatch is not a backend fault, so nothing on this rule may be ERROR.
+                        assertThat(logPage.content()).noneMatch(log -> log.level() == LogLevel.ERROR);
+
+                        // Nothing was sent on this run, so the "Sending" line must be absent from what is read.
+                        assertThat(logPage.content()).noneMatch(log -> log.message().contains("to Python evaluator"));
+                    });
+        }
+
+        @Test
         void getLogsTraceThreadUserDefinedMetricPythonScorer() throws JsonProcessingException {
             //Given
             var pythonEvaluatorRequest = TraceThreadPythonEvaluatorRequest.builder()
@@ -1764,6 +1835,7 @@ class AutomationRuleEvaluatorsResourceTest {
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
             var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.class)
                     .toBuilder()
+                    .triggerScope(EvalTriggerScope.PRODUCTION)
                     .code(TraceThreadUserDefinedMetricPythonCode.builder()
                             .metric(TRACE_THREAD_USER_DEFINED_METRIC)
                             .build())
@@ -1816,6 +1888,7 @@ class AutomationRuleEvaluatorsResourceTest {
             // Added a Python rule with sampling rate 0
             var evaluatorPython = factory.manufacturePojo(AutomationRuleEvaluatorUserDefinedMetricPython.class)
                     .toBuilder()
+                    .triggerScope(EvalTriggerScope.PRODUCTION)
                     .samplingRate(0f)
                     .filters(List.of())
                     .projectIds(Set.of(projectId))
@@ -1825,6 +1898,7 @@ class AutomationRuleEvaluatorsResourceTest {
             // Added a LLM rule with sampling rate 0
             var evaluatorLlm = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
                     .toBuilder()
+                    .triggerScope(EvalTriggerScope.PRODUCTION)
                     .samplingRate(0f)
                     .filters(List.of())
                     .projectIds(Set.of(projectId))
@@ -1859,6 +1933,7 @@ class AutomationRuleEvaluatorsResourceTest {
             var evaluatorPython = Optional.ofNullable(factory
                     .manufacturePojo(AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.class)
                     .toBuilder()
+                    .triggerScope(EvalTriggerScope.PRODUCTION)
                     .samplingRate(0f)
                     .filters(List.of())
                     .projectIds(Set.of(projectId))
@@ -1872,6 +1947,7 @@ class AutomationRuleEvaluatorsResourceTest {
             var evaluatorLlm = Optional.ofNullable(
                     factory.manufacturePojo(AutomationRuleEvaluatorTraceThreadLlmAsJudge.class)
                             .toBuilder()
+                            .triggerScope(EvalTriggerScope.PRODUCTION)
                             .samplingRate(0f)
                             .filters(List.of())
                             .projectIds(Set.of(projectId))
@@ -1938,6 +2014,7 @@ class AutomationRuleEvaluatorsResourceTest {
             // Create a disabled rule explicitly
             var automationRuleEvaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
                     .toBuilder()
+                    .triggerScope(EvalTriggerScope.PRODUCTION)
                     .enabled(false)
                     .build();
             var id = evaluatorsResourceClient.createEvaluator(automationRuleEvaluator, WORKSPACE_NAME, API_KEY);
@@ -1960,6 +2037,7 @@ class AutomationRuleEvaluatorsResourceTest {
                     .toBuilder()
                     .samplingRate(1.0f) // High sampling rate, but rule is disabled
                     .enabled(false)
+                    .triggerScope(EvalTriggerScope.PRODUCTION)
                     .projectIds(Set.of(projectId))
                     .build();
             var idPython = evaluatorsResourceClient.createEvaluator(evaluatorPython, WORKSPACE_NAME, API_KEY);
@@ -1969,6 +2047,7 @@ class AutomationRuleEvaluatorsResourceTest {
                     .toBuilder()
                     .samplingRate(1.0f) // High sampling rate, but rule is disabled
                     .enabled(false)
+                    .triggerScope(EvalTriggerScope.PRODUCTION)
                     .projectIds(Set.of(projectId))
                     .build();
             var idLlm = evaluatorsResourceClient.createEvaluator(evaluatorLlm, WORKSPACE_NAME, API_KEY);
@@ -2000,6 +2079,7 @@ class AutomationRuleEvaluatorsResourceTest {
             var evaluatorPython = Optional.ofNullable(factory
                     .manufacturePojo(AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.class)
                     .toBuilder()
+                    .triggerScope(EvalTriggerScope.PRODUCTION)
                     .samplingRate(1.0f) // High sampling rate, but rule is disabled
                     .enabled(false)
                     .filters(List.of())
@@ -2013,6 +2093,7 @@ class AutomationRuleEvaluatorsResourceTest {
             var evaluatorLlm = Optional.ofNullable(
                     factory.manufacturePojo(AutomationRuleEvaluatorTraceThreadLlmAsJudge.class)
                             .toBuilder()
+                            .triggerScope(EvalTriggerScope.PRODUCTION)
                             .samplingRate(1.0f) // High sampling rate, but rule is disabled
                             .enabled(false)
                             .filters(List.of())
@@ -3166,9 +3247,7 @@ class AutomationRuleEvaluatorsResourceTest {
         void shouldCreateAutomationRuleWithMultipleProjects(LlmProviderFactory llmProviderFactory) {
             // Given
             var chatResponse = ChatResponse.builder().aiMessage(AiMessage.from(VALID_AI_MSG_TXT)).build();
-            when(llmProviderFactory.getLanguageModel(anyString(), any())
-                    .chat(any(ChatRequest.class)))
-                    .thenAnswer(invocationOnMock -> chatResponse);
+            answerEveryJudgeCall(llmProviderFactory, invocationOnMock -> chatResponse);
 
             AutomationRuleEvaluatorLlmAsJudge evaluator = factory
                     .manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
@@ -3198,9 +3277,7 @@ class AutomationRuleEvaluatorsResourceTest {
         void shouldUpdateAutomationRuleToDifferentSetOfProjects(LlmProviderFactory llmProviderFactory) {
             // Given - Create rule with 2 projects
             var chatResponse = ChatResponse.builder().aiMessage(AiMessage.from(VALID_AI_MSG_TXT)).build();
-            when(llmProviderFactory.getLanguageModel(anyString(), any())
-                    .chat(any(ChatRequest.class)))
-                    .thenAnswer(invocationOnMock -> chatResponse);
+            answerEveryJudgeCall(llmProviderFactory, invocationOnMock -> chatResponse);
 
             AutomationRuleEvaluatorLlmAsJudge evaluator = factory
                     .manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
@@ -3242,9 +3319,7 @@ class AutomationRuleEvaluatorsResourceTest {
         void shouldAllowSameProjectsForDifferentRules(LlmProviderFactory llmProviderFactory) {
             // Given - Same project set for both rules
             var chatResponse = ChatResponse.builder().aiMessage(AiMessage.from(VALID_AI_MSG_TXT)).build();
-            when(llmProviderFactory.getLanguageModel(anyString(), any())
-                    .chat(any(ChatRequest.class)))
-                    .thenAnswer(invocationOnMock -> chatResponse);
+            answerEveryJudgeCall(llmProviderFactory, invocationOnMock -> chatResponse);
 
             Set<UUID> sharedProjects = Set.of(projectId1, projectId2);
 
@@ -3293,9 +3368,7 @@ class AutomationRuleEvaluatorsResourceTest {
         void shouldDeleteRuleAndRemoveAllProjectAssociations(LlmProviderFactory llmProviderFactory) {
             // Given - Create rule with multiple projects
             var chatResponse = ChatResponse.builder().aiMessage(AiMessage.from(VALID_AI_MSG_TXT)).build();
-            when(llmProviderFactory.getLanguageModel(anyString(), any())
-                    .chat(any(ChatRequest.class)))
-                    .thenAnswer(invocationOnMock -> chatResponse);
+            answerEveryJudgeCall(llmProviderFactory, invocationOnMock -> chatResponse);
 
             AutomationRuleEvaluatorLlmAsJudge evaluator = factory
                     .manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
@@ -3321,9 +3394,7 @@ class AutomationRuleEvaluatorsResourceTest {
         void shouldHandleSingleProjectCase(LlmProviderFactory llmProviderFactory) {
             // Given
             var chatResponse = ChatResponse.builder().aiMessage(AiMessage.from(VALID_AI_MSG_TXT)).build();
-            when(llmProviderFactory.getLanguageModel(anyString(), any())
-                    .chat(any(ChatRequest.class)))
-                    .thenAnswer(invocationOnMock -> chatResponse);
+            answerEveryJudgeCall(llmProviderFactory, invocationOnMock -> chatResponse);
 
             AutomationRuleEvaluatorLlmAsJudge evaluator = factory
                     .manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)

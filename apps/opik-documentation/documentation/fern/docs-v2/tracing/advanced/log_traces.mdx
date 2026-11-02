@@ -43,13 +43,13 @@ Opik SDK.
 <Tabs>
     <Tab value="Typescript SDK" title="Typescript SDK" language="typescript">
 
-    ```bash
+    ```bash wordWrap
     npm install opik
     ```
 
     You can then set the Opik environment variables in your `.env` file:
 
-    ```bash
+    ```bash wordWrap
     # Set OPIK_API_KEY and OPIK_WORKSPACE in your .env file
     OPIK_API_KEY=your_api_key_here
     OPIK_WORKSPACE=your_workspace_name
@@ -61,7 +61,7 @@ Opik SDK.
     </Tab>
     <Tab value="Python SDK" title="Python SDK" language="python">
 
-    ```bash
+    ```bash wordWrap
     # Install the SDK
     pip install opik
     ```
@@ -75,7 +75,7 @@ Opik SDK.
 
     You will need to set the following environment variables for your OpenTelemetry setup:
 
-    ```bash
+    ```bash wordWrap
     export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
     export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
 
@@ -105,14 +105,14 @@ Once you have installed and configured the Opik SDK, you can start using it to t
       <Step>
         Install the Opik TypeScript SDK:
 
-        ```bash
+        ```bash wordWrap
         npm install opik-openai
         ```
       </Step>
       <Step>
         Configure the Opik TypeScript SDK using environment variables:
 
-        ```bash
+        ```bash wordWrap
         export OPIK_API_KEY="<your-api-key>" # Only required if you are using the Opik Cloud version
         export OPIK_URL_OVERRIDE="https://www.comet.com/opik/api" # Cloud version
         # export OPIK_URL_OVERRIDE="http://localhost:5173/api" # Self-hosting
@@ -121,7 +121,7 @@ Once you have installed and configured the Opik SDK, you can start using it to t
       <Step>
         Wrap your OpenAI client with the `trackOpenAI` function:
 
-        ```typescript
+        ```typescript wordWrap
         import OpenAI from "openai";
         import { trackOpenAI } from "opik-openai";
 
@@ -157,7 +157,7 @@ Once you have installed and configured the Opik SDK, you can start using it to t
       <Step>
         Install the Opik Python SDK:
 
-        ```bash
+        ```bash wordWrap
         pip install opik
         ```
       </Step>
@@ -165,14 +165,14 @@ Once you have installed and configured the Opik SDK, you can start using it to t
         Configure the Opik Python SDK, this will prompt you for your API key if you are using Opik
         Cloud or your Opik server address if you are self-hosting:
 
-        ```bash
+        ```bash wordWrap
         opik configure
         ```
       </Step>
       <Step>
         Wrap your OpenAI client with the `track_openai` function:
 
-        ```python
+        ```python wordWrap
         from opik.integrations.openai import track_openai
         from openai import OpenAI
 
@@ -194,14 +194,14 @@ Once you have installed and configured the Opik SDK, you can start using it to t
       <Step>
         Install the Opik Vercel integration:
 
-        ```bash
+        ```bash wordWrap
         npm install opik-vercel
         ```
       </Step>
       <Step>
         Configure the Opik AI Vercel SDK using environment variables and set your Opik API key:
 
-        ```bash
+        ```bash wordWrap
         export OPIK_API_KEY="<your-api-key>"
         export OPIK_URL_OVERRIDE="https://www.comet.com/opik/api" # Cloud version
         # export OPIK_URL_OVERRIDE="http://localhost:5173/api" # Self-hosting
@@ -210,7 +210,7 @@ Once you have installed and configured the Opik SDK, you can start using it to t
       <Step>
         Initialize the OpikExporter with your AI SDK:
 
-        ```ts
+        ```ts wordWrap
         import { openai } from "@ai-sdk/openai";
         import { generateText } from "ai";
         import { NodeSDK } from "@opentelemetry/sdk-node";
@@ -246,21 +246,21 @@ Once you have installed and configured the Opik SDK, you can start using it to t
       <Step>
         Install the Opik SDK:
 
-        ```bash
+        ```bash wordWrap
         pip install opik
         ```
       </Step>
       <Step>
         Configure the Opik SDK by running the `opik configure` command in your terminal:
 
-        ```bash
+        ```bash wordWrap
         opik configure
         ```
       </Step>
       <Step>
         Wrap your ADK agent with the `OpikTracer` decorator:
 
-        ```python
+        ```python wordWrap
         from opik.integrations.adk import OpikTracer, track_adk_agent_recursive
 
         opik_tracer = OpikTracer()
@@ -283,21 +283,21 @@ Once you have installed and configured the Opik SDK, you can start using it to t
       <Step>
         Install the Opik SDK:
 
-        ```bash
+        ```bash wordWrap
         pip install opik
         ```
       </Step>
       <Step>
         Configure the Opik SDK by running the `opik configure` command in your terminal:
 
-        ```bash
+        ```bash wordWrap
         opik configure
         ```
       </Step>
       <Step>
         Wrap your LangGraph graph with the `OpikTracer` decorator:
 
-        ```python
+        ```python wordWrap
         from opik.integrations.langchain import OpikTracer
 
         # Create your LangGraph graph
@@ -324,21 +324,21 @@ Once you have installed and configured the Opik SDK, you can start using it to t
       <Step>
         Install the Opik Python SDK:
 
-        ```bash
+        ```bash wordWrap
         pip install opik
         ```
       </Step>
       <Step>
         Configure the Opik Python SDK:
 
-        ```bash
+        ```bash wordWrap
         opik configure
         ```
       </Step>
       <Step>
         Wrap your function with the `@track` decorator:
 
-        ```python
+        ```python wordWrap
         from opik import track
 
         @track
@@ -425,7 +425,7 @@ While decorators are most popular in Python, we also support them in our Typescr
         TypeScript started supporting decorators from version 5 but it's use is still not widespread.
         The Opik typescript SDK also supports decorators but it's currently considered experimental.
 
-        ```typescript maxLines=100
+        ```typescript maxLines=100 wordWrap
         import { track } from "opik";
 
         class TranslationService {
@@ -454,7 +454,7 @@ While decorators are most popular in Python, we also support them in our Typescr
         You can add the `@track` decorator to any function in your application and track not just
         LLM calls but also any other steps in your application:
 
-        ```python maxLines=100
+        ```python maxLines=100 wordWrap
         import opik
         import openai
 
@@ -505,8 +505,9 @@ While decorators are most popular in Python, we also support them in our Typescr
         and metadata for example.
 
         <CodeBlocks>
-            ```python title="opik_context module"
+            ```python title="opik_context module" wordWrap
             import opik
+            from opik import opik_context
 
             @opik.track
             def llm_chain(text: str) -> str:
@@ -527,7 +528,7 @@ While decorators are most popular in Python, we also support them in our Typescr
                 return f"Processed: {text}"
             ```
 
-            ```python title="opik_args parameter"
+            ```python title="opik_args parameter" wordWrap
             import opik
 
             @opik.track
@@ -560,6 +561,15 @@ While decorators are most popular in Python, we also support them in our Typescr
             If you specify the opik_args parameter as part of your function call, you can propagate
             the configuration to the nested functions.
         </Tip>
+
+        <Note>
+            Output you set with `opik_context.update_current_span(output=...)` or
+            `opik_context.update_current_trace(output=...)` is the final output of that span or
+            trace: when the function ends, `@track` doesn't log the return value there. Input works
+            differently: input you set with `update_current_span(input=...)` or
+            `update_current_trace(input=...)` is merged with the captured function arguments. To keep
+            the return value in the output as well, include it in the output you set.
+        </Note>
     </Tab>
 
 </Tabs>
@@ -572,7 +582,7 @@ If you need full control over the logging process, you can use the low-level SDK
     <Tab title="Typescript" value="typescript" language="typescript">
         You can use the [`Opik`](/reference/typescript-sdk/overview) client to log your traces and spans:
 
-        ```typescript
+        ```typescript wordWrap
         import { Opik } from "opik";
 
         const client = new Opik({
@@ -624,7 +634,7 @@ If you need full control over the logging process, you can use the low-level SDK
         [`Trace.span`](https://www.comet.com/docs/opik/python-sdk-reference/Objects/Trace.html#opik.api_objects.trace.Trace.span)
         method:
 
-        ```python
+        ```python wordWrap
         from opik import Opik
 
         client = Opik(project_name="Opik client demo")
@@ -665,7 +675,7 @@ If you need full control over the logging process, you can use the low-level SDK
 
         If you want to ensure all traces are logged to Opik before exiting your program, you can use the `opik.Opik.flush` method:
 
-        ```python
+        ```python wordWrap
         from opik import Opik
 
         client = Opik()
@@ -692,7 +702,7 @@ If you are using the low-level SDKs, you can use the context managers to log tra
 
         For detailed API reference, see [`opik.start_as_current_trace`](https://www.comet.com/docs/opik/python-sdk-reference/context_manager/start_as_current_trace.html).
 
-        ```python
+        ```python wordWrap
         import opik
 
         # Basic trace creation
@@ -720,7 +730,7 @@ If you are using the low-level SDKs, you can use the context managers to log tra
 
         For detailed API reference, see [`opik.start_as_current_span`](https://www.comet.com/docs/opik/python-sdk-reference/context_manager/start_as_current_span.html).
 
-        ```python
+        ```python wordWrap
         import opik
 
         # Basic span creation
@@ -753,7 +763,7 @@ If you are using the low-level SDKs, you can use the context managers to log tra
 
         You can nest spans within traces to create hierarchical structures:
 
-        ```python
+        ```python wordWrap
         import opik
 
         with opik.start_as_current_trace("chatbot-conversation", project_name="chatbot") as trace:
@@ -778,7 +788,7 @@ If you are using the low-level SDKs, you can use the context managers to log tra
 
         Context managers automatically handle errors and ensure proper cleanup:
 
-        ```python
+        ```python wordWrap
         import opik
 
         try:
@@ -796,7 +806,7 @@ If you are using the low-level SDKs, you can use the context managers to log tra
 
         You can modify trace and span parameters both inside and outside the context manager:
 
-        ```python
+        ```python wordWrap
         import opik
 
         # Parameters set outside the context manager
@@ -818,7 +828,7 @@ If you are using the low-level SDKs, you can use the context managers to log tra
 
         Control when data is sent to Opik:
 
-        ```python
+        ```python wordWrap
         import opik
 
         # Immediate flush
@@ -860,7 +870,7 @@ the trace to be logged to in a couple of ways:
     You can use the `OPIK_PROJECT_NAME` environment variable to set the project you want the trace
     to be logged or pass a parameter to the `Opik` client.
 
-    ```typescript
+    ```typescript wordWrap
     import { Opik } from "opik";
 
     const client = new Opik({
@@ -877,7 +887,7 @@ the trace to be logged to in a couple of ways:
 
         If you are using function decorators, you can set the project as part of the decorator parameters:
 
-        ```python
+        ```python wordWrap
         @track(project_name="my_project")
         def my_function():
             pass
@@ -885,7 +895,7 @@ the trace to be logged to in a couple of ways:
 
         If you are using the low level SDK, you can set the project as part of the `Opik` client constructor:
 
-        ```python
+        ```python wordWrap
         from opik import Opik
 
         client = Opik(project_name="my_project")
@@ -922,7 +932,7 @@ This ensures that all traces and spans within a single execution flow are logged
 
 When `@track(project_name="...")` is used on the top-level function, it sets the project context for the entire call tree:
 
-```python
+```python wordWrap
 from opik import track
 
 @track(project_name="my-agent")
@@ -943,7 +953,7 @@ def generate(context):
 
 If a nested function specifies a different `project_name`, it is ignored and the outer project is preserved:
 
-```python
+```python wordWrap
 @track(project_name="my-agent")
 def agent(query):
     helper(query)  # Still logs to "my-agent", NOT "other-project"
@@ -958,7 +968,7 @@ def helper(query):
 
 The `opik.project_context()` context manager sets the project name for all Opik operations within a block — `@track`-decorated functions, native integrations, and `Opik()` client calls (when `project_name` is not passed explicitly):
 
-```python
+```python wordWrap
 import opik
 
 with opik.project_context("customer-support"):
@@ -972,7 +982,7 @@ Nesting rules are the same: the first `project_context` or `@track(project_name=
 <Warning>
 When a script combines `@track` tracing with other Opik API calls — such as `evaluate()`, `get_or_create_dataset()`, or `Prompt()` — traces and API objects can land in different projects if the project name is not set consistently. Make sure the value passed to `opik.configure(project_name=...)` (which controls where `@track` traces go) matches the `project_name` argument passed explicitly to each API call:
 
-```python
+```python wordWrap
 import opik
 
 opik.configure(project_name="my-project")
@@ -1003,7 +1013,7 @@ Environments let you tag traces with a lifecycle stage — for example `developm
 
         Using the low-level SDK:
 
-        ```typescript
+        ```typescript wordWrap
         import { Opik } from "opik";
 
         const client = new Opik({ projectName: "my-project" });
@@ -1029,7 +1039,7 @@ Environments let you tag traces with a lifecycle stage — for example `developm
 
         Using the `@track` decorator:
 
-        ```python
+        ```python wordWrap
         import opik
 
         @opik.track(environment="production")
@@ -1041,7 +1051,7 @@ Environments let you tag traces with a lifecycle stage — for example `developm
 
         Using the low-level SDK:
 
-        ```python
+        ```python wordWrap
         from opik import Opik
 
         client = Opik(project_name="my_project")
@@ -1061,11 +1071,11 @@ Environments let you tag traces with a lifecycle stage — for example `developm
 
 #### Managing environments
 
-You can manage the set of named environments in your workspace programmatically:
+You can manage the set of named environments in your workspace programmatically, or from the **Environments** tab of the workspace **Configuration** page. The Prompt Library uses the same environments to [deploy prompt versions](/development/prompt-library/environments).
 
 <Tabs>
     <Tab title="Typescript" value="typescript" language="typescript">
-        ```typescript
+        ```typescript wordWrap
         import { Opik } from "opik";
 
         const client = new Opik();
@@ -1087,7 +1097,7 @@ You can manage the set of named environments in your workspace programmatically:
         ```
     </Tab>
     <Tab title="Python" value="python" language="python">
-        ```python
+        ```python wordWrap
         from opik import Opik
 
         client = Opik()
@@ -1115,7 +1125,7 @@ You can manage the set of named environments in your workspace programmatically:
 
 Once traces are tagged, you can filter them programmatically using the `environment` field in `filter_string`. It supports `=`, `!=`, `in`, and `not_in`:
 
-```python
+```python wordWrap
 from opik import Opik
 
 client = Opik()
@@ -1164,7 +1174,7 @@ debugging why traces and spans are not being logged to Opik.
         If you are running a short-lived script, you can flush the traces to Opik by using the
         `flush` method of the `Opik` client.
 
-        ```typescript
+        ```typescript wordWrap
         import { Opik } from "opik";
 
         const client = new Opik();
@@ -1178,7 +1188,7 @@ debugging why traces and spans are not being logged to Opik.
         If you are running a short-lived script, you can flush the traces to Opik by using the
         `flush` method of the `Opik` client.
 
-        ```python maxLines=100
+        ```python maxLines=100 wordWrap
         from opik import Opik
 
         client = Opik()
@@ -1188,7 +1198,7 @@ debugging why traces and spans are not being logged to Opik.
         You can also set the `flush` parameter to `True` when you are using the `@track` decorator to make sure
         the traces are flushed to Opik before the program exits.
 
-        ```python
+        ```python wordWrap
         from opik import track
 
         @track(flush=True)
@@ -1212,7 +1222,7 @@ debugging why traces and spans are not being logged to Opik.
         If you are looking for more control, you can also use the `setTracingActive` function to
         dynamically disable the logging process.
 
-        ```typescript
+        ```typescript wordWrap
         import {
           isTracingActive,
           setTracingActive,
@@ -1241,7 +1251,7 @@ debugging why traces and spans are not being logged to Opik.
         If you are looking for more control, you can also use the `set_tracing_active` function to
         dynamically disable the logging process.
 
-        ```python
+        ```python wordWrap
         import opik
 
         # Check the current state of the tracing flag

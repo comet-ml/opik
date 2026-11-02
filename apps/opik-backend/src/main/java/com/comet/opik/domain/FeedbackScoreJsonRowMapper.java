@@ -10,8 +10,7 @@ import lombok.experimental.UtilityClass;
 import org.apache.commons.lang3.StringUtils;
 
 /**
- * Builds the {@code JSONEachRow} row for a feedback score, for the write path behind
- * {@code bulkInsert.v2ClientEnabled}.
+ * Builds the {@code JSONEachRow} row for a feedback score.
  *
  * <p>The counterpart of {@code FeedbackScoreDAOImpl#bindParameters}: the two must produce identical
  * cells, since the toggle is meant to be safe to flip either way on a running install. Both normalize

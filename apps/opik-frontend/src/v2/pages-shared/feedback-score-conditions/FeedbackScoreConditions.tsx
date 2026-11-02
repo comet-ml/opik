@@ -6,14 +6,16 @@ import {
   useFieldArray,
   UseFormReturn,
 } from "react-hook-form";
-import { LayoutGrid, Plus, Trash } from "lucide-react";
+import { LayoutGrid, Trash } from "lucide-react";
 import get from "lodash/get";
 
 import { FormControl, FormField, FormItem } from "@/ui/form";
 import { Input } from "@/ui/input";
 import { Button } from "@/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/ui/toggle-group";
-import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import DisabledTooltip from "@/shared/DisabledTooltip/DisabledTooltip";
+import ConditionCard from "@/shared/ConditionCard/ConditionCard";
+import AddItemButton from "@/shared/AddItemButton/AddItemButton";
 import SelectBox from "@/shared/SelectBox/SelectBox";
 import FeedbackDefinitionsAndScoresSelectBox, {
   ScoreSource,
@@ -121,21 +123,6 @@ type SharedProps<T extends FieldValues> = {
 const DEFAULT_MINIMUM_MESSAGE =
   "Can't remove — at least one group with one condition is required.";
 
-// Radix tooltips don't fire on elements with pointer-events: none (which
-// disabled buttons get from the Button variants), so when `disabled` is true
-// we wrap the child in a span that intercepts hover/focus for the tooltip.
-const DisabledTooltip: React.FC<{
-  message: string;
-  disabled: boolean;
-  children: React.ReactNode;
-}> = ({ message, disabled, children }) => (
-  <TooltipWrapper content={disabled ? message : null}>
-    <span className={cn("inline-flex", disabled && "cursor-not-allowed")}>
-      {children}
-    </span>
-  </TooltipWrapper>
-);
-
 const SeparatorBadge: React.FC<{ kind: "AND" | "OR" }> = ({ kind }) => (
   <div className="py-0.5">
     <span className="text-xs font-medium leading-4 text-violet-600">
@@ -199,24 +186,12 @@ const FeedbackScoreConditions = <T extends FieldValues>({
         </React.Fragment>
       ))}
       {!singleGroup && (
-        <div className="flex h-8 items-center justify-center rounded-md border border-dashed border-border bg-soft-background">
-          <DisabledTooltip
-            disabled={atGroupLimit}
-            message={`At most ${maxGroups} groups.`}
-          >
-            <Button
-              type="button"
-              variant="ghost"
-              size="xs"
-              className="text-foreground hover:text-primary-hover"
-              onClick={addGroup}
-              disabled={atGroupLimit}
-            >
-              <Plus className="mr-0.5 size-3" />
-              Add OR group
-            </Button>
-          </DisabledTooltip>
-        </div>
+        <AddItemButton
+          label="Add OR group"
+          onClick={addGroup}
+          disabled={atGroupLimit}
+          disabledMessage={`At most ${maxGroups} groups.`}
+        />
       )}
     </div>
   );
@@ -336,38 +311,13 @@ const ConditionGroup = <T extends FieldValues>({
             />
           </React.Fragment>
         ))}
-        <DisabledTooltip
+        <AddItemButton
+          label={addConditionLabel}
+          onClick={addCondition}
+          variant={showHeader ? "inline" : "dashed"}
           disabled={atConditionLimit}
-          message={`At most ${maxConditionsPerGroup} conditions per group.`}
-        >
-          {showHeader ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="xs"
-              className="self-start pl-1 text-foreground hover:text-primary-hover"
-              onClick={addCondition}
-              disabled={atConditionLimit}
-            >
-              <Plus className="mr-0.5 size-3" />
-              {addConditionLabel}
-            </Button>
-          ) : (
-            <div className="flex h-8 w-full items-center justify-center rounded-md border border-dashed border-border bg-soft-background">
-              <Button
-                type="button"
-                variant="ghost"
-                size="xs"
-                className="text-foreground hover:text-primary-hover"
-                onClick={addCondition}
-                disabled={atConditionLimit}
-              >
-                <Plus className="mr-0.5 size-3" />
-                {addConditionLabel}
-              </Button>
-            </div>
-          )}
-        </DisabledTooltip>
+          disabledMessage={`At most ${maxConditionsPerGroup} conditions per group.`}
+        />
       </div>
     </div>
   );
@@ -413,140 +363,118 @@ const ConditionRow = <T extends FieldValues>({
       )?.message,
     ]),
   ) as Record<ConditionField, string | undefined>;
-  const hasErrors = conditionFields.some((f) => errors[f]);
 
   return (
-    <div className="flex flex-col gap-1">
-      <div className="flex min-h-11 items-stretch overflow-hidden rounded-md border border-border bg-background">
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 px-2 py-1.5">
-          <FormField
-            control={form.control}
-            name={fieldPath("name")}
-            render={({ field }) => (
-              <FormItem className="flex min-w-[160px] flex-1">
-                <FormControl>
-                  <FeedbackDefinitionsAndScoresSelectBox
-                    value={field.value as string}
-                    onChange={field.onChange}
-                    scoreSource={scoreSource}
-                    entityIds={[projectId]}
-                    multiselect={false}
-                    className={cn("h-8 w-full font-normal", {
-                      "border-destructive": Boolean(errors.name),
-                    })}
-                  />
-                </FormControl>
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name={fieldPath("operator")}
-            render={({ field }) => (
-              <FormItem className="shrink-0">
-                <FormControl>
-                  <ToggleGroup
-                    type="single"
-                    variant="secondary"
-                    value={field.value as string}
-                    onValueChange={(v) => v && field.onChange(v)}
-                    className={cn("h-8", {
-                      "border-destructive": Boolean(errors.operator),
-                    })}
+    <ConditionCard
+      onRemove={onDelete}
+      canRemove={canDelete}
+      removeDisabledMessage={minimumMessage}
+      errors={conditionFields.map((f) => errors[f])}
+    >
+      <FormField
+        control={form.control}
+        name={fieldPath("name")}
+        render={({ field }) => (
+          <FormItem className="flex min-w-[160px] flex-1">
+            <FormControl>
+              <FeedbackDefinitionsAndScoresSelectBox
+                value={field.value as string}
+                onChange={field.onChange}
+                scoreSource={scoreSource}
+                entityIds={[projectId]}
+                multiselect={false}
+                className={cn("h-8 w-full font-normal", {
+                  "border-destructive": Boolean(errors.name),
+                })}
+              />
+            </FormControl>
+          </FormItem>
+        )}
+      />
+      <FormField
+        control={form.control}
+        name={fieldPath("operator")}
+        render={({ field }) => (
+          <FormItem className="shrink-0">
+            <FormControl>
+              <ToggleGroup
+                type="single"
+                variant="secondary"
+                value={field.value as string}
+                onValueChange={(v) => v && field.onChange(v)}
+                className={cn("h-8", {
+                  "border-destructive": Boolean(errors.operator),
+                })}
+              >
+                {operators.map((op) => (
+                  <ToggleGroupItem
+                    key={op}
+                    value={op}
+                    size="sm"
+                    aria-label={OPERATOR_LABELS[op]}
                   >
-                    {operators.map((op) => (
-                      <ToggleGroupItem
-                        key={op}
-                        value={op}
-                        size="sm"
-                        aria-label={OPERATOR_LABELS[op]}
-                      >
-                        {op}
-                      </ToggleGroupItem>
-                    ))}
-                  </ToggleGroup>
-                </FormControl>
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name={fieldPath("threshold")}
-            render={({ field }) => (
-              <FormItem className="w-[87px] shrink-0">
-                <FormControl>
-                  <Input
-                    className={cn("h-8 text-right", {
-                      "border-destructive": Boolean(errors.threshold),
-                    })}
-                    type="number"
-                    step="0.01"
-                    placeholder="0.7"
-                    value={field.value as string}
-                    onChange={field.onChange}
-                    onBlur={field.onBlur}
-                    name={field.name}
-                  />
-                </FormControl>
-              </FormItem>
-            )}
-          />
-          {showWindow && (
-            <FormField
-              control={form.control}
-              name={fieldPath("window")}
-              render={({ field }) => (
-                <FormItem className="flex min-w-[160px] flex-1">
-                  <FormControl>
-                    <SelectBox
-                      value={field.value as string}
-                      onChange={field.onChange}
-                      options={WINDOW_OPTIONS}
-                      className={cn("h-8 w-full text-left font-normal", {
-                        "border-destructive": Boolean(errors.window),
-                      })}
-                      placeholder="Select time window"
-                      renderTrigger={(value) => {
-                        const label = WINDOW_LABEL_BY_VALUE[value];
-                        if (!label) return null;
-                        return (
-                          <span className="truncate">
-                            <span className="text-muted-slate">
-                              In the last
-                            </span>{" "}
-                            {label}
-                          </span>
-                        );
-                      }}
-                    />
-                  </FormControl>
-                </FormItem>
-              )}
-            />
+                    {op}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
+            </FormControl>
+          </FormItem>
+        )}
+      />
+      <FormField
+        control={form.control}
+        name={fieldPath("threshold")}
+        render={({ field }) => (
+          <FormItem className="w-[87px] shrink-0">
+            <FormControl>
+              <Input
+                className={cn("h-8 text-right", {
+                  "border-destructive": Boolean(errors.threshold),
+                })}
+                type="number"
+                step="0.01"
+                placeholder="0.7"
+                value={field.value as string}
+                onChange={field.onChange}
+                onBlur={field.onBlur}
+                name={field.name}
+              />
+            </FormControl>
+          </FormItem>
+        )}
+      />
+      {showWindow && (
+        <FormField
+          control={form.control}
+          name={fieldPath("window")}
+          render={({ field }) => (
+            <FormItem className="flex min-w-[160px] flex-1">
+              <FormControl>
+                <SelectBox
+                  value={field.value as string}
+                  onChange={field.onChange}
+                  options={WINDOW_OPTIONS}
+                  className={cn("h-8 w-full text-left font-normal", {
+                    "border-destructive": Boolean(errors.window),
+                  })}
+                  placeholder="Select time window"
+                  renderTrigger={(value) => {
+                    const label = WINDOW_LABEL_BY_VALUE[value];
+                    if (!label) return null;
+                    return (
+                      <span className="truncate">
+                        <span className="text-muted-slate">In the last</span>{" "}
+                        {label}
+                      </span>
+                    );
+                  }}
+                />
+              </FormControl>
+            </FormItem>
           )}
-        </div>
-        <DisabledTooltip disabled={!canDelete} message={minimumMessage}>
-          <Button
-            type="button"
-            variant="minimal"
-            size="icon-2xs"
-            className="h-auto w-6 rounded-none border-l border-border opacity-50 hover:opacity-100"
-            onClick={onDelete}
-            disabled={!canDelete}
-            aria-label="Remove condition"
-          >
-            <Trash />
-          </Button>
-        </DisabledTooltip>
-      </div>
-      {hasErrors && (
-        <div className="comet-body-s flex flex-wrap gap-x-2 px-2 text-destructive">
-          {conditionFields.map(
-            (f) => errors[f] && <span key={f}>{errors[f]}</span>,
-          )}
-        </div>
+        />
       )}
-    </div>
+    </ConditionCard>
   );
 };
 

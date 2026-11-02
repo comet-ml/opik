@@ -82,7 +82,7 @@ To design a new optimization algorithm within Opik's ecosystem, your optimizer n
 
 Extend `BaseOptimizer` and define your `DEFAULT_PROMPTS` - the internal prompts your algorithm uses:
 
-```python
+```python wordWrap
 from opik_optimizer.base_optimizer import BaseOptimizer, OptimizationRound
 from opik_optimizer.optimization_result import OptimizationResult
 from opik_optimizer.api_objects.chat_prompt import ChatPrompt
@@ -161,7 +161,7 @@ Return only the improved prompt text.""",
 
 This is the core method implementing your optimization logic:
 
-```python
+```python wordWrap
 def optimize_prompt(
     self,
     prompt: ChatPrompt,
@@ -301,7 +301,7 @@ def optimize_prompt(
 
 Your custom logic to create new prompt variations. Use `get_prompt()` to access internal prompts (which respects user's `prompt_overrides`):
 
-```python
+```python wordWrap
 from opik_optimizer._llm_calls import call_model
 
 def _generate_candidates(
@@ -391,7 +391,7 @@ def _parse_prompt_from_response(
 
 For complex generation, use Pydantic models for structured LLM responses:
 
-```python
+```python wordWrap
 from opik_optimizer._llm_calls import call_model
 from pydantic import BaseModel
 

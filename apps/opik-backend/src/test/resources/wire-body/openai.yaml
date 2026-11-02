@@ -1,0 +1,233 @@
+# What OpenAI receives on a Chat Completions key (the default pipeline mode), as main sends it on 2026-10-13. See
+# WireBodyTableTest for the format. "chat" rows go through the playground and API path; "judge" rows go through
+# online-evaluation scoring with the rule's model block as the request.
+
+models:
+  # The model rules here read only the registry's reasoning flag, so each group is a few registry entries, not every
+  # OpenAI model. openai-responses.yaml lists the same groups.
+  reasoning:
+    - gpt-5-nano
+    - o3-mini
+  non-reasoning:
+    - gpt-4.1
+    - gpt-3.5-turbo
+  # In the registry only, not in OpenaiModelName: what a model the sync or the CDN just added looks like.
+  registry-only:
+    - gpt-7
+  # In OpenaiModelName but not in the registry. The provider comes from the enum, and gpt-5 is a reasoning model, but
+  # the reasoning rule reads only the registry, so it does not apply.
+  enum-only:
+    - gpt-5
+
+defaults:
+  chat:
+    request:
+      messages:
+        - role: system
+          content: Be brief.
+        - role: user
+          content: Say hi.
+      max_completion_tokens: 512
+    body:
+      messages:
+        - role: system
+          content: Be brief.
+        - role: user
+          content: Say hi.
+      max_completion_tokens: 512
+      stream: false
+  judge:
+    rule:
+      model: {}
+      messages:
+        - role: USER
+          content: Is Paris the capital of France?
+      variables: {}
+      schema:
+        - name: Correctness
+          type: INTEGER
+          description: 1 if correct
+    body:
+      messages:
+        - role: user
+          content: Is Paris the capital of France?
+      stream: false
+      response_format:
+        type: json_schema
+        json_schema:
+          name: scoring_schema
+          strict: false
+          schema:
+            type: object
+            properties:
+              Correctness:
+                type: object
+                description: 1 if correct
+                properties:
+                  reason:
+                    type: string
+                    description: the reason for the score for Correctness
+                  score:
+                    type: integer
+                    description: the score for Correctness
+                required: [score, reason]
+            required: [Correctness]
+
+rows:
+  # Sampling params and penalties, chat path.
+  - name: sampling params and penalties are sent to a model that is not a reasoning model
+    models: [non-reasoning, enum-only]
+    request: {temperature: 0.3, top_p: 0.9, frequency_penalty: 0.5, presence_penalty: 0.5}
+    body: {temperature: 0.3, top_p: 0.9, frequency_penalty: 0.5, presence_penalty: 0.5}
+  - name: sampling params and penalties are dropped for a reasoning model
+    models: [reasoning, registry-only]
+    request: {temperature: 0.3, top_p: 0.9, frequency_penalty: 0.5, presence_penalty: 0.5}
+  - name: a temperature in custom_parameters reaches a reasoning model
+    models: [reasoning]
+    request: {custom_parameters: {temperature: 0.3}}
+    # The reasoning rule clears the typed fields only; custom_parameters keys are added to the body as given.
+    body: {temperature: 0.3}
+  - name: seed is sent, also to a reasoning model
+    models: [gpt-4.1, gpt-5-nano]
+    request: {seed: 42}
+    body: {seed: 42}
+
+  # Effort, chat path.
+  - name: an effort is sent as given
+    models: [reasoning, registry-only, non-reasoning]
+    request: {reasoning_effort: low}
+    body: {reasoning_effort: low}
+  - name: an effort name OpenAI does not have is sent unchecked
+    models: [reasoning]
+    request: {reasoning_effort: ultra}
+    body: {reasoning_effort: ultra}
+  - name: max effort is left out, so the model runs at its own default
+    models: [reasoning, registry-only]
+    request: {reasoning_effort: max}
+  - name: max effort is left out on a streamed request too
+    model: gpt-5-nano
+    request: {stream: true, reasoning_effort: max}
+    body: {stream: true}
+
+  # Max tokens, chat path.
+  - name: no output cap sends none
+    model: gpt-4.1
+    request: {max_completion_tokens: null}
+    body: {max_completion_tokens: null}
+  - name: max_tokens alone is sent as max_tokens
+    model: gpt-4.1
+    request: {max_completion_tokens: null, max_tokens: 300}
+    body: {max_completion_tokens: null, max_tokens: 300}
+  - name: max_tokens and max_completion_tokens are both sent
+    model: gpt-4.1
+    request: {max_tokens: 300}
+    body: {max_tokens: 300}
+
+  # Other request fields, chat path.
+  - name: stop is sent as stop
+    model: gpt-4.1
+    request: {stop: [END]}
+    body: {stop: [END]}
+  - name: a streamed request sends stream true
+    model: gpt-4.1
+    request: {stream: true, temperature: 0.3}
+    body: {stream: true, temperature: 0.3}
+  - name: custom_parameters keys are added to the body as given
+    model: gpt-4.1
+    request: {custom_parameters: {service_tier: flex, metadata: {run: r1}}}
+    body: {service_tier: flex, metadata: {run: r1}}
+
+  # User content in array form, chat path. A vision model gets the parts as sent; any other model gets them
+  # flattened to one string, with the image as a placeholder.
+  - name: array content is sent as parts to a vision model
+    model: gpt-4.1
+    request:
+      messages:
+        - role: system
+          content: Be brief.
+        - role: user
+          content:
+            - type: text
+              text: Say hi.
+            - type: image_url
+              image_url: {url: 'https://example.com/cat.png'}
+    body:
+      messages:
+        - role: system
+          content: Be brief.
+        - role: user
+          content:
+            - type: text
+              text: Say hi.
+            - type: image_url
+              image_url: {url: 'https://example.com/cat.png'}
+  - name: array content is flattened to a string for a model without vision
+    model: gpt-3.5-turbo
+    request:
+      messages:
+        - role: system
+          content: Be brief.
+        - role: user
+          content:
+            - type: text
+              text: Say hi.
+            - type: image_url
+              image_url: {url: 'https://example.com/cat.png'}
+    body:
+      messages:
+        - role: system
+          content: Be brief.
+        - role: user
+          content: 'Say hi.<<<image>>>https://example.com/cat.png<<</image>>>'
+
+  # Judge path. gpt-3.5-turbo and o3-mini have no structuredOutput in the registry, so only the row about that
+  # uses them.
+  - name: a judge sends temperature to a model that is not a reasoning model
+    path: judge
+    models: [gpt-4.1, enum-only]
+    request: {temperature: 0.3}
+    body: {temperature: 0.3}
+  - name: a judge drops temperature for a reasoning model
+    path: judge
+    models: [gpt-5-nano, registry-only]
+    request: {temperature: 0.3}
+  - name: a judge on a model without structured output puts the output format in the prompt
+    path: judge
+    models: [gpt-3.5-turbo, o3-mini]
+    body:
+      response_format: null
+      messages:
+        - role: user
+          content: |-
+            Is Paris the capital of France?
+
+            IMPORTANT:
+            You must respond with ONLY a single valid JSON object that conforms to the structure of the example below.
+            Pay attention to the field names and data types (boolean, integer, double).
+            Do NOT include any other text, explanation, or markdown formatting.
+            The JSON object should look like this:
+            {
+              "Correctness" : {
+                "score" : 1,
+                "reason" : "A brief explanation for the score."
+              }
+            }
+
+            Here are the descriptions for each field:
+            - Correctness: 1 if correct
+  - name: a judge sends the seed
+    path: judge
+    model: gpt-4.1
+    request: {seed: 42}
+    body: {seed: 42}
+  - name: a judge sends custom_parameters as top-level fields
+    path: judge
+    model: gpt-5-nano
+    request: {custom_parameters: {max_completion_tokens: 300, reasoning_effort: low, service_tier: flex}}
+    body: {max_completion_tokens: 300, reasoning_effort: low, service_tier: flex}
+  # A rule made through the API can carry an effort its model has no levels for.
+  - name: a judge leaves out a custom_parameters effort its model refuses
+    path: judge
+    model: gpt-4.1
+    request: {custom_parameters: {max_completion_tokens: 300, reasoning_effort: low, service_tier: flex}}
+    body: {max_completion_tokens: 300, service_tier: flex}

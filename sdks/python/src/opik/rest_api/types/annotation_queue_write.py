@@ -4,6 +4,7 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
+from .annotation_queue_annotator_view_write import AnnotationQueueAnnotatorViewWrite
 from .annotation_queue_automation_write import AnnotationQueueAutomationWrite
 from .annotation_queue_write_scope import AnnotationQueueWriteScope
 
@@ -24,6 +25,7 @@ class AnnotationQueueWrite(UniversalBaseModel):
     annotators_per_item: typing.Optional[int] = None
     lock_timeout_seconds: typing.Optional[int] = None
     automation: typing.Optional[AnnotationQueueAutomationWrite] = None
+    annotator_view: typing.Optional[AnnotationQueueAnnotatorViewWrite] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

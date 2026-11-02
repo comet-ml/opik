@@ -93,7 +93,7 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [];
 const DEFAULT_COLUMNS: ColumnData<FlattenedTrialItem>[] = [
   {
     id: COLUMN_ID_ID,
-    label: "Test suite item ID",
+    label: "Item ID",
     type: COLUMN_TYPE.string,
     accessorFn: (row) => row.dataset_item_id,
     cell: IdCell as never,
@@ -315,7 +315,7 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
       ({ id, label, columnType }): ChipDefinition => ({
         id,
         field: id,
-        label: `${label} (Test suite)`,
+        label: `${label} (${isTestSuite ? "Test suite" : "Dataset"})`,
         kind: "query-builder",
         columnType,
         operators: OPERATORS_MAP[columnType].map((o) => o.value),
@@ -349,7 +349,7 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
     });
 
     return definitions;
-  }, [dynamicDatasetColumns, scoreNameOptions]);
+  }, [dynamicDatasetColumns, scoreNameOptions, isTestSuite]);
 
   const {
     chipsPinned,
@@ -493,7 +493,7 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
         columnHelper.group({
           id: "dataset",
           meta: {
-            header: "Test suite",
+            header: isTestSuite ? "Test suite" : "Dataset",
           },
           header: SectionHeader,
           columns: convertColumnDataToColumn<
@@ -548,6 +548,7 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
     return retVal;
   }, [
     activeDefaultColumns,
+    isTestSuite,
     datasetColumnsData,
     selectedColumns,
     outputColumnsData,

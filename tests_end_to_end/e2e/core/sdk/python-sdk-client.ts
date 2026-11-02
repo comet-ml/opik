@@ -361,6 +361,37 @@ export interface PythonSdkClient {
       idx: number | null;
     }>;
   }>;
+  /**
+   * `cancel_experiments(ids=[...])`, one of the bindings opik#9211 regenerated.
+   *
+   * Answers what the SDK call answered — nothing — rather than the experiments'
+   * new state. The endpoint behind it replies 204 even for ids it is not
+   * tracking, so "the call went through" and "the run stopped" are two claims;
+   * read the second off `readExperimentLifecycle`.
+   */
+  cancelExperiments(args: {
+    ids: string[];
+    workspace?: string;
+  }): Promise<{ requested: number; returned_none: boolean }>;
+  /**
+   * An experiment's `status`/`finished_at` as the regenerated Python client
+   * deserialises them, through `Experiment.get_experiment_data()`.
+   *
+   * Nullable throughout on purpose: `ExperimentPublic` declares every field
+   * optional, so a field a regen dropped arrives as `null` instead of raising —
+   * which is why a caller has to assert the absence away before comparing.
+   */
+  readExperimentLifecycle(args: {
+    experiment_id: string;
+    workspace?: string;
+  }): Promise<{
+    experiment_id: string;
+    status: string | null;
+    finished_at: string | null;
+    created_at: string | null;
+    trace_count: number | null;
+    dataset_item_count: number | null;
+  }>;
   createTextPrompt(args: {
     name: string;
     prompt: string;
@@ -410,6 +441,38 @@ export interface PythonSdkClient {
      */
     resolve_via?: 'get_or_create' | 'list';
   }): Promise<{ suite_id: string; inserted: number }>;
+  /**
+   * Write a suite version whose llm_judge evaluator schema carries item TYPES.
+   *
+   * Not expressible through `createTestSuite`: every public entry point for
+   * suite-level assertions takes plain strings and writes every item as
+   * `BOOLEAN`, so the `INTEGER`/`DOUBLE` branch opik#8557 added is unreachable
+   * from the shorthand. The bridge builds the config from the same strings the
+   * shorthand would and replaces only each item's `type`, so the type is the
+   * single variable.
+   *
+   * Answers the suite re-read from the backend, so a caller asserts the round
+   * trip rather than the request it sent.
+   */
+  setTestSuiteEvaluatorSchema(args: {
+    suite_name: string;
+    project_name: string;
+    schema_items: Array<{
+      name: string;
+      type: 'BOOLEAN' | 'INTEGER' | 'DOUBLE';
+      description: string;
+    }>;
+    workspace?: string;
+  }): Promise<{
+    suite_id: string;
+    version_name: string | null;
+    global_assertions: string[];
+    schema_items: Array<{
+      name: string;
+      type: 'BOOLEAN' | 'INTEGER' | 'DOUBLE';
+      description: string;
+    }>;
+  }>;
   runTestSuite(args: {
     suite_name: string;
     project_name: string;
@@ -417,6 +480,15 @@ export interface PythonSdkClient {
     experiment_name: string;
     judge_model?: string;
     workspace?: string;
+    /**
+     * Return every assertion score result the run produced, per item and run.
+     *
+     * Opt-in because a run judged by a real model carries model prose in its
+     * reasons, which nothing deterministic can assert on. The one shape worth
+     * reading is the mechanical one: a schema item whose type the judge cannot
+     * score, where the SDK builds the result itself without a provider call.
+     */
+    include_assertions?: boolean;
   }): Promise<{
     experiment_id: string | null;
     experiment_name: string | null;
@@ -424,6 +496,32 @@ export interface PythonSdkClient {
     items_passed: number;
     items_failed: number;
     items_total: number;
+    /**
+     * The dataset item ids the run produced a result for.
+     *
+     * Distinct from `items_total`: a run that covered one item twice and
+     * another never still reports the right total, so "every item was covered"
+     * is a question about this set.
+     */
+    item_ids: string[];
+    /**
+     * `null` unless `include_assertions` asked for them — which keeps "the
+     * caller did not ask" distinct from "the run produced no assertion
+     * results", the second being a real and interesting answer.
+     */
+    item_assertions:
+      | Array<{
+          dataset_item_id: string;
+          trial_id: number;
+          name: string;
+          value: number;
+          reason: string | null;
+          category_name: string | null;
+          scoring_failed: boolean;
+          metadata: Record<string, unknown> | null;
+        }>
+      | null;
+    total_time: number | null;
   }>;
   createAnnotationQueue(args: {
     project_name: string;
@@ -463,6 +561,100 @@ export interface PythonSdkClient {
      * optional typed field would erase the difference between absent and null.
      */
     conversation: Array<Record<string, unknown>>;
+  }>;
+  /**
+   * Drive `opik.integrations.ollama.track_ollama` through a sequence of
+   * `chat()` calls against a mock `/api/chat` the bridge serves itself.
+   *
+   * One call rather than one per `chat()`, because the facts under test do not
+   * survive being split: the `opik_tracked` guard needs two `track_ollama`
+   * calls on the SAME client object, and the nested case needs an
+   * `@opik.track` frame around one of the calls. See the route's own header.
+   *
+   * Returns only what lives in the bridge's process — what each call returned,
+   * and whether the double-wrap was a no-op. The spans the tracker wrote are
+   * the caller's to read back over REST, which is where a wrong provider,
+   * model, usage key or parent is observable.
+   */
+  trackedOllamaChats(args: {
+    project_name: string;
+    /** Echoed by the mock onto every chunk, so the span's `model` is this value. */
+    model: string;
+    prompt: string;
+    calls: Array<{
+      /** Echoed back, so a result is matched to its call and not to its position. */
+      label: string;
+      stream?: boolean;
+      use_async?: boolean;
+      /** Overrides the `ollama` default `track_ollama` records on the span. */
+      provider?: string;
+      /** Makes the call from inside an `@opik.track` function of this name. */
+      parent_name?: string;
+    }>;
+    workspace?: string;
+  }): Promise<{
+    double_track_is_noop: boolean;
+    calls: Array<{
+      label: string;
+      content: string;
+      model: string;
+      /**
+       * Chunks a streamed call yielded; 0 for a non-streamed one. Asserted, not
+       * decoration: "the streamed call produced one span" only means
+       * aggregation happened if the stream really arrived in pieces.
+       */
+      chunk_count: number;
+    }>;
+  }>;
+  /**
+   * Drive `@opik.track` over a GENERATOR that the consumer stops reading early,
+   * in every shape a user stops one in.
+   *
+   * One call rather than one per shape, for the reason the route's header gives:
+   * the two controls (`exhaust`, `plain_function`) are only worth anything
+   * beside the early-exit shapes in the SAME run, because a trace missing from
+   * a run where the controls also went missing says nothing about generators.
+   *
+   * Returns only what lives in the bridge's process — what each consumer
+   * actually received before it stopped, and whether the `consumer_raises`
+   * shape really raised. The traces and spans the decorator wrote are the
+   * caller's to read back over REST, which is where "the whole trace was
+   * dropped" (the pre-opik#8518 behaviour) is observable.
+   */
+  trackedGeneratorCalls(args: {
+    project_name: string;
+    /**
+     * What the generator yields, in order. Passed in rather than fixed in the
+     * bridge so the caller can derive the span output it expects — the
+     * decorator records the consumed items joined with no separator.
+     */
+    items: string[];
+    calls: Array<{
+      /** Also the tracked function's name, so the trace is addressable by it. */
+      label: string;
+      shape:
+        | 'break_after'
+        | 'bare_next'
+        | 'islice'
+        | 'consumer_raises'
+        | 'exhaust'
+        | 'plain_function';
+      /** Items the consumer takes before stopping; ignored by the two controls. */
+      take?: number;
+    }>;
+    workspace?: string;
+  }): Promise<{
+    calls: Array<{
+      label: string;
+      /**
+       * What the consumer received before it stopped — the fact that exists
+       * only inside the bridge, and what makes the span's recorded output
+       * assertable rather than merely present.
+       */
+      consumed: string[];
+      /** The exception type the consumer caught, for `consumer_raises`; null otherwise. */
+      caught: string | null;
+    }>;
   }>;
 }
 
@@ -737,6 +929,23 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
         timeoutMs: 300_000,
       });
     },
+    async cancelExperiments(args) {
+      return request<{ requested: number; returned_none: boolean }>(
+        'POST',
+        '/experiments/cancel',
+        args,
+      );
+    },
+    async readExperimentLifecycle(args) {
+      return request<{
+        experiment_id: string;
+        status: string | null;
+        finished_at: string | null;
+        created_at: string | null;
+        trace_count: number | null;
+        dataset_item_count: number | null;
+      }>('POST', '/experiments/lifecycle', args);
+    },
     async createTextPrompt(args) {
       return request<{ id: string; name: string }>('POST', '/prompts/text', args);
     },
@@ -770,6 +979,18 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
         args,
       );
     },
+    async setTestSuiteEvaluatorSchema(args) {
+      return request<{
+        suite_id: string;
+        version_name: string | null;
+        global_assertions: string[];
+        schema_items: Array<{
+          name: string;
+          type: 'BOOLEAN' | 'INTEGER' | 'DOUBLE';
+          description: string;
+        }>;
+      }>('POST', '/test-suites/evaluator-schema', args);
+    },
     async runTestSuite(args) {
       // Runs real LLM judge calls across every item/run in the suite, which
       // routinely outlives the default 30s budget on a loaded cloud
@@ -783,6 +1004,20 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
         items_passed: number;
         items_failed: number;
         items_total: number;
+        item_ids: string[];
+        item_assertions:
+          | Array<{
+              dataset_item_id: string;
+              trial_id: number;
+              name: string;
+              value: number;
+              reason: string | null;
+              category_name: string | null;
+              scoring_failed: boolean;
+              metadata: Record<string, unknown> | null;
+            }>
+          | null;
+        total_time: number | null;
       }>('POST', '/test-suites/run', args, { timeoutMs: 90_000 });
     },
     async createAnnotationQueue(args) {
@@ -799,6 +1034,34 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
         scores: Array<{ name: string; value: number; reason: string | null }>;
         conversation: Array<Record<string, unknown>>;
       }>('POST', '/threads/evaluate', args, { timeoutMs: 150_000 });
+    },
+    async trackedOllamaChats(args) {
+      // One request makes every call in the sequence and then flushes the
+      // tracker, so the budget covers all of them plus the upload — which is
+      // rate-limited on a shared cloud workspace, where a 429 makes the SDK
+      // back off. The provider itself is local and instant.
+      return request<{
+        double_track_is_noop: boolean;
+        calls: Array<{
+          label: string;
+          content: string;
+          model: string;
+          chunk_count: number;
+        }>;
+      }>('POST', '/integrations/ollama/chat', args, { timeoutMs: 150_000 });
+    },
+    async trackedGeneratorCalls(args) {
+      // One request makes every call in the sequence, collects the dropped
+      // generators and then flushes — so the budget covers all of them plus the
+      // upload, which is rate-limited on a shared cloud workspace where a 429
+      // makes the SDK back off. The generators themselves are local and instant.
+      return request<{
+        calls: Array<{
+          label: string;
+          consumed: string[];
+          caught: string | null;
+        }>;
+      }>('POST', '/traces/track-generator', args, { timeoutMs: 150_000 });
     },
   };
 }

@@ -52,7 +52,7 @@ We repeat this process for a number of generations until we find the best prompt
 
 You can use the `EvolutionaryOptimizer` to optimize a prompt:
 
-```python maxLines=1000
+```python maxLines=1000 wordWrap
 from opik_optimizer import EvolutionaryOptimizer
 from opik.evaluation.metrics import LevenshteinRatio # or any other suitable metric
 from opik_optimizer import datasets, ChatPrompt
@@ -122,15 +122,19 @@ The `optimize_prompt` method has the following parameters:
 <ParamField path="prompt" type="ChatPrompt">The prompt to optimize</ParamField>
 <ParamField path="dataset" type="Dataset">The dataset to use for evaluation</ParamField>
 <ParamField path="metric" type="Callable">Metric function to optimize with, should have the arguments `dataset_item` and `llm_output`</ParamField>
+<ParamField path="agent" type="OptimizableAgent | None" optional={true}>Agent instance used to run the prompts. Pass an instance, not a class. If None, the default LiteLLM-based agent is used.</ParamField>
 <ParamField path="experiment_config" type="dict | None" optional={true}>Optional experiment configuration</ParamField>
 <ParamField path="n_samples" type="int | float | str | None" optional={true}>Number of dataset items to use per evaluation. Use counts (e.g., `50`), fractions (e.g., `0.1`), percentages (e.g., "10%"), or "all"/"full"/None for the full dataset.</ParamField>
 <ParamField path="n_samples_minibatch" type="int | None" optional={true}>Optional number of samples for inner-loop minibatches (defaults to n_samples).</ParamField>
 <ParamField path="n_samples_strategy" type="str | None" optional={true}>Sampling strategy for subsampling (default: "random_sorted").</ParamField>
 <ParamField path="auto_continue" type="bool" optional={true} default="False">Whether to automatically continue optimization</ParamField>
-<ParamField path="agent_class" type="type[opik_optimizer.optimizable_agent.OptimizableAgent] | None" optional={true}>Optional agent class to use</ParamField>
-<ParamField path="project_name" type="str" optional={true} default="Optimization">Opik project name for logging traces (default: "Optimization")</ParamField>
+<ParamField path="project_name" type="str | None" optional={true}>Opik project for the optimization run. Falls back to the `OPIK_PROJECT_NAME` environment variable, then "Optimization". Trial traces are logged to the dataset's project.</ParamField>
+<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID to use when creating the Opik optimization run.</ParamField>
+<ParamField path="validation_dataset" type="Dataset | None" optional={true}>Optional validation dataset used to rank candidates.</ParamField>
 <ParamField path="max_trials" type="int" optional={true} default="10" />
-<ParamField path="mcp_config" type="opik_optimizer.mcp_utils.mcp_workflow.MCPExecutionConfig | None" optional={true}>MCP tool calling configuration (default: None)</ParamField>
+<ParamField path="allow_tool_use" type="bool" optional={true} default="True">Whether tools may be executed during evaluation.</ParamField>
+<ParamField path="optimize_prompts" type="bool | str | list[str] | None" optional={true} default="system">Which prompt roles the optimizer may change, for example `"system"`, `"user"`, or a list of roles.</ParamField>
+<ParamField path="optimize_tools" type="bool | dict[str, bool] | None" optional={true}>Optimize the tool descriptions defined in `ChatPrompt.tools`. See [Optimize tools (MCP)](/development/optimization-runs/optimization/optimize_tools).</ParamField>
 <ParamField path="args" type="Any" />
 <ParamField path="kwargs" type="Any" />
 
@@ -141,12 +145,12 @@ There are two models to consider when using the `EvolutionaryOptimizer`:
 - `ChatPrompt.model`: The model used to evaluate the prompt.
 
 The `model` parameter accepts any LiteLLM-supported model string (e.g., `"gpt-4o"`, `"azure/gpt-4"`,
-`"anthropic/claude-3-opus"`, `"gemini/gemini-1.5-pro"`). You can also pass in extra model parameters
+`"anthropic/claude-opus-4-7"`, `"gemini/gemini-1.5-pro"`). You can also pass in extra model parameters
 using the `model_parameters` parameter:
 
-```python
+```python wordWrap
 optimizer = EvolutionaryOptimizer(
-    model="anthropic/claude-3-opus-20240229",
+    model="anthropic/claude-sonnet-4-6",
     model_parameters={
         "temperature": 0.7,
         "max_tokens": 4096

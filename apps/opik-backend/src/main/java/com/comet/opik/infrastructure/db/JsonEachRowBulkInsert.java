@@ -42,8 +42,8 @@ import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils
  * experiment aggregates — this class is the same approach, factored out so a write path can adopt it
  * without growing its own copy of the plumbing. {@code FeedbackScoreDAO} is the first caller.
  *
- * <p>Callers reach this only when {@code bulkInsert.v2ClientEnabled} is set — see
- * {@link com.comet.opik.infrastructure.BulkInsertConfig}.
+ * <p>This is the only bulk write path. It was introduced behind a toggle alongside the R2DBC
+ * implementation it replaced; both the toggle and that implementation are gone.
  *
  * <p><b>Which thread does what.</b> The two halves run on different pools, deliberately:
  *

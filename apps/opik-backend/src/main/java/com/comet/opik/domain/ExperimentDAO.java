@@ -377,6 +377,7 @@ public class ExperimentDAO {
                         AND project_id IN :target_project_ids
                         <endif>
                         AND trace_id IN (SELECT trace_id FROM experiment_items_final)
+                        <if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT id_week FROM span_weeks WHERE workspace_id = :workspace_id <if(has_target_projects)>AND project_id IN :target_project_ids<endif> AND trace_id IN (SELECT trace_id FROM experiment_items_final))<endif>
                         ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                         <if(has_target_projects)>LIMIT 1 BY workspace_id, project_id, id<else>LIMIT 1 BY id<endif>
                     )
@@ -660,6 +661,7 @@ public class ExperimentDAO {
                     e.type as type,
                     e.evaluation_method as evaluation_method,
                     e.status as status,
+                    e.finished_at as finished_at,
                     e.experiment_scores as experiment_scores,
                     e.dataset_version_id as dataset_version_id,
                     agg.feedback_scores_avg as feedback_scores,
@@ -720,6 +722,7 @@ public class ExperimentDAO {
                     e.type as type,
                     e.evaluation_method as evaluation_method,
                     e.status as status,
+                    e.finished_at as finished_at,
                     e.experiment_scores as experiment_scores,
                     e.dataset_version_id as dataset_version_id,
                     fs.feedback_scores as feedback_scores,
@@ -1359,6 +1362,7 @@ public class ExperimentDAO {
                         AND project_id IN :target_project_ids
                         <endif>
                         AND trace_id IN (SELECT trace_id FROM experiment_items_final)
+                        <if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT id_week FROM span_weeks WHERE workspace_id = :workspace_id <if(has_target_projects)>AND project_id IN :target_project_ids<endif> AND trace_id IN (SELECT trace_id FROM experiment_items_final))<endif>
                         ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                         <if(has_target_projects)>LIMIT 1 BY workspace_id, project_id, id<else>LIMIT 1 BY id<endif>
                     )
@@ -1834,6 +1838,7 @@ public class ExperimentDAO {
                 dataset_version_id,
                 execution_policy,
                 project_id,
+                finished_at,
                 created_at,
                 last_updated_at
             )
@@ -1858,6 +1863,7 @@ public class ExperimentDAO {
                 dataset_version_id,
                 execution_policy,
                 project_id,
+                <if(finished)> now64(9) <else> finished_at <endif> as finished_at,
                 created_at,
                 now64(9) as last_updated_at
             FROM experiments
@@ -1969,6 +1975,7 @@ public class ExperimentDAO {
                                 var template = getSTWithLogComment(FIND, "get_experiment_by_id", workspaceId, userName,
                                         "");
                                 addTracesPartitionedFlag(template);
+                                addSpanWeeksBound(template);
                                 template.add("id", id.toString());
                                 template.add("limit", limit);
                                 template.add("has_aggregated", hasAggregated);
@@ -2024,6 +2031,7 @@ public class ExperimentDAO {
                                         userName,
                                         ids.size());
                                 addTracesPartitionedFlag(template);
+                                addSpanWeeksBound(template);
                                 template.add("ids_list", ids);
                                 template.add("has_aggregated", hasAggregated);
                                 template.add("has_raw", hasRaw);
@@ -2043,6 +2051,7 @@ public class ExperimentDAO {
                 .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
                     var template = getSTWithLogComment(FIND, "get_experiments_stream", workspaceId, userName, "");
                     addTracesPartitionedFlag(template);
+                    addSpanWeeksBound(template);
                     template.add("name", request.name());
                     if (request.lastRetrievedId() != null) {
                         template.add("lastRetrievedId", request.lastRetrievedId());
@@ -2109,6 +2118,7 @@ public class ExperimentDAO {
                     .evaluationMethod(
                             EvaluationMethod.fromString(row.get("evaluation_method", String.class)).orElse(null))
                     .status(ExperimentStatus.fromString(row.get("status", String.class)))
+                    .finishedAt(row.get("finished_at", Instant.class))
                     .experimentScores(getExperimentScores(row))
                     .datasetVersionId(Optional.ofNullable(row.get("dataset_version_id", String.class))
                             .filter(str -> !str.isBlank())
@@ -2356,9 +2366,16 @@ public class ExperimentDAO {
         }
     }
 
+    private void addSpanWeeksBound(ST template) {
+        if (configuration.getDatabaseAnalyticsDataModel().spanWeeksReadBounded()) {
+            template.add("span_weeks_bound", true);
+        }
+    }
+
     private ST newFindTemplate(String query, ExperimentSearchCriteria criteria, String queryName, String workspaceId) {
         var template = getSTWithLogComment(query, queryName, workspaceId, "", "");
         addTracesPartitionedFlag(template);
+        addSpanWeeksBound(template);
         Optional.ofNullable(criteria.datasetId())
                 .ifPresent(datasetId -> template.add("dataset_id", datasetId));
         Optional.ofNullable(criteria.name())
@@ -2704,6 +2721,7 @@ public class ExperimentDAO {
     private ST newGroupTemplate(String query, ExperimentGroupCriteria criteria, String queryName, String workspaceId) {
         var template = getSTWithLogComment(query, queryName, workspaceId, "", "");
         addTracesPartitionedFlag(template);
+        addSpanWeeksBound(template);
 
         ExperimentGroupMappers.applyGroupCriteriaToTemplate(template, criteria, filterQueryBuilder);
         groupingQueryBuilder.addGroupingTemplateParams(criteria.groups(), template);
@@ -2900,6 +2918,10 @@ public class ExperimentDAO {
 
         if (experimentUpdate.status() != null) {
             template.add("status", experimentUpdate.status().getValue());
+        }
+
+        if (experimentUpdate.finished()) {
+            template.add("finished", true);
         }
 
         if (experimentUpdate.experimentScores() != null) {

@@ -22,6 +22,7 @@ import {
 } from "@/types/dashboard";
 import { Filter } from "@/types/filters";
 import { isFilterValid, createFilter } from "@/lib/filters";
+import { isCostMetricType } from "./helpers";
 import MetricContainerChart from "./MetricChart/MetricChartContainer";
 import { LOGS_TYPE } from "@/constants/traces";
 import { LOGS_SOURCE } from "@/types/traces";
@@ -42,8 +43,10 @@ import { buildDocsUrl } from "@/v2/lib/utils";
 import { BREAKDOWN_FIELD } from "@/types/dashboard";
 import {
   BREAKDOWN_GROUP_NAMES,
+  TAG_COST_BREAKDOWN_DESCRIPTION,
   buildBreakdownDrilldownFilter,
   getMetricEntityType,
+  getCompatibleBreakdownFields,
 } from "./breakdown";
 
 const ProjectMetricsWidget: React.FunctionComponent<
@@ -114,7 +117,7 @@ const ProjectMetricsWidget: React.FunctionComponent<
 
   const metricType = widget?.config?.metricType as string | undefined;
   const metricName = metricType as METRIC_NAME_TYPE | undefined;
-  const isCostMetric = metricName === METRIC_NAME_TYPE.COST;
+  const isCostMetric = isCostMetricType(metricName);
   const isDurationMetric =
     metricName === METRIC_NAME_TYPE.TRACE_DURATION ||
     metricName === METRIC_NAME_TYPE.THREAD_DURATION ||
@@ -504,12 +507,22 @@ const ProjectMetricsWidget: React.FunctionComponent<
     );
   };
 
+  const tagCostInfo =
+    isCostMetric &&
+    effectiveBreakdown?.field === BREAKDOWN_FIELD.TAGS &&
+    getCompatibleBreakdownFields(metricType ?? "").includes(
+      BREAKDOWN_FIELD.TAGS,
+    )
+      ? TAG_COST_BREAKDOWN_DESCRIPTION
+      : undefined;
+
   return (
     <DashboardWidget>
       {preview ? (
-        <DashboardWidget.PreviewHeader />
+        <DashboardWidget.PreviewHeader infoMessage={tagCostInfo} />
       ) : (
         <DashboardWidget.Header
+          infoMessage={tagCostInfo}
           title={widget.title || widget.generatedTitle || ""}
           subtitle={widget.subtitle}
           readOnly={readOnly}

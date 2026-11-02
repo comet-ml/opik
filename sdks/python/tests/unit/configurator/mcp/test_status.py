@@ -154,3 +154,26 @@ def test_collect__not_registered__reports_detection(monkeypatch, tmp_path):
     assert host.detected is False
     assert host.transport is None
     assert host.in_sync is None
+
+
+def test_collect__workspace__read_from_the_name_this_sdk_writes(monkeypatch, tmp_path):
+    _patch_single_host(
+        monkeypatch,
+        tmp_path,
+        block={
+            "type": "stdio",
+            "command": "/usr/bin/uvx",
+            "args": ["opik-mcp"],
+            "env": {
+                "COMET_URL_OVERRIDE": "https://opik.acme.com",
+                "OPIK_WORKSPACE": "ws",
+            },
+        },
+    )
+
+    [host] = status.collect_host_statuses(
+        _config("https://opik.acme.com/opik/api/", "ws")
+    )
+
+    assert host.workspace == "ws"
+    assert host.in_sync is True

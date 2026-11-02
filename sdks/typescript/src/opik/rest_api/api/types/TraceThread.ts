@@ -18,6 +18,8 @@ export interface TraceThread {
     usage?: Record<string, number>;
     comments?: OpikApi.Comment[];
     tags?: string[];
+    /** Annotation queues this thread is currently an item of */
+    annotationQueues?: OpikApi.AnnotationQueueReference[];
     lastUpdatedAt?: Date;
     lastUpdatedBy?: string;
     createdBy?: string;

@@ -1,6 +1,6 @@
 import React, { useRef, useState } from "react";
 import { CellContext } from "@tanstack/react-table";
-import { MoreHorizontal, Pencil, RotateCcw } from "lucide-react";
+import { Eye, MoreHorizontal, Pencil, RotateCcw } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -9,15 +9,15 @@ import {
 } from "@/ui/dropdown-menu";
 import { Button } from "@/ui/button";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
-import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import { DatasetVersion } from "@/types/datasets";
 import { isLatestVersionTag } from "@/constants/datasets";
-import useRestoreDatasetVersionMutation from "@/api/datasets/useRestoreDatasetVersionMutation";
-import { useHasDraft, useClearDraft } from "@/store/TestSuiteDraftStore";
 import EditVersionDialog from "./EditVersionDialog";
+import RestoreVersionDialog from "./RestoreVersionDialog";
 
 type CustomMeta = {
   datasetId: string;
+  canEdit: boolean;
+  onViewVersion: (version: DatasetVersion) => void;
 };
 
 const EDIT_KEY = 1;
@@ -31,21 +31,9 @@ const VersionRowActionsCell: React.FC<CellContext<DatasetVersion, unknown>> = (
   const [open, setOpen] = useState<boolean | number>(false);
 
   const { custom } = context.column.columnDef.meta ?? {};
-  const { datasetId } = (custom ?? {}) as CustomMeta;
-
-  const restoreMutation = useRestoreDatasetVersionMutation();
-  const hasDraft = useHasDraft();
-  const clearDraft = useClearDraft();
+  const { datasetId, canEdit, onViewVersion } = (custom ?? {}) as CustomMeta;
 
   const isLatestVersion = version.tags?.some(isLatestVersionTag) ?? false;
-
-  const handleRestore = () => {
-    restoreMutation.mutate(
-      { datasetId, versionRef: version.version_hash },
-      { onSuccess: () => clearDraft() },
-    );
-    setOpen(false);
-  };
 
   return (
     <CellWrapper
@@ -54,59 +42,64 @@ const VersionRowActionsCell: React.FC<CellContext<DatasetVersion, unknown>> = (
       className="justify-end p-0"
       stopClickPropagation
     >
-      <EditVersionDialog
-        key={`edit-${resetKeyRef.current}`}
-        open={open === EDIT_KEY}
-        setOpen={setOpen}
-        version={version}
-        datasetId={datasetId}
-      />
-
-      <ConfirmDialog
-        key={`restore-${resetKeyRef.current}`}
-        open={open === RESTORE_KEY}
-        setOpen={setOpen}
-        onConfirm={handleRestore}
-        title="Restore version"
-        description={
-          `Restoring this version will create a new version based on version ${version.version_name}. All previous versions will stay in your history.` +
-          (hasDraft
-            ? "\n\nYou have unsaved draft changes that will be discarded. This action can't be undone."
-            : "")
-        }
-        confirmText={hasDraft ? "Discard & Restore" : "Restore version"}
-        confirmButtonVariant={hasDraft ? "destructive" : "default"}
-      />
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="minimal" size="icon" className="-mr-2.5">
-            <span className="sr-only">Actions menu</span>
-            <MoreHorizontal className="size-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-52">
-          <DropdownMenuItem
-            onClick={() => {
-              setOpen(EDIT_KEY);
-              resetKeyRef.current = resetKeyRef.current + 1;
-            }}
-          >
-            <Pencil className="mr-2 size-4" />
-            Edit
-          </DropdownMenuItem>
-          {!isLatestVersion && (
-            <DropdownMenuItem
-              onClick={() => {
-                setOpen(RESTORE_KEY);
-                resetKeyRef.current = resetKeyRef.current + 1;
-              }}
-            >
-              <RotateCcw className="mr-2 size-4" />
-              Restore
-            </DropdownMenuItem>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
+      {canEdit && (
+        <>
+          <EditVersionDialog
+            key={`edit-${resetKeyRef.current}`}
+            open={open === EDIT_KEY}
+            setOpen={setOpen}
+            version={version}
+            datasetId={datasetId}
+          />
+          <RestoreVersionDialog
+            key={`restore-${resetKeyRef.current}`}
+            open={open === RESTORE_KEY}
+            setOpen={setOpen}
+            datasetId={datasetId}
+            version={version}
+          />
+        </>
+      )}
+      {(canEdit || !isLatestVersion) && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="minimal" size="icon" className="-mr-2.5">
+              <span className="sr-only">Actions menu</span>
+              <MoreHorizontal className="size-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-52">
+            {!isLatestVersion && (
+              <DropdownMenuItem onClick={() => onViewVersion(version)}>
+                <Eye className="mr-2 size-4" />
+                View records
+              </DropdownMenuItem>
+            )}
+            {canEdit && (
+              <DropdownMenuItem
+                onClick={() => {
+                  setOpen(EDIT_KEY);
+                  resetKeyRef.current = resetKeyRef.current + 1;
+                }}
+              >
+                <Pencil className="mr-2 size-4" />
+                Edit
+              </DropdownMenuItem>
+            )}
+            {canEdit && !isLatestVersion && (
+              <DropdownMenuItem
+                onClick={() => {
+                  setOpen(RESTORE_KEY);
+                  resetKeyRef.current = resetKeyRef.current + 1;
+                }}
+              >
+                <RotateCcw className="mr-2 size-4" />
+                Restore
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
     </CellWrapper>
   );
 };

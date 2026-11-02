@@ -9,7 +9,7 @@ import {
 } from "use-query-params";
 import useLocalStorageState from "use-local-storage-state";
 import { keepPreviousData } from "@tanstack/react-query";
-import { Check, Loader2 } from "lucide-react";
+import { AlertCircle, Check, Loader2 } from "lucide-react";
 
 import DataTable from "@/shared/DataTable/DataTable";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
@@ -609,6 +609,15 @@ function DatasetItemsTab({
           iconClassName="animate-spin"
           title={`Your ${entityName} is still loading`}
           description={`Some results or counts may update as more data becomes available. You can continue exploring while the full ${entityName} loads.`}
+          className="mb-4"
+        />
+      )}
+      {datasetStatus === DATASET_STATUS.failed && (
+        <StatusMessage
+          icon={AlertCircle}
+          iconClassName="text-destructive"
+          title="The last file import failed"
+          description={`The uploaded file could not be processed, so some or all of its items were not added to this ${entityName}. Check the file and upload it again.`}
           className="mb-4"
         />
       )}

@@ -13,9 +13,11 @@ import jakarta.ws.rs.InternalServerErrorException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.csv.CSVException;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
+import org.apache.commons.csv.DuplicateHeaderMode;
 import org.apache.commons.io.input.BOMInputStream;
 import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Mono;
@@ -126,10 +128,16 @@ public class CsvDatasetItemProcessor {
             if (message != null && message.contains("header name is missing")) {
                 throw new BadRequestException("CSV contains empty header names. All column headers must have a name.");
             }
+            if (message != null && message.contains("duplicate name")) {
+                throw new BadRequestException(
+                        "CSV contains duplicate column headers. All column headers must be unique.");
+            }
             throw new BadRequestException("Invalid CSV format");
+        } catch (CSVException e) {
+            throw new BadRequestException("Invalid CSV format: %s".formatted(e.getMessage()));
         } catch (IOException e) {
-            log.error("Failed to validate CSV headers", e);
-            throw new BadRequestException("Failed to read CSV file");
+            log.error("Failed to read uploaded CSV temp file", e);
+            throw new InternalServerErrorException("Failed to process CSV file");
         }
     }
 
@@ -202,6 +210,8 @@ public class CsvDatasetItemProcessor {
                 .setHeader()
                 .setSkipHeaderRecord(true)
                 .setIgnoreHeaderCase(true)
+                // Uses the parser's own case-insensitive comparison, so columns it would merge are rejected
+                .setDuplicateHeaderMode(DuplicateHeaderMode.DISALLOW)
                 .setTrim(true)
                 .setIgnoreEmptyLines(true)
                 .get()

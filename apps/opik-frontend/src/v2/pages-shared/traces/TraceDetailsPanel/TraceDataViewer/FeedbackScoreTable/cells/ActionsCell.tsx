@@ -3,7 +3,7 @@ import { Button } from "@/ui/button";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 import { ExpandingFeedbackScoreRow } from "../types";
 import { X } from "lucide-react";
-import { getIsParentFeedbackScoreRow } from "../utils";
+import { getIsDeletableFeedbackScoreRow } from "../utils";
 import { useLoggedInUserNameOrOpenSourceDefaultUser } from "@/store/AppStore";
 
 type CustomMeta = {
@@ -17,14 +17,7 @@ const ActionsCell: React.FunctionComponent<
   const { onDelete } = (custom ?? {}) as CustomMeta;
   const currentUserName = useLoggedInUserNameOrOpenSourceDefaultUser();
 
-  const isParentFeedbackScoreRow = getIsParentFeedbackScoreRow(
-    context.row.original,
-  );
-
-  const row = context.row.original;
-  const isUserOwner = (row.author ?? row.created_by) === currentUserName;
-
-  if (isParentFeedbackScoreRow || !isUserOwner) {
+  if (!getIsDeletableFeedbackScoreRow(context.row.original, currentUserName)) {
     return null;
   }
 

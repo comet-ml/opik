@@ -5,6 +5,7 @@ import com.google.common.base.Splitter;
 import io.dropwizard.util.Duration;
 import io.r2dbc.spi.ConnectionFactories;
 import io.r2dbc.spi.ConnectionFactory;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -27,6 +28,9 @@ public class DatabaseAnalyticsFactory {
     private static final String ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS = "async_insert_busy_timeout_max_ms";
     private static final String ASYNC_INSERT_BUSY_TIMEOUT_MIN_MS = "async_insert_busy_timeout_min_ms";
     private static final String ASYNC_INSERT_MAX_DATA_SIZE = "async_insert_max_data_size";
+    private static final String HTTP_HEADERS_PROGRESS_INTERVAL_MS = "http_headers_progress_interval_ms";
+    // Shared by the @Min bound and the range check in r2dbcOnlyServerSettings(), so the two cannot disagree.
+    private static final int MIN_PROGRESS_HEADER_CADENCE_MS = 1;
     private static final String KEY_VALUE_FORMAT = "%s=%s";
 
     // Split each `&`/`,`-chunk on the FIRST `=` only — values may themselves contain `=`,
@@ -66,6 +70,35 @@ public class DatabaseAnalyticsFactory {
      */
     private @Min(1) Long asyncInsertMaxDataSize;
 
+    /**
+     * Cadence (ms) for {@code http_headers_progress_interval_ms}, the server-side throttle on
+     * {@code X-ClickHouse-Progress} response headers. <em>This field</em> is applied to {@link #build()} only — which
+     * is not the same as the setting never reaching {@link #buildClient()}, since a cadence an operator puts in
+     * {@code custom_http_params} is forwarded there wholesale like every other entry. On the R2DBC path the field
+     * overrides the chain, so the guard cannot be undercut from {@code custom_http_params}.
+     *
+     * <p>{@link #build()} returns the R2DBC connection factory, and clickhouse-r2dbc sets
+     * {@code send_progress_in_http_headers=1} on every HTTP statement unconditionally
+     * ({@code ClickHouseConnection#createStatement}). It appends that setting <em>after</em>
+     * {@code custom_http_params}, and ClickHouse applies duplicate query-string settings in order, so the chain below
+     * cannot switch the progress headers off — only change how often they are emitted. Meanwhile the v1 Apache
+     * transport builds its connection manager with {@code Http1Config.DEFAULT.getMaxHeaderCount() == 100} and offers no
+     * option to raise it, so at ClickHouse's 100ms default cadence any query running past ~10s overflows the cap and
+     * the response fails to parse — reported as an {@code IOException} that the driver rethrows as a bare
+     * {@code ConnectException}, which is how it reaches dashboards as a connectivity failure (OPIK-8628).
+     *
+     * <p>Kept in milliseconds rather than a {@link Duration} to match the ClickHouse setting it carries, and bounded on
+     * both sides. The ceiling is the driver's 30s {@code socket_timeout}: the progress headers are what keep the socket
+     * producing bytes during a long query, so a cadence near it trades this bug for read timeouts — {@link Max} leaves
+     * a 3x margin. The floor is the query duration a deployment must survive, since the 100-header budget is reached
+     * at {@code interval x 90}: 3s covers 270s, against a 106.7s worst case observed during the incident window.
+     *
+     * <p>A primitive with no initializer: the default lives once, in {@code config.yml}, so there is a single place to
+     * read and change it, and {@link Min} then makes a configuration that supplies nothing fail at startup — an absent
+     * key leaves 0, which is out of range — rather than silently reinstating the ClickHouse default.
+     */
+    private @Min(MIN_PROGRESS_HEADER_CADENCE_MS) @Max(10_000) int httpHeadersProgressIntervalMs;
+
     private Duration healthCheckTimeout = Duration.seconds(1);
 
     // Optional socket timeout, applied in buildClient() only when set (null = library default of 0/no timeout).
@@ -85,7 +118,7 @@ public class DatabaseAnalyticsFactory {
     private boolean coldStorageDiskHealthCheckEnabled;
 
     public ConnectionFactory build() {
-        var queryParametersOverrides = getQueryParametersOverrides(queryParameters);
+        var queryParametersOverrides = getQueryParametersOverrides(queryParameters, r2dbcOnlyServerSettings());
         var options = queryParametersOverrides == null ? "" : "?%s".formatted(queryParametersOverrides);
         var url = URL_TEMPLATE.formatted(protocol.getValue(), username, password, host, port, databaseName, options);
         return ConnectionFactories.get(url);
@@ -126,7 +159,13 @@ public class DatabaseAnalyticsFactory {
         // are R2DBC-specific and do not translate to the v2 driver surface; connection pool,
         // timeouts and compression are owned by the v2 Client.Builder methods above. Values
         // are still returned by parseQueryParameters() for tests/observability.
-        var parsed = parseQueryParameters(getQueryParametersOverrides(queryParameters));
+        // No r2dbcOnlyServerSettings() here: the progress-header guard is specific to the v1/R2DBC driver, and
+        // DatabaseAnalyticsModule#buildReadOnlyClient builds a bare factory whose user runs under readonly=1 with a
+        // two-setting allowlist — any other per-query setting change is rejected outright. That is about the *field*;
+        // custom_http_params is still forwarded wholesale, so a cadence an operator writes there reaches this client
+        // like any other entry. Deliberate: it is their explicit instruction, filtering one key would be inconsistent
+        // with every other setting, and the readonly factory is built without queryParameters so it cannot be hit.
+        var parsed = parseQueryParameters(getQueryParametersOverrides(queryParameters, Map.of()));
         parsed.serverSettings().forEach(builder::serverSetting);
 
         if (clientSocketTimeout != null) {
@@ -137,12 +176,16 @@ public class DatabaseAnalyticsFactory {
     }
 
     /**
-     * Returns {@code queryParameters} with every set {@link #configurableServerSettings() override} applied to
-     * {@code custom_http_params} — overriding a present value, or added when absent (including when
-     * {@code queryParameters} is blank). Returned unchanged when no override field is set.
+     * Returns {@code queryParameters} with every set {@link #configurableServerSettings() override}, plus
+     * {@code pathServerSettings}, applied to {@code custom_http_params} — overriding a present value, or added when
+     * absent (including when {@code queryParameters} is blank). Returned unchanged when neither contributes anything.
+     *
+     * @param pathServerSettings settings that apply to only one of {@link #build()} / {@link #buildClient()}, rather
+     *                           than to both as the config fields do.
      */
-    private String getQueryParametersOverrides(String queryParameters) {
+    private String getQueryParametersOverrides(String queryParameters, Map<String, String> pathServerSettings) {
         var overrides = configurableServerSettings();
+        overrides.putAll(pathServerSettings);
         if (overrides.isEmpty()) {
             return queryParameters;
         }
@@ -154,8 +197,9 @@ public class DatabaseAnalyticsFactory {
 
     /**
      * Server settings from dedicated config fields, included when the field is set. Each is applied to
-     * {@code custom_http_params} by {@link #getQueryParametersOverrides(String)} — overriding a present value, or
+     * {@code custom_http_params} by {@link #getQueryParametersOverrides(String, Map)} — overriding a present value, or
      * added when absent — so an unset field leaves the {@code queryParameters} / ClickHouse-server value untouched.
+     * These apply to both {@link #build()} and {@link #buildClient()}.
      */
     private Map<String, String> configurableServerSettings() {
         var overrides = new LinkedHashMap<String, String>();
@@ -169,6 +213,26 @@ public class DatabaseAnalyticsFactory {
             overrides.put(ASYNC_INSERT_MAX_DATA_SIZE, String.valueOf(asyncInsertMaxDataSize));
         }
         return overrides;
+    }
+
+    /**
+     * Settings applied to {@link #build()} only. The progress-header guard belongs here rather than in
+     * {@link #configurableServerSettings()} for two independent reasons: the defect it guards is clickhouse-r2dbc's
+     * alone — the v2 client never sets {@code send_progress_in_http_headers} — and
+     * {@code DatabaseAnalyticsModule#buildReadOnlyClient} builds a bare factory for a user running under
+     * {@code readonly=1} whose profile allows exactly two settings to change per query, so sending it there fails
+     * every read that user makes.
+     *
+     * <p>Omitted when out of range. A factory built in code rather than bound from config never goes through
+     * validation, so it carries the primitive's 0. Sending a value that {@link Min} would reject overrides the
+     * server's own cadence with "no throttle"; omitting it leaves that cadence in place. ClickHouse accepts 0, so the
+     * two are indistinguishable on a default server — but they stop being so the moment a deployment sets this in a
+     * settings profile, and an unconfigured factory has no business speaking for one.
+     */
+    private Map<String, String> r2dbcOnlyServerSettings() {
+        return httpHeadersProgressIntervalMs < MIN_PROGRESS_HEADER_CADENCE_MS
+                ? Map.of()
+                : Map.of(HTTP_HEADERS_PROGRESS_INTERVAL_MS, String.valueOf(httpHeadersProgressIntervalMs));
     }
 
     private String serialize(Map<String, String> driverOptions, Map<String, String> serverSettings) {

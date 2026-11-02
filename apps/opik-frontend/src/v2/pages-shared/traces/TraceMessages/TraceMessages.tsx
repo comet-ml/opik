@@ -7,12 +7,14 @@ type TraceMessagesProps = {
   traces: Trace[];
   traceId?: string;
   handleOpenTrace: (id: string, filterToolCalls: boolean) => void;
+  content?: React.ReactNode;
 };
 
 const TraceMessages: React.FC<TraceMessagesProps> = ({
   traces,
   traceId,
   handleOpenTrace,
+  content,
 }) => {
   const setRef = useCallback(
     (element: HTMLDivElement | null) => {
@@ -37,7 +39,8 @@ const TraceMessages: React.FC<TraceMessagesProps> = ({
       className="relative flex size-full justify-center overflow-y-auto px-4"
       ref={setRef}
     >
-      <div className="flex w-full flex-col gap-2">
+      <div className="flex h-fit w-full flex-col gap-2 pb-6">
+        {content}
         {traces.map((t) => (
           <TraceMessage
             key={t.id}

@@ -19,6 +19,9 @@ export const AgentInsightsIssueWithDetails: core.serialization.ObjectSchema<
     status: AgentInsightsIssueWithDetailsStatus.optional(),
     severity: AgentInsightsIssueWithDetailsSeverity.optional(),
     tracesQuery: core.serialization.property("traces_query", core.serialization.string().optional()),
+    closeNote: core.serialization.property("close_note", core.serialization.string().optional()),
+    statusChangedBy: core.serialization.property("status_changed_by", core.serialization.string().optional()),
+    statusChangedAt: core.serialization.property("status_changed_at", core.serialization.date().optional()),
     createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
     createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
     lastUpdatedBy: core.serialization.property("last_updated_by", core.serialization.string().optional()),
@@ -36,6 +39,9 @@ export declare namespace AgentInsightsIssueWithDetails {
         status?: AgentInsightsIssueWithDetailsStatus.Raw | null;
         severity?: AgentInsightsIssueWithDetailsSeverity.Raw | null;
         traces_query?: string | null;
+        close_note?: string | null;
+        status_changed_by?: string | null;
+        status_changed_at?: string | null;
         created_by?: string | null;
         created_at?: string | null;
         last_updated_by?: string | null;

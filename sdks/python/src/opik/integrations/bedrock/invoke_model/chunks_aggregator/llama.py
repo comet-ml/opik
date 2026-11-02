@@ -5,7 +5,7 @@ import logging
 from typing import Any, Dict, List
 
 from .. import usage_converters
-from .base import ChunkAggregator
+from .base import ChunkAggregator, updated_token_count
 
 LOGGER = logging.getLogger(__name__)
 
@@ -67,11 +67,11 @@ class LlamaAggregator(ChunkAggregator):
                 # Use bedrock metrics as authoritative source
                 metrics = chunk_data.get("amazon-bedrock-invocationMetrics", {})
                 if metrics:
-                    prompt_token_count = metrics.get(
-                        "inputTokenCount", prompt_token_count
+                    prompt_token_count = updated_token_count(
+                        metrics.get("inputTokenCount"), prompt_token_count
                     )
-                    generation_token_count = metrics.get(
-                        "outputTokenCount", generation_token_count
+                    generation_token_count = updated_token_count(
+                        metrics.get("outputTokenCount"), generation_token_count
                     )
                     LOGGER.debug(
                         "Llama bedrock metrics: input=%d, output=%d",
