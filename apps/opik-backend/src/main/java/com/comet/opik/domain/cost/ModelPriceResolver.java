@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 /**
  * Finds the price for a model name and provider. The organization's rows come first: every spelling of the name under
@@ -29,8 +30,9 @@ class ModelPriceResolver {
     // separators a compact-dated name only ever prices when it is present verbatim in the price
     // table -- any name needing normalization (dot form, an `alias_of` entry, or a release the
     // daily LiteLLM sync has not picked up yet) silently fell through to a zero cost.
-    private static final String DATE_SUFFIX_PATTERN = "-\\d{4}-?(0[1-9]|1[0-2])-?(0[1-9]|[12]\\d|3[01])$";
-    private static final String VERSION_SUFFIX_PATTERN = ":\\d+$";
+    private static final Pattern DATE_SUFFIX_PATTERN = Pattern
+            .compile("-\\d{4}-?(0[1-9]|1[0-2])-?(0[1-9]|[12]\\d|3[01])$");
+    private static final Pattern VERSION_SUFFIX_PATTERN = Pattern.compile(":\\d+$");
 
     enum NameForm {
         EXACT,
@@ -193,10 +195,10 @@ class ModelPriceResolver {
     }
 
     private String stripDateSuffix(String modelName) {
-        return modelName.toLowerCase(Locale.ROOT).replaceFirst(DATE_SUFFIX_PATTERN, "");
+        return DATE_SUFFIX_PATTERN.matcher(modelName.toLowerCase(Locale.ROOT)).replaceFirst("");
     }
 
     private String stripVersionSuffix(String modelName) {
-        return modelName.toLowerCase(Locale.ROOT).replaceFirst(VERSION_SUFFIX_PATTERN, "");
+        return VERSION_SUFFIX_PATTERN.matcher(modelName.toLowerCase(Locale.ROOT)).replaceFirst("");
     }
 }
