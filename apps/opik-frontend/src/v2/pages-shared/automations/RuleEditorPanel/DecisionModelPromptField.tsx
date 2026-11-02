@@ -9,7 +9,11 @@ import { FormErrorSkeleton, FormField, FormItem, FormMessage } from "@/ui/form";
 import useAppStore from "@/store/AppStore";
 import useProviderKeys from "@/api/provider-keys/useProviderKeys";
 import { PROVIDER_TYPE } from "@/types/providers";
-import { DECISION_MODELS } from "@/constants/decisionModels";
+import { PROVIDERS } from "@/constants/providers";
+import {
+  DECISION_MODELS,
+  DECISIONS_API_MODELS,
+} from "@/constants/decisionModels";
 import SelectBox from "@/shared/SelectBox/SelectBox";
 import ManageAIProviderDialog from "@/v2/pages-shared/llm/ManageAIProviderDialog/ManageAIProviderDialog";
 import { EvaluationRuleFormType } from "@/v2/pages-shared/automations/RuleEditorPanel/schema";
@@ -51,55 +55,59 @@ const DecisionModelSelect: React.FC<{
   } = usePermissions();
   const [connectOpen, setConnectOpen] = useState(false);
 
+  const model = form.watch("llmJudgeDetails.model");
+  // DECISION_MODELS (Jev) are all OpenRouter's.
+  const provider =
+    DECISIONS_API_MODELS.find((decisionModel) => decisionModel.value === model)
+      ?.provider ?? PROVIDER_TYPE.OPEN_ROUTER;
+  const providerLabel = PROVIDERS[provider].label;
   const isConnected = (data?.content ?? []).some(
-    (provider) => provider.provider === PROVIDER_TYPE.OPEN_ROUTER,
+    (providerKey) => providerKey.provider === provider,
   );
 
-  if (!isPending && !isConnected) {
-    if (!canUpdateAIProviders) {
-      return (
-        <span className="comet-body-xs text-muted-slate">
-          Ask an admin to connect OpenRouter
-        </span>
-      );
-    }
-    return (
-      <>
-        <Button
-          type="button"
-          variant="ghost"
-          size="2xs"
-          className="gap-1 px-0 hover:bg-transparent hover:text-primary-hover"
-          onClick={() => setConnectOpen(true)}
-        >
-          <Plug className="size-3 shrink-0" />
-          Connect OpenRouter
-        </Button>
-        {connectOpen && (
-          <ManageAIProviderDialog
-            open
-            setOpen={setConnectOpen}
-            configuredProvidersList={data?.content}
-            defaultProvider={PROVIDER_TYPE.OPEN_ROUTER}
-          />
-        )}
-      </>
-    );
-  }
-
   return (
-    <SelectBox
-      variant="ghost"
-      value={form.watch("llmJudgeDetails.model")}
-      onChange={(model: string) =>
-        form.setValue("llmJudgeDetails.model", model, {
-          shouldDirty: true,
-        })
-      }
-      options={DECISION_MODELS}
-      testId="decision-model-select"
-      className="comet-body-xs h-6 w-auto gap-1 px-1 text-muted-slate"
-    />
+    <>
+      <SelectBox
+        variant="ghost"
+        value={model}
+        onChange={(nextModel: string) =>
+          form.setValue("llmJudgeDetails.model", nextModel, {
+            shouldDirty: true,
+          })
+        }
+        options={[...DECISION_MODELS, ...DECISIONS_API_MODELS]}
+        testId="decision-model-select"
+        className="comet-body-xs h-6 w-auto gap-1 px-1 text-muted-slate"
+      />
+      {!isPending &&
+        !isConnected &&
+        (canUpdateAIProviders ? (
+          <>
+            <Button
+              type="button"
+              variant="ghost"
+              size="2xs"
+              className="gap-1 px-0 hover:bg-transparent hover:text-primary-hover"
+              onClick={() => setConnectOpen(true)}
+            >
+              <Plug className="size-3 shrink-0" />
+              <span>{`Connect ${providerLabel}`}</span>
+            </Button>
+            {connectOpen && (
+              <ManageAIProviderDialog
+                open
+                setOpen={setConnectOpen}
+                configuredProvidersList={data?.content}
+                defaultProvider={provider}
+              />
+            )}
+          </>
+        ) : (
+          <span className="comet-body-xs text-muted-slate">
+            {`Ask an admin to connect ${providerLabel}`}
+          </span>
+        ))}
+    </>
   );
 };
 

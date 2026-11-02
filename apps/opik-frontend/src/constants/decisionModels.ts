@@ -1,4 +1,4 @@
-import { PROVIDER_MODEL_TYPE } from "@/types/providers";
+import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
 
 /**
  * OpenRouter models served by the Decisions API (TypeSafe Jev) rather than chat completions. They answer
@@ -18,3 +18,20 @@ export const DECISION_MODELS: { value: PROVIDER_MODEL_TYPE; label: string }[] =
       label: "typesafe/jev-1.13",
     },
   ];
+
+/**
+ * Chat models a Decision model rule can use through their provider's Decisions API. Their providers serve them over chat
+ * as well, so a rule uses the Decisions API only when it saves `api: "decisions"`. Adding a model, from any provider, is
+ * one entry here.
+ */
+export const DECISIONS_API_MODELS: {
+  value: PROVIDER_MODEL_TYPE;
+  label: string;
+  provider: PROVIDER_TYPE;
+}[] = [
+  {
+    value: PROVIDER_MODEL_TYPE.GPT_6_LUNA,
+    label: "GPT 6 Luna",
+    provider: PROVIDER_TYPE.OPEN_AI,
+  },
+];
