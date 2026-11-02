@@ -20,14 +20,14 @@ class ModelPriceMerger {
         var merged = base.toBuilder();
         List<ModelPrice.PromptTier> tiers = base.promptTiers();
         if (row.inputPerMillion() != null) {
-            BigDecimal input = perToken(row.inputPerMillion());
+            BigDecimal input = perMillionToPerToken(row.inputPerMillion());
             merged.inputPrice(input)
                     .inputAudioTokenPrice(
                             SpanCostCalculator.scaledToTier(base.inputAudioTokenPrice(), base.inputPrice(), input));
             tiers = withEachTier(tiers, tier -> tier.toBuilder().inputPrice(BigDecimal.ZERO).build());
         }
         if (row.outputPerMillion() != null) {
-            BigDecimal output = perToken(row.outputPerMillion());
+            BigDecimal output = perMillionToPerToken(row.outputPerMillion());
             merged.outputPrice(output)
                     .outputAudioTokenPrice(
                             SpanCostCalculator.scaledToTier(base.outputAudioTokenPrice(), base.outputPrice(), output))
@@ -36,11 +36,11 @@ class ModelPriceMerger {
             tiers = withEachTier(tiers, tier -> tier.toBuilder().outputPrice(BigDecimal.ZERO).build());
         }
         if (row.cacheReadPerMillion() != null) {
-            merged.cacheReadInputTokenPrice(perToken(row.cacheReadPerMillion()));
+            merged.cacheReadInputTokenPrice(perMillionToPerToken(row.cacheReadPerMillion()));
             tiers = withEachTier(tiers, tier -> tier.toBuilder().cacheReadInputTokenPrice(BigDecimal.ZERO).build());
         }
         if (row.cacheWritePerMillion() != null) {
-            BigDecimal write = perToken(row.cacheWritePerMillion());
+            BigDecimal write = perMillionToPerToken(row.cacheWritePerMillion());
             merged.cacheCreationInputTokenPrice(write)
                     .cacheCreationInputTokenPriceAbove1hr(
                             SpanCostCalculator.scaledToTier(base.cacheCreationInputTokenPriceAbove1hr(),
@@ -56,7 +56,7 @@ class ModelPriceMerger {
                 : price;
     }
 
-    private BigDecimal perToken(BigDecimal perMillion) {
+    private BigDecimal perMillionToPerToken(BigDecimal perMillion) {
         return perMillion.movePointLeft(6);
     }
 
