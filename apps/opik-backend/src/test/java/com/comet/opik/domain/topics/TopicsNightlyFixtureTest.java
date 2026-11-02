@@ -186,13 +186,12 @@ class TopicsNightlyFixtureTest {
                     .build());
         }
 
-        var prototypes = TopicsArrivalService.prototypes(live, rows).orElseThrow();
-        var labels = prototypes.assigner().assign(night.nightWindow().vectors());
+        var arrival = new KMeansTopicAlgorithm().arrival(live, rows).orElseThrow();
+        var labels = arrival.label(night.nightWindow().vectors());
 
         var topics = new long[labels.length];
         for (int i = 0; i < labels.length; i++) {
-            var topicId = prototypes.topicId(labels[i]);
-            topics[i] = topicId.equals(TraceTopic.OTHER) ? -1 : TopicsNightlyFixture.counter(topicId);
+            topics[i] = labels[i].equals(TraceTopic.OTHER) ? -1 : TopicsNightlyFixture.counter(labels[i]);
         }
         assertThat(topics).containsExactly(longs(night.expected.get("final_labels")));
     }

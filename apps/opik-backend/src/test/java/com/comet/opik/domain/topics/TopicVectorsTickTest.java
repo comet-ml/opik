@@ -679,7 +679,7 @@ class TopicVectorsTickTest {
             assertThat(cosine(intent(667), intent(333))).isLessThan(0.75);
             var meter = new TopicsTestMeter();
             var tick = tickWith(new TopicsArrivalService(opikConfig.getTopics(), template, traceTopicsDAO,
-                    meter.meter), meter);
+                    new KMeansTopicAlgorithm(), meter.meter), meter);
             var workspaceId = enabledWorkspace();
             var projectId = UUID.randomUUID();
             var billing = topic(workspaceId, projectId, "Billing", null);
@@ -719,7 +719,7 @@ class TopicVectorsTickTest {
         void noTopics() {
             var meter = new TopicsTestMeter();
             var tick = tickWith(new TopicsArrivalService(opikConfig.getTopics(), template, traceTopicsDAO,
-                    meter.meter), meter);
+                    new KMeansTopicAlgorithm(), meter.meter), meter);
             var workspaceId = enabledWorkspace();
             var projectId = UUID.randomUUID();
             labelTraces(workspaceId, projectId, 3, 1);
@@ -815,7 +815,9 @@ class TopicVectorsTickTest {
             var failingDAO = mock(TraceTopicsDAO.class);
             when(failingDAO.insert(any())).thenReturn(Mono.error(new IllegalStateException("trace_topics down")));
             var meter = new TopicsTestMeter();
-            var tick = tickWith(new TopicsArrivalService(opikConfig.getTopics(), template, failingDAO, meter.meter),
+            var tick = tickWith(
+                    new TopicsArrivalService(opikConfig.getTopics(), template, failingDAO, new KMeansTopicAlgorithm(),
+                            meter.meter),
                     meter);
             config().setEmbedBatchSize(2);
             var workspaceId = enabledWorkspace();
@@ -849,7 +851,7 @@ class TopicVectorsTickTest {
                     .thenThrow(new IllegalStateException("mysql down"));
             var meter = new TopicsTestMeter();
             var tick = tickWith(new TopicsArrivalService(opikConfig.getTopics(), failingTemplate, traceTopicsDAO,
-                    meter.meter), meter);
+                    new KMeansTopicAlgorithm(), meter.meter), meter);
             config().setEmbedBatchSize(2);
             var workspaceId = enabledWorkspace();
             var projectId = UUID.randomUUID();
@@ -877,7 +879,9 @@ class TopicVectorsTickTest {
             var hangingDAO = mock(TraceTopicsDAO.class);
             when(hangingDAO.insert(any())).thenReturn(Mono.never());
             var meter = new TopicsTestMeter();
-            var tick = tickWith(new TopicsArrivalService(opikConfig.getTopics(), template, hangingDAO, meter.meter),
+            var tick = tickWith(
+                    new TopicsArrivalService(opikConfig.getTopics(), template, hangingDAO, new KMeansTopicAlgorithm(),
+                            meter.meter),
                     meter);
             opikConfig.getTopics().getArrival().setTimeout(io.dropwizard.util.Duration.seconds(1));
             config().setEmbedBatchSize(2);
@@ -917,7 +921,7 @@ class TopicVectorsTickTest {
             });
             var meter = new TopicsTestMeter();
             var tick = tickWith(new TopicsArrivalService(opikConfig.getTopics(), hangingTemplate, traceTopicsDAO,
-                    meter.meter), meter);
+                    new KMeansTopicAlgorithm(), meter.meter), meter);
             opikConfig.getTopics().getArrival().setTimeout(io.dropwizard.util.Duration.seconds(1));
             config().setEmbedBatchSize(2);
             var workspaceId = enabledWorkspace();
@@ -948,7 +952,8 @@ class TopicVectorsTickTest {
             var dao = mock(TraceTopicsDAO.class);
             var noTemplate = mock(TransactionTemplate.class);
             var meter = new TopicsTestMeter();
-            var arrival = new TopicsArrivalService(opikConfig.getTopics(), noTemplate, dao, meter.meter).tick();
+            var arrival = new TopicsArrivalService(opikConfig.getTopics(), noTemplate, dao, new KMeansTopicAlgorithm(),
+                    meter.meter).tick();
             var workspaceId = UUID.randomUUID().toString();
             var vectors = IntStream.range(0, 3)
                     .mapToObj(i -> TopicVector.builder()

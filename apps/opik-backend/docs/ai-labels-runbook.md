@@ -753,6 +753,9 @@ After each insert of topic vectors, the vectors tick gives those traces a topic 
 prototype in the project's saved list. A trace then has a topic before the next night. Arrival runs inside the tick, so
 it needs `TOPICS_ENABLED=true`, and it runs only with `TOPICS_ARRIVAL_ENABLED=true` (the default).
 
+The rule belongs to the topic algorithm (`TopicAlgorithm.arrival`), so it agrees with the night. This section describes
+the current algorithm, `KMeansTopicAlgorithm`.
+
 ### What it writes
 
 - One `trace_topics` row per trace, with `source = 'arrival'`, an empty `run_id`, and the topic's id, or the all-zeros
@@ -813,7 +816,7 @@ Every series has `workspace_id` and `workspace_name`.
 | Metric | Prometheus name | Meaning |
 |---|---|---|
 | `topics.arrival.labelled` by `outcome` | `topics_arrival_labelled_total` | Traces per outcome. `topic` and `other`: a row was written. `no_prototypes`: the project has no live topic, no row. `dimension_mismatch`: the vector length differs from the prototypes', no row, one WARN per project per tick. `over_budget`: less than 1s left, no row. |
-| `topics.arrival.failures` by `phase`, `error_type` | `topics_arrival_failures_total` | Failed steps. `read`: the projects' lists in MySQL. `assign`: the saved prototypes could not be used. `insert`: the `trace_topics` insert. `error_type` `TimeoutException`: the step ran out of time. |
+| `topics.arrival.failures` by `phase`, `error_type` | `topics_arrival_failures_total` | Failed steps. `read`: the projects' lists in MySQL. `assign`: the algorithm could not make its rule from the saved list, or the rule failed. `insert`: the `trace_topics` insert. `error_type` `TimeoutException`: the step ran out of time. |
 | `topics.arrival.duration_seconds` | `topics_arrival_duration_seconds` | Wall time of the arrival step after one vectors insert, a native histogram. |
 
 No alert reads them: a trace that arrival misses gets its topic from the next night.

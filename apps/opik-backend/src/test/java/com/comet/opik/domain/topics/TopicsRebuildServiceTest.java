@@ -25,6 +25,7 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -298,6 +299,11 @@ class TopicsRebuildServiceTest {
 
             @Override
             public Update update(NightState state, NightWindow window, int maxTopics, Context context) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public Optional<Arrival> arrival(List<Topic> live, List<TopicPrototype> prototypes) {
                 throw new UnsupportedOperationException();
             }
         };

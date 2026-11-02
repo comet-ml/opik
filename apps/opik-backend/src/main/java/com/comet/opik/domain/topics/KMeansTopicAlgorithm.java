@@ -1,15 +1,23 @@
 package com.comet.opik.domain.topics;
 
+import com.google.common.base.Preconditions;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.stream.Stream;
 
 /**
- * The topic algorithm of stages 2a and 2b. The first build merges identical texts, k-means them into fine groups, has
- * the LLM name topics over the groups and assigns every trace to its nearest group centre. The nightly update is
- * {@link NightlyUpdate}, with {@link NightClusterer#KMEANS}. Stateless.
+ * The topic algorithm of stages 2a, 2b and 3. The first build merges identical texts, k-means them into fine groups,
+ * has the LLM name topics over the groups and assigns every trace to its nearest group centre. The nightly update is
+ * {@link NightlyUpdate}, with {@link NightClusterer#KMEANS}. Both end with {@link PrototypeAssigner} (cosine
+ * {@value PrototypeAssigner#ASSIGN_MIN_COSINE}, Other gate {@value PrototypeAssigner#OTHER_GATE}), and so does arrival,
+ * with the prototypes the night saved: a trace's topic on arrival is the one the night would give it. Stateless.
  */
 @Singleton
 public class KMeansTopicAlgorithm implements TopicAlgorithm {
@@ -81,6 +89,55 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
         var revived = stats.putArray("revived");
         result.revived().forEach(t -> revived.add(state.topic(t).getName()));
         return new Update(result.labels());
+    }
+
+    /**
+     * The assignment by {@code live}'s prototypes and the known-Other ones, each in {@code prototypes}' order: the order
+     * the night saved them in and assigned with, so a tie goes the same way. The prototypes a nightly update keeps for
+     * dormant or retired topics it may revive are left out: only a night brings such a topic back. Empty without a
+     * prototype of a live topic.
+     */
+    @Override
+    public Optional<Arrival> arrival(@NonNull List<Topic> live, @NonNull List<TopicPrototype> prototypes) {
+        var owners = new HashMap<UUID, Integer>();
+        for (var topic : live) {
+            owners.put(topic.id(), owners.size());
+        }
+        var topicPrototypes = new ArrayList<float[]>();
+        var topicOwners = new ArrayList<Integer>();
+        var otherPrototypes = new ArrayList<float[]>();
+        for (var row : prototypes) {
+            if (row.topicId() == null) {
+                otherPrototypes.add(row.values());
+            } else if (owners.containsKey(row.topicId())) {
+                topicPrototypes.add(row.values());
+                topicOwners.add(owners.get(row.topicId()));
+            }
+        }
+        if (topicPrototypes.isEmpty()) {
+            return Optional.empty();
+        }
+        int dimensions = topicPrototypes.getFirst().length;
+        Preconditions.checkState(Stream.concat(topicPrototypes.stream(), otherPrototypes.stream())
+                .allMatch(values -> values.length == dimensions), "prototypes of more than one length");
+        return Optional.of(new NearestPrototype(
+                new PrototypeAssigner(topicPrototypes, topicOwners, otherPrototypes, dimensions),
+                live.stream().map(Topic::id).toList(), dimensions));
+    }
+
+    /** Arrival by the saved prototypes, with the topic id of each owner index the assigner returns. */
+    private record NearestPrototype(PrototypeAssigner assigner, List<UUID> topicIds,
+            int dimensions) implements Arrival {
+
+        @Override
+        public UUID[] label(@NonNull float[] vectors) {
+            var owners = assigner.assign(vectors);
+            var topics = new UUID[owners.length];
+            for (int i = 0; i < owners.length; i++) {
+                topics[i] = owners[i] == PrototypeAssigner.OTHER ? TraceTopic.OTHER : topicIds.get(owners[i]);
+            }
+            return topics;
+        }
     }
 
     /** The assignment by the group centres, and how many known-Other prototypes its gate left out. */

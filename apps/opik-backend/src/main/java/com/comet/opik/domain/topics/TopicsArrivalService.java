@@ -9,7 +9,6 @@ import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.Meter;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
-import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.jdbi.v3.core.statement.SqlStatements;
@@ -30,21 +29,20 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.metrics.ErrorMetricsResolver.ERROR_TYPE_KEY;
 import static io.opentelemetry.api.common.AttributeKey.stringKey;
 
 /**
- * Topic on arrival: right after the vectors tick writes a chunk's vectors, each trace gets the topic of its nearest
- * prototype, as a {@code trace_topics} row with source {@code arrival} and an empty run id. The next night writes a row
- * for every trace of its window, and the latest row wins, so an arrival label holds until then.
+ * Topic on arrival: right after the vectors tick writes a chunk's vectors, each trace gets a topic by the project's
+ * saved list, as a {@code trace_topics} row with source {@code arrival} and an empty run id. The next night writes a
+ * row for every trace of its window, and the latest row wins, so an arrival label holds until then.
  *
- * <p>The prototypes are the project's live topics' and the known-Other ones, assigned by {@link PrototypeAssigner} with
- * the night's Other gate and threshold. The prototypes a nightly update keeps for retired topics it may revive are left
- * out: only a night brings such a topic back. A project without a live topic prototype gets no row; its traces wait for
- * its first build.
+ * <p>The rule is the {@link TopicAlgorithm}'s ({@link TopicAlgorithm#arrival}); this service reads the saved list once
+ * per project per tick, bounds the time, writes the rows and counts. With {@link KMeansTopicAlgorithm}, a trace gets
+ * its nearest live prototype's topic, as the night assigns. A project whose list labels nothing yet gets no row; its
+ * traces wait for its first build.
  *
  * <p>Best effort: a failed MySQL read or {@code trace_topics} insert is logged and counted, never thrown, and changes
  * nothing in the tick. The night labels those traces.
@@ -74,19 +72,11 @@ public class TopicsArrivalService {
     private final TopicsConfig config;
     private final TransactionTemplate template;
     private final TraceTopicsDAO traceTopicsDAO;
+    private final TopicAlgorithm algorithm;
 
     private final LongCounter labelled;
     private final LongCounter failures;
     private final DoubleHistogram duration;
-
-    /** A project's assignment, with the live topic id of each owner index the assigner returns. */
-    @Builder
-    record Prototypes(@NonNull PrototypeAssigner assigner, @NonNull List<UUID> topicIds, int dimensions) {
-
-        UUID topicId(int owner) {
-            return owner == PrototypeAssigner.OTHER ? TraceTopic.OTHER : topicIds.get(owner);
-        }
-    }
 
     /** A project's topic list as one tick read it. */
     private record Saved(List<Topic> live, List<TopicPrototype> rows) {
@@ -94,19 +84,20 @@ public class TopicsArrivalService {
 
     @Inject
     public TopicsArrivalService(@NonNull @Config("topics") TopicsConfig config, @NonNull TransactionTemplate template,
-            @NonNull TraceTopicsDAO traceTopicsDAO) {
-        this(config, template, traceTopicsDAO, GlobalOpenTelemetry.get().getMeter("opik.topics"));
+            @NonNull TraceTopicsDAO traceTopicsDAO, @NonNull TopicAlgorithm algorithm) {
+        this(config, template, traceTopicsDAO, algorithm, GlobalOpenTelemetry.get().getMeter("opik.topics"));
     }
 
     TopicsArrivalService(@NonNull TopicsConfig config, @NonNull TransactionTemplate template,
-            @NonNull TraceTopicsDAO traceTopicsDAO, @NonNull Meter meter) {
+            @NonNull TraceTopicsDAO traceTopicsDAO, @NonNull TopicAlgorithm algorithm, @NonNull Meter meter) {
         this.config = config;
         this.template = template;
         this.traceTopicsDAO = traceTopicsDAO;
+        this.algorithm = algorithm;
         this.labelled = meter.counterBuilder("topics.arrival.labelled")
                 .setDescription("Traces the vectors tick labelled on arrival, by outcome and workspace: topic or other "
-                        + "(a trace_topics row written), no_prototypes (the project has no live topic yet), "
-                        + "dimension_mismatch (its prototypes and the vectors differ in length), over_budget (less "
+                        + "(a trace_topics row written), no_prototypes (the project's list labels nothing yet), "
+                        + "dimension_mismatch (its list and the vectors differ in length), over_budget (less "
                         + "than a second left of the step's time or of the tick)")
                 .build();
         this.failures = meter.counterBuilder("topics.arrival.failures")
@@ -124,48 +115,13 @@ public class TopicsArrivalService {
         return new Tick(config.getArrival().isEnabled());
     }
 
-    /**
-     * The assignment by {@code live}'s prototypes and the known-Other ones, each in {@code rows}' order: the order the
-     * night saved them in and assigned with, so a tie goes the same way. Empty without a prototype of a live topic.
-     *
-     * @param rows the project's prototypes by position; those of a topic not in {@code live} are left out
-     */
-    static Optional<Prototypes> prototypes(@NonNull List<Topic> live, @NonNull List<TopicPrototype> rows) {
-        var owners = new HashMap<UUID, Integer>();
-        for (var topic : live) {
-            owners.put(topic.id(), owners.size());
-        }
-        var topicPrototypes = new ArrayList<float[]>();
-        var topicOwners = new ArrayList<Integer>();
-        var otherPrototypes = new ArrayList<float[]>();
-        for (var row : rows) {
-            if (row.topicId() == null) {
-                otherPrototypes.add(row.values());
-            } else if (owners.containsKey(row.topicId())) {
-                topicPrototypes.add(row.values());
-                topicOwners.add(owners.get(row.topicId()));
-            }
-        }
-        if (topicPrototypes.isEmpty()) {
-            return Optional.empty();
-        }
-        int dimensions = topicPrototypes.getFirst().length;
-        Preconditions.checkState(Stream.concat(topicPrototypes.stream(), otherPrototypes.stream())
-                .allMatch(values -> values.length == dimensions), "prototypes of more than one length");
-        return Optional.of(Prototypes.builder()
-                .assigner(new PrototypeAssigner(topicPrototypes, topicOwners, otherPrototypes, dimensions))
-                .topicIds(live.stream().map(Topic::id).toList())
-                .dimensions(dimensions)
-                .build());
-    }
-
     /** The arrival step of one tick. Not thread safe: the tick is one thread. */
     public final class Tick {
 
         private final boolean enabled;
-        // Per project read this tick, its assignment, or empty without a live topic. A project whose read or assignment
-        // failed is in neither map: it is not read again this tick.
-        private final Map<UUID, Optional<Prototypes>> projects = new HashMap<>();
+        // Per project read this tick, its arrival rule, or empty when its list labels nothing yet. A project whose read
+        // or rule failed is in neither map: it is not read again this tick.
+        private final Map<UUID, Optional<TopicAlgorithm.Arrival>> projects = new HashMap<>();
         private final Set<UUID> unusable = new HashSet<>();
         private final Set<UUID> mismatchLogged = new HashSet<>();
 
@@ -217,26 +173,28 @@ public class TopicsArrivalService {
                     continue;
                 }
                 var group = entry.getValue();
-                var prototypes = projects.get(projectId).orElse(null);
-                if (prototypes == null) {
+                var arrival = projects.get(projectId).orElse(null);
+                if (arrival == null) {
                     count(workspaceId, workspaceName, NO_PROTOTYPES, group.size());
                     continue;
                 }
                 var assignable = group.stream()
-                        .filter(vector -> vector.vector().size() == prototypes.dimensions())
+                        .filter(vector -> vector.vector().size() == arrival.dimensions())
                         .toList();
                 if (assignable.size() < group.size()) {
                     count(workspaceId, workspaceName, DIMENSION_MISMATCH, group.size() - assignable.size());
                     if (mismatchLogged.add(projectId)) {
                         log.warn("Topic arrival skipped vectors of another length than the prototypes, workspace '{}', "
                                 + "project '{}', prototypes '{}', vectors '{}'", workspaceId, projectId,
-                                prototypes.dimensions(), group.size() - assignable.size());
+                                arrival.dimensions(), group.size() - assignable.size());
                     }
                 }
                 if (assignable.isEmpty()) {
                     continue;
                 }
-                var owners = prototypes.assigner().assign(flatten(assignable, prototypes.dimensions()));
+                var topicIds = arrival.label(flatten(assignable, arrival.dimensions()));
+                Preconditions.checkState(topicIds.length == assignable.size(),
+                        "the arrival rule labelled '%s' of '%s' vectors", topicIds.length, assignable.size());
                 for (int i = 0; i < assignable.size(); i++) {
                     var vector = assignable.get(i);
                     rows.add(TraceTopic.builder()
@@ -244,11 +202,11 @@ public class TopicsArrivalService {
                             .projectId(projectId)
                             .traceId(vector.traceId())
                             .traceCreatedAt(vector.traceCreatedAt())
-                            .topicId(prototypes.topicId(owners[i]))
+                            .topicId(topicIds[i])
                             .source(TraceTopic.Source.ARRIVAL)
                             .runId("")
                             .build());
-                    if (owners[i] == PrototypeAssigner.OTHER) {
+                    if (TraceTopic.OTHER.equals(topicIds[i])) {
                         other++;
                     } else {
                         topics++;
@@ -308,12 +266,12 @@ public class TopicsArrivalService {
                     continue;
                 }
                 try {
-                    projects.put(projectId, prototypes(project.live(), project.rows()));
+                    projects.put(projectId, algorithm.arrival(project.live(), project.rows()));
                 } catch (RuntimeException exception) {
                     unusable.add(projectId);
                     fail(workspaceId, workspaceName, ASSIGN, exception);
-                    log.warn("Topic arrival can't assign by the saved prototypes, workspace '{}', project '{}'; not "
-                            + "labelling it this tick", workspaceId, projectId, exception);
+                    log.warn("Topic arrival can't build its rule from the saved list, workspace '{}', project '{}'; "
+                            + "not labelling it this tick", workspaceId, projectId, exception);
                 }
             }
         }

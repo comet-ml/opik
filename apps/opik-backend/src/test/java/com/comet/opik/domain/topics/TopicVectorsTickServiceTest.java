@@ -940,7 +940,7 @@ class TopicVectorsTickServiceTest {
         var config = new TopicsConfig();
         config.getArrival().setEnabled(false);
         return new TopicsArrivalService(config, mock(TransactionTemplate.class), mock(TraceTopicsDAO.class),
-                new TopicsTestMeter().meter);
+                new KMeansTopicAlgorithm(), new TopicsTestMeter().meter);
     }
 
     /** Both workspace attributes, with the name {@link #names()} gives. */
