@@ -351,7 +351,7 @@ flowchart TD
     D --> E["Read the eligible workspaces,<br/>count each one's projects in the window"]
     E -->|workspaces read fails| E1["Record ends failed; the night throws"]
     E -->|a workspace count fails| E2["count_failed row;<br/>the workspace runs the next night"]
-    E --> F["Skip rows: small, deleted, already_saved"]
+    E --> F["Skip rows: small, deleted"]
     E --> G["Projects to build, smallest first"]
     G --> H{"Next project, budget left?"}
     H -->|budget out| H1["not_reached rows for the rest"]
@@ -359,12 +359,13 @@ flowchart TD
     H1 --> M
     H -->|yes| I{"Takes topics:project lock?"}
     I -->|no| I1["Skip row: locked"]
-    I -->|yes| I2{"Built by hand since listed?"}
+    I -->|yes| I2{"Last saved run covers the night?"}
     I2 -->|yes| I3["Skip row: already_saved"]
-    I2 -->|no| J["Start the run: topic_runs row"]
-    J -->|fails| J1["first_build row, no run_id (start_failed)"]
-    J -->|ok| K["First build, within the project timeout"]
-    K --> L["first_build row with run_id: saved or failed"]
+    I2 -->|no| N["Mode: nightly_update with live topics,<br/>else first_build"]
+    N --> J["Start the run: topic_runs row"]
+    J -->|fails| J1["Row with the mode, no run_id (start_failed)"]
+    J -->|ok| K["Run in that mode, within the project timeout"]
+    K --> L["Row with the mode and run_id: saved or failed"]
     L --> H
     I1 --> H
     I3 --> H
