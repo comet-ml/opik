@@ -1,6 +1,6 @@
 import { test, expect } from '@e2e/fixtures';
 import { PlaygroundPage } from '@e2e/pom/playground.page';
-import { ensureModelAvailable } from '@e2e/pom/model-availability';
+import { ensureMockModelAvailable } from '@e2e/pom/model-availability';
 
 /**
  * T1 Playground smoke: run prompts against a seeded dataset → Re-run auto-creates
@@ -9,17 +9,19 @@ import { ensureModelAvailable } from '@e2e/pom/model-availability';
  * The Playground has no separate "Save as experiment" step — every Re-run click
  * creates a new experiment automatically (verified Phase 3 discovery).
  */
-test.describe('Playground — smoke', { tag: ['@t1-smoke', '@llm-daily', '@area:playground', '@cap:playground.compose-run-prompt', '@cap:playground.run-against-dataset'] }, () => {
+test.describe('Playground — smoke', { tag: ['@t1-smoke', '@area:playground', '@cap:playground.compose-run-prompt', '@cap:playground.run-against-dataset'] }, () => {
   test('Run prompts against a dataset auto-creates an experiment', async ({
     dataset,
     project,
     backendClient,
     page,
+    providerKeys,
+    testNamespace,
   }) => {
     test.setTimeout(180_000);
 
-    const modelDisplayName = await test.step('Ensure a model is available via the Configuration UI', async () => {
-      return ensureModelAvailable(page);
+    const modelDisplayName = await test.step('Provision a mock-gateway model', async () => {
+      return ensureMockModelAvailable(providerKeys, testNamespace);
     });
 
     const playground = new PlaygroundPage(page, project.id);

@@ -51,6 +51,17 @@ export interface ProviderKeyRef {
    * array — see `providerModelNames` for reading it as a list.
    */
   configuration?: { models?: string };
+  /** Masked by the backend: first and last three characters kept. */
+  api_key?: string;
+}
+
+/**
+ * Whether a stored key is one of the placeholders the fixtures seed
+ * (`qa-placeholder-…`, `opik-e2e-placeholder-…`) rather than a working
+ * credential. Real vendor keys start `sk-`, `AIza` or `gsk_`.
+ */
+export function isPlaceholderApiKey(masked: string | undefined): boolean {
+  return !!masked && (masked.startsWith('qa-') || masked.startsWith('opi'));
 }
 
 /**

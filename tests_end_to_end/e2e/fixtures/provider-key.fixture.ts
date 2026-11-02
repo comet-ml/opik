@@ -15,6 +15,7 @@ import {
   deleteProviderKeyByName,
   findProviderKeyByProvider,
   guardRefusesInternalDestinations,
+  isPlaceholderApiKey,
   notFoundProviderBaseUrl,
   PUBLIC_NOT_FOUND_BASE_URL,
 } from '../core/provider-keys';
@@ -350,7 +351,17 @@ export const test = baseTest.extend<ProviderKeyFixtures>({
       async ensureBuiltIn(provider, models = []) {
         for (const model of models) registerUnbilledModel(model);
         const existing = await findProviderKeyByProvider(provider);
-        if (existing) return { seeded: false };
+        if (existing) {
+          // Reuse is only free when the key is a placeholder; a real one would bill every call.
+          if (!isPlaceholderApiKey(existing.api_key)) {
+            throw new Error(
+              `[provider-key fixture] the workspace holds a real ${provider} key (${existing.api_key}), ` +
+                'so this spec would bill against it. Remove it under AI Providers: test workspaces ' +
+                'should hold placeholder keys only.',
+            );
+          }
+          return { seeded: false };
+        }
         try {
           await createProviderKey({
             provider,
