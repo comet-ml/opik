@@ -239,8 +239,10 @@ export class DashboardsPage {
    * The open widget dialog's "Group by" accordion trigger.
    *
    * `AccordionTrigger` renders a real button whose accessible name is the
-   * section label, so this needs no test id. Exposed rather than kept private
-   * because the keyboard-order test has to drive the section from outside.
+   * section label, so this needs no test id. Its only caller today is
+   * `selectWidgetGroupBy` below, which has to read the trigger's
+   * `aria-expanded` before deciding whether to click it; it is exposed for
+   * symmetry with `filtersSection`, which a spec does address directly.
    */
   groupBySection(): Locator {
     return this.page.getByRole('dialog').getByRole('button', { name: 'Group by', exact: true });

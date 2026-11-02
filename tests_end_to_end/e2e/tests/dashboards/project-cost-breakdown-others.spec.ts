@@ -351,6 +351,14 @@ test.describe('Dashboards — cost breakdown Others', { tag: ['@t2-cuj', '@area:
       // bug the next person "fixes".
       const seed = costBreakdownSpans;
 
+      // The un-grouped read this test's title measures against, taken here for
+      // the same reason the other two tests take it: "exactly twice the
+      // un-grouped cost" is only a claim about the TAG breakdown if the
+      // un-grouped answer is itself pinned. Without it the doubling would be
+      // asserted against a seed literal, and a backend that over-reported the
+      // plain total by 2x would satisfy every assertion below.
+      await expectUngroupedTotal(backendClient, project.id, seed, 'SPAN_COST', 'span_cost');
+
       // Ranked by aggregate: the shared tag carries the whole bucket total, so
       // it outranks every own-tag group and takes the first of the ten slots —
       // leaving one fewer slot for the own tags and pushing a fourth group into
@@ -377,13 +385,13 @@ test.describe('Dashboards — cost breakdown Others', { tag: ['@t2-cuj', '@area:
       expect(status, `SPAN_COST by tags rejected with: ${message}`).toBe(200);
       expectBreakdown(series, seed, expected, 'SPAN_COST by tags');
 
-      // Stated as its own assertion rather than left implicit in
-      // `bucketTotal`: the documented overlap is a FACT about this read, and a
-      // reader of a failure here should not have to derive it from the seed.
-      expect(
-        expected.bucketTotal,
-        'an overlapping tag breakdown exceeds real spend, by exactly the overlap',
-      ).toBe(sumExact([seed.perBucketTotal, seed.perBucketTotal]));
+      // The doubling itself is asserted inside `expectBreakdown`, which sums
+      // every series in each bucket and compares it to `expected.bucketTotal` —
+      // twice the un-grouped per-bucket total pinned at the top of this test.
+      // It is deliberately NOT restated here as a second expect: comparing
+      // `expected.bucketTotal` to the expression that built it reads like a
+      // check on the overlap while being `x === x`, so it could never fail and
+      // would leave the real guarantee looking weaker than it is.
     },
   );
 
