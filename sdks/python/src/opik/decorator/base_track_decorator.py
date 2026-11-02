@@ -184,10 +184,10 @@ class BaseTrackDecorator(abc.ABC):
         if hasattr(func, "opik_tracked") and func.opik_tracked:  # type: ignore
             return func
 
-        if inspect.isgeneratorfunction(func):
+        if inspect_helpers.is_generator_function(func):
             return self._tracked_sync_generator(func=func, track_options=track_options)
 
-        if inspect.isasyncgenfunction(func):
+        if inspect_helpers.is_async_generator_function(func):
             return self._tracked_async_generator(
                 func=func,
                 track_options=track_options,
