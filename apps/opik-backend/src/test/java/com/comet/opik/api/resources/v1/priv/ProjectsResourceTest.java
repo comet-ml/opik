@@ -3217,6 +3217,28 @@ class ProjectsResourceTest {
         }
 
         @Test
+        void update__whenNameAtMaxLength__thenAcceptTheUpdate() {
+            var newName = RandomStringUtils.secure().nextAlphanumeric(Project.NAME_MAX_LENGTH);
+            var expectedProject = getProject(projectId).toBuilder().name(newName).build();
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path(projectId.toString())
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .method(HttpMethod.PATCH, Entity.json(ProjectUpdate.builder().name(newName).build()))) {
+
+                assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+            }
+
+            var actualProject = getProject(projectId);
+            assertThat(actualProject)
+                    .usingRecursiveComparison()
+                    .ignoringFields("lastUpdatedAt")
+                    .isEqualTo(expectedProject);
+        }
+
+        @Test
         void update__whenNameHasSurroundingWhitespace__thenStoreStrippedName() {
             var newName = "Test Project: " + UUID.randomUUID();
             var expectedProject = getProject(projectId).toBuilder().name(newName).build();

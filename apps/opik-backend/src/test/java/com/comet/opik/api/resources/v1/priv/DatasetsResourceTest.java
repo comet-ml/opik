@@ -1498,6 +1498,25 @@ class DatasetsResourceTest {
         }
 
         @Test
+        @DisplayName("when project name has leading whitespace, then datasets reuse the same project")
+        void create__whenProjectNameHasLeadingWhitespace__thenReuseTheProject() {
+            var projectName = "  project-" + UUID.randomUUID();
+            var dataset1 = buildDataset().toBuilder().id(null).projectId(null).projectName(projectName).build();
+            var dataset2 = buildDataset().toBuilder().id(null).projectId(null).projectName(projectName).build();
+
+            var datasetId1 = datasetResourceClient.createDataset(dataset1, API_KEY, TEST_WORKSPACE);
+            var datasetId2 = datasetResourceClient.createDataset(dataset2, API_KEY, TEST_WORKSPACE);
+
+            var projectId = datasetResourceClient.getDatasetById(datasetId1, API_KEY, TEST_WORKSPACE).projectId();
+            var expectedDataset = dataset2.toBuilder().id(datasetId2).projectId(projectId).build();
+            var actualDataset = datasetResourceClient.getDatasetById(datasetId2, API_KEY, TEST_WORKSPACE);
+            assertThat(projectId).isNotNull();
+            assertThat(actualDataset).usingRecursiveComparison()
+                    .ignoringFields(DATASET_IGNORED_FIELDS)
+                    .isEqualTo(expectedDataset);
+        }
+
+        @Test
         @DisplayName("when description is multiline, then accept the request")
         void create__whenDescriptionIsMultiline__thenAcceptTheRequest() {
 

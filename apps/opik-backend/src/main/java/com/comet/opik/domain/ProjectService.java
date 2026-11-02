@@ -177,8 +177,8 @@ class ProjectServiceImpl implements ProjectService {
     }
 
     /**
-     * Guards the {@code projects.name} column for callers that bypass request validation ({@code @ProjectName} /
-     * {@code @Size}), e.g. OpenTelemetry. Counts code points like the column and the OpenTelemetry check, so it never
+     * Guards the {@code projects.name} column for callers that bypass request validation ({@code @Size}), e.g.
+     * OpenTelemetry. Counts code points like the column and the OpenTelemetry check, so it never
      * rejects a name those accept; request validation counts UTF-16 units, which is stricter, never looser.
      */
     private static void validateProjectNameLength(String name) {
@@ -194,19 +194,19 @@ class ProjectServiceImpl implements ProjectService {
         UUID projectId = idGenerator.generateId();
         String userName = requestContext.get().getUserName();
         String workspaceId = requestContext.get().getWorkspaceId();
+        // Stripped like trace and span creation (WorkspaceUtils.getProjectName), so both resolve to the same project.
+        // Implicit creation keeps the name its caller resolved, so its lookup and insert agree.
+        var strippedProject = project.toBuilder().name(project.name().strip()).build();
 
-        return createProject(project, projectId, userName, workspaceId);
+        return createProject(strippedProject, projectId, userName, workspaceId);
     }
 
     private Project createProject(Project project, UUID projectId, String userName, String workspaceId) {
         IdGenerator.validateVersion(projectId, "project");
-        // Stripped like implicit creation (WorkspaceUtils.getProjectName), so all paths agree on the name.
-        String name = project.name().strip();
-        validateProjectNameLength(name);
+        validateProjectNameLength(project.name());
 
         var newProject = project.toBuilder()
                 .id(projectId)
-                .name(name)
                 .createdBy(userName)
                 .lastUpdatedBy(userName)
                 .build();
