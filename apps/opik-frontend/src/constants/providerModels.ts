@@ -823,10 +823,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "nex-agi/nex-n2.5-pro",
     },
     {
-      value: PROVIDER_MODEL_TYPE.NOUSRESEARCH_HERMES_3_LLAMA_3_1_405B,
-      label: "nousresearch/hermes-3-llama-3.1-405b",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.NOUSRESEARCH_HERMES_4_405B,
       label: "nousresearch/hermes-4-405b",
     },
@@ -1134,22 +1130,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.PERPLEXITY_SONAR_REASONING_PRO,
       label: "perplexity/sonar-reasoning-pro",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_S_2_1,
-      label: "poolside/laguna-s-2.1",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_S_2_1_FREE,
-      label: "poolside/laguna-s-2.1:free",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_XS_2_1,
-      label: "poolside/laguna-xs-2.1",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_XS_2_1_FREE,
-      label: "poolside/laguna-xs-2.1:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.PRISM_ML_TERNARY_BONSAI_2_27B,
