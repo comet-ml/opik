@@ -360,6 +360,7 @@ class TopicVectorsTickTest {
     @DisplayName("a status older than the short window is found only by the tick on which the long-window pass is due")
     void longWindowPass() {
         // Wait for a tick that runs the pass, so the next one certainly doesn't.
+        makeLongWindowPassDue();
         Awaitility.await().atMost(20, TimeUnit.SECONDS).pollInterval(Duration.ofMillis(500))
                 .until(() -> tickService.tick(Instant.now()).longWindowPass());
         var workspaceId = enabledWorkspace();
@@ -582,6 +583,7 @@ class TopicVectorsTickTest {
     @DisplayName("the long-window pass stays on while its ticks reach the cap, and stops once one finds fewer")
     void longWindowUntilDrained() {
         // Drain any pass in progress, and wait for a pass to be due, so the next tick is a long one.
+        makeLongWindowPassDue();
         Awaitility.await().atMost(20, TimeUnit.SECONDS).pollInterval(Duration.ofMillis(500))
                 .until(() -> tickService.tick(Instant.now()).longWindowPass());
         config().setMaxTracesPerTick(2);
@@ -931,6 +933,14 @@ class TopicVectorsTickTest {
 
     private TopicsConfig.VectorsConfig config() {
         return opikConfig.getTopics().getVectors();
+    }
+
+    /**
+     * An earlier test whose single tick was a long-window pass that didn't drain (a back-off, a cap) holds the pass off
+     * for 1.5 tick intervals, which is 1.5 h here: drop the lock, so the next tick runs the pass.
+     */
+    private void makeLongWindowPassDue() {
+        lockService.unlockUsingToken(TopicVectorsTickService.LONG_WINDOW_LOCK).block();
     }
 
     private String enabledWorkspace() {
