@@ -2922,15 +2922,41 @@ class ProjectsResourceTest {
         }
 
         @Test
-        void create__whenNameHasSupplementaryCharactersWithinLimit__thenAcceptCreate() {
-            // 150 characters but 300 UTF-16 units: the limit counts characters, like the column.
+        void create__whenNameAtMaxLength__thenAcceptCreate() {
             var project = factory.manufacturePojo(Project.class).toBuilder()
-                    .name("\uD83D\uDE80".repeat(150))
+                    .name(RandomStringUtils.secure().nextAlphanumeric(Project.NAME_MAX_LENGTH))
                     .build();
 
             var id = createProject(project);
 
             assertProject(project.toBuilder().lastUpdatedTraceAt(null).id(id).build());
+        }
+
+        @Test
+        void create__whenNameHasSurroundingWhitespace__thenStoreStrippedName() {
+            var name = RandomStringUtils.secure().nextAlphanumeric(32);
+            var project = factory.manufacturePojo(Project.class).toBuilder()
+                    .name("  " + name + " ")
+                    .build();
+
+            var id = createProject(project);
+
+            assertProject(project.toBuilder().name(name).lastUpdatedTraceAt(null).id(id).build());
+        }
+
+        @Test
+        void create__whenNameHasLeadingWhitespace__thenTracesWithSameNameUseTheProject() {
+            var project = factory.manufacturePojo(Project.class).toBuilder()
+                    .name("  " + RandomStringUtils.secure().nextAlphanumeric(32))
+                    .build();
+            var expectedProjectId = createProject(project);
+
+            var traceId = traceResourceClient.createTrace(factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name())
+                    .build(), API_KEY, TEST_WORKSPACE);
+
+            var actualTrace = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY);
+            assertThat(actualTrace.projectId()).isEqualTo(expectedProjectId);
         }
 
         @Test
@@ -2943,8 +2969,8 @@ class ProjectsResourceTest {
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
                     .post(Entity.json(project))) {
 
-                assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
-                var expectedError = new ErrorMessage(List.of("Project name length must not exceed '150'"));
+                assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+                var expectedError = new ErrorMessage(List.of("name cannot exceed 150 characters"));
                 assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(expectedError);
             }
         }
@@ -3181,13 +3207,36 @@ class ProjectsResourceTest {
                     .header(WORKSPACE_HEADER, TEST_WORKSPACE)
                     .method(HttpMethod.PATCH, Entity.json(projectUpdate))) {
 
-                assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
-                var expectedError = new ErrorMessage(List.of("Project name length must not exceed '150'"));
+                assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+                var expectedError = new ErrorMessage(List.of("name cannot exceed 150 characters"));
                 assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(expectedError);
             }
 
             var actualProject = getProject(projectId);
             assertThat(actualProject).isEqualTo(expectedProject);
+        }
+
+        @Test
+        void update__whenNameHasSurroundingWhitespace__thenStoreStrippedName() {
+            var newName = "Test Project: " + UUID.randomUUID();
+            var expectedProject = getProject(projectId).toBuilder().name(newName).build();
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path(projectId.toString())
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .method(HttpMethod.PATCH,
+                            Entity.json(ProjectUpdate.builder().name(" " + newName + "  ").build()))) {
+
+                assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+            }
+
+            var actualProject = getProject(projectId);
+            assertThat(actualProject)
+                    .usingRecursiveComparison()
+                    .ignoringFields("lastUpdatedAt")
+                    .isEqualTo(expectedProject);
         }
 
         private Project getProject(UUID id) {

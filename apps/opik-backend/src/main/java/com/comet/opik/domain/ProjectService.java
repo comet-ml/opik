@@ -149,9 +149,6 @@ class ProjectServiceImpl implements ProjectService {
     }
 
     private static final String PROJECT_ALREADY_EXISTS = "Project already exists";
-    // Width of projects.name, in characters (code points, not UTF-16 units). Checked here rather than with @Size so
-    // every path that writes a name (create, update, implicit creation from a project_name) counts the same way.
-    private static final int PROJECT_NAME_MAX_LENGTH = 150;
 
     // recordLastUpdatedTrace populates projects.last_updated_trace_at from the trace timestamp, so sorting by last
     // trace reads it straight from MySQL instead of querying ClickHouse. Projects without traces have it NULL, so we
@@ -179,9 +176,14 @@ class ProjectServiceImpl implements ProjectService {
                 Response.status(Response.Status.NOT_FOUND).entity(new ErrorMessage(List.of(message))).build());
     }
 
+    /**
+     * Guards the {@code projects.name} column for callers that bypass request validation ({@code @ProjectName} /
+     * {@code @Size}), e.g. OpenTelemetry. Counts code points like the column and the OpenTelemetry check, so it never
+     * rejects a name those accept; request validation counts UTF-16 units, which is stricter, never looser.
+     */
     private static void validateProjectNameLength(String name) {
-        if (name != null && name.codePointCount(0, name.length()) > PROJECT_NAME_MAX_LENGTH) {
-            String message = "Project name length must not exceed '%d'".formatted(PROJECT_NAME_MAX_LENGTH);
+        if (name != null && name.codePointCount(0, name.length()) > Project.NAME_MAX_LENGTH) {
+            String message = "Project name length must not exceed '%d'".formatted(Project.NAME_MAX_LENGTH);
             throw new BadRequestException(message,
                     Response.status(Response.Status.BAD_REQUEST).entity(new ErrorMessage(List.of(message))).build());
         }
@@ -198,10 +200,13 @@ class ProjectServiceImpl implements ProjectService {
 
     private Project createProject(Project project, UUID projectId, String userName, String workspaceId) {
         IdGenerator.validateVersion(projectId, "project");
-        validateProjectNameLength(project.name());
+        // Stripped like implicit creation (WorkspaceUtils.getProjectName), so all paths agree on the name.
+        String name = project.name().strip();
+        validateProjectNameLength(name);
 
         var newProject = project.toBuilder()
                 .id(projectId)
+                .name(name)
                 .createdBy(userName)
                 .lastUpdatedBy(userName)
                 .build();
@@ -242,7 +247,8 @@ class ProjectServiceImpl implements ProjectService {
     public Project update(@NonNull UUID id, @NonNull ProjectUpdate projectUpdate) {
         String userName = requestContext.get().getUserName();
         String workspaceId = requestContext.get().getWorkspaceId();
-        validateProjectNameLength(projectUpdate.name());
+        String name = StringUtils.strip(projectUpdate.name());
+        validateProjectNameLength(name);
 
         try {
             template.inTransaction(WRITE, handle -> {
@@ -254,7 +260,7 @@ class ProjectServiceImpl implements ProjectService {
 
                 repository.update(project.id(),
                         workspaceId,
-                        projectUpdate.name(),
+                        name,
                         projectUpdate.description(),
                         projectUpdate.visibility(),
                         userName);

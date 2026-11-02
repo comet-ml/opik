@@ -2438,6 +2438,21 @@ class TracesResourceTest {
     class CreateTrace {
 
         @Test
+        void create__whenProjectNameTooLong__thenReturnUnprocessableEntity() {
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(RandomStringUtils.secure().nextAlphanumeric(Project.NAME_MAX_LENGTH + 1))
+                    .usage(null)
+                    .feedbackScores(null)
+                    .build();
+
+            try (var actualResponse = traceResourceClient.callCreateTrace(trace, API_KEY, TEST_WORKSPACE)) {
+                assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+                var expectedError = new ErrorMessage(List.of("projectName cannot exceed 150 characters"));
+                assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(expectedError);
+            }
+        }
+
+        @Test
         @DisplayName("Success")
         void testCreateTrace() {
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
@@ -2943,18 +2958,17 @@ class TracesResourceTest {
         }
 
         @Test
-        void batch__whenProjectNameTooLong__thenReturnBadRequest() {
-            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectName(RandomStringUtils.secure().nextAlphanumeric(151))
-                            .usage(null)
-                            .feedbackScores(null)
-                            .build())
-                    .toList();
+        void batch__whenProjectNameTooLong__thenReturnUnprocessableEntity() {
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(RandomStringUtils.secure().nextAlphanumeric(Project.NAME_MAX_LENGTH + 1))
+                    .usage(null)
+                    .feedbackScores(null)
+                    .build();
 
-            try (var actualResponse = traceResourceClient.callBatchCreateTraces(traces, API_KEY, TEST_WORKSPACE)) {
-                assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
-                var expectedError = new ErrorMessage(List.of("Project name length must not exceed '150'"));
+            try (var actualResponse = traceResourceClient.callBatchCreateTraces(List.of(trace), API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+                var expectedError = new ErrorMessage(List.of("traces[0].projectName cannot exceed 150 characters"));
                 assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(expectedError);
             }
         }
