@@ -953,6 +953,10 @@ clickhouse:
   image: altinity/clickhouse-server:26.3.16.10001.altinitystable
   storage: 50Gi
   logsLevel: information
+  # -- Rotation cap for the ClickHouse file logs. No volume is mounted for them, so they land on the node's root disk
+  logsMaxSize: 100M
+  # -- Rotated file logs kept (applies to both the server and error log)
+  logsMaxCount: 3
   # Custom health checks with longer timeouts for major version upgrades
   livenessProbe:
     httpGet:
