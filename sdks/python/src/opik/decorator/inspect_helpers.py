@@ -50,12 +50,8 @@ def is_generator(obj: Any) -> bool:
     return inspect.isgenerator(obj)
 
 
-def is_generator_function(func: Callable) -> bool:
-    return _matches_in_wrapped_chain(func, inspect.isgeneratorfunction)
-
-
-def is_async_generator_function(func: Callable) -> bool:
-    return _matches_in_wrapped_chain(func, inspect.isasyncgenfunction)
+def is_generator_function(obj: Any) -> bool:
+    return inspect.isgeneratorfunction(obj)
 
 
 def is_async(func: Callable) -> bool:
@@ -66,17 +62,13 @@ def is_async(func: Callable) -> bool:
     # inspect.markcoroutinefunction opt-in added in Python 3.12
     # (https://github.com/python/cpython/issues/94912) requires the wrapper
     # author to mark it, so this traversal is still needed on every version.
-    return _matches_in_wrapped_chain(func, inspect.iscoroutinefunction)
-
-
-def _matches_in_wrapped_chain(func: Callable, predicate: Callable[[Any], bool]) -> bool:
     seen = set()
     current: Any = func
     while current is not None:
         if id(current) in seen:
             break
         seen.add(id(current))
-        if predicate(current):
+        if inspect.iscoroutinefunction(current):
             return True
         current = getattr(current, "__wrapped__", None)
 

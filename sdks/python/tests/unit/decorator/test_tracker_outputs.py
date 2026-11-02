@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import dataclasses
 import functools
 import gc
@@ -685,41 +686,6 @@ def test_track__single_generator_function_tracked__generator_exhausted__happyflo
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
-def test_track__generator_function_wrapped_with_functools_wraps__generator_exhausted__span_ended_after_last_yield(
-    fake_backend,
-):
-    def passthrough(func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            return func(*args, **kwargs)
-
-        return wrapper
-
-    @tracker.track
-    @passthrough
-    def f(x):
-        values = ["yielded-1", " yielded-2", " yielded-3"]
-        for value in values:
-            yield value
-
-    generator = f("generator-input")
-    next(generator)
-    tracker.flush_tracker()
-    assert len(fake_backend.trace_trees) == 0
-
-    for _ in generator:
-        pass
-
-    tracker.flush_tracker()
-
-    assert len(fake_backend.trace_trees) == 1
-
-    assert_equal(
-        _expected_generator_trace("yielded-1 yielded-2 yielded-3"),
-        fake_backend.trace_trees[0],
-    )
-
-
 def _expected_generator_trace(output: str) -> TraceModel:
     return TraceModel(
         id=ANY_BUT_NONE,
@@ -831,6 +797,238 @@ def test_track__single_generator_function_tracked__never_iterated__no_span_repor
     tracker.flush_tracker()
 
     assert fake_backend.trace_trees == []
+
+
+def _passthrough(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        return func(*args, **kwargs)
+
+    return wrapper
+
+
+def test_track__generator_function_behind_functools_wraps_decorator__span_ended_after_last_yield(
+    fake_backend,
+):
+    @tracker.track
+    def f_inner():
+        return "inner-output"
+
+    @tracker.track
+    @_passthrough
+    def f(x):
+        for value in ["yielded-1", " yielded-2", " yielded-3"]:
+            f_inner()
+            yield value
+
+    assert list(f("generator-input")) == ["yielded-1", " yielded-2", " yielded-3"]
+
+    tracker.flush_tracker()
+
+    inner_span = SpanModel(
+        id=ANY_BUT_NONE,
+        name="f_inner",
+        input={},
+        output={"output": "inner-output"},
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        spans=[],
+        source="sdk",
+    )
+    EXPECTED_TRACE_TREE = _expected_generator_trace("yielded-1 yielded-2 yielded-3")
+    EXPECTED_TRACE_TREE.spans[0].spans = [inner_span, inner_span, inner_span]
+
+    assert len(fake_backend.trace_trees) == 1
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_track__async_generator_function_behind_functools_wraps_decorator__span_ended_after_last_yield(
+    fake_backend,
+):
+    @tracker.track
+    @_passthrough
+    async def f(x):
+        for value in ["yielded-1", " yielded-2", " yielded-3"]:
+            await asyncio.sleep(0)
+            yield value
+
+    async def consume():
+        return [value async for value in f("generator-input")]
+
+    assert asyncio.run(consume()) == ["yielded-1", " yielded-2", " yielded-3"]
+
+    tracker.flush_tracker()
+
+    assert len(fake_backend.trace_trees) == 1
+    assert_equal(
+        _expected_generator_trace("yielded-1 yielded-2 yielded-3"),
+        fake_backend.trace_trees[0],
+    )
+
+
+def test_track__function_returns_generator__output_logged_before_consumption__caller_gets_every_item(
+    fake_backend,
+):
+    @tracker.track
+    def f(x):
+        return (value for value in ["yielded-1", " yielded-2", " yielded-3"])
+
+    generator = f("generator-input")
+    # Serializing the returned generator as the output used to consume it here.
+    tracker.flush_tracker()
+
+    assert list(generator) == ["yielded-1", " yielded-2", " yielded-3"]
+
+    tracker.flush_tracker()
+
+    assert len(fake_backend.trace_trees) == 1
+    assert_equal(
+        _expected_generator_trace("yielded-1 yielded-2 yielded-3"),
+        fake_backend.trace_trees[0],
+    )
+
+
+def test_track__function_returns_generator__never_iterated__span_ended_with_empty_output(
+    fake_backend,
+):
+    @tracker.track
+    @_passthrough
+    def f(x):
+        yield "yielded-1"
+
+    generator = f("generator-input")
+    del generator
+    gc.collect()
+
+    tracker.flush_tracker()
+
+    assert len(fake_backend.trace_trees) == 1
+    assert_equal(_expected_generator_trace(""), fake_backend.trace_trees[0])
+
+
+def test_track__function_returns_generator__consumed_after_tracked_parent_returned__span_attached_to_parent(
+    fake_backend,
+):
+    @tracker.track
+    @_passthrough
+    def f(x):
+        yield "yielded-1"
+        yield " yielded-2"
+
+    @tracker.track
+    def f_outer():
+        nonlocal generator
+        generator = f("generator-input")
+        return "outer-output"
+
+    generator = None
+    f_outer()
+    assert list(generator) == ["yielded-1", " yielded-2"]
+
+    tracker.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="f_outer",
+        input={},
+        output={"output": "outer-output"},
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="f_outer",
+                input={},
+                output={"output": "outer-output"},
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=_expected_generator_trace("yielded-1 yielded-2").spans,
+                source="sdk",
+            )
+        ],
+        source="sdk",
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_track__wrapper_turns_generator_into_list__tracked_as_normal_function(
+    fake_backend,
+):
+    def materialize(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            return list(func(*args, **kwargs))
+
+        return wrapper
+
+    @tracker.track
+    @materialize
+    def f(x):
+        yield "yielded-1"
+        yield "yielded-2"
+
+    assert f("generator-input") == ["yielded-1", "yielded-2"]
+
+    tracker.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="f",
+        input={"x": "generator-input"},
+        output={"output": ["yielded-1", "yielded-2"]},
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="f",
+                input={"x": "generator-input"},
+                output={"output": ["yielded-1", "yielded-2"]},
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[],
+                source="sdk",
+            )
+        ],
+        source="sdk",
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_track__context_manager_functions__still_usable_as_context_managers(
+    fake_backend,
+):
+    @tracker.track
+    @contextlib.contextmanager
+    def sync_context(x):
+        yield "sync-value"
+
+    @tracker.track
+    @contextlib.asynccontextmanager
+    async def async_context(x):
+        yield "async-value"
+
+    with sync_context("input") as value:
+        assert value == "sync-value"
+
+    async def use_async_context():
+        async with async_context("input") as value:
+            return value
+
+    assert asyncio.run(use_async_context()) == "async-value"
+
+    tracker.flush_tracker()
+
+    assert [trace_tree.name for trace_tree in fake_backend.trace_trees] == [
+        "sync_context",
+        "async_context",
+    ]
 
 
 @pytest.mark.asyncio
@@ -1228,45 +1426,6 @@ def test_track__top_level_single_async_generator_function_tracked__generator_exh
     assert len(fake_backend.trace_trees) == 1
 
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
-
-
-def test_track__async_generator_function_wrapped_with_functools_wraps__generator_exhausted__span_ended_after_last_yield(
-    fake_backend,
-):
-    def passthrough(func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            return func(*args, **kwargs)
-
-        return wrapper
-
-    @tracker.track
-    @passthrough
-    async def f(x):
-        await asyncio.sleep(0.01)
-
-        for item in ["yielded-1", " yielded-2", " yielded-3"]:
-            yield item
-
-    async def async_generator_user():
-        generator = f("generator-input")
-        await generator.__anext__()
-        tracker.flush_tracker()
-        assert len(fake_backend.trace_trees) == 0
-
-        async for _ in generator:
-            pass
-
-    asyncio.run(async_generator_user())
-
-    tracker.flush_tracker()
-
-    assert len(fake_backend.trace_trees) == 1
-
-    assert_equal(
-        _expected_generator_trace("yielded-1 yielded-2 yielded-3"),
-        fake_backend.trace_trees[0],
-    )
 
 
 def test_track__top_level_async_generator_function_tracked__generator_has_another_tracked_function_inside__nested_function_attached_to_generator_span_and_trace(

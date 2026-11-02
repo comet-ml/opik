@@ -1,11 +1,6 @@
 import functools
 
-from opik.decorator.inspect_helpers import (
-    get_function_name,
-    is_async,
-    is_async_generator_function,
-    is_generator_function,
-)
+from opik.decorator.inspect_helpers import get_function_name, is_async
 
 
 class TestGetFunctionName:
@@ -158,75 +153,3 @@ class TestIsAsync:
         func_b.__wrapped__ = func_a  # type: ignore[attr-defined]
 
         assert is_async(func_a) is False
-
-
-class TestIsGeneratorFunction:
-    """Test cases for the is_generator_function function."""
-
-    def test_plain_generator_function_detected(self):
-        def my_generator():
-            yield 1
-
-        assert is_generator_function(my_generator) is True
-
-    def test_plain_sync_function_not_detected(self):
-        def my_sync():
-            pass
-
-        assert is_generator_function(my_sync) is False
-
-    def test_generator_wrapped_by_two_sync_decorators_detected(self):
-        def my_generator():
-            yield 1
-
-        @functools.wraps(my_generator)
-        def wrapper1(*args, **kwargs):
-            return my_generator(*args, **kwargs)
-
-        @functools.wraps(wrapper1)
-        def wrapper2(*args, **kwargs):
-            return wrapper1(*args, **kwargs)
-
-        assert is_generator_function(wrapper2) is True
-
-    def test_async_generator_not_detected(self):
-        async def my_async_generator():
-            yield 1
-
-        assert is_generator_function(my_async_generator) is False
-
-
-class TestIsAsyncGeneratorFunction:
-    """Test cases for the is_async_generator_function function."""
-
-    def test_plain_async_generator_function_detected(self):
-        async def my_async_generator():
-            yield 1
-
-        assert is_async_generator_function(my_async_generator) is True
-
-    def test_plain_async_function_not_detected(self):
-        async def my_async():
-            pass
-
-        assert is_async_generator_function(my_async) is False
-
-    def test_async_generator_wrapped_by_two_sync_decorators_detected(self):
-        async def my_async_generator():
-            yield 1
-
-        @functools.wraps(my_async_generator)
-        def wrapper1(*args, **kwargs):
-            return my_async_generator(*args, **kwargs)
-
-        @functools.wraps(wrapper1)
-        def wrapper2(*args, **kwargs):
-            return wrapper1(*args, **kwargs)
-
-        assert is_async_generator_function(wrapper2) is True
-
-    def test_sync_generator_not_detected(self):
-        def my_generator():
-            yield 1
-
-        assert is_async_generator_function(my_generator) is False

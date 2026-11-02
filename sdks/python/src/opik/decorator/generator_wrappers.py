@@ -49,17 +49,21 @@ class FinishGeneratorCallback(Protocol):
 class BaseTrackedGenerator(Generic[YieldType]):
     def __init__(
         self,
-        start_span_arguments: arguments_helpers.StartSpanParameters,
+        start_span_arguments: Optional[arguments_helpers.StartSpanParameters],
         opik_distributed_trace_headers: Optional[DistributedTraceHeadersDict],
         track_options: arguments_helpers.TrackOptions,
         finally_callback: FinishGeneratorCallback,
+        started_span_data: Optional[span.SpanData] = None,
+        started_trace_data: Optional[trace.TraceData] = None,
     ):
         self._start_span_arguments = start_span_arguments
         self._opik_distributed_trace_headers = opik_distributed_trace_headers
         self._track_options = track_options
 
-        self._created_span_data: Optional[span.SpanData] = None
-        self._created_trace_data: Optional[trace.TraceData] = None
+        # Set when a tracked function returned the generator: its span was started
+        # at the call, so it is adopted here instead of created on first iteration.
+        self._created_span_data: Optional[span.SpanData] = started_span_data
+        self._created_trace_data: Optional[trace.TraceData] = started_trace_data
 
         self._accumulated_values: List[YieldType] = []
 
@@ -70,10 +74,15 @@ class BaseTrackedGenerator(Generic[YieldType]):
         # explicit close, or the consumer simply dropping it.
         self._span_finished = False
 
+        if started_span_data is not None:
+            _register_exit_hook()
+            _UNFINISHED_GENERATORS.add(self)
+
     def _ensure_span_and_trace_created(self) -> None:
         if self._created_span_data is not None:
             return
 
+        assert self._start_span_arguments is not None
         result = span_creation_handler.create_span_respecting_context(
             self._start_span_arguments, self._opik_distributed_trace_headers
         )
@@ -153,16 +162,20 @@ class SyncTrackedGenerator(BaseTrackedGenerator[YieldType]):
     def __init__(
         self,
         generator: Generator[YieldType, None, None],
-        start_span_arguments: arguments_helpers.StartSpanParameters,
+        start_span_arguments: Optional[arguments_helpers.StartSpanParameters],
         opik_distributed_trace_headers: Optional[DistributedTraceHeadersDict],
         track_options: arguments_helpers.TrackOptions,
         finally_callback: FinishGeneratorCallback,
+        started_span_data: Optional[span.SpanData] = None,
+        started_trace_data: Optional[trace.TraceData] = None,
     ) -> None:
         super().__init__(
             start_span_arguments=start_span_arguments,
             opik_distributed_trace_headers=opik_distributed_trace_headers,
             track_options=track_options,
             finally_callback=finally_callback,
+            started_span_data=started_span_data,
+            started_trace_data=started_trace_data,
         )
         self._generator = generator
 
@@ -222,16 +235,20 @@ class AsyncTrackedGenerator(BaseTrackedGenerator[YieldType]):
     def __init__(
         self,
         generator: AsyncGenerator[YieldType, None],
-        start_span_arguments: arguments_helpers.StartSpanParameters,
+        start_span_arguments: Optional[arguments_helpers.StartSpanParameters],
         opik_distributed_trace_headers: Optional[DistributedTraceHeadersDict],
         track_options: arguments_helpers.TrackOptions,
         finally_callback: FinishGeneratorCallback,
+        started_span_data: Optional[span.SpanData] = None,
+        started_trace_data: Optional[trace.TraceData] = None,
     ) -> None:
         super().__init__(
             start_span_arguments=start_span_arguments,
             opik_distributed_trace_headers=opik_distributed_trace_headers,
             track_options=track_options,
             finally_callback=finally_callback,
+            started_span_data=started_span_data,
+            started_trace_data=started_trace_data,
         )
         self._generator = generator
         self._loop: Optional[asyncio.AbstractEventLoop] = None
