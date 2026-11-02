@@ -183,7 +183,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.forceMerge.minAgeSeconds | int | `604800` | A part quiet for this long becomes eligible for force-merge (min_age_to_force_merge_seconds). |
 | clickhouse.forceMerge.numberOfFreeEntriesInPoolToLowerMaxSizeOfMerge | int | `8` | Below this many free pool slots, the largest merges are throttled so they cannot starve the pool (number_of_free_entries_in_pool_to_lower_max_size_of_merge). |
 | clickhouse.forceMerge.onPartitionOnly | bool | `false` | false: per part. true: only once the whole partition is quiet, so a partition still taking writes never becomes eligible (min_age_to_force_merge_on_partition_only). |
-| clickhouse.image | string | `"altinity/clickhouse-server:26.3.16.10001.altinitystable"` |  |
+| clickhouse.image | string | `"clickhouse/clickhouse-server:26.3.62.3"` |  |
 | clickhouse.lifecycle | object | `{}` |  |
 | clickhouse.livenessProbe.failureThreshold | int | `10` |  |
 | clickhouse.livenessProbe.httpGet.path | string | `"/ping"` |  |
