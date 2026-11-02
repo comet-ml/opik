@@ -65,6 +65,7 @@ public class TopicsNightlyGauges implements Managed {
     static final String RUNNING = "topics.nightly.running_seconds";
     static final String LAST_NIGHT_PROJECTS = "topics.nightly.last_night.projects";
     static final String LAST_NIGHT_RUNS = "topics.nightly.last_night.runs";
+    static final String LAST_NIGHT_FAILED = "topics.nightly.last_night.failed";
     static final String STALE_PROJECTS = "topics.nightly.stale_projects";
     static final String STARVED_PROJECTS = "topics.nightly.starved_projects";
     static final String MISMATCHED = "topics.workspaces.mismatched";
@@ -77,12 +78,17 @@ public class TopicsNightlyGauges implements Managed {
     record Series(@NonNull Attributes attributes, long value) {
     }
 
-    /** What one refresh read. {@code runningSince} is null when no night runs. */
-    record Snapshot(@NonNull Instant lastStartedAt, Instant runningSince, @NonNull Map<String, List<Series>> levels) {
+    /**
+     * What one refresh read. {@code runningSince} is null when no night runs, {@code lastNightOutcome} before the first
+     * night ends.
+     */
+    record Snapshot(@NonNull Instant lastStartedAt, Instant runningSince, TopicNight.Outcome lastNightOutcome,
+            @NonNull Map<String, List<Series>> levels) {
     }
 
     /** The rows one refresh reads, in one transaction; workspace names are resolved after it. */
-    private record Read(Instant lastStartedAt, Instant runningSince, List<TopicNightDAO.ProjectCount> projects,
+    private record Read(Instant lastStartedAt, Instant runningSince, TopicNight.Outcome lastNightOutcome,
+            List<TopicNightDAO.ProjectCount> projects,
             List<TopicNightDAO.RunCount> runs, List<TopicNightDAO.WorkspaceCount> stale,
             List<TopicNightDAO.WorkspaceCount> starved, List<String> eligible, List<String> mismatched) {
     }
@@ -135,6 +141,12 @@ public class TopicsNightlyGauges implements Managed {
                         state.runningSince() == null ? 0 : secondsSince(state.runningSince()))));
         level(meter, LAST_NIGHT_PROJECTS, "Projects of the latest ended night, by workspace, decision and skip reason; "
                 + "count_failed is one per workspace whose count read failed");
+        meter.gaugeBuilder(LAST_NIGHT_FAILED).ofLongs()
+                .setDescription("1 when the latest ended night failed (a read failed, or its pod died and the next "
+                        + "night's housekeeping failed it), 0 when it finished; not published before the first night "
+                        + "ends")
+                .buildWithCallback(measurement -> current().map(Snapshot::lastNightOutcome)
+                        .ifPresent(outcome -> measurement.record(outcome == TopicNight.Outcome.FAILED ? 1 : 0)));
         level(meter, LAST_NIGHT_RUNS, "Runs the latest ended night started, by workspace and status (saved, failed, "
                 + "running when marking it failed threw); a run that could not start is failed");
         level(meter, STALE_PROJECTS, "Projects expected on each of the last 3 ended nights (any decision but a skip "
@@ -204,7 +216,7 @@ public class TopicsNightlyGauges implements Managed {
         }
         var ended = nights.findLatestEnded(Math.max(STALE_NIGHTS, STARVED_NIGHTS));
         var latest = ended.isEmpty() ? null : ended.getFirst().night();
-        return new Read(lastStartedAt, nights.runningSince(),
+        return new Read(lastStartedAt, nights.runningSince(), ended.isEmpty() ? null : ended.getFirst().outcome(),
                 latest == null ? List.of() : nights.countProjects(latest),
                 latest == null ? List.of() : nights.countRuns(latest),
                 ended.size() < STALE_NIGHTS
@@ -237,7 +249,7 @@ public class TopicsNightlyGauges implements Managed {
         perWorkspace(levels, STALE_PROJECTS, read.eligible(), read.stale());
         perWorkspace(levels, STARVED_PROJECTS, read.eligible(), read.starved());
         read.mismatched().forEach(workspaceId -> add(levels, MISMATCHED, workspace(workspaceId), 1));
-        return new Snapshot(read.lastStartedAt(), read.runningSince(), Map.copyOf(levels));
+        return new Snapshot(read.lastStartedAt(), read.runningSince(), read.lastNightOutcome(), Map.copyOf(levels));
     }
 
     /** Every eligible workspace, 0 unless counted: the series exists before its first problem. */

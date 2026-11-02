@@ -235,8 +235,9 @@ class TopicNightsTest {
 
         for (var name : List.of(TopicsNightlyGauges.STATE_AGE, TopicsNightlyGauges.LAST_STARTED_AGE,
                 TopicsNightlyGauges.RUNNING, TopicsNightlyGauges.LAST_NIGHT_PROJECTS,
-                TopicsNightlyGauges.LAST_NIGHT_RUNS, TopicsNightlyGauges.STALE_PROJECTS,
-                TopicsNightlyGauges.STARVED_PROJECTS, TopicsNightlyGauges.MISMATCHED)) {
+                TopicsNightlyGauges.LAST_NIGHT_RUNS, TopicsNightlyGauges.LAST_NIGHT_FAILED,
+                TopicsNightlyGauges.STALE_PROJECTS, TopicsNightlyGauges.STARVED_PROJECTS,
+                TopicsNightlyGauges.MISMATCHED)) {
             assertThat(meter.hasGauge(name)).as(name).isTrue();
             assertThat(meter.observe(name)).as(name).isEmpty();
         }
@@ -251,10 +252,28 @@ class TopicNightsTest {
         assertThat(meter.points(TopicsNightlyGauges.STATE_REFRESH_FAILURES)).singleElement()
                 .satisfies(point -> assertThat(point.value()).isZero());
         for (var name : List.of(TopicsNightlyGauges.LAST_STARTED_AGE, TopicsNightlyGauges.RUNNING,
-                TopicsNightlyGauges.LAST_NIGHT_PROJECTS, TopicsNightlyGauges.STALE_PROJECTS,
-                TopicsNightlyGauges.MISMATCHED)) {
+                TopicsNightlyGauges.LAST_NIGHT_PROJECTS, TopicsNightlyGauges.LAST_NIGHT_FAILED,
+                TopicsNightlyGauges.STALE_PROJECTS, TopicsNightlyGauges.MISMATCHED)) {
             assertThat(meter.observe(name)).as(name).isEmpty();
         }
+    }
+
+    @Test
+    @DisplayName("last night failed: 1 while the latest ended night failed, 0 once one finishes; a running night does "
+            + "not count, and nothing is published before the first night ends")
+    void lastNightFailed() {
+        dao().start(NIGHT.minusDays(1), clock.instant().minusSeconds(60));
+        refresh();
+        assertThat(meter.observe(TopicsNightlyGauges.LAST_NIGHT_FAILED)).isEmpty();
+
+        ended(NIGHT.minusDays(1), TopicNight.Outcome.FAILED);
+        dao().start(NIGHT, clock.instant().minusSeconds(60));
+        refresh();
+        assertThat(gauge(TopicsNightlyGauges.LAST_NIGHT_FAILED)).isEqualTo(1.0);
+
+        ended(NIGHT, TopicNight.Outcome.FINISHED);
+        refresh();
+        assertThat(gauge(TopicsNightlyGauges.LAST_NIGHT_FAILED)).isZero();
     }
 
     @Test
