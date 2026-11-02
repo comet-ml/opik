@@ -4,7 +4,9 @@ import decimal
 import importlib
 import uuid
 import warnings
+from collections import namedtuple
 from datetime import date, datetime, timezone
+from enum import Enum
 from threading import Lock
 from typing import Any, Optional
 
@@ -204,6 +206,13 @@ class FrozenSlotsKey:
     x: int
 
 
+ContainerKey = namedtuple("ContainerKey", ["name", "index"])
+
+
+class ContainerValue(Enum):
+    LIST = ["a", 1]
+
+
 @dataclasses.dataclass(slots=True)
 class SlotsWithUnsetField:
     x: int
@@ -278,6 +287,29 @@ def test_jsonable_encoder__slots_dataclass_as_dict_key__key_stringified_and_sibl
     encoded = jsonable_encoder.encode({FrozenSlotsKey(x=1): "a", "other": "b"})
 
     assert encoded == {"FrozenSlotsKey(x=1)": "a", "other": "b"}
+
+
+@pytest.mark.parametrize(
+    "key,expected_key",
+    [
+        (("a", 1), "('a', 1)"),
+        (frozenset({"a"}), "frozenset({'a'})"),
+        (ContainerKey(name="a", index=1), "ContainerKey(name='a', index=1)"),
+        (ContainerValue.LIST, "ContainerValue.LIST"),
+    ],
+)
+def test_jsonable_encoder__container_as_dict_key__key_stringified_and_siblings_kept(
+    key, expected_key
+):
+    encoded = jsonable_encoder.encode({key: "value", "other": "kept"})
+
+    assert encoded == {expected_key: "value", "other": "kept"}
+
+
+def test_jsonable_encoder__container_as_nested_dict_key__nested_dict_kept():
+    encoded = jsonable_encoder.encode({"nested": {("a", 1): "value"}})
+
+    assert encoded == {"nested": {"('a', 1)": "value"}}
 
 
 def test_jsonable_encoder__non_serializable_to_text__bytes():
