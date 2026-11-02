@@ -1,4 +1,4 @@
-export { test, expect } from './environment-split-thread.fixture';
+export { test, expect } from './cost-breakdown-spans.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -640,3 +640,8 @@ export type {
   EnvironmentSplitThreadRef,
   EnvironmentSplitThreadFixtures,
 } from './environment-split-thread.fixture';
+export type {
+  CostBreakdownGroup,
+  CostBreakdownSpansRef,
+  CostBreakdownSpansFixtures,
+} from './cost-breakdown-spans.fixture';

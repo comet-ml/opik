@@ -707,8 +707,36 @@ export interface SpanBatchSeed {
   endTime?: Date;
   model?: string;
   provider?: string;
-  /** Written through verbatim; deliberately no `total_cost` (see `createSpan`). */
+  /** Written through verbatim. See `totalEstimatedCost` for the cost counterpart. */
   usage?: Record<string, number>;
+  /**
+   * The span's `tags`, sent only when supplied.
+   *
+   * A breakdown on `tags` is the one group expression that is not a scalar
+   * column: `arrayJoin(if(empty(s.tags), ['Unknown'], s.tags))` fans a span out
+   * once per tag it carries, so a span with two tags is counted under both. That
+   * overlap is the documented behaviour behind the tag-cost warning, and it is
+   * only observable from a seed that can put more than one tag on a span.
+   */
+  tags?: string[];
+  /**
+   * The span's `total_estimated_cost`, supplied by the CLIENT rather than priced
+   * by the server.
+   *
+   * The opposite choice from `createSpan`/`modelCostSpans`, and deliberately so.
+   * Those exist to exercise server-side price resolution, where a client-supplied
+   * cost would defeat the whole test. Here the subject is the arithmetic a cost
+   * BREAKDOWN does over costs that already exist — `SpanDAO` stores an explicit
+   * `total_estimated_cost` as given (`SpanDAO.java:2163`) rather than
+   * recalculating — so an explicit cost is what makes the expected sums literals
+   * in the spec instead of whatever the shipped price table happens to say this
+   * week.
+   *
+   * A JS number, not a string: `JSON.stringify` emits the shortest exact decimal
+   * text for these values (`0.1` -> `0.1`), and Jackson builds the BigDecimal
+   * from that text, so the stored decimal is the one written here.
+   */
+  totalEstimatedCost?: number;
   /**
    * The span's `metadata` payload, sent only when supplied.
    *
@@ -840,6 +868,14 @@ export interface TraceBatchSeed {
    * absent value and a present one are different seeds.
    */
   environment?: string;
+  /**
+   * The trace's `tags`, sent only when supplied.
+   *
+   * The trace-side counterpart of `SpanBatchSeed.tags`: a breakdown on `tags`
+   * for a TRACE metric groups on `t.tags`, not on the spans' own, so the two
+   * have to be seedable independently.
+   */
+  tags?: string[];
 }
 
 /**
@@ -4967,6 +5003,10 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
             ...(span.model === undefined ? {} : { model: span.model }),
             ...(span.provider === undefined ? {} : { provider: span.provider }),
             ...(span.usage === undefined ? {} : { usage: span.usage }),
+            ...(span.tags === undefined ? {} : { tags: span.tags }),
+            ...(span.totalEstimatedCost === undefined
+              ? {}
+              : { total_estimated_cost: span.totalEstimatedCost }),
             ...(span.metadata === undefined ? {} : { metadata: span.metadata }),
             ...(span.errorInfo === undefined
               ? {}
@@ -7063,6 +7103,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
             source: 'sdk' as const,
             ...(trace.threadId ? { thread_id: trace.threadId } : {}),
             ...(trace.environment === undefined ? {} : { environment: trace.environment }),
+            ...(trace.tags === undefined ? {} : { tags: trace.tags }),
             ...(trace.input === undefined ? {} : { input: trace.input }),
             ...(trace.output === undefined ? {} : { output: trace.output }),
             ...(trace.metadata === undefined ? {} : { metadata: trace.metadata }),
