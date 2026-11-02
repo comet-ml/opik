@@ -1783,16 +1783,17 @@ public class ExperimentDAO {
     private static final String FIND_IDS_BY_DATASET_ID = """
             SELECT id
             FROM (
-                SELECT id, dataset_version_id
+                SELECT id, dataset_version_id, type
                 FROM experiments
                 WHERE workspace_id = :workspace_id
                 AND dataset_id = :dataset_id
                 ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             )
+            WHERE type = 'regular'
             <if(dataset_version_id)>
-            WHERE dataset_version_id = :dataset_version_id
-            <if(include_unversioned)>OR dataset_version_id = ''<endif>
+            AND (dataset_version_id = :dataset_version_id
+            <if(include_unversioned)>OR dataset_version_id = ''<endif>)
             <endif>
             SETTINGS log_comment = '<log_comment>'
             ;

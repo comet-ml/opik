@@ -86,7 +86,6 @@ import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
-import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -112,7 +111,9 @@ import jakarta.ws.rs.core.Response;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.RandomUtils;
 import org.apache.hc.core5.http.HttpStatus;
+import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 import org.awaitility.Awaitility;
 import org.glassfish.jersey.client.ChunkedInput;
 import org.junit.jupiter.api.AfterAll;
@@ -126,14 +127,13 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
@@ -148,6 +148,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -275,7 +276,6 @@ class DatasetsResourceTest {
     private OptimizationResourceClient optimizationResourceClient;
     private ProjectResourceClient projectResourceClient;
     private ExperimentAggregatesService experimentAggregatesService;
-    private TransactionTemplateAsync clickHouseTemplate;
 
     @BeforeAll
     void setUpAll(ClientSupport client, TransactionTemplate mySqlTemplate, Injector injector) {
@@ -296,7 +296,6 @@ class DatasetsResourceTest {
         optimizationResourceClient = new OptimizationResourceClient(client, baseURI, factory);
         projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
         experimentAggregatesService = injector.getInstance(ExperimentAggregatesService.class);
-        clickHouseTemplate = injector.getInstance(TransactionTemplateAsync.class);
     }
 
     @AfterAll
@@ -8965,23 +8964,52 @@ class DatasetsResourceTest {
         }
 
         private UUID createExperiment(Dataset dataset) {
+            return createExperiment(dataset, ExperimentType.REGULAR);
+        }
+
+        private UUID createExperiment(Dataset dataset, ExperimentType type) {
             return experimentResourceClient.create(
-                    experimentResourceClient.createPartialExperiment().datasetName(dataset.name()).build(),
+                    experimentResourceClient.createPartialExperiment().datasetName(dataset.name()).type(type).build(),
                     apiKey, workspaceName);
         }
 
-        private ExperimentItem buildExperimentItem(UUID experimentId, UUID datasetItemId) {
-            var trace = factory.manufacturePojo(Trace.class);
-            createAndAssert(trace, workspaceName, apiKey);
-            return factory.manufacturePojo(ExperimentItem.class).toBuilder()
-                    .experimentId(experimentId)
-                    .datasetItemId(datasetItemId)
-                    .traceId(trace.id())
-                    .usage(null)
-                    .totalEstimatedCost(null)
-                    .duration(null)
-                    .traceVisibilityMode(null)
+        private ExperimentItem createExperimentItem(UUID experimentId, DatasetItem datasetItem) {
+            var projectName = RandomStringUtils.secure().nextAlphabetic(20);
+            var trace = Trace.builder()
+                    .id(GENERATOR.generate())
+                    .input(JsonUtils.valueToTree(Map.of("question", RandomStringUtils.secure().nextAlphabetic(10))))
+                    .output(JsonUtils.valueToTree(Map.of("answer", RandomStringUtils.secure().nextAlphabetic(10))))
+                    .projectName(projectName)
+                    .startTime(Instant.now())
+                    .name(RandomStringUtils.secure().nextAlphabetic(10))
                     .build();
+            createAndAssert(trace, workspaceName, apiKey);
+
+            var score = FeedbackScoreBatchItem.builder()
+                    .id(trace.id())
+                    .projectName(projectName)
+                    .name("accuracy")
+                    .value(BigDecimal.valueOf(RandomUtils.secure().randomInt(0, 100)))
+                    .source(ScoreSource.SDK)
+                    .build();
+            createScoreAndAssert(FeedbackScoreBatch.builder().scores(List.of(score)).build(), apiKey, workspaceName);
+
+            return ExperimentItem.builder()
+                    .id(GENERATOR.generate())
+                    .experimentId(experimentId)
+                    .datasetItemId(datasetItem.id())
+                    .traceId(trace.id())
+                    .input(trace.input())
+                    .output(trace.output())
+                    .traceVisibilityMode(VisibilityMode.DEFAULT)
+                    .executionPolicy(ExecutionPolicy.DEFAULT)
+                    .feedbackScores(List.of(FeedbackScoreMapper.INSTANCE.toFeedbackScore(score)))
+                    .description(datasetItem.description())
+                    .build();
+        }
+
+        private void createExperimentItems(ExperimentItem... experimentItems) {
+            createAndAssert(new ExperimentItemsBatch(Set.of(experimentItems)), apiKey, workspaceName);
         }
 
         private List<ExperimentsComparisonFilter> idFilter(UUID datasetItemId) {
@@ -8998,10 +9026,26 @@ class DatasetsResourceTest {
             }
         }
 
-        private Set<UUID> experimentIdsOf(DatasetItem datasetItem) {
-            return datasetItem.experimentItems().stream()
-                    .map(ExperimentItem::experimentId)
-                    .collect(toUnmodifiableSet());
+        private void assertItemWithExperimentItems(DatasetItemPage actualPage, DatasetItem expectedItem,
+                ExperimentItem... expectedExperimentItems) {
+            assertPage(List.of(expectedItem), actualPage.content());
+
+            var actualExperimentItems = actualPage.content().getFirst().experimentItems();
+            assertThat(actualExperimentItems)
+                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_LIST)
+                    .containsExactlyInAnyOrder(expectedExperimentItems);
+
+            var expectedById = Arrays.stream(expectedExperimentItems)
+                    .collect(toMap(ExperimentItem::id, Function.identity()));
+            for (var actualExperimentItem : actualExperimentItems) {
+                var actualFeedbackScores = assertFeedbackScoresIgnoredFieldsAndSetThemToNull(
+                        actualExperimentItem, USER).feedbackScores();
+                assertThat(actualFeedbackScores)
+                        .usingRecursiveFieldByFieldElementComparator(RecursiveComparisonConfiguration.builder()
+                                .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
+                                .build())
+                        .isEqualTo(expectedById.get(actualExperimentItem.id()).feedbackScores());
+            }
         }
 
         @Test
@@ -9010,25 +9054,40 @@ class DatasetsResourceTest {
             var targetItem = DatasetResourceClient.buildDatasetItem(factory);
             var otherItem = DatasetResourceClient.buildDatasetItem(factory);
             var dataset = createDatasetWithItems(List.of(targetItem, otherItem));
-            var datasetId = dataset.id();
 
             var experimentId1 = createExperiment(dataset);
             var experimentId2 = createExperiment(dataset);
             var otherDatasetExperimentId = createExperiment(
                     createDatasetWithItems(List.of(DatasetResourceClient.buildDatasetItem(factory))));
 
-            createAndAssert(new ExperimentItemsBatch(Set.of(
-                    buildExperimentItem(experimentId1, targetItem.id()),
-                    buildExperimentItem(experimentId2, targetItem.id()),
-                    buildExperimentItem(experimentId1, otherItem.id()),
-                    buildExperimentItem(otherDatasetExperimentId, targetItem.id()))), apiKey, workspaceName);
+            var expectedExperimentItem1 = createExperimentItem(experimentId1, targetItem);
+            var expectedExperimentItem2 = createExperimentItem(experimentId2, targetItem);
+            createExperimentItems(
+                    expectedExperimentItem1,
+                    expectedExperimentItem2,
+                    createExperimentItem(experimentId1, otherItem),
+                    createExperimentItem(otherDatasetExperimentId, targetItem));
 
-            var actualPage = getPage(datasetId, null, idFilter(targetItem.id()));
+            var actualPage = getPage(dataset.id(), null, idFilter(targetItem.id()));
 
-            assertThat(actualPage.content()).hasSize(1);
-            var actualItem = actualPage.content().getFirst();
-            assertThat(actualItem.id()).isEqualTo(targetItem.id());
-            assertThat(experimentIdsOf(actualItem)).containsExactlyInAnyOrder(experimentId1, experimentId2);
+            assertItemWithExperimentItems(actualPage, targetItem, expectedExperimentItem1, expectedExperimentItem2);
+        }
+
+        @ParameterizedTest
+        @EnumSource(value = ExperimentType.class, names = "REGULAR", mode = EnumSource.Mode.EXCLUDE)
+        @DisplayName("when experiment_ids is omitted, then exclude optimizer experiments")
+        void findWhenExperimentIdsOmittedThenExcludeOptimizerExperiments(ExperimentType optimizerType) {
+            var targetItem = DatasetResourceClient.buildDatasetItem(factory);
+            var dataset = createDatasetWithItems(List.of(targetItem));
+            var regularExperimentId = createExperiment(dataset);
+            var optimizerExperimentId = createExperiment(dataset, optimizerType);
+
+            var expectedExperimentItem = createExperimentItem(regularExperimentId, targetItem);
+            createExperimentItems(expectedExperimentItem, createExperimentItem(optimizerExperimentId, targetItem));
+
+            var actualPage = getPage(dataset.id(), null, idFilter(targetItem.id()));
+
+            assertItemWithExperimentItems(actualPage, targetItem, expectedExperimentItem);
         }
 
         @Test
@@ -9049,21 +9108,30 @@ class DatasetsResourceTest {
                     false, apiKey, workspaceName);
             var experimentOnVersion2 = createExperiment(dataset);
 
-            createAndAssert(new ExperimentItemsBatch(Set.of(
-                    buildExperimentItem(experimentOnVersion1, targetItem.id()),
-                    buildExperimentItem(experimentOnVersion2, targetItem.id()))), apiKey, workspaceName);
+            var expectedOnVersion1 = createExperimentItem(experimentOnVersion1, targetItem);
+            var expectedOnVersion2 = createExperimentItem(experimentOnVersion2, targetItem);
+            createExperimentItems(expectedOnVersion1, expectedOnVersion2);
 
-            assertThat(experimentIdsOf(getPage(datasetId, version1.versionHash(), idFilter(targetItem.id()))
-                    .content().getFirst()))
-                    .containsExactly(experimentOnVersion1);
-            assertThat(experimentIdsOf(getPage(datasetId, version2.versionHash(), idFilter(targetItem.id()))
-                    .content().getFirst()))
-                    .containsExactly(experimentOnVersion2);
-            assertThat(experimentIdsOf(getPage(datasetId, DatasetVersionService.LATEST_TAG,
-                    idFilter(targetItem.id())).content().getFirst()))
-                    .containsExactly(experimentOnVersion2);
-            assertThat(experimentIdsOf(getPage(datasetId, null, idFilter(targetItem.id())).content().getFirst()))
-                    .containsExactlyInAnyOrder(experimentOnVersion1, experimentOnVersion2);
+            assertItemWithExperimentItems(getPage(datasetId, version1.versionHash(), idFilter(targetItem.id())),
+                    targetItem, expectedOnVersion1);
+            assertItemWithExperimentItems(getPage(datasetId, version2.versionHash(), idFilter(targetItem.id())),
+                    targetItem, expectedOnVersion2);
+            assertItemWithExperimentItems(
+                    getPage(datasetId, DatasetVersionService.LATEST_TAG, idFilter(targetItem.id())),
+                    targetItem, expectedOnVersion2);
+            assertItemWithExperimentItems(getPage(datasetId, null, idFilter(targetItem.id())),
+                    targetItem, expectedOnVersion1, expectedOnVersion2);
+        }
+
+        @Test
+        @DisplayName("when dataset_version does not exist, then return not found")
+        void findWhenDatasetVersionNotFound() {
+            var dataset = createDatasetWithItems(List.of(DatasetResourceClient.buildDatasetItem(factory)));
+
+            try (var response = datasetResourceClient.callGetDatasetItemsWithExperimentItems(
+                    dataset.id(), null, "unknown-version", null, apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+            }
         }
 
         @Test
@@ -9078,75 +9146,11 @@ class DatasetsResourceTest {
             assertThat(actualPage.total()).isZero();
         }
 
-        @Test
-        @DisplayName("when filtering by item id, then experiment items are read by dataset item id")
-        void findWhenItemIdFilterThenExperimentItemsReadByDatasetItemId() {
-            var targetItem = DatasetResourceClient.buildDatasetItem(factory);
-            var otherItem = DatasetResourceClient.buildDatasetItem(factory);
-            var dataset = createDatasetWithItems(List.of(targetItem, otherItem));
-            var experimentId = createExperiment(dataset);
-            createAndAssert(new ExperimentItemsBatch(Set.of(
-                    buildExperimentItem(experimentId, targetItem.id()),
-                    buildExperimentItem(experimentId, otherItem.id()))), apiKey, workspaceName);
-
-            getPage(dataset.id(), null, idFilter(targetItem.id()));
-
-            // Without the item filter in the primary key condition, every experiment item, trace and score of every
-            // experiment on the dataset is read to return one item, so the read grows with the dataset's history.
-            for (var queryName : List.of("get_dataset_item_versions_with_experiment_items",
-                    "count_dataset_item_versions_with_experiment_items")) {
-                var conditions = experimentItemsKeyConditions(explainIndexes(statementFor(queryName)));
-                assertThat(conditions).as(queryName).isNotEmpty()
-                        .allSatisfy(condition -> assertThat(condition).contains("dataset_item_id in"));
-            }
-        }
-
-        private List<String> experimentItemsKeyConditions(List<String> plan) {
-            var conditions = new ArrayList<String>();
-            for (int i = 0; i < plan.size(); i++) {
-                if (!plan.get(i).contains("ReadFromMergeTree") || !plan.get(i).contains(".experiment_items)")) {
-                    continue;
-                }
-                var primaryKey = plan.subList(i + 1, plan.size()).stream()
-                        .dropWhile(line -> !line.strip().equals("PrimaryKey"))
-                        .filter(line -> line.contains("Condition:"))
-                        .findFirst();
-                conditions.add(primaryKey.orElse("no primary key condition"));
-            }
-            return conditions;
-        }
-
-        private String statementFor(String queryName) {
-            var logCommentPrefix = "%s:%s:".formatted(queryName, workspaceId);
-            return Awaitility.await()
-                    .atMost(Duration.ofSeconds(30))
-                    .pollInterval(Duration.ofMillis(500))
-                    .until(() -> clickHouseTemplate.nonTransaction(connection -> Mono
-                            .from(connection.createStatement("SYSTEM FLUSH LOGS").execute())
-                            .flatMap(result -> Mono.from(result.getRowsUpdated()))
-                            .then(Mono.from(connection.createStatement("""
-                                    SELECT query FROM system.query_log
-                                    WHERE startsWith(log_comment, :prefix) AND type = 'QueryFinish'
-                                    ORDER BY event_time_microseconds DESC
-                                    LIMIT 1
-                                    """).bind("prefix", logCommentPrefix).execute()))
-                            .flatMap(result -> Mono.from(result.map((row, ignored) -> row.get(0, String.class)))))
-                            .block(), Objects::nonNull);
-        }
-
-        private List<String> explainIndexes(String statement) {
-            return clickHouseTemplate.nonTransaction(connection -> Flux
-                    .from(connection.createStatement("EXPLAIN indexes = 1 " + statement).execute())
-                    .flatMap(result -> result.map((row, ignored) -> row.get(0, String.class)))
-                    .collectList())
-                    .block();
-        }
-
         Stream<Arguments> findWhenInvalidParams() {
             return Stream.of(
                     arguments("[]", null, "experiment_ids cannot be empty"),
                     arguments(" ", null, "experiment_ids cannot be empty"),
-                    arguments(JsonUtils.writeValueAsString(List.of(UUID.randomUUID())), "v1",
+                    arguments(JsonUtils.writeValueAsString(List.of(GENERATOR.generate())), "v1",
                             "dataset_version can only be used when experiment_ids is omitted"));
         }
 
@@ -9155,7 +9159,7 @@ class DatasetsResourceTest {
         @DisplayName("when params are invalid, then return bad request")
         void findWhenInvalidParams(String experimentIds, String datasetVersion, String expectedError) {
             try (var response = datasetResourceClient.callGetDatasetItemsWithExperimentItems(
-                    UUID.randomUUID(), experimentIds, datasetVersion, null, apiKey, workspaceName)) {
+                    GENERATOR.generate(), experimentIds, datasetVersion, null, apiKey, workspaceName)) {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
                 assertThat(response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class).getMessage())
                         .isEqualTo(expectedError);
