@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.llm.openai;
 
 import com.comet.opik.TestConfigUtils;
+import com.comet.opik.domain.llm.ProviderErrorMessageValidator;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmTestClients;
 import com.comet.opik.infrastructure.llm.decisions.DecisionsQuestion;
@@ -52,10 +53,10 @@ class OpenAiDecisionsClientTest {
             }
             """;
 
-    private final OpenAiDecisionsClient client = new OpenAiDecisionsClient(new OpenAIClientGenerator(
-            TestConfigUtils.loadConfigTest().getLlmProviderClient(),
-            LlmTestClients.RESPONSES_API_HTTP_CLIENT,
-            LlmTestClients.LLM_HTTP_CLIENT_BUILDERS));
+    private final OpenAiDecisionsClient client = new OpenAiDecisionsClient(
+            new OpenAIClientGenerator(TestConfigUtils.loadConfigTest().getLlmProviderClient(),
+                    LlmTestClients.RESPONSES_API_HTTP_CLIENT, LlmTestClients.LLM_HTTP_CLIENT_BUILDERS),
+            new ProviderErrorMessageValidator(TestConfigUtils.loadConfigTest().getLlmProviderClient()));
 
     private WireMockServer openAi;
 
@@ -126,6 +127,19 @@ class OpenAiDecisionsClientTest {
                         exception -> assertThat(exception.getResponse().getStatus()).isEqualTo(404))
                 .hasMessageContaining(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER)
                 .hasMessageNotContaining("internal admin page");
+    }
+
+    @Test
+    void documentedErrorWithMoreThanPlainTextKeepsStatusButNotTheUpstreamText() {
+        openAi.stubFor(post(urlPathEqualTo(DECISIONS_PATH)).willReturn(json(400, """
+                {"error": {"message": "Bad question\\nINFO forged log line", "type": "invalid_request_error"}}
+                """)));
+
+        assertThatThrownBy(() -> client.decide(request(), config()).block())
+                .isInstanceOfSatisfying(ClientErrorException.class,
+                        exception -> assertThat(exception.getResponse().getStatus()).isEqualTo(400))
+                .hasMessageContaining(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER)
+                .hasMessageNotContaining("forged log line");
     }
 
     @Test

@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.llm.openai;
 
 import com.comet.opik.api.LlmProvider;
+import com.comet.opik.domain.llm.ProviderErrorMessageValidator;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.decisions.DecisionsClient;
 import com.comet.opik.infrastructure.llm.decisions.DecisionsRequest;
@@ -14,14 +15,10 @@ import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
-import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.util.LinkedHashMap;
-import java.util.Objects;
-
-import static com.comet.opik.domain.llm.ChatCompletionService.UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
 
 /**
  * Client for OpenAI's Decisions API ({@code POST {base URL}/decisions}), which serves gpt-6-luna to rules that ask
@@ -34,15 +31,16 @@ import static com.comet.opik.domain.llm.ChatCompletionService.UNEXPECTED_ERROR_C
  *
  * <p>Errors carry the upstream status, as with the OpenRouter client: 4xx as {@link ClientErrorException} and 5xx as
  * {@link ServerErrorException}, so the online-scoring consumer drops permanent failures and redelivers transient ones.
- * The base URL is the workspace's, so the upstream message is kept only when it names an error OpenAI documents.
+ * The base URL is the workspace's, so the upstream message passes the same {@link ProviderErrorMessageValidator} as
+ * the chat path: it is kept only when it names an error OpenAI documents and reads as short plain text.
  */
 @RequiredArgsConstructor
 public class OpenAiDecisionsClient implements DecisionsClient {
 
     static final String PREDICATE_TYPE = "predicate";
-    private static final int MAX_ERROR_MESSAGE_LENGTH = 512;
 
     private final @NonNull OpenAIClientGenerator clientGenerator;
+    private final @NonNull ProviderErrorMessageValidator errorMessageValidator;
 
     @Override
     public LlmProvider provider() {
@@ -57,7 +55,7 @@ public class OpenAiDecisionsClient implements DecisionsClient {
                 .create(toParams(request)))
                 .subscribeOn(Schedulers.boundedElastic())
                 .map(OpenAiDecisionsClient::toResponse)
-                .onErrorMap(OpenAIServiceException.class, OpenAiDecisionsClient::toWebApplicationException);
+                .onErrorMap(OpenAIServiceException.class, this::toWebApplicationException);
     }
 
     private static DecisionCreateParams toParams(DecisionsRequest request) {
@@ -95,13 +93,12 @@ public class OpenAiDecisionsClient implements DecisionsClient {
                 .build();
     }
 
-    private static WebApplicationException toWebApplicationException(OpenAIServiceException exception) {
+    private WebApplicationException toWebApplicationException(OpenAIServiceException exception) {
         int status = exception.statusCode();
-        var upstreamMessage = Objects.requireNonNullElse(
-                LlmProviderOpenAiResponses.toErrorMessage(exception).getMessage(),
-                UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
+        var upstreamMessage = errorMessageValidator.validate(LlmProviderOpenAiResponses.toErrorMessage(exception))
+                .getMessage();
         var message = "OpenAI Decisions API request failed, status '%s', message '%s'"
-                .formatted(status, StringUtils.truncate(upstreamMessage, MAX_ERROR_MESSAGE_LENGTH));
+                .formatted(status, upstreamMessage);
         return switch (Response.Status.Family.familyOf(status)) {
             case CLIENT_ERROR -> new ClientErrorException(message, status);
             // ServerErrorException rejects any non-5xx status with an IllegalArgumentException.
