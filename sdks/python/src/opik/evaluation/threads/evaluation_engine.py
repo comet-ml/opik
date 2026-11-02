@@ -50,6 +50,8 @@ class ThreadsEvaluationEngine:
     ) -> evaluation_result.ThreadsEvaluationResult:
         if len(metrics) == 0:
             raise ValueError("No metrics provided")
+        if max_threads < 1:
+            raise ValueError(f"max_threads must be at least 1, got {max_threads}")
 
         threads = self._threads_client.search_threads(
             project_name=self._project_name,

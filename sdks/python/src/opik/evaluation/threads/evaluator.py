@@ -90,9 +90,9 @@ def evaluate_threads(
             Default is 8.
         max_traces_per_thread: Maximum number of traces to fetch per thread.
             Default is 1000.
-        max_threads: Maximum number of threads to evaluate. Default is 1000.
-            When the search returns this many threads, the project may hold more
-            that match, so a warning is logged.
+        max_threads: Maximum number of threads to evaluate, at least 1. Default is 1000.
+            When the search returns this many threads, more matching threads may
+            be left out, so a warning is logged.
 
     Returns:
         ThreadsEvaluationResult containing evaluation scores for each thread.

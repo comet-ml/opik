@@ -245,6 +245,14 @@ class TestThreadsEvaluationEngine(unittest.TestCase):
         self.assertEqual(len(log_context.output), 1)
         self.assertIn("max_threads=2", log_context.output[0])
 
+    def test_evaluate_threads__max_threads_below_1__raises_value_error(self):
+        for max_threads in (0, -1):
+            with self.subTest(max_threads=max_threads):
+                with pytest.raises(ValueError, match=f"got {max_threads}"):
+                    self._evaluate_threads_with_executor_mocked(max_threads=max_threads)
+
+        self.mock_client.search_threads.assert_not_called()
+
     def test_evaluate_threads__fewer_threads_than_max_threads__no_warning(self):
         self.mock_client.search_threads.return_value = [
             TraceThread(id="thread_1", status="inactive"),
