@@ -80,6 +80,14 @@ public class TopicsWorkspaceNames {
         return resolved.value();
     }
 
+    /**
+     * The name this pod last resolved for the workspace, even one due for a refresh, or its id when it has none. Never
+     * looks it up: for a path that must not wait on the name service, such as one past a tick's deadline.
+     */
+    public String knownName(@NonNull String workspaceId) {
+        return Optional.ofNullable(names.get(workspaceId)).map(Name::value).orElse(workspaceId);
+    }
+
     /** Both workspace attributes, to add the metric's own attributes to. */
     public AttributesBuilder builder(@NonNull String workspaceId) {
         return Attributes.builder().put(WORKSPACE_ID, workspaceId).put(WORKSPACE_NAME, name(workspaceId));

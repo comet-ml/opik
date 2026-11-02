@@ -51,6 +51,25 @@ class TopicsWorkspaceNamesTest {
     }
 
     @Test
+    @DisplayName("The known name never looks up: the id before any lookup, then the last resolved name, even expired")
+    void knownNameNeverLooksUp() {
+        var calls = new AtomicInteger();
+        var clock = new MutableClock(NOW);
+        var names = new TopicsWorkspaceNames(id -> {
+            calls.incrementAndGet();
+            return "name-" + id;
+        }, clock);
+
+        assertThat(names.knownName("ws")).isEqualTo("ws");
+        assertThat(calls).hasValue(0);
+
+        names.name("ws");
+        clock.now = NOW.plus(TopicsWorkspaceNames.NAME_TTL);
+        assertThat(names.knownName("ws")).isEqualTo("name-ws");
+        assertThat(calls).hasValue(1);
+    }
+
+    @Test
     @DisplayName("A resolved name passed in is used as is, and a blank one falls back to the id")
     void staticBuilderFallsBack() {
         assertThat(TopicsWorkspaceNames.builder("ws", "acme").build().get(TopicsWorkspaceNames.WORKSPACE_NAME))

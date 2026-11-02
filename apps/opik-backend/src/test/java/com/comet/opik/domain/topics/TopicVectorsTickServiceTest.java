@@ -16,6 +16,7 @@ import com.comet.opik.infrastructure.inference.InferenceClient;
 import com.comet.opik.infrastructure.inference.InferenceException;
 import com.comet.opik.infrastructure.lock.LockService;
 import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.common.AttributesBuilder;
 import io.opentelemetry.api.metrics.DoubleGaugeBuilder;
 import io.opentelemetry.api.metrics.DoubleHistogram;
 import io.opentelemetry.api.metrics.DoubleHistogramBuilder;
@@ -37,6 +38,7 @@ import reactor.core.publisher.Mono;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import ru.vyarus.guicey.jdbi3.tx.TxConfig;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -55,6 +57,7 @@ import java.util.stream.Stream;
 import static io.opentelemetry.api.common.AttributeKey.longKey;
 import static io.opentelemetry.api.common.AttributeKey.stringKey;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.within;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.ArgumentMatchers.any;
@@ -209,7 +212,7 @@ class TopicVectorsTickServiceTest {
                 return Mono.just((long) rows.size());
             });
             service = new TopicVectorsTickService(config, new AiLabelsConfig(), template, dao, client, lockService,
-                    registry, meter.meter);
+                    registry, names(), meter.meter);
         }
 
         @Test
@@ -620,8 +623,8 @@ class TopicVectorsTickServiceTest {
             service.tick(Instant.now());
 
             verify(meter.counter("topics.vectors.read.failures"))
-                    .add(1, Attributes.of(stringKey("phase"), "find", stringKey("workspace_id"), "broken",
-                            stringKey("error_type"), "IllegalStateException"));
+                    .add(1, workspace("broken").put(stringKey("phase"), "find")
+                            .put(stringKey("error_type"), "IllegalStateException").build());
             assertThat(meter.observeGauge()).containsOnlyKeys("fine");
         }
 
@@ -636,10 +639,11 @@ class TopicVectorsTickServiceTest {
 
             assertThat(result.skipped()).isEqualTo(Map.of(TopicVectorsTickService.READ_FAILED, 1));
             verify(meter.counter("topics.vectors.read.failures"))
-                    .add(1, Attributes.of(stringKey("phase"), "summaries", stringKey("workspace_id"), WORKSPACE_ID,
-                            stringKey("error_type"), "IllegalStateException"));
+                    .add(1, workspace(WORKSPACE_ID).put(stringKey("phase"), "summaries")
+                            .put(stringKey("error_type"), "IllegalStateException").build());
             verify(meter.counter("topics.vectors.skipped"))
-                    .add(1, Attributes.of(stringKey("reason"), TopicVectorsTickService.READ_FAILED));
+                    .add(1, workspace(WORKSPACE_ID).put(stringKey("reason"), TopicVectorsTickService.READ_FAILED)
+                            .build());
         }
 
         @Test
@@ -686,10 +690,92 @@ class TopicVectorsTickServiceTest {
 
             assertThat(result.written()).isEqualTo(2);
             verify(meter.counter("topics.vectors.embed.failures"))
-                    .add(1, Attributes.of(longKey("http_status"), 400L, stringKey("code"), "invalid_request",
-                            stringKey("error_type"), "InferenceException"));
-            verify(meter.counter("topics.vectors.long_window.missed")).add(1L);
-            verify(meter.counter("topics.vectors.long_window.missed"), never()).add(2L);
+                    .add(1, workspace(WORKSPACE_ID).put(longKey("http_status"), 400L)
+                            .put(stringKey("code"), "invalid_request")
+                            .put(stringKey("error_type"), "InferenceException").build());
+            verify(meter.counter("topics.vectors.long_window.missed")).add(1L, workspace(WORKSPACE_ID).build());
+            verify(meter.counter("topics.vectors.long_window.missed"), never()).add(eq(2L), any());
+        }
+
+        @Test
+        @DisplayName("every per-workspace metric carries workspace_id and workspace_name, and the gauge takes the name "
+                + "the tick resolved, never one looked up at scrape time")
+        void workspaceAttributes() {
+            var lookups = new java.util.concurrent.atomic.AtomicInteger();
+            service = new TopicVectorsTickService(config, new AiLabelsConfig(), template, dao, client, lockService,
+                    registry, new TopicsWorkspaceNames(id -> {
+                        lookups.incrementAndGet();
+                        return "name-" + id;
+                    }, Clock.systemUTC()), meter.meter);
+            stub(List.of(candidate(UUID.randomUUID(), 1, NOW.minusSeconds(5))), candidate -> "intent");
+
+            assertThat(service.tick(NOW).written()).isOne();
+
+            var workspace = workspace(WORKSPACE_ID).build();
+            verify(meter.counter("topics.vectors.written")).add(1, workspace);
+            verify(meter.histogram("topics.vectors.embed.duration_seconds"))
+                    .record(anyDouble(), eq(workspace(WORKSPACE_ID).put(stringKey("outcome"), "ok").build()));
+            assertThat(meter.observeGaugeAttributes()).containsExactly(Map.entry(WORKSPACE_ID, workspace));
+            meter.observeGaugeAttributes();
+            assertThat(lookups).hasValue(1);
+        }
+
+        @Test
+        @DisplayName("a failed name lookup costs only the name: the workspace is labelled with its id, and the tick "
+                + "writes as usual")
+        void nameFallback() {
+            service = new TopicVectorsTickService(config, new AiLabelsConfig(), template, dao, client, lockService,
+                    registry, new TopicsWorkspaceNames(id -> {
+                        throw new IllegalStateException("react service down");
+                    }, Clock.systemUTC()), meter.meter);
+            stub(List.of(candidate(UUID.randomUUID(), 1, NOW.minusSeconds(5))), candidate -> "intent");
+
+            assertThat(service.tick(NOW).written()).isOne();
+
+            var byId = TopicsWorkspaceNames.builder(WORKSPACE_ID, WORKSPACE_ID).build();
+            verify(meter.counter("topics.vectors.written")).add(1, byId);
+            assertThat(meter.observeGaugeAttributes()).containsExactly(Map.entry(WORKSPACE_ID, byId));
+        }
+
+        @Test
+        @DisplayName("workspaces the budget cuts off are counted once each in workspaces_not_read, with the name this "
+                + "pod knows, after at most one lookup; they have no gauge value")
+        void workspacesNotRead() {
+            var looked = Collections.synchronizedList(new ArrayList<String>());
+            var names = new TopicsWorkspaceNames(id -> {
+                looked.add(id);
+                return "name-" + id;
+            }, Clock.systemUTC());
+            names.name("b");
+            looked.clear();
+            service = new TopicVectorsTickService(config, new AiLabelsConfig(), template, dao, client, lockService,
+                    registry, names, meter.meter);
+            when(template.inTransaction(any(TxConfig.class), any())).thenReturn(List.of("a", "b", "c"));
+            when(registry.find(TopicVectorsTickService.TASK)).thenReturn(java.util.Optional.of(earlyTask()));
+            var budget = config.getVectors().getTickBudget().toJavaDuration();
+
+            service.tick(Instant.now().minus(budget));
+
+            verify(dao, never()).findUnvectored(any(), any(), any(), any(), any(), anyInt(), anyLong());
+            // Only the first workspace in visiting order is looked up, before the time check stops the reads.
+            assertThat(looked).hasSizeLessThanOrEqualTo(1);
+            for (var id : List.of("a", "b", "c")) {
+                var name = id.equals("b") || looked.contains(id) ? "name-" + id : id;
+                verify(meter.counter("topics.vectors.workspaces_not_read"))
+                        .add(1, TopicsWorkspaceNames.builder(id, name).build());
+            }
+            verify(meter.counter("topics.vectors.workspaces_not_read"), times(3)).add(anyLong(), any());
+            assertThat(meter.observeGauge()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("without the trace_summary task the tick throws, so the job counts it as failed, not as ran")
+        void missingTask() {
+            when(registry.find(TopicVectorsTickService.TASK)).thenReturn(java.util.Optional.empty());
+
+            assertThatThrownBy(() -> service.tick(NOW)).isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining(TopicVectorsTickService.TASK);
+            verify(dao, never()).findUnvectored(any(), any(), any(), any(), any(), anyInt(), anyLong());
         }
 
         private void longWindowDue() {
@@ -786,6 +872,7 @@ class TopicVectorsTickServiceTest {
 
         final Meter meter = mock(Meter.class);
         private final Map<String, LongCounter> counters = new ConcurrentHashMap<>();
+        private final Map<String, DoubleHistogram> histograms = new ConcurrentHashMap<>();
         private final AtomicReference<Consumer<ObservableDoubleMeasurement>> gauge = new AtomicReference<>();
 
         TestMeter() {
@@ -797,7 +884,8 @@ class TopicVectorsTickServiceTest {
             });
             when(meter.histogramBuilder(anyString())).thenAnswer(invocation -> {
                 var builder = mock(DoubleHistogramBuilder.class, RETURNS_SELF);
-                doReturn(mock(DoubleHistogram.class)).when(builder).build();
+                var histogram = histogram(invocation.getArgument(0));
+                doReturn(histogram).when(builder).build();
                 return builder;
             });
             when(meter.gaugeBuilder(anyString())).thenAnswer(invocation -> {
@@ -814,18 +902,42 @@ class TopicVectorsTickServiceTest {
             return counters.computeIfAbsent(name, key -> mock(LongCounter.class));
         }
 
+        DoubleHistogram histogram(String name) {
+            return histograms.computeIfAbsent(name, key -> mock(DoubleHistogram.class));
+        }
+
         /** One scrape of the gauge: its value per workspace. */
         Map<String, Double> observeGauge() {
             var values = new HashMap<String, Double>();
+            observe((value, attributes) -> values.put(attributes.get(stringKey("workspace_id")), value));
+            return values;
+        }
+
+        /** One scrape of the gauge: the attributes of its value per workspace. */
+        Map<String, Attributes> observeGaugeAttributes() {
+            var values = new HashMap<String, Attributes>();
+            observe((value, attributes) -> values.put(attributes.get(stringKey("workspace_id")), attributes));
+            return values;
+        }
+
+        private void observe(java.util.function.BiConsumer<Double, Attributes> recorded) {
             var measurement = mock(ObservableDoubleMeasurement.class);
             doAnswer(invocation -> {
-                Attributes attributes = invocation.getArgument(1);
-                values.put(attributes.get(stringKey("workspace_id")), invocation.getArgument(0));
+                recorded.accept(invocation.getArgument(0), invocation.getArgument(1));
                 return null;
             }).when(measurement).record(anyDouble(), any(Attributes.class));
             gauge.get().accept(measurement);
-            return values;
         }
+    }
+
+    /** Workspace names as the tests expect them: {@code name-} and the id, never failing. */
+    static TopicsWorkspaceNames names() {
+        return new TopicsWorkspaceNames(workspaceId -> "name-" + workspaceId, Clock.systemUTC());
+    }
+
+    /** Both workspace attributes, with the name {@link #names()} gives. */
+    static AttributesBuilder workspace(String workspaceId) {
+        return TopicsWorkspaceNames.builder(workspaceId, "name-" + workspaceId);
     }
 
     @Test

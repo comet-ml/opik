@@ -7,6 +7,10 @@ import ch.qos.logback.core.read.ListAppender;
 import com.comet.opik.domain.topics.TopicVectorsTickService;
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.lock.LockService;
+import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.metrics.LongCounter;
+import io.opentelemetry.api.metrics.LongCounterBuilder;
+import io.opentelemetry.api.metrics.Meter;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -20,10 +24,15 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.RETURNS_SELF;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @DisplayName("topic vectors job")
@@ -32,6 +41,7 @@ class TopicVectorsJobTest {
     private final TopicsConfig config = new TopicsConfig();
     private final TopicVectorsTickService tickService = mock(TopicVectorsTickService.class);
     private final LockService lockService = mock(LockService.class);
+    private final LongCounter ticks = mock(LongCounter.class);
     private final ListAppender<ILoggingEvent> appender = new ListAppender<>();
     private final Logger logger = (Logger) LoggerFactory.getLogger(TopicVectorsJob.class);
     private TopicVectorsJob job;
@@ -40,7 +50,9 @@ class TopicVectorsJobTest {
     void setUp() {
         config.setEnabled(true);
         when(tickService.leaderLease()).thenReturn(Duration.ofSeconds(95));
-        job = new TopicVectorsJob(config, tickService, lockService);
+        job = new TopicVectorsJob(config, tickService, lockService, meterOf(ticks));
+        // Only the firings' own counts matter below; the start values have their own test.
+        clearInvocations(ticks);
         appender.start();
         logger.addAppender(appender);
     }
@@ -93,9 +105,12 @@ class TopicVectorsJobTest {
 
         job.doJob(null);
         verify(tickService).tick(any());
+        verify(ticks).add(1, outcome(TopicVectorsJob.RAN));
 
         job.doJob(null);
         verify(tickService).tick(any());
+        verify(ticks).add(1, outcome(TopicVectorsJob.NOT_DUE));
+        verify(ticks, times(2)).add(anyLong(), any());
         assertThat(appender.list).anySatisfy(event -> {
             assertThat(event.getLevel()).isEqualTo(Level.INFO);
             assertThat(event.getFormattedMessage()).contains("lock 'topics:vectors:tick'");
@@ -111,10 +126,88 @@ class TopicVectorsJobTest {
         job.doJob(null);
 
         verify(tickService, never()).tick(any());
+        verify(ticks).add(1, outcome(TopicVectorsJob.LOCK_HELD));
+        verify(ticks, times(1)).add(anyLong(), any());
         assertThat(appender.list).anySatisfy(event -> {
             assertThat(event.getLevel()).isEqualTo(Level.INFO);
             assertThat(event.getFormattedMessage()).contains("lock 'topics:vectors:leader'");
         });
+    }
+
+    @Test
+    @DisplayName("with topics on, every tick outcome starts at 0; with topics off the job publishes nothing")
+    void outcomesStartAtZero() {
+        var enabledTicks = mock(LongCounter.class);
+        new TopicVectorsJob(config, tickService, lockService, meterOf(enabledTicks));
+        for (var outcome : TopicVectorsJob.OUTCOMES) {
+            verify(enabledTicks).add(0, outcome(outcome));
+        }
+        assertThat(TopicVectorsJob.OUTCOMES).containsExactly("ran", "not_due", "lock_held", "failed");
+
+        var disabledTicks = mock(LongCounter.class);
+        var disabled = new TopicsConfig();
+        disabled.setEnabled(false);
+        new TopicVectorsJob(disabled, tickService, lockService, meterOf(disabledTicks));
+        verifyNoInteractions(disabledTicks);
+    }
+
+    @Test
+    @DisplayName("a tick that throws is counted once as failed and logged at ERROR; the lock fallback does not run")
+    void tickFails() {
+        var fallbackRan = new AtomicBoolean();
+        when(lockService.bestEffortLock(any(), any(), any(), any(), any())).thenAnswer(invocation -> {
+            Mono<Object> action = invocation.getArgument(1);
+            Mono<Void> fallback = invocation.getArgument(2);
+            // The lock service runs the fallback when the action fails with a Redis error.
+            return action.onErrorResume(error -> fallback.doOnSuccess(__ -> fallbackRan.set(true)).then(Mono.empty()));
+        });
+        when(lockService.lockUsingToken(TopicVectorsJob.TICK_LOCK, Duration.ofSeconds(59)))
+                .thenReturn(Mono.just(true));
+        when(tickService.tick(any())).thenThrow(new IllegalStateException("ai-labels has no task 'trace_summary'"));
+
+        job.doJob(null);
+
+        verify(ticks).add(1, outcome(TopicVectorsJob.FAILED));
+        verify(ticks, times(1)).add(anyLong(), any());
+        assertThat(fallbackRan).isFalse();
+        assertThat(appender.list).anySatisfy(event -> {
+            assertThat(event.getLevel()).isEqualTo(Level.ERROR);
+            assertThat(event.getFormattedMessage()).isEqualTo("Topic vectors tick failed");
+        });
+    }
+
+    @Test
+    @DisplayName("a tick lock that can't be read, or a lock service error, is counted as failed")
+    void lockErrorsFail() {
+        when(lockService.bestEffortLock(any(), any(), any(), any(), any()))
+                .thenAnswer(invocation -> invocation.getArgument(1));
+        when(lockService.lockUsingToken(TopicVectorsJob.TICK_LOCK, Duration.ofSeconds(59)))
+                .thenReturn(Mono.error(new IllegalStateException("redis down")));
+
+        job.doJob(null);
+
+        verify(tickService, never()).tick(any());
+        verify(ticks).add(1, outcome(TopicVectorsJob.FAILED));
+
+        when(lockService.bestEffortLock(any(), any(), any(), any(), any()))
+                .thenReturn(Mono.error(new IllegalStateException("lock service broke")));
+
+        job.doJob(null);
+
+        verify(ticks, times(2)).add(1, outcome(TopicVectorsJob.FAILED));
+        verify(ticks, times(2)).add(anyLong(), any());
+    }
+
+    private static Attributes outcome(String outcome) {
+        return Attributes.of(TopicVectorsJob.OUTCOME, outcome);
+    }
+
+    private static Meter meterOf(LongCounter counter) {
+        var meter = mock(Meter.class);
+        var builder = mock(LongCounterBuilder.class, RETURNS_SELF);
+        when(builder.build()).thenReturn(counter);
+        when(meter.counterBuilder("topics.vectors.ticks")).thenReturn(builder);
+        return meter;
     }
 
     @Test
