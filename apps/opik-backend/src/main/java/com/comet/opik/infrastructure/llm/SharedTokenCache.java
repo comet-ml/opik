@@ -81,7 +81,7 @@ public class SharedTokenCache {
             throw failure.fetchFailure;
         } catch (RuntimeException exception) {
             log.warn("Token cache unavailable for '{}'; falling back to a direct fetch", cacheKey,
-                    sanitized(exception));
+                    withoutMessageOrCauses(exception));
         }
 
         return new Result(fetch.get().value(), Outcome.DEGRADED_DIRECT);
@@ -92,7 +92,7 @@ public class SharedTokenCache {
         try {
             redisClient.getBucket(cacheKey).delete();
         } catch (RuntimeException exception) {
-            log.warn("Failed to invalidate the cached value of '{}'", cacheKey, sanitized(exception));
+            log.warn("Failed to invalidate the cached value of '{}'", cacheKey, withoutMessageOrCauses(exception));
         }
     }
 
@@ -118,7 +118,7 @@ public class SharedTokenCache {
             return encrypted == null ? null : EncryptionUtils.decryptGcm(encrypted);
         } catch (RuntimeException exception) {
             // debug only: an outage also fails the lock, which get() reports once
-            log.debug("Failed to read the cached value of '{}'", cacheKey, sanitized(exception));
+            log.debug("Failed to read the cached value of '{}'", cacheKey, withoutMessageOrCauses(exception));
             return null;
         }
     }
@@ -131,7 +131,7 @@ public class SharedTokenCache {
             redisClient.getBucket(cacheKey).set(EncryptionUtils.encryptGcm(fetched.value()), fetched.cacheFor());
         } catch (RuntimeException exception) {
             log.debug("Failed to cache the value of '{}'; the value is still returned", cacheKey,
-                    sanitized(exception));
+                    withoutMessageOrCauses(exception));
         }
     }
 
@@ -139,10 +139,10 @@ public class SharedTokenCache {
      * The failure's type and stack, without its message or causes: Redisson puts the command's arguments, here the
      * encrypted value, in its exception messages.
      */
-    private static RuntimeException sanitized(RuntimeException exception) {
-        var sanitized = new RuntimeException(exception.getClass().getName());
-        sanitized.setStackTrace(exception.getStackTrace());
-        return sanitized;
+    private static RuntimeException withoutMessageOrCauses(RuntimeException exception) {
+        var stripped = new RuntimeException(exception.getClass().getName());
+        stripped.setStackTrace(exception.getStackTrace());
+        return stripped;
     }
 
     /** Carries a fetch's own failure past the Redis and lock fallback, which would otherwise fetch a second time. */

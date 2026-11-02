@@ -895,7 +895,7 @@ class VertexAIClientGeneratorTest {
                             .withFixedDelay(stallMillis)));
             var config = clientConfig();
             config.setVertexAIClient(config.getVertexAIClient().toBuilder()
-                    .tokenCacheLockTimeout(Duration.milliseconds(500))
+                    .tokenCacheLockTimeout(Duration.seconds(1))
                     .build());
             var generator = new VertexAIClientGenerator(config, registry, LlmTestClients.REMOTE_MEDIA_INLINER,
                     LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache);
@@ -907,8 +907,10 @@ class VertexAIClientGeneratorTest {
             assertThat(thrown).isNotNull();
             assertThat(ExceptionUtils.getThrowableList(thrown))
                     .anyMatch(cause -> String.valueOf(cause.getMessage())
-                            .equals("Fetching the Vertex AI OAuth token took longer than 'PT0.4S'"));
+                            .equals("Fetching the Vertex AI OAuth token took longer than 'PT0.8S'"));
             assertThat(elapsedMillis).isLessThan(stallMillis);
+            // every attempt timed out on the same stalled request instead of starting its own
+            wireMock.server().verify(1, postRequestedFor(urlPathMatching(TOKEN_PATH)));
             wireMock.server().verify(0, postRequestedFor(urlPathMatching(GENERATE_CONTENT_PATH)));
         }
 

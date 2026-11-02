@@ -909,7 +909,7 @@ llmProviderClient:
     # of the total lifetime. It is always refreshed at least 5 minutes before it expires
     tokenCacheRefreshFraction: 0.25
     # Default: 15s
-    # Description: Lease time for the cross-pod single-flight lock around an OAuth token fetch. Capped at 1m
+    # Description: Lease time for the cross-pod single-flight lock around an OAuth token fetch. Between 1s and 1m
     tokenCacheLockTimeout: 15s
 
 # Configuration for cache manager

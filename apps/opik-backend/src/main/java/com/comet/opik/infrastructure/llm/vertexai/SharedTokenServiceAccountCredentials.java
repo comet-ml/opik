@@ -20,6 +20,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Service-account credentials whose OAuth token is fetched once for every pod and shared through
@@ -43,6 +44,12 @@ final class SharedTokenServiceAccountCredentials extends GoogleCredentials {
 
     // A fetch past its deadline is abandoned rather than waited for, and its thread ends at the library's own timeout.
     private static final Executor FETCHES = Executors.newVirtualThreadPerTaskExecutor();
+
+    /**
+     * The fetch still running for this key, if any. The next refresh waits on it again rather than starting another,
+     * so a stalled token endpoint gets one request per key and pod, not one per abandoned deadline.
+     */
+    private final transient AtomicReference<CompletableFuture<AccessToken>> inFlight = new AtomicReference<>();
 
     private record CachedToken(@NonNull String token, long expiresAtEpochMillis) {
     }
@@ -93,21 +100,21 @@ final class SharedTokenServiceAccountCredentials extends GoogleCredentials {
 
     private AccessToken fetchWithinLease() throws IOException {
         var deadline = Duration.ofMillis((long) (lockTimeout.toMillis() * FETCH_SHARE_OF_LEASE));
-        var fetch = CompletableFuture.supplyAsync(() -> {
-            try {
-                return delegate.refreshAccessToken();
-            } catch (IOException exception) {
-                throw new UncheckedIOException(exception);
-            }
-        }, FETCHES);
+        var fetch = inFlight.updateAndGet(running -> running != null && !running.isDone()
+                ? running
+                : CompletableFuture.supplyAsync(() -> {
+                    try {
+                        return delegate.refreshAccessToken();
+                    } catch (IOException exception) {
+                        throw new UncheckedIOException(exception);
+                    }
+                }, FETCHES));
         try {
             return fetch.get(deadline.toMillis(), TimeUnit.MILLISECONDS);
         } catch (TimeoutException exception) {
-            fetch.cancel(true);
             throw new IOException("Fetching the Vertex AI OAuth token took longer than '%s'".formatted(deadline),
                     exception);
         } catch (InterruptedException exception) {
-            fetch.cancel(true);
             Thread.currentThread().interrupt();
             throw new IOException("Interrupted while fetching the Vertex AI OAuth token", exception);
         } catch (ExecutionException exception) {

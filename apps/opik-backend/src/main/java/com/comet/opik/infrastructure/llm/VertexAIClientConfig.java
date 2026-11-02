@@ -47,5 +47,5 @@ public record VertexAIClientConfig(
         @NotEmpty Set<@NotNull URI> tokenUris,
         @NotNull @MinDuration(value = 1, unit = TimeUnit.SECONDS) @MaxDuration(value = 1, unit = TimeUnit.DAYS) Duration credentialsCacheExpireAfterAccess,
         @DecimalMin("0.0") @DecimalMax("0.99") double tokenCacheRefreshFraction,
-        @NotNull @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS) @MaxDuration(value = 1, unit = TimeUnit.MINUTES) Duration tokenCacheLockTimeout) {
+        @NotNull @MinDuration(value = 1, unit = TimeUnit.SECONDS) @MaxDuration(value = 1, unit = TimeUnit.MINUTES) Duration tokenCacheLockTimeout) {
 }
