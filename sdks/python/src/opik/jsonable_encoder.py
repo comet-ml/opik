@@ -3,6 +3,7 @@ import dataclasses
 import datetime as dt
 import functools
 import logging
+import math
 from enum import Enum
 from pathlib import PurePath
 from types import GeneratorType
@@ -72,6 +73,8 @@ def encode(obj: Any, seen: Optional[Set[int]] = None) -> Any:
             return encode(obj.value, seen)
         if isinstance(obj, PurePath):
             return str(obj)
+        if np is not None and isinstance(obj, (np.number, np.bool_)):
+            return _encode_numpy_scalar(obj, seen)
         if isinstance(obj, (str, int, float, type(None))):
             return obj
         if isinstance(obj, dt.datetime):
@@ -102,9 +105,6 @@ def encode(obj: Any, seen: Optional[Set[int]] = None) -> Any:
         if np is not None and isinstance(obj, np.ndarray):
             return encode(obj.tolist(), seen)
 
-        if np is not None and isinstance(obj, (np.number, np.bool_)):
-            return encode(obj.item(), seen)
-
         if _is_pydantic_iterator_validator(obj):
             return "<Pydantic ValidatorIterator serialization is not supported>"
 
@@ -121,6 +121,21 @@ def encode(obj: Any, seen: Optional[Set[int]] = None) -> Any:
     data = str(obj)
 
     return data
+
+
+def _encode_numpy_scalar(obj: Any, seen: Set[int]) -> Any:
+    value = obj.item()
+    if isinstance(value, np.complexfloating):
+        return str(value)
+    if isinstance(value, np.floating):
+        if not math.isfinite(value):
+            return str(value)
+        value = float(value)
+    elif isinstance(value, np.generic):
+        return str(value)
+    if isinstance(value, float) and not math.isfinite(value):
+        return str(value)
+    return encode(value, seen)
 
 
 def _is_pydantic_iterator_validator(obj: Any) -> bool:
