@@ -23,6 +23,7 @@ def patch_adk(
         _patch_adk_opentelemetry_tracers(
             distributed_headers=distributed_headers,
         )
+        _patch_adk_record_invocation()
 
 
 def _patch_adk_lite_llm() -> None:
@@ -96,3 +97,20 @@ def _patch_adk_opentelemetry_tracers(
         base_agent.tracer.start_as_current_span = opik_tracer.start_as_current_span
         base_agent.tracer.start_span = opik_tracer.start_span
     LOGGER.debug("Patched ADK tracers")
+
+
+def _patch_adk_record_invocation() -> None:
+    try:
+        from google.adk.telemetry import _instrumentation
+    except ImportError:
+        return
+
+    record_invocation = getattr(_instrumentation, "record_invocation", None)
+    if record_invocation is None or hasattr(record_invocation, "opik_patched"):
+        return
+
+    _instrumentation.record_invocation = (
+        opik_adk_otel_tracer.skip_opik_bookkeeping_for_runner_spans(record_invocation)
+    )
+    _instrumentation.record_invocation.opik_patched = True  # type: ignore
+    LOGGER.debug("Patched ADK record_invocation")

@@ -23,6 +23,7 @@ import com.redis.testcontainers.RedisContainer;
 import io.r2dbc.spi.Statement;
 import lombok.Builder;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -38,6 +39,7 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -66,9 +68,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * green delete could only have run against {@code traces_local}.
  *
  * <p>Dedicated, non-reused ClickHouse and ZooKeeper containers are required because the wrap destructively renames the
- * live {@code traces} table; a reused container would corrupt other suites and reruns. No Awaitility: the trace
- * create/delete API is synchronous with respect to trace reads (an INSERT to a single local shard is direct, not
- * spooled), as the existing trace-delete suites rely on too.
+ * live {@code traces} table; a reused container would corrupt other suites and reruns. A created trace is awaited
+ * before it is deleted: with {@code prefer_localhost_replica=0}, as every deployment runs, an INSERT through the
+ * {@code Distributed} {@code traces} is queued and shipped to the shard in the background (see {@code users.xml}). A
+ * delete needs no wait, since it runs against {@code traces_local} directly.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ExtendWith(DropwizardAppExtensionProvider.class)
@@ -147,7 +150,7 @@ class TracesDistributedWrapMutationTest {
 
         traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
         // Insert and read both routed through the Distributed `traces`.
-        assertThat(getTraceIds(trace.projectName())).contains(trace.id());
+        awaitListed(trace);
 
         // Delete-by-id via the live user path. Against the Distributed `traces` the mutation 500s (see the guard
         // below), so a NO_CONTENT here means it ran against `traces_local`.
@@ -161,7 +164,7 @@ class TracesDistributedWrapMutationTest {
         var window = RetentionWindow.aroundNow();
         var trace = newTrace().id(window.middleId()).build();
         traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
-        assertThat(getTraceIds(trace.projectName())).contains(trace.id());
+        awaitListed(trace);
 
         traceDAO.deleteForRetention(List.of(WORKSPACE_ID), window.cutoffId(), window.lowerBound()).block();
 
@@ -173,7 +176,7 @@ class TracesDistributedWrapMutationTest {
         var window = RetentionWindow.aroundNow();
         var trace = newTrace().id(window.middleId()).build();
         traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
-        assertThat(getTraceIds(trace.projectName())).contains(trace.id());
+        awaitListed(trace);
 
         traceDAO.deleteForRetentionBounded(Map.of(WORKSPACE_ID, window.lowerBound()), window.cutoffId(),
                 window.lowerBound()).block();
@@ -220,6 +223,14 @@ class TracesDistributedWrapMutationTest {
         return factory.manufacturePojo(Trace.class).toBuilder()
                 .feedbackScores(null)
                 .usage(null);
+    }
+
+    /** The INSERT reaches the shard through the Distributed table's background queue, so the row is awaited. */
+    private void awaitListed(Trace trace) {
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(10))
+                .pollInterval(Duration.ofMillis(100))
+                .untilAsserted(() -> assertThat(getTraceIds(trace.projectName())).contains(trace.id()));
     }
 
     private List<UUID> getTraceIds(String projectName) {

@@ -26,6 +26,8 @@ import {
   resolveTraceEvaluatorVariableDefault,
 } from "@/lib/llm";
 import { safelyGetPromptMustacheTags } from "@/lib/prompt";
+import useAppStore from "@/store/AppStore";
+import useOpenAiPipelineMode from "@/hooks/useOpenAiPipelineMode";
 import {
   convertLLMJudgeDataToLLMJudgeObject,
   convertLLMJudgeObjectToLLMJudgeData,
@@ -237,6 +239,8 @@ const useRuleEditorForm = ({
   defaultScope = EVALUATORS_RULE_SCOPE.trace,
 }: UseRuleEditorFormParams) => {
   const isEdit = Boolean(rule) && !isClone;
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const openAiPipelineMode = useOpenAiPipelineMode(workspaceName);
   const savedJudge = useMemo(
     () =>
       rule && isLLMJudgeRule(rule)
@@ -453,14 +457,17 @@ const useRuleEditorForm = ({
     }
 
     const llmJudgeDetails = form.getValues("llmJudgeDetails");
-    const code = convertLLMJudgeDataToLLMJudgeObject({
-      ...llmJudgeDetails,
-      ...nameInlineVariables(
-        llmJudgeDetails.messages,
-        llmJudgeDetails.variables,
-        savedVariables,
-      ),
-    });
+    const code = convertLLMJudgeDataToLLMJudgeObject(
+      {
+        ...llmJudgeDetails,
+        ...nameInlineVariables(
+          llmJudgeDetails.messages,
+          llmJudgeDetails.variables,
+          savedVariables,
+        ),
+      },
+      openAiPipelineMode,
+    );
     return {
       ...rule,
       code:
@@ -468,7 +475,7 @@ const useRuleEditorForm = ({
           ? { ...code, variables: undefined }
           : code,
     } as EvaluatorsRule;
-  }, [form, savedVariables]);
+  }, [form, savedVariables, openAiPipelineMode]);
 
   const convertCodeSignature = useCallback(() => {
     const details = form.getValues("pythonCodeDetails");

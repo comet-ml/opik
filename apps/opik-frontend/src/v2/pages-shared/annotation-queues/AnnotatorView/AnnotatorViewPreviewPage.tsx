@@ -1,16 +1,10 @@
 import React from "react";
-import { ArrowLeft, Info, Trash } from "lucide-react";
-import { Button } from "@/ui/button";
+import { ArrowLeft, Undo2 } from "lucide-react";
 import Loader from "@/shared/Loader/Loader";
 import SandboxedViewPreview from "@/shared/SandboxedView/SandboxedViewPreview";
 import { ANNOTATOR_VIEW_PACKS } from "./annotatorViewData";
 import { AnnotatorViewEditor } from "./useAnnotatorViewEditor";
-import AnnotatorViewStatusTag from "./AnnotatorViewStatusTag";
 import AnnotatorViewBanner from "./AnnotatorViewBanner";
-import {
-  getAnnotatorViewDescription,
-  getAnnotatorViewNote,
-} from "./annotatorViewCopy";
 
 type AnnotatorViewPreviewPageProps = {
   editor: AnnotatorViewEditor;
@@ -21,7 +15,6 @@ const AnnotatorViewPreviewPage: React.FC<AnnotatorViewPreviewPageProps> = ({
   editor,
   onBack,
 }) => {
-  const note = getAnnotatorViewNote(editor);
   const unit = editor.scope;
 
   const renderPreview = () => {
@@ -66,45 +59,36 @@ const AnnotatorViewPreviewPage: React.FC<AnnotatorViewPreviewPageProps> = ({
   };
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-center gap-2.5">
-        <Button
-          variant="outline"
-          size="icon-xs"
-          aria-label="Back to queue settings"
-          onClick={onBack}
-        >
-          <ArrowLeft />
-        </Button>
-        <div className="flex min-w-0 flex-1 flex-col">
-          <div className="flex items-center gap-2">
-            <span className="comet-body-s-accented">
-              Previewing annotator view
-            </span>
-            <AnnotatorViewStatusTag editor={editor} />
-          </div>
-          <span
-            className="comet-body-xs truncate text-muted-slate"
-            title={getAnnotatorViewDescription(editor)}
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex shrink-0 flex-col gap-1.5 border-b border-border bg-background px-4 py-3">
+        <div className="flex h-6 items-center justify-between gap-2">
+          <button
+            type="button"
+            className="comet-title-xs flex items-center gap-1 pr-0.5 leading-[18px] hover:text-primary"
+            aria-label="Back to queue settings"
+            onClick={onBack}
           >
-            {getAnnotatorViewDescription(editor)} · read-only
-          </span>
+            <span className="flex size-6 items-center justify-center">
+              <ArrowLeft className="size-3" />
+            </span>
+            Previewing annotator view
+          </button>
+          {editor.hasView && (
+            <button
+              type="button"
+              className="comet-body-xs flex h-6 items-center gap-0.5 hover:text-primary"
+              onClick={editor.reset}
+            >
+              <Undo2 className="size-3" />
+              Revert to default
+            </button>
+          )}
         </div>
-        {editor.hasView && (
-          <Button variant="ghost" size="2xs" onClick={editor.reset}>
-            <Trash className="mr-1 size-3" />
-            Reset
-          </Button>
-        )}
+        <AnnotatorViewBanner editor={editor} />
       </div>
-      <AnnotatorViewBanner editor={editor} />
-      {renderPreview()}
-      {note && editor.samples.length > 0 && (
-        <p className="comet-body-xs flex items-start gap-1.5 text-muted-slate">
-          <Info className="mt-0.5 size-3 shrink-0" />
-          {note}
-        </p>
-      )}
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+        {renderPreview()}
+      </div>
     </div>
   );
 };

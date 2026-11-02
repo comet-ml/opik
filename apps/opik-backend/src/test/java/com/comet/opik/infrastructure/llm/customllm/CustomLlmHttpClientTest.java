@@ -312,7 +312,8 @@ class CustomLlmHttpClientTest {
 
     /**
      * The header wait starts once the connection is established: resolving the host, which the connect timeout
-     * bounds, takes longer than the read timeout here, and the headers that follow within it still arrive.
+     * bounds, takes longer than the header wait here, and the headers that follow within it still arrive. Both
+     * timeouts are the same, so the header wait is that long whichever of them bounds it.
      */
     @ParameterizedTest
     @EnumSource(StreamPath.class)
@@ -335,7 +336,7 @@ class CustomLlmHttpClientTest {
         var slowDnsClient = DestinationGuardDns.clientBuilder(slowDnsGuard).protocols(List.of(Protocol.HTTP_1_1))
                 .connectTimeout(Duration.ofSeconds(10))
                 .build();
-        var timedClient = clientWithTimeouts(readTimeout, STREAM_READ_TIMEOUT, slowDnsClient);
+        var timedClient = clientWithTimeouts(readTimeout, readTimeout, slowDnsClient);
         try (var server = rawServer(delayedStream(Duration.ofMillis(300), Duration.ZERO, data))) {
             var expectedEvents = List.of(new ServerSentEvent(null, data));
             long startNanos = System.nanoTime();
@@ -507,20 +508,35 @@ class CustomLlmHttpClientTest {
         }
     }
 
+    /**
+     * A provider can hold a stream's headers while the model reasons, so a stream waits for them up to the longer of
+     * the read timeout and the stream read timeout: headers slower than the read timeout but within the stream read
+     * timeout arrive, and headers that never arrive fail at the stream read timeout.
+     */
     @ParameterizedTest
     @EnumSource(StreamPath.class)
-    void aStreamWhoseHeadersNeverArriveFailsAtTheReadTimeout(StreamPath streamPath) throws Exception {
+    void aStreamWaitsForItsHeadersUpToTheStreamReadTimeout(StreamPath streamPath) throws Exception {
         var readTimeout = Duration.ofMillis(500);
-        var expectedMaxElapsed = Duration.ofSeconds(5);
-        var silentClient = clientWithReadTimeout(readTimeout, okHttpClient);
+        var streamReadTimeout = Duration.ofMillis(2_500);
+        var headerDelay = Duration.ofMillis(1_500);
+        var expectedMaxElapsed = Duration.ofSeconds(6);
+        var data = RandomStringUtils.secure().nextAlphanumeric(10);
+        var timedClient = clientWithTimeouts(readTimeout, streamReadTimeout, okHttpClient);
+        try (var server = rawServer(delayedStream(headerDelay, Duration.ZERO, data))) {
+            var expectedEvents = List.of(new ServerSentEvent(null, data));
+
+            var actualEvents = streamedEvents(timedClient, streamPath, rawRequest(server));
+
+            assertThat(actualEvents).isEqualTo(expectedEvents);
+        }
         try (var server = rawServer(out -> Thread.sleep(30_000))) {
             long startNanos = System.nanoTime();
 
-            Throwable actualError = failure(silentClient, CallPath.valueOf(streamPath.name()), rawRequest(server));
+            Throwable actualError = failure(timedClient, CallPath.valueOf(streamPath.name()), rawRequest(server));
 
             var actualElapsed = Duration.ofNanos(System.nanoTime() - startNanos);
             assertThat(actualError).isExactlyInstanceOf(TimeoutException.class);
-            assertThat(actualElapsed).isBetween(readTimeout, expectedMaxElapsed);
+            assertThat(actualElapsed).isBetween(streamReadTimeout, expectedMaxElapsed);
         }
     }
 
