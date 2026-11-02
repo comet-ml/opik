@@ -6,11 +6,13 @@ import com.comet.opik.infrastructure.http.OneShotRequestBodies;
 import com.comet.opik.infrastructure.llm.LlmServiceProvider;
 import com.comet.opik.infrastructure.llm.customllm.LlmHttpClientBuilders;
 import com.comet.opik.infrastructure.llm.customllm.StreamCallTimeouts;
+import com.comet.opik.infrastructure.llm.decisions.DecisionsClient;
 import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.comet.opik.infrastructure.net.DestinationGuardDns;
 import com.google.inject.AbstractModule;
 import com.google.inject.Provides;
 import com.google.inject.Singleton;
+import com.google.inject.multibindings.ProvidesIntoSet;
 import com.openai.client.okhttp.OkHttpClient;
 import com.openai.core.http.HttpClient;
 import jakarta.inject.Named;
@@ -59,6 +61,13 @@ public class OpenAIModule extends AbstractModule {
         return Optional.ofNullable(config.getReadTimeout())
                 .map(timeout -> Duration.ofMillis(timeout.toMilliseconds()))
                 .orElse(Duration.ZERO);
+    }
+
+    @ProvidesIntoSet
+    @Singleton
+    public DecisionsClient decisionsClient(
+            @NonNull @Named("openaiGenerator") OpenAIClientGenerator clientGenerator) {
+        return new OpenAiDecisionsClient(clientGenerator);
     }
 
     @Provides
