@@ -136,7 +136,7 @@ public class CustomModelPriceValidator {
                     "The note is %d characters, at most %d".formatted(note.length(), MAX_NOTE_LENGTH)));
         }
 
-        var price = CustomModelPrice.builder()
+        var priceBuilder = CustomModelPrice.builder()
                 .modelName(Optional.ofNullable(modelName).orElse(""))
                 .provider(provider)
                 .kind(Optional.ofNullable(kind).orElse(CustomModelPrice.Kind.FIXED))
@@ -147,10 +147,10 @@ public class CustomModelPriceValidator {
         if (kind == CustomModelPrice.Kind.FIXED) {
             checkFixed(index, node, errors);
         } else if (kind == CustomModelPrice.Kind.ALIAS) {
-            checkAlias(index, node, price, errors);
+            checkAlias(index, node, priceBuilder, errors);
         }
         return errors.size() == errorsBefore
-                ? Optional.of(new ParsedRow(index, sentModel, sentProvider, price.build(), note))
+                ? Optional.of(new ParsedRow(index, sentModel, sentProvider, priceBuilder.build(), note))
                 : Optional.empty();
     }
 
@@ -163,7 +163,7 @@ public class CustomModelPriceValidator {
         }
     }
 
-    private void checkAlias(int index, JsonNode node, CustomModelPrice.CustomModelPriceBuilder price,
+    private void checkAlias(int index, JsonNode node, CustomModelPrice.CustomModelPriceBuilder priceBuilder,
             List<Problem> errors) {
         PRICE_FIELDS.stream().filter(field -> isSet(node, field)).forEach(field -> errors.add(new Problem(index,
                 field, "field_not_for_kind", "An alias row prices like its target, so it can't have %s"
@@ -188,9 +188,9 @@ public class CustomModelPriceValidator {
         }
         String targetProvider = name(index, ALIAS_OF + ".provider", text(index, aliasOf, "provider", errors),
                 errors);
-        price.aliasModelName(normalizeModelName(targetModel))
+        priceBuilder.aliasModelName(normalizeModelName(targetModel))
                 .aliasProvider(ProviderRegistry.resolve(targetProvider, targetModel)
-                        .orElse(CustomModelPrice.ANY_PROVIDER));
+                        .orElse(CustomModelPrice.SPAN_PROVIDER));
     }
 
     private void checkAliasTargets(List<ParsedRow> rows, List<Problem> errors) {
@@ -201,28 +201,38 @@ public class CustomModelPriceValidator {
                 .filter(price -> price.kind() == CustomModelPrice.Kind.FIXED)
                 .toList());
         for (ParsedRow row : rows) {
-            CustomModelPrice alias = row.price();
-            if (alias.kind() != CustomModelPrice.Kind.ALIAS) {
-                continue;
+            if (row.price().kind() == CustomModelPrice.Kind.ALIAS) {
+                aliasTargetProblem(row, byKey, fixedRows).ifPresent(errors::add);
             }
-            String targetProvider = alias.aliasProvider().isEmpty() ? alias.provider() : alias.aliasProvider();
-            var targetKey = new RowKey(alias.aliasModelName(), targetProvider);
-            if (targetKey.equals(keyOf(alias))) {
-                errors.add(new Problem(row.index(), ALIAS_OF, "alias_target_is_itself",
-                        "An alias row can't price like itself"));
-            } else
-                if (Optional.ofNullable(byKey.get(targetKey)).map(CustomModelPrice::kind)
-                        .filter(CustomModelPrice.Kind.ALIAS::equals).isPresent()) {
-                            errors.add(new Problem(row.index(), ALIAS_OF, "alias_target_is_alias",
-                                    "'%s' is an alias too: point this row at a model with a price".formatted(
-                                            alias.aliasModelName())));
-                        } else
-                    if (ModelPriceResolver.resolve(alias.aliasModelName(), targetProvider, fixedRows).isEmpty()) {
-                        errors.add(new Problem(row.index(), ALIAS_OF, "alias_target_unpriced",
-                                "Neither the built-in prices nor these rows price '%s' on %s".formatted(
-                                        alias.aliasModelName(), describeProvider(targetProvider))));
-                    }
         }
+    }
+
+    private Optional<Problem> aliasTargetProblem(ParsedRow row, Map<RowKey, CustomModelPrice> byKey,
+            PriceLayers fixedRows) {
+        CustomModelPrice alias = row.price();
+        boolean underSpanProvider = CustomModelPrice.SPAN_PROVIDER.equals(alias.aliasProvider());
+        String targetProvider = underSpanProvider ? alias.provider() : alias.aliasProvider();
+        var targetKey = new RowKey(alias.aliasModelName(), targetProvider);
+        if (targetKey.equals(keyOf(alias))) {
+            return Optional.of(new Problem(row.index(), ALIAS_OF, "alias_target_is_itself",
+                    "An alias row can't price like itself"));
+        }
+        CustomModelPrice target = byKey.get(targetKey);
+        if (target != null && target.kind() == CustomModelPrice.Kind.ALIAS) {
+            return Optional.of(new Problem(row.index(), ALIAS_OF, "alias_target_is_alias",
+                    "'%s' is an alias too: point this row at a model with a price".formatted(target.modelName())));
+        }
+        // An any-provider alias whose target names no provider is looked up under each span's own provider, so
+        // whether it prices can only be known per span.
+        if (underSpanProvider && CustomModelPrice.ANY_PROVIDER.equals(alias.provider())) {
+            return Optional.empty();
+        }
+        if (ModelPriceResolver.resolve(alias.aliasModelName(), targetProvider, fixedRows).isEmpty()) {
+            return Optional.of(new Problem(row.index(), ALIAS_OF, "alias_target_unpriced",
+                    "Neither the built-in prices nor these rows price '%s' on %s".formatted(alias.aliasModelName(),
+                            describeProvider(targetProvider))));
+        }
+        return Optional.empty();
     }
 
     private List<Problem> warnings(List<ParsedRow> rows) {

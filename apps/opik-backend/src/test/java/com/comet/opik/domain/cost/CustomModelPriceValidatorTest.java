@@ -1,6 +1,7 @@
 package com.comet.opik.domain.cost;
 
 import com.comet.opik.domain.cost.CustomModelPriceValidator.Problem;
+import com.comet.opik.domain.cost.CustomModelPriceValidator.ValidRow;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.Test;
@@ -121,8 +122,8 @@ class CustomModelPriceValidatorTest {
     void validateRejectsAnInvalidRow(String row, String field, String code) {
         var result = CustomModelPriceValidator.validate(rows("[" + row + "]"));
 
-        assertThat(result.errors()).containsExactly(new Problem(0, field, code,
-                result.errors().getFirst().message()));
+        assertThat(result.errors()).extracting(Problem::row, Problem::field, Problem::code)
+                .containsExactly(tuple(0, field, code));
     }
 
     @Test
@@ -178,6 +179,17 @@ class CustomModelPriceValidatorTest {
 
         assertThat(result.isValid()).isTrue();
         assertThat(result.rows().getFirst().price().aliasModelName()).isEqualTo("team-base");
+    }
+
+    @Test
+    void validateAcceptsAnAnyProviderAliasPricedUnderEachSpansProvider() {
+        var result = CustomModelPriceValidator.validate(rows("""
+                [{"model": "team-mini", "kind": "alias", "alias_of": {"model": "gpt-5-mini"}}]
+                """));
+
+        assertThat(result.isValid()).isTrue();
+        var layers = PriceLayers.of("org-1", 1, result.rows().stream().map(ValidRow::price).toList());
+        assertThat(ModelPriceResolver.resolve("team-mini", "openai", layers)).isPresent();
     }
 
     @Test
