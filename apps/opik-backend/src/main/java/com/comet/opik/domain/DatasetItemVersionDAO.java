@@ -719,10 +719,35 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 ) AS div_dedup
             )<if(dataset_item_filters)>
             , filtered_dataset_item_ids AS (
-                SELECT id FROM dataset_items_resolved WHERE <dataset_item_filters>
-                UNION ALL
-                SELECT id FROM legacy_dataset_item_aliases
-                WHERE dataset_item_id IN (SELECT id FROM dataset_items_resolved WHERE <dataset_item_filters>)
+                SELECT arrayJoin([dataset_item_id, id]) AS id
+                FROM dataset_item_versions
+                WHERE workspace_id = :workspace_id
+                AND dataset_id = :datasetId
+                AND dataset_item_id IN (
+                    SELECT id
+                    FROM (
+                        SELECT
+                            dataset_item_id AS id,
+                            id AS row_id,
+                            dataset_version_id,
+                            data,
+                            description,
+                            source,
+                            trace_id,
+                            span_id,
+                            tags,
+                            evaluators,
+                            execution_policy,
+                            item_created_at AS created_at,
+                            item_last_updated_at AS last_updated_at,
+                            item_created_by AS created_by,
+                            item_last_updated_by AS last_updated_by
+                        FROM dataset_item_versions
+                        WHERE workspace_id = :workspace_id
+                        AND dataset_id = :datasetId
+                    ) AS resolved
+                    WHERE <dataset_item_filters>
+                )
             )<endif>,
             experiment_items_scope AS (
             	SELECT
@@ -1256,10 +1281,35 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 ) AS div_dedup
             )<if(dataset_item_filters)>
             , filtered_dataset_item_ids AS (
-                SELECT id FROM dataset_items_resolved WHERE <dataset_item_filters>
-                UNION ALL
-                SELECT id FROM legacy_dataset_item_aliases
-                WHERE dataset_item_id IN (SELECT id FROM dataset_items_resolved WHERE <dataset_item_filters>)
+                SELECT arrayJoin([dataset_item_id, id]) AS id
+                FROM dataset_item_versions
+                WHERE workspace_id = :workspace_id
+                AND dataset_id = :datasetId
+                AND dataset_item_id IN (
+                    SELECT id
+                    FROM (
+                        SELECT
+                            dataset_item_id AS id,
+                            id AS row_id,
+                            dataset_version_id,
+                            data,
+                            description,
+                            source,
+                            trace_id,
+                            span_id,
+                            tags,
+                            evaluators,
+                            execution_policy,
+                            item_created_at AS created_at,
+                            item_last_updated_at AS last_updated_at,
+                            item_created_by AS created_by,
+                            item_last_updated_by AS last_updated_by
+                        FROM dataset_item_versions
+                        WHERE workspace_id = :workspace_id
+                        AND dataset_id = :datasetId
+                    ) AS resolved
+                    WHERE <dataset_item_filters>
+                )
             )<endif><if(push_top_limit_raw)>
             , top_dataset_items_raw AS (
                 SELECT arrayJoin(raw_dataset_item_ids) AS dataset_item_id
