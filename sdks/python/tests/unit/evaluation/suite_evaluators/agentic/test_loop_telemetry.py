@@ -480,3 +480,37 @@ class TestVerdictTool:
             _WrapupSchema,
         ]
         assert content == '{"verdict": "pass"}'
+
+    def test_run_agentic_judge__verdict_mixed_with_lookup__sets_verdict_aside_and_runs_lookup(
+        self,
+    ):
+        read_tool = _StubTool("read")
+        responses = [
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    _tool_call("c1", "read"),
+                    _tool_call("c2", "submit_verdict", '{"verdict": "early"}'),
+                ],
+            },
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    _tool_call("c3", "submit_verdict", '{"verdict": "pass"}')
+                ],
+            },
+        ]
+
+        content, model, _ = _run_with_responses(responses, [read_tool], _ctx(_trace()))
+
+        assert content == '{"verdict": "pass"}'
+        assert read_tool.execute_count == 1
+        assert len(model.calls) == 2
+        for call in model.calls:
+            assert _conversation_is_well_formed(call["messages"])
+        assert any(
+            m.get("role") == "tool" and m.get("tool_call_id") == "c2"
+            for m in model.calls[1]["messages"]
+        )

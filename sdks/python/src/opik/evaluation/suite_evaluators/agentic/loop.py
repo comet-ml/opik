@@ -53,6 +53,12 @@ _DEDUP_HINT_TEMPLATE = (
     "cannot produce new information."
 )
 
+_VERDICT_SET_ASIDE_HINT = (
+    "Verdict not accepted: it was sent in the same turn as lookup tools whose "
+    "results you had not seen yet. Review their results, then call "
+    "`submit_verdict` again."
+)
+
 
 @dataclasses.dataclass
 class LoopTelemetry:
@@ -132,6 +138,17 @@ def run_agentic_judge(
         for call in tool_calls:
             tool_name = call["function"]["name"]
             arguments = call["function"].get("arguments", "{}")
+            if tool_name == VERDICT_TOOL_NAME:
+                # Only reached for a verdict mixed with lookups; it was
+                # decided before their results, so the model must resubmit.
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": call["id"],
+                        "content": _VERDICT_SET_ASIDE_HINT,
+                    }
+                )
+                continue
             telemetry.tool_calls_by_name[tool_name] += 1
 
             call_key = (tool_name, arguments)
@@ -230,9 +247,12 @@ def _verdict_tool_spec(response_format: Type[pydantic.BaseModel]) -> Dict[str, A
 
 
 def _verdict_arguments(response: base_model.ConversationDict) -> Optional[str]:
-    for call in response.get("tool_calls") or []:
-        if call["function"]["name"] == VERDICT_TOOL_NAME:
-            return call["function"].get("arguments") or "{}"
+    """Return the verdict arguments only when it is the turn's sole tool use."""
+    tool_calls = response.get("tool_calls") or []
+    if tool_calls and all(
+        c["function"]["name"] == VERDICT_TOOL_NAME for c in tool_calls
+    ):
+        return tool_calls[0]["function"].get("arguments") or "{}"
     return None
 
 
