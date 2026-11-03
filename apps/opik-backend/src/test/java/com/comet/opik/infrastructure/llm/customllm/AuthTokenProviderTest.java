@@ -12,6 +12,7 @@ import com.comet.opik.infrastructure.llm.LlmTestClients;
 import com.comet.opik.infrastructure.llm.SharedTokenCache;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.infrastructure.net.DestinationGuard;
+import com.comet.opik.infrastructure.redis.LockServiceTestUtils;
 import com.comet.opik.infrastructure.redis.StringRedisClient;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
@@ -35,6 +36,8 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.containing;
@@ -427,6 +430,37 @@ class AuthTokenProviderTest {
         assertThat(waiter.bearer("ws", providerId, wrap(recipe))).isEqualTo("tok-held");
         // one fetch total (the holder's); the waiter recovered from the cache
         wireMock.verify(1, postRequestedFor(urlEqualTo(TOKEN_PATH)));
+    }
+
+    /**
+     * The lock's lease isn't renewed: were it only {@code lockTimeout}, the second pod would take the lock while the
+     * first is still fetching, find Redis empty and fetch a second token.
+     */
+    @Test
+    @DisplayName("a fetch slower than the lock timeout but within the fetch timeout is still made once across pods")
+    void fetchOutlastingTheLockTimeoutIsMadeOnce() throws Exception {
+        wireMock.stubFor(post(urlEqualTo(TOKEN_PATH))
+                .willReturn(okJson("{\"access_token\": \"tok-slow\", \"expires_in\": 3600}").withFixedDelay(1_000)));
+        var config = relaxedConfig();
+        config.setLockTimeout(TestConfigUtils.duration("200ms"));
+        config.setFetchTimeout(TestConfigUtils.duration("5s"));
+        var lockService = LockServiceTestUtils.newLockService(redisson);
+        var recipe = wrap(oauthRecipe().build());
+        var providerId = UUID.randomUUID();
+        var pods = List.of(
+                new AuthTokenProvider(new SharedTokenCache(stringRedisClient, lockService), config, CLIENT),
+                new AuthTokenProvider(new SharedTokenCache(stringRedisClient, lockService), config, CLIENT));
+
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            var bearers = pods.stream()
+                    .map(pod -> executor.submit(() -> pod.bearer("ws", providerId, recipe)))
+                    .toList();
+            for (var bearer : bearers) {
+                assertThat(bearer.get(30, TimeUnit.SECONDS)).isEqualTo("tok-slow");
+            }
+        }
+
+        wireMock.verify(exactly(1), postRequestedFor(urlEqualTo(TOKEN_PATH)));
     }
 
     @Test

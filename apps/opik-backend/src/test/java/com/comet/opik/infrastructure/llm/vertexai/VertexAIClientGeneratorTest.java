@@ -863,7 +863,7 @@ class VertexAIClientGeneratorTest {
          * a pod refreshing inside the auth library's margin fetches a new one rather than being handed it back.
          */
         @Test
-        @DisplayName("a shared token leaves Redis at least the configured margin before it expires")
+        @DisplayName("a shared token leaves Redis at least 5 minutes before it expires")
         void sharedTokenLeavesRedisBeforeItExpires() {
             var config = clientConfig();
             config.setVertexAIClient(config.getVertexAIClient().toBuilder().tokenCacheRefreshFraction(0).build());
@@ -872,10 +872,9 @@ class VertexAIClientGeneratorTest {
 
             var key = redisson.getKeys().getKeysStream().toList().getFirst();
             var actualTtlMillis = redisson.getBucket(key).remainTimeToLive();
-            // the stub token lives 3600 s
+            // the stub token lives 60 minutes and config-test.yml sets a 5 minute minimum refresh-ahead
             assertThat(actualTtlMillis)
-                    .isLessThanOrEqualTo(TimeUnit.HOURS.toMillis(1)
-                            - config.getVertexAIClient().tokenCacheMinRefreshAhead().toMilliseconds())
+                    .isLessThanOrEqualTo(TimeUnit.MINUTES.toMillis(55))
                     .isGreaterThan(TimeUnit.MINUTES.toMillis(54));
         }
 
