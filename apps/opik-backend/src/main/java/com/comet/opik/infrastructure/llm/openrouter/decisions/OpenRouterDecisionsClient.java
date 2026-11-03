@@ -72,12 +72,7 @@ public class OpenRouterDecisionsClient {
         var openRouterUrl = StringUtils.isNotBlank(config.baseUrl())
                 ? config.baseUrl()
                 : llmProviderClientConfig.getOpenRouterUrl();
-        String decisionsUrl;
-        try {
-            decisionsUrl = decisionsUrl(openRouterUrl);
-        } catch (BadRequestException invalidUrl) {
-            return Mono.error(invalidUrl);
-        }
+        var decisionsUrl = decisionsUrl(openRouterUrl);
         var httpRequest = RetriableHttpClient.Request.<DecisionsResponse>builder()
                 .requestFunction(httpClient -> httpClient.target(decisionsUrl))
                 .requestCustomizer(builder -> {
