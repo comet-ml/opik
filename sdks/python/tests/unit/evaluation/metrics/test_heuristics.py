@@ -178,7 +178,7 @@ def test_evaluation__equals_with_numeric_inputs():
         (frozenset({"x", "y", "z"}), frozenset({"z", "y", "x"})),
         ({"a": "Hello"}, {"a": "hello"}),
         ({"B": 1, "a": 2}, {"a": 2, "b": 1}),
-        # 1 and 9 share a hash slot, so these two sets iterate in different orders.
+        # Same items, different iteration order: set items must be sorted.
         ({1, 9}, {9, 1}),
         ({1: "a", "1": "b", None: "c"}, {None: "c", "1": "b", 1: "a"}),
         (collections.OrderedDict([("b", 2), ("a", 1)]), {"a": 1, "b": 2}),
@@ -266,17 +266,24 @@ def test_equals__repeated_reference__rendered_in_full():
     )
 
 
-def test_equals__deeply_nested_containers__fall_back_to_str():
-    def nest(depth: int) -> dict:
-        value: dict = {"k": 0}
+def test_equals__deeply_nested_containers__compared_by_str():
+    def nest(depth: int, first: str, second: str) -> dict:
+        value: dict = {first: 0, second: 0}
         for _ in range(depth):
             value = {"k": value}
         return value
 
     metric = equals.Equals(track=False)
 
-    assert metric.score(output=nest(700), reference=nest(700)) == ScoreResult(
-        name=metric.name, value=1.0, reason=None, metadata=None
+    # Past the nesting cap key order counts again, as str() is order-sensitive.
+    assert metric.score(output=nest(700, "a", "b"), reference=nest(700, "a", "b")) == (
+        ScoreResult(name=metric.name, value=1.0, reason=None, metadata=None)
+    )
+    assert metric.score(output=nest(700, "a", "b"), reference=nest(700, "b", "a")) == (
+        ScoreResult(name=metric.name, value=0.0, reason=None, metadata=None)
+    )
+    assert metric.score(output=nest(50, "a", "b"), reference=nest(50, "b", "a")) == (
+        ScoreResult(name=metric.name, value=1.0, reason=None, metadata=None)
     )
 
 

@@ -4,6 +4,12 @@ from .. import base_metric, score_result
 from opik.exceptions import MetricComputationError
 
 _CONTAINER_TYPES = (dict, list, tuple, set, frozenset)
+# Deeper containers are compared by str(), so the result never depends on stack depth.
+_MAX_NESTING = 100
+
+
+class _TooDeeplyNested(Exception):
+    pass
 
 
 def _is_container(value: Any) -> bool:
@@ -19,6 +25,9 @@ def _canonical_text(
         return normalize(repr(value))
     if id(value) in active_ids:
         return "..."
+    # active_ids holds the containers being rendered, so its size is the depth.
+    if len(active_ids) >= _MAX_NESTING:
+        raise _TooDeeplyNested
     active_ids.add(id(value))
     # Read the built-in type's contents, as str() does, not a subclass override.
     base = next(kind for kind in _CONTAINER_TYPES if isinstance(value, kind))
@@ -123,8 +132,7 @@ class Equals(base_metric.BaseMetric):
             try:
                 value_left = _canonical_text(output, normalize, set())
                 value_right = _canonical_text(reference, normalize, set())
-            except RecursionError:
-                # Too deeply nested to canonicalize: compare by str() as before.
+            except _TooDeeplyNested:
                 value_left = value_right = None
 
         if value_left is None or value_right is None:
