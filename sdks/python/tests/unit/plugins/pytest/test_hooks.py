@@ -151,6 +151,41 @@ def test_pytest_sessionfinish__skipped_test__not_scored_or_added_to_experiment(
     run_mock.assert_called_once_with(client=client, test_items=[passed_item])
 
 
+def test_pytest_sessionfinish__xpassed_test__not_scored_or_added_to_experiment(
+    monkeypatch,
+):
+    # A non-strict xfail test that passes is reported as xpassed, not passed.
+    passed_item = SimpleNamespace(
+        nodeid="passed", report=SimpleNamespace(passed=True, skipped=False)
+    )
+    xpassed_item = SimpleNamespace(
+        nodeid="xpassed",
+        report=SimpleNamespace(passed=True, skipped=False, wasxfail="known bug"),
+    )
+    session = _session(auto_active=True)
+    session.items = [passed_item, xpassed_item]
+    for nodeid in ("passed", "xpassed"):
+        test_runs_storage.LLM_UNIT_TEST_RUNS.add(nodeid)
+        test_runs_storage.TEST_RUNS_TO_TRACE_DATA[nodeid] = SimpleNamespace(
+            id=f"trace-{nodeid}"
+        )
+
+    client = mock.Mock()
+    monkeypatch.setattr(
+        hooks.opik_client, "get_global_client", mock.Mock(return_value=client)
+    )
+    run_mock = mock.Mock()
+    monkeypatch.setattr(hooks.experiment_runner, "run", run_mock)
+
+    hooks.pytest_sessionfinish(session=session, exitstatus=0)
+
+    payload = client.log_traces_feedback_scores.call_args.args[0]
+    assert [(score["id"], score["value"]) for score in payload] == [
+        ("trace-passed", 1.0)
+    ]
+    run_mock.assert_called_once_with(client=client, test_items=[passed_item])
+
+
 def test_pytest_sessionfinish__only_skipped_tests__no_client_calls(monkeypatch):
     item = SimpleNamespace(
         nodeid="skipped", report=SimpleNamespace(passed=False, skipped=True)
