@@ -1141,6 +1141,18 @@ class ChatCompletionServiceTest {
             verify(chatModel, times(1)).chat(any(ChatRequest.class));
         }
 
+        @ParameterizedTest(name = "token endpoint {0} -> retryable, retried in-process")
+        @CsvSource({"408", "429", "500", "503", "504"})
+        @DisplayName("A transient Vertex AI token-endpoint failure keeps its status and is retried")
+        void scoreTrace__whenVertexAiTokenEndpointTransient__thenRetried(int status) {
+            var failure = new HttpResponseException.Builder(status, "STATUS", new HttpHeaders()).build();
+
+            var thrown = scoreTraceWithBudget(2, new GenAiIOException("Failed to refresh the credentials", failure));
+
+            assertRetryable(thrown, status);
+            verify(chatModel, times(3)).chat(any(ChatRequest.class));
+        }
+
         @Test
         @DisplayName("A transient Vertex AI failure is still retried in-process")
         void scoreTrace__whenTransientVertexAiStatus__thenStillRetriedInProcess() {

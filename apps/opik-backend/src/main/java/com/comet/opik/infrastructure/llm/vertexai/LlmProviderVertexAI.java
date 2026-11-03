@@ -263,9 +263,11 @@ public class LlmProviderVertexAI implements LlmProviderService {
     }
 
     /**
-     * Google's token endpoint refused the service-account key with a status that can never succeed, such as an
-     * {@code invalid_grant} for a deleted key. The SDK raises it as an I/O failure, so it is named here rather than
-     * reported as an unexpected error; Google's own text stays out, like any undocumented provider text.
+     * Google's token endpoint refused the service-account key with a permanent status, such as an {@code invalid_grant}
+     * for a deleted or disabled key. Another attempt can't change that: even a skewed server clock, which Google also
+     * answers with {@code invalid_grant}, fails every call alike until it is fixed. The SDK raises it as an I/O
+     * failure, so it is named here rather than reported as an unexpected error; Google's own text stays out, like any
+     * undocumented provider text.
      */
     private static Optional<ErrorMessage> keyRejection(Throwable throwable) {
         return Optional.ofNullable(ExceptionUtils.throwableOfType(throwable, HttpResponseException.class))
