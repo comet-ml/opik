@@ -8,6 +8,7 @@ from typing import Any, Iterable, List, Optional
 from opik.evaluation import preprocessing
 from opik.evaluation.metrics.base_metric import BaseMetric
 from opik.evaluation.metrics.score_result import ScoreResult
+from opik.exceptions import MetricComputationError
 
 # Up to four words of any kind between an injection verb and what it targets, as
 # in "ignore *all of the previous* instructions". A fixed list of allowed words
@@ -179,6 +180,13 @@ class PromptInjection(BaseMetric):
         ]
 
     def score(self, output: str, **ignored_kwargs: Any) -> ScoreResult:
+        if not isinstance(output, str):
+            # normalize_text raises a bare TypeError from unicodedata otherwise.
+            raise MetricComputationError(
+                f"{self.name} metric requires a string 'output' argument, "
+                f"got {type(output).__name__}."
+            )
+
         processed = preprocessing.normalize_text(output)
         if not processed.strip():
             return ScoreResult(
