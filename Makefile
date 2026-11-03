@@ -44,8 +44,8 @@ help:
 	@echo ""
 	@echo "Git Hooks (pre-commit framework — install once per clone)"
 	@echo ""
-	@echo "  make hooks         - Install the pre-commit framework hook"
-	@echo "  make hooks-remove  - Uninstall the pre-commit framework hook"
+	@echo "  make hooks         - Install the pre-commit framework hooks (pre-commit + commit-msg)"
+	@echo "  make hooks-remove  - Uninstall the pre-commit framework hooks"
 	@echo ""
 	@echo "Lint Checks (root .pre-commit-config.yaml is the single source of truth)"
 	@echo "  make precommit       - Run hooks on changed files (vs origin/main)"
@@ -131,7 +131,8 @@ clean-agents:
 	@[ -f ".mcp.json" ] && rm -f .mcp.json && echo "Removed .mcp.json" || true
 	@echo "Done! Local customizations preserved."
 
-# Install the pre-commit framework hook (writes .git/hooks/pre-commit).
+# Install the pre-commit framework hooks (writes .git/hooks/pre-commit and
+# .git/hooks/commit-msg, per default_install_hook_types in .pre-commit-config.yaml).
 hooks:
 	@command -v pre-commit >/dev/null 2>&1 || { \
 		echo "Error: pre-commit not found. Install it: pip install pre-commit (or brew install pre-commit)."; \
@@ -154,9 +155,9 @@ hooks:
 	@pre-commit install -f
 	@# Clear any legacy hook a prior non-force install left behind.
 	@rm -f "$$(git rev-parse --git-path hooks)/pre-commit.legacy"
-	@echo "pre-commit hook installed."
+	@echo "pre-commit hooks installed (pre-commit, commit-msg)."
 
-# Uninstall the pre-commit framework hook.
+# Uninstall the pre-commit framework hooks.
 hooks-remove:
 	@command -v pre-commit >/dev/null 2>&1 || { \
 		echo "pre-commit not found; nothing to uninstall."; \

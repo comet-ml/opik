@@ -6,6 +6,13 @@
 # Versions of remote linters are pinned per `rev:` (the framework's design — it
 # provisions each tool in an isolated env so contributors need no Python/JS/Java
 # install to run the Python hooks). Keep them fresh with `pre-commit autoupdate`.
+
+# `make hooks` installs both git hooks. Hooks without their own `stages:` would
+# otherwise run at every installed stage (twice per commit), so pin them to the
+# file stages. `manual` must stay: the Code Quality CI legs run --hook-stage manual.
+default_install_hook_types: [pre-commit, commit-msg]
+default_stages: [pre-commit, manual]
+
 repos:
   # ---------------------------------------------------------------------------
   # Python SDK  (sdks/python)
@@ -440,4 +447,33 @@ repos:
         # a fixture, not accepting user input.
         files: ^apps/opik-backend/src/main/java/.*\.java$
         args: ['--config', '.semgrep', '--error', '--severity', 'ERROR', '--disable-version-check', '--quiet', '--skip-unknown-extensions']
+
+  # ---------------------------------------------------------------------------
+  # Commit messages — commitlint against commitlint.config.mjs, the single source
+  # of truth for the commit / PR title format. commit-msg stage only, so it has no
+  # files: and no Code Quality leg; the PR Linter workflow runs this same hook on
+  # the PR title and every PR commit. The pin below is the only commitlint version
+  # in the repo. The local hook is fast feedback (--no-verify skips it); CI enforces.
+  # ---------------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: commitlint
+        name: 📓 commitlint — commit messages
+        entry: commitlint --edit
+        language: node
+        # commitlint 21 needs Node >= 22.12; pinning makes pre-commit provision it
+        # (nodeenv) instead of borrowing whatever system Node the contributor has.
+        language_version: &commitlint_node 22.23.3
+        additional_dependencies: &commitlint_deps ['@commitlint/cli@21.2.4']
+        stages: [commit-msg]
+      # Self-check: the accepted / rejected headers in both modes, whenever the
+      # config or its tests change. Shares the pins above through YAML anchors.
+      - id: commitlint-config-tests
+        name: 🧪 commitlint config tests
+        entry: scripts/test_commitlint_config.sh
+        language: node
+        language_version: *commitlint_node
+        additional_dependencies: *commitlint_deps
+        files: ^commitlint\.config\.mjs$|^scripts/test_commitlint_config\.sh$
+        pass_filenames: false
 ...

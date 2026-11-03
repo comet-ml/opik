@@ -23,6 +23,63 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v7
+        with:
+          # The commitlint step runs the PR's own commitlint.config.mjs; don't
+          # leave the token in .git/config for that code.
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10.3.0
+
+      - name: Cache pre-commit environments
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-commitlint-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+
+      # Lint the PR title and every commit in the PR with the same commitlint hook
+      # that runs locally at commit-msg, so commitlint.config.mjs and its pinned
+      # version in .pre-commit-config.yaml are the only definition of the format.
+      # Fetched in its own step so the token never shares an environment with the
+      # PR's code, which the lint step below runs (commitlint.config.mjs).
+      - name: Fetch PR Commits
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          # The PR commits endpoint returns at most 250 commits, which covers any PR we review.
+          gh api --paginate "repos/$REPO/pulls/$PR_NUMBER/commits" \
+            --jq '.[] | "\(.sha) \(.commit.message | @base64)"' > "$RUNNER_TEMP/commits.txt"
+
+      # A failing title / commit subjects are written to files that the next step
+      # turns into the linter comment; commitlint's full output goes to this job's
+      # log. This step itself never fails the job.
+      - name: Lint PR Title and Commits (commitlint)
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          : > "$RUNNER_TEMP/commitlint-title-failed"
+          : > "$RUNNER_TEMP/commitlint-bad-commits.txt"
+          lint() {
+            uvx pre-commit run commitlint --hook-stage commit-msg --commit-msg-filename "$1"
+          }
+
+          printf '%s\n' "$PR_TITLE" > "$RUNNER_TEMP/title.txt"
+          echo "::group::PR title"
+          if ! OPIK_COMMITLINT_PR_TITLE=1 lint "$RUNNER_TEMP/title.txt"; then
+            echo failed > "$RUNNER_TEMP/commitlint-title-failed"
+          fi
+          echo "::endgroup::"
+
+          while read -r sha message; do
+            printf '%s' "$message" | base64 -d > "$RUNNER_TEMP/msg.txt"
+            echo "::group::commit ${sha:0:10}"
+            if ! lint "$RUNNER_TEMP/msg.txt"; then
+              printf '%s %s\n' "${sha:0:10}" "$(head -n1 "$RUNNER_TEMP/msg.txt")" >> "$RUNNER_TEMP/commitlint-bad-commits.txt"
+            fi
+            echo "::endgroup::"
+          done < "$RUNNER_TEMP/commits.txt"
 
       - name: Validate PR Title, Description, and Commits
         uses: actions/github-script@v9
@@ -39,16 +96,34 @@ jobs:
             
             let errors = [];
 
-            // 1. Validate PR Title
+            // 1. PR title and commit messages, as linted by commitlint in the previous step
+            const fs = require("fs");
             const title = pr.title;
-            const titleRegex = /^\[(OPIK-\d+|DND-\d+|DEV-\d+|CUST-\d+|issue-\d+|NA)\](\s*\[(BE|FE|DOCS|SDK|GHA|CI|HELM)\])*\s*.+$/;
-            if (!titleRegex.test(title)) {
+            const formatDocs = "The format is defined in [`commitlint.config.mjs`](https://github.com/comet-ml/opik/blob/main/commitlint.config.mjs); see [Commit and PR conventions](https://github.com/comet-ml/opik/blob/main/CONTRIBUTING.md#commit-and-pr-conventions). The **Lint PR Title and Commits** step log has commitlint's full output.";
+            if (fs.readFileSync(`${process.env.RUNNER_TEMP}/commitlint-title-failed`, "utf8").trim()) {
               errors.push(
                 "❌ **Invalid Title Format.** Your PR title must include a ticket/issue number and may optionally include component tags (`[FE]`, `[BE]`, etc.).\n\n" +
                 "  - **Internal contributors: Open a JIRA ticket and link to it:** `[OPIK-xxxx]` or `[CUST-xxxx]` or `[DND-xxxx]` or `[DEV-xxxx] [COMPONENT] Your change`\n" +
                 "  - **External contributors: Open a Github Issue and link to it via its number:** `[issue-xxxx] [COMPONENT] Your change`\n" +
                 "  - **No ticket:** Use `[NA] [COMPONENT] Your change` (Issues section not required)\n\n" +
-                "  *Example: `[issue-3108] [BE] [FE] Fix authentication bug` or `[OPIK-1234] Fix bug` or `[NA] Update README`*"
+                "  *Example: `[issue-3108] [BE] [FE] fix: authentication bug` or `[OPIK-1234] fix: bug` or `[NA] docs: update README`*\n\n" +
+                formatDocs
+              );
+            }
+            const badCommits = fs.readFileSync(`${process.env.RUNNER_TEMP}/commitlint-bad-commits.txt`, "utf8").trim();
+            if (badCommits) {
+              errors.push(
+                "❌ **Invalid Commit Message.** These commits don't match any accepted header form:\n\n" +
+                badCommits.split("\n").map(line => {
+                  const [sha, ...subject] = line.split(" ");
+                  return `  - ${sha}: \`${subject.join(" ").replace(/`/g, "'")}\``;
+                }).join("\n") + "\n\n" +
+                "  Accepted forms:\n" +
+                "  - `[TICKET] [COMPONENT] type: description` (first commit; becomes the PR title)\n" +
+                "  - `type(scope): description` (follow-up commits)\n" +
+                "  - `Revision N: description` (last resort)\n\n" +
+                "  Fix them with `git rebase -i` (reword) and force-push. Run `make hooks` to check messages locally at commit time.\n\n" +
+                formatDocs
               );
             }
 

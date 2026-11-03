@@ -11,6 +11,9 @@ alwaysApply: true
 - `user/NA-hotfix-description`
 
 ## Commit Format
+`commitlint.config.mjs` is the source of truth for the format. It is checked at commit time
+by the commit-msg hook (`make hooks`) and in CI by the PR Linter (PR title + every PR commit).
+
 First commit in branch (used as PR title source):
 `[<TICKET-KEY>] [COMPONENT] <type>: description`
 - `[OPIK-1234] [BE] feat: add create trace endpoint`
