@@ -7,6 +7,7 @@ import opik.opik_context as opik_context
 from . import test_runs_storage, test_run_content
 from opik.decorator import inspect_helpers
 import opik.config as config
+from opik import tracing_runtime_config
 
 LOGGER = logging.getLogger(__name__)
 
@@ -42,13 +43,22 @@ def llm_unit(
 
         @functools.wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
-            # pytest.skip(), pytest.xfail() and pytest.fail() raise a
-            # BaseException, which @opik.track does not end the trace for.
-            # The context manager ends it in a finally block, so the next
-            # test doesn't log into this test's trace.
+            if not tracing_runtime_config.is_tracing_active():
+                return func(*args, **kwargs)
+
+            # The trace must end even when pytest.skip(), pytest.xfail() or
+            # pytest.fail() stops the test, so the next test doesn't log
+            # into this test's trace.
             with opik.start_as_current_span(name=func.__name__):
                 _register_test_run(func, args, kwargs, argnames_mapping)
-                return func(*args, **kwargs)
+                result = func(*args, **kwargs)
+                if result is not None:
+                    opik_context.update_current_span(
+                        output=result
+                        if isinstance(result, dict)
+                        else {"output": result}
+                    )
+                return result
 
         setattr(wrapper, "_opik_llm_unit", True)
         return wrapper
