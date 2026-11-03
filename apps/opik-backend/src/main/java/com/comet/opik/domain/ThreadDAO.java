@@ -246,14 +246,15 @@ class ThreadDAOImpl implements ThreadDAO {
      * partition of the project to open. The week is the stored {@code id_at}'s rather than one derived from the id, so
      * it names the row's own partition whatever the {@code id_at} type.
      * <p>
-     * traces_final reads no payload. A thread row shows the input of its first trace and the output of its last, so
-     * thread_message_traces picks those two traces per thread from traces_final's narrow columns, and thread_messages
-     * reads the payload of only those traces, outside FINAL, keeping each id's latest version. Read under FINAL for
-     * every trace of the page's threads, the payload ran a project with multi-MiB messages past the query memory
-     * limit: the traces of a page's threads are spread across the project's weeks, so the read covered nearly every
-     * granule of those weeks, and FINAL's in-order merge held their blocks at once. The picks break ties on the trace
-     * id, and every reference to the picks goes through one cached scalar, so the narrow traces_final read runs only once
-     * more for them.
+     * On the page pushdown traces_final reads no payload. A thread row shows the input of its first trace and the output
+     * of its last, so thread_message_traces picks those two traces per thread from traces_final's narrow columns, and
+     * thread_messages reads the payload of only those traces, outside FINAL, keeping each id's latest version. Read under
+     * FINAL for every trace of the page's threads, the payload ran a project with multi-MiB messages past the query
+     * memory limit: the traces of a page's threads are spread across the project's weeks, so the read covered nearly
+     * every granule of those weeks, and FINAL's in-order merge held their blocks at once. The picks break ties on the
+     * trace id, and every reference to the picks goes through one cached scalar, so the narrow traces_final read runs
+     * only once more for them. The other paths keep the payload in traces_final: there it spans every thread of the
+     * project or window, and the second narrow pass and the project-sized picks cost more than the payload they save.
      * <p>
      * The set may hold traces that traces_final drops: a trace whose older version carried one of the page's thread ids
      * before it moved to another thread, or a trace the filters reject. That changes no result: spans_agg is joined to
@@ -362,16 +363,32 @@ class ThreadDAOImpl implements ThreadDAO {
                     thread_id,
                     start_time,
                     end_time,
+                    <if(!page_pushdown)>
+                    input,
+                    output,
+                    truncated_input,
+                    truncated_output,
+                    input_length,
+                    output_length,
+                    truncation_threshold,
+                    <endif>
                     last_updated_at,
                     last_updated_by,
                     created_by,
                     created_at,
-                    environment,
-                    id_week
+                    environment
+                    <if(page_pushdown)>, id_week<endif>
                 FROM (
                     SELECT
                         *,
+                        <if(page_pushdown)>
                         toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) AS id_week
+                        <else>
+                        truncated_input,
+                        truncated_output,
+                        input_length,
+                        output_length
+                        <endif>
                     FROM traces FINAL
                     WHERE workspace_id = :workspace_id
                       AND project_id = :project_id
@@ -453,6 +470,7 @@ class ThreadDAOImpl implements ThreadDAO {
                     arraySort(groupUniqArrayIf(provider, provider != '')) as providers
                 FROM spans_deduped
                 GROUP BY workspace_id, project_id, trace_id
+            <if(page_pushdown)>
             ), thread_message_traces AS (
                 SELECT
                     thread_id,
@@ -493,6 +511,7 @@ class ThreadDAOImpl implements ThreadDAO {
                     LIMIT 1 BY id
                 ) AS message_payloads ON message_payloads.id = message_traces.trace_id
                 GROUP BY message_traces.thread_id
+            <endif>
             ), trace_threads_final AS (
                 SELECT
                     workspace_id,
@@ -708,6 +727,7 @@ class ThreadDAOImpl implements ThreadDAO {
                 c.comments AS comments
                 <if(!exclude_annotation_queues)>, ttaqi.annotation_queues AS annotation_queues<endif>
             FROM (
+                <if(page_pushdown)>
                 SELECT
                     agg.*,
                     tm.first_message AS first_message,
@@ -719,6 +739,7 @@ class ThreadDAOImpl implements ThreadDAO {
                     tm.first_message_truncation_threshold AS first_message_truncation_threshold,
                     tm.last_message_truncation_threshold AS last_message_truncation_threshold
                 FROM (
+                <endif>
                     SELECT
                         t.thread_id as id,
                         t.workspace_id as workspace_id,
@@ -730,6 +751,16 @@ class ThreadDAOImpl implements ThreadDAO {
                            (dateDiff('microsecond', minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), maxIf(t.end_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9)))) / 1000.0),
                            NULL) AS duration,
                         countIf(notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) > 0 as has_non_sentinel_trace,
+                        <if(!page_pushdown)>
+                        if(has_non_sentinel_trace, argMinIf(t.input, t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), argMin(t.input, t.start_time)) as first_message,
+                        if(has_non_sentinel_trace, argMaxIf(t.output, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9)), notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), argMax(t.output, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9)))) as last_message,
+                        if(has_non_sentinel_trace, argMinIf(t.truncated_input, t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), argMin(t.truncated_input, t.start_time)) as truncated_first_message,
+                        if(has_non_sentinel_trace, argMaxIf(t.truncated_output, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9)), notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), argMax(t.truncated_output, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9)))) as truncated_last_message,
+                        if(has_non_sentinel_trace, argMinIf(t.input_length, t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), argMin(t.input_length, t.start_time)) as first_message_length,
+                        if(has_non_sentinel_trace, argMaxIf(t.output_length, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9)), notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), argMax(t.output_length, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9)))) as last_message_length,
+                        if(has_non_sentinel_trace, argMinIf(t.truncation_threshold, t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), argMin(t.truncation_threshold, t.start_time)) as first_message_truncation_threshold,
+                        if(has_non_sentinel_trace, argMaxIf(t.truncation_threshold, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9)), notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), argMax(t.truncation_threshold, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9)))) as last_message_truncation_threshold,
+                        <endif>
                         count(DISTINCT t.id) * 2 as number_of_messages,
                         sum(s.total_estimated_cost) as total_estimated_cost,
                         sumMap(s.usage) as usage,
@@ -742,8 +773,10 @@ class ThreadDAOImpl implements ThreadDAO {
                         LEFT JOIN spans_agg AS s ON t.id = s.trace_id
                     GROUP BY
                         t.workspace_id, t.project_id, t.thread_id
+                <if(page_pushdown)>
                 ) AS agg
                 LEFT JOIN thread_messages AS tm ON tm.thread_id = agg.id
+                <endif>
             ) AS t
             <if(uuid_from_time || uuid_to_time)>INNER<else>LEFT<endif> JOIN trace_threads_final AS tt ON t.workspace_id = tt.workspace_id
                 AND t.project_id = tt.project_id
