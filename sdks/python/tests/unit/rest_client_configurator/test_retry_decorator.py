@@ -24,8 +24,9 @@ def _waits_before_giving_up(headers):
         ({"Retry-After": "2"}, 2.0),
         ({"retry-after": "2"}, 2.0),
         ({"Retry-After": "0"}, 1.0),
+        ({"Retry-After": "59"}, 59.0),
     ],
-    ids=["seconds", "lower_case_name", "zero_raised_to_minimum"],
+    ids=["seconds", "lower_case_name", "zero_raised_to_minimum", "just_under_cap"],
 )
 def test_opik_rest_retry__429_with_retry_after__waits_as_asked(headers, expected_wait):
     assert _waits_before_giving_up(headers) == [expected_wait, expected_wait]
@@ -46,8 +47,10 @@ def test_opik_rest_retry__429_with_retry_after_http_date__waits_until_that_date(
 
 @pytest.mark.parametrize(
     "headers",
-    [{"Retry-After": "3600"}, {"Retry-After": "soon"}, {}],
-    ids=["too_long", "unparseable", "missing"],
+    # A huge Retry-After is lowered to the 60 s cap, so 60 itself cannot be
+    # told apart from it and also backs off instead of blocking the caller.
+    [{"Retry-After": "60"}, {"Retry-After": "3600"}, {"Retry-After": "soon"}, {}],
+    ids=["at_cap", "too_long", "unparseable", "missing"],
 )
 def test_opik_rest_retry__429_without_usable_short_retry_after__backs_off_exponentially(
     headers,
