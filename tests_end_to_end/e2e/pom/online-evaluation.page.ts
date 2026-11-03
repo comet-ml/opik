@@ -2,6 +2,7 @@ import { test, type Page, type Locator } from '@playwright/test';
 import { expect } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 import { assertAllowedModelDisplayName } from '@e2e/core/llm-model-policy';
+import { waitForAssistantSidebarLoaded } from './assistant-sidebar';
 
 export type EvaluatorType = 'LLM-as-a-Judge' | 'Decision model' | 'Code evaluator';
 
@@ -69,6 +70,7 @@ export class OnlineEvaluationPage {
     await this.page.goto(
       `${env.baseUrl}/${env.workspace}/projects/${projectId}/online-evaluation`,
     );
+    await waitForAssistantSidebarLoaded(this.page);
   }
 
   /** Resolves once either the empty state or a real rule row is on screen. */
@@ -906,11 +908,31 @@ export class OnlineEvaluationPage {
     return this.panel.locator('button[role="combobox"]:has([data-testid="decision-model-select"])');
   }
 
+  /**
+   * Open the decision-model select and return its listbox.
+   *
+   * Retried as a whole: the editor remounts the select while its queries
+   * settle, which closes a listbox that had just opened and detaches its
+   * options mid-click (seen on staging 2.2.138).
+   */
+  async openDecisionModelSelect(): Promise<Locator> {
+    return test.step('open the decision-model select', async () => {
+      const listbox = this.page.getByRole('listbox');
+      await expect(async () => {
+        if (!(await listbox.isVisible())) await this.decisionModelSelect.click({ timeout: 2_000 });
+        await expect(listbox).toBeVisible({ timeout: 2_000 });
+      }).toPass({ timeout: 15_000 });
+      return listbox;
+    });
+  }
+
   async chooseDecisionModel(model: string): Promise<void> {
     return test.step(`choose the decision model "${model}"`, async () => {
-      await this.decisionModelSelect.click();
-      await this.page.getByRole('option', { name: model, exact: true }).click();
-      await expect(this.decisionModelSelect).toHaveText(model);
+      await expect(async () => {
+        const listbox = await this.openDecisionModelSelect();
+        await listbox.getByRole('option', { name: model, exact: true }).click({ timeout: 2_000 });
+        await expect(this.decisionModelSelect).toHaveText(model, { timeout: 2_000 });
+      }).toPass({ timeout: 30_000 });
     });
   }
 

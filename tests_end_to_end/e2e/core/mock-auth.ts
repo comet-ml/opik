@@ -27,6 +27,8 @@ export const mockAuthBaseUrlForBackend =
 /** Fixed identities the mock accepts (see mock_token_auth_service.py). */
 export const MOCK_AUTH_CLIENT_ID = 'opik-test';
 export const MOCK_AUTH_CLIENT_SECRET = 'opik-secret';
+/** The bearer the mock gateway accepts without a token fetch (STATIC_API_KEY in the service). */
+export const MOCK_STATIC_API_KEY = 'mock-static-key';
 
 export const mockTokenUrlForBackend = `${mockAuthBaseUrlForBackend}/oauth/token`;
 export const mockGatewayUrlForBackend = `${mockAuthBaseUrlForBackend}/v1`;

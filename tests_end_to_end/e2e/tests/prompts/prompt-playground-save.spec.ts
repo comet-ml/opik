@@ -72,6 +72,10 @@ test.describe(
           await test.step(`Verify Playground shows ${promptType} prompt at v1`, async () => {
             await playground.waitForReady();
             await playground.waitForLoadedPromptVersion(promptName, 'v1');
+            // The chip shows v1 before v1's messages land in the card, and when
+            // they land they replace whatever is there — an edit made in
+            // between is silently discarded.
+            await expect.poll(() => playground.variantMessageBodies(0)).toContain(v1Content);
           });
 
           await test.step('Edit the user message in the Playground', async () => {

@@ -7,8 +7,10 @@ on:
   workflow_dispatch:
 
 
+# Only a test-environment deploy supersedes an earlier one. Any other label gets a group of its own:
+# a cancelled run's check stays on the head commit and blocks Renovate's automerge for good.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ (github.event_name == 'workflow_dispatch' || github.event.label.name == 'test-environment') && 'deploy' || github.run_id }}
   cancel-in-progress: true
 permissions:
   contents: read
