@@ -1,35 +1,35 @@
 blinker==1.9.0
-certifi==2026.10.19
-charset-normalizer==3.4.6
-click==8.3.1
-docker==7.1.0
+certifi==2026.10.23
+charset-normalizer==3.5.2
+click==8.5.0
+docker==7.2.0
 Flask==3.1.3
 gunicorn==23.0.0
 uuid6==2025.0.1
-opik==2.2.125
-idna==3.15
+opik==2.2.137
+idna==3.20
 itsdangerous==2.2.0
 Jinja2==3.1.6
-MarkupSafe==3.0.3
-packaging==26.0
+MarkupSafe==3.0.4
+packaging==26.3
 pydantic-settings>=2.14.2,<3.0.0,!=2.9.0
-requests==2.33.1
+requests==2.34.2
 urllib3==2.8.0
 Werkzeug==3.1.9
 opentelemetry-api==1.36.0
-opentelemetry-sdk==1.36.0
-opentelemetry-exporter-otlp-proto-http==1.36.0
+opentelemetry-sdk==1.45.2
+opentelemetry-exporter-otlp-proto-http==1.45.2
 opentelemetry-instrumentation-flask==0.57b0
 opentelemetry-instrumentation-requests==0.57b0
 opentelemetry-instrumentation-system-metrics==0.57b0
 opentelemetry-instrumentation-logging==0.57b0
-schedule==1.2.1
+schedule==1.2.2
 # Transitive via litellm, which only requires >=0.8.0 at this version, so the floor
 # below is the guard: 0.9.0 vendors PyO3 0.22.6, which refuses to build against the
 # Alpine image's Python 3.14, and 0.12.0 is the first release with cp314 musllinux wheels.
 tiktoken==0.14.0
 redis==6.4.0
-rq==2.6.0
+rq==2.12.0
 opik-optimizer==3.2.0
 # gepa moves with opik-optimizer, in this same commit: 3.2.0 is the first
 # published release whose own metadata declares gepa>=0.1.0, so the floor the
@@ -40,6 +40,6 @@ gepa==0.1.4
 # Transitive via opik-optimizer, pinned for reproducibility. No longer built from source:
 # 1.94.2 was the first release publishing musllinux wheels, so the Alpine builder installs
 # a prebuilt abi3 wheel and the Rust toolchain no longer has to compile it.
-litellm==1.103.1
+litellm==1.106.6
 pyrate-limiter>=3.0.0,<4.0.0
 python-jsonpath>=2.0.0,<3.0.0
