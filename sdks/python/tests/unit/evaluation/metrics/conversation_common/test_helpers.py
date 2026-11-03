@@ -174,3 +174,14 @@ def test_message_has_text__reexported_from_helpers():
     must keep working alongside the one implementation in ``conversation_content``."""
     assert conversation_helpers.message_has_text({"content": "Hi there!"})
     assert not conversation_helpers.message_has_text({"content": ""})
+
+
+def test_get_turns_in_sliding_window_rejects_non_positive_window_size():
+    turns = [
+        {"role": "user", "content": "Hello!"},
+        {"role": "assistant", "content": "Hi there!"},
+    ]
+
+    for window_size in [0, -1]:
+        with pytest.raises(ValueError, match="window_size must be >= 1"):
+            list(conversation_helpers.get_turns_in_sliding_window(turns, window_size))

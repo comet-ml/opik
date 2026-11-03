@@ -22,7 +22,13 @@ def get_turns_in_sliding_window(
     Yields:
         A generator that produces lists of conversation turns, where each list
         represents a sliding window of turns.
+    Raises:
+        ValueError: If `window_size` is less than 1. A non-positive size would
+            yield an empty conversation for every turn, which the sliding-window
+            judges would then score without any error.
     """
+    if window_size < 1:
+        raise ValueError(f"window_size must be >= 1, got {window_size!r}")
 
     for i in range(len(turns)):
         yield turns[max(0, i - window_size + 1) : i + 1]
