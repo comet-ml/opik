@@ -1,3 +1,4 @@
+import collections
 import concurrent.futures
 import math
 import re
@@ -164,6 +165,125 @@ def test_evaluation__equals_with_numeric_inputs():
     # Mixed types that don't match
     assert metric.score(output=42, reference="forty-two") == ScoreResult(
         name=metric.name, value=0.0, reason=None, metadata=None
+    )
+
+
+@pytest.mark.parametrize(
+    "output,reference",
+    [
+        ({"a": 1, "b": 2}, {"b": 2, "a": 1}),
+        ({"outer": {"x": 1, "y": [1, 2]}}, {"outer": {"y": [1, 2], "x": 1}}),
+        ([{"a": 1, "b": 2}, 3], [{"b": 2, "a": 1}, 3]),
+        ({"x", "y", "z"}, {"z", "y", "x"}),
+        (frozenset({"x", "y", "z"}), frozenset({"z", "y", "x"})),
+        ({"a": "Hello"}, {"a": "hello"}),
+        ({"B": 1, "a": 2}, {"a": 2, "b": 1}),
+        # Same items, different iteration order: set items must be sorted.
+        ({1, 9}, {9, 1}),
+        ({1: "a", "1": "b", None: "c"}, {None: "c", "1": "b", 1: "a"}),
+        (collections.OrderedDict([("b", 2), ("a", 1)]), {"a": 1, "b": 2}),
+        (collections.defaultdict(list, {"b": [2], "a": [1]}), {"a": [1], "b": [2]}),
+    ],
+)
+def test_equals__containers_with_same_content__score_one(output, reference):
+    metric = equals.Equals(track=False)
+
+    assert metric.score(output=output, reference=reference) == ScoreResult(
+        name=metric.name, value=1.0, reason=None, metadata=None
+    )
+
+
+@pytest.mark.parametrize(
+    "output,reference",
+    [
+        ([1, 2], [2, 1]),
+        ({"a": 1}, {"a": 1, "b": 2}),
+        ({"a": 1}, {"a": "1"}),
+        ({"a": 1}, {"a": 1.0}),
+        ({"a": True}, {"a": 1}),
+        ([1, 2], (1, 2)),
+        ({"a": 1}, '{"a": 1}'),
+        ({"A": 1, "a": 2}, {"A": 2, "a": 1}),
+        (frozenset({"x"}), {"x"}),
+        ((1, 2), (2, 1)),
+        (collections.namedtuple("Point", "x y")(1, 2), (1, 2)),
+    ],
+)
+def test_equals__containers_with_different_content__score_zero(output, reference):
+    metric = equals.Equals(track=False)
+
+    assert metric.score(output=output, reference=reference) == ScoreResult(
+        name=metric.name, value=0.0, reason=None, metadata=None
+    )
+
+
+def test_equals__case_sensitive__applies_to_strings_inside_containers():
+    metric = equals.Equals(case_sensitive=True, track=False)
+
+    assert metric.score(output={"a": "Hello"}, reference={"a": "hello"}).value == 0.0
+    assert (
+        metric.score(output={"b": "Hi", "a": 1}, reference={"a": 1, "b": "Hi"}).value
+        == 1.0
+    )
+
+
+def test_equals__container_subclass__compared_by_stored_content():
+    class NoItems(dict):
+        def items(self):
+            return iter(())
+
+    metric = equals.Equals(track=False)
+
+    assert metric.score(output=NoItems(a=1), reference={}).value == 0.0
+    assert metric.score(output=NoItems(a=1), reference={"a": 1}).value == 1.0
+
+
+def test_equals__self_referencing_containers__do_not_recurse_forever():
+    output: list = [1]
+    output.append(output)
+    reference: list = [1]
+    reference.append(reference)
+    output_dict: dict = {"a": 1}
+    output_dict["self"] = output_dict
+    reference_dict: dict = {"a": 1}
+    reference_dict["self"] = reference_dict
+    metric = equals.Equals(track=False)
+
+    assert metric.score(output=output, reference=reference) == ScoreResult(
+        name=metric.name, value=1.0, reason=None, metadata=None
+    )
+    assert metric.score(output=output_dict, reference=reference_dict) == ScoreResult(
+        name=metric.name, value=1.0, reason=None, metadata=None
+    )
+
+
+def test_equals__repeated_reference__rendered_in_full():
+    shared = [1]
+    metric = equals.Equals(track=False)
+
+    assert metric.score(output=[shared, shared], reference=[[1], [1]]) == ScoreResult(
+        name=metric.name, value=1.0, reason=None, metadata=None
+    )
+
+
+def test_equals__deeply_nested_containers__compared_by_str():
+    def nest(depth: int, first: str, second: str) -> dict:
+        value: dict = {first: 0, second: 0}
+        for _ in range(depth):
+            value = {"k": value}
+        return value
+
+    metric = equals.Equals(track=False)
+
+    # Past the nesting cap key order counts again, as str() is order-sensitive.
+    assert metric.score(output=nest(700, "a", "b"), reference=nest(700, "a", "b")) == (
+        ScoreResult(name=metric.name, value=1.0, reason=None, metadata=None)
+    )
+    assert metric.score(output=nest(700, "a", "b"), reference=nest(700, "b", "a")) == (
+        ScoreResult(name=metric.name, value=0.0, reason=None, metadata=None)
+    )
+    assert metric.score(output=nest(50, "a", "b"), reference=nest(50, "b", "a")) == (
+        ScoreResult(name=metric.name, value=1.0, reason=None, metadata=None)
     )
 
 
