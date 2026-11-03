@@ -47,7 +47,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static org.apache.commons.lang3.StringUtils.defaultIfBlank;
@@ -138,9 +137,6 @@ public class AuthTokenProvider {
         } catch (AuthTokenException exception) {
             recordRequestMetric(workspaceId, providerId, "failed");
             throw exception;
-        } catch (SharedTokenCache.FetchTimeoutException exception) {
-            recordRequestMetric(workspaceId, providerId, "failed");
-            throw fetchTimeoutFailure(authConfig.value(), exception);
         }
         recordRequestMetric(workspaceId, providerId, switch (result.outcome()) {
             case CACHE_HIT -> "cache_hit";
@@ -229,9 +225,7 @@ public class AuthTokenProvider {
                 throw new IOException("the deadline closed the body");
             }
         } catch (IOException | ProcessingException exception) {
-            // past the fetch timeout, the failure is the token cache cancelling the fetch at its deadline
-            if ((deadline != null && deadline.expired())
-                    || System.nanoTime() - startNanos >= TimeUnit.MILLISECONDS.toNanos(fetchTimeoutMillis)) {
+            if (deadline != null && deadline.expired()) {
                 recordFetchMetric(startNanos, "slow_reply", origin);
                 throw fetchTimeoutFailure(authConfig, exception);
             }
