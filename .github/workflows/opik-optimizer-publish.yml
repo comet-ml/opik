@@ -30,7 +30,7 @@ jobs:
         - name: Set up Python 3.9
           uses: actions/setup-python@v7
           with:
-                python-version: 3.15
+                python-version: 3.9
 
         - name: Build pip package
           run: |
