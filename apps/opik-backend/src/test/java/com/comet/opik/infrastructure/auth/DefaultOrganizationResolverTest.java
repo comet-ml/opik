@@ -12,6 +12,8 @@ import java.util.stream.Stream;
 
 class DefaultOrganizationResolverTest {
 
+    private static final String PINNED_DEFAULT_ORGANIZATION_ID = "01a1a1c9-b569-7b5b-9c5c-1aa254d42e50";
+
     private final OrganizationResolver resolver = new DefaultOrganizationResolver();
 
     static Stream<Named<Context>> contexts() {
@@ -30,14 +32,14 @@ class DefaultOrganizationResolverTest {
     @MethodSource("contexts")
     void organizationIdReturnsDefaultOrganization(Context context) {
         StepVerifier.create(resolver.organizationId().contextWrite(context))
-                .expectNext(ProjectService.DEFAULT_ORGANIZATION_ID)
+                .expectNext(PINNED_DEFAULT_ORGANIZATION_ID)
                 .verifyComplete();
     }
 
     @Test
     void requireOrganizationAdminAllowsWithDefaultOrganization() {
         StepVerifier.create(resolver.requireOrganizationAdmin())
-                .expectNext(ProjectService.DEFAULT_ORGANIZATION_ID)
+                .expectNext(PINNED_DEFAULT_ORGANIZATION_ID)
                 .verifyComplete();
     }
 }
