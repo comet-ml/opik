@@ -2,6 +2,7 @@ package com.comet.opik.infrastructure.llm.vertexai;
 
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
+import com.comet.opik.domain.llm.ProviderFailures;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.http.OneShotRequestBodies;
 import com.comet.opik.infrastructure.llm.GeminiMaxOutputTokens;
@@ -194,8 +195,12 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
         return builder.build();
     }
 
+    /**
+     * The cause is carried redacted: the key-file parser can quote the key's own content in its message, such as an
+     * unrecognised {@code type} value, and this exception is logged with its cause.
+     */
     private InternalServerErrorException failWithError(Exception e) {
-        return new InternalServerErrorException("Failed to create GoogleCredentials", e);
+        return new InternalServerErrorException("Failed to create GoogleCredentials", ProviderFailures.redacted(e));
     }
 
     /**

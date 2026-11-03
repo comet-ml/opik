@@ -10,7 +10,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.UUID;
 import java.util.function.Supplier;
 
 /**
@@ -71,7 +73,7 @@ public class SharedTokenCache {
             // A waiter first waits out the holder's lease, then holds the lock for at most one of its own
             var value = lockService
                     .executeWithLockCustomExpire(
-                            new LockService.Lock(cacheKey + ":fetch-lock"),
+                            fetchLock(cacheKey),
                             Mono.fromCallable(() -> fetchUnderLock(cacheKey, fetch)),
                             lease)
                     .timeout(lease.multipliedBy(2), Mono.empty())
@@ -85,11 +87,11 @@ public class SharedTokenCache {
             if (refreshed != null) {
                 return new Result(refreshed, Outcome.LOCK_TIMEOUT_RECOVERED);
             }
-            log.warn("Timed out waiting for the fetch lock of '{}'; fetching directly", cacheKey);
+            log.warn("Timed out waiting for the fetch lock, fetching directly, kind '{}'", kind(cacheKey));
         } catch (FetchFailedException failure) {
             throw failure.fetchFailure;
         } catch (RuntimeException exception) {
-            log.warn("Token cache unavailable for '{}'; falling back to a direct fetch", cacheKey,
+            log.warn("Token cache unavailable, falling back to a direct fetch, kind '{}'", kind(cacheKey),
                     withoutMessageOrCauses(exception));
         }
 
@@ -116,7 +118,8 @@ public class SharedTokenCache {
         try {
             redisClient.getBucket(cacheKey).delete();
         } catch (RuntimeException exception) {
-            log.warn("Failed to invalidate the cached value of '{}'", cacheKey, withoutMessageOrCauses(exception));
+            log.warn("Failed to invalidate a cached value, kind '{}'", kind(cacheKey),
+                    withoutMessageOrCauses(exception));
         }
     }
 
@@ -142,7 +145,7 @@ public class SharedTokenCache {
             return encrypted == null ? null : EncryptionUtils.decryptGcm(encrypted);
         } catch (RuntimeException exception) {
             // debug only: an outage also fails the lock, which get() reports once
-            log.debug("Failed to read the cached value of '{}'", cacheKey, withoutMessageOrCauses(exception));
+            log.debug("Failed to read a cached value, kind '{}'", kind(cacheKey), withoutMessageOrCauses(exception));
             return null;
         }
     }
@@ -154,9 +157,27 @@ public class SharedTokenCache {
         try {
             redisClient.getBucket(cacheKey).set(EncryptionUtils.encryptGcm(fetched.value()), fetched.cacheFor());
         } catch (RuntimeException exception) {
-            log.debug("Failed to cache the value of '{}'; the value is still returned", cacheKey,
+            log.debug("Failed to cache a value, it is still returned, kind '{}'", kind(cacheKey),
                     withoutMessageOrCauses(exception));
         }
+    }
+
+    /**
+     * The lock is named by a UUID derived from the key rather than by the key: the lock service logs its name, and
+     * metrics label it with the UUIDs collapsed, so the label stays one per kind.
+     */
+    private static LockService.Lock fetchLock(String cacheKey) {
+        return new LockService.Lock(UUID.nameUUIDFromBytes(cacheKey.getBytes(StandardCharsets.UTF_8)),
+                kind(cacheKey) + "-fetch-lock");
+    }
+
+    /**
+     * What a key caches, its prefix up to the first {@code ':'}, for logs. The rest of the key names the Redis bucket,
+     * which logs never do.
+     */
+    private static String kind(String cacheKey) {
+        int end = cacheKey.indexOf(':');
+        return end < 0 ? "token" : cacheKey.substring(0, end);
     }
 
     /**

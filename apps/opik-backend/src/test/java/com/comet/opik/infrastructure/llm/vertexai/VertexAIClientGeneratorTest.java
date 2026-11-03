@@ -29,6 +29,7 @@ import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import io.dropwizard.util.Duration;
+import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.client.Client;
 import lombok.Builder;
 import lombok.RequiredArgsConstructor;
@@ -36,6 +37,7 @@ import okhttp3.ConnectionPool;
 import okhttp3.Dispatcher;
 import okhttp3.OkHttpClient;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -876,6 +878,28 @@ class VertexAIClientGeneratorTest {
             assertThat(actualTtlMillis)
                     .isLessThanOrEqualTo(TimeUnit.MINUTES.toMillis(55))
                     .isGreaterThan(TimeUnit.MINUTES.toMillis(54));
+        }
+
+        /** The exception is logged with its cause, and the key-file parser quotes an unrecognised type back. */
+        @Test
+        @DisplayName("a malformed key file's content is kept out of the error and its causes")
+        void malformedKeyFileContentIsKeptOutOfTheError() throws Exception {
+            var secret = RandomStringUtils.secure().nextAlphanumeric(32);
+            var malformedKey = LlmProviderClientApiConfig.builder()
+                    .apiKey(serviceAccountJson(PROJECT_ID)
+                            .replace("\"type\": \"service_account\"", "\"type\": \"%s\"".formatted(secret)))
+                    .configuration(Map.of("location", "global"))
+                    .build();
+            var generator = new VertexAIClientGenerator(clientConfig(), registry, LlmTestClients.REMOTE_MEDIA_INLINER,
+                    LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache);
+
+            var thrown = catchThrowable(
+                    () -> generator.generate(malformedKey, ChatCompletionRequest.builder().model(MODEL).build()));
+
+            assertThat(thrown).isInstanceOf(InternalServerErrorException.class)
+                    .hasMessage("Failed to create GoogleCredentials");
+            assertThat(ExceptionUtils.getThrowableList(thrown))
+                    .noneMatch(cause -> String.valueOf(cause.getMessage()).contains(secret));
         }
 
         @Test
