@@ -8,8 +8,11 @@ import com.comet.opik.api.resources.utils.TestHttpClientUtils;
 import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.LlmProviderTokenAuthConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.llm.LlmTestClients;
+import com.comet.opik.infrastructure.llm.SharedTokenCache;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.infrastructure.net.DestinationGuard;
+import com.comet.opik.infrastructure.redis.LockServiceTestUtils;
 import com.comet.opik.infrastructure.redis.StringRedisClient;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
@@ -26,13 +29,15 @@ import org.redisson.Redisson;
 import org.redisson.api.RedissonClient;
 import org.redisson.api.options.KeysScanOptions;
 import org.redisson.config.Config;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.containing;
@@ -45,6 +50,10 @@ import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.awaitility.Awaitility.await;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Auth Token Provider Test")
@@ -53,70 +62,6 @@ class AuthTokenProviderTest {
     private static final String TOKEN_PATH = "/oauth/token";
     private static final String SECRET_VALUE = "super-s3cr3t";
     private static final Client CLIENT = TestHttpClientUtils.client();
-
-    /**
-     * Single-flight correctness belongs to {@code RedissonLockService}'s own tests (which is also
-     * package-private); here the lock is a passthrough so the provider's orchestration is what's
-     * under test.
-     */
-    private static final LockService PASSTHROUGH_LOCK_SERVICE = new LockService() {
-        @Override
-        public <T> Mono<T> executeWithLock(Lock lock, Mono<T> action) {
-            return action;
-        }
-
-        @Override
-        public <T> Mono<T> executeWithLockCustomExpire(Lock lock, Mono<T> action, Duration duration) {
-            return action;
-        }
-
-        @Override
-        public <T> Flux<T> executeWithLock(Lock lock, Flux<T> action) {
-            return action;
-        }
-
-        @Override
-        public <T> Mono<T> bestEffortLock(Lock lock, Mono<T> action, Mono<Void> failToAcquireLockAction,
-                Duration actionTimeout, Duration lockTimeout) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public <T> Mono<T> bestEffortLock(Lock lock, Mono<T> action, Mono<Void> failToAcquireLockAction,
-                Duration actionTimeout, Duration lockTimeout, boolean holdUntilExpiry) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public Mono<Boolean> lockUsingToken(Lock lock, Duration lockDuration) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public Mono<Void> unlockUsingToken(Lock lock) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public Mono<String> tryAcquireSlot(Lock lock, int totalSlots, Duration leaseTime) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public Mono<Boolean> refreshSlot(Lock lock, String permitId, Duration leaseTime) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public Mono<Boolean> releaseSlot(Lock lock, String permitId) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public Mono<Void> addSlotPermits(Lock lock, int delta) {
-            throw new UnsupportedOperationException();
-        }
-    };
 
     private final RedisContainer redis = RedisContainerUtils.newRedisContainer();
     private WireMockServer wireMock;
@@ -139,7 +84,9 @@ class AuthTokenProviderTest {
         opikConfiguration.getEncryption().setKey("0123456789abcdef");
         EncryptionUtils.setConfig(opikConfiguration);
 
-        provider = new AuthTokenProvider(stringRedisClient, PASSTHROUGH_LOCK_SERVICE, relaxedConfig(), CLIENT);
+        provider = new AuthTokenProvider(
+                new SharedTokenCache(stringRedisClient, LlmTestClients.PASSTHROUGH_LOCK_SERVICE), relaxedConfig(),
+                CLIENT);
     }
 
     private static LlmProviderTokenAuthConfig relaxedConfig() {
@@ -183,7 +130,7 @@ class AuthTokenProviderTest {
     }
 
     private List<String> cachedKeys(UUID providerId) {
-        var keys = new java.util.ArrayList<String>();
+        var keys = new ArrayList<String>();
         redisson.getKeys()
                 .getKeys(KeysScanOptions.defaults().pattern("llm_auth_token:%s:*".formatted(providerId)))
                 .forEach(keys::add);
@@ -391,7 +338,9 @@ class AuthTokenProviderTest {
     void oversizedReplyIsRefusedWithoutReadingTheRest() {
         var config = relaxedConfig();
         config.setMaxResponseChars(1_000);
-        var cappedProvider = new AuthTokenProvider(stringRedisClient, PASSTHROUGH_LOCK_SERVICE, config, CLIENT);
+        var cappedProvider = new AuthTokenProvider(
+                new SharedTokenCache(stringRedisClient, LlmTestClients.PASSTHROUGH_LOCK_SERVICE), config,
+                CLIENT);
         // the first chunk is past the cap, even compressed, and the rest takes 20 seconds to arrive
         wireMock.stubFor(post(urlEqualTo(TOKEN_PATH)).willReturn(aResponse()
                 .withBody(RandomStringUtils.secure().nextAlphanumeric(100_000))
@@ -412,7 +361,9 @@ class AuthTokenProviderTest {
     void tricklingReplyIsRefusedAtTheFetchTimeout() {
         var config = relaxedConfig();
         config.setFetchTimeout(TestConfigUtils.duration("1s"));
-        var shortTimeoutProvider = new AuthTokenProvider(stringRedisClient, PASSTHROUGH_LOCK_SERVICE, config, CLIENT);
+        var shortTimeoutProvider = new AuthTokenProvider(
+                new SharedTokenCache(stringRedisClient, LlmTestClients.PASSTHROUGH_LOCK_SERVICE),
+                config, CLIENT);
         // 100 chunks over 20 seconds: each wait for bytes is well within the 1 second read timeout
         wireMock.stubFor(post(urlEqualTo(TOKEN_PATH)).willReturn(aResponse()
                 .withBody("{\"access_token\": \"%s\"}".formatted(RandomStringUtils.secure().nextAlphanumeric(100)))
@@ -463,20 +414,55 @@ class AuthTokenProviderTest {
         UUID providerId = UUID.randomUUID();
 
         // the "holder": a normal provider sharing the same Redis, whose fetch caches tok-held
-        var holder = new AuthTokenProvider(stringRedisClient, PASSTHROUGH_LOCK_SERVICE, relaxedConfig(), CLIENT);
+        var holder = new AuthTokenProvider(
+                new SharedTokenCache(stringRedisClient, LlmTestClients.PASSTHROUGH_LOCK_SERVICE), relaxedConfig(),
+                CLIENT);
         // the "waiter": its lock wait elapses (empty result), but only after the holder has
         // written — exactly the sequence the timed-out-waiter re-read is for
-        LockService timedOutLock = org.mockito.Mockito.mock(LockService.class);
-        org.mockito.Mockito.when(timedOutLock.executeWithLockCustomExpire(
-                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
-                org.mockito.ArgumentMatchers.any()))
+        LockService timedOutLock = mock(LockService.class);
+        when(timedOutLock.executeWithLockCustomExpire(
+                any(), any(),
+                any()))
                 .thenAnswer(invocation -> Mono.fromRunnable(() -> holder.bearer("ws", providerId, wrap(recipe)))
                         .then(Mono.empty()));
-        var waiter = new AuthTokenProvider(stringRedisClient, timedOutLock, relaxedConfig(), CLIENT);
+        var waiter = new AuthTokenProvider(new SharedTokenCache(stringRedisClient, timedOutLock), relaxedConfig(),
+                CLIENT);
 
         assertThat(waiter.bearer("ws", providerId, wrap(recipe))).isEqualTo("tok-held");
         // one fetch total (the holder's); the waiter recovered from the cache
         wireMock.verify(1, postRequestedFor(urlEqualTo(TOKEN_PATH)));
+    }
+
+    /**
+     * The lock's lease isn't renewed: were it only {@code lockTimeout}, the second pod would take the lock while the
+     * first is still fetching, find Redis empty and fetch a second token.
+     */
+    @Test
+    @DisplayName("a fetch slower than the lock timeout but within the fetch timeout is still made once across pods")
+    void fetchOutlastingTheLockTimeoutIsMadeOnce() throws Exception {
+        wireMock.stubFor(post(urlEqualTo(TOKEN_PATH))
+                .willReturn(okJson("{\"access_token\": \"tok-slow\", \"expires_in\": 3600}").withFixedDelay(1_000)));
+        var config = relaxedConfig();
+        config.setLockTimeout(TestConfigUtils.duration("200ms"));
+        config.setFetchTimeout(TestConfigUtils.duration("5s"));
+        var lockService = LockServiceTestUtils.newLockService(redisson);
+        var recipe = wrap(oauthRecipe().build());
+        var providerId = UUID.randomUUID();
+        var firstPod = new AuthTokenProvider(new SharedTokenCache(stringRedisClient, lockService), config, CLIENT);
+        var secondPod = new AuthTokenProvider(new SharedTokenCache(stringRedisClient, lockService), config, CLIENT);
+
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            var firstBearer = executor.submit(() -> firstPod.bearer("ws", providerId, recipe));
+            // the second pod starts only once the first is fetching, so it misses Redis and has to wait on the lock
+            await().atMost(5, TimeUnit.SECONDS)
+                    .until(() -> wireMock.findAll(postRequestedFor(urlEqualTo(TOKEN_PATH))).size() == 1);
+            var secondBearer = executor.submit(() -> secondPod.bearer("ws", providerId, recipe));
+
+            assertThat(firstBearer.get(30, TimeUnit.SECONDS)).isEqualTo("tok-slow");
+            assertThat(secondBearer.get(30, TimeUnit.SECONDS)).isEqualTo("tok-slow");
+        }
+
+        wireMock.verify(exactly(1), postRequestedFor(urlEqualTo(TOKEN_PATH)));
     }
 
     @Test
@@ -559,7 +545,9 @@ class AuthTokenProviderTest {
     void strictGuardRefusesNonPublicTokenUrl() {
         var strictConfig = new LlmProviderTokenAuthConfig();
         strictConfig.setDestinationGuard(DestinationGuard.Mode.STRICT);
-        var strictProvider = new AuthTokenProvider(stringRedisClient, PASSTHROUGH_LOCK_SERVICE, strictConfig, CLIENT);
+        var strictProvider = new AuthTokenProvider(
+                new SharedTokenCache(stringRedisClient, LlmTestClients.PASSTHROUGH_LOCK_SERVICE),
+                strictConfig, CLIENT);
 
         assertThatThrownBy(() -> strictProvider.bearer("ws", UUID.randomUUID(), wrap(oauthRecipe().build())))
                 .isInstanceOf(AuthTokenException.class)
@@ -570,7 +558,8 @@ class AuthTokenProviderTest {
     @Test
     @DisplayName("a Redis outage degrades to a direct fetch instead of failing the call")
     void redisOutageDegradesToDirectFetch() {
-        var flakyRedis = RedisContainerUtils.newRedisContainer();
+        // its own container: a reused one would be the class's, and stopping it would fail the tests after this
+        var flakyRedis = RedisContainerUtils.newRedisContainer().withReuse(false);
         flakyRedis.start();
         var flakyConfig = new Config();
         flakyConfig.useSingleServer()
@@ -580,8 +569,9 @@ class AuthTokenProviderTest {
                 .setConnectTimeout(500);
         var flakyRedisson = Redisson.create(flakyConfig);
         try {
-            var flakyProvider = new AuthTokenProvider(new StringRedisClient(flakyRedisson),
-                    PASSTHROUGH_LOCK_SERVICE, relaxedConfig(), CLIENT);
+            var flakyProvider = new AuthTokenProvider(
+                    new SharedTokenCache(new StringRedisClient(flakyRedisson), LlmTestClients.PASSTHROUGH_LOCK_SERVICE),
+                    relaxedConfig(), CLIENT);
             flakyRedis.stop();
 
             stubToken("{\"access_token\": \"tok-degraded\", \"expires_in\": 3600}");

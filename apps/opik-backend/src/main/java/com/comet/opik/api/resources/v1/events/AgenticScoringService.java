@@ -162,13 +162,10 @@ public interface AgenticScoringService {
     /**
      * Tool choice for the FIRST call of the agentic loop. {@link ToolChoice#REQUIRED} is what stops an
      * OpenAI judge from answering straight from visible context (see {@link SupportedJudgeProvider} for
-     * the empirical asymmetry), but langchain4j's {@code VertexAiGeminiChatModel} rejects any explicit
-     * tool choice with {@code UnsupportedFeatureException} — and since that is terminal, forcing it there
-     * failed the evaluation outright instead of scoring it. Vertex therefore gets
-     * {@link ToolChoice#AUTO}: the model may skip the tool loop, which the loop already handles (a first
-     * response with no tool-execution requests finishes it), so a possibly-tool-less evaluation replaces
-     * a guaranteed failure. The same trade applies to the Claude models that answer a forced choice with a
-     * 400, and to any Claude given a thinking budget.
+     * the empirical asymmetry). The Claude models that answer a forced choice with a 400, and any Claude
+     * given a thinking budget, get {@link ToolChoice#AUTO} instead: the model may skip the tool loop, which
+     * the loop already handles (a first response with no tool-execution requests finishes it), so a
+     * possibly-tool-less evaluation replaces a guaranteed failure.
      */
     ToolChoice firstRoundToolChoice(LlmProvider provider, LlmAsJudgeModelParameters modelParameters);
 
@@ -464,12 +461,10 @@ class AgenticScoringServiceImpl implements AgenticScoringService {
             return ToolChoice.AUTO;
         }
         return switch (provider) {
-            case OPEN_AI, ANTHROPIC, GEMINI, OPEN_ROUTER, BEDROCK -> ToolChoice.REQUIRED;
-            // VERTEX_AI: VertexAiGeminiChatModel.validate() throws UnsupportedFeatureException on any
-            // toolChoice other than AUTO, even though the provider does support tools. The rest have no
-            // tool support at all, so callers gate them out before reaching here; AUTO keeps a caller
+            case OPEN_AI, ANTHROPIC, GEMINI, OPEN_ROUTER, VERTEX_AI, BEDROCK -> ToolChoice.REQUIRED;
+            // No tool support at all, so callers gate them out before reaching here; AUTO keeps a caller
             // that forgets the gate on the harmless side.
-            case VERTEX_AI, OLLAMA, CUSTOM_LLM, OPIK_FREE -> ToolChoice.AUTO;
+            case OLLAMA, CUSTOM_LLM, OPIK_FREE -> ToolChoice.AUTO;
         };
     }
 
