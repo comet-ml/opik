@@ -9,6 +9,8 @@ import com.comet.opik.infrastructure.llm.GeminiMaxOutputTokens;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderLangChainMapper;
 import com.comet.opik.utils.ClientDisconnectedException;
+import com.comet.opik.utils.HttpStatusRetryability;
+import com.google.api.client.http.HttpResponseException;
 import com.google.genai.errors.ApiException;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
@@ -43,6 +45,9 @@ import java.util.function.Consumer;
 @RequiredArgsConstructor
 @Slf4j
 public class LlmProviderVertexAI implements LlmProviderService {
+
+    static final String KEY_REJECTED = "Vertex AI rejected the service account key: check that the key and its"
+            + " service account exist and are enabled";
 
     private static final String CUT_OFF_BEFORE_ANSWERING = "Vertex AI used up the max output tokens limit%s before "
             + "writing any answer. Thinking tokens count toward this limit, so raise Max output tokens and run again";
@@ -253,7 +258,19 @@ public class LlmProviderVertexAI implements LlmProviderService {
     public Optional<ErrorMessage> getLlmProviderError(@NonNull Throwable throwable) {
         return Optional.ofNullable(ExceptionUtils.throwableOfType(throwable, ApiException.class))
                 .map(LlmProviderVertexAI::toErrorMessage)
+                .or(() -> keyRejection(throwable))
                 .or(() -> LlmProviderLangChainMapper.INSTANCE.getGeminiErrorObject(throwable, log));
+    }
+
+    /**
+     * Google's token endpoint refused the service-account key with a status that can never succeed, such as an
+     * {@code invalid_grant} for a deleted key. The SDK raises it as an I/O failure, so it is named here rather than
+     * reported as an unexpected error; Google's own text stays out, like any undocumented provider text.
+     */
+    private static Optional<ErrorMessage> keyRejection(Throwable throwable) {
+        return Optional.ofNullable(ExceptionUtils.throwableOfType(throwable, HttpResponseException.class))
+                .filter(rejection -> HttpStatusRetryability.isPermanent(rejection.getStatusCode()))
+                .map(rejection -> new ErrorMessage(rejection.getStatusCode(), KEY_REJECTED));
     }
 
     private static ErrorMessage toErrorMessage(ApiException exception) {

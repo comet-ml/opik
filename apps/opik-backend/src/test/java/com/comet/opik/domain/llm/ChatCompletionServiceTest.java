@@ -9,8 +9,11 @@ import com.comet.opik.infrastructure.llm.openrouter.OpenRouterDecisionModel;
 import com.comet.opik.infrastructure.llm.vertexai.LlmProviderVertexAI.CutOffBeforeAnsweringException;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.ChunkedOutputHandlers;
+import com.google.api.client.http.HttpHeaders;
+import com.google.api.client.http.HttpResponseException;
 import com.google.genai.errors.ApiException;
 import com.google.genai.errors.ClientException;
+import com.google.genai.errors.GenAiIOException;
 import com.google.genai.errors.ServerException;
 import com.openai.errors.OpenAIServiceException;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
@@ -1115,6 +1118,24 @@ class ChatCompletionServiceTest {
         @DisplayName("A permanent Vertex AI failure does not consume the in-process retry budget")
         void scoreTrace__whenPermanentVertexAiStatus__thenNotRetriedInProcess() {
             var thrown = scoreTraceWithBudget(2, vertexAiFailure(400));
+
+            assertNonRetryable(thrown, 400);
+            verify(chatModel, times(1)).chat(any(ChatRequest.class));
+        }
+
+        /**
+         * Google's token endpoint refusing the service-account key surfaces from the Vertex AI SDK as an I/O failure
+         * wrapping google-auth's {@code GoogleAuthException}, whose constructors are package-private, around the
+         * endpoint's {@code HttpResponseException}. Its status is what classifies it, not the I/O failure around it.
+         */
+        @Test
+        @DisplayName("A Vertex AI key the token endpoint rejects is neither retried in-process nor redelivered")
+        void scoreTrace__whenVertexAiKeyRejected__thenNonRetryable() {
+            var rejection = new HttpResponseException.Builder(400, "Bad Request", new HttpHeaders())
+                    .setContent("{\"error\": \"invalid_grant\"}")
+                    .build();
+
+            var thrown = scoreTraceWithBudget(2, new GenAiIOException("Failed to refresh the credentials", rejection));
 
             assertNonRetryable(thrown, 400);
             verify(chatModel, times(1)).chat(any(ChatRequest.class));

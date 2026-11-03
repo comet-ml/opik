@@ -17,6 +17,8 @@ public class ProviderRequestRefusedException extends NonRetriableException {
                 + " '-' are allowed"),
         VERTEX_AI_LOCATION("Vertex AI location is not a valid region"),
         VERTEX_AI_TOKEN_URI("Vertex AI service account token_uri must be a Google token endpoint"),
+        VERTEX_AI_KEY_UNREADABLE("Vertex AI service account key could not be read: it must be a service account's JSON"
+                + " key file"),
         MEDIA_URL("""
                 a media URL was refused: it must be an http or https URL that resolves to a public address \
                 (self-hosted deployments serving media from internal networks can set \

@@ -12,6 +12,7 @@ import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmTestClients;
 import com.comet.opik.infrastructure.llm.SharedTokenCache;
+import com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException;
 import com.comet.opik.infrastructure.redis.StringRedisClient;
 import com.comet.opik.utils.ClientDisconnectedException;
 import com.comet.opik.utils.JsonUtils;
@@ -30,7 +31,6 @@ import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import io.dropwizard.util.Duration;
-import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.client.Client;
 import lombok.Builder;
 import lombok.RequiredArgsConstructor;
@@ -78,6 +78,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
@@ -903,9 +904,9 @@ class VertexAIClientGeneratorTest {
             assertThat(actual).isEqualTo(expected);
         }
 
-        /** The exception is logged with its cause, and the key-file parser quotes an unrecognised type back. */
+        /** No attempt can read the key, and the key-file parser quotes an unrecognised type back. */
         @Test
-        @DisplayName("a malformed key file's content is kept out of the error and its causes")
+        @DisplayName("a malformed key file is refused without retrying, its content kept out of the error")
         void malformedKeyFileContentIsKeptOutOfTheError() throws Exception {
             var secret = RandomStringUtils.secure().nextAlphanumeric(32);
             var malformedKey = LlmProviderClientApiConfig.builder()
@@ -919,10 +920,36 @@ class VertexAIClientGeneratorTest {
             var thrown = catchThrowable(
                     () -> generator.generate(malformedKey, ChatCompletionRequest.builder().model(MODEL).build()));
 
-            assertThat(thrown).isInstanceOf(InternalServerErrorException.class)
-                    .hasMessage("Failed to create GoogleCredentials");
+            assertThat(thrown).isInstanceOf(ProviderRequestRefusedException.class)
+                    .hasMessage("Vertex AI service account key could not be read: it must be a service account's"
+                            + " JSON key file");
             assertThat(ExceptionUtils.getThrowableList(thrown))
                     .noneMatch(cause -> String.valueOf(cause.getMessage()).contains(secret));
+        }
+
+        /** A rejected key never starts working, so it is named, with Google's status, instead of an unexpected error. */
+        @Test
+        @DisplayName("a key the token endpoint rejects is reported as rejected, with the endpoint's status")
+        void rejectedKeyIsReportedWithTheEndpointsStatus() {
+            wireMock.server().stubFor(post(urlPathMatching(TOKEN_PATH))
+                    .willReturn(aResponse()
+                            .withStatus(400)
+                            .withHeader("Content-Type", "application/json")
+                            .withBody(
+                                    "{\"error\": \"invalid_grant\", \"error_description\": \"Invalid JWT Signature.\"}")));
+            var generator = new VertexAIClientGenerator(clientConfig(), registry, LlmTestClients.REMOTE_MEDIA_INLINER,
+                    LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache);
+            var apiConfig = LlmProviderClientApiConfig.builder()
+                    .apiKey(serviceAccountJson)
+                    .configuration(Map.of("location", "global"))
+                    .build();
+            var expected = Optional.of(new ErrorMessage(400, LlmProviderVertexAI.KEY_REJECTED));
+
+            var thrown = catchThrowable(() -> completeVia(generator, "global"));
+            var actual = new LlmProviderVertexAI(generator, apiConfig).getLlmProviderError(thrown);
+
+            assertThat(actual).isEqualTo(expected);
+            wireMock.server().verify(0, postRequestedFor(urlPathMatching(GENERATE_CONTENT_PATH)));
         }
 
         @Test

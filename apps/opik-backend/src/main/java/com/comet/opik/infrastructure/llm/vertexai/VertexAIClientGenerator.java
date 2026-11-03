@@ -274,9 +274,15 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
         }
     }
 
-    private SharedTokenServiceAccountCredentials loadCredentials(String apiKey, String keyHash) throws IOException {
-        var credentials = ServiceAccountCredentials.fromStream(
-                new ByteArrayInputStream(apiKey.getBytes(StandardCharsets.UTF_8)));
+    private SharedTokenServiceAccountCredentials loadCredentials(String apiKey, String keyHash) {
+        ServiceAccountCredentials credentials;
+        try {
+            credentials = ServiceAccountCredentials.fromStream(
+                    new ByteArrayInputStream(apiKey.getBytes(StandardCharsets.UTF_8)));
+        } catch (IOException exception) {
+            // No attempt can read it, and the parser can quote the key file back, so the refusal carries none of it
+            throw new ProviderRequestRefusedException(ProviderRequestRefusedException.Reason.VERTEX_AI_KEY_UNREADABLE);
+        }
 
         // the credentials refresh by posting to token_uri, which comes from the user-supplied key file
         if (!clientConfig.getVertexAIClient().tokenUris().contains(credentials.getTokenServerUri())) {

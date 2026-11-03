@@ -10,6 +10,7 @@ import com.comet.opik.infrastructure.net.DestinationGuardDns;
 import com.comet.opik.utils.ChunkedOutputHandlers;
 import com.comet.opik.utils.HttpStatusRetryability;
 import com.fasterxml.jackson.core.JacksonException;
+import com.google.api.client.http.HttpResponseException;
 import com.google.common.base.Throwables;
 import com.google.genai.errors.ApiException;
 import com.openai.errors.OpenAIRetryableException;
@@ -427,15 +428,16 @@ public class ChatCompletionService {
 
     /**
      * Walks the cause chain like {@link #findUnsupportedFeature}, so the status is found whether the provider client
-     * throws bare or wraps. A wire status, an {@link HttpException} or the Vertex AI SDK's {@link ApiException}, is
+     * throws bare or wraps. A wire status, an {@link HttpException}, the Vertex AI SDK's {@link ApiException} or Google's
+     * token endpoint's {@link HttpResponseException}, is
      * searched for across the whole chain before any typed exception is considered, because it carries the upstream
      * code verbatim: langchain4j's {@code ExceptionMapper} raises {@code InternalServerException(HttpException(503))},
      * and taking the outermost match would collapse that 503 into the flat 500 the typed exception implies.
      *
      * <p>Review finding on #8170 asked whether an outer wrapper's status can shadow a nested provider one, since
      * {@code ExceptionUtils} lists the chain outermost-first. It cannot: {@code HttpException}'s only constructor is
-     * {@code (int, String)}, and the Vertex AI SDK builds its {@code ApiException} from a response without a cause, so
-     * either is terminal in the chain. At most one can appear, and the {@code findFirst} here is therefore not a
+     * {@code (int, String)}, and the Vertex AI SDK and google-auth build theirs from a response without a cause, so
+     * each is terminal in the chain. At most one can appear, and the {@code findFirst} here is therefore not a
      * precedence choice between rival wire statuses.
      */
     private Optional<Integer> findProviderHttpStatus(Throwable throwable) {
@@ -470,11 +472,15 @@ public class ChatCompletionService {
         return family == Response.Status.Family.CLIENT_ERROR || family == Response.Status.Family.SERVER_ERROR;
     }
 
-    /** The status the provider sent, as the HTTP client or the Vertex AI SDK recorded it. */
+    /**
+     * The status the provider sent, as the HTTP client or the Vertex AI SDK recorded it, or as Google's token endpoint
+     * answered the Vertex AI credentials' token request.
+     */
     private static Optional<Integer> wireStatusOf(Throwable throwable) {
         return switch (throwable) {
             case HttpException httpException -> Optional.of(httpException.statusCode());
             case ApiException apiException -> Optional.of(apiException.code());
+            case HttpResponseException tokenRejection -> Optional.of(tokenRejection.getStatusCode());
             default -> Optional.empty();
         };
     }
