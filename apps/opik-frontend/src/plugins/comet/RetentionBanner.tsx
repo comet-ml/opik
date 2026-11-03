@@ -58,12 +58,12 @@ const RetentionBanner = ({ onChangeHeight, hidden }: RetentionBannerProps) => {
     },
   );
 
-  const admins = useMemo(() => {
-    return organizationMembers?.filter?.(
+  const { admins, firstThreeAdmins } = useMemo(() => {
+    const admins = organizationMembers?.filter?.(
       (m) => m.role === ORGANIZATION_ROLE_TYPE.admin,
     );
+    return { admins, firstThreeAdmins: admins?.slice(0, 3) };
   }, [organizationMembers]);
-  const firstThreeAdmins = admins?.slice(0, 3);
 
   const isOrganizationAdmin =
     organization?.role === ORGANIZATION_ROLE_TYPE.admin;
@@ -75,11 +75,10 @@ const RetentionBanner = ({ onChangeHeight, hidden }: RetentionBannerProps) => {
     SHOW_BANNER_MIN_THRESHOLD;
 
   // Until membership loads, admins can't be told apart from members, so the wrong message would flash.
+  const isMembershipLoading = !organization || !organizationMembers;
+  const isUsageWarningHidden = !spanQuota || isUsedLess80 || closed;
   const hideBanner =
-    !user ||
-    (isTrialExpired
-      ? !organization || !organizationMembers
-      : !spanQuota || isUsedLess80 || closed);
+    !user || (isTrialExpired ? isMembershipLoading : isUsageWarningHidden);
 
   const isExceededLimit = !!spanQuota && spanQuota.used >= spanQuota.limit;
 
