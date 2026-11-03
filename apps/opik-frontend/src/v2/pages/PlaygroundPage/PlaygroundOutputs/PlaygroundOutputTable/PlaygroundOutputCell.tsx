@@ -203,6 +203,7 @@ const PlaygroundOutputCell: React.FunctionComponent<
                 />
               ) : (
                 <PlaygroundOutputScoresContainer
+                  key={traceId}
                   traceId={traceId}
                   notRun={experimentItem.notRun}
                 />
