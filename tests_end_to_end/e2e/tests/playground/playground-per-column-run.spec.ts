@@ -29,32 +29,44 @@ import { PlaygroundPage } from '@e2e/pom/playground.page';
  * completion. That is what keeps this deterministic and free of a provider key.
  */
 test.describe('Playground — per-column run', { tag: ['@t2-cuj', '@area:playground'] }, () => {
+  /** One variant of a `POST /experiments/execute`, read off its `prompts[]`. */
   interface PostedExperiment {
     name?: string;
     dataset_name?: string;
     /**
-     * `getExperimentFromRun` stringifies the variant's own rendered prompt into
-     * `metadata.messages`. It is the only field on this POST that says which
-     * variant produced it, and so the only way to tell "B's suffix reached B"
-     * from "B's suffix reached whichever variant ran".
+     * The variant's own messages, stringified. Name and messages sit on the same
+     * prompt entry, so this is the only way to tell "B's suffix reached B" from "B's suffix reached whichever
+     * variant ran".
      */
-    metadata?: { messages?: string };
+    messages: string;
+  }
+
+  interface ExecuteRequest {
+    dataset_name?: string;
+    prompts?: { experiment_name?: string; messages?: unknown[] }[];
   }
 
   /**
-   * Collect every experiment-creation POST the page makes, from before the run
-   * starts.
+   * Collect every variant the page asks the backend to run, from before the
+   * run starts.
    *
-   * Anchored on the end of the path — `/experiments/items` and
-   * `/experiments/execute` share the prefix, and only the bare collection
-   * endpoint is the dataset-mode write path.
+   * A dataset run is executed server-side: the page sends one
+   * `/experiments/execute` carrying every variant it runs, and the backend
+   * creates the experiments, so each variant is read off that one request.
    */
   const collectExperimentPosts = (page: Page): PostedExperiment[] => {
     const posted: PostedExperiment[] = [];
     page.on('request', (request) => {
       if (request.method() !== 'POST') return;
-      if (!/\/v1\/private\/experiments\/?$/.test(new URL(request.url()).pathname)) return;
-      posted.push((request.postDataJSON() ?? {}) as PostedExperiment);
+      if (!new URL(request.url()).pathname.endsWith('/v1/private/experiments/execute')) return;
+      const body = (request.postDataJSON() ?? {}) as ExecuteRequest;
+      for (const prompt of body.prompts ?? []) {
+        posted.push({
+          name: prompt.experiment_name,
+          dataset_name: body.dataset_name,
+          messages: JSON.stringify(prompt.messages ?? []),
+        });
+      }
     });
     return posted;
   };
@@ -189,7 +201,7 @@ test.describe('Playground — per-column run', { tag: ['@t2-cuj', '@area:playgro
         // from the clicked position instead of the variant's own index would
         // post `_a` here, and a build that ran the wrong column would post B's
         // name with A's prompt.
-        expect(posted[0].metadata?.messages ?? '').toContain(variantBMarker);
+        expect(posted[0].messages).toContain(variantBMarker);
       });
 
       await test.step('The toast names B and only B', async () => {

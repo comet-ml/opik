@@ -14,16 +14,17 @@ import { ExperimentsPage } from '@e2e/pom/experiments.page';
  * the field advances itself to `{name}_02` so a re-run does not collide.
  *
  * `playground-smoke.spec.ts` already covers running against a dataset, but it
- * matches the experiment it created by `datasetId`, explicitly "since the name
- * is auto-generated server-side". That was true before this change and is the
+ * matches the experiment it created by id, explicitly because "the name is
+ * auto-generated server-side". That was true before this change and is the
  * reason a dropped name, a suffix attached to the wrong variant, or a blank
  * name forwarded verbatim all still pass it. This spec joins the two halves:
  * the name a user typed, and the names that run's experiments end up carrying.
  *
  * Deliberately driven through the UI. The typed name never leaves the frontend
  * as typed — `getExperimentNameForPrompt` composes it per prompt and
- * `createLogPlaygroundProcessor` decides whether to put `name` on the POST at
- * all — and neither is observable from a hand-built request.
+ * `useRunExperimentExecution` decides whether each variant carries an
+ * `experiment_name` at all — and neither is observable from a hand-built
+ * request.
  *
  * The provider is a `custom-llm` one whose base URL refuses every connection.
  * The model has to be selectable for Run to enable, but its output is not under
@@ -32,16 +33,21 @@ import { ExperimentsPage } from '@e2e/pom/experiments.page';
  * completion. That is what keeps this deterministic and free of a provider key.
  */
 test.describe('Playground — experiment naming', { tag: ['@t2-cuj', '@area:playground'] }, () => {
+  /** One variant of a `POST /experiments/execute`, read off its `prompts[]`. */
   interface PostedExperiment {
     name?: string;
     dataset_name?: string;
     /**
-     * `getExperimentFromRun` stringifies the variant's own rendered prompt into
-     * `metadata.messages`. It is the only field on this POST that says which
-     * variant produced it, and so the only way to assert that a suffix reached
-     * the variant it belongs to rather than merely reaching *some* variant.
+     * The variant's own messages, stringified. Name and messages sit on the same
+     * prompt entry, so this is the only way to assert that a suffix reached the variant it belongs to rather than
+     * merely reaching *some* variant.
      */
-    metadata?: { messages?: string };
+    messages: string;
+  }
+
+  interface ExecuteRequest {
+    dataset_name?: string;
+    prompts?: { experiment_name?: string; messages?: unknown[] }[];
   }
 
   /**
@@ -73,21 +79,27 @@ test.describe('Playground — experiment naming', { tag: ['@t2-cuj', '@area:play
   };
 
   /**
-   * Collect every experiment-creation POST the page makes, from before the run
-   * starts. Registered eagerly rather than awaited per-request: the frontend
-   * queues experiment creation independently of the trace batches that paint
-   * the result rows, so the two POSTs can land in either order and well apart.
+   * Collect every variant the page asks the backend to run, from before the
+   * run starts. Registered eagerly rather than awaited per-request, so a run
+   * sent before a wait would have been set up is not missed.
    *
-   * Anchored on the end of the path — `/experiments/items` and
-   * `/experiments/execute` share the prefix, and only the bare collection
-   * endpoint is the dataset-mode write path.
+   * A dataset run is executed server-side: the page sends one
+   * `/experiments/execute` carrying every variant it runs, and the backend
+   * creates the experiments, so each variant is read off that one request.
    */
   const collectExperimentPosts = (page: Page): PostedExperiment[] => {
     const posted: PostedExperiment[] = [];
     page.on('request', (request) => {
       if (request.method() !== 'POST') return;
-      if (!/\/v1\/private\/experiments\/?$/.test(new URL(request.url()).pathname)) return;
-      posted.push((request.postDataJSON() ?? {}) as PostedExperiment);
+      if (!new URL(request.url()).pathname.endsWith('/v1/private/experiments/execute')) return;
+      const body = (request.postDataJSON() ?? {}) as ExecuteRequest;
+      for (const prompt of body.prompts ?? []) {
+        posted.push({
+          name: prompt.experiment_name,
+          dataset_name: body.dataset_name,
+          messages: JSON.stringify(prompt.messages ?? []),
+        });
+      }
     });
     return posted;
   };
@@ -166,7 +178,7 @@ test.describe('Playground — experiment naming', { tag: ['@t2-cuj', '@area:play
         // `promptIds.indexOf(promptId)` exists to prevent, and a set comparison
         // cannot see it — the sorted names match either way. The prompt each
         // POST carries is what tells them apart.
-        const promptByName = new Map(posted.map((p) => [p.name, p.metadata?.messages ?? '']));
+        const promptByName = new Map(posted.map((p) => [p.name, p.messages]));
         expect([...promptByName.keys()].sort()).toEqual([nameA, nameB].sort());
         expect(promptByName.get(nameB)).toContain(variantBMarker);
         expect(promptByName.get(nameA)).not.toContain(variantBMarker);
