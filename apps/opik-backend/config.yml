@@ -15,6 +15,9 @@ logging:
     # Description: langchain4j logs each retry of a model's own retry loop with the provider's response; Opik logs its
     #   own retries without it
     dev.langchain4j.internal.RetryUtils: ERROR
+    org.eclipse.jetty.http.HttpParser: INFO
+    org.apache.hc.client5.http.wire: INFO
+    org.apache.hc.client5.http.headers: INFO
 
 # Description: state database configuration
 # https://www.dropwizard.io/en/stable/manual/configuration.html#database
