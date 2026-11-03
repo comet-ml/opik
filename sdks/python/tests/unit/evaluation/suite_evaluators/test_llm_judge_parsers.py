@@ -212,6 +212,8 @@ class TestResponseSchema:
         assert results[0].scoring_failed is True
         assert results[0].category_name == "suite_assertion"
         assert results[0].metadata["raw_output"] == content
+        assert "Failed to parse model output" in results[0].reason
+        assert "valid dictionary" in results[0].reason
 
     def test_parse__missing_assertion__raises_with_failed_results(self):
         schema = llm_judge_parsers.ResponseSchema(

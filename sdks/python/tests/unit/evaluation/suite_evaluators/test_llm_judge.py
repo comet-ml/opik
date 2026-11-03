@@ -753,16 +753,21 @@ class TestLLMJudgeRetries:
     def test_score__json_array_verdict_on_every_attempt__returns_failed_results(
         self,
     ):
+        calls = {"n": 0}
+
         class ArrayModel:
             def generate_chat_completion(self, messages, response_format=None):
+                calls["n"] += 1
                 return {"role": "assistant", "content": "[]"}
 
         evaluator = self._judge_with_model(ArrayModel())
         results = evaluator.score(input="q", output="PASS")
 
+        assert calls["n"] == 3, "every attempt of the retry policy should be used"
         assert len(results) == 1
         assert results[0].name == "The response contains the literal text PASS."
         assert results[0].scoring_failed is True
+        assert "Failed to parse model output" in results[0].reason
 
     def test_score__empty_response_logged__diagnostic_reaches_logger(self, capture_log):
         from opik import exceptions
