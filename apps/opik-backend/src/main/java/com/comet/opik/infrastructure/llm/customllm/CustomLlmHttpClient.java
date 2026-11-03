@@ -146,7 +146,8 @@ class CustomLlmHttpClient implements HttpClient {
                 var body = response.body();
                 try (response; InputStream bodyStream = body.byteStream()) {
                     if (!response.isSuccessful()) {
-                        var exception = new HttpException(response.code(), readErrorBody(call, body));
+                        var exception = new HttpResponseException(response.code(), readErrorBody(call, body),
+                                response.headers().toMultimap());
                         ignoringExceptions(() -> listener.onError(exception));
                         return;
                     }
@@ -202,7 +203,8 @@ class CustomLlmHttpClient implements HttpClient {
         // its timeout is the stream read timeout, see StreamCallTimeouts
         var body = response.body();
         if (!response.isSuccessful()) {
-            tube.fail(new HttpException(response.code(), readErrorBody(call, body)));
+            tube.fail(new HttpResponseException(response.code(), readErrorBody(call, body),
+                    response.headers().toMultimap()));
             return;
         }
         tube.send(new HttpResponseReceived(toResponse(response, null)));
@@ -267,7 +269,8 @@ class CustomLlmHttpClient implements HttpClient {
         try (response) {
             var body = untimedBody(response);
             if (!response.isSuccessful()) {
-                throw new HttpException(response.code(), readErrorBody(call, body));
+                throw new HttpResponseException(response.code(), readErrorBody(call, body),
+                        response.headers().toMultimap());
             }
             return toResponse(response, body.bytes());
         }
