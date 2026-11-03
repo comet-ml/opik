@@ -41,7 +41,17 @@ const toYaml = (data: object): string => {
   // A trace with no output passes undefined, which would otherwise print "null".
   if (data === undefined) return "";
 
-  const doc = new Document(data, normalizeLineEndings, YAML_OPTIONS);
+  // The 1.1 merge tag claims every "<<" string and prints it bare, ignoring the
+  // quote style set below; output never needs merge keys, so drop the tag.
+  const doc = new Document(data, normalizeLineEndings, {
+    ...YAML_OPTIONS,
+    customTags: (tags) =>
+      tags.filter((tag) =>
+        typeof tag === "string"
+          ? tag !== "merge"
+          : tag.tag !== "tag:yaml.org,2002:merge",
+      ),
+  });
   let lastScalar: Scalar | undefined;
   visit(doc, {
     Scalar(_key, node) {
