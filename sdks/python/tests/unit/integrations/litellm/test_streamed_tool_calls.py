@@ -6,7 +6,7 @@ from openai.types.chat.chat_completion_chunk import (
 )
 import pydantic
 
-from opik.integrations import _streamed_tool_calls
+from opik.integrations.litellm import _streamed_tool_calls
 
 
 class _FloatIndexFunction(pydantic.BaseModel):

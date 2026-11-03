@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Optional
 
 import litellm.types.utils
 
-from opik.integrations import _streamed_tool_calls
+from opik.integrations.litellm import _streamed_tool_calls
 
 LOGGER = logging.getLogger(__name__)
 
