@@ -1,3 +1,5 @@
+import math
+
 import pydantic
 
 from typing import Any
@@ -23,8 +25,22 @@ class FeedbackScoreValidator(validator.Validator):
 
     def validate(self) -> result.ValidationResult:
         try:
-            PydanticWrapper(feedback_score=self.feedback_score)
-            self.validation_result = result.ValidationResult(failed=False)
+            parsed = PydanticWrapper(feedback_score=self.feedback_score)
+            value = parsed.feedback_score.get("value")
+            if value is not None and not math.isfinite(value):
+                # pydantic accepts NaN and infinity for a float, but neither is a
+                # valid JSON number: such a score used to pass this validation -
+                # whose job is to warn and drop invalid scores - and only failed,
+                # or poisoned an average, at the backend.
+                self.validation_result = result.ValidationResult(
+                    failed=True,
+                    failure_reasons=[
+                        "feedback_score.value - NaN and infinity are not valid "
+                        "feedback score values."
+                    ],
+                )
+            else:
+                self.validation_result = result.ValidationResult(failed=False)
         except pydantic.ValidationError as exception:
             failure_reasons = []
             for e in exception.errors():
