@@ -7598,60 +7598,31 @@ class DatasetsResourceTest {
         private void createExperimentItems(List<DatasetItem> items, List<Trace> traces,
                 List<FeedbackScoreBatchItem> scores, UUID experimentId, List<ExperimentItem> experimentItems) {
             for (int i = 0; i < items.size(); i++) {
-                var item = items.get(i);
-                var trace = traces.get(i);
-                var score = scores.get(i);
-
-                var experimentItem = ExperimentItem.builder()
-                        .id(GENERATOR.generate())
-                        .datasetItemId(item.id())
-                        .traceId(trace.id())
-                        .experimentId(experimentId)
-                        .input(trace.input())
-                        .output(trace.output())
-                        .traceVisibilityMode(VisibilityMode.DEFAULT)
-                        .executionPolicy(ExecutionPolicy.DEFAULT)
-                        .feedbackScores(score == null
-                                ? null
-                                : Stream.of(score)
-                                        .map(FeedbackScoreMapper.INSTANCE::toFeedbackScore)
-                                        .toList())
-                        .description(item.description())
-                        .build();
-
-                experimentItems.add(experimentItem);
+                experimentItems.add(expectedExperimentItem(experimentId, items.get(i), traces.get(i), scores.get(i)));
             }
         }
 
         private void createScores(List<Trace> traces, String projectName, List<FeedbackScoreBatchItem> scores) {
             for (int i = 0; i < traces.size(); i++) {
-                var trace = traces.get(i);
-
-                var score = FeedbackScoreBatchItem.builder()
+                scores.add(factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                        .id(traces.get(i).id())
+                        .projectName(projectName)
+                        .projectId(null)
                         .name("sql_cost")
                         .value(BigDecimal.valueOf(i == 0 ? 10 : i))
                         .source(ScoreSource.SDK)
-                        .id(trace.id())
-                        .projectName(projectName)
-                        .build();
-
-                scores.add(score);
+                        .build());
             }
         }
 
         private void createTraces(List<DatasetItem> items, String projectName, String workspaceName, String apiKey,
                 List<Trace> traces) {
-            for (int i = 0; i < items.size(); i++) {
-                var item = items.get(i);
-                var trace = Trace.builder()
-                        .id(GENERATOR.generate())
+            for (var item : items) {
+                var trace = factory.manufacturePojo(Trace.class).toBuilder()
                         .input(item.data().get("input"))
                         .output(item.data().get("expected_output"))
                         .projectName(projectName)
-                        .startTime(Instant.now())
-                        .name("trace-" + i)
                         .build();
-
                 createAndAssert(trace, workspaceName, apiKey);
                 traces.add(trace);
             }
@@ -8975,37 +8946,20 @@ class DatasetsResourceTest {
 
         private ExperimentItem createExperimentItem(UUID experimentId, DatasetItem datasetItem) {
             var projectName = RandomStringUtils.secure().nextAlphabetic(20);
-            var trace = Trace.builder()
-                    .id(GENERATOR.generate())
-                    .input(JsonUtils.valueToTree(Map.of("question", RandomStringUtils.secure().nextAlphabetic(10))))
-                    .output(JsonUtils.valueToTree(Map.of("answer", RandomStringUtils.secure().nextAlphabetic(10))))
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectName(projectName)
-                    .startTime(Instant.now())
-                    .name(RandomStringUtils.secure().nextAlphabetic(10))
                     .build();
             createAndAssert(trace, workspaceName, apiKey);
 
-            var score = FeedbackScoreBatchItem.builder()
+            var score = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                     .id(trace.id())
                     .projectName(projectName)
-                    .name("accuracy")
+                    .projectId(null)
                     .value(BigDecimal.valueOf(RandomUtils.secure().randomInt(0, 100)))
-                    .source(ScoreSource.SDK)
                     .build();
             createScoreAndAssert(FeedbackScoreBatch.builder().scores(List.of(score)).build(), apiKey, workspaceName);
 
-            return ExperimentItem.builder()
-                    .id(GENERATOR.generate())
-                    .experimentId(experimentId)
-                    .datasetItemId(datasetItem.id())
-                    .traceId(trace.id())
-                    .input(trace.input())
-                    .output(trace.output())
-                    .traceVisibilityMode(VisibilityMode.DEFAULT)
-                    .executionPolicy(ExecutionPolicy.DEFAULT)
-                    .feedbackScores(List.of(FeedbackScoreMapper.INSTANCE.toFeedbackScore(score)))
-                    .description(datasetItem.description())
-                    .build();
+            return expectedExperimentItem(experimentId, datasetItem, trace, score);
         }
 
         private void createExperimentItems(ExperimentItem... experimentItems) {
@@ -10138,6 +10092,30 @@ class DatasetsResourceTest {
             case NULL -> ColumnType.NULL;
             default -> ColumnType.NULL;
         };
+    }
+
+    private ExperimentItem expectedExperimentItem(UUID experimentId, DatasetItem datasetItem, Trace trace,
+            FeedbackScoreBatchItem score) {
+        return factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                .experimentId(experimentId)
+                .datasetItemId(datasetItem.id())
+                .traceId(trace.id())
+                .projectId(null)
+                .projectName(null)
+                .input(trace.input())
+                .output(trace.output())
+                .traceMetadata(null)
+                .feedbackScores(score == null ? null : List.of(FeedbackScoreMapper.INSTANCE.toFeedbackScore(score)))
+                .comments(null)
+                .totalEstimatedCost(null)
+                .usage(null)
+                .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(trace.startTime(), trace.endTime()))
+                .traceVisibilityMode(VisibilityMode.DEFAULT)
+                .description(datasetItem.description())
+                .executionPolicy(ExecutionPolicy.DEFAULT)
+                .assertionResults(null)
+                .status(null)
+                .build();
     }
 
     private void assertDatasetItemExperiments(DatasetItemPage actualPage, List<DatasetItem> datasetItems,
