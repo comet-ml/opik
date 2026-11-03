@@ -30,6 +30,7 @@ def parse_model_output(content: str, name: str) -> score_result.ScoreResult:
         return score_result.ScoreResult(name=name, value=score, reason=reason)
     except Exception as e:
         LOGGER.error(f"Failed to parse model output: {e}", exc_info=True)
-        raise exceptions.MetricComputationError(
-            logging_messages.FACTUALITY_SCORE_CALC_FAILED
-        )
+        message = logging_messages.FACTUALITY_SCORE_CALC_FAILED
+        if isinstance(e, exceptions.JSONParsingError):
+            message = f"{message}: {e}"
+        raise exceptions.MetricComputationError(message) from e
