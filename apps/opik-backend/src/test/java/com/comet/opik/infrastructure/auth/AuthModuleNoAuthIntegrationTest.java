@@ -29,7 +29,6 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 
 import java.util.UUID;
 
-import static com.comet.opik.domain.ProjectService.DEFAULT_ORGANIZATION_ID;
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
 import static com.comet.opik.domain.ProjectService.DEFAULT_WORKSPACE_NAME;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
@@ -41,6 +40,7 @@ class AuthModuleNoAuthIntegrationTest {
 
     public static final String URL_TEMPLATE = "%s/v1/private/projects";
     public static final String FEEDBACK_DEFINITION_TEMPLATE = "%s/v1/private/feedback-definitions";
+    private static final String PINNED_DEFAULT_ORGANIZATION_ID = "01a1a1c9-b569-7b5b-9c5c-1aa254d42e50";
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer();
@@ -156,10 +156,10 @@ class AuthModuleNoAuthIntegrationTest {
         assertThat(resolver).isInstanceOf(DefaultOrganizationResolver.class);
 
         StepVerifier.create(resolver.organizationId())
-                .expectNext(DEFAULT_ORGANIZATION_ID)
+                .expectNext(PINNED_DEFAULT_ORGANIZATION_ID)
                 .verifyComplete();
         StepVerifier.create(resolver.requireOrganizationAdmin())
-                .expectNext(DEFAULT_ORGANIZATION_ID)
+                .expectNext(PINNED_DEFAULT_ORGANIZATION_ID)
                 .verifyComplete();
     }
 
