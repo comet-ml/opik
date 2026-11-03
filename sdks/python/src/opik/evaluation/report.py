@@ -4,7 +4,7 @@ from typing import Dict, List, Optional, Tuple
 from rich import align, console, panel, table, text
 
 
-from . import test_result, evaluation_result
+from . import test_result, evaluation_result, score_statistics
 from .metrics import score_result
 
 
@@ -27,6 +27,11 @@ def _compute_average_scores(
             if score.scoring_failed:
                 score_failed[score.name] += 1
                 score_counts[score.name] += 0
+            elif not score_statistics.is_valid_score_value(score.value):
+                # Also left out of the experiment's stored statistics, so a
+                # single NaN doesn't turn the whole average into "nan" here.
+                score_counts[score.name] += 0
+                score_failed[score.name] += 0
             else:
                 score_totals[score.name] += score.value
                 score_counts[score.name] += 1

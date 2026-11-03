@@ -74,7 +74,7 @@ def calculate_aggregated_statistics(
                 continue
 
             # Only include successful scores with valid values
-            if _is_valid_score_value(score_result.value):
+            if is_valid_score_value(score_result.value):
                 scores_by_name[score_result.name].append(score_result.value)
 
     if failed_by_name:
@@ -98,6 +98,6 @@ def calculate_aggregated_statistics(
     return aggregated_scores
 
 
-def _is_valid_score_value(value: float) -> bool:
+def is_valid_score_value(value: float) -> bool:
     """Check if a score value is valid for statistical calculations."""
     return isinstance(value, (int, float)) and math.isfinite(value)
