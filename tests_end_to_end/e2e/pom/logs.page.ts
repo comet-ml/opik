@@ -457,16 +457,34 @@ export class LogsPage {
    */
   async gotoThreads(
     projectId: string,
-    opts: { timeRange?: string; size?: number } = {},
+    opts: {
+      timeRange?: string;
+      size?: number;
+      /**
+       * The shared `environment` param, stated in the URL rather than picked
+       * from the dropdown.
+       *
+       * Two things need this. The param outranks the per-project localStorage
+       * memory `useLogsEnvironment` keeps, so a spec that wants a known
+       * starting point has to say so; and an inbound name the workspace does
+       * not know is a branch reachable no other way — the dropdown can only
+       * offer names that exist.
+       */
+      environment?: string;
+      /** The Threads table's own `threads_page`, for asserting a reset to 1. */
+      threadsPage?: number;
+    } = {},
   ): Promise<void> {
     return test.step(
-      `Open Logs (Threads) for project ${projectId}${opts.timeRange ? ` over ${opts.timeRange}` : ''}`,
+      `Open Logs (Threads) for project ${projectId}${opts.timeRange ? ` over ${opts.timeRange}` : ''}${opts.environment ? ` in environment ${opts.environment}` : ''}`,
       async () => {
         this.projectId = projectId;
         const env = loadEnvConfig();
         const params = new URLSearchParams({ logsType: 'threads' });
         if (opts.timeRange !== undefined) params.set('time_range', opts.timeRange);
         if (opts.size !== undefined) params.set('size', String(opts.size));
+        if (opts.environment !== undefined) params.set('environment', opts.environment);
+        if (opts.threadsPage !== undefined) params.set('threads_page', String(opts.threadsPage));
         await this.page.goto(
           `${env.baseUrl}/${env.workspace}/projects/${projectId}/logs?${params}`,
         );
@@ -609,6 +627,47 @@ export class LogsPage {
    */
   traceRow(traceId: string): Locator {
     return this.page.locator(`tr[data-row-id="${traceId}"]`);
+  }
+
+  /**
+   * Wait for a trace's own row to be in the table, re-issuing the listing if
+   * the table came back without it.
+   *
+   * The table is filled by `GET /v1/private/traces/`, which is rate limited per
+   * workspace. When parallel specs have spent the budget that call is shed with
+   * a 429, the empty answer is kept, and nothing refetches — so the table stays
+   * rowless and a wait on `data-row-id` can never succeed however long it runs.
+   * Observed on staging for 2.2.136 on the `page.goBack()` return from a trace
+   * panel, with the trace reading back fine through the backend client (which
+   * carries `withRateLimitRetry` for exactly this burst; the browser has none).
+   *
+   * Not a loosened assertion: the row must still resolve to exactly one
+   * element, and the last attempt rethrows the locator's own failure — so a
+   * trace the table genuinely never lists still fails here, naming that trace,
+   * rather than being reported as a rate limit.
+   */
+  async waitForTraceRow(
+    traceId: string,
+    opts: { attempts?: number; timeout?: number } = {},
+  ): Promise<void> {
+    const attempts = opts.attempts ?? 3;
+    const timeout = opts.timeout ?? 20_000;
+    return test.step(`Wait for the row of trace ${traceId}`, async () => {
+      for (let attempt = 1; attempt <= attempts; attempt++) {
+        const isLast = attempt === attempts;
+        try {
+          await expect(
+            this.traceRow(traceId),
+            'exactly one row for this trace',
+          ).toHaveCount(1, { timeout: isLast ? timeout + 10_000 : timeout });
+          return;
+        } catch (error) {
+          if (isLast) throw error;
+          await this.page.reload();
+          await this.waitForReady({ timeout: 60_000 });
+        }
+      }
+    });
   }
 
   /** Tick the selection checkbox on a trace's row. */
@@ -774,9 +833,18 @@ export class LogsPage {
    *
    * Returns the direction the URL ended up carrying, so a caller asserts the
    * direction it got rather than assuming the first click sorts descending.
+   *
+   * `'threads'` is here as well as the two entity tables because the Threads
+   * tab mounts the same `DataTable` under its own `threads_sorting` param — but
+   * its listing is `/v1/private/traces/threads`, a different endpoint from the
+   * `/v1/private/traces` the Traces tab reads, so the request this waits on is
+   * mapped from `type` rather than spelled from it. Note the Threads columns
+   * take their sortability from the listing's own `sortable_by`, not from a
+   * `sortable: true` on the column definition, so a header is only clickable
+   * for a field `TraceThreadSortingFactory` lists.
    */
   async sortByColumn(
-    type: 'traces' | 'spans',
+    type: 'traces' | 'spans' | 'threads',
     label: string,
     columnId: string,
   ): Promise<'asc' | 'desc'> {
@@ -786,6 +854,7 @@ export class LogsPage {
       // otherwise sort whichever the DOM happened to order first.
       await expect(title, `exactly one "${label}" column header`).toHaveCount(1);
 
+      const endpoint = type === 'threads' ? '/v1/private/traces/threads' : `/v1/private/${type}`;
       const listed = this.page.waitForResponse((response) => {
         // Trailing slash tolerated deliberately: the frontend's own
         // `TRACES_REST_ENDPOINT` / `SPANS_REST_ENDPOINT` are declared WITH one
@@ -793,7 +862,7 @@ export class LogsPage {
         // same endpoint without. Pinning either spelling makes this wait pass
         // or hang on which caller happened to issue the request.
         const pathname = new URL(response.url()).pathname.replace(/\/$/, '');
-        return pathname.endsWith(`/v1/private/${type}`) && response.ok();
+        return pathname.endsWith(endpoint) && response.ok();
       });
       await title.click();
 
@@ -828,7 +897,7 @@ export class LogsPage {
    * asserting both is asserting the table and the API agree.
    */
   async readUrlSorting(
-    type: 'traces' | 'spans',
+    type: 'traces' | 'spans' | 'threads',
   ): Promise<Array<{ id: string; desc: boolean }> | null> {
     const raw = new URL(this.page.url()).searchParams.get(`${type}_sorting`);
     if (raw === null) return null;
@@ -1243,6 +1312,81 @@ export class LogsPage {
     });
   }
 
+  // --- Environment filter (opik#9177) ---
+  //
+  // One `EnvironmentFilterSelect` shared by the Traces, Spans and Threads tabs,
+  // backed by the `environment` query param and a per-project localStorage
+  // memory. It feeds the listing, the statistics read and the export alike, and
+  // the tab resets to page 1 when the inbound name is one the workspace does
+  // not know.
+
+  /**
+   * The environment dropdown's trigger, identified by the label it currently
+   * reads — the environment's own name, "Untagged", or "All environments".
+   *
+   * The control carries no testid, and the label IS its accessible name, so
+   * the label is both the handle and a thing worth asserting: it is the only
+   * place the page says which environment the table below is scoped to.
+   *
+   * Parameterised rather than matched by a pattern over the three
+   * possibilities, deliberately: a selected environment's name is an arbitrary
+   * `[A-Za-z0-9_-]+` string, and a regex loose enough to accept one also
+   * matches the breadcrumb's workspace button and whatever else in the chrome
+   * happens to be a single-word button. The caller always knows what it set.
+   */
+  environmentFilterTrigger(label: string): Locator {
+    return this.page.getByRole('button', { name: label, exact: true });
+  }
+
+  /**
+   * Open the environment dropdown — whose trigger currently reads
+   * `currentLabel` — and pick `name`, resolving once the `environment` query
+   * param carries it.
+   *
+   * Gated on the URL rather than on the trigger's new label: the param is what
+   * the listing, the statistics read and a reload all key on, and the label
+   * changes from local state the moment the item is selected — so a caller
+   * that waited on the label could read the table before the refetch went out.
+   *
+   * `name` is an environment's own name. "All environments" and "Untagged" are
+   * deliberately not expressible here: they map to an ABSENT param and to the
+   * `__untagged__` sentinel respectively, so each needs its own wait, and
+   * folding three different post-conditions behind one argument is how a helper
+   * quietly stops waiting for the right thing.
+   */
+  async selectEnvironment(currentLabel: string, name: string): Promise<void> {
+    return test.step(`Filter Logs by environment "${name}"`, async () => {
+      const trigger = this.environmentFilterTrigger(currentLabel);
+      await expect(
+        trigger,
+        `exactly one environment filter control reading "${currentLabel}"`,
+      ).toHaveCount(1);
+      await trigger.click();
+      const item = this.page.getByRole('menuitem', { name, exact: true });
+      await expect(item, `exactly one "${name}" item in the environment dropdown`).toHaveCount(1);
+      await item.click();
+      await this.page.waitForURL((url) => url.searchParams.get('environment') === name);
+    });
+  }
+
+  /**
+   * The `environment` query param as the page currently has it, or null when it
+   * carries none.
+   *
+   * Read rather than asserted so a caller can say what it expects: an absent
+   * param is the right answer after an unknown name is dropped, and the wrong
+   * one after a tab switch.
+   */
+  currentEnvironmentParam(): string | null {
+    return new URL(this.page.url()).searchParams.get('environment');
+  }
+
+  /** The `threads_page` query param as a number, defaulting to the page's own 1. */
+  currentThreadsPage(): number {
+    const raw = new URL(this.page.url()).searchParams.get('threads_page');
+    return raw === null ? 1 : Number(raw);
+  }
+
   // --- Threads tab ---
 
   /** The Threads/Traces/Spans tab toggle for "Threads". */
@@ -1352,6 +1496,60 @@ export class LogsPage {
   /** The "Last message" cell text for a thread. */
   threadLastMessageCell(threadId: string): Locator {
     return this.threadRow(threadId).locator(`[data-cell-id="${threadId}_last_message"]`);
+  }
+
+  /**
+   * The "Total tokens" cell of a thread row — the `usage.total_tokens` column.
+   *
+   * Note the UNDERSCORE: `ThreadsTab` declares the column as
+   * `usage.total_tokens`, `convertColumnDataToColumn` passes that through as the
+   * `accessorKey` with no explicit `id`, and TanStack then derives the column id
+   * from the accessor key with every `.` replaced by `_` — so the
+   * `data-cell-id` the DataTable stamps is `<rowId>_usage_total_tokens`, not the
+   * dotted form the column data uses. Both this column and Estimated cost are
+   * in `DEFAULT_SELECTED_COLUMNS`, so a spec reaching for them does not have to
+   * open the column picker first.
+   */
+  threadTotalTokensCell(threadId: string): Locator {
+    return this.threadRow(threadId).locator(`[data-cell-id="${threadId}_usage_total_tokens"]`);
+  }
+
+  /**
+   * Read the "Total tokens" cell of a thread row as a number.
+   *
+   * Throws rather than returning 0 when the cell renders the `-` placeholder
+   * `ThreadsTab`'s `accessorFn` falls back to: an absent aggregate and a zero
+   * one are different answers, and a reader that folded them together would let
+   * a row with no usage at all pass an assertion about its token total.
+   */
+  async readThreadTotalTokens(threadId: string): Promise<number> {
+    return test.step(`Read total tokens for thread ${threadId}`, async () => {
+      const cell = this.threadTotalTokensCell(threadId);
+      await cell.waitFor({ state: 'visible' });
+      const text = ((await cell.textContent()) ?? '').trim();
+      const digits = text.replace(/[^\d]/g, '');
+      if (digits === '') {
+        throw new Error(
+          `LogsPage.readThreadTotalTokens: thread ${threadId} renders no token total ` +
+            `(cell reads "${text}")`,
+        );
+      }
+      return Number(digits);
+    });
+  }
+
+  /**
+   * The table's "No matching results" state — what the Logs tables render when
+   * a search or a filter matched nothing.
+   *
+   * Addressed as the heading rather than by text: `DataTableNoMatchingData`
+   * renders the same string as its illustration's `alt` too, so a role-less
+   * lookup would be ambiguous about which element it found. Note this is also
+   * what the table shows for a FAILED request, so a spec asserting it should
+   * have checked the API's own answer for the same question first.
+   */
+  get noMatchingResults(): Locator {
+    return this.page.getByRole('heading', { name: 'No matching results' });
   }
 
   /**
