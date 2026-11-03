@@ -3,6 +3,7 @@ package com.comet.opik.domain.topics;
 import com.comet.opik.infrastructure.metrics.ErrorMetricsResolver;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
+import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.DoubleHistogram;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.Meter;
@@ -12,13 +13,15 @@ import lombok.NonNull;
 
 import java.time.Clock;
 import java.time.Duration;
+import java.util.Objects;
 
 import static com.comet.opik.infrastructure.metrics.ErrorMetricsResolver.ERROR_TYPE_KEY;
 import static io.opentelemetry.api.common.AttributeKey.stringKey;
 
 /**
- * The nightly job's metrics. Every metric of one workspace's work carries {@code workspace_id} and
- * {@code workspace_name}; only {@code topics.nightly.budget_used_seconds}, a whole night's, has neither.
+ * The nightly job's and the read API's metrics. Every metric of one workspace's work carries {@code workspace_id} and
+ * {@code workspace_name}; {@code topics.nightly.budget_used_seconds}, a whole night's, has neither, nor has
+ * {@code topics.api.duration_seconds}, where every caller's workspace would add series.
  */
 @Singleton
 public class TopicsMetrics {
@@ -67,6 +70,8 @@ public class TopicsMetrics {
     private final LongCounter countFailures;
     private final LongCounter takeBackFailures;
     private final DoubleHistogram otherShare;
+    private final DoubleHistogram apiDuration;
+    private final LongCounter apiStale;
 
     @Inject
     public TopicsMetrics(@NonNull TopicsWorkspaceNames names) {
@@ -135,6 +140,15 @@ public class TopicsMetrics {
                 .setDescription("Share of a saved run's window traces labelled Other, the stats.other_share of its "
                         + "topic_runs row")
                 .build();
+        this.apiDuration = meter.histogramBuilder("topics.api.duration_seconds").setUnit("s")
+                .setDescription("Duration of a topics read API request after its project check, by status: ready, "
+                        + "collecting, disabled, error")
+                .build();
+        this.apiStale = meter.counterBuilder("topics.api.stale_traces")
+                .setDescription("Traces a topics read API response counted as Other because their topic is no "
+                        + "longer live: an arrival before a night, a trace past the night's maxVectors, or a night "
+                        + "that saved during the request")
+                .build();
     }
 
     /** {@code reason} is null for a decision other than skip. */
@@ -199,5 +213,16 @@ public class TopicsMetrics {
 
     void budgetUsed(@NonNull Duration duration) {
         budgetUsed.record(duration.toNanos() / 1e9);
+    }
+
+    void apiRequest(@NonNull String status, @NonNull Duration duration) {
+        apiDuration.record(duration.toNanos() / 1e9, Attributes.of(STATUS, status));
+    }
+
+    /** The name comes with the request, so no lookup: a missing one falls back to the id. */
+    void apiStale(@NonNull String workspaceId, String workspaceName, long traces) {
+        apiStale.add(traces,
+                TopicsWorkspaceNames.builder(workspaceId, Objects.requireNonNullElse(workspaceName, workspaceId))
+                        .build());
     }
 }
