@@ -24,8 +24,12 @@ RUN npm run build -- --mode $BUILD_MODE \
     && printf '{"version": "%s"}\n' "$VITE_APP_VERSION" > dist/version.json
 
 # Production stage
-# Using nginx alpine image with OpenTelemetry support
-FROM nginx:1.30.6-alpine-otel@sha256:53cf1f780c33f6e599e9a001e9425fc6ba33e513c31855e3448f75613e95656f AS nginx
+# Slim plus only the OpenTelemetry module: the -otel image is built on the full alpine variant, whose other
+# modules and curl we don't use and which bring in brotli, curl and expat CVEs. The module comes from nginx.org,
+# signed with the key slim already trusts, built for the base's nginx version.
+FROM nginx:1.30.6-alpine-slim@sha256:dede8895648b461178c3bc604f7eed4423efe5220b2c4d839f5eb3d34ac3f8f7 AS nginx
+RUN apk add --no-cache -X "https://nginx.org/packages/alpine/v$(grep -oE '^[0-9]+\.[0-9]+' /etc/alpine-release)/main" \
+    "nginx-module-otel~${NGINX_VERSION}"
 
 # Add label for later inspection
 ARG BUILD_MODE=production
