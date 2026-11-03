@@ -21,6 +21,8 @@ export interface ScoreData {
 interface PlaygroundOutputScoresProps {
   metricNames: string[]; // Expected metric names from rules
   metricScores: Record<string, ScoreData>; // Actual scores from trace (keyed by name)
+  metricRuleIds?: Record<string, string>;
+  waitOver?: boolean;
   notRun?: boolean;
   className?: string;
 }
@@ -28,6 +30,8 @@ interface PlaygroundOutputScoresProps {
 const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
   metricNames,
   metricScores,
+  metricRuleIds = {},
+  waitOver = false,
   notRun = false,
   className,
 }) => {
@@ -62,6 +66,8 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
           metricName={metricName}
           color={metricColors[metricName]}
           score={metricScores[metricName]}
+          ruleId={metricRuleIds[metricName]}
+          waitOver={waitOver}
           notRun={notRun}
         />
       ))}
@@ -87,6 +93,8 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
                   metricName={metricName}
                   color={metricColors[metricName]}
                   score={metricScores[metricName]}
+                  ruleId={metricRuleIds[metricName]}
+                  waitOver={waitOver}
                   notRun={notRun}
                 />
               ))}

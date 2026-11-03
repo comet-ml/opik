@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import {
   EVAL_TRIGGER_SCOPE,
   EVALUATORS_RULE_TYPE,
@@ -21,6 +21,7 @@ type RulesState = {
 type TraceData = {
   feedback_scores: { name: string; value?: number }[];
   metadata: Record<string, unknown>;
+  end_time?: string;
 };
 
 let rulesState: RulesState;
@@ -56,8 +57,20 @@ vi.mock("@/api/traces/useTraceById", () => ({
 }));
 
 vi.mock("./PlaygroundOutputScores", () => ({
-  default: ({ metricNames }: { metricNames: string[] }) => (
-    <div data-testid="metric-names">{metricNames.join(",")}</div>
+  default: ({
+    metricNames,
+    metricRuleIds,
+    waitOver,
+  }: {
+    metricNames: string[];
+    metricRuleIds: Record<string, string>;
+    waitOver: boolean;
+  }) => (
+    <>
+      <div data-testid="metric-names">{metricNames.join(",")}</div>
+      <div data-testid="metric-rule-ids">{JSON.stringify(metricRuleIds)}</div>
+      <div data-testid="wait-over">{String(waitOver)}</div>
+    </>
   ),
 }));
 
@@ -100,6 +113,9 @@ const makeTrace = (
     ...(pickedRuleIds && { selected_rule_ids: pickedRuleIds }),
   },
 });
+
+const minutesAgo = (minutes: number) =>
+  new Date(Date.now() - minutes * 60_000).toISOString();
 
 const renderContainer = () =>
   render(<PlaygroundOutputScoresContainer traceId={TRACE_ID} />);
@@ -459,6 +475,68 @@ describe("PlaygroundOutputScoresContainer", () => {
       renderContainer();
 
       expect(screen.getByTestId("metric-names")).toHaveTextContent("Relevance");
+    });
+  });
+  describe("when the wait for scores is over", () => {
+    beforeEach(() => {
+      rulesState.content = [makeRule("r1", ["Relevance"])];
+      rulesState.total = 1;
+    });
+
+    it("should count the wait from when the run produced the trace, so a reload does not restart it", () => {
+      traceData = { ...makeTrace(["r1"]), end_time: minutesAgo(10) };
+
+      renderContainer();
+
+      expect(pollWith(traceData)).toBe(false);
+      expect(screen.getByTestId("wait-over")).toHaveTextContent("true");
+    });
+
+    it("should keep waiting for a trace the run produced moments ago", () => {
+      traceData = { ...makeTrace(["r1"]), end_time: minutesAgo(1) };
+
+      renderContainer();
+
+      expect(pollWith(traceData)).toBe(5000);
+      expect(screen.getByTestId("wait-over")).toHaveTextContent("false");
+    });
+
+    it("should stop the spinners at the end of the wait while the page stays open", () => {
+      vi.useFakeTimers();
+      try {
+        traceData = { ...makeTrace(["r1"]), end_time: minutesAgo(4) };
+
+        renderContainer();
+        expect(screen.getByTestId("wait-over")).toHaveTextContent("false");
+
+        act(() => {
+          vi.advanceTimersByTime(60_000);
+        });
+
+        expect(screen.getByTestId("wait-over")).toHaveTextContent("true");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("should not end the wait for a row that was not run", () => {
+      render(<PlaygroundOutputScoresContainer traceId={null} notRun />);
+
+      expect(screen.getByTestId("wait-over")).toHaveTextContent("false");
+    });
+
+    it("should tell each metric which rule to open the execution logs of", () => {
+      rulesState.content = [
+        makeRule("r1", ["Relevance"]),
+        makeRule("r2", ["Accuracy", "Tone"]),
+      ];
+      rulesState.total = 2;
+
+      renderContainer();
+
+      expect(
+        JSON.parse(screen.getByTestId("metric-rule-ids").textContent!),
+      ).toEqual({ Relevance: "r1", Accuracy: "r2", Tone: "r2" });
     });
   });
 });
