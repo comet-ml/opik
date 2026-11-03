@@ -58,7 +58,6 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.ref }}
-          fetch-depth: 0
           token: ${{ steps.app-token.outputs.token || github.token }}
 
       - name: Setup Node.js
