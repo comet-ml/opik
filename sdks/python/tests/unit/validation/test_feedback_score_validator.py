@@ -116,3 +116,20 @@ def test_feedback_score_validator(feedback_score_dict, is_valid):
     tested = feedback_score.FeedbackScoreValidator(feedback_score_dict)
 
     assert tested.validate().ok() is is_valid, f"Failed with {feedback_score_dict}"
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf"), "nan", "inf"])
+def test_a_non_finite_score_is_rejected(value):
+    score = {"id": "some-id", "name": "accuracy", "value": value}
+
+    validation_result = feedback_score.FeedbackScoreValidator(score).validate()
+
+    assert validation_result.failed
+    assert "NaN and infinity are not valid" in validation_result.failure_reasons[0]
+
+
+@pytest.mark.parametrize("value", [0, 1, -1, 0.5, "0.5"])
+def test_a_finite_score_is_accepted(value):
+    score = {"id": "some-id", "name": "accuracy", "value": value}
+
+    assert not feedback_score.FeedbackScoreValidator(score).validate().failed
