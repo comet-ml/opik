@@ -24,6 +24,9 @@ def log_feedback_scores(
             for score in result.scores
             if not score.scoring_failed
         ]
+        if not feedback_scores:
+            continue
+
         client.log_threads_feedback_scores(
             scores=feedback_scores,
             project_name=project_name,

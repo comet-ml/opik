@@ -45,6 +45,45 @@ def test_log_feedback_scores():
         assert score["reason"] == expected_scores[i].reason
 
 
+def test_log_feedback_scores__thread_without_scores__not_logged():
+    """Skipped threads and threads whose metrics all failed are not logged."""
+    failed_score = score_result.ScoreResult(
+        name="metric1", value=0.0, reason="Failed", scoring_failed=True
+    )
+    results = [
+        evaluation_result.ThreadEvaluationResult(thread_id="skipped", scores=[]),
+        evaluation_result.ThreadEvaluationResult(
+            thread_id="all_failed", scores=[failed_score]
+        ),
+    ]
+
+    mock_client = mock.MagicMock(spec=threads_client.ThreadsClient)
+
+    helpers.log_feedback_scores(
+        results, project_name="test_project", client=mock_client
+    )
+
+    mock_client.log_threads_feedback_scores.assert_not_called()
+
+
+def test_log_feedback_scores__mixed_threads__only_threads_with_scores_logged():
+    score = score_result.ScoreResult(name="metric1", value=0.8, reason="Good")
+    results = [
+        evaluation_result.ThreadEvaluationResult(thread_id="skipped", scores=[]),
+        evaluation_result.ThreadEvaluationResult(thread_id="scored", scores=[score]),
+    ]
+
+    mock_client = mock.MagicMock(spec=threads_client.ThreadsClient)
+
+    helpers.log_feedback_scores(
+        results, project_name="test_project", client=mock_client
+    )
+
+    mock_client.log_threads_feedback_scores.assert_called_once()
+    scores = mock_client.log_threads_feedback_scores.call_args[1]["scores"]
+    assert [s["id"] for s in scores] == ["scored"]
+
+
 def test_load_conversation_thread():
     """Test that load_conversation_thread correctly fetches and transforms traces."""
     # Setup mock traces
