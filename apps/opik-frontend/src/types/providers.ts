@@ -1074,7 +1074,7 @@ export interface BaseProviderKey {
   created_at: string;
   provider: PROVIDER_TYPE;
   ui_composed_provider: COMPOSED_PROVIDER_TYPE;
-  // masked by the backend: it only tells whether a key is stored
+  // masked by the backend, or the string "null" when no key is stored
   api_key?: string;
   configuration: ProviderKeyConfiguration;
   headers?: Record<string, string>;

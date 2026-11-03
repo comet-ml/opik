@@ -211,13 +211,17 @@ describe("createCustomProviderDetailsFormSchema on a URL change", () => {
     expect(result.success).toBe(true);
   });
 
-  it("accepts the change when no key is stored", () => {
-    const result = createCustomProviderDetailsFormSchema([], {
-      base_url: STORED_URL,
-    }).safeParse(bedrockEdit({}));
+  it.each([undefined, "null"])(
+    "accepts the change when no key is stored (api_key %s)",
+    (storedApiKey) => {
+      const result = createCustomProviderDetailsFormSchema([], {
+        base_url: STORED_URL,
+        api_key: storedApiKey,
+      }).safeParse(bedrockEdit({}));
 
-    expect(result.success).toBe(true);
-  });
+      expect(result.success).toBe(true);
+    },
+  );
 
   it("asks for each stored secret again in token mode", () => {
     const credential = (key: string, value: string, secret: boolean) => ({

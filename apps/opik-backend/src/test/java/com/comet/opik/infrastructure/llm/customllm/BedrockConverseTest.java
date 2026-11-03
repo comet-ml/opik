@@ -304,9 +304,11 @@ class BedrockConverseTest {
                 .hasMessageContaining("doesn't serve the Bedrock Converse API");
     }
 
-    @Test
-    void reportsAUrlThatDoesNotServeConverseStreamInsteadOfACorruptStream() {
-        bedrock.stubFor(post(urlEqualTo(STREAM_PATH)).willReturn(okJson(UNKNOWN_OPERATION_RESPONSE)));
+    @ParameterizedTest
+    @ValueSource(strings = {"", "\r\n  "})
+    void reportsAUrlThatDoesNotServeConverseStreamInsteadOfACorruptStream(String leadingWhitespace) {
+        bedrock.stubFor(post(urlEqualTo(STREAM_PATH))
+                .willReturn(okJson(leadingWhitespace + UNKNOWN_OPERATION_RESPONSE)));
         var stream = stream();
 
         assertThat(stream.done()).failsWithin(10, TimeUnit.SECONDS).withThrowableThat()

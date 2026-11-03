@@ -135,6 +135,10 @@ export type StoredProviderCredentials = {
   api_key?: string;
 };
 
+// The provider list sends the string "null" for a provider saved without a key.
+const hasStoredApiKey = ({ api_key }: StoredProviderCredentials) =>
+  Boolean(api_key) && api_key !== "null";
+
 export const createCustomProviderDetailsFormSchema = (
   existingProviderNames?: string[],
   storedProvider?: StoredProviderCredentials,
@@ -276,7 +280,7 @@ export const createCustomProviderDetailsFormSchema = (
               });
             }
           });
-        } else if (storedProvider.api_key && !data.apiKey) {
+        } else if (hasStoredApiKey(storedProvider) && !data.apiKey) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
             message: "Enter the API key again to change the URL",

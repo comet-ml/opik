@@ -49,8 +49,8 @@ class AwsEventStreamParser implements ServerSentEventParser {
                     return;
                 }
                 // Bedrock answers a path it doesn't serve with a 200 and a JSON body. A frame starts with its length,
-                // whose first byte is 0 or 1 under the 16 MB cap, never '{'.
-                if (firstFrame && prelude[0] == '{') {
+                // whose first byte is 0 or 1 under the 16 MB cap, never whitespace or '{'.
+                if (firstFrame && startsWithJsonObject(prelude)) {
                     listener.onError(new ProviderRequestRefusedException(
                             ProviderRequestRefusedException.Reason.BEDROCK_CONVERSE_URL));
                     return;
@@ -118,6 +118,18 @@ class AwsEventStreamParser implements ServerSentEventParser {
             case "serviceUnavailableException" -> 503;
             default -> 500;
         };
+    }
+
+    private static boolean startsWithJsonObject(byte[] bytes) {
+        for (byte value : bytes) {
+            if (value == '{') {
+                return true;
+            }
+            if (value != ' ' && value != '\t' && value != '\n' && value != '\r') {
+                return false;
+            }
+        }
+        return false;
     }
 
     private static Map<String, String> stringHeaders(ByteBuffer buffer) throws IOException {
