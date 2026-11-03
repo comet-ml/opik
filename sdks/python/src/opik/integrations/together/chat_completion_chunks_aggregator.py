@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 import pydantic
 from together.types import ChatCompletionChunk
 
-from opik.integrations import _streamed_tool_calls
+from opik.integrations.together import _streamed_tool_calls
 
 LOGGER = logging.getLogger(__name__)
 

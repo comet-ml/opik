@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 import pydantic
 from groq.types.chat import chat_completion_chunk
 
-from opik.integrations import _streamed_tool_calls
+from opik.integrations.groq import _streamed_tool_calls
 
 LOGGER = logging.getLogger(__name__)
 

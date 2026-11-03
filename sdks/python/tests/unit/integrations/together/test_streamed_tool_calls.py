@@ -4,7 +4,7 @@ from openai.types.chat.chat_completion_chunk import (
 )
 from together.types import tool_choice as together_tool_choice
 
-from opik.integrations import _streamed_tool_calls
+from opik.integrations.together import _streamed_tool_calls
 
 
 def _together_fragment(index, call_id=None, name=None, arguments=None):

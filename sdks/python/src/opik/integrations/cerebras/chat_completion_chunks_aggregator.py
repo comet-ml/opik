@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 import pydantic
 from cerebras.cloud.sdk.types.chat.chat_completion import ChatChunkResponse
 
-from opik.integrations import _streamed_tool_calls
+from opik.integrations.cerebras import _streamed_tool_calls
 
 LOGGER = logging.getLogger(__name__)
 
