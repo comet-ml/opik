@@ -4,6 +4,7 @@ import com.comet.opik.TestConfigUtils;
 import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmTestClients;
+import com.comet.opik.infrastructure.llm.SharedTokenCache;
 import com.google.genai.Client;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.StreamingChatModel;
@@ -53,7 +54,7 @@ class LlmProviderVertexAITest {
         var generator = new VertexAIClientGenerator(configuration.getLlmProviderClient(),
                 new LlmModelRegistryService(configuration, mock(jakarta.ws.rs.client.Client.class)),
                 LlmTestClients.REMOTE_MEDIA_INLINER,
-                LlmTestClients.VIDEO_MIME_TYPE_UTILS);
+                LlmTestClients.VIDEO_MIME_TYPE_UTILS, mock(SharedTokenCache.class));
         // A malformed key makes the streaming client throw at build time, before the stream starts.
         var apiConfig = LlmProviderClientApiConfig.builder().apiKey("not-a-service-account").configuration(Map.of())
                 .build();
