@@ -62,11 +62,13 @@ def wrap_sync_stream(
     def wrapper() -> Iterator[Any]:
         accumulated_items: List[Any] = []
         state["started"] = True
+        completed = False
         error_info: Optional[ErrorInfoDict] = None
         try:
             for item in stream:
                 accumulated_items.append(item)
                 yield item
+            completed = True
         except Exception as exception:
             LOGGER.debug(
                 "Exception raised from cohere stream: %s",
@@ -75,12 +77,24 @@ def wrap_sync_stream(
             )
             error_info = error_info_collector.collect(exception)
             raise exception
+        except BaseException as exception:
+            # GeneratorExit is raised when a consumer abandons the stream
+            # (``break``, or the generator being closed/collected). It is not an
+            # Exception subclass, so without this it reaches `finally` with
+            # error_info unset and a truncated stream is recorded as a success.
+            LOGGER.debug(
+                "cohere stream terminated early: %s",
+                type(exception).__name__,
+                exc_info=True,
+            )
+            error_info = error_info_collector.collect(exception)
+            raise
         finally:
             if finalizer is not None:
                 finalizer.detach()
             output = (
                 generations_aggregator(accumulated_items)
-                if error_info is None
+                if error_info is None and completed
                 else None
             )
             if not state["finished"]:
@@ -120,11 +134,13 @@ def wrap_async_stream(
     async def wrapper() -> AsyncIterator[Any]:
         accumulated_items: List[Any] = []
         state["started"] = True
+        completed = False
         error_info: Optional[ErrorInfoDict] = None
         try:
             async for item in stream:
                 accumulated_items.append(item)
                 yield item
+            completed = True
         except Exception as exception:
             LOGGER.debug(
                 "Exception raised from cohere async stream: %s",
@@ -133,12 +149,24 @@ def wrap_async_stream(
             )
             error_info = error_info_collector.collect(exception)
             raise exception
+        except BaseException as exception:
+            # GeneratorExit is raised when a consumer abandons the stream
+            # (``break``, or the generator being closed/collected). It is not an
+            # Exception subclass, so without this it reaches `finally` with
+            # error_info unset and a truncated stream is recorded as a success.
+            LOGGER.debug(
+                "cohere async stream terminated early: %s",
+                type(exception).__name__,
+                exc_info=True,
+            )
+            error_info = error_info_collector.collect(exception)
+            raise
         finally:
             if finalizer is not None:
                 finalizer.detach()
             output = (
                 generations_aggregator(accumulated_items)
-                if error_info is None
+                if error_info is None and completed
                 else None
             )
             if not state["finished"]:

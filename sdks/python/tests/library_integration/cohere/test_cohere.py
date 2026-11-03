@@ -407,8 +407,9 @@ def test_wrap_async_stream__advanced_then_dropped__finalizes_exactly_once():
     calls = _collect_finalizations(stream_wrappers.wrap_async_stream, advance=True)
 
     assert len(calls) == 1
-    # the surviving call is the informative one, not the finalizer's None
-    assert calls[0]["output"] == {"items": ["a"]}
+    # the surviving call is the body's, not the finalizer's: abandonment is
+    # reported as an early termination rather than a completed response.
+    assert calls[0]["error_info"]["exception_type"] == "GeneratorExit"
 
 
 def test_wrap_async_stream__never_advanced__still_finalizes_once():
