@@ -51,11 +51,8 @@ def aggregate(
 
                 # Cerebras streams reasoning separately from content; without this the
                 # aggregated span would show an empty answer for reasoning models.
-                # getattr because the SDK is unpinned and older versions have no
-                # `reasoning` attribute on the delta.
-                reasoning = getattr(delta, "reasoning", None)
-                if reasoning:
-                    reasoning_chunks.append(reasoning)
+                if delta.reasoning:
+                    reasoning_chunks.append(delta.reasoning)
 
             if chunk.choices and chunk.choices[0].finish_reason:
                 aggregated_response["choices"][0]["finish_reason"] = chunk.choices[
@@ -67,10 +64,9 @@ def aggregate(
 
         aggregated_response["choices"][0]["message"]["content"] = "".join(text_chunks)
         if reasoning_chunks:
-            # reasoning_content is the name opik's own API types use
-            # (rest_api/types/assistant_message.py, delta.py), so the renderer
-            # and the persisted payload agree.
-            aggregated_response["choices"][0]["message"]["reasoning_content"] = "".join(
+            # Same key the non-streamed ChatCompletionResponse message uses, so a
+            # request logs the same shape either way.
+            aggregated_response["choices"][0]["message"]["reasoning"] = "".join(
                 reasoning_chunks
             )
         result = ChatCompletionChunksAggregated(**aggregated_response)

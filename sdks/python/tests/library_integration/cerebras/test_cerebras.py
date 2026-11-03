@@ -205,7 +205,7 @@ def test_aggregate__reasoning_deltas__kept_alongside_content():
 
     message = aggregated.choices[0]["message"]
     assert message["content"] == "Blue."
-    assert message["reasoning_content"] == "The sky scatters short wavelengths."
+    assert message["reasoning"] == "The sky scatters short wavelengths."
 
 
 def test_aggregate__no_reasoning_deltas__reasoning_key_absent():
@@ -217,7 +217,7 @@ def test_aggregate__no_reasoning_deltas__reasoning_key_absent():
         ]
     )
 
-    assert "reasoning_content" not in aggregated.choices[0]["message"]
+    assert "reasoning" not in aggregated.choices[0]["message"]
 
 
 def test_extract_metadata_from_client__credentials_in_base_url__stripped():
@@ -234,7 +234,30 @@ def test_extract_metadata_from_client__credentials_in_base_url__stripped():
     assert "abc" not in metadata["base_url"]
 
 
-def test_patch_sync_stream__two_streams_patched_before_iteration__each_uses_its_own_callback():
+def test_extract_metadata_from_client__encoded_path__encoding_preserved():
+    """A decoded path can invent a query: %3F would read back as '?'."""
+    client = cerebras.Cerebras(
+        api_key="fake-api-key", base_url="https://h/a%20b/%3Fx"
+    )
+
+    metadata = opik_tracker._extract_metadata_from_client(client)
+
+    # The client appends a trailing slash to the path; what matters is that
+    # %20 and %3F survive rather than decoding to a space and a '?'.
+    assert metadata == {"base_url": "https://h/a%20b/%3Fx/"}
+
+
+def test_extract_metadata_from_client__ipv6_host__brackets_kept():
+    client = cerebras.Cerebras(api_key="fake-api-key", base_url="https://[::1]:8443/v1")
+
+    metadata = opik_tracker._extract_metadata_from_client(client)
+
+    assert metadata == {"base_url": "https://[::1]:8443/v1/"}
+
+
+def test_patch_sync_stream__two_streams_patched_before_iteration__each_uses_its_own_callback(
+    monkeypatch,
+):
     """The patch is installed on the class, so per-call state must live on the instance."""
     finalized = []
 
@@ -254,27 +277,22 @@ def test_patch_sync_stream__two_streams_patched_before_iteration__each_uses_its_
         def __init__(self, items):
             self._items = items
 
-    original = stream_patchers.original_stream_iter_method
     # patch_sync_stream rebinds cerebras.Stream.__iter__ on the class, so the
     # class attribute has to be restored too or later tests inherit a wrapper
-    # closed over this test's fake iterator.
-    original_class_iter = cerebras.Stream.__iter__
-    stream_patchers.original_stream_iter_method = lambda self: iter(self._items)
-    try:
-        first = FakeStream(["a1", "a2"])
-        second = FakeStream(["b1", "b2"])
-        stream_patchers.patch_sync_stream(
-            first, "SPAN_A", None, list, make_callback("A")
-        )
-        stream_patchers.patch_sync_stream(
-            second, "SPAN_B", None, list, make_callback("B")
-        )
+    # closed over this test's fake iterator. Setting it to its current value
+    # registers it with monkeypatch, which restores both on teardown.
+    monkeypatch.setattr(cerebras.Stream, "__iter__", cerebras.Stream.__iter__)
+    monkeypatch.setattr(
+        stream_patchers, "original_stream_iter_method", lambda self: iter(self._items)
+    )
 
-        assert list(first) == ["a1", "a2"]
-        assert list(second) == ["b1", "b2"]
-    finally:
-        stream_patchers.original_stream_iter_method = original
-        cerebras.Stream.__iter__ = original_class_iter
+    first = FakeStream(["a1", "a2"])
+    second = FakeStream(["b1", "b2"])
+    stream_patchers.patch_sync_stream(first, "SPAN_A", None, list, make_callback("A"))
+    stream_patchers.patch_sync_stream(second, "SPAN_B", None, list, make_callback("B"))
+
+    assert list(first) == ["a1", "a2"]
+    assert list(second) == ["b1", "b2"]
 
     assert finalized == [
         ("A", "SPAN_A", ["a1", "a2"]),
@@ -297,53 +315,51 @@ def test_cerebras_chat_completions_create__stream__span_finalized_by_its_own_cli
     This is the end-to-end version of the per-instance wiring — going through
     track_cerebras() rather than calling patch_sync_stream directly.
     """
-    original_class_iter = cerebras.Stream.__iter__
-    original_module_iter = stream_patchers.original_stream_iter_method
-    stream_patchers.original_stream_iter_method = lambda self: iter(self._items)
+    # Setting the class dunder to its current value registers it with monkeypatch,
+    # which restores it and the module attribute on teardown.
+    monkeypatch.setattr(cerebras.Stream, "__iter__", cerebras.Stream.__iter__)
+    monkeypatch.setattr(
+        stream_patchers, "original_stream_iter_method", lambda self: iter(self._items)
+    )
+    first = track_cerebras(
+        cerebras.Cerebras(api_key="fake-api-key"), provider="provider-one"
+    )
+    second = track_cerebras(
+        cerebras.Cerebras(api_key="fake-api-key"), provider="provider-two"
+    )
 
-    try:
-        first = track_cerebras(
-            cerebras.Cerebras(api_key="fake-api-key"), provider="provider-one"
-        )
-        second = track_cerebras(
-            cerebras.Cerebras(api_key="fake-api-key"), provider="provider-two"
-        )
+    chunks = [
+        _chunk(role="assistant"),
+        _chunk(content="Blue."),
+        _chunk(finish_reason="stop"),
+    ]
+    monkeypatch.setattr(
+        first.chat.completions,
+        "_post",
+        lambda *args, **kwargs: _mock_stream(list(chunks)),
+    )
+    monkeypatch.setattr(
+        second.chat.completions,
+        "_post",
+        lambda *args, **kwargs: _mock_stream(list(chunks)),
+    )
 
-        chunks = [
-            _chunk(role="assistant"),
-            _chunk(content="Blue."),
-            _chunk(finish_reason="stop"),
-        ]
-        monkeypatch.setattr(
-            first.chat.completions,
-            "_post",
-            lambda *args, **kwargs: _mock_stream(list(chunks)),
-        )
-        monkeypatch.setattr(
-            second.chat.completions,
-            "_post",
-            lambda *args, **kwargs: _mock_stream(list(chunks)),
-        )
+    messages = [{"role": "user", "content": "Why is the sky blue?"}]
+    first_stream = first.chat.completions.create(
+        model=MODEL, messages=messages, stream=True
+    )
+    second_stream = second.chat.completions.create(
+        model=MODEL, messages=messages, stream=True
+    )
 
-        messages = [{"role": "user", "content": "Why is the sky blue?"}]
-        first_stream = first.chat.completions.create(
-            model=MODEL, messages=messages, stream=True
-        )
-        second_stream = second.chat.completions.create(
-            model=MODEL, messages=messages, stream=True
-        )
+    # Consume the first client's stream last: the finalisation callback is a
+    # bound method of that client's decorator, which carries `provider`. If
+    # it came from the class-level closure, this span is finalised by the
+    # second client's decorator and reports provider-two.
+    assert [c for c in second_stream] == chunks
+    assert [c for c in first_stream] == chunks
 
-        # Consume the first client's stream last: the finalisation callback is a
-        # bound method of that client's decorator, which carries `provider`. If
-        # it came from the class-level closure, this span is finalised by the
-        # second client's decorator and reports provider-two.
-        assert [c for c in second_stream] == chunks
-        assert [c for c in first_stream] == chunks
-
-        opik.flush_tracker()
-    finally:
-        stream_patchers.original_stream_iter_method = original_module_iter
-        cerebras.Stream.__iter__ = original_class_iter
+    opik.flush_tracker()
 
     providers = sorted(
         span.provider for trace in fake_backend.trace_trees for span in trace.spans
@@ -366,35 +382,33 @@ def test_cerebras_chat_completions_create__stream__finalized_span_carries_output
     The other stream test pins which client finalizes the span; this one pins
     what actually lands on it.
     """
-    original_class_iter = cerebras.Stream.__iter__
-    original_module_iter = stream_patchers.original_stream_iter_method
-    stream_patchers.original_stream_iter_method = lambda self: iter(self._items)
+    # Setting the class dunder to its current value registers it with monkeypatch,
+    # which restores it and the module attribute on teardown.
+    monkeypatch.setattr(cerebras.Stream, "__iter__", cerebras.Stream.__iter__)
+    monkeypatch.setattr(
+        stream_patchers, "original_stream_iter_method", lambda self: iter(self._items)
+    )
+    client = track_cerebras(cerebras.Cerebras(api_key="fake-api-key"))
+    chunks = [
+        _chunk(role="assistant"),
+        _chunk(content="Blue."),
+        _chunk(content=" Scattering."),
+        _chunk(finish_reason="stop"),
+    ]
+    monkeypatch.setattr(
+        client.chat.completions,
+        "_post",
+        lambda *args, **kwargs: _mock_stream(list(chunks)),
+    )
 
-    try:
-        client = track_cerebras(cerebras.Cerebras(api_key="fake-api-key"))
-        chunks = [
-            _chunk(role="assistant"),
-            _chunk(content="Blue."),
-            _chunk(content=" Scattering."),
-            _chunk(finish_reason="stop"),
-        ]
-        monkeypatch.setattr(
-            client.chat.completions,
-            "_post",
-            lambda *args, **kwargs: _mock_stream(list(chunks)),
-        )
+    stream = client.chat.completions.create(
+        model=MODEL,
+        messages=[{"role": "user", "content": "Why is the sky blue?"}],
+        stream=True,
+    )
+    assert [c for c in stream] == chunks
 
-        stream = client.chat.completions.create(
-            model=MODEL,
-            messages=[{"role": "user", "content": "Why is the sky blue?"}],
-            stream=True,
-        )
-        assert [c for c in stream] == chunks
-
-        opik.flush_tracker()
-    finally:
-        stream_patchers.original_stream_iter_method = original_module_iter
-        cerebras.Stream.__iter__ = original_class_iter
+    opik.flush_tracker()
 
     assert len(fake_backend.trace_trees) == 1
     span = fake_backend.trace_trees[0].spans[0]
@@ -410,42 +424,43 @@ def test_cerebras_chat_completions_create__async_stream__finalized_span_carries_
     fake_backend, monkeypatch
 ):
     """Same wiring through AsyncCerebras, which patches __aiter__ rather than __iter__."""
-    original_class_aiter = cerebras.AsyncStream.__aiter__
-    original_module_aiter = stream_patchers.original_async_stream_aiter_method
+
 
     async def _aiter(self):
         for item in self._items:
             yield item
 
-    stream_patchers.original_async_stream_aiter_method = _aiter
+    # Setting the class dunder to its current value registers it with monkeypatch,
+    # which restores it and the module attribute on teardown.
+    monkeypatch.setattr(
+        cerebras.AsyncStream, "__aiter__", cerebras.AsyncStream.__aiter__
+    )
+    monkeypatch.setattr(
+        stream_patchers, "original_async_stream_aiter_method", _aiter
+    )
+    client = track_cerebras(cerebras.AsyncCerebras(api_key="fake-api-key"))
+    chunks = [
+        _chunk(role="assistant"),
+        _chunk(content="Blue."),
+        _chunk(finish_reason="stop"),
+    ]
 
-    try:
-        client = track_cerebras(cerebras.AsyncCerebras(api_key="fake-api-key"))
-        chunks = [
-            _chunk(role="assistant"),
-            _chunk(content="Blue."),
-            _chunk(finish_reason="stop"),
-        ]
+    async def _mock_post(*args, **kwargs):
+        return _mock_async_stream(list(chunks))
 
-        async def _mock_post(*args, **kwargs):
-            return _mock_async_stream(list(chunks))
+    monkeypatch.setattr(client.chat.completions, "_post", _mock_post)
 
-        monkeypatch.setattr(client.chat.completions, "_post", _mock_post)
+    async def drive():
+        stream = await client.chat.completions.create(
+            model=MODEL,
+            messages=[{"role": "user", "content": "Why is the sky blue?"}],
+            stream=True,
+        )
+        return [chunk async for chunk in stream]
 
-        async def drive():
-            stream = await client.chat.completions.create(
-                model=MODEL,
-                messages=[{"role": "user", "content": "Why is the sky blue?"}],
-                stream=True,
-            )
-            return [chunk async for chunk in stream]
+    assert asyncio.run(drive()) == chunks
 
-        assert asyncio.run(drive()) == chunks
-
-        opik.flush_tracker()
-    finally:
-        stream_patchers.original_async_stream_aiter_method = original_module_aiter
-        cerebras.AsyncStream.__aiter__ = original_class_aiter
+    opik.flush_tracker()
 
     assert len(fake_backend.trace_trees) == 1
     span = fake_backend.trace_trees[0].spans[0]
