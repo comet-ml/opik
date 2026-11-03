@@ -1752,7 +1752,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             ORDER BY u.id DESC
             LIMIT :limit
             <elseif(late_materialize_raw)>
-            , trace_payloads AS (
+            , latest_trace_payloads AS (
                 SELECT
                     id,
                     <if(truncate)> replaceRegexpAll(if(notEmpty(input_slim), input_slim, truncated_input), '<truncate>', '"[image]"') as input <else> input <endif>,
@@ -1761,7 +1761,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 FROM traces
                 WHERE workspace_id = :workspace_id
                 <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
-                AND id IN (SELECT DISTINCT trace_id FROM experiment_items_trace_scope)
+                AND id IN (SELECT arrayJoin((SELECT groupArray(DISTINCT trace_id) FROM experiment_items_trace_scope)))
                 <if(traces_partitioned)>
                 AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
                     SELECT toYYYYMMDD(toDate32(trace_id_at) - toIntervalDay(toDayOfWeek(trace_id_at, 1)))
@@ -1772,21 +1772,26 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 )
                 <endif>
                 AND (id, last_updated_at) IN (
-                    SELECT id, max(last_updated_at)
-                    FROM traces
-                    WHERE workspace_id = :workspace_id
-                    <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
-                    AND id IN (SELECT DISTINCT trace_id FROM experiment_items_trace_scope)
-                    <if(traces_partitioned)>
-                    AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
-                        SELECT toYYYYMMDD(toDate32(trace_id_at) - toIntervalDay(toDayOfWeek(trace_id_at, 1)))
+                    SELECT arrayJoin((
+                        SELECT groupArray(tuple(id, last_updated_at))
                         FROM (
-                            SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS trace_id_at
-                            FROM experiment_items_trace_scope
+                            SELECT id, max(last_updated_at) AS last_updated_at
+                            FROM traces
+                            WHERE workspace_id = :workspace_id
+                            <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
+                            AND id IN (SELECT arrayJoin((SELECT groupArray(DISTINCT trace_id) FROM experiment_items_trace_scope)))
+                            <if(traces_partitioned)>
+                            AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                                SELECT toYYYYMMDD(toDate32(trace_id_at) - toIntervalDay(toDayOfWeek(trace_id_at, 1)))
+                                FROM (
+                                    SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS trace_id_at
+                                    FROM experiment_items_trace_scope
+                                )
+                            )
+                            <endif>
+                            GROUP BY id
                         )
-                    )
-                    <endif>
-                    GROUP BY id
+                    ))
                 )
                 LIMIT 1 BY id
             ), raw_ei_light AS (
@@ -1978,7 +1983,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         l.assertions_array
                     )) AS items
                 FROM raw_ei_light AS l
-                LEFT JOIN trace_payloads AS t ON t.id = l.trace_id
+                LEFT JOIN latest_trace_payloads AS t ON t.id = l.trace_id
                 GROUP BY l.stable_dataset_item_id
             )
             SELECT
