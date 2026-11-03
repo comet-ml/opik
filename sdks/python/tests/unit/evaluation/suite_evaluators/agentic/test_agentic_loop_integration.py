@@ -2,15 +2,12 @@
 
 Drives the loop with a stub ChatModel that returns a canned tool-call
 sequence: first turn -> `read(...)`, second turn (after tool result) ->
-structured JSON verdict (no separate wrap-up round-trip).
+`submit_verdict(...)` (no separate wrap-up round-trip).
 
 Confirms:
-- `tool_choice="auto"` on the first turn (overview is pre-seeded into
-  the user message, so the loop no longer forces a tool call).
-- `response_format` is set on every turn so the model can finalize as
-  soon as it stops calling tools.
-- The wrap-up call is skipped when the last response already carries
-  the structured verdict.
+- `tool_choice="required"` on every turn, with `submit_verdict` offered
+  next to the drill-in tools and no `response_format`.
+- The wrap-up call is skipped when the model submits the verdict.
 - Verdict JSON is parsed into ScoreResult.
 """
 
@@ -106,7 +103,7 @@ def test_score__full_loop__calls_read_and_produces_verdict():
         }
     )
     responses: List[base_model.ConversationDict] = [
-        # Turn 1 (auto): model decides to drill in via read
+        # Turn 1: model decides to drill in via read
         {
             "role": "assistant",
             "tool_calls": [
@@ -120,11 +117,19 @@ def test_score__full_loop__calls_read_and_produces_verdict():
                 }
             ],
         },
-        # Turn 2 (auto): model produces the structured verdict directly —
-        # `response_format` is set on every turn, so when no tool call is
-        # requested the content is already JSON and the loop skips the
-        # wrap-up round-trip.
-        {"role": "assistant", "content": verdict},
+        # Turn 2: model submits the verdict, so the loop skips the
+        # wrap-up round-trip. Text next to the call is ignored.
+        {
+            "role": "assistant",
+            "content": "Found it.",
+            "tool_calls": [
+                {
+                    "id": "call-2",
+                    "type": "function",
+                    "function": {"name": "submit_verdict", "arguments": verdict},
+                }
+            ],
+        },
     ]
     model = _StubChatModel(responses)
     judge = AgenticLLMJudge(assertions=["agent called the tool_call span"], model=model)
@@ -138,19 +143,16 @@ def test_score__full_loop__calls_read_and_produces_verdict():
     # Inspect what the loop sent the model — two calls, no wrap-up.
     assert len(model.calls) == 2
     first, second = model.calls
-    assert first["tool_choice"] == "auto"
-    assert first["response_format"] is not None
-    assert first["tools"] and any(
-        spec["function"]["name"] == "read" for spec in first["tools"]
-    )
+    assert first["tool_choice"] == "required"
+    assert first["response_format"] is None
+    tool_names = {spec["function"]["name"] for spec in first["tools"]}
+    assert {"read", "submit_verdict"} <= tool_names
     # `get_trace_spans` is no longer in the default registry.
     assert not any(
         spec["function"]["name"] == "get_trace_spans" for spec in first["tools"]
     )
-    # Second (finalizing) turn carries both tools and response_format —
-    # the model elected to skip tools and emit the verdict directly.
-    assert second["tool_choice"] == "auto"
-    assert second["response_format"] is not None
+    assert second["tool_choice"] == "required"
+    assert second["response_format"] is None
 
 
 def test_score__model_loops_forever__terminates_within_max_rounds():
