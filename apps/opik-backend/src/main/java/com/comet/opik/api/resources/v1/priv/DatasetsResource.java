@@ -115,6 +115,9 @@ import static org.apache.commons.collections4.CollectionUtils.emptyIfNull;
 @Tag(name = "Datasets", description = "Dataset resources")
 public class DatasetsResource {
 
+    // Each item carries one result per experiment in all-experiments mode, so pages are bounded tighter
+    static final int ALL_EXPERIMENTS_MAX_PAGE_SIZE = 100;
+
     private final @NonNull DatasetService service;
     private final @NonNull DatasetItemService itemService;
     private final @NonNull DatasetExpansionService expansionService;
@@ -778,7 +781,9 @@ public class DatasetsResource {
     public Response findDatasetItemsWithExperimentItems(
             @PathParam("id") UUID datasetId,
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
-            @QueryParam("size") @Min(1) @DefaultValue("10") int size,
+            @QueryParam("size") @Min(1) @DefaultValue("10") @Schema(description = "Page size. At most "
+                    + ALL_EXPERIMENTS_MAX_PAGE_SIZE
+                    + " when experiment_ids is omitted, since each item then carries a result per experiment") int size,
             @QueryParam("experiment_ids") @Schema(description = "JSON array of experiment IDs. Omit to include every regular experiment on the dataset (optimizer trial, mini-batch and mutation experiments are excluded); item filters are then evaluated against the newest version of each item that those experiments reference") String experimentIdsQueryParam,
             @QueryParam("dataset_version") @Schema(description = "Dataset version hash or tag. Only experiments run against this version are included. Requires experiment_ids to be omitted. Returns 404 if the version does not exist") String datasetVersion,
             @QueryParam("filters") String filters,
@@ -798,6 +803,9 @@ public class DatasetsResource {
             validationError = "dataset_version can only be used when experiment_ids is omitted";
         } else if (allDatasetExperiments && !featureFlags.isDatasetVersioningEnabled()) {
             validationError = "experiment_ids is required when dataset versioning is disabled";
+        } else if (allDatasetExperiments && size > ALL_EXPERIMENTS_MAX_PAGE_SIZE) {
+            validationError = "size must be at most %d when experiment_ids is omitted"
+                    .formatted(ALL_EXPERIMENTS_MAX_PAGE_SIZE);
         }
 
         if (validationError != null) {

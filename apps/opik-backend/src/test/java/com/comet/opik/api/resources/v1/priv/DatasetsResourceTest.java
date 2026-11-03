@@ -8983,7 +8983,8 @@ class DatasetsResourceTest {
         private DatasetItemPage getPage(UUID datasetId, String datasetVersion,
                 List<ExperimentsComparisonFilter> filters) {
             try (var response = datasetResourceClient.callGetDatasetItemsWithExperimentItems(
-                    datasetId, null, datasetVersion, filters, apiKey, workspaceName)) {
+                    datasetId, null, datasetVersion, DatasetsResource.ALL_EXPERIMENTS_MAX_PAGE_SIZE, filters,
+                    apiKey, workspaceName)) {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
                 return response.readEntity(DatasetItemPage.class);
             }
@@ -9092,7 +9093,7 @@ class DatasetsResourceTest {
             var dataset = createDatasetWithItems(List.of(DatasetResourceClient.buildDatasetItem(factory)));
 
             try (var response = datasetResourceClient.callGetDatasetItemsWithExperimentItems(
-                    dataset.id(), null, "unknown-version", null, apiKey, workspaceName)) {
+                    dataset.id(), null, "unknown-version", null, null, apiKey, workspaceName)) {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
             }
         }
@@ -9111,18 +9112,20 @@ class DatasetsResourceTest {
 
         Stream<Arguments> findWhenInvalidParams() {
             return Stream.of(
-                    arguments("[]", null, "experiment_ids cannot be empty"),
-                    arguments(" ", null, "experiment_ids cannot be empty"),
-                    arguments(JsonUtils.writeValueAsString(List.of(GENERATOR.generate())), "v1",
-                            "dataset_version can only be used when experiment_ids is omitted"));
+                    arguments("[]", null, null, "experiment_ids cannot be empty"),
+                    arguments(" ", null, null, "experiment_ids cannot be empty"),
+                    arguments(JsonUtils.writeValueAsString(List.of(GENERATOR.generate())), "v1", null,
+                            "dataset_version can only be used when experiment_ids is omitted"),
+                    arguments(null, null, 101, "size must be at most 100 when experiment_ids is omitted"));
         }
 
         @ParameterizedTest
         @MethodSource
         @DisplayName("when params are invalid, then return bad request")
-        void findWhenInvalidParams(String experimentIds, String datasetVersion, String expectedError) {
+        void findWhenInvalidParams(String experimentIds, String datasetVersion, Integer size,
+                String expectedError) {
             try (var response = datasetResourceClient.callGetDatasetItemsWithExperimentItems(
-                    GENERATOR.generate(), experimentIds, datasetVersion, null, apiKey, workspaceName)) {
+                    GENERATOR.generate(), experimentIds, datasetVersion, size, null, apiKey, workspaceName)) {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
                 assertThat(response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class).getMessage())
                         .isEqualTo(expectedError);

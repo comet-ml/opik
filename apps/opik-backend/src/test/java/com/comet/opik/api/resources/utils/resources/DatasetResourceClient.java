@@ -594,12 +594,16 @@ public class DatasetResourceClient {
     }
 
     public Response callGetDatasetItemsWithExperimentItems(UUID datasetId, String experimentIds,
-            String datasetVersion, List<? extends Filter> filters, String apiKey, String workspaceName) {
+            String datasetVersion, Integer size, List<? extends Filter> filters, String apiKey, String workspaceName) {
         var webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path(datasetId.toString())
                 .path("items")
                 .path("experiments")
                 .path("items");
+
+        if (size != null) {
+            webTarget = webTarget.queryParam("size", size);
+        }
 
         if (experimentIds != null) {
             webTarget = webTarget.queryParam("experiment_ids", experimentIds);
