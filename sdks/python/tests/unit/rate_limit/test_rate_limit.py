@@ -50,9 +50,9 @@ def test_parse_rate_limit(rate_limit_dict, expected):
     [
         ({"Retry-After": "5"}, 5.0),
         ({"retry-after": "2.5"}, 2.5),
-        ({"Retry-After": "0"}, rate_limit.MIN_RETRY_AFTER_SECONDS),
-        ({"Retry-After": "-3"}, rate_limit.MIN_RETRY_AFTER_SECONDS),
-        ({"Retry-After": "99999999999"}, rate_limit.MAX_RETRY_AFTER_SECONDS),
+        ({"Retry-After": "0"}, 1.0),
+        ({"Retry-After": "-3"}, 1.0),
+        ({"Retry-After": "99999999999"}, 60.0),
         ({}, None),
         ({"Retry-After": "soon"}, None),
         ({"Retry-After": "nan"}, None),
@@ -105,4 +105,4 @@ def test_parse_retry_after__http_date_far_in_the_future__lowered_to_maximum():
         {"Retry-After": email.utils.format_datetime(retry_at, usegmt=True)}
     )
 
-    assert parsed == rate_limit.MAX_RETRY_AFTER_SECONDS
+    assert parsed == 60.0

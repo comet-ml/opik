@@ -3,7 +3,6 @@ import email.utils
 
 import pytest
 
-from opik.rate_limit import rate_limit
 from opik.rest_api.core.api_error import ApiError
 from opik.rest_client_configurator import retry_decorator
 
@@ -24,7 +23,7 @@ def _waits_before_giving_up(headers):
     [
         ({"Retry-After": "2"}, 2.0),
         ({"retry-after": "2"}, 2.0),
-        ({"Retry-After": "0"}, rate_limit.MIN_RETRY_AFTER_SECONDS),
+        ({"Retry-After": "0"}, 1.0),
     ],
     ids=["seconds", "lower_case_name", "zero_raised_to_minimum"],
 )
