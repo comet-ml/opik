@@ -137,8 +137,10 @@ def test_score__full_loop__calls_read_and_produces_verdict():
     results = judge.score(_build_ctx())
 
     assert len(results) == 1
+    assert results[0].name == "agent called the tool_call span"
     assert results[0].value is True
     assert results[0].reason == "tool_call span found"
+    assert results[0].scoring_failed is False
 
     # Inspect what the loop sent the model — two calls, no wrap-up.
     assert len(model.calls) == 2

@@ -88,8 +88,10 @@ def run_agentic_judge(
 ) -> str:
     """Drive the tool-call loop and return the raw verdict JSON.
 
-    The verdict arrives as the arguments of a `submit_verdict` tool call.
-    Caller parses it via the same path the one-shot LLMJudge uses.
+    Normally this is the raw arguments of the `submit_verdict` call. If the
+    model ends without calling it, or `max_rounds` drill-in rounds run out,
+    it is the content of a tools-free wrap-up request (empty string when
+    absent). Caller parses it via the same path the one-shot LLMJudge uses.
 
     Raises whatever the underlying model raises on hard failures — the same
     contract as `LLMJudge._generate_and_parse`.
