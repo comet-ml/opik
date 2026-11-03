@@ -1,12 +1,14 @@
 package com.comet.opik.infrastructure.llm;
 
 import com.comet.opik.infrastructure.redis.StringRedisClient;
+import com.comet.opik.podam.PodamFactoryUtils;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.redisson.api.RBucket;
+import uk.co.jemos.podam.api.PodamFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -29,6 +31,7 @@ import static org.mockito.Mockito.when;
 @DisplayName("Shared Token Cache Test")
 class SharedTokenCacheTest {
 
+    private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
     private final SharedTokenCache tokenCache = new SharedTokenCache(emptyRedis(),
             LlmTestClients.PASSTHROUGH_LOCK_SERVICE);
 
@@ -59,7 +62,8 @@ class SharedTokenCacheTest {
             var fetchTimeout = Duration.ofMillis(500);
 
             var startNanos = System.nanoTime();
-            var thrown = catchThrowable(() -> tokenCache.get("key", Duration.ofSeconds(1), fetchTimeout,
+            var thrown = catchThrowable(() -> tokenCache.get(podamFactory.manufacturePojo(String.class),
+                    Duration.ofSeconds(1), fetchTimeout,
                     () -> fetchFrom(stalledEndpoint.getLocalPort())));
             var elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNanos);
 

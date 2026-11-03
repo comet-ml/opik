@@ -47,6 +47,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static org.apache.commons.lang3.StringUtils.defaultIfBlank;
@@ -139,7 +140,7 @@ public class AuthTokenProvider {
             throw exception;
         } catch (SharedTokenCache.FetchTimeoutException exception) {
             recordRequestMetric(workspaceId, providerId, "failed");
-            throw slowReply(authConfig.value());
+            throw fetchTimeoutFailure(authConfig.value(), exception);
         }
         recordRequestMetric(workspaceId, providerId, switch (result.outcome()) {
             case CACHE_HIT -> "cache_hit";
@@ -228,10 +229,11 @@ public class AuthTokenProvider {
                 throw new IOException("the deadline closed the body");
             }
         } catch (IOException | ProcessingException exception) {
-            // an interrupt is the token cache cancelling a fetch past its deadline
-            if ((deadline != null && deadline.expired()) || Thread.currentThread().isInterrupted()) {
+            // past the fetch timeout, the failure is the token cache cancelling the fetch at its deadline
+            if ((deadline != null && deadline.expired())
+                    || System.nanoTime() - startNanos >= TimeUnit.MILLISECONDS.toNanos(fetchTimeoutMillis)) {
                 recordFetchMetric(startNanos, "slow_reply", origin);
-                throw slowReply(authConfig);
+                throw fetchTimeoutFailure(authConfig, exception);
             }
             // the guard checks each address connected to as well, refusing a host that no longer resolves as above
             var refused = ExceptionUtils.throwableOfType(exception, RefusedHostException.class);
@@ -281,9 +283,9 @@ public class AuthTokenProvider {
         return new FetchedToken(tokenNode.asText(), ttlSeconds);
     }
 
-    private static AuthTokenException slowReply(ProviderAuthConfig authConfig) {
+    private static AuthTokenException fetchTimeoutFailure(ProviderAuthConfig authConfig, Exception cause) {
         return new AuthTokenException("token reply from '%s' took longer than the fetch timeout"
-                .formatted(authConfig.tokenUrl()), null, true);
+                .formatted(authConfig.tokenUrl()), cause, true);
     }
 
     private Invocation buildRequest(ProviderAuthConfig authConfig) {

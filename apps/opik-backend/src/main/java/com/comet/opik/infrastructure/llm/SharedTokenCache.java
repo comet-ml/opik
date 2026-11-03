@@ -43,7 +43,7 @@ public class SharedTokenCache {
     public static final double FETCH_SHARE_OF_LEASE = 0.8;
 
     // One thread per running fetch: each blocks a caller waiting on it, so they are bounded by the callers themselves
-    private static final ExecutorService FETCHES = Executors.newVirtualThreadPerTaskExecutor();
+    private static final ExecutorService FETCH_EXECUTOR = Executors.newVirtualThreadPerTaskExecutor();
 
     /** A fetched value and how long other calls may be served it; zero or less is not cached at all. */
     public record Fetched(@NonNull String value, @NonNull Duration cacheFor) {
@@ -150,7 +150,7 @@ public class SharedTokenCache {
     }
 
     private static Fetched fetchWithin(Duration fetchTimeout, Supplier<Fetched> fetch) {
-        var running = FETCHES.submit(fetch::get);
+        var running = FETCH_EXECUTOR.submit(fetch::get);
         try {
             return running.get(fetchTimeout.toMillis(), TimeUnit.MILLISECONDS);
         } catch (TimeoutException exception) {
