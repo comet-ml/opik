@@ -234,6 +234,9 @@ class DatasetsResourceTest {
     private static final String TEST_WORKSPACE = UUID.randomUUID().toString();
 
     private static final TimeBasedEpochGenerator GENERATOR = Generators.timeBasedEpochGenerator();
+    // The sub-microsecond part is dropped by ClickHouse, so the expected duration is the truncated literal
+    private static final Duration TRACE_DURATION = Duration.ofNanos(1_500_250_700);
+    private static final double EXPECTED_TRACE_DURATION_MILLIS = 1500.25;
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer();
@@ -7618,10 +7621,13 @@ class DatasetsResourceTest {
         private void createTraces(List<DatasetItem> items, String projectName, String workspaceName, String apiKey,
                 List<Trace> traces) {
             for (var item : items) {
+                var startTime = Instant.now().truncatedTo(ChronoUnit.MICROS);
                 var trace = factory.manufacturePojo(Trace.class).toBuilder()
                         .input(item.data().get("input"))
                         .output(item.data().get("expected_output"))
                         .projectName(projectName)
+                        .startTime(startTime)
+                        .endTime(startTime.plus(TRACE_DURATION))
                         .build();
                 createAndAssert(trace, workspaceName, apiKey);
                 traces.add(trace);
@@ -8946,8 +8952,11 @@ class DatasetsResourceTest {
 
         private ExperimentItem createExperimentItem(UUID experimentId, DatasetItem datasetItem) {
             var projectName = RandomStringUtils.secure().nextAlphabetic(20);
+            var startTime = Instant.now().truncatedTo(ChronoUnit.MICROS);
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectName(projectName)
+                    .startTime(startTime)
+                    .endTime(startTime.plus(TRACE_DURATION))
                     .build();
             createAndAssert(trace, workspaceName, apiKey);
 
@@ -10109,11 +10118,7 @@ class DatasetsResourceTest {
                 .comments(null)
                 .totalEstimatedCost(null)
                 .usage(null)
-                .duration(trace.endTime() == null
-                        ? null
-                        : DurationUtils.getDurationInMillisWithSubMilliPrecision(
-                                trace.startTime().truncatedTo(ChronoUnit.MICROS),
-                                trace.endTime().truncatedTo(ChronoUnit.MICROS)))
+                .duration(EXPECTED_TRACE_DURATION_MILLIS)
                 .traceVisibilityMode(VisibilityMode.DEFAULT)
                 .description(datasetItem.description())
                 .executionPolicy(ExecutionPolicy.DEFAULT)
