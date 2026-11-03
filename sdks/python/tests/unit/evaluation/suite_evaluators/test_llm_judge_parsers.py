@@ -177,6 +177,36 @@ class TestResponseSchema:
         assert "Failed to parse model output" in results[0].reason
         assert results[0].metadata["raw_output"] == content
 
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            [],
+            [{"assertion_1": {"score": True, "reason": "ok", "confidence": 1.0}}],
+            "unexpected text",
+            42,
+            None,
+            True,
+        ],
+    )
+    def test_parse__valid_json_non_object__raises_with_failed_results(self, payload):
+        schema = llm_judge_parsers.ResponseSchema(
+            ["First assertion", "Second assertion"]
+        )
+        content = json.dumps(payload)
+
+        with pytest.raises(LLMJudgeParseError) as exc_info:
+            schema.parse(content)
+
+        results = exc_info.value.results
+        assert [result.name for result in results] == [
+            "First assertion",
+            "Second assertion",
+        ]
+        assert all(result.scoring_failed for result in results)
+        assert all(result.category_name == "suite_assertion" for result in results)
+        assert all(result.metadata["raw_output"] == content for result in results)
+        assert all("Failed to parse model output" in result.reason for result in results)
+
     def test_parse__missing_assertion__raises_with_failed_results(self):
         schema = llm_judge_parsers.ResponseSchema(
             ["Response is accurate", "Response is helpful"]
