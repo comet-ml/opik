@@ -64,6 +64,7 @@ jobs:
             path: 'dest'
             ref: 'gh-pages'
             fetch-depth: 0
+            filter: blob:none
 
         - name: Run lint on Helm chart
           shell: bash
