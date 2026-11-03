@@ -8983,8 +8983,7 @@ class DatasetsResourceTest {
         private DatasetItemPage getPage(UUID datasetId, String datasetVersion,
                 List<ExperimentsComparisonFilter> filters) {
             try (var response = datasetResourceClient.callGetDatasetItemsWithExperimentItems(
-                    datasetId, null, datasetVersion, DatasetsResource.ALL_EXPERIMENTS_MAX_PAGE_SIZE, filters,
-                    apiKey, workspaceName)) {
+                    datasetId, null, datasetVersion, 100, filters, apiKey, workspaceName)) {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
                 return response.readEntity(DatasetItemPage.class);
             }

@@ -116,7 +116,7 @@ import static org.apache.commons.collections4.CollectionUtils.emptyIfNull;
 public class DatasetsResource {
 
     // Each item carries one result per experiment in all-experiments mode, so pages are bounded tighter
-    static final int ALL_EXPERIMENTS_MAX_PAGE_SIZE = 100;
+    private static final int ALL_EXPERIMENTS_MAX_PAGE_SIZE = 100;
 
     private final @NonNull DatasetService service;
     private final @NonNull DatasetItemService itemService;
