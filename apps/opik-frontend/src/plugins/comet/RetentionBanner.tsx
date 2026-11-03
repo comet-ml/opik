@@ -65,24 +65,6 @@ const RetentionBanner = ({ onChangeHeight, hidden }: RetentionBannerProps) => {
   }, [organizationMembers]);
   const firstThreeAdmins = admins?.slice(0, 3);
 
-  // Billing only offers Free to a single admin whose other members are all Opik-only; offering the
-  // downgrade to anyone else would lead to a disabled option.
-  const canDowngradeToFree = useMemo(() => {
-    if (!organizationMembers) return false;
-
-    const adminCount = organizationMembers.filter(
-      (m) => m.role === ORGANIZATION_ROLE_TYPE.admin,
-    ).length;
-    return (
-      adminCount === 1 &&
-      organizationMembers.every(
-        (m) =>
-          m.role === ORGANIZATION_ROLE_TYPE.admin ||
-          m.role === ORGANIZATION_ROLE_TYPE.opik,
-      )
-    );
-  }, [organizationMembers]);
-
   const isOrganizationAdmin =
     organization?.role === ORGANIZATION_ROLE_TYPE.admin;
 
@@ -131,30 +113,24 @@ const RetentionBanner = ({ onChangeHeight, hidden }: RetentionBannerProps) => {
       );
     }
 
-    // Opens the plan picker directly and keeps the admin on the billing page when it is closed.
-    const planPickerUrl = buildUrl(
-      `organizations/${workspace?.organizationId}/billing`,
-      undefined,
-      "&initialOpenUpgradeCard=true&redirectFromTrialModal=true",
-    );
-    const linkProps = {
-      href: planPickerUrl,
-      target: "_blank",
-      rel: "noopener noreferrer",
-      className: "whitespace-nowrap underline",
-    };
-
     return (
       <span>
         Your Pro trial has ended, so your organization is limited to the Free
-        plan. <a {...linkProps}>Update your payment details</a> to keep Pro
-        {canDowngradeToFree ? (
-          <>
-            , or <a {...linkProps}>downgrade to the Free plan</a>.
-          </>
-        ) : (
-          "."
-        )}
+        plan.{" "}
+        <a
+          // Opens the plan picker directly and keeps the admin on the billing page when it is closed.
+          href={buildUrl(
+            `organizations/${workspace?.organizationId}/billing`,
+            undefined,
+            "&initialOpenUpgradeCard=true&redirectFromTrialModal=true",
+          )}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="whitespace-nowrap underline"
+        >
+          Update your payment details
+        </a>{" "}
+        to keep Pro.
       </span>
     );
   };

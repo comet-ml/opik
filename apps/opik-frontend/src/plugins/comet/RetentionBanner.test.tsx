@@ -79,48 +79,16 @@ describe("RetentionBanner", () => {
   describe("expired trial", () => {
     beforeEach(() => givenQuotas(0, true));
 
-    it("offers an admin both payment and downgrade, opening the plan picker", () => {
+    it("offers an admin a single payment link that opens the plan picker", () => {
       renderBanner();
 
-      for (const name of [
-        "Update your payment details",
-        "downgrade to the Free plan",
-      ]) {
-        const href = screen.getByRole("link", { name }).getAttribute("href");
-        expect(href).toContain(`organizations/${ORG_ID}/billing`);
-        expect(href).toContain("initialOpenUpgradeCard=true");
-        expect(href).toContain("redirectFromTrialModal=true");
-      }
-    });
-
-    // Billing doesn't offer Free to these organizations, so the link would lead nowhere.
-    it("hides the downgrade link when the organization has other full members", () => {
-      givenMembers(
-        member("owner", ORGANIZATION_ROLE_TYPE.admin),
-        member("colleague", ORGANIZATION_ROLE_TYPE.member),
-      );
-
-      renderBanner();
-
-      expect(
-        screen.getByRole("link", { name: "Update your payment details" }),
-      ).toBeVisible();
-      expect(
-        screen.queryByRole("link", { name: "downgrade to the Free plan" }),
-      ).toBeNull();
-    });
-
-    it("keeps the downgrade link when the other members are Opik-only", () => {
-      givenMembers(
-        member("owner", ORGANIZATION_ROLE_TYPE.admin),
-        member("opik-user", ORGANIZATION_ROLE_TYPE.opik),
-      );
-
-      renderBanner();
-
-      expect(
-        screen.getByRole("link", { name: "downgrade to the Free plan" }),
-      ).toBeVisible();
+      const links = screen.getAllByRole("link");
+      expect(links).toHaveLength(1);
+      expect(links[0]).toHaveTextContent("Update your payment details");
+      const href = links[0].getAttribute("href");
+      expect(href).toContain(`organizations/${ORG_ID}/billing`);
+      expect(href).toContain("initialOpenUpgradeCard=true");
+      expect(href).toContain("redirectFromTrialModal=true");
     });
 
     it("asks a non-admin to contact the admins, without billing links", () => {
