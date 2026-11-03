@@ -27,6 +27,7 @@ from opik.integrations.cohere import (
     chat_stream_aggregator,
     cohere_chat_decorator,
     opik_tracker,
+    stream_wrappers,
     track_cohere,
 )
 
@@ -355,3 +356,63 @@ def test_extract_metadata_from_client__credentials_in_base_url__stripped():
     assert metadata == {"base_url": "https://proxy.internal:8443/v2"}
     assert "secret" not in metadata["base_url"]
     assert "abc" not in metadata["base_url"]
+
+
+def _collect_finalizations(wrap, advance):
+    """Drive an async stream through `wrap`, optionally advancing it, then drop it.
+
+    Returns every ``finally_callback`` invocation. Two of them means a span was
+    ingested twice.
+    """
+    calls = []
+
+    def finally_callback(
+        output,
+        error_info,
+        capture_output,
+        generators_span_to_end,
+        generators_trace_to_end,
+    ):
+        calls.append({"output": output, "error_info": error_info})
+
+    async def source():
+        for item in ("a", "b"):
+            yield item
+
+    async def drive():
+        generator = wrap(
+            source(), "SPAN", None, lambda items: {"items": list(items)},
+            finally_callback,
+        )
+        if advance:
+            await generator.__anext__()
+        del generator
+        for _ in range(5):
+            gc.collect()
+            # the asyncgen finalizer hook schedules aclose() on the loop, so the
+            # generator's own `finally` only runs once the loop gets a turn.
+            await asyncio.sleep(0.02)
+        return calls
+
+    return asyncio.run(drive())
+
+
+def test_wrap_async_stream__advanced_then_dropped__finalizes_exactly_once():
+    """`detach()` is too late for an async generator, so a guard has to catch it.
+
+    weakref.finalize fires at collection, but the body's `finally` -- which
+    holds the detach -- only runs when the loop awaits aclose(). Both used to
+    report the span: once with output=None and once with the aggregate.
+    """
+    calls = _collect_finalizations(stream_wrappers.wrap_async_stream, advance=True)
+
+    assert len(calls) == 1
+    # the surviving call is the informative one, not the finalizer's None
+    assert calls[0]["output"] == {"items": ["a"]}
+
+
+def test_wrap_async_stream__never_advanced__still_finalizes_once():
+    calls = _collect_finalizations(stream_wrappers.wrap_async_stream, advance=False)
+
+    assert len(calls) == 1
+    assert calls[0]["output"] is None

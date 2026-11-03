@@ -1,6 +1,6 @@
 import logging
 import weakref
-from typing import Any, AsyncIterator, Callable, Iterator, List, Optional
+from typing import Any, AsyncIterator, Callable, Dict, Iterator, List, Optional
 
 from opik.api_objects import span, trace
 from opik.decorator import error_info_collector, generator_wrappers
@@ -10,6 +10,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 def _end_abandoned_stream(
+    state: Dict[str, bool],
     span_to_end: span.SpanData,
     trace_to_end: Optional[trace.TraceData],
     finally_callback: generator_wrappers.FinishGeneratorCallback,
@@ -21,7 +22,16 @@ def _end_abandoned_stream(
     wrapper is built, so a stream that is created and then dropped would leave
     it open for good. Registered with ``weakref.finalize`` and detached as soon
     as the generator does run, the same way the LiteLLM integration does it.
+
+    ``detach()`` is enough for a sync generator, which CPython closes before it
+    clears weakrefs, but not for an async one: its ``finally`` only runs when
+    the event loop awaits ``aclose()`` through the asyncgen finalizer hook,
+    which is after this has already fired. So skip once the body has started
+    and let that ``finally`` report the real output instead of ``None``.
     """
+    if state["started"] or state["finished"]:
+        return
+    state["finished"] = True
     finally_callback(
         output=None,
         error_info=None,
@@ -47,9 +57,11 @@ def wrap_sync_stream(
     """
 
     finalizer: Optional[weakref.finalize] = None
+    state: Dict[str, bool] = {"started": False, "finished": False}
 
     def wrapper() -> Iterator[Any]:
         accumulated_items: List[Any] = []
+        state["started"] = True
         error_info: Optional[ErrorInfoDict] = None
         try:
             for item in stream:
@@ -71,18 +83,21 @@ def wrap_sync_stream(
                 if error_info is None
                 else None
             )
-            finally_callback(
-                output=output,
-                error_info=error_info,
-                capture_output=True,
-                generators_span_to_end=span_to_end,
-                generators_trace_to_end=trace_to_end,
-            )
+            if not state["finished"]:
+                state["finished"] = True
+                finally_callback(
+                    output=output,
+                    error_info=error_info,
+                    capture_output=True,
+                    generators_span_to_end=span_to_end,
+                    generators_trace_to_end=trace_to_end,
+                )
 
     generator = wrapper()
     finalizer = weakref.finalize(
         generator,
         _end_abandoned_stream,
+        state,
         span_to_end,
         trace_to_end,
         finally_callback,
@@ -100,9 +115,11 @@ def wrap_async_stream(
     """Async counterpart of :func:`wrap_sync_stream`."""
 
     finalizer: Optional[weakref.finalize] = None
+    state: Dict[str, bool] = {"started": False, "finished": False}
 
     async def wrapper() -> AsyncIterator[Any]:
         accumulated_items: List[Any] = []
+        state["started"] = True
         error_info: Optional[ErrorInfoDict] = None
         try:
             async for item in stream:
@@ -124,18 +141,21 @@ def wrap_async_stream(
                 if error_info is None
                 else None
             )
-            finally_callback(
-                output=output,
-                error_info=error_info,
-                capture_output=True,
-                generators_span_to_end=span_to_end,
-                generators_trace_to_end=trace_to_end,
-            )
+            if not state["finished"]:
+                state["finished"] = True
+                finally_callback(
+                    output=output,
+                    error_info=error_info,
+                    capture_output=True,
+                    generators_span_to_end=span_to_end,
+                    generators_trace_to_end=trace_to_end,
+                )
 
     generator = wrapper()
     finalizer = weakref.finalize(
         generator,
         _end_abandoned_stream,
+        state,
         span_to_end,
         trace_to_end,
         finally_callback,
