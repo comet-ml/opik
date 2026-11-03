@@ -38,7 +38,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
+          # Only merge-base + describe below: they need commits and tags, not
+          # trees or files, so skip both (the HEAD checkout alone is ~300 MB).
           fetch-depth: 0
+          filter: tree:0
+          sparse-checkout: .github
           ref: ${{ github.event.pull_request.head.ref }}
       
       - name: Get latest tag from main at merge-base
