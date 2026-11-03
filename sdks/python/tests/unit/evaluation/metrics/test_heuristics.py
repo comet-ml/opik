@@ -228,6 +228,20 @@ def test_levenshtein_ratio__none_input__raises_metric_computation_error(
         metric.score(output=output, reference=reference)
 
 
+def test_regex_match__non_pattern_regex__raises_value_error():
+    with pytest.raises(ValueError, match="regex must be a string pattern"):
+        regex_match.RegexMatch(regex=123)
+
+    with pytest.raises(ValueError, match="regex must be a string pattern"):
+        regex_match.RegexMatch(regex=b"\\d+")
+
+
+def test_regex_match__compiled_pattern_is_accepted():
+    metric = regex_match.RegexMatch(regex=re.compile(r"\\d+"), track=False)
+
+    assert metric.score(output="abc 123").value == 1.0
+
+
 def test_regex_match__none_output__raises_metric_computation_error():
     metric = regex_match.RegexMatch(r".+metric$", track=False)
     with pytest.raises(MetricComputationError):

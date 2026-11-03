@@ -42,9 +42,16 @@ class RegexMatch(base_metric.BaseMetric):
             project_name=project_name,
         )
 
-        self._regex_pattern: re.Pattern = (
-            re.compile(regex) if isinstance(regex, str) else regex
-        )
+        if isinstance(regex, str):
+            self._regex_pattern: re.Pattern = re.compile(regex)
+        elif isinstance(regex, re.Pattern) and not isinstance(regex.pattern, bytes):
+            self._regex_pattern = regex
+        else:
+            # A bytes pattern could never match: `score` only accepts a str output.
+            raise ValueError(
+                "regex must be a string pattern or a compiled re.Pattern, "
+                f"got {type(regex).__name__}."
+            )
 
     def score(self, output: str, **ignored_kwargs: Any) -> score_result.ScoreResult:
         """
