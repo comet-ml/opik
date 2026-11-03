@@ -85,6 +85,13 @@ public interface TopicRunDAO {
     @SqlQuery("SELECT * FROM topic_runs WHERE project_id = :projectId ORDER BY started_at, run_id")
     List<TopicRun> findByProject(@Bind("projectId") UUID projectId);
 
+    /** The project's saved runs: the topics read API counts only their {@code trace_topics} rows and arrival's. */
+    @SqlQuery("""
+            SELECT run_id FROM topic_runs
+            WHERE workspace_id = :workspaceId AND project_id = :projectId AND status = 'saved'
+            """)
+    List<UUID> findSavedRunIds(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId);
+
     class ModeMapper extends AbstractEnumColumnMapper<TopicRun.Mode> {
         public ModeMapper() {
             super(value -> Arrays.stream(TopicRun.Mode.values())

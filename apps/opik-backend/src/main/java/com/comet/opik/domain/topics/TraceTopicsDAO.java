@@ -1,5 +1,6 @@
 package com.comet.opik.domain.topics;
 
+import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.WeeklyPartitions;
@@ -15,8 +16,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -72,6 +75,28 @@ public class TraceTopicsDAO {
             )
             GROUP BY topic_id
             SETTINGS log_comment = '<log_comment>'
+            """;
+
+    /**
+     * Traces per topic and UTC day among the project's traces created in the window, each by its latest row. Rows of
+     * runs that did not save are skipped before the dedupe, so their trace counts by its earlier row.
+     */
+    private static final String COUNT_BY_TOPIC_AND_DAY = """
+            SELECT topic_id, toDate(trace_created_at, 'UTC') AS day, count() AS traces
+            FROM (
+                SELECT topic_id, trace_created_at
+                FROM trace_topics
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                AND trace_created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
+                AND trace_created_at \\< fromUnixTimestamp64Micro(:to_micros, 'UTC')
+                AND (source = 'arrival' <if(saved_run_ids)> OR run_id IN :saved_run_ids <endif>)
+                ORDER BY workspace_id, project_id, trace_id, updated_at DESC, run_id DESC
+                LIMIT 1 BY workspace_id, project_id, trace_id
+            )
+            GROUP BY topic_id, day
+            SETTINGS max_threads = 2, max_execution_time = <max_execution_time>, max_memory_usage = <max_memory_usage>,
+                max_rows_to_read = <max_rows_to_read>, log_comment = '<log_comment>'
             """;
 
     /** The latest topic of each of the project's traces created in the window. */
@@ -150,6 +175,7 @@ public class TraceTopicsDAO {
 
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull JsonEachRowBulkInsert jsonBulkInsert;
+    private final @NonNull @Config("topics") TopicsConfig config;
 
     public Mono<Long> insert(List<TraceTopic> rows) {
         if (CollectionUtils.isEmpty(rows)) {
@@ -212,6 +238,43 @@ public class TraceTopicsDAO {
                         UUID.fromString(row.get("topic_id", String.class)),
                         ((Number) row.get("traces", Object.class)).longValue())))
                 .collectMap(Map.Entry::getKey, Map.Entry::getValue);
+    }
+
+    /**
+     * Per topic id ({@link TraceTopic#OTHER} for Other) and UTC day of {@code trace_created_at}, the project's traces
+     * created in {@code [from, to)}. A trace counts by its latest arrival row or row of a run in {@code savedRunIds}.
+     * Under the window read's guards.
+     */
+    public Flux<TopicDayCount> countByTopicAndDay(@NonNull String workspaceId, @NonNull UUID projectId,
+            @NonNull Instant from, @NonNull Instant to, @NonNull Collection<UUID> savedRunIds,
+            long maxExecutionSeconds) {
+        // The guards of the vectors job's window read: validated config numbers, never input.
+        var find = config.getVectors().getFind();
+        var template = getSTWithLogComment(COUNT_BY_TOPIC_AND_DAY, "topics:count_by_topic_and_day", workspaceId, null,
+                "project_id=%s, from=%s, to=%s, saved_runs=%d".formatted(projectId, from, to, savedRunIds.size()))
+                .add("max_rows_to_read", find.getMaxRowsToRead())
+                .add("max_memory_usage", find.getMaxMemoryUsage())
+                .add("max_execution_time", maxExecutionSeconds);
+        if (!savedRunIds.isEmpty()) {
+            template.add("saved_run_ids", true);
+        }
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(template.render())
+                            .bind("workspace_id", workspaceId)
+                            .bind("project_id", projectId.toString())
+                            .bind("from_micros", toEpochMicros(from))
+                            .bind("to_micros", toEpochMicros(to));
+                    if (!savedRunIds.isEmpty()) {
+                        statement.bind("saved_run_ids",
+                                savedRunIds.stream().map(UUID::toString).toArray(String[]::new));
+                    }
+                    return statement.execute();
+                })
+                .flatMap(result -> result.map((row, metadata) -> new TopicDayCount(
+                        UUID.fromString(row.get("topic_id", String.class)),
+                        row.get("day", LocalDate.class),
+                        ((Number) row.get("traces", Object.class)).longValue())));
     }
 
     /**
@@ -336,5 +399,8 @@ public class TraceTopicsDAO {
 
     private static long toEpochMicros(Instant instant) {
         return Math.addExact(Math.multiplyExact(instant.getEpochSecond(), 1_000_000L), instant.getNano() / 1_000L);
+    }
+
+    public record TopicDayCount(@NonNull UUID topicId, @NonNull LocalDate day, long traces) {
     }
 }
