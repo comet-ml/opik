@@ -143,7 +143,7 @@ class ResponseSchema:
 
         try:
             parsed = json.loads(content)
-            validated = self._response_model(**parsed)
+            validated = self._response_model.model_validate(parsed)
 
             results = [
                 score_result.ScoreResult(
