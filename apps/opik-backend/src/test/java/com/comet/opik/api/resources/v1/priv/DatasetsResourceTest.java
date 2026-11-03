@@ -10109,7 +10109,11 @@ class DatasetsResourceTest {
                 .comments(null)
                 .totalEstimatedCost(null)
                 .usage(null)
-                .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(trace.startTime(), trace.endTime()))
+                .duration(trace.endTime() == null
+                        ? null
+                        : DurationUtils.getDurationInMillisWithSubMilliPrecision(
+                                trace.startTime().truncatedTo(ChronoUnit.MICROS),
+                                trace.endTime().truncatedTo(ChronoUnit.MICROS)))
                 .traceVisibilityMode(VisibilityMode.DEFAULT)
                 .description(datasetItem.description())
                 .executionPolicy(ExecutionPolicy.DEFAULT)
