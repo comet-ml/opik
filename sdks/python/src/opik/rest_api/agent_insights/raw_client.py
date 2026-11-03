@@ -12,8 +12,10 @@ from ..core.pydantic_utilities import parse_obj_as
 from ..core.request_options import RequestOptions
 from ..core.serialization import convert_and_respect_annotation_metadata
 from ..errors.bad_request_error import BadRequestError
+from ..errors.forbidden_error import ForbiddenError
 from ..errors.not_found_error import NotFoundError
 from ..errors.unauthorized_error import UnauthorizedError
+from ..errors.unprocessable_entity_error import UnprocessableEntityError
 from ..types.agent_insights_issue_page import AgentInsightsIssuePage
 from ..types.agent_insights_issue_with_details import AgentInsightsIssueWithDetails
 from ..types.reported_issue import ReportedIssue
@@ -300,10 +302,11 @@ class RawAgentInsightsClient:
         *,
         project_id: str,
         status: AgentInsightsIssueUpdateStatus,
+        close_note: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
-        Moves an issue through its lifecycle: open, resolved or closed
+        Moves an issue through its lifecycle: open, resolved or closed. close_note is kept only with closed; any other status clears it
 
         Parameters
         ----------
@@ -312,6 +315,9 @@ class RawAgentInsightsClient:
         project_id : str
 
         status : AgentInsightsIssueUpdateStatus
+
+        close_note : typing.Optional[str]
+            Why the issue is closed as not useful. Stored only with status closed; any other status clears it
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -326,6 +332,7 @@ class RawAgentInsightsClient:
             json={
                 "project_id": project_id,
                 "status": status,
+                "close_note": close_note,
             },
             headers={
                 "content-type": "application/json",
@@ -358,8 +365,30 @@ class RawAgentInsightsClient:
                         ),
                     ),
                 )
+            if _response.status_code == 403:
+                raise ForbiddenError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
             if _response.status_code == 404:
                 raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 422:
+                raise UnprocessableEntityError(
                     headers=dict(_response.headers),
                     body=typing.cast(
                         typing.Optional[typing.Any],
@@ -650,10 +679,11 @@ class AsyncRawAgentInsightsClient:
         *,
         project_id: str,
         status: AgentInsightsIssueUpdateStatus,
+        close_note: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
-        Moves an issue through its lifecycle: open, resolved or closed
+        Moves an issue through its lifecycle: open, resolved or closed. close_note is kept only with closed; any other status clears it
 
         Parameters
         ----------
@@ -662,6 +692,9 @@ class AsyncRawAgentInsightsClient:
         project_id : str
 
         status : AgentInsightsIssueUpdateStatus
+
+        close_note : typing.Optional[str]
+            Why the issue is closed as not useful. Stored only with status closed; any other status clears it
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -676,6 +709,7 @@ class AsyncRawAgentInsightsClient:
             json={
                 "project_id": project_id,
                 "status": status,
+                "close_note": close_note,
             },
             headers={
                 "content-type": "application/json",
@@ -708,8 +742,30 @@ class AsyncRawAgentInsightsClient:
                         ),
                     ),
                 )
+            if _response.status_code == 403:
+                raise ForbiddenError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
             if _response.status_code == 404:
                 raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 422:
+                raise UnprocessableEntityError(
                     headers=dict(_response.headers),
                     body=typing.cast(
                         typing.Optional[typing.Any],

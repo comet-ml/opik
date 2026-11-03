@@ -1,5 +1,6 @@
 package com.comet.opik.domain.llm;
 
+import com.comet.opik.domain.llm.langchain4j.OpikContent;
 import com.comet.opik.domain.llm.langchain4j.OpikUserMessage;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.openai.internal.chat.Content;
@@ -173,6 +174,11 @@ public class MessageContentNormalizer {
         }
     }
 
+    /**
+     * Flattens a user message's content to a string: text parts as their text and image parts as image placeholders.
+     * The parts are either langchain4j {@link Content} or {@link OpikContent}, which is what
+     * {@code OpenAiMessageJsonDeserializer} builds for every user message an API request sends.
+     */
     public static String flattenContent(@NonNull Object rawContent) {
         if (rawContent instanceof String str) {
             return str;
@@ -181,7 +187,9 @@ public class MessageContentNormalizer {
         if (rawContent instanceof List<?> list) {
             var builder = new StringBuilder();
             for (var item : list) {
-                if (item instanceof Content content) {
+                if (item instanceof OpikContent opikContent) {
+                    builder.append(renderOpikContent(opikContent));
+                } else if (item instanceof Content content) {
                     builder.append(renderContent(content));
                 }
             }
@@ -283,6 +291,22 @@ public class MessageContentNormalizer {
             case "image_url" -> renderImagePlaceholder(content.imageUrl());
             default -> {
                 log.warn("Skipping unknown content type during normalization: '{}'", normalized);
+                yield "";
+            }
+        };
+    }
+
+    private String renderOpikContent(OpikContent content) {
+        var type = content.type();
+        if (type == null) {
+            return "";
+        }
+
+        return switch (type) {
+            case TEXT -> StringUtils.isBlank(content.text()) ? "" : content.text();
+            case IMAGE_URL -> renderImagePlaceholder(content.imageUrl());
+            case VIDEO_URL, AUDIO_URL, AUDIO, FILE -> {
+                log.warn("Skipping unsupported content type during normalization: '{}'", type);
                 yield "";
             }
         };

@@ -4,8 +4,11 @@ import com.comet.opik.api.ChunkedResponseHandler;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.model.StreamingResponseHandler;
 import dev.langchain4j.model.chat.response.ChatResponse;
+import dev.langchain4j.model.chat.response.PartialResponse;
+import dev.langchain4j.model.chat.response.PartialResponseContext;
 import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
 import dev.langchain4j.model.output.Response;
+import dev.langchain4j.model.output.TokenUsage;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
@@ -38,10 +41,7 @@ public class LoggingChunkedResponseHandler
 
     @Override
     public void onComplete(@NonNull Response<AiMessage> response) {
-        logger.logComplete(
-                response.tokenUsage().inputTokenCount(),
-                response.tokenUsage().outputTokenCount(),
-                response.tokenUsage().totalTokenCount());
+        logComplete(response.tokenUsage());
         delegate.onComplete(response);
     }
 
@@ -52,12 +52,23 @@ public class LoggingChunkedResponseHandler
     }
 
     @Override
+    public void onPartialResponse(@NonNull PartialResponse partialResponse, @NonNull PartialResponseContext context) {
+        logger.appendContent(partialResponse.text());
+        delegate.onPartialResponse(partialResponse, context);
+    }
+
+    @Override
     public void onCompleteResponse(ChatResponse chatResponse) {
-        logger.logComplete(
-                chatResponse.tokenUsage().inputTokenCount(),
-                chatResponse.tokenUsage().outputTokenCount(),
-                chatResponse.tokenUsage().totalTokenCount());
+        logComplete(chatResponse.tokenUsage());
         delegate.onCompleteResponse(chatResponse);
+    }
+
+    private void logComplete(TokenUsage tokenUsage) {
+        if (tokenUsage == null) {
+            logger.logComplete(null, null, null);
+            return;
+        }
+        logger.logComplete(tokenUsage.inputTokenCount(), tokenUsage.outputTokenCount(), tokenUsage.totalTokenCount());
     }
 
     @Override

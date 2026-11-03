@@ -86,9 +86,9 @@ class BaseTrackDecorator(abc.ABC):
             metadata: Metadata to associate with the span.
             capture_input: Whether to capture the input arguments.
             ignore_arguments: The list of the arguments NOT to include into span/trace inputs.
-            capture_output: Whether to capture the output result. Output keys set
+            capture_output: Whether to capture the output result. Output set
                 explicitly via `opik_context.update_current_span`/`update_current_trace`
-                during the call are kept; the return value fills in the rest.
+                during the call is kept as is, and the return value is not logged there.
             generations_aggregator: Function to aggregate generation results.
             flush: Whether to flush the client after logging.
             project_name: The name of the project to log data.
@@ -564,25 +564,22 @@ class BaseTrackDecorator(abc.ABC):
         client = opik_client.get_global_client()
 
         # Output already on the span/trace was set by the user via opik_context
-        # during the call. Re-applying it after the captured return value keeps
-        # every explicit value while still logging whatever the return value adds.
+        # during the call. It is final, so the captured return value is not applied.
         if should_process_span_data and span_data_to_end is not None:
             # save span data only if appropriate
-            explicit_span_output = span_data_to_end.output
-            span_data_to_end.output = None
+            span_ignore_keys = [] if span_data_to_end.output is None else ["output"]
             span_data_to_end.init_end_time().update(
-                **end_arguments.to_kwargs(),
+                **end_arguments.to_kwargs(ignore_keys=span_ignore_keys),
             )
-            span_data_to_end.update(output=explicit_span_output)
             client.__internal_api__span__(**span_data_to_end.as_parameters)
 
         if trace_data_to_end is not None:
-            explicit_trace_output = trace_data_to_end.output
-            trace_data_to_end.output = None
+            trace_ignore_keys = ["usage", "model", "provider"]
+            if trace_data_to_end.output is not None:
+                trace_ignore_keys.append("output")
             trace_data_to_end.init_end_time().update(
-                **end_arguments.to_kwargs(ignore_keys=["usage", "model", "provider"]),
+                **end_arguments.to_kwargs(ignore_keys=trace_ignore_keys),
             )
-            trace_data_to_end.update(output=explicit_trace_output)
 
             client.__internal_api__trace__(**trace_data_to_end.as_parameters)
 

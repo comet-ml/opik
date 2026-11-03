@@ -94,7 +94,7 @@ test.describe(
   { tag: ['@t2-cuj', '@area:playground'] },
   () => {
     test(
-      'The OpenRouter panel offers Temperature up to 2 and sends max_tokens only when it is set',
+      'The OpenRouter panel offers Temperature up to 2 and sends max_tokens unless it is set to 0',
       { tag: ['@cap:playground.configure-model-settings'] },
       async ({ project, page }) => {
         test.setTimeout(180_000);
@@ -148,8 +148,8 @@ test.describe(
 
           await expect(
             playground.sliderInput('maxTokens'),
-            'Max tokens opens at 0, which means "use the provider default"',
-          ).toHaveValue('0');
+            'a new OpenRouter prompt opens Max tokens at 4000, like every other provider',
+          ).toHaveValue('4000');
         });
 
         const firstPanel = await test.step('Type a Temperature above 1', async () => {
@@ -161,6 +161,7 @@ test.describe(
           const shown = {
             temperature: Number(await playground.sliderInput('temperature').inputValue()),
             topP: Number(await playground.sliderInput('topP').inputValue()),
+            maxTokens: Number(await playground.sliderInput('maxTokens').inputValue()),
           };
           await playground.closeModelParameters();
           return shown;
@@ -181,7 +182,7 @@ test.describe(
           await playground.fillUserMessage('Reply with the single word OK.');
         });
 
-        await test.step('With Max tokens at 0, the body has no max_tokens', async () => {
+        await test.step('An untouched prompt sends the Max tokens the panel shows', async () => {
           const body = await nextCompletionBody(page, () => playground.clickRun());
 
           expect(body.model, 'the request names the OpenRouter model').toBe(MODEL);
@@ -191,54 +192,46 @@ test.describe(
           expect(body.top_p, 'Top P is sent next to Temperature at its displayed value').toBe(
             firstPanel.topP,
           );
-          expect(
-            Object.keys(body),
-            'a 0 cap must be dropped, not sent as max_tokens: 0',
-          ).not.toContain('max_tokens');
+          expect(body.max_tokens, 'exactly the Max tokens the panel shows').toBe(
+            firstPanel.maxTokens,
+          );
         });
 
-        const secondPanel = await test.step(
-          'Set Max tokens to 64 and type a fractional Top K',
+        await test.step(
+          `Set Max tokens to 0, with no control ${MODEL} does not list on OpenRouter`,
           async () => {
             await playground.openModelParameters(0);
-            await commitSliderInput(playground, 'maxTokens', '64');
-            await expect(playground.sliderInput('maxTokens')).toHaveValue('64');
-            await commitSliderInput(playground, 'topK', '7.5');
-            const shown = {
-              maxTokens: Number(await playground.sliderInput('maxTokens').inputValue()),
-              topK: Number(await playground.sliderInput('topK').inputValue()),
-            };
+            await commitSliderInput(playground, 'maxTokens', '0');
+            await expect(playground.sliderInput('maxTokens')).toHaveValue('0');
+            for (const controlId of ['topK', 'minP', 'topA', 'repetitionPenalty']) {
+              await expect(
+                playground.sliderInput(controlId),
+                `${MODEL} has no ${controlId} in OpenRouter's supported_parameters`,
+              ).toHaveCount(0);
+            }
             await playground.closeModelParameters();
-            return shown;
           },
         );
 
-        await test.step('The body carries the set max_tokens and an integer top_k', async () => {
-          const body = await nextCompletionBody(page, () => playground.clickRun());
-          const customParameters = (body.custom_parameters ?? {}) as Record<string, unknown>;
+        await test.step(
+          'With Max tokens at 0, the body has no max_tokens and no custom_parameters',
+          async () => {
+            const body = await nextCompletionBody(page, () => playground.clickRun());
 
-          expect(body.max_tokens, 'exactly the Max tokens the panel shows').toBe(
-            secondPanel.maxTokens,
-          );
-          expect(body.temperature, 'Temperature is unchanged by the second edit').toBe(
-            firstPanel.temperature,
-          );
-          // The Top K input keeps a typed fraction on screen (QA radar on #8603), so
-          // the integer guarantee lives in the request builder. Comparing against the
-          // rounded display stays true if the input later snaps to whole numbers.
-          expect(
-            Number.isInteger(customParameters.top_k),
-            `top_k is an integer, got ${customParameters.top_k}`,
-          ).toBe(true);
-          expect(
-            customParameters.top_k,
-            'top_k travels in custom_parameters, which the backend forwards to OpenRouter',
-          ).toBe(Math.round(secondPanel.topK));
-          expect(
-            Object.keys(body),
-            'no flat top_k — the backend proxy drops unknown top-level fields',
-          ).not.toContain('top_k');
-        });
+            expect(
+              Object.keys(body),
+              '0 means no limit, so it is dropped, not sent as max_tokens: 0',
+            ).not.toContain('max_tokens');
+            expect(body.temperature, 'Temperature is unchanged by the second edit').toBe(
+              firstPanel.temperature,
+            );
+            expect(
+              Object.keys(body),
+              'none of top_k, min_p, top_a, repetition_penalty is sent, so nothing is nested',
+            ).not.toContain('custom_parameters');
+            expect(Object.keys(body), 'and nothing is sent flat either').not.toContain('top_k');
+          },
+        );
       },
     );
   },

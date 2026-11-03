@@ -99,10 +99,9 @@ class AnalyticsQueriesResourceTest {
                         .redisUrl(REDIS.getRedisURI())
                         // The read-only free-form SQL user is provisioned globally on the ClickHouse container
                         // (users.xml) and wired by config-test.yml; the test only needs to flip the toggle on.
-                        // Only A is allowlisted, so B exercises the per-workspace gate of the scoped endpoint.
                         .customConfigs(List.of(
                                 new CustomConfig("serviceToggles.ollieEnabled", "true"),
-                                new CustomConfig("customCharts.enabledWorkspaces", WORKSPACE_ID_A)))
+                                new CustomConfig("customCharts.enabled", "true")))
                         .build());
     }
 
@@ -253,15 +252,6 @@ class AnalyticsQueriesResourceTest {
                 .extracting(node -> node.get("id").asText())
                 .containsExactly(experimentIdA.toString())
                 .doesNotContain(experimentIdB.toString());
-    }
-
-    @Test
-    @DisplayName("scoped: a workspace not on the Custom Charts allowlist gets 501")
-    void executeScopedQuery__whenWorkspaceNotAllowlisted__thenNotImplemented() {
-        try (Response response = analyticsQueriesClient.callExecuteScoped(null, RESULT_QUERY, API_KEY_B,
-                WORKSPACE_NAME_B)) {
-            assertThat(response.getStatus()).isEqualTo(Response.Status.NOT_IMPLEMENTED.getStatusCode());
-        }
     }
 
     private void assertBadRequest(String query) {

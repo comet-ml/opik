@@ -14,7 +14,14 @@ import TimeRow from "@/shared/FiltersContent/rows/TimeRow";
 import DictionaryRow from "@/shared/FiltersContent/rows/DictionaryRow";
 import DefaultRow from "@/shared/FiltersContent/rows/DefaultRow";
 import CategoryRow from "@/shared/FiltersContent/rows/CategoryRow";
+import ConditionCard from "@/shared/ConditionCard/ConditionCard";
+import FieldOverflowTooltip from "@/shared/FiltersContent/FieldOverflowTooltip";
 import { createFilter } from "@/lib/filters";
+
+export type FilterRowVariant = "table" | "card";
+
+const CARD_FIELD_CLASSES =
+  "[&_[class*=min-w-]]:min-w-0 [&_[class*=max-w-]]:max-w-none [&_[role=combobox]]:h-8 [&_input]:h-8 [&_[role=combobox]>span]:block [&_[role=combobox]>span]:min-w-0 [&_[role=combobox]>span]:truncate";
 
 type FilterRowProps<TColumnData> = {
   prefix: string;
@@ -24,6 +31,7 @@ type FilterRowProps<TColumnData> = {
   filter: Filter;
   onRemove: (id: string) => void;
   onChange: (filter: Filter) => void;
+  variant?: FilterRowVariant;
 };
 
 export const FilterRow = <TColumnData,>({
@@ -34,6 +42,7 @@ export const FilterRow = <TColumnData,>({
   disabledColumns,
   onRemove,
   onChange: onFilterChange,
+  variant = "table",
 }: FilterRowProps<TColumnData>) => {
   const onChange = useCallback(
     (newFilter: Filter) => {
@@ -83,30 +92,56 @@ export const FilterRow = <TColumnData,>({
     }
   };
 
+  const columnCell = (
+    <td className="p-1">
+      <ColumnSelector
+        columns={columns}
+        field={filter.field}
+        onSelect={(column) =>
+          onChange({
+            ...createFilter(),
+            id: filter.id,
+            field: column.id,
+            type: column.type as COLUMN_TYPE,
+            operator:
+              getConfig?.(column.id)?.defaultOperator ??
+              DEFAULT_OPERATOR_MAP[column.type as COLUMN_TYPE] ??
+              OPERATORS_MAP[column.type as COLUMN_TYPE]?.[0]?.value ??
+              "",
+          })
+        }
+        disabledColumns={disabledColumns}
+      ></ColumnSelector>
+    </td>
+  );
+
+  if (variant === "card") {
+    return (
+      <ConditionCard
+        onRemove={() => onRemove(filter.id)}
+        removeLabel="Remove filter"
+        errors={[filter.error]}
+        className={CARD_FIELD_CLASSES}
+      >
+        <FieldOverflowTooltip>
+          <table className="w-full">
+            <tbody>
+              <tr className="grid auto-cols-fr grid-flow-col gap-2 [&>td.flex>*]:min-w-0 [&>td.flex]:contents [&>td]:min-w-0 [&>td]:p-0">
+                {columnCell}
+                {renderByType()}
+              </tr>
+            </tbody>
+          </table>
+        </FieldOverflowTooltip>
+      </ConditionCard>
+    );
+  }
+
   return (
     <>
       <tr>
         <td className="comet-body-s p-1">{prefix}</td>
-        <td className="p-1">
-          <ColumnSelector
-            columns={columns}
-            field={filter.field}
-            onSelect={(column) =>
-              onChange({
-                ...createFilter(),
-                id: filter.id,
-                field: column.id,
-                type: column.type as COLUMN_TYPE,
-                operator:
-                  getConfig?.(column.id)?.defaultOperator ??
-                  DEFAULT_OPERATOR_MAP[column.type as COLUMN_TYPE] ??
-                  OPERATORS_MAP[column.type as COLUMN_TYPE]?.[0]?.value ??
-                  "",
-              })
-            }
-            disabledColumns={disabledColumns}
-          ></ColumnSelector>
-        </td>
+        {columnCell}
         {renderByType()}
         <td>
           <Button

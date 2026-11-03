@@ -27,7 +27,7 @@ export class EnvironmentsClient {
     }
 
     /**
-     * Find environments for the workspace. Capped at the workspace limit (default 20).
+     * Find environments for the workspace. Capped at the workspace limit (default 100).
      *
      * @param {EnvironmentsClient.RequestOptions} requestOptions - Request-specific configuration.
      *

@@ -222,6 +222,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 type,
                 evaluation_method,
                 status,
+                finished_at,
                 optimization_id,
                 dataset_version_id,
                 prompt_versions,
@@ -267,6 +268,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 type,
                 evaluation_method,
                 status,
+                finished_at,
                 experiment_scores
             FROM experiments
             WHERE workspace_id = :workspace_id
@@ -378,6 +380,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
                 AND trace_id IN (SELECT trace_id FROM experiment_items)
+                <if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT id_week FROM span_weeks WHERE workspace_id = :workspace_id AND project_id IN :project_ids AND trace_id IN (SELECT trace_id FROM experiment_items))<endif>
                 ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                 LIMIT 1 by id
             ), spans_agg AS (
@@ -656,6 +659,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 type,
                 evaluation_method,
                 status,
+                finished_at,
                 experiment_scores,
                 trace_count,
                 experiment_items_count,
@@ -692,6 +696,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 :type,
                 :evaluation_method,
                 :status,
+                :finished_at,
                 mapFromArrays(:experiment_scores_keys, :experiment_scores_values),
                 :trace_count,
                 :experiment_items_count,
@@ -819,6 +824,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
                 AND trace_id IN :trace_ids
+                <if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT id_week FROM span_weeks WHERE workspace_id = :workspace_id AND project_id IN :project_ids AND trace_id IN :trace_ids)<endif>
                 ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY workspace_id, project_id, id
             )
@@ -1729,6 +1735,12 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
         }
     }
 
+    private void addSpanWeeksBound(ST template) {
+        if (configuration.getDatabaseAnalyticsDataModel().spanWeeksReadBounded()) {
+            template.add("span_weeks_bound", true);
+        }
+    }
+
     private Mono<ExperimentData> getExperimentData(UUID experimentId) {
         return asyncTemplate.nonTransaction(connection -> makeFluxContextAware((userName, workspaceId) -> {
             var template = getSTWithLogComment(GET_EXPERIMENT_DATA,
@@ -1844,6 +1856,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
         return asyncTemplate.nonTransaction(connection -> makeFluxContextAware((userName, workspaceId) -> {
             var template = getSTWithLogComment(query, logName, workspaceId, userName, experimentId.toString());
             addTracesPartitionedFlag(template);
+            addSpanWeeksBound(template);
 
             var statement = connection.createStatement(template.render())
                     .bind("workspace_id", workspaceId)
@@ -1967,6 +1980,12 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             statement.bind("assertion_scores_avg_keys", assertionScoresAvgArrays.keys())
                     .bind("assertion_scores_avg_values", assertionScoresAvgArrays.values());
 
+            if (experimentData.finishedAt() == null) {
+                statement.bindNull("finished_at", String.class);
+            } else {
+                statement.bind("finished_at", experimentData.finishedAt());
+            }
+
             return makeMonoContextAware((userName, workspaceId) -> Mono.from(statement.execute()).then());
         });
     }
@@ -2006,6 +2025,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             // Only the traces read declares the slot; the siblings are keyed by trace id but partitioned on ids of
             // their own, so the flag is inert for them.
             addTracesPartitionedFlag(template);
+            addSpanWeeksBound(template);
 
             var statement = connection.createStatement(template.render())
                     .bind("workspace_id", workspaceId)
@@ -2199,9 +2219,9 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
      * statement's parameter names — so binding is O(n²) and dominates the aggregation job at that batch
      * size. This path was the first to move, measured at ~500× end-to-end on large batches; it has
      * since become the shared helper that the feedback score, experiment item and dataset item writers
-     * use behind {@code bulkInsert.v2ClientEnabled}.
+     * use.
      *
-     * <p>This one is <b>not</b> behind that toggle. It has always been JSONEachRow, so there is no
+     * <p>This one never had an R2DBC counterpart. It has always been JSONEachRow, so there is no
      * second writer to fall back to and nothing to compare against — the flag exists to A/B paths that
      * have an R2DBC equivalent, and this does not.
      *
@@ -2276,6 +2296,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 .type(row.get("type", String.class))
                 .evaluationMethod(row.get("evaluation_method", String.class))
                 .status(row.get("status", String.class))
+                .finishedAt(row.get("finished_at", String.class))
                 .experimentScores(parseExperimentScoresFromString(row.get("experiment_scores", String.class)))
                 .build();
     }
@@ -2527,6 +2548,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 createdBy,
                 lastUpdatedBy,
                 status,
+                row.get("finished_at", Instant.class),
                 experimentScores,
                 null, // promptVersion (singular) - not in DB
                 promptVersions,

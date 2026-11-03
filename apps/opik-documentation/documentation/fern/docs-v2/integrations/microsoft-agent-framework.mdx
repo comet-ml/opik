@@ -27,7 +27,7 @@ The framework provides everything from simple chat agents to complex multi-agent
 
 To use the Microsoft Agent Framework integration with Opik, you will need to have the Agent Framework and the required OpenTelemetry packages installed:
 
-```bash
+```bash wordWrap
 pip install --pre agent-framework opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp
 ```
 
@@ -83,7 +83,7 @@ In addition, you will need to set the following environment variables to configu
     If you are self-hosting Opik, you will need to set the following environment
     variables:
 
-    ```bash
+    ```bash wordWrap
     export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
     ```
 
@@ -91,7 +91,7 @@ In addition, you will need to set the following environment variables to configu
         To log the traces to a specific project, you can add the `projectName`
         parameter to the `OTEL_EXPORTER_OTLP_HEADERS` environment variable:
 
-        ```bash
+        ```bash wordWrap
         export OTEL_EXPORTER_OTLP_HEADERS='projectName=<your-project-name>'
         ```
 
@@ -104,7 +104,7 @@ In addition, you will need to set the following environment variables to configu
 
 The Microsoft Agent Framework has built-in OpenTelemetry instrumentation. Once you've configured the environment variables above, you can start creating agents and their traces will automatically be sent to Opik:
 
-```python
+```python wordWrap
 import asyncio
 import os
 

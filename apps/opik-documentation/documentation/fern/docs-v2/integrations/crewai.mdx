@@ -33,7 +33,7 @@ Opik integrates with CrewAI to log traces for all CrewAI activity, including bot
 
 First, ensure you have both `opik` and `crewai` installed:
 
-```bash
+```bash wordWrap
 pip install opik crewai crewai-tools
 ```
 
@@ -52,13 +52,13 @@ In order to configure CrewAI, you will need to have your LLM provider API key. F
 
 You can set it as an environment variable:
 
-```bash
+```bash wordWrap
 export OPENAI_API_KEY="YOUR_API_KEY"
 ```
 
 Or set it programmatically:
 
-```python
+```python wordWrap
 import os
 import getpass
 
@@ -80,7 +80,7 @@ To log a CrewAI pipeline run, you can use the [`track_crewai`](https://www.comet
 
 The first step is to create our project. We will use an example from CrewAI's documentation:
 
-```python
+```python wordWrap
 from crewai import Agent, Crew, Task, Process
 
 class YourCrewName:
@@ -129,7 +129,7 @@ class YourCrewName:
 
 Now we can import Opik's tracker and run our `crew`. **For CrewAI v1.0.0+, pass the crew instance to `track_crewai`** to ensure LLM calls are logged:
 
-```python
+```python wordWrap
 from opik.integrations.crewai import track_crewai
 
 # Create the crew
@@ -157,7 +157,7 @@ Opik also supports the CrewAI Flows API. When you enable tracking with `track_cr
 
 Example:
 
-```python
+```python wordWrap
 import litellm
 from crewai.flow.flow import Flow, start, listen
 from opik.integrations.crewai import track_crewai
@@ -207,7 +207,7 @@ Threads in Opik are collections of traces that are grouped together using a uniq
 
 The `thread_id` can be passed to the CrewAI crew as a parameter, which will be used to group all traces into a single thread.
 
-```python
+```python wordWrap
 from crewai import Agent, Crew, Task, Process
 from opik.integrations.crewai import track_crewai
 

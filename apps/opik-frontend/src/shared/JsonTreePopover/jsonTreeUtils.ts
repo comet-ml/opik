@@ -186,6 +186,22 @@ export const filterVisiblePaths = (
   });
 };
 
+export const findPrefixMatchPath = (
+  filteredVisiblePaths: VisiblePathItem[],
+  pathToExpand: string | null,
+  searchTerm: string,
+): string | null => {
+  if (!searchTerm) return null;
+  const term = searchTerm.toLowerCase();
+  const childPrefix = pathToExpand ? `${pathToExpand}.` : "";
+  const match = filteredVisiblePaths.find((item) => {
+    if (!item.path.startsWith(childPrefix)) return false;
+    const name = item.path.slice(childPrefix.length).split(/[.[]/)[0];
+    return name.toLowerCase().startsWith(term);
+  });
+  return match?.path ?? null;
+};
+
 /**
  * Finds the first child path of an expanded path for focus management.
  */

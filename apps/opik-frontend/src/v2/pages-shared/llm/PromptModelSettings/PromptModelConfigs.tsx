@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useSyncExternalStore } from "react";
 import { Settings2 } from "lucide-react";
 
 import {
@@ -29,7 +29,18 @@ import OpenRouterModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/pr
 import GeminiModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/GeminiModelConfigs";
 import VertexAIModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/VertexAIModelConfigs";
 import CustomModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/CustomModelConfig";
-import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
+import GenericModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/GenericModelConfigs";
+import {
+  ANTHROPIC_PANEL,
+  GenericPanelPresentation,
+  OPENAI_PANEL,
+} from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/genericPanels";
+import { getModelParams, toParamsRoute } from "@/lib/modelParams";
+import {
+  getModelParamsVersion,
+  subscribeToModelParams,
+} from "@/lib/modelRegistryStore";
+import { ModelParams } from "@/types/modelParams";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import {
   isOpenAICompatibleProvider,
@@ -69,9 +80,32 @@ const PromptModelConfigs = ({
 }: PromptModelConfigsProps) => {
   const provider: PROVIDER_TYPE =
     parseComposedProviderType(composedProviderType);
+  useSyncExternalStore(subscribeToModelParams, getModelParamsVersion);
+
+  const renderCatalogPanel = (
+    params: ModelParams,
+    presentation: GenericPanelPresentation,
+  ) => (
+    <GenericModelConfigs
+      model={model}
+      params={params}
+      presentation={presentation}
+      configs={configs as Record<string, unknown>}
+      unsupportedParams={unsupportedParams}
+      onChange={onChange}
+    />
+  );
 
   const getProviderForm = () => {
     if (provider === PROVIDER_TYPE.OPEN_AI) {
+      const params = getModelParams(
+        PROVIDER_TYPE.OPEN_AI,
+        model,
+        toParamsRoute(openAiPipelineMode),
+      );
+      if (params) {
+        return renderCatalogPanel(params, OPENAI_PANEL);
+      }
       return (
         <OpenAIModelConfigs
           configs={configs as LLMOpenAIConfigsType}
@@ -84,6 +118,10 @@ const PromptModelConfigs = ({
     }
 
     if (provider === PROVIDER_TYPE.ANTHROPIC) {
+      const params = getModelParams(PROVIDER_TYPE.ANTHROPIC, model);
+      if (params) {
+        return renderCatalogPanel(params, ANTHROPIC_PANEL);
+      }
       return (
         <AnthropicModelConfigs
           configs={configs as LLMAnthropicConfigsType}
@@ -132,6 +170,7 @@ const PromptModelConfigs = ({
         <CustomModelConfigs
           configs={configs as LLMCustomConfigsType}
           model={model}
+          provider={provider}
           unsupportedParams={unsupportedParams}
           onChange={onChange}
         />
@@ -162,7 +201,11 @@ const PromptModelConfigs = ({
   const disabled = disabledProp || !composedProviderType;
 
   return (
-    <DropdownMenu>
+    // Not modal: a modal menu sets pointer-events: none on the body, so the first click outside only
+    // closes the panel and is lost, e.g. Run right after changing a setting. Focus outside is still
+    // ignored, as the modal menu does, because the thinking effort list renders in a portal outside
+    // this panel and moving focus into it would otherwise close the panel.
+    <DropdownMenu modal={false}>
       <TooltipWrapper content="Model parameters">
         <DropdownMenuTrigger asChild>
           <Button variant={variant} size={size} disabled={disabled}>
@@ -176,11 +219,19 @@ const PromptModelConfigs = ({
         side="bottom"
         align="end"
         onCloseAutoFocus={(e) => e.preventDefault()}
+        onFocusOutside={(e) => e.preventDefault()}
       >
-        <ExplainerDescription
-          className="mb-5 w-72"
-          {...EXPLAINERS_MAP[EXPLAINER_ID.whats_these_configuration_things]}
-        />
+        <div className="mb-5 w-72">
+          <h5 className="comet-body-s-accented text-foreground">
+            Model parameters
+          </h5>
+          <p className="comet-body-xs mt-1 text-light-slate">
+            {
+              EXPLAINERS_MAP[EXPLAINER_ID.whats_these_configuration_things]
+                .description
+            }
+          </p>
+        </div>
         {providerForm}
       </DropdownMenuContent>
     </DropdownMenu>

@@ -11,6 +11,12 @@ export interface AgentInsightsIssueWithDetails {
     status?: OpikApi.AgentInsightsIssueWithDetailsStatus;
     severity?: OpikApi.AgentInsightsIssueWithDetailsSeverity;
     tracesQuery?: string;
+    /** The team's reason for closing the issue as not useful; set only while status is closed */
+    closeNote?: string;
+    /** Who last changed the status */
+    statusChangedBy?: string;
+    /** When the status was last changed */
+    statusChangedAt?: Date;
     createdBy?: string;
     createdAt?: Date;
     lastUpdatedBy?: string;

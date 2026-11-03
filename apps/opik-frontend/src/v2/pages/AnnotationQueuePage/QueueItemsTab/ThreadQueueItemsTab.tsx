@@ -72,7 +72,6 @@ import TimeCell from "@/shared/DataTableCells/TimeCell";
 import useTraceThreadPanelsState from "@/v2/pages-shared/traces/useTraceThreadPanelsState";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import useAppStore from "@/store/AppStore";
-import { generateAnnotationQueueIdFilter } from "@/lib/filters";
 import SelectBox, { SelectBoxProps } from "@/shared/SelectBox/SelectBox";
 import { useTruncationEnabled } from "@/contexts/server-sync-provider";
 
@@ -309,16 +308,11 @@ const ThreadQueueItemsTab: React.FunctionComponent<
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
-  const extendedFilters = useMemo(
-    () => [...filters, ...generateAnnotationQueueIdFilter(annotationQueue.id)],
-    [annotationQueue.id, filters],
-  );
-
   const { data, isPending, isPlaceholderData, isFetching } = useThreadsList(
     {
       projectId: annotationQueue.project_id,
       sorting: sortedColumns,
-      filters: extendedFilters,
+      filters,
       page: page as number,
       size: size as number,
       search: search as string,

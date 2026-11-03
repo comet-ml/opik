@@ -23,6 +23,7 @@ import OverrideVersionDialog from "@/v2/pages-shared/datasets/OverrideVersionDia
 import DatasetExpansionDialog from "@/v2/pages-shared/datasets/DatasetExpansionDialog";
 import GeneratedSamplesDialog from "@/v2/pages-shared/datasets/GeneratedSamplesDialog";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
+import Loader from "@/shared/Loader/Loader";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
 import useNavigationBlocker from "@/hooks/useNavigationBlocker";
@@ -75,7 +76,7 @@ function DatasetItemsPage(): React.ReactElement {
 
   const { mutate: updateDataset } = useDatasetUpdateMutation();
 
-  const { data: dataset } = useDatasetById(
+  const { data: dataset, isPending: isDatasetPending } = useDatasetById(
     { datasetId },
     {
       refetchInterval: (query) => {
@@ -359,27 +360,35 @@ function DatasetItemsPage(): React.ReactElement {
           </TabsTrigger>
         </TabsList>
         <TabsContent value="items">
-          <DatasetItemsTab
-            datasetId={datasetId}
-            datasetName={dataset?.name}
-            datasetStatus={dataset?.status}
-            storageKeys={
-              isTestSuite ? SUITE_STORAGE_KEYS : DATASET_STORAGE_KEYS
-            }
-            defaultSelectedColumns={
-              isTestSuite
-                ? SUITE_DEFAULT_SELECTED_COLUMNS
-                : DATASET_DEFAULT_SELECTED_COLUMNS
-            }
-            entityName={entityName}
-            buildColumns={buildColumns}
-            renderEditPanel={renderEditPanel}
-            onAddItem={handleAddItem}
-            itemName={itemName}
-          />
+          {isDatasetPending ? (
+            <Loader />
+          ) : (
+            <DatasetItemsTab
+              datasetId={datasetId}
+              datasetName={dataset?.name}
+              datasetStatus={dataset?.status}
+              storageKeys={
+                isTestSuite ? SUITE_STORAGE_KEYS : DATASET_STORAGE_KEYS
+              }
+              defaultSelectedColumns={
+                isTestSuite
+                  ? SUITE_DEFAULT_SELECTED_COLUMNS
+                  : DATASET_DEFAULT_SELECTED_COLUMNS
+              }
+              entityName={entityName}
+              buildColumns={buildColumns}
+              renderEditPanel={renderEditPanel}
+              onAddItem={handleAddItem}
+              itemName={itemName}
+            />
+          )}
         </TabsContent>
         <TabsContent value="version-history">
-          <VersionHistoryTab datasetId={datasetId} />
+          <VersionHistoryTab
+            datasetId={datasetId}
+            datasetName={dataset?.name}
+            datasetType={datasetType}
+          />
         </TabsContent>
       </Tabs>
     </div>

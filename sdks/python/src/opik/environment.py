@@ -59,9 +59,20 @@ def get_user_identifier() -> str:
     if workspace and workspace != opik.config.OPIK_WORKSPACE_DEFAULT_NAME:
         return workspace
 
-    hashed_part = _hash(get_hostname() + get_user())
+    return f"{opik.config.OPIK_WORKSPACE_DEFAULT_NAME}_{get_client_identifier()}"
 
-    return f"{opik.config.OPIK_WORKSPACE_DEFAULT_NAME}_{hashed_part}"
+
+@functools.lru_cache
+def get_client_identifier() -> str:
+    """
+    An anonymous identifier for this machine and OS user: a hash of the hostname and
+    username, never the raw values.
+
+    Sent to the backend on every request so an installation can estimate how many
+    distinct clients use it. Unlike `get_user_identifier` it ignores the workspace,
+    which every member of a team shares and would make them count as one client.
+    """
+    return _hash(get_hostname() + get_user())
 
 
 def is_default_user_identifier(identifier: str) -> bool:

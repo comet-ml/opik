@@ -23,6 +23,7 @@ from opik.integrations.langchain import (
     LANGGRAPH_INTERRUPT_METADATA_KEY,
 )
 from opik.types import DistributedTraceHeadersDict
+from ... import llm_constants
 from .constants import (
     EXPECTED_FULL_OPENAI_USAGE_LOGGED_FORMAT,
     OPENAI_MODEL_FOR_TESTS,
@@ -264,6 +265,8 @@ def test_langgraph__ChatOpenAI_used_in_the_node_with_config__langchain_looses_pa
     opik_tracer = OpikTracer()
     llm = langchain_openai.ChatOpenAI(
         model=OPENAI_MODEL_FOR_TESTS,
+        max_tokens=64,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
     )
 
     graph_builder = StateGraph(State)
@@ -352,6 +355,8 @@ def test_langgraph__ChatOpenAI_used_in_the_node_with_config__langchain_looses_pa
     opik_tracer = OpikTracer()
     llm = langchain_openai.ChatOpenAI(
         model=OPENAI_MODEL_FOR_TESTS,
+        max_tokens=64,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
     )
 
     graph_builder = StateGraph(State)

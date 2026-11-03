@@ -23,5 +23,15 @@ public record ExperimentItemToProcess(
         String workspaceName,
         @NonNull String userName,
         @NonNull List<UUID> allExperimentIds,
-        List<OpikPromptEntry> opikPrompts) implements RedisSubscriberMessage {
+        List<OpikPromptEntry> opikPrompts,
+        Boolean testSuite,
+        List<UUID> selectedRuleIds) implements RedisSubscriberMessage {
+
+    /**
+     * Null on messages published before regular datasets could run server-side, when every run was a test
+     * suite. A rolling upgrade can hand such a message to a new consumer, so null keeps the old meaning.
+     */
+    public boolean isTestSuite() {
+        return testSuite == null || testSuite;
+    }
 }

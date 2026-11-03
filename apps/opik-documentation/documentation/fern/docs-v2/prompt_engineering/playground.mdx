@@ -25,8 +25,10 @@ Supported providers include OpenAI, Anthropic, Gemini, OpenRouter, Vertex AI, an
 endpoints. Reasoning models like Claude and o1/o3 expose additional controls such as thinking
 effort.
 
-Click **Run** (or press **Shift+Enter**) to execute all variants at once. Results stream in real
-time with the model's response, token usage, latency, and a link to the full trace.
+Click **Run** (or press **Cmd+Enter** on Mac, **Ctrl+Enter** on Windows and Linux) to execute all
+variants at once. When your cursor is in one variant, the shortcut runs only that variant.
+Results stream in real time with the model's response, token usage, latency, and a link to the
+full trace.
 
 ## Validate against test suites
 
@@ -36,11 +38,14 @@ cases and see which variant performs better.
 
 <Steps>
   <Step title="Bind a dataset or test suite">
-    Click **Test on Dataset** in the header and select a dataset or test suite. If you're using
-    template variables (`{{variable_name}}`), they are automatically mapped to dataset columns.
+    Click **Run experiment** in the header, choose **Dataset** or **Test suite**, and select one. For a
+    dataset, also pick the metrics to score with; a test suite is scored by its own assertions. If
+    you're using template variables (`{{variable_name}}`), they are automatically mapped to dataset
+    columns.
   </Step>
   <Step title="Run the experiment">
-    Click **Run experiment** to execute all prompt variants against every item in the dataset.
+    Start the run to execute all prompt variants against every item. Each prompt variant becomes its
+    own experiment.
     Results appear in a table below the prompts, with each variant's output shown side by side.
   </Step>
   <Step title="Review results">
@@ -56,6 +61,22 @@ cases and see which variant performs better.
 Use `{{variable_name}}` syntax in your prompt messages to create dynamic templates. When running
 in standard mode, the Playground asks you to fill in the values. In dataset mode, variables are
 mapped to dataset columns automatically.
+
+### Images, video, and audio
+
+Use the image, audio, or video button under a user message to attach media. Enter a URL, or a
+template variable such as `{{image}}` that reads a dataset column holding a URL or a base64 data
+URI.
+
+To send a different number of images for each dataset item, store them as a list in one column and
+add that column once as `{{images}}`. Each entry in the list becomes its own part, so an item with
+three entries sends three images and an item with an empty list sends none. Video and audio lists
+work the same way, and so do lists saved as JSON text, as a CSV upload stores them. Test-suite runs
+read top-level columns only, so use `{{images}}` rather than `{{input.images}}` there.
+
+```json
+{ "images": ["https://example.com/front.jpg", "data:image/png;base64,iVBORw0KGgo..."] }
+```
 
 ## Next steps
 

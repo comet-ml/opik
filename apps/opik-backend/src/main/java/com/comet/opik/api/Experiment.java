@@ -69,6 +69,8 @@ public record Experiment(
         @JsonView({
                 Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy,
         @JsonView({Experiment.View.Public.class, Experiment.View.Write.class}) ExperimentStatus status,
+        @JsonView({
+                Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "When the run stopped producing items. Unset while it may still produce more, whatever its status") Instant finishedAt,
         @JsonView({Experiment.View.Public.class,
                 Experiment.View.Write.class}) List<@NotNull @Valid ExperimentScore> experimentScores,
         @JsonView({Experiment.View.Public.class,

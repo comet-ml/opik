@@ -1,5 +1,5 @@
 name: E2E Tests - Post Merge (v2)
-run-name: "E2E Tests v2 (${{ github.event.inputs.tier || 't1' }}) - ${{ github.event_name == 'push' && format('Post-merge {0}', github.sha) || format('Manual run by @{0}', github.actor) }}"
+run-name: "E2E Tests v2 (${{ github.event.inputs.tier || (github.event_name == 'schedule' && 'llm-daily' || 't1') }}) - ${{ github.event_name == 'push' && format('Post-merge {0}', github.sha) || github.event_name == 'schedule' && 'Scheduled' || format('Manual run by @{0}', github.actor) }}"
 
 on:
   push:
@@ -14,17 +14,22 @@ on:
     paths:
       - '.github/workflows/e2e_tests_post_merge_v2.yml'
 
+  # The one run that calls a real LLM provider (@llm-daily), on a throwaway local stack.
+  schedule:
+    - cron: '0 5 * * *'
+
   workflow_dispatch:
     inputs:
       tier:
         type: choice
-        description: 'Which tag tier to run (t1=smoke, t2=cuj, t3=nightly)'
+        description: 'Which tag tier to run (t1=smoke, t2=cuj, t3=nightly, llm-daily=real-provider canary)'
         required: true
         default: 't1'
         options:
           - t1
           - t2
           - t3
+          - llm-daily
       notify_on_success:
         type: boolean
         description: 'Send Slack notification even on success'
@@ -55,7 +60,7 @@ permissions:
 
 jobs:
   e2e-tests:
-    name: "🧪 E2E v2 Tests (${{ github.event.inputs.tier || 't1' }})"
+    name: "🧪 E2E v2 Tests (${{ github.event.inputs.tier || (github.event_name == 'schedule' && 'llm-daily' || 't1') }})"
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
@@ -97,12 +102,12 @@ jobs:
       - name: "📦 Setup Node.js"
         uses: actions/setup-node@v7
         with:
-          node-version: '20'
+          node-version: '26'
           cache: 'npm'
           cache-dependency-path: tests_end_to_end/e2e/package-lock.json
 
       - name: "🐍 Setup uv & Python"
-        uses: astral-sh/setup-uv@v10.2.0
+        uses: astral-sh/setup-uv@v10.3.0
         with:
           python-version: '3.12'
 
@@ -161,10 +166,10 @@ jobs:
           OPIK_BASE_URL: http://localhost:5173
           OPIK_WORKSPACE: default
           WORKERS: 2
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_E2E_TESTS }}
-          ALLURE_LAUNCH_NAME: "Opik v2 Post-Merge ${{ github.event.inputs.tier || 't1' }} - ${{ github.run_id }}"
-          TIER: ${{ github.event.inputs.tier || 't1' }}
+          # Only the llm-daily canary may spend; a tier run holding a key would plant it in the workspace for every later spec.
+          OPENAI_API_KEY: ${{ (github.event.inputs.tier || (github.event_name == 'schedule' && 'llm-daily' || 't1')) == 'llm-daily' && secrets.OPENAI_API_KEY || '' }}
+          ALLURE_LAUNCH_NAME: "Opik v2 Post-Merge ${{ github.event.inputs.tier || (github.event_name == 'schedule' && 'llm-daily' || 't1') }} - ${{ github.run_id }}"
+          TIER: ${{ github.event.inputs.tier || (github.event_name == 'schedule' && 'llm-daily' || 't1') }}
           # The dockerized backend reaches the host-run mock token service via the docker0 host IP
           MOCK_AUTH_URL_FOR_BACKEND: http://172.17.0.1:9878
         run: |
@@ -265,7 +270,7 @@ jobs:
       - name: "📋 Generate job summary"
         if: always()
         env:
-          TIER: ${{ github.event.inputs.tier || 't1' }}
+          TIER: ${{ github.event.inputs.tier || (github.event_name == 'schedule' && 'llm-daily' || 't1') }}
           TESTOPS_URL: ${{ steps.set-outputs.outputs.testops_url }}
           TOTAL: ${{ steps.parse-results.outputs.total }}
           PASSED: ${{ steps.parse-results.outputs.passed }}
@@ -431,7 +436,7 @@ jobs:
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           TEST_RESULT: ${{ needs.e2e-tests.result }}
-          SUITE_NAME: "v2 ${{ github.event.inputs.tier || 't1' }}"
+          SUITE_NAME: "v2 ${{ github.event.inputs.tier || (github.event_name == 'schedule' && 'llm-daily' || 't1') }}"
           PASSED_TESTS: ${{ needs.e2e-tests.outputs.passed_tests }}
           FAILED_TESTS: ${{ needs.e2e-tests.outputs.failed_tests }}
           TESTOPS_URL: ${{ needs.e2e-tests.outputs.testops_url }}

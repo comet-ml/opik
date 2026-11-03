@@ -18,7 +18,7 @@ Agent optimization focuses on multi-step agent logic. Keep these runs separate t
 
 ## Quickstart: tool-only optimization
 
-```python
+```python wordWrap
 from opik_optimizer import ChatPrompt, MetaPromptOptimizer
 
 prompt = ChatPrompt(
@@ -63,7 +63,7 @@ function-calling tools while preserving the original MCP config for reproducibil
 
 ### OpenAI MCP tool entries (local/remote)
 
-```python
+```python wordWrap
 prompt = ChatPrompt(
     system="Use tools when needed.",
     user="{user_query}",
@@ -89,7 +89,7 @@ prompt = ChatPrompt(
 
 ### Cursor MCP config (JSON) → tools
 
-```python
+```python wordWrap
 from opik_optimizer.utils.toolcalling import cursor_mcp_config_to_tools
 
 cursor_config = {
@@ -113,7 +113,7 @@ prompt = ChatPrompt(
 `ChatPrompt.tools` accepts OpenAI-style MCP entries directly. Cursor configs use a different
 shape (`mcpServers`) and must be converted first:
 
-```python
+```python wordWrap
 # OpenAI-style MCP tool entry (directly supported by ChatPrompt.tools)
 openai_tools = [
     {
@@ -140,7 +140,7 @@ After normalization, both styles execute the same way during evaluation and opti
 
 ### Mixed function + MCP tools
 
-```python
+```python wordWrap
 prompt = ChatPrompt(
     system="Use tools when needed.",
     user="{user_query}",
@@ -171,7 +171,7 @@ prompt = ChatPrompt(
 
 When a server exposes many tools, pass a dict to select the subset you want:
 
-```python
+```python wordWrap
 result = optimizer.optimize_prompt(
     prompt=prompt,
     dataset=my_dataset,
@@ -195,7 +195,7 @@ to select a smaller subset of tools.
 If you want to optimize tool descriptions without executing tools during evaluation, set
 `allow_tool_use=False`:
 
-```python
+```python wordWrap
 result = optimizer.optimize_prompt(
     prompt=prompt,
     dataset=my_dataset,
@@ -234,7 +234,7 @@ result = optimizer.optimize_prompt(
 ### See tool-calling debug logs
 Set the optimizer log level to surface tool calls:
 
-```bash
+```bash wordWrap
 export OPIK_OPTIMIZER_LOG_LEVEL=DEBUG
 ```
 

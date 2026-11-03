@@ -1,6 +1,7 @@
 package com.comet.opik.utils;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.StreamReadConstraints;
 import com.fasterxml.jackson.core.json.JsonReadFeature;
@@ -24,6 +25,7 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.io.ByteArrayOutputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -198,6 +200,18 @@ public class JsonUtils {
         }
     }
 
+    /**
+     * A streaming parser over {@code content}, under the shared mapper's read constraints, for reading part of a
+     * document without building a tree of all of it.
+     */
+    public static JsonParser createParser(@NonNull String content) {
+        try {
+            return MAPPER.getFactory().createParser(content);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
     public static JsonNode getJsonNodeFromString(@NonNull String value) {
         try {
             return MAPPER.readTree(value);
@@ -352,6 +366,9 @@ public class JsonUtils {
 
     public <T> T readJsonFile(@NonNull String fileName, @NonNull TypeReference<T> valueTypeRef) throws IOException {
         try (InputStream inputStream = JsonUtils.class.getClassLoader().getResourceAsStream(fileName)) {
+            if (inputStream == null) {
+                throw new FileNotFoundException("Resource not found: '%s'".formatted(fileName));
+            }
             return MAPPER.readValue(inputStream, valueTypeRef);
         }
     }

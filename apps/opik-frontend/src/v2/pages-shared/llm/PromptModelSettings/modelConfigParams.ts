@@ -23,12 +23,12 @@ export type ModelConfigParam =
 /**
  * An evaluator rule persists only LlmAsJudgeModelParameters — name, temperature, seed and the
  * free-form custom_parameters. Everything else the rule form used to render was dropped on save.
- * The Anthropic effort is kept because it is saved inside custom_parameters.output_config.
+ * The efforts are kept because they are saved inside custom_parameters: Anthropic's under
+ * output_config, OpenAI's as reasoning_effort and OpenRouter's under reasoning.
  */
 export const RULE_UNSUPPORTED_PARAMS: ReadonlySet<ModelConfigParam> = new Set([
   "topP",
   "maxCompletionTokens",
-  "reasoningEffort",
   "throttling",
   "maxConcurrentRequests",
 ]);
@@ -38,4 +38,11 @@ export const RULE_UNSUPPORTED_PARAMS: ReadonlySet<ModelConfigParam> = new Set([
  * and max concurrency belong to the playground's batch runner and reach nothing from here.
  */
 export const OPTIMIZATION_UNSUPPORTED_PARAMS: ReadonlySet<ModelConfigParam> =
+  new Set(["throttling", "maxConcurrentRequests"]);
+
+/**
+ * A run against a dataset executes on the server, which schedules its own work: these two control
+ * the browser's batch loop and reach nothing once the run leaves the page.
+ */
+export const BACKEND_RUN_UNSUPPORTED_PARAMS: ReadonlySet<ModelConfigParam> =
   new Set(["throttling", "maxConcurrentRequests"]);

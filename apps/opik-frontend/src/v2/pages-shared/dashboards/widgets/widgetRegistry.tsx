@@ -1,4 +1,10 @@
-import { NotebookText, Hash, Trophy, ChartNoAxesCombined } from "lucide-react";
+import {
+  NotebookText,
+  Hash,
+  Trophy,
+  ChartNoAxesCombined,
+  Sparkles,
+} from "lucide-react";
 import {
   WidgetResolver,
   WidgetComponents,
@@ -20,6 +26,9 @@ import { widgetHelpers as experimentsFeedbackScoresHelpers } from "./Experiments
 import ExperimentsLeaderboardWidget from "./ExperimentsLeaderboardWidget/ExperimentsLeaderboardWidget";
 import ExperimentsLeaderboardWidgetEditor from "./ExperimentsLeaderboardWidget/ExperimentsLeaderboardWidgetEditor";
 import { widgetHelpers as experimentLeaderboardHelpers } from "./ExperimentsLeaderboardWidget/helpers";
+import OllieChartWidget from "./OllieChartWidget/OllieChartWidget";
+import OllieChartEditor from "./OllieChartWidget/OllieChartEditor";
+import { widgetHelpers as ollieChartHelpers } from "./OllieChartWidget/helpers";
 
 export const widgetResolver: WidgetResolver = (
   type: string,
@@ -99,6 +108,21 @@ export const widgetResolver: WidgetResolver = (
           icon: <Trophy className="size-4" />,
           category: WIDGET_CATEGORY.EVALUATION,
           iconColor: "text-chart-yellow",
+          disabled: false,
+        },
+      };
+    case WIDGET_TYPES.OLLIE_CHART:
+      return {
+        Widget: OllieChartWidget,
+        Editor: OllieChartEditor,
+        getDefaultConfig: ollieChartHelpers.getDefaultConfig,
+        calculateTitle: ollieChartHelpers.calculateTitle,
+        metadata: {
+          title: "Ollie chart",
+          description: "A custom chart created by Ollie.",
+          icon: <Sparkles className="size-4" />,
+          category: WIDGET_CATEGORY.GENERAL,
+          iconColor: "text-chart-purple",
           disabled: false,
         },
       };

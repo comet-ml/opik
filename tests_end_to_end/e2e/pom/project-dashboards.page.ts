@@ -1,6 +1,7 @@
 import type { Page, Locator } from '@playwright/test';
 import { expect, test } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
+import { openWidgetConfigDialog } from './add-widget-control';
 
 /** The built-in project view every project starts on, as the picker labels it. */
 export const DEFAULT_PROJECT_VIEW_NAME = 'Project overview';
@@ -8,6 +9,51 @@ export const DEFAULT_PROJECT_VIEW_NAME = 'Project overview';
 export const DEFAULT_PROJECT_VIEW_ID = 'template:project-overview';
 /** A section title only the built-in template carries, so its presence names it. */
 export const DEFAULT_PROJECT_VIEW_SECTION = 'At a glance';
+
+/**
+ * The built-in template's three section titles, in the order it declares them
+ * (`PROJECT_OVERVIEW_TEMPLATE` in `lib/dashboard/templates.ts`).
+ *
+ * A copy of the template has to reproduce them in this order, so the list is the
+ * expectation a copy is compared against — not a lookup table for the page.
+ */
+export const DEFAULT_PROJECT_VIEW_SECTIONS = [
+  'At a glance',
+  'Volume, latency & cost',
+  'Quality & conversations',
+] as const;
+
+/** How many widgets each of those sections carries in the template: `[5, 3, 4]`. */
+export const DEFAULT_PROJECT_VIEW_WIDGET_COUNTS = [5, 3, 4] as const;
+
+/**
+ * The titles of the five "At a glance" stats cards, in template order.
+ *
+ * These are the numbers a user reads first, which is why a copy is compared
+ * against the built-in view card by card: `buildCopyConfig` runs the whole
+ * template through `regenerateAllIds`, and a rewrite that came out subtly wrong
+ * still renders a card with a number in it.
+ */
+export const PROJECT_OVERVIEW_KPI_CARDS = [
+  'Traces',
+  'Errors',
+  'Latency (p50)',
+  'Latency (p99)',
+  'Cost',
+] as const;
+
+/**
+ * A `dashboardId` that is a real view rather than a built-in template.
+ *
+ * The template ids are `template:<name>`, so "the URL holds a UUID" is how a
+ * test knows the page has switched to the copy that was just created.
+ */
+const UUID_PATTERN = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+
+/** The name `useCustomizeTemplate` gives the first copy of the built-in view. */
+export const PROJECT_OVERVIEW_COPY_NAME = 'Project overview (custom)';
+/** …and the second, once the first name is taken. */
+export const PROJECT_OVERVIEW_SECOND_COPY_NAME = 'Project overview (custom 2)';
 
 /**
  * A project's Dashboards page — `/$workspaceName/projects/$projectId/dashboards`.
@@ -223,6 +269,231 @@ export class ProjectDashboardsPage {
    */
   sectionTitle(title: string): Locator {
     return this.page.getByRole('heading', { level: 3, name: title });
+  }
+
+  /**
+   * The "Add widget" control in one section's header, addressed through that
+   * section's heading.
+   *
+   * Scoped to the section rather than taken positionally: the whole subject of
+   * the copy flow is that the widget lands in the section it was asked for, and
+   * `getByRole('button', { name: 'Add widget' }).nth(2)` would couple the test
+   * to the order the sections happen to render in — which is the thing under
+   * test. The control sits inside the accordion trigger, which is inside the
+   * section's `h3`, so the heading is a real parent of it.
+   *
+   * On the built-in template the control is present because
+   * `useCustomizeTemplate` sets `onAddWidgetToTemplate`: the view is read-only,
+   * but adding a widget to it is allowed and makes a copy.
+   */
+  sectionAddWidgetControl(sectionTitle: string): Locator {
+    return this.sectionTitle(sectionTitle).getByRole('button', { name: 'Add widget' });
+  }
+
+  /**
+   * Adds a widget from one section's header and gives it `widgetTitle`.
+   *
+   * The title is set rather than left to the generated one because it is how the
+   * stored config is read afterwards: "the new widget is in section 3 and
+   * nowhere else" needs the widget to be distinguishable from the twelve the
+   * template already carries, and every generated title is drawn from the same
+   * small vocabulary those use.
+   *
+   * The metric is left at the dialog's default, which is deliberate — this spec
+   * is about where the widget lands and what the save creates, not about
+   * configuring a chart (`DashboardsPage.selectWidgetMetric` covers that). One
+   * fewer control touched is one fewer way for the seed to end up in a shape the
+   * assertions were not written for.
+   */
+  async addWidgetToSection(sectionTitle: string, widgetTitle: string): Promise<void> {
+    await test.step(`Add a widget titled "${widgetTitle}" from the "${sectionTitle}" section`, async () => {
+      const dialog = await openWidgetConfigDialog(
+        this.page,
+        this.sectionAddWidgetControl(sectionTitle),
+      );
+      await this.setPreviewWidgetTitle(dialog, widgetTitle);
+      await dialog.getByRole('button', { name: 'Add widget', exact: true }).click();
+      await dialog.waitFor({ state: 'hidden' });
+    });
+  }
+
+  /**
+   * Renames the widget in the open config dialog's preview.
+   *
+   * The title and subtitle are `InlineEditableText`, which renders a
+   * `div[role="button"]` in its resting state and swaps in a text input once
+   * clicked — so neither carries an accessible name of its own that survives the
+   * edit, and the resting name is the generated title, which is what we are
+   * about to replace. Every other control in the dialog is a real `<button>`,
+   * so the tag is what separates the two inline fields from them; the subtitle
+   * is excluded by its placeholder, and the result is asserted to be a single
+   * element rather than taken with `.first()`.
+   *
+   * No `data-testid`: this page object drives a deployed release build, so a
+   * test hook added alongside it would not exist in the app under test.
+   */
+  private async setPreviewWidgetTitle(dialog: Locator, widgetTitle: string): Promise<void> {
+    await test.step(`Title the preview widget "${widgetTitle}"`, async () => {
+      const titleField = dialog
+        .locator('div[role="button"]')
+        .filter({ hasNotText: 'Click to add a description' });
+      await expect(
+        titleField,
+        'exactly one inline-editable field in the preview that is not the description',
+      ).toHaveCount(1);
+      await titleField.click();
+
+      // The input only exists while the field is in edit mode, which is why it
+      // is looked up after the click rather than with it.
+      const input = dialog.locator('input[type="text"]');
+      await expect(input, 'the title field swapped in its editor').toHaveCount(1);
+      await input.fill(widgetTitle);
+      await this.page.keyboard.press('Enter');
+
+      // Committed, not merely typed: Enter is what `InlineEditableText` listens
+      // for, and a save that did not land would leave the widget carrying its
+      // generated title — which the config assertions would then read as the
+      // widget having gone to the wrong section.
+      await expect(
+        dialog.getByText(widgetTitle, { exact: true }),
+        'the preview header shows the new title',
+      ).toBeVisible();
+    });
+  }
+
+  /**
+   * One of the "At a glance" stats cards, addressed by the title in its header.
+   *
+   * Exact text inside a `dashboard-widget`: the card titles are short words that
+   * appear as substrings of their neighbours' ("Cost" in "Estimated cost",
+   * "Traces" in "Trace volume"), so a substring filter would match several
+   * widgets at once.
+   */
+  kpiCard(title: string): Locator {
+    return this.page
+      .getByTestId('dashboard-widget')
+      .filter({ has: this.page.getByText(title, { exact: true }) });
+  }
+
+  /**
+   * The number one stats card is showing.
+   *
+   * A card renders three lines — its title, the metric's label, and the value —
+   * and nothing else identifies the value: it is an unlabelled `div` with no
+   * role, inside a widget that carries no test id of its own beyond the shared
+   * `dashboard-widget`. So the card's text is read as a whole and the third line
+   * taken, which is also what makes the wait correct: while the metric is
+   * loading the card renders skeletons and only the title, so a three-line shape
+   * IS the settled state. Polled rather than waited on a spinner, because the
+   * skeleton is a bare `div` too.
+   *
+   * Returns the value verbatim, formatting included ("6", "0.4s", "-"), because
+   * the comparison this exists for is between two renders of the same metric —
+   * parsing it into a number would quietly let "0s" and "0" agree.
+   */
+  async kpiCardValue(title: string): Promise<string> {
+    return test.step(`Read the "${title}" stats card`, async () => {
+      const card = this.kpiCard(title);
+      await expect(card, `exactly one "${title}" stats card`).toHaveCount(1);
+      const lines = async () =>
+        (await card.innerText())
+          .split('\n')
+          .map((line) => line.trim())
+          .filter((line) => line.length > 0);
+      await expect
+        .poll(async () => (await lines()).length, {
+          message: `the "${title}" card must settle on a title, a metric label and a value`,
+          timeout: 30_000,
+        })
+        .toBe(3);
+      const settled = await lines();
+      expect(settled, `the "${title}" card's three lines`).toHaveLength(3);
+      return settled[2];
+    });
+  }
+
+  /** Every "At a glance" card's value, keyed by card title. */
+  async kpiCardValues(): Promise<Record<string, string>> {
+    return test.step('Read the "At a glance" stats cards', async () => {
+      const values: Record<string, string> = {};
+      for (const title of PROJECT_OVERVIEW_KPI_CARDS) {
+        values[title] = await this.kpiCardValue(title);
+      }
+      return values;
+    });
+  }
+
+  /**
+   * Waits for the page to switch itself to a freshly created view and returns
+   * its id.
+   *
+   * A copy's id only ever surfaces in the URL — `onCopyCreated` writes it to the
+   * `dashboardId` param — so this is the only way a test can learn it, and it
+   * has to learn it to register the view for teardown. Matched on the id being a
+   * UUID rather than on "not the template id": the page rewrites the param more
+   * than once while it resolves, and the template id is not the only non-UUID
+   * value it can hold on the way.
+   */
+  async waitForCopyDashboardId(): Promise<string> {
+    return test.step('Wait for the page to switch to the created copy', async () => {
+      await this.page.waitForURL(
+        (url) => UUID_PATTERN.test(url.searchParams.get('dashboardId') ?? ''),
+        { timeout: 30_000 },
+      );
+      const id = this.currentDashboardId();
+      expect(id, 'the created copy must leave its id in the URL').not.toBeNull();
+      return id as string;
+    });
+  }
+
+  /**
+   * The toast's "Rename" action.
+   *
+   * Addressed page-wide and by name: Radix renders the toast into a portal at the
+   * end of the document, outside this page's tree, and the only other thing on
+   * screen carrying this label is the visually-hidden announcer — which renders
+   * the action's `altText` as text, not as a button. Deliberately not scoped to
+   * the toast element either, because the claim one spec makes is about this
+   * action still being clickable after the page has moved to a different view.
+   */
+  get copyToastRenameAction(): Locator {
+    return this.page.getByRole('button', { name: 'Rename', exact: true });
+  }
+
+  /**
+   * The rename dialog the toast's action opens — `ProjectDashboardViewDialog` in
+   * `edit` mode.
+   *
+   * Filtered on its title rather than taken as "the dialog": the widget config
+   * dialog is also a `role="dialog"`, and a spec that renames right after adding
+   * a widget would otherwise be able to satisfy this against the dialog it had
+   * just closed.
+   */
+  get editViewDialog(): Locator {
+    return this.page
+      .getByRole('dialog')
+      .filter({ has: this.page.getByText('Edit view', { exact: true }) });
+  }
+
+  /**
+   * The name box in that dialog, which arrives prefilled with the name of the
+   * view the dialog is about.
+   *
+   * That prefill is the assertion the rename spec exists for — the toast can
+   * outlive the view it refers to, so the dialog has to open on the copy rather
+   * than on whatever view the user has since switched to.
+   */
+  get editViewNameInput(): Locator {
+    return this.editViewDialog.getByPlaceholder('View name');
+  }
+
+  /** Renames the view the open "Edit view" dialog is about. */
+  async submitRename(newName: string): Promise<void> {
+    await test.step(`Rename the view to "${newName}"`, async () => {
+      await this.editViewNameInput.fill(newName);
+      await this.editViewDialog.getByRole('button', { name: 'Rename view' }).click();
+      await this.editViewDialog.waitFor({ state: 'hidden' });
+    });
   }
 
   /**

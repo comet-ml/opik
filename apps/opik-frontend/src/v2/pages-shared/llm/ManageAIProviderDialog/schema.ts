@@ -2,7 +2,9 @@ import { z } from "zod";
 import uniq from "lodash/uniq";
 
 import {
+  AUTH_SECRET_SENTINEL,
   AUTH_SEND_AS_VALUES,
+  BEDROCK_API_VALUES,
   OPENAI_PIPELINE_MODE_VALUES,
   OpenAiPipelineMode,
   PROVIDER_TYPE,
@@ -39,7 +41,9 @@ const headersArraySchema = z
   )
   .optional();
 
-// If a header has any content, both key and value must be non-empty, and keys must be unique.
+// Mirrors the backend's header rules for the map the dialog sends: keys are trimmed and fully
+// empty rows dropped, so a value needs a name, any value (empty included) is accepted, and names
+// must differ in more than case, as HTTP compares them ignoring it.
 const validateHeaders = (
   headers: Array<{ key: string; value: string }> | undefined,
   ctx: z.RefinementCtx,
@@ -47,49 +51,36 @@ const validateHeaders = (
 ) => {
   if (!headers) return;
 
-  const headerKeys: string[] = [];
+  const headerKeys = new Set<string>();
 
   headers.forEach((header, index) => {
-    const hasKey = header.key.trim().length > 0;
-    const hasValue = header.value.trim().length > 0;
+    const key = header.key.trim().toLowerCase();
 
-    // If either field has content, both must have content
-    if ((hasKey || hasValue) && !hasKey) {
+    if (!key) {
+      if (header.value.trim().length > 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Header key is required",
+          path: ["headers", index, "key"],
+        });
+      }
+      return;
+    }
+
+    if (reservedKeys.includes(key)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Header key is required",
+        message: "Use the API key field instead of this header",
         path: ["headers", index, "key"],
       });
-    }
-
-    if ((hasKey || hasValue) && !hasValue) {
+    } else if (headerKeys.has(key)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Header value is required",
-        path: ["headers", index, "value"],
+        message: "Header key must be unique, ignoring case",
+        path: ["headers", index, "key"],
       });
-    }
-
-    if (hasKey) {
-      const trimmedKey = header.key.trim();
-      // Reserved names match case-insensitively (HTTP header names are case-insensitive).
-      // Uniqueness stays case-sensitive so stored maps with case-variant keys remain editable.
-      if (reservedKeys.includes(trimmedKey.toLowerCase())) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Use the API key field instead of this header",
-          path: ["headers", index, "key"],
-        });
-      } else if (headerKeys.includes(trimmedKey)) {
-        // Check for duplicate header keys
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Header key must be unique",
-          path: ["headers", index, "key"],
-        });
-      } else {
-        headerKeys.push(trimmedKey);
-      }
+    } else {
+      headerKeys.add(key);
     }
   });
 };
@@ -139,8 +130,18 @@ export const VertexAIProviderDetailsFormSchema = z.object({
   location: z.string(),
 });
 
+export type StoredProviderCredentials = {
+  base_url?: string;
+  api_key?: string;
+};
+
+// The provider list sends the string "null" for a provider saved without a key.
+const hasStoredApiKey = ({ api_key }: StoredProviderCredentials) =>
+  Boolean(api_key) && api_key !== "null";
+
 export const createCustomProviderDetailsFormSchema = (
   existingProviderNames?: string[],
+  storedProvider?: StoredProviderCredentials,
 ) =>
   z
     .object({
@@ -155,6 +156,7 @@ export const createCustomProviderDetailsFormSchema = (
       providerName: z.string().optional(),
       apiKey: z.string(),
       url: z.string().url(),
+      bedrockApi: z.enum(BEDROCK_API_VALUES).optional(),
       models: z
         .string()
         .min(1, { message: "Models list is required" })
@@ -265,6 +267,28 @@ export const createCustomProviderDetailsFormSchema = (
       }
       validateHeaders(data.headers, ctx);
 
+      // The backend refuses to send stored secrets to a new URL, so an edit that changes it has to
+      // carry them again.
+      if (data.id && storedProvider && data.url !== storedProvider.base_url) {
+        if (data.authMode === "token") {
+          data.authCredentials?.forEach((entry, index) => {
+            if (entry.value === AUTH_SECRET_SENTINEL) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "Enter this secret again to change the URL",
+                path: ["authCredentials", index, "value"],
+              });
+            }
+          });
+        } else if (hasStoredApiKey(storedProvider) && !data.apiKey) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Enter the API key again to change the URL",
+            path: ["apiKey"],
+          });
+        }
+      }
+
       // Validate query params: same rules as headers (both key/value required, unique keys)
       if (data.queryParams) {
         const paramKeys: string[] = [];
@@ -324,11 +348,17 @@ export const createCustomProviderDetailsFormSchema = (
       }
     });
 
-export const createAIProviderFormSchema = (existingProviderNames?: string[]) =>
+export const createAIProviderFormSchema = (
+  existingProviderNames?: string[],
+  storedProvider?: StoredProviderCredentials,
+) =>
   z.union([
     CloudAIProviderDetailsFormSchema,
     VertexAIProviderDetailsFormSchema,
-    createCustomProviderDetailsFormSchema(existingProviderNames),
+    createCustomProviderDetailsFormSchema(
+      existingProviderNames,
+      storedProvider,
+    ),
   ]);
 
 export const AIProviderFormSchema = createAIProviderFormSchema();

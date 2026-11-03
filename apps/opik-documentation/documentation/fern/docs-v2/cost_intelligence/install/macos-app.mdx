@@ -50,7 +50,7 @@ Deploy `Opik CIPX.app` to `/Applications` as a package payload, together with an
 
 <Accordion title="View an example configuration profile">
 
-```xml title="opik-cipx-app.mobileconfig"
+```xml title="opik-cipx-app.mobileconfig" wordWrap
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -128,7 +128,7 @@ Every payload key, profile validation, and the per-MDM upload paths are in [Adva
 
 Ship a file per user at `~/.opik-cipx/config.toml`:
 
-```toml
+```toml wordWrap
 [opik]
 base_url  = "https://www.comet.com/opik/api"
 api_key   = "<workspace-scoped service-account key>"
@@ -147,7 +147,7 @@ Trigger a first launch — a package postinstall script that opens the app in th
 
 Then check a target device:
 
-```bash
+```bash wordWrap
 systemextensionsctl list | grep opik-cipx        # extension activated
 ls -l ~/.opik-cipx/config.toml                   # the step that silently fails
 ```
@@ -179,7 +179,7 @@ The profile carries two payloads that do different jobs.
 
 Validate the profile before pushing, because a malformed payload is silently ignored by some MDMs:
 
-```bash
+```bash wordWrap
 plutil -lint opik-cipx-app.mobileconfig    # must print "OK"
 ```
 
@@ -239,7 +239,7 @@ For Claude Code this is handled for you: the app points Claude Code at the devic
 
 <Accordion title="Uninstall">
 
-```bash
+```bash wordWrap
 # Remove the profile via your MDM, or:
 sudo profiles remove -identifier com.comet.opik-cipx-app.managed
 

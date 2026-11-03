@@ -12,6 +12,7 @@ import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.domain.ProjectService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.metrics.ClickHousePartitionMetricsDAO.LwdStat;
@@ -36,6 +37,7 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -93,6 +95,7 @@ class ClickHousePartitionMetricsDAOTest {
     private TraceResourceClient traceResourceClient;
     private ClickHousePartitionMetricsDAO partitionMetricsDAO;
     private ConnectionFactory connectionFactory;
+    private ProjectService projectService;
 
     @BeforeAll
     void setUpAll(ClientSupport clientSupport, Injector injector) {
@@ -101,6 +104,7 @@ class ClickHousePartitionMetricsDAOTest {
         traceResourceClient = new TraceResourceClient(clientSupport, baseUrl);
         partitionMetricsDAO = injector.getInstance(ClickHousePartitionMetricsDAO.class);
         connectionFactory = injector.getInstance(ConnectionFactory.class);
+        projectService = injector.getInstance(ProjectService.class);
     }
 
     @Test
@@ -163,6 +167,54 @@ class ClickHousePartitionMetricsDAOTest {
             assertThat(groundTruth).isGreaterThanOrEqualTo(toDelete);
             assertThat(daoLwd).isEqualTo(groundTruth);
         });
+    }
+
+    @Test
+    void lwdScanFailureOnOneTableLeavesOtherTablesReporting() {
+        var apiKey = randomName("api-key");
+        var workspaceName = randomName("workspace");
+        mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, UUID.randomUUID().toString(),
+                randomName("user"));
+        var projectName = randomName("project");
+        var traceId = traceResourceClient.createTrace(
+                factory.manufacturePojo(Trace.class).toBuilder()
+                        .id(null)
+                        .projectName(projectName)
+                        .projectId(null)
+                        .startTime(Instant.now())
+                        .feedbackScores(null)
+                        .usage(null)
+                        .build(),
+                apiKey, workspaceName);
+        traceResourceClient.deleteTrace(traceId, workspaceName, apiKey);
+
+        // A table named in lwdTables that doesn't exist (UNKNOWN_TABLE), e.g. spans_local before the
+        // wrap, must drop only its own series: traces reports exactly what it reports on its own.
+        Awaitility.await().atMost(30, TimeUnit.SECONDS).pollInterval(1, TimeUnit.SECONDS).untilAsserted(() -> {
+            var expected = partitionMetricsDAO.getLwdRowCounts(List.of("traces")).block();
+            assertThat(expected).isNotEmpty();
+
+            var actual = partitionMetricsDAO.getLwdRowCounts(List.of("missing_table", "traces")).block();
+
+            assertThat(actual).isEqualTo(expected);
+        });
+    }
+
+    @Test
+    void installationDateIsNotAfterProjectCreation() {
+        var apiKey = randomName("api-key");
+        var workspaceName = randomName("workspace");
+        mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, UUID.randomUUID().toString(),
+                randomName("user"));
+        var projectId = projectResourceClient.createProject(
+                factory.manufacturePojo(Project.class).toBuilder().name(randomName("project")).build(), apiKey,
+                workspaceName);
+        var createdDate = projectResourceClient.getProject(projectId, apiKey, workspaceName).createdAt()
+                .atZone(ZoneOffset.UTC).toLocalDate();
+
+        var actual = projectService.findInstallationDate().block();
+
+        assertThat(actual).hasValueSatisfying(date -> assertThat(date).isBeforeOrEqualTo(createdDate));
     }
 
     private PartitionStat tracesStat() {

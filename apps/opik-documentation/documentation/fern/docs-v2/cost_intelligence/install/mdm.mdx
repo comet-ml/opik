@@ -34,7 +34,7 @@ Settings delivered this way are org-enforced: users cannot disable the plugin or
 
 Generate it from **Cost Intelligence → Organization Policies → Copy settings file**, or start from this template:
 
-```json
+```json wordWrap
 {
   "extraKnownMarketplaces": {
     "opik-enterprise": {
@@ -63,7 +63,7 @@ Generate it from **Cost Intelligence → Organization Policies → Copy settings
 
 Validate before shipping. A malformed payload is silently ignored by some MDMs, which gives you a rollout that reports success and enforces nothing:
 
-```bash
+```bash wordWrap
 plutil -convert json -o /dev/null 50-opik-cipx.json   # macOS
 python3 -m json.tool 50-opik-cipx.json > /dev/null    # any platform
 ```
@@ -76,7 +76,7 @@ python3 -m json.tool 50-opik-cipx.json > /dev/null    # any platform
 
 Ship the JSON to the device (a pkg payload, or a "files and script" policy), then place it as root:
 
-```bash
+```bash wordWrap
 #!/bin/bash
 set -euo pipefail
 DIR="/Library/Application Support/ClaudeCode/managed-settings.d"
@@ -94,7 +94,7 @@ MDM script runners already execute as root. Use absolute tool paths; those runne
 
 The whole install fits in one JumpCloud Command, run as **root**. Inline the JSON with a heredoc so no separate file transfer is needed:
 
-```bash
+```bash wordWrap
 #!/bin/bash
 set -euo pipefail
 DIR="/Library/Application Support/ClaudeCode/managed-settings.d"
@@ -120,7 +120,7 @@ Two operational notes specific to JumpCloud:
 
 Same JSON, different path. Any provisioning tool that can write a root-owned file works: Ansible, Puppet, Chef, or a package postinstall:
 
-```bash
+```bash wordWrap
 install -d -m 755 /etc/claude-code/managed-settings.d
 install -m 644 -o root -g root \
   50-opik-cipx.json /etc/claude-code/managed-settings.d/50-opik-cipx.json
@@ -134,7 +134,7 @@ install -m 644 -o root -g root \
 
 As the logged-in user, in a **fresh** Claude Code session (managed settings load at startup):
 
-```bash
+```bash wordWrap
 claude plugin list
 cat "/Library/Application Support/ClaudeCode/managed-settings.d/50-opik-cipx.json"
 opik-cipx status
@@ -153,7 +153,7 @@ So you push this file once, and manage cost policy from the Opik dashboard after
 
 ## Uninstall
 
-```bash
+```bash wordWrap
 sudo rm "/Library/Application Support/ClaudeCode/managed-settings.d/50-opik-cipx.json"
 ```
 

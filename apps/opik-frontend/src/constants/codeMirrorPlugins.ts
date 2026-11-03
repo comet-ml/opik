@@ -18,6 +18,19 @@ export const codeMirrorPromptTheme = EditorView.theme({
   ".cm-line": {
     "padding-left": 0,
   },
+  // With no line padding, CodeMirror's default -0.6px cursor margin puts a
+  // column-0 cursor outside .cm-scroller, which clips it: an empty editor
+  // shows no cursor at all.
+  ".cm-cursor": {
+    marginLeft: 0,
+  },
+  // CodeMirror puts this invisible 1em-tall image in front of the placeholder.
+  // After Backspace empties the editor, @codemirror/view 6.28 sizes the cursor
+  // from it, so the cursor came out shorter than the text (fixed upstream in
+  // 6.39.8). 1.2em is about the height of a line of text.
+  ".cm-widgetBuffer": {
+    height: "1.2em",
+  },
   ".cm-scroller": {
     fontFamily: "inherit",
   },

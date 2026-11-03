@@ -1,12 +1,12 @@
-# syntax=docker/dockerfile:1
+# syntax=docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
 #######################################################################
 # Multi-stage build: Build stage
 #######################################################################
-FROM python:3.12.14-slim AS builder
+FROM python:3.12.16-slim@sha256:8523d6abeb48ceae0b7240d30c5808fc26cb79c1a635bacdf19cf3baecfbec07 AS builder
 
 # uv is a drop-in faster pip; the binary is copied from the official distroless
 # image (pinned) and used only in this builder stage — it never reaches runtime.
-COPY --from=ghcr.io/astral-sh/uv:0.11.29 /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.13.6@sha256:af22a52f5eafef3d78e551599d405c02df61919d18028f0cea8eda93bc9986d0 /uv /usr/local/bin/uv
 
 WORKDIR /build
 
@@ -42,7 +42,7 @@ RUN sh /usr/local/bin/selftest.sh ./scoring_runner.pyc
 #######################################################################
 # Multi-stage build: Runtime stage
 #######################################################################
-FROM python:3.12.14-slim AS runtime
+FROM python:3.12.16-slim@sha256:8523d6abeb48ceae0b7240d30c5808fc26cb79c1a635bacdf19cf3baecfbec07 AS runtime
 
 WORKDIR /opt/opik-sandbox-executor-python
 

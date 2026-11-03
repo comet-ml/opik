@@ -9,6 +9,7 @@ import {
 import useDatasetById from "@/api/datasets/useDatasetById";
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
 import { useDatasetEntityIdFromURL } from "@/v2/hooks/useDatasetEntityIdFromURL";
+import { useRedirectToOwnProject } from "@/v2/hooks/useRedirectToOwnProject";
 
 const DatasetDetailPage = () => {
   const setBreadcrumbParam = useBreadcrumbsStore((state) => state.setParam);
@@ -35,6 +36,8 @@ const DatasetDetailPage = () => {
   const { data } = useDatasetById({
     datasetId,
   });
+
+  useRedirectToOwnProject(data?.project_id);
 
   useEffect(() => {
     if (data?.name) {

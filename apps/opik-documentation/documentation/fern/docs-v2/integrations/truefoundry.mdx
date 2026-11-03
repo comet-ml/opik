@@ -159,7 +159,7 @@ The gateway exposes an OpenAI-compatible API, so you can use the [Opik OpenAI SD
 
 First, ensure you have both `opik` and `openai` packages installed:
 
-```bash
+```bash wordWrap
 pip install opik openai
 ```
 
@@ -181,14 +181,14 @@ You need a TrueFoundry API key and the base URL of your gateway.
 
 Set your configuration as environment variables:
 
-```bash
+```bash wordWrap
 export TRUEFOUNDRY_API_KEY="<your-truefoundry-api-key>"
 export TRUEFOUNDRY_BASE_URL="<your-truefoundry-base-url>"
 ```
 
 Or set them programmatically:
 
-```python
+```python wordWrap
 import os
 import getpass
 
@@ -201,7 +201,7 @@ if "TRUEFOUNDRY_BASE_URL" not in os.environ:
 
 ### Simple LLM Call
 
-```python
+```python wordWrap
 import os
 from opik.integrations.openai import track_openai
 from openai import OpenAI
@@ -238,7 +238,7 @@ print(response.choices[0].message.content)
 
 If you have multiple steps in your LLM pipeline, you can use the `@track` decorator to log the traces for each step. If TrueFoundry is called within one of these steps, the LLM call will be associated with that corresponding step:
 
-```python
+```python wordWrap
 import os
 from opik import track
 from opik.integrations.openai import track_openai

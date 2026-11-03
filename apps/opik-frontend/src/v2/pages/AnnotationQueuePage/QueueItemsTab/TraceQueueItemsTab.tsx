@@ -84,7 +84,6 @@ import TimeCell from "@/shared/DataTableCells/TimeCell";
 import useTraceThreadPanelsState from "@/v2/pages-shared/traces/useTraceThreadPanelsState";
 import useTracesStatistic from "@/api/traces/useTracesStatistic";
 import useAppStore from "@/store/AppStore";
-import { generateAnnotationQueueIdFilter } from "@/lib/filters";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
 import SelectBox, { SelectBoxProps } from "@/shared/SelectBox/SelectBox";
 import { useTruncationEnabled } from "@/contexts/server-sync-provider";
@@ -389,16 +388,11 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
     defaultValue: {},
   });
 
-  const extendedFilters = useMemo(
-    () => [...filters, ...generateAnnotationQueueIdFilter(annotationQueue.id)],
-    [annotationQueue.id, filters],
-  );
-
   const { data, isPending, isPlaceholderData, isFetching } = useTracesList(
     {
       projectId: annotationQueue.project_id,
       sorting: sortedColumns,
-      filters: extendedFilters,
+      filters,
       page: page as number,
       size: size as number,
       search: search as string,
@@ -416,6 +410,7 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
       projectId: annotationQueue.project_id,
       filters,
       search: search as string,
+      annotationQueueId: annotationQueue.id,
     },
     {
       placeholderData: keepPreviousData,

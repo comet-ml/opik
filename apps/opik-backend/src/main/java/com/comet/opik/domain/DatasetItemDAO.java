@@ -13,11 +13,9 @@ import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.ErrorUtils;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
-import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Statement;
 import jakarta.inject.Inject;
@@ -30,7 +28,6 @@ import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -47,8 +44,6 @@ import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
-import static com.comet.opik.utils.template.TemplateUtils.QueryItem;
-import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolder;
 
 @ImplementedBy(DatasetItemDAOImpl.class)
 public interface DatasetItemDAO {
@@ -90,43 +85,6 @@ public interface DatasetItemDAO {
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
 class DatasetItemDAOImpl implements DatasetItemDAO {
-
-    private static final String INSERT_DATASET_ITEM = """
-            INSERT INTO dataset_items (
-                id,
-                dataset_id,
-                source,
-                trace_id,
-                span_id,
-                data,
-                tags,
-                created_at,
-                workspace_id,
-                created_by,
-                last_updated_by
-            )
-            SETTINGS log_comment = '<log_comment>'
-            FORMAT Values
-                <items:{item |
-                    (
-                         :id<item.index>,
-                         :datasetId<item.index>,
-                         :source<item.index>,
-                         :traceId<item.index>,
-                         :spanId<item.index>,
-                         :data<item.index>,
-                         :tags<item.index>,
-                         now64(9),
-                         :workspace_id,
-                         :createdBy<item.index>,
-                         :lastUpdatedBy<item.index>
-                     )
-                     <if(item.hasNext)>
-                        ,
-                     <endif>
-                }>
-            ;
-            """;
 
     private static final String SELECT_DATASET_ITEM = """
             SELECT
@@ -747,6 +705,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 FROM spans final
                 WHERE workspace_id = :workspace_id
                 AND trace_id IN (SELECT trace_id FROM experiment_items_scope)
+                <if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT id_week FROM span_weeks WHERE workspace_id = :workspace_id AND trace_id IN (SELECT trace_id FROM experiment_items_scope))<endif>
                 GROUP BY workspace_id, trace_id
                 ) s ON t.id = s.trace_id
                 GROUP BY
@@ -1089,6 +1048,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     FROM spans final
                     WHERE workspace_id = :workspace_id
                     AND trace_id IN (SELECT trace_id FROM experiment_items_final)
+                    <if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT id_week FROM span_weeks WHERE workspace_id = :workspace_id AND trace_id IN (SELECT trace_id FROM experiment_items_final))<endif>
                     GROUP BY workspace_id, project_id, trace_id
                 ) AS s ON eif.trace_id = s.trace_id
             ), feedback_scores_agg AS (
@@ -1185,16 +1145,11 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             return Mono.empty();
         }
 
-        if (configuration.getBulkInsert().v2ClientEnabled()) {
-            return insertJsonEachRow(datasetId, items);
-        }
-
-        return asyncTemplate.nonTransaction(connection -> mapAndInsert(
-                datasetId, items, connection, INSERT_DATASET_ITEM));
+        return insertJsonEachRow(datasetId, items);
     }
 
     /**
-     * Same rows as {@link #INSERT_DATASET_ITEM}, streamed as JSONEachRow instead of bound as ~9 named
+     * Dataset item rows streamed as JSONEachRow. Replaced an R2DBC insert that bound ~9 named
      * parameters per row plus a shared workspace id.
      *
      * <p>Only {@code save} moves onto this path. {@code mapAndInsert} is also rendered with
@@ -1223,45 +1178,6 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     getLogComment("save_dataset_items", workspaceId, userName, items.size()),
                     items,
                     item -> DatasetItemJsonRowMapper.toJsonRow(item, datasetId, userName, workspaceId))
-                    .doFinally(signalType -> endSegment(segment));
-        });
-    }
-
-    private Mono<Long> mapAndInsert(
-            UUID datasetId, List<DatasetItem> items, Connection connection, String sqlTemplate) {
-
-        return makeMonoContextAware((userName, workspaceId) -> {
-            List<QueryItem> queryItems = getQueryItemPlaceHolder(items.size());
-
-            var template = getSTWithLogComment(sqlTemplate, "save_dataset_items", workspaceId, userName, items.size())
-                    .add("items", queryItems);
-
-            String sql = template.render();
-
-            var statement = connection.createStatement(sql);
-            statement.bind("workspace_id", workspaceId);
-
-            int i = 0;
-            for (DatasetItem item : items) {
-                Map<String, JsonNode> data = new HashMap<>(Optional.ofNullable(item.data()).orElse(Map.of()));
-
-                statement.bind("id" + i, item.id());
-                statement.bind("datasetId" + i, datasetId);
-                statement.bind("source" + i, item.source().getValue());
-                statement.bind("traceId" + i, DatasetItemResultMapper.getOrDefault(item.traceId()));
-                statement.bind("spanId" + i, DatasetItemResultMapper.getOrDefault(item.spanId()));
-                statement.bind("data" + i, DatasetItemResultMapper.getOrDefault(data));
-                statement.bind("tags" + i, item.tags() != null ? item.tags().toArray(String[]::new) : new String[]{});
-                statement.bind("createdBy" + i, userName);
-                statement.bind("lastUpdatedBy" + i, userName);
-                i++;
-            }
-
-            Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "insert_dataset_items");
-
-            return Flux.from(statement.execute())
-                    .flatMap(Result::getRowsUpdated)
-                    .reduce(0L, Long::sum)
                     .doFinally(signalType -> endSegment(segment));
         });
     }
@@ -1479,10 +1395,17 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
         }
     }
 
+    private void addSpanWeeksBound(ST template) {
+        if (configuration.getDatabaseAnalyticsDataModel().spanWeeksReadBounded()) {
+            template.add("span_weeks_bound", true);
+        }
+    }
+
     private ST newFindTemplate(String query, DatasetItemSearchCriteria datasetItemSearchCriteria, String queryName,
             String workspaceId) {
         var template = getSTWithLogComment(query, queryName, workspaceId, "", "");
         addTracesPartitionedFlag(template);
+        addSpanWeeksBound(template);
 
         Optional.ofNullable(datasetItemSearchCriteria.filters())
                 .ifPresent(filters -> {
@@ -1675,6 +1598,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             var template = getSTWithLogComment(SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_STATS,
                     "get_experiment_items_stats", workspaceId, userName, experimentIds.size());
             addTracesPartitionedFlag(template);
+            addSpanWeeksBound(template);
             template.add("dataset_id", datasetId);
             if (!experimentIds.isEmpty()) {
                 template.add("experiment_ids", true);

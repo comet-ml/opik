@@ -144,28 +144,22 @@ test.describe('Experiments compare — linked prompt versions', { tag: ['@t2-cuj
       await expect(live, 'the live tag is still navigable').toHaveAttribute('href', /\/prompts\//);
     });
 
-    await test.step('The same experiment alone shows the deleted state in both places it renders', async () => {
+    await test.step('The same experiment alone shows the deleted state once, in the page header', async () => {
       const single = new CompareExperimentsPage(page, seed.projectId, seed.datasetId, [
         seed.orphaned.id,
       ]);
       await single.gotoConfiguration();
 
-      // Two, exactly: outside compare mode the prompt appears once in the page
-      // header and once as a tag beside the Configuration search box, and the
-      // experiment has one linked version. Counting them pins both renders at
-      // once — a build where either regressed to an enabled, empty-labelled
-      // link would no longer say "Deleted prompt" and the count would drop.
+      // One, exactly: outside compare mode the prompt renders only in the page
+      // header, and the experiment has one linked version. Zero means the
+      // header regressed to an enabled, empty-labelled link; two means the
+      // Configuration tab started repeating the header's tag again.
       await expect(
         single.deletedPromptTags(),
         'deleted-prompt tags on the single-experiment page',
-      ).toHaveCount(2);
+      ).toHaveCount(1);
 
-      for (const index of [0, 1]) {
-        await single.expectTagNotNavigable(
-          single.deletedPromptTags().nth(index),
-          `deleted prompt tag ${index}`,
-        );
-      }
+      await single.expectTagNotNavigable(single.deletedPromptTags().first(), 'the deleted prompt tag');
 
       await test.step('…and the synthetic compare row is not rendered outside compare mode', async () => {
         await single.expectConfigRowAbsent(PROMPT_ROW);

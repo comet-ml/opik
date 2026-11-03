@@ -326,6 +326,43 @@ describe("pythonProxyErrorMessage", () => {
   });
 });
 
+describe("a run on a model the API key can't use", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("reports the 404 and Anthropic's own message", async () => {
+    const anthropicError = {
+      type: "error",
+      error: { type: "not_found_error", message: "model: claude-mythos-5" },
+      request_id: "req_011CfxbMhbsXYbQCVuBpCBKP",
+    };
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        `data: ${JSON.stringify({
+          code: 404,
+          message: JSON.stringify(anthropicError),
+        })}\n\ndata: [DONE]\n`,
+        { status: 200 },
+      ),
+    );
+    const { result } = renderHook(() =>
+      useCompletionProxyStreaming({ workspaceName: "default" }),
+    );
+
+    const run = await result.current({
+      model: PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_5,
+      messages: [{ role: LLM_MESSAGE_ROLE.user, content: "hi" }],
+      configs: {} as LLMPromptConfigsType,
+      onAddChunk: vi.fn(),
+      signal: new AbortController().signal,
+    });
+
+    expect(run.errorStatus).toBe(404);
+    expect(run.providerError).toBe("model: claude-mythos-5");
+  });
+});
+
 describe("the reasoning effort a playground run sends", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -360,11 +397,129 @@ describe("the reasoning effort a playground run sends", () => {
   });
 
   it.each<OpenAiPipelineMode | undefined>([undefined, "chat_completions_api"])(
-    "sends a stored max as high when the mode is %s",
+    "sends a stored max as the model's default, medium, when the mode is %s",
     async (mode) => {
-      expect(await sentReasoningEffort(mode)).toBe("high");
+      expect(await sentReasoningEffort(mode)).toBe("medium");
     },
   );
+});
+
+describe("the error status a failed run reports", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const runAgainst = async (response: Response) => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(response);
+    const { result } = renderHook(() =>
+      useCompletionProxyStreaming({ workspaceName: "default" }),
+    );
+
+    return result.current({
+      model: PROVIDER_MODEL_TYPE.GPT_4O,
+      messages: [{ role: LLM_MESSAGE_ROLE.user, content: "hi" }],
+      configs: {} as LLMPromptConfigsType,
+      onAddChunk: vi.fn(),
+      signal: new AbortController().signal,
+    });
+  };
+
+  const streamOf = (event: object) =>
+    new Response(`data: ${JSON.stringify(event)}\n`, { status: 200 });
+
+  it("reads the status the backend sends with an in-stream error", async () => {
+    const run = await runAgainst(
+      streamOf({ code: 429, message: "Rate limit reached for gpt-4o" }),
+    );
+
+    expect(run.errorStatus).toBe(429);
+    expect(run.opikError).toBe("Rate limit reached for gpt-4o");
+  });
+
+  it("reads the status of an error wrapped in the provider's own envelope", async () => {
+    const run = await runAgainst(
+      streamOf({
+        code: 402,
+        message: JSON.stringify({
+          error: { message: "You exceeded your current quota." },
+        }),
+      }),
+    );
+
+    expect(run.errorStatus).toBe(402);
+    expect(run.providerError).toBe("You exceeded your current quota.");
+  });
+
+  it("falls back to the HTTP status when the body is not an error event", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const run = await runAgainst(
+      new Response("<html>429 Too Many Requests</html>\n", { status: 429 }),
+    );
+
+    expect(run.errorStatus).toBe(429);
+  });
+
+  it("reads a status sent as a string of digits", async () => {
+    const run = await runAgainst(streamOf({ code: "429", message: "slow" }));
+
+    expect(run.errorStatus).toBe(429);
+  });
+
+  it.each([
+    ["a boolean", true],
+    ["an array", [429]],
+    ["a status below the error range", 399],
+    ["a status past the HTTP range", 5000],
+    ["a string that is not a status", "429abc"],
+  ])(
+    "keeps the HTTP status when the event's code is %s",
+    async (_label, code) => {
+      const run = await runAgainst(
+        new Response(`data: ${JSON.stringify({ code, message: "x" })}\n`, {
+          status: 503,
+        }),
+      );
+
+      expect(run.errorStatus).toBe(503);
+    },
+  );
+
+  it("reads an error the backend answers with plain JSON and no trailing newline", async () => {
+    const message =
+      "custom_parameters.stream is set by Opik from the request and cannot be replaced";
+    const run = await runAgainst(
+      new Response(JSON.stringify({ code: 400, message }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    expect(run.errorStatus).toBe(400);
+    expect(run.opikError).toBe(message);
+  });
+
+  it("reads the last line of a stream that ends without a newline", async () => {
+    const run = await runAgainst(
+      new Response(
+        `data: ${JSON.stringify({
+          choices: [{ delta: { content: "hello" } }],
+        })}`,
+        { status: 200 },
+      ),
+    );
+
+    expect(run.result).toBe("hello");
+  });
+
+  it("reports no status for a run that succeeds", async () => {
+    const run = await runAgainst(
+      streamOf({ choices: [{ delta: { content: "hello" } }] }),
+    );
+
+    expect(run.errorStatus).toBeNull();
+    expect(run.result).toBe("hello");
+  });
 });
 
 describe("the penalties a playground run sends", () => {
@@ -416,4 +571,94 @@ describe("the penalties a playground run sends", () => {
       expect(body.presence_penalty).toBe(0.3);
     },
   );
+});
+
+describe("the finish reason a playground run reports", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const sse = (...events: object[]) =>
+    events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("") +
+    "data: [DONE]\n\n";
+
+  const runAgainst = async (body: string) => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(body));
+    const { result } = renderHook(() =>
+      useCompletionProxyStreaming({ workspaceName: "default" }),
+    );
+
+    return result.current({
+      model: PROVIDER_MODEL_TYPE.GPT_5_NANO,
+      messages: [{ role: LLM_MESSAGE_ROLE.user, content: "hi" }],
+      configs: { maxCompletionTokens: 60 } as LLMPromptConfigsType,
+      onAddChunk: vi.fn(),
+      signal: new AbortController().signal,
+    });
+  };
+
+  const USAGE = { prompt_tokens: 58, completion_tokens: 60, total_tokens: 118 };
+
+  it.each<[string, string, string | null, typeof USAGE | null]>([
+    [
+      "keeps OpenAI's length although the usage chunk after it has no choices",
+      sse(
+        { choices: [{ index: 0, delta: { content: "" } }] },
+        { choices: [{ index: 0, delta: {}, finish_reason: "length" }] },
+        { choices: [], usage: USAGE },
+      ),
+      "length",
+      USAGE,
+    ],
+    [
+      "reads a finish reason sent together with the usage",
+      sse(
+        { choices: [{ delta: { content: "" } }] },
+        {
+          choices: [{ delta: { content: "" }, finish_reason: "length" }],
+          usage: USAGE,
+        },
+      ),
+      "length",
+      USAGE,
+    ],
+    [
+      "reports stop for an answer that finished normally without usage",
+      sse(
+        { choices: [{ delta: { content: "hi" } }] },
+        { choices: [{ delta: { content: "" }, finish_reason: "stop" }] },
+      ),
+      "stop",
+      null,
+    ],
+    [
+      "reports none when the stream carries no finish reason",
+      sse({ choices: [{ delta: { content: "" } }], usage: USAGE }),
+      null,
+      USAGE,
+    ],
+  ])("%s", async (_, body, expectedFinishReason, expectedUsage) => {
+    const run = await runAgainst(body);
+
+    expect(run).toMatchObject({
+      finishReason: expectedFinishReason,
+      usage: expectedUsage,
+      providerError: null,
+      opikError: null,
+      pythonProxyError: null,
+    });
+  });
+
+  it("returns an empty result for a run that spent the limit on reasoning", async () => {
+    const run = await runAgainst(
+      sse(
+        { choices: [{ index: 0, delta: { content: "" } }] },
+        { choices: [{ index: 0, delta: {}, finish_reason: "length" }] },
+        { choices: [], usage: USAGE },
+      ),
+    );
+
+    expect(run.result).toBe("");
+    expect(run.usage).toEqual(USAGE);
+  });
 });

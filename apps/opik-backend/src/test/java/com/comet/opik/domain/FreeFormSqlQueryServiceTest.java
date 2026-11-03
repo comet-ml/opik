@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.clickhouse.client.api.ServerException;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.infrastructure.DatabaseAnalyticsReadOnlyFreeFormSqlConfig;
 import com.comet.opik.infrastructure.FreeFormSqlPostRunCheckConfig;
@@ -7,6 +8,7 @@ import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.WebApplicationException;
+import jakarta.ws.rs.core.HttpHeaders;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -181,6 +183,30 @@ class FreeFormSqlQueryServiceTest {
     }
 
     @Test
+    @DisplayName("ClickHouse's concurrent-query cap is a retryable 429, not a failed query")
+    void tooManySimultaneousQueriesIsRetryable() {
+        givenClickHouseReturnsOneRow();
+        when(dao.execute(any(), anyString(), anyString(), anyString(), anyString()))
+                .thenReturn(CompletableFuture.failedFuture(
+                        new ServerException(202, "Too many simultaneous queries for user", 500, "query-id")));
+
+        assertThatThrownBy(() -> service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, UUID.randomUUID(), QUERY)
+                .join()).cause().satisfies(retryable());
+    }
+
+    @Test
+    @DisplayName("the concurrent-query cap hit by the post-run check is a retryable 429, not a failed check")
+    void tooManySimultaneousQueriesInCheckIsRetryable() {
+        givenClickHouseReturnsOneRow();
+        when(dao.explainPlan(any(), anyString(), anyString(), anyString()))
+                .thenReturn(CompletableFuture.failedFuture(
+                        new ServerException(202, "Too many simultaneous queries for user", 500, "query-id")));
+
+        assertThatThrownBy(() -> service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, UUID.randomUUID(), QUERY)
+                .join()).cause().satisfies(retryable());
+    }
+
+    @Test
     @DisplayName("the check reads the log of exactly the execution it follows")
     void checksTheExecutedQuery() {
         givenClickHouseReturnsOneRow();
@@ -302,6 +328,15 @@ class FreeFormSqlQueryServiceTest {
         config.setLogReadDelay(io.dropwizard.util.Duration.milliseconds(0));
         config.setMaxLogReadAttempts(1);
         return config;
+    }
+
+    static java.util.function.Consumer<Throwable> retryable() {
+        return error -> {
+            assertThat(error).isInstanceOf(WebApplicationException.class);
+            var response = ((WebApplicationException) error).getResponse();
+            assertThat(response.getStatus()).isEqualTo(429);
+            assertThat(response.getHeaderString(HttpHeaders.RETRY_AFTER)).isEqualTo("1");
+        };
     }
 
     /** A withheld result: the status, and the constant message, with no row and no ClickHouse detail. */

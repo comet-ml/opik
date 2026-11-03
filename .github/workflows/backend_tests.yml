@@ -81,6 +81,8 @@ jobs:
                 TESTCONTAINERS_REUSE_ENABLE: true
               run: >-
                 mvn clean test
+                -Dspotless.skip=true
+                -Dresolve.skip=true
                 -Dtest="${{ matrix.tests }}"
                 -Dmaven.test.failure.ignore=true
                 -Dsurefire.rerunFailingTestsCount=3

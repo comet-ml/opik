@@ -5,6 +5,7 @@ import com.comet.opik.api.SpanSearchStreamRequest;
 import com.comet.opik.api.filter.SpanFilter;
 import com.comet.opik.api.resources.utils.TestArgs;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
+import com.comet.opik.domain.SpanType;
 import lombok.RequiredArgsConstructor;
 
 import java.time.Instant;
@@ -34,6 +35,15 @@ public final class SpanStreamTestAssertion implements SpanPageTestAssertion<Span
 
         var streamRequestBuilder = SpanSearchStreamRequest.builder().projectName(projectName)
                 .filters(List.copyOf(filters));
+
+        // Same query params as SpansTestAssertion, mapped onto the search request
+        Optional.ofNullable(queryParams.get("trace_id"))
+                .map(UUID::fromString)
+                .ifPresent(streamRequestBuilder::traceId);
+
+        Optional.ofNullable(queryParams.get("type"))
+                .map(SpanType::valueOf)
+                .ifPresent(streamRequestBuilder::type);
 
         // Add time filtering parameters if present
         Optional.ofNullable(queryParams.get("from_time"))

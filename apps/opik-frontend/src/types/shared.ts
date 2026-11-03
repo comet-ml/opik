@@ -50,6 +50,7 @@ export const COLUMN_ENVIRONMENT_ID = "environment";
 
 export const COLUMN_GUARDRAIL_STATISTIC_ID = "guardrails_failed_count";
 export const COLUMN_DATA_ID = "data";
+export const COLUMN_TAGS_ID = "tags";
 
 export enum COLUMN_TYPE {
   string = "string",

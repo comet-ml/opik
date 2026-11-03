@@ -53,6 +53,7 @@ public class ExperimentEntityData {
             String type,
             String evaluationMethod,
             String status,
+            String finishedAt,
             Map<String, BigDecimal> experimentScores) {
     }
 

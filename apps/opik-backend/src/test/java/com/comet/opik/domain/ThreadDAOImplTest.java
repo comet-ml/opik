@@ -7,7 +7,11 @@ import com.comet.opik.api.filter.TraceThreadFilter;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.infrastructure.FilterUtils;
+import com.fasterxml.uuid.Generators;
+import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -19,12 +23,16 @@ import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ThreadDAOImplTest {
+
+    private static final TimeBasedEpochGenerator UUID_GENERATOR = Generators.timeBasedEpochGenerator();
 
     @Test
     @DisplayName("a multi-element stream collapses to the first thread (singleOrEmpty would throw here)")
@@ -58,7 +66,7 @@ class ThreadDAOImplTest {
     @DisplayName("traces_final_ids prefilter gate")
     class TracesFinalIdsPrefilterGate {
 
-        private static final String SPANS_PREFILTER = "AND trace_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM traces_final_ids)))";
+        private static final String SPANS_PREFILTER = "AND trace_id IN (SELECT arrayJoin(arrayMap(t -> t.1, (SELECT groupArray((id, thread_id, id_week)) FROM traces_final_ids))))";
         // Rendered into the query only when searchText is set (FilterUtils#newTraceThreadFindTemplate);
         // the searchText case below is the one that exercises it.
         private static final String SEARCH_CLAUSE = "ilike(thread_id, :search_text)";
@@ -159,11 +167,59 @@ class ThreadDAOImplTest {
     }
 
     @Nested
+    @DisplayName("latest-version search across the templates that share it")
+    class LatestVersionSearchTemplateSync {
+
+        private static final String SEARCH_CLAUSE = "ilike(thread_id, :search_text)";
+        private static final Pattern SEARCH_BLOCK = Pattern.compile(
+                "AND thread_id IN \\(\\s*SELECT thread_id\\s+FROM traces\\s.*?AND ilike\\(thread_id, :search_text\\)\\s*\\)",
+                Pattern.DOTALL);
+
+        /**
+         * The search runs on the latest version of each trace outside FINAL, in a block copied into the list,
+         * page-ids, count and stats templates. This pins the four copies to the same SQL, so a change to one
+         * (window, partition hint, latest-version subquery) can't miss the others.
+         */
+        @Test
+        @DisplayName("the list, page-ids, count and stats templates render the same latest-version search block")
+        void allTemplatesRenderTheSameSearchBlock() {
+            var criteria = TraceSearchCriteria.builder()
+                    .projectId(UUID_GENERATOR.generate())
+                    .uuidFromTime(UUID_GENERATOR.generate())
+                    .uuidToTime(UUID_GENERATOR.generate())
+                    .searchText(RandomStringUtils.secure().nextAlphanumeric(10))
+                    .build();
+
+            var expectedBlock = searchBlock(ThreadDAOImpl.SELECT_TRACES_THREADS_BY_PROJECT_IDS, criteria);
+
+            assertThat(searchBlock(ThreadDAOImpl.SELECT_PAGE_THREAD_IDS, criteria)).isEqualTo(expectedBlock);
+            assertThat(searchBlock(ThreadDAOImpl.SELECT_COUNT_TRACES_THREADS_BY_PROJECT_IDS, criteria))
+                    .isEqualTo(expectedBlock);
+            assertThat(searchBlock(ThreadDAOImpl.SELECT_TRACE_THREADS_STATS, criteria)).isEqualTo(expectedBlock);
+        }
+
+        /** The template's single search block, whitespace-normalised since each copy sits at its own indent. */
+        private static String searchBlock(String query, TraceSearchCriteria criteria) {
+            var template = FilterUtils.newTraceThreadFindTemplate(query, criteria, SEARCH_CLAUSE, true)
+                    .add("traces_partitioned", true);
+            if (ThreadDAOImpl.shouldUseTracesFinalIdsPrefilter(criteria, template)) {
+                template.add("traces_final_ids", true);
+            }
+            var sql = template.render();
+            var blocks = SEARCH_BLOCK.matcher(sql).results()
+                    .map(match -> match.group().replaceAll("\\s+", " "))
+                    .toList();
+            assertThat(blocks).hasSize(1);
+            return blocks.getFirst();
+        }
+    }
+
+    @Nested
     @DisplayName("thread_id pushdown across the templates that share it")
     class ThreadIdPushdownTemplateSync {
 
         private static final String THREAD_ID_PUSHDOWN = "AND thread_id = :thread_id_pushdown";
-        private static final String TRACES_FINAL_IDS_IN = "thread_id IN (SELECT thread_id FROM traces_final_ids)";
+        private static final String TRACES_FINAL_IDS_IN = "thread_id IN (SELECT arrayJoin(arrayMap(t -> t.2, (SELECT groupArray((id, thread_id, id_week)) FROM traces_final_ids))))";
         private static final String TRACES_FINAL_IN = "thread_id IN (SELECT thread_id FROM traces_final)";
         private static final String ROW_ID_RANGE = "AND id >= :uuid_from_time";
         private static final String SEARCH_CLAUSE = "ilike(thread_id, :search_text)";
@@ -344,5 +400,96 @@ class ThreadDAOImplTest {
         int end = sql.indexOf("ORDER BY (workspace_id, project_id, thread_id, id)", start);
         assertThat(end).isGreaterThan(start);
         return sql.substring(start, end);
+    }
+
+    @Nested
+    @DisplayName("annotation queue narrowing")
+    class AnnotationQueueNarrowing {
+
+        private static final String QUEUE_THREADS_PREFILTER = "AND id IN (SELECT thread_model_id FROM annotation_queue_thread_model_ids)";
+        private static final String QUEUE_THREADS_CHECK = "AND tt.thread_model_id IN (SELECT thread_model_id FROM annotation_queue_thread_model_ids)";
+        private static final String UNQUEUED_CHECK = "AND tt.thread_model_id NOT IN (SELECT thread_model_id FROM annotation_queue_memberships";
+
+        /**
+         * Whether a trace or thread in no queue (an empty queue id list) passes the operator. A new operator on
+         * the field fails {@link #everyQueueFilterOperatorIsClassified} until it is added here, so it cannot slip
+         * through as narrowing while it actually keeps unqueued items.
+         */
+        private static final Map<Operator, Boolean> ACCEPTS_UNQUEUED = Map.of(
+                Operator.CONTAINS, false,
+                Operator.EQUAL, false,
+                Operator.IS_NOT_EMPTY, false,
+                Operator.NOT_CONTAINS, true,
+                Operator.NOT_EQUAL, true,
+                Operator.IS_EMPTY, true);
+
+        private static ST template(List<TraceThreadFilter> filters, UUID annotationQueueId) {
+            var criteria = TraceSearchCriteria.builder()
+                    .projectId(UUID.randomUUID())
+                    .filters(filters)
+                    .annotationQueueId(annotationQueueId)
+                    .build();
+            var template = FilterUtils.newTraceThreadFindTemplate(
+                    ThreadDAOImpl.SELECT_TRACES_THREADS_BY_PROJECT_IDS, criteria, "1", true);
+            assertThat(ThreadDAOImpl.isPagePushdownEligible(template, criteria)).isFalse();
+            if (ThreadDAOImpl.shouldUseTracesFinalIdsPrefilter(criteria, template)) {
+                template.add("traces_final_ids", true);
+            }
+            return template;
+        }
+
+        private static TraceThreadFilter queueFilter(Operator operator) {
+            return TraceThreadFilter.builder()
+                    .field(TraceThreadField.ANNOTATION_QUEUE_IDS)
+                    .operator(operator)
+                    .value(UUID.randomUUID().toString())
+                    .build();
+        }
+
+        @Test
+        @DisplayName("every operator of the queue filter is classified as narrowing or keeping unqueued items")
+        void everyQueueFilterOperatorIsClassified() {
+            var supported = new FilterQueryBuilder().getSupportedOperators(TraceThreadField.ANNOTATION_QUEUE_IDS)
+                    .get(TraceThreadField.ANNOTATION_QUEUE_IDS);
+
+            assertThat(supported).containsExactlyInAnyOrderElementsOf(ACCEPTS_UNQUEUED.keySet());
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("operators")
+        @DisplayName("a queue filter either narrows the traces scan to the queue's threads or excludes failing threads")
+        void queueFilterNarrowsOnlyWhenItRejectsUnqueuedThreads(Operator operator, boolean acceptsUnqueued) {
+            var sql = template(List.of(queueFilter(operator)), null).render();
+
+            if (acceptsUnqueued) {
+                assertThat(sql).doesNotContain(QUEUE_THREADS_PREFILTER).doesNotContain(QUEUE_THREADS_CHECK)
+                        .contains(UNQUEUED_CHECK);
+            } else {
+                assertThat(sql).contains(QUEUE_THREADS_PREFILTER).contains(QUEUE_THREADS_CHECK)
+                        .doesNotContain(UNQUEUED_CHECK);
+            }
+        }
+
+        private static Stream<Arguments> operators() {
+            return ACCEPTS_UNQUEUED.entrySet().stream().map(entry -> Arguments.of(entry.getKey(), entry.getValue()));
+        }
+
+        @Test
+        @DisplayName("the queue id alone narrows the traces scan to that queue's threads")
+        void queueIdNarrowsToQueueThreads() {
+            var sql = template(null, UUID.randomUUID()).render();
+
+            assertThat(sql).contains(QUEUE_THREADS_PREFILTER).contains(QUEUE_THREADS_CHECK)
+                    .contains("AND queue_id = :annotation_queue_id");
+        }
+
+        @Test
+        @DisplayName("a queue filter makes the memberships cover every queue of the project, even with the queue id")
+        void queueFilterWithQueueIdKeepsEveryQueue() {
+            var sql = template(List.of(queueFilter(Operator.NOT_EQUAL)), UUID.randomUUID()).render();
+
+            assertThat(sql).doesNotContain("AND queue_id = :annotation_queue_id")
+                    .contains(QUEUE_THREADS_PREFILTER).contains(UNQUEUED_CHECK);
+        }
     }
 }

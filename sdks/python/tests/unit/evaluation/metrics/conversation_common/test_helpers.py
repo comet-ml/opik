@@ -167,3 +167,10 @@ def test_extract_turns_windows_from_conversation__no_turns__raises_error():
         conversation_helpers.extract_turns_windows_from_conversation(
             conversation=conversation, window_size=2
         )
+
+
+def test_message_has_text__reexported_from_helpers():
+    """The sliding-window judges read content through ``helpers``, so the re-export
+    must keep working alongside the one implementation in ``conversation_content``."""
+    assert conversation_helpers.message_has_text({"content": "Hi there!"})
+    assert not conversation_helpers.message_has_text({"content": ""})

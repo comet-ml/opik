@@ -24,7 +24,7 @@ The Opik Python SDK is a key component of our platform, allowing developers to i
 
   <Tabs>
     <Tab title="Linux/Mac">
-    ```bash
+    ```bash wordWrap
     # From the root of the repository
     ./opik.sh --port-mapping
 
@@ -33,7 +33,7 @@ The Opik Python SDK is a key component of our platform, allowing developers to i
     ```
     </Tab>
     <Tab title="Windows">
-    ```powershell
+    ```powershell wordWrap
     # From the root of the repository
     .\opik.ps1 --port-mapping
 
@@ -50,7 +50,7 @@ The Opik Python SDK is a key component of our platform, allowing developers to i
   <Tip title="Windows Users">
     - Ensure the Python `Scripts` directory (e.g., `C:\Users\<name>\AppData\Local\Programs\Python<version>\Scripts\`) is in your system's PATH for the `opik` CLI command to work after installation. Restart your terminal after adding it.
     - Using a Python virtual environment is highly recommended:
-      ```powershell
+      ```powershell wordWrap
       # Create a virtual environment
       py -m venv my-opik-env
       
@@ -69,7 +69,7 @@ The Opik Python SDK is a key component of our platform, allowing developers to i
 
 Navigate to the `sdks/python` directory (or use the path from your virtual environment setup) and install the SDK in editable mode:
 
-```bash
+```bash wordWrap
 pip install -e .
 ```
 
@@ -85,7 +85,7 @@ Make your desired code changes, additions, or bug fixes within the `sdks/python`
 
 Testing is crucial. For most SDK contributions, you should run the unit and the end-to-end (e2e) tests:
 
-```bash
+```bash wordWrap
 cd sdks/python # Ensure you are in this directory
 
 # Install test-specific requirements
@@ -114,7 +114,7 @@ If you're making changes to specific integrations (e.g., OpenAI, Anthropic):
 
 Ensure your code adheres to our linting standards:
 
-```bash
+```bash wordWrap
 cd "$(git rev-parse --show-toplevel)"
 make precommit
 ```
