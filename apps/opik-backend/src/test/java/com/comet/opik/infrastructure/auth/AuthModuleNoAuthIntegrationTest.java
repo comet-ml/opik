@@ -23,11 +23,13 @@ import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
+import reactor.test.StepVerifier;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 
 import java.util.UUID;
 
+import static com.comet.opik.domain.ProjectService.DEFAULT_ORGANIZATION_ID;
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
 import static com.comet.opik.domain.ProjectService.DEFAULT_WORKSPACE_NAME;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
@@ -147,6 +149,18 @@ class AuthModuleNoAuthIntegrationTest {
                 .hasEntrySatisfying("\uD83D\uDC4D", value -> assertThat(value).isEqualTo(1.0));
         assertThat(actualEntity.getDetails().getCategories())
                 .hasEntrySatisfying("\uD83D\uDC4E", value -> assertThat(value).isEqualTo(0.0));
+    }
+
+    @Test
+    void testOrganizationResolver__noAuthIsConfigured__thenResolveDefaultOrganization(OrganizationResolver resolver) {
+        assertThat(resolver).isInstanceOf(DefaultOrganizationResolver.class);
+
+        StepVerifier.create(resolver.organizationId())
+                .expectNext(DEFAULT_ORGANIZATION_ID)
+                .verifyComplete();
+        StepVerifier.create(resolver.requireOrganizationAdmin())
+                .expectNext(DEFAULT_ORGANIZATION_ID)
+                .verifyComplete();
     }
 
 }

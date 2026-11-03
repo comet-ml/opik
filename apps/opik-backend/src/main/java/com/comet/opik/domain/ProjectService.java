@@ -67,6 +67,9 @@ public interface ProjectService {
     String DEFAULT_PROJECT = "Default Project";
     String DEFAULT_WORKSPACE_NAME = "default";
     String DEFAULT_WORKSPACE_ID = "0190babc-62a0-71d2-832a-0feffa4676eb";
+    // Organization-level rows are stored under this ID, so changing it orphans them. It exists only in Opik and
+    // must never be sent to Comet.
+    String DEFAULT_ORGANIZATION_ID = "01a1a1c9-b569-7b5b-9c5c-1aa254d42e50";
     String DEFAULT_USER = "admin";
 
     Project create(Project project);
