@@ -329,7 +329,7 @@ public class TopicsRebuildService {
             return template.inTransaction(READ_ONLY, handle -> {
                 var dao = handle.attach(TopicDAO.class);
                 var states = dao.findStates(Set.of(projectId));
-                var live = dao.findLive(projectId);
+                var live = dao.findLive(workspaceId, projectId);
                 if (states.isEmpty() || live.isEmpty()) {
                     throw new TopicsRunException(Code.INTERNAL, "the project has no saved topic list");
                 }

@@ -101,8 +101,8 @@ class TopicsReadDAOTest {
                 arrival(workspaceId, projectId, TO.minusNanos(1_000), topicId));
 
         assertThat(count(workspaceId, projectId, Set.of())).containsExactlyInAnyOrder(
-                new TopicDayCount(topicId, TODAY.minusDays(29), 1),
-                new TopicDayCount(topicId, TODAY, 1));
+                TopicDayCount.builder().topicId(topicId).day(TODAY.minusDays(29)).traces(1).build(),
+                TopicDayCount.builder().topicId(topicId).day(TODAY).traces(1).build());
     }
 
     @Test
@@ -121,8 +121,8 @@ class TopicsReadDAOTest {
                 arrival(workspaceId, projectId, nightThenArrival, NOON, arrivalTopic));
 
         assertThat(count(workspaceId, projectId, Set.of(runId))).containsExactlyInAnyOrder(
-                new TopicDayCount(arrivalTopic, TODAY, 1),
-                new TopicDayCount(nightTopic, TODAY, 1));
+                TopicDayCount.builder().topicId(arrivalTopic).day(TODAY).traces(1).build(),
+                TopicDayCount.builder().topicId(nightTopic).day(TODAY).traces(1).build());
     }
 
     @Test
@@ -141,7 +141,7 @@ class TopicsReadDAOTest {
                 night(workspaceId, projectId, ID_GENERATOR.generateId(), NOON, failedTopic, failedRun));
 
         assertThat(count(workspaceId, projectId, Set.of(savedRun)))
-                .containsExactly(new TopicDayCount(savedTopic, TODAY, 1));
+                .containsExactly(TopicDayCount.builder().topicId(savedTopic).day(TODAY).traces(1).build());
     }
 
     @Test
@@ -155,7 +155,7 @@ class TopicsReadDAOTest {
                         UUID.randomUUID()));
 
         assertThat(count(workspaceId, projectId, Set.of()))
-                .containsExactly(new TopicDayCount(arrivalTopic, TODAY, 1));
+                .containsExactly(TopicDayCount.builder().topicId(arrivalTopic).day(TODAY).traces(1).build());
     }
 
     @Test
@@ -171,9 +171,9 @@ class TopicsReadDAOTest {
                 arrival(workspaceId, projectId, NOON, TraceTopic.OTHER));
 
         assertThat(count(workspaceId, projectId, Set.of())).containsExactlyInAnyOrder(
-                new TopicDayCount(topicId, TODAY, 2),
-                new TopicDayCount(topicId, TODAY.minusDays(1), 1),
-                new TopicDayCount(TraceTopic.OTHER, TODAY, 1));
+                TopicDayCount.builder().topicId(topicId).day(TODAY).traces(2).build(),
+                TopicDayCount.builder().topicId(topicId).day(TODAY.minusDays(1)).traces(1).build(),
+                TopicDayCount.builder().topicId(TraceTopic.OTHER).day(TODAY).traces(1).build());
     }
 
     @Test
@@ -186,7 +186,7 @@ class TopicsReadDAOTest {
                 arrival(workspaceId(), projectId, NOON, topicId));
 
         assertThat(count(workspaceId, projectId, Set.of()))
-                .containsExactly(new TopicDayCount(topicId, TODAY, 1));
+                .containsExactly(TopicDayCount.builder().topicId(topicId).day(TODAY).traces(1).build());
     }
 
     @Test
@@ -235,10 +235,8 @@ class TopicsReadDAOTest {
             var dao = handle.attach(TopicDAO.class);
             assertThat(dao.findLive(workspaceId, projectId)).extracting(Topic::id).containsExactly(live.id());
             assertThat(dao.findLive(workspaceId(), projectId)).isEmpty();
-            assertThat(dao.findState(workspaceId, projectId)).hasValueSatisfying(found -> {
-                assertThat(found.firstBuiltAt()).isEqualTo(state.firstBuiltAt());
-                assertThat(found.lastRunId()).isEqualTo(state.lastRunId());
-            });
+            assertThat(dao.findState(workspaceId, projectId))
+                    .hasValueSatisfying(found -> assertThat(found).usingRecursiveComparison().isEqualTo(state));
             assertThat(dao.findState(workspaceId(), projectId)).isEmpty();
             return null;
         });

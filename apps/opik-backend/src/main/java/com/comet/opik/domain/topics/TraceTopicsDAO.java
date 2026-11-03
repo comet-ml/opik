@@ -10,6 +10,7 @@ import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.Row;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -249,13 +250,10 @@ public class TraceTopicsDAO {
     public Flux<TopicDayCount> countByTopicAndDay(@NonNull String workspaceId, @NonNull UUID projectId,
             @NonNull Instant from, @NonNull Instant to, @NonNull Collection<UUID> savedRunIds,
             long maxExecutionSeconds) {
-        // The guards of the vectors job's window read: validated config numbers, never input.
-        var find = config.getVectors().getFind();
-        var template = getSTWithLogComment(COUNT_BY_TOPIC_AND_DAY, "topics:count_by_topic_and_day", workspaceId, null,
-                "project_id=%s, from=%s, to=%s, saved_runs=%d".formatted(projectId, from, to, savedRunIds.size()))
-                .add("max_rows_to_read", find.getMaxRowsToRead())
-                .add("max_memory_usage", find.getMaxMemoryUsage())
-                .add("max_execution_time", maxExecutionSeconds);
+        var template = TopicsQueryGuards.windowRead(getSTWithLogComment(COUNT_BY_TOPIC_AND_DAY,
+                "topics:count_by_topic_and_day", workspaceId, null,
+                "project_id=%s, from=%s, to=%s, saved_runs=%d".formatted(projectId, from, to, savedRunIds.size())),
+                config, maxExecutionSeconds);
         if (!savedRunIds.isEmpty()) {
             template.add("saved_run_ids", true);
         }
@@ -272,10 +270,11 @@ public class TraceTopicsDAO {
                     }
                     return statement.execute();
                 })
-                .flatMap(result -> result.map((row, metadata) -> new TopicDayCount(
-                        UUID.fromString(row.get("topic_id", String.class)),
-                        row.get("day", LocalDate.class),
-                        ((Number) row.get("traces", Object.class)).longValue())));
+                .flatMap(result -> result.map((row, metadata) -> TopicDayCount.builder()
+                        .topicId(UUID.fromString(row.get("topic_id", String.class)))
+                        .day(row.get("day", LocalDate.class))
+                        .traces(((Number) row.get("traces", Object.class)).longValue())
+                        .build()));
     }
 
     /**
@@ -402,6 +401,7 @@ public class TraceTopicsDAO {
         return Math.addExact(Math.multiplyExact(instant.getEpochSecond(), 1_000_000L), instant.getNano() / 1_000L);
     }
 
+    @Builder(toBuilder = true)
     public record TopicDayCount(@NonNull UUID topicId, @NonNull LocalDate day, long traces) {
     }
 }

@@ -893,7 +893,8 @@ Every body has `today`, `window_from` and `window_until` (UTC dates, both ends i
   2. A trace outside the newest 30,000 of a large project. It keeps an earlier night's topic until retention deletes it.
   3. A night that saves between the request's MySQL read and its ClickHouse read. Only that request.
 - **Known gap.** When a ClickHouse merge runs between a failed run's insert and its delete, some traces have no row
-  left. They are missing from `total_traces` until the next saved night.
+  left. They are missing from `total_traces` until a later saved night labels them. A trace that no later night's
+  window covers stays missing.
 - **Numbers.** `count`: the topic's traces in the window. `total_traces`: all counted traces, Other included. `share`:
   `count / total_traces`, 0 with no trace. `change`: today's count minus yesterday's; today is partial. `series`: 30
   `{day, count}` entries, oldest first, today last. `rank`: active topics first, then inactive ones (`inactive_since`
@@ -992,5 +993,4 @@ metrics.
 | `RATE_LIMIT_GET_PROJECT_TOPICS_PER_WORKSPACE_LIMIT` | `60` | Requests per workspace in 60 s. |
 
 The endpoint has no switch of its own. The rollback is `TOPICS_ENABLED=false` and a restart; stored topics and rows
-stay. To hide one workspace's topics without a restart, opt it out of topics: the endpoint answers `disabled`, and its
-vectors and nights stop too.
+stay.

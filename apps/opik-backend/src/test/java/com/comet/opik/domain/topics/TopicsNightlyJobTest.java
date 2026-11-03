@@ -250,7 +250,7 @@ class TopicsNightlyJobTest {
             return null;
         });
 
-        var topics = topics(built);
+        var topics = topics(workspaceId, built);
         assertThat(topics).isNotEmpty().hasSizeLessThanOrEqualTo(TopicsRebuildService.MAX_TOPICS);
         assertThat(topics).allSatisfy(topic -> {
             assertThat(topic.workspaceId()).isEqualTo(workspaceId);
@@ -335,7 +335,7 @@ class TopicsNightlyJobTest {
     void nightlyUpdate() {
         var workspaceId = enabledWorkspace();
         var projectId = firstBuilt(workspaceId);
-        var before = topics(projectId);
+        var before = topics(workspaceId, projectId);
         forceReview(projectId);
         plant(workspaceId, projectId, PLANTED);
         var revise = InferenceJson.MAPPER.createObjectNode();
@@ -379,7 +379,7 @@ class TopicsNightlyJobTest {
         assertThat(retired.retiredReason()).isEqualTo("merged");
         assertThat(retired.name()).isEqualTo(before.get(1).name());
 
-        var live = topics(projectId);
+        var live = topics(workspaceId, projectId);
         assertThat(live).extracting(Topic::id).contains(keptId).doesNotContain(retiredId);
         assertThat(live).hasSizeLessThanOrEqualTo(TopicsRebuildService.MAX_TOPICS);
         assertThat(live).filteredOn(topic -> topic.name().equals("Tire Pressure Checks")).singleElement()
@@ -410,7 +410,7 @@ class TopicsNightlyJobTest {
     void verifyFails() {
         var workspaceId = enabledWorkspace();
         var projectId = firstBuilt(workspaceId);
-        var topics = topics(projectId);
+        var topics = topics(workspaceId, projectId);
         forceReview(projectId);
         plant(workspaceId, projectId, PLANTED);
         var revise = InferenceJson.MAPPER.createObjectNode();
@@ -429,7 +429,7 @@ class TopicsNightlyJobTest {
         var update = nightlyRun(projectId);
         assertThat(update.status()).isEqualTo(TopicRun.Status.FAILED);
         assertThat(update.errorCode()).isEqualTo("qwen_error");
-        assertThat(topics(projectId)).isEqualTo(topics);
+        assertThat(topics(workspaceId, projectId)).isEqualTo(topics);
         assertThat(state(projectId).rebuilds()).isEqualTo(REVIEW_REBUILDS);
     }
 
@@ -505,7 +505,7 @@ class TopicsNightlyJobTest {
 
         assertThat(nightlyService.runNight(secondStart()).saved()).isEqualTo(1);
 
-        var live = topics(projectId);
+        var live = topics(workspaceId, projectId);
         assertThat(live).extracting(Topic::name).doesNotContain("Tire Pressure Checks");
         assertThat(live).filteredOn(topic -> topic.id().equals(dormant.id())).singleElement().satisfies(topic -> {
             assertThat(topic.name()).isEqualTo("Tire Questions");
@@ -542,7 +542,8 @@ class TopicsNightlyJobTest {
         assertThat(state.windowUntil())
                 .isEqualTo(secondNight().plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant());
         assertThat(runs(projectId)).extracting(TopicRun::status).containsOnly(TopicRun.Status.SAVED);
-        assertThat(topics(projectId)).isNotEmpty().allSatisfy(topic -> assertThat(topic.born()).isEqualTo(night()));
+        assertThat(topics(workspaceId, projectId)).isNotEmpty()
+                .allSatisfy(topic -> assertThat(topic.born()).isEqualTo(night()));
     }
 
     @Test
@@ -550,7 +551,7 @@ class TopicsNightlyJobTest {
     void reviseFails() {
         var workspaceId = enabledWorkspace();
         var projectId = firstBuilt(workspaceId);
-        var topics = topics(projectId);
+        var topics = topics(workspaceId, projectId);
         var prototypes = prototypes(projectId);
         var labels = traceTopicsDAO.findByProject(workspaceId, projectId).collectList().block();
         forceReview(projectId);
@@ -562,7 +563,7 @@ class TopicsNightlyJobTest {
         var update = nightlyRun(projectId);
         assertThat(update.status()).isEqualTo(TopicRun.Status.FAILED);
         assertThat(update.errorCode()).isEqualTo("qwen_error");
-        assertThat(topics(projectId)).isEqualTo(topics);
+        assertThat(topics(workspaceId, projectId)).isEqualTo(topics);
         assertThat(prototypes(projectId)).extracting(TopicPrototype::id)
                 .containsExactlyElementsOf(prototypes.stream().map(TopicPrototype::id).toList());
         assertThat(state(projectId).rebuilds()).isEqualTo(REVIEW_REBUILDS);
@@ -603,7 +604,7 @@ class TopicsNightlyJobTest {
         var result = nightlyService.runNight(start());
 
         assertThat(result.saved()).isEqualTo(1);
-        assertThat(topics(projectId)).hasSize(10);
+        assertThat(topics(workspaceId, projectId)).hasSize(10);
         assertThat(json(runs(projectId).getFirst().stats()).path("other_groups").asInt()).isEqualTo(5);
     }
 
@@ -673,7 +674,7 @@ class TopicsNightlyJobTest {
                     assertThat(run.errorCode()).isEqualTo("save");
                     assertThat(run.errorMessage()).contains("another run saved this project meanwhile");
                 }));
-        assertThat(topics(projectId)).isEmpty();
+        assertThat(topics(workspaceId, projectId)).isEmpty();
         assertThat(state(projectId).lastRunId()).isEqualTo(other);
         assertThat(traceTopicsDAO.findByProject(workspaceId, projectId).collectList().block()).isEmpty();
     }
@@ -701,7 +702,7 @@ class TopicsNightlyJobTest {
                     assertThat(run.errorCode()).isEqualTo("save");
                     assertThat(run.errorMessage()).contains("the project was deleted during the run");
                 }));
-        assertThat(topics(projectId)).isEmpty();
+        assertThat(topics(workspaceId, projectId)).isEmpty();
         List<TopicProjectState> states = template.inTransaction(READ_ONLY,
                 handle -> handle.attach(TopicDAO.class).findStates(Set.of(projectId)));
         assertThat(states).isEmpty();
@@ -721,11 +722,11 @@ class TopicsNightlyJobTest {
 
         projectDeletedListener.onProjectsDeleted(new ProjectsDeleted(Set.of(projectId), workspaceId, "test"));
 
-        assertThat(topics(projectId)).isEmpty();
+        assertThat(topics(workspaceId, projectId)).isEmpty();
         assertThat(prototypes(projectId)).isEmpty();
         assertThat(state(projectId)).isNull();
         assertThat(runs(projectId)).isEmpty();
-        assertThat(topics(kept)).isNotEmpty();
+        assertThat(topics(workspaceId, kept)).isNotEmpty();
         assertThat(runs(kept)).hasSize(1);
     }
 
@@ -752,7 +753,7 @@ class TopicsNightlyJobTest {
                     assertThat(run.runId().toString()).isEqualTo(runId);
                     assertThat(run.status()).isEqualTo(TopicRun.Status.SAVED);
                 }));
-        assertThat(topics(projectId)).isNotEmpty().allSatisfy(topic -> assertThat(topic.born())
+        assertThat(topics(workspaceId, projectId)).isNotEmpty().allSatisfy(topic -> assertThat(topic.born())
                 .isEqualTo(LocalDate.now(ZoneOffset.UTC)));
         try (var response = rebuild(workspaceId, projectId)) {
             assertThat(response.getStatus()).isEqualTo(409);
@@ -782,7 +783,8 @@ class TopicsNightlyJobTest {
         }
         Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> assertThat(runs(projectId))
                 .singleElement().satisfies(run -> assertThat(run.status()).isEqualTo(TopicRun.Status.SAVED)));
-        assertThat(topics(projectId)).isNotEmpty().allSatisfy(topic -> assertThat(topic.born()).isEqualTo(night()));
+        assertThat(topics(workspaceId, projectId)).isNotEmpty()
+                .allSatisfy(topic -> assertThat(topic.born()).isEqualTo(night()));
     }
 
     @Test
@@ -1016,7 +1018,7 @@ class TopicsNightlyJobTest {
             assertThat(run.errorMessage()).isNotBlank();
             assertThat(json(run.stats()).path("vectors").asInt()).isEqualTo(BUILT);
         });
-        assertThat(topics(projectId)).isEmpty();
+        assertThat(topics(workspaceId, projectId)).isEmpty();
         assertThat(prototypes(projectId)).isEmpty();
         assertThat(state(projectId)).isNull();
         assertThat(traceTopicsDAO.findByProject(workspaceId, projectId).collectList().block()).isEmpty();
@@ -1141,8 +1143,9 @@ class TopicsNightlyJobTest {
         return template.inTransaction(READ_ONLY, handle -> handle.attach(TopicRunDAO.class).findByProject(projectId));
     }
 
-    private List<Topic> topics(UUID projectId) {
-        return template.inTransaction(READ_ONLY, handle -> handle.attach(TopicDAO.class).findLive(projectId));
+    private List<Topic> topics(String workspaceId, UUID projectId) {
+        return template.inTransaction(READ_ONLY,
+                handle -> handle.attach(TopicDAO.class).findLive(workspaceId, projectId));
     }
 
     private List<TopicPrototype> prototypes(UUID projectId) {

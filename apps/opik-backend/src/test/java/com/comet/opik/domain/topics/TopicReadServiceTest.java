@@ -12,6 +12,8 @@ import org.jdbi.v3.core.Handle;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import reactor.core.publisher.Flux;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import ru.vyarus.guicey.jdbi3.tx.TxAction;
@@ -38,7 +40,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @DisplayName("topics read service")
-class TopicsReadServiceTest {
+class TopicReadServiceTest {
 
     private static final String WORKSPACE_ID = "ws-1";
     private static final String WORKSPACE_NAME = "Acme";
@@ -58,7 +60,8 @@ class TopicsReadServiceTest {
     private ProjectService projectService;
     private TopicWindowDAO windowDAO;
     private TraceTopicsDAO traceTopicsDAO;
-    private TopicsReadService service;
+    private TransactionTemplate template;
+    private TopicReadService service;
 
     @BeforeEach
     void setUp() {
@@ -73,13 +76,27 @@ class TopicsReadServiceTest {
         when(handle.attach(TopicWorkspaceDAO.class)).thenReturn(workspaceDAO);
         when(handle.attach(TopicDAO.class)).thenReturn(topicDAO);
         when(handle.attach(TopicRunDAO.class)).thenReturn(runDAO);
-        var template = mock(TransactionTemplate.class);
+        template = mock(TransactionTemplate.class);
         when(template.inTransaction(any(TxConfig.class), any()))
                 .thenAnswer(invocation -> invocation.<TxAction<?>>getArgument(1).execute(handle));
         when(workspaceDAO.isEligible(WORKSPACE_ID)).thenReturn(true);
         when(topicDAO.findState(WORKSPACE_ID, projectId)).thenReturn(Optional.empty());
-        service = new TopicsReadService(new TopicsConfig(), template, projectService, windowDAO, traceTopicsDAO,
-                new TopicsMetrics(meter.meter), Clock.fixed(NOW, ZoneOffset.UTC));
+        service = service(NOW);
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "2026-11-03T00:00:00Z, 2026-11-03",
+            "2026-11-03T23:59:59.999Z, 2026-11-03",
+            "2026-11-02T23:59:59.999Z, 2026-11-02"})
+    @DisplayName("today is the UTC date of the request, from its first to its last millisecond")
+    void today(Instant now, LocalDate today) {
+        when(workspaceDAO.isEligible(WORKSPACE_ID)).thenReturn(false);
+
+        var body = service(now).get(WORKSPACE_ID, WORKSPACE_NAME, projectId);
+
+        assertThat(body.today()).isEqualTo(today);
+        assertThat(body.windowFrom()).isEqualTo(today.minusDays(29));
     }
 
     @Test
@@ -91,9 +108,9 @@ class TopicsReadServiceTest {
         when(topicDAO.findLive(WORKSPACE_ID, projectId)).thenReturn(List.of(topic));
         when(runDAO.findSavedRunIds(WORKSPACE_ID, projectId)).thenReturn(savedRuns);
         when(traceTopicsDAO.countByTopicAndDay(WORKSPACE_ID, projectId, FROM, TO, savedRuns,
-                TopicsReadService.MAX_EXECUTION_SECONDS)).thenReturn(Flux.just(
-                        new TopicDayCount(topic.id(), TODAY, 5),
-                        new TopicDayCount(UUID.randomUUID(), TODAY, 2)));
+                TopicReadService.MAX_EXECUTION_SECONDS)).thenReturn(Flux.just(
+                        TopicDayCount.builder().topicId(topic.id()).day(TODAY).traces(5).build(),
+                        TopicDayCount.builder().topicId(UUID.randomUUID()).day(TODAY).traces(2).build()));
 
         var body = service.get(WORKSPACE_ID, WORKSPACE_NAME, projectId);
 
@@ -117,7 +134,7 @@ class TopicsReadServiceTest {
         when(topicDAO.findLive(WORKSPACE_ID, projectId)).thenReturn(List.of(topic));
         when(runDAO.findSavedRunIds(WORKSPACE_ID, projectId)).thenReturn(List.of());
         when(traceTopicsDAO.countByTopicAndDay(eq(WORKSPACE_ID), eq(projectId), any(), any(), any(), anyLong()))
-                .thenReturn(Flux.just(new TopicDayCount(topic.id(), TODAY, 1)));
+                .thenReturn(Flux.just(TopicDayCount.builder().topicId(topic.id()).day(TODAY).traces(1).build()));
 
         service.get(WORKSPACE_ID, WORKSPACE_NAME, projectId);
 
@@ -129,7 +146,7 @@ class TopicsReadServiceTest {
             + "counts read")
     void collecting() {
         when(topicDAO.findLive(WORKSPACE_ID, projectId)).thenReturn(List.of());
-        when(windowDAO.countByProject(WORKSPACE_ID, projectId, FROM, TO, TopicsReadService.MAX_EXECUTION_SECONDS))
+        when(windowDAO.countByProject(WORKSPACE_ID, projectId, FROM, TO, TopicReadService.MAX_EXECUTION_SECONDS))
                 .thenReturn(Flux.empty());
 
         var body = service.get(WORKSPACE_ID, WORKSPACE_NAME, projectId);
@@ -170,7 +187,7 @@ class TopicsReadServiceTest {
         assertThatThrownBy(() -> service.get(WORKSPACE_ID, WORKSPACE_NAME, projectId))
                 .isInstanceOfSatisfying(ServiceUnavailableException.class, exception -> assertThat(
                         exception.getResponse().getHeaderString(HttpHeaders.RETRY_AFTER))
-                        .isEqualTo(TopicsReadService.RETRY_AFTER_SECONDS));
+                        .isEqualTo(TopicReadService.RETRY_AFTER_SECONDS));
         assertThat(meter.points(DURATION)).singleElement()
                 .satisfies(point -> assertThat(point.get("status")).isEqualTo("error"));
     }
@@ -208,6 +225,11 @@ class TopicsReadServiceTest {
         verifyNoInteractions(workspaceDAO, topicDAO, traceTopicsDAO);
         verify(windowDAO, never()).countByProject(any(), any(), any(), any(), anyLong());
         assertThat(meter.points(DURATION)).isEmpty();
+    }
+
+    private TopicReadService service(Instant now) {
+        return new TopicReadService(new TopicsConfig(), template, projectService, windowDAO, traceTopicsDAO,
+                new TopicsMetrics(meter.meter), Clock.fixed(now, ZoneOffset.UTC));
     }
 
     private void readyWithCounts(Flux<TopicDayCount> counts) {

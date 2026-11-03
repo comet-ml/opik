@@ -8,7 +8,6 @@ import org.assertj.core.groups.Tuple;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -16,7 +15,6 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.assertj.core.api.Assertions.within;
 
@@ -38,12 +36,14 @@ class TopicsCountsTest {
             .build();
 
     @Test
-    @DisplayName("today is the UTC date of the request, from its first to its last millisecond")
-    void today() {
-        assertThat(TopicsCounts.today(clock("2026-11-03T00:00:00Z"))).isEqualTo(TODAY);
-        assertThat(TopicsCounts.today(clock("2026-11-03T23:59:59.999Z"))).isEqualTo(TODAY);
-        assertThat(TopicsCounts.today(clock("2026-11-02T23:59:59.999Z"))).isEqualTo(TODAY.minusDays(1));
-        assertThat(TopicsCounts.windowFrom(TODAY)).isEqualTo(TODAY.minusDays(29));
+    @DisplayName("the fields of every status: today, the 29 days before it, and no topic")
+    void window() {
+        var body = TopicsCounts.window(TODAY).status(ProjectTopics.Status.DISABLED).build();
+
+        assertThat(body.today()).isEqualTo(TODAY);
+        assertThat(body.windowFrom()).isEqualTo(TODAY.minusDays(29));
+        assertThat(body.windowUntil()).isEqualTo(TODAY);
+        assertThat(body.topics()).isEmpty();
     }
 
     @Test
@@ -64,9 +64,9 @@ class TopicsCountsTest {
         assertThat(body.totalTraces()).isEqualTo(8L);
         var series = body.topics().getFirst().series();
         assertThat(series).hasSize(30);
-        assertThat(series.getFirst()).isEqualTo(new DayCount(TODAY.minusDays(29), 2));
-        assertThat(series.get(19)).isEqualTo(new DayCount(TODAY.minusDays(10), 5));
-        assertThat(series.getLast()).isEqualTo(new DayCount(TODAY, 1));
+        assertThat(series.getFirst()).isEqualTo(DayCount.builder().day(TODAY.minusDays(29)).count(2).build());
+        assertThat(series.get(19)).isEqualTo(DayCount.builder().day(TODAY.minusDays(10)).count(5).build());
+        assertThat(series.getLast()).isEqualTo(DayCount.builder().day(TODAY).count(1).build());
         assertThat(series).extracting(DayCount::day)
                 .containsExactlyElementsOf(TODAY.minusDays(29).datesUntil(TODAY.plusDays(1)).toList());
         assertThat(series).filteredOn(day -> day.count() > 0).hasSize(3);
@@ -122,7 +122,7 @@ class TopicsCountsTest {
         var body = fold(List.of(first, second), List.of(
                 row(first, TODAY, 3),
                 row(second, TODAY.minusDays(4), 2),
-                new TopicDayCount(TraceTopic.OTHER, TODAY, 2)));
+                TopicDayCount.builder().topicId(TraceTopic.OTHER).day(TODAY).traces(2).build()));
 
         assertThat(stats(body, first).share()).isCloseTo(3.0 / 7, within(1e-12));
         var sum = body.topics().stream().mapToDouble(TopicStats::share).sum() + body.other().share();
@@ -160,9 +160,9 @@ class TopicsCountsTest {
         var retiredId = UUID.randomUUID();
         var body = fold(List.of(live), List.of(
                 row(live, TODAY, 5),
-                new TopicDayCount(retiredId, TODAY.minusDays(1), 3),
-                new TopicDayCount(retiredId, TODAY, 1),
-                new TopicDayCount(TraceTopic.OTHER, TODAY, 2)));
+                TopicDayCount.builder().topicId(retiredId).day(TODAY.minusDays(1)).traces(3).build(),
+                TopicDayCount.builder().topicId(retiredId).day(TODAY).traces(1).build(),
+                TopicDayCount.builder().topicId(TraceTopic.OTHER).day(TODAY).traces(2).build()));
 
         assertThat(body.topics()).extracting(TopicStats::id).containsExactly(live.id());
         var other = body.other();
@@ -170,7 +170,7 @@ class TopicsCountsTest {
         assertThat(other.count()).isEqualTo(6);
         assertThat(other.stale()).isEqualTo(4);
         assertThat(other.change()).isEqualTo(0);
-        assertThat(other.series().getLast()).isEqualTo(new DayCount(TODAY, 3));
+        assertThat(other.series().getLast()).isEqualTo(DayCount.builder().day(TODAY).count(3).build());
         assertThat(other.share()).isCloseTo(6.0 / 11, within(1e-12));
         assertThat(body.totalTraces()).isEqualTo(11L);
     }
@@ -194,7 +194,7 @@ class TopicsCountsTest {
     void labelledFrom() {
         var topic = topic(FIRST_BUILD, null);
         var body = fold(List.of(topic), List.of(
-                new TopicDayCount(UUID.randomUUID(), TODAY.minusDays(4), 1),
+                TopicDayCount.builder().topicId(UUID.randomUUID()).day(TODAY.minusDays(4)).traces(1).build(),
                 row(topic, TODAY.minusDays(3), 6),
                 row(topic, TODAY, 2)));
 
@@ -216,14 +216,16 @@ class TopicsCountsTest {
     }
 
     @Test
-    @DisplayName("a row outside the window is a caller error")
+    @DisplayName("a row outside the window is skipped")
     void rowOutsideWindow() {
         var topic = topic(FIRST_BUILD, null);
 
-        assertThatThrownBy(() -> fold(List.of(topic), List.of(row(topic, TODAY.plusDays(1), 1))))
-                .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> fold(List.of(topic), List.of(row(topic, TODAY.minusDays(30), 1))))
-                .isInstanceOf(IllegalArgumentException.class);
+        var body = fold(List.of(topic), List.of(row(topic, TODAY.plusDays(1), 1), row(topic, TODAY.minusDays(30), 1),
+                row(topic, TODAY, 2)));
+
+        assertThat(body.totalTraces()).isEqualTo(2L);
+        assertThat(stats(body, topic).count()).isEqualTo(2);
+        assertThat(stats(body, topic).series().getLast()).isEqualTo(DayCount.builder().day(TODAY).count(2).build());
     }
 
     private static ProjectTopics fold(List<Topic> live, List<TopicDayCount> rows) {
@@ -235,7 +237,7 @@ class TopicsCountsTest {
     }
 
     private static TopicDayCount row(Topic topic, LocalDate day, long traces) {
-        return new TopicDayCount(topic.id(), day, traces);
+        return TopicDayCount.builder().topicId(topic.id()).day(day).traces(traces).build();
     }
 
     private static Tuple tupleOf(Topic topic, int rank) {
@@ -256,9 +258,5 @@ class TopicsCountsTest {
                 .born(born)
                 .inactiveSince(inactiveSince)
                 .build();
-    }
-
-    private static Clock clock(String instant) {
-        return Clock.fixed(Instant.parse(instant), ZoneOffset.UTC);
     }
 }

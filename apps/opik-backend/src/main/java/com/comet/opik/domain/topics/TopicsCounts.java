@@ -5,12 +5,11 @@ import com.comet.opik.api.ProjectTopics.DayCount;
 import com.comet.opik.api.ProjectTopics.OtherStats;
 import com.comet.opik.api.ProjectTopics.TopicStats;
 import com.comet.opik.domain.topics.TraceTopicsDAO.TopicDayCount;
-import com.google.common.base.Preconditions;
 import jakarta.annotation.Nullable;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 
-import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
@@ -26,6 +25,7 @@ import java.util.stream.IntStream;
  * {@link TraceTopicsDAO#countByTopicAndDay}. The window is the 30 UTC days that end with today, the window of
  * tomorrow's night.
  * <ul>
+ * <li>Only the window's days count: a row of another day is skipped.</li>
  * <li>A row of an id that is neither a live topic nor Other (a topic retired since the trace was labelled) counts as
  * Other and as {@code stale}.</li>
  * <li>{@code change} is today minus yesterday; {@code share} is over all the window's traces, Other included.</li>
@@ -44,14 +44,22 @@ public class TopicsCounts {
     private static final Comparator<Topic> RANK_TIES = Comparator.comparing(Topic::born)
             .thenComparing(topic -> topic.id().toString());
 
-    /** The UTC date of the request. */
-    public static LocalDate today(@NonNull Clock clock) {
-        return LocalDate.ofInstant(clock.instant(), ZoneOffset.UTC);
-    }
-
-    /** The window's first day; the last is {@code today}. */
     public static LocalDate windowFrom(@NonNull LocalDate today) {
         return today.minusDays(WINDOW_DAYS - 1);
+    }
+
+    /** The fields of every status: the window's dates, and no topic. */
+    public static ProjectTopics.ProjectTopicsBuilder window(@NonNull LocalDate today) {
+        return ProjectTopics.builder()
+                .today(today)
+                .windowFrom(windowFrom(today))
+                .windowUntil(today)
+                .topics(List.of());
+    }
+
+    /** The last saved night, null before the first one. */
+    public static Instant lastRunAt(@Nullable TopicProjectState state) {
+        return state == null ? null : state.lastSuccessAt();
     }
 
     public static ProjectTopics ready(@NonNull LocalDate today, @NonNull List<Topic> live,
@@ -63,8 +71,9 @@ public class TopicsCounts {
         long stale = 0;
         for (var row : rows) {
             int index = (int) ChronoUnit.DAYS.between(from, row.day());
-            Preconditions.checkArgument(index >= 0 && index < WINDOW_DAYS,
-                    "Row day '%s' is outside the window '%s' to '%s'", row.day(), from, today);
+            if (index < 0 || index >= WINDOW_DAYS) {
+                continue;
+            }
             var topicDays = days.get(row.topicId());
             if (topicDays != null) {
                 topicDays[index] += row.traces();
@@ -105,12 +114,9 @@ public class TopicsCounts {
                 })
                 .toList();
 
-        return ProjectTopics.builder()
+        return window(today)
                 .status(ProjectTopics.Status.READY)
-                .today(today)
-                .windowFrom(from)
-                .windowUntil(today)
-                .lastRunAt(state == null ? null : state.lastSuccessAt())
+                .lastRunAt(lastRunAt(state))
                 .totalTraces(total)
                 .labelledFrom(labelledFrom(from, other, days.values()))
                 .topics(topics)
@@ -140,7 +146,7 @@ public class TopicsCounts {
 
     private static List<DayCount> series(LocalDate from, long[] days) {
         return IntStream.range(0, WINDOW_DAYS)
-                .mapToObj(i -> new DayCount(from.plusDays(i), days[i]))
+                .mapToObj(i -> DayCount.builder().day(from.plusDays(i)).count(days[i]).build())
                 .toList();
     }
 

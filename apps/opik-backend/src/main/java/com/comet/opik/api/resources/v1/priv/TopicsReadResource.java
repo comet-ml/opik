@@ -3,7 +3,7 @@ package com.comet.opik.api.resources.v1.priv;
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.ProjectTopics;
 import com.comet.opik.api.error.ErrorMessage;
-import com.comet.opik.domain.topics.TopicsReadService;
+import com.comet.opik.domain.topics.TopicReadService;
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.auth.RequiredPermissions;
@@ -38,7 +38,7 @@ import java.util.UUID;
 @Tag(name = "Topics", description = "Project topics and internal topics operations")
 public class TopicsReadResource {
 
-    private final @NonNull TopicsReadService service;
+    private final @NonNull TopicReadService service;
     private final @NonNull @Config("topics") TopicsConfig config;
     private final @NonNull Provider<RequestContext> requestContext;
 
@@ -59,7 +59,7 @@ public class TopicsReadResource {
             return Response.status(Response.Status.NOT_IMPLEMENTED).build();
         }
         var context = requestContext.get();
-        log.info("Getting topics of project '{}' on workspace_id '{}'", projectId, context.getWorkspaceId());
+        log.info("Getting project topics, project_id '{}', workspace_id '{}'", projectId, context.getWorkspaceId());
         var topics = service.get(context.getWorkspaceId(), context.getWorkspaceName(), projectId);
         return Response.ok(topics).build();
     }

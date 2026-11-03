@@ -1,9 +1,11 @@
 package com.comet.opik.domain.topics;
 
+import com.comet.opik.api.ProjectTopics;
 import com.comet.opik.infrastructure.metrics.ErrorMetricsResolver;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.common.AttributesBuilder;
 import io.opentelemetry.api.metrics.DoubleHistogram;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.Meter;
@@ -13,7 +15,6 @@ import lombok.NonNull;
 
 import java.time.Clock;
 import java.time.Duration;
-import java.util.Objects;
 
 import static com.comet.opik.infrastructure.metrics.ErrorMetricsResolver.ERROR_TYPE_KEY;
 import static io.opentelemetry.api.common.AttributeKey.stringKey;
@@ -44,6 +45,8 @@ public class TopicsMetrics {
     static final String ERROR_START_FAILED = "start_failed";
     /** Housekeeping failed a run its pod left {@code running}: the code {@code TopicRunDAO.failAbandoned} writes. */
     static final String ERROR_ABANDONED = "abandoned";
+    /** The read API's status of a failed request, beside ready, collecting and disabled. */
+    static final String API_STATUS_ERROR = "error";
 
     private static final AttributeKey<String> DECISION = stringKey("decision");
     private static final AttributeKey<String> REASON = stringKey("reason");
@@ -215,14 +218,14 @@ public class TopicsMetrics {
         budgetUsed.record(duration.toNanos() / 1e9);
     }
 
-    void apiRequest(@NonNull String status, @NonNull Duration duration) {
-        apiDuration.record(duration.toNanos() / 1e9, Attributes.of(STATUS, status));
+    /** {@code status} is null for a request that failed, recorded as {@code error}. */
+    void apiRequest(ProjectTopics.Status status, @NonNull Duration duration) {
+        apiDuration.record(duration.toNanos() / 1e9,
+                Attributes.of(STATUS, status == null ? API_STATUS_ERROR : status.getValue()));
     }
 
-    /** The name comes with the request, so no lookup: a missing one falls back to the id. */
-    void apiStale(@NonNull String workspaceId, String workspaceName, long traces) {
-        apiStale.add(traces,
-                TopicsWorkspaceNames.builder(workspaceId, Objects.requireNonNullElse(workspaceName, workspaceId))
-                        .build());
+    /** {@code workspace} holds both workspace attributes, with the name the request came with. */
+    void apiStale(@NonNull AttributesBuilder workspace, long traces) {
+        apiStale.add(traces, workspace.build());
     }
 }

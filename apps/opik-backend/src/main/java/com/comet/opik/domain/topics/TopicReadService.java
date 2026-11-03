@@ -5,12 +5,14 @@ import com.comet.opik.api.ProjectTopics;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.infrastructure.TopicsConfig;
+import com.comet.opik.infrastructure.db.ClickHouseQueryLimits;
 import com.google.common.base.Throwables;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.ServiceUnavailableException;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
@@ -23,8 +25,8 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeoutException;
 
@@ -46,15 +48,11 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
  */
 @Slf4j
 @Singleton
-public class TopicsReadService {
+public class TopicReadService {
 
     static final long MAX_EXECUTION_SECONDS = 10;
     static final Duration CLIENT_TIMEOUT = Duration.ofSeconds(MAX_EXECUTION_SECONDS + 1);
     static final String RETRY_AFTER_SECONDS = "5";
-
-    /** ClickHouse limit errors: too many rows, timeout, memory limit, too many rows or bytes. */
-    private static final Set<Integer> CH_LIMIT_CODES = Set.of(158, 159, 241, 396);
-    private static final String STATUS_ERROR = "error";
 
     private final TopicsConfig config;
     private final TransactionTemplate template;
@@ -65,13 +63,13 @@ public class TopicsReadService {
     private final Clock clock;
 
     @Inject
-    public TopicsReadService(@NonNull @Config("topics") TopicsConfig config, @NonNull TransactionTemplate template,
+    public TopicReadService(@NonNull @Config("topics") TopicsConfig config, @NonNull TransactionTemplate template,
             @NonNull ProjectService projectService, @NonNull TopicWindowDAO windowDAO,
             @NonNull TraceTopicsDAO traceTopicsDAO, @NonNull TopicsMetrics metrics) {
         this(config, template, projectService, windowDAO, traceTopicsDAO, metrics, Clock.systemUTC());
     }
 
-    TopicsReadService(@NonNull TopicsConfig config, @NonNull TransactionTemplate template,
+    TopicReadService(@NonNull TopicsConfig config, @NonNull TransactionTemplate template,
             @NonNull ProjectService projectService, @NonNull TopicWindowDAO windowDAO,
             @NonNull TraceTopicsDAO traceTopicsDAO, @NonNull TopicsMetrics metrics, @NonNull Clock clock) {
         this.config = config;
@@ -87,12 +85,13 @@ public class TopicsReadService {
     public ProjectTopics get(@NonNull String workspaceId, String workspaceName, @NonNull UUID projectId) {
         projectService.get(projectId, workspaceId);
         long start = System.nanoTime();
-        var status = STATUS_ERROR;
+        ProjectTopics.Status status = null;
         try {
             var body = read(workspaceId, projectId);
-            status = body.status().getValue();
+            status = body.status();
             if (body.other() != null && body.other().stale() > 0) {
-                metrics.apiStale(workspaceId, workspaceName, body.other().stale());
+                metrics.apiStale(TopicsWorkspaceNames.builder(workspaceId,
+                        Objects.requireNonNullElse(workspaceName, workspaceId)), body.other().stale());
             }
             return body;
         } finally {
@@ -101,16 +100,10 @@ public class TopicsReadService {
     }
 
     private ProjectTopics read(String workspaceId, UUID projectId) {
-        var today = TopicsCounts.today(clock);
-        var windowFrom = TopicsCounts.windowFrom(today);
-        var empty = ProjectTopics.builder()
-                .today(today)
-                .windowFrom(windowFrom)
-                .windowUntil(today)
-                .topics(List.of());
-        var reads = template.inTransaction(READ_ONLY, handle -> {
+        var today = LocalDate.ofInstant(clock.instant(), ZoneOffset.UTC);
+        var snapshot = template.inTransaction(READ_ONLY, handle -> {
             if (!handle.attach(TopicWorkspaceDAO.class).isEligible(workspaceId)) {
-                return Optional.<Reads>empty();
+                return Optional.<ProjectSnapshot>empty();
             }
             var topicDAO = handle.attach(TopicDAO.class);
             var live = topicDAO.findLive(workspaceId, projectId);
@@ -118,37 +111,37 @@ public class TopicsReadService {
             var savedRunIds = live.isEmpty()
                     ? List.<UUID>of()
                     : handle.attach(TopicRunDAO.class).findSavedRunIds(workspaceId, projectId);
-            return Optional.of(new Reads(live, state, savedRunIds));
+            return Optional.of(ProjectSnapshot.builder().live(live).state(state).savedRunIds(savedRunIds).build());
         });
-        if (reads.isEmpty()) {
-            return empty.status(ProjectTopics.Status.DISABLED).build();
+        if (snapshot.isEmpty()) {
+            return TopicsCounts.window(today).status(ProjectTopics.Status.DISABLED).build();
         }
 
-        var live = reads.get().live();
-        var state = reads.get().state();
-        var from = startOf(windowFrom);
+        var live = snapshot.get().live();
+        var state = snapshot.get().state();
+        var from = startOf(TopicsCounts.windowFrom(today));
         var to = startOf(today.plusDays(1));
         if (live.isEmpty()) {
-            long vectors = clickHouse(workspaceId, projectId, windowDAO
+            long vectors = blockOrUnavailable(workspaceId, projectId, windowDAO
                     .countByProject(workspaceId, projectId, from, to, MAX_EXECUTION_SECONDS)
                     .next()
                     .map(TopicWindowDAO.ProjectCount::traces)
                     .defaultIfEmpty(0L));
-            return empty.status(ProjectTopics.Status.COLLECTING)
-                    .lastRunAt(state == null ? null : state.lastSuccessAt())
+            return TopicsCounts.window(today).status(ProjectTopics.Status.COLLECTING)
+                    .lastRunAt(TopicsCounts.lastRunAt(state))
                     .vectorsInWindow(vectors)
                     .minVectors((long) config.getNightly().getMinVectors())
                     .build();
         }
-        var rows = clickHouse(workspaceId, projectId, traceTopicsDAO
-                .countByTopicAndDay(workspaceId, projectId, from, to, reads.get().savedRunIds(),
+        var rows = blockOrUnavailable(workspaceId, projectId, traceTopicsDAO
+                .countByTopicAndDay(workspaceId, projectId, from, to, snapshot.get().savedRunIds(),
                         MAX_EXECUTION_SECONDS)
                 .collectList());
         return TopicsCounts.ready(today, live, state, rows);
     }
 
     /** Blocks on a ClickHouse read; a query limit or the client timeout becomes a 503 with Retry-After. */
-    private <T> T clickHouse(String workspaceId, UUID projectId, Mono<T> read) {
+    private <T> T blockOrUnavailable(String workspaceId, UUID projectId, Mono<T> read) {
         try {
             return read.timeout(CLIENT_TIMEOUT).block();
         } catch (RuntimeException exception) {
@@ -166,13 +159,15 @@ public class TopicsReadService {
 
     private static boolean isLimit(Throwable error) {
         return Throwables.getCausalChain(error).stream().anyMatch(cause -> cause instanceof TimeoutException
-                || (cause instanceof ServerException server && CH_LIMIT_CODES.contains(server.getCode())));
+                || (cause instanceof ServerException server && ClickHouseQueryLimits.CODES.contains(server.getCode())));
     }
 
     private static Instant startOf(LocalDate day) {
         return day.atStartOfDay().toInstant(ZoneOffset.UTC);
     }
 
-    private record Reads(List<Topic> live, TopicProjectState state, List<UUID> savedRunIds) {
+    /** The MySQL reads of one request, taken in one transaction. */
+    @Builder(toBuilder = true)
+    private record ProjectSnapshot(List<Topic> live, TopicProjectState state, List<UUID> savedRunIds) {
     }
 }

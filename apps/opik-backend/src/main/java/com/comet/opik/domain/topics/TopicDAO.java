@@ -35,14 +35,7 @@ public interface TopicDAO {
             """)
     void insertTopics(@BindMethods List<Topic> topics);
 
-    @SqlQuery("""
-            SELECT * FROM topics
-            WHERE project_id = :projectId AND retired_at IS NULL
-            ORDER BY born, id
-            """)
-    List<Topic> findLive(@Bind("projectId") UUID projectId);
-
-    /** The topics read API's read: the workspace's project only. */
+    /** The project's live topics, in the saved list's order: born, then id. */
     @SqlQuery("""
             SELECT * FROM topics
             WHERE workspace_id = :workspaceId AND project_id = :projectId AND retired_at IS NULL

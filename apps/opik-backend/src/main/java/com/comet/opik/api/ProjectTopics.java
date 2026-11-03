@@ -33,7 +33,8 @@ public record ProjectTopics(
         @Schema(description = "ready only: the first day in the window with a labelled trace; earlier days are 0 "
                 + "because nothing was labelled. Omitted when the window has none") LocalDate labelledFrom,
         @Schema(description = "The live topics in rank order; empty unless ready") List<TopicStats> topics,
-        @Schema(description = "ready only: traces with no topic") OtherStats other) {
+        @Schema(description = "ready only: traces with no topic, or with a topic that is no longer "
+                + "live") OtherStats other) {
 
     @Getter
     @RequiredArgsConstructor
@@ -51,8 +52,8 @@ public record ProjectTopics(
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record TopicStats(
             @Schema(description = "The topic id, the value the traces filter uses") UUID id,
-            String name,
-            String definition,
+            @Schema(description = "The topic's name") String name,
+            @Schema(description = "What the topic's traces are about") String definition,
             @Schema(description = "The UTC date of the night that made the topic") LocalDate born,
             @Schema(description = "Born after the project's first build, in the last 7 days") boolean isNew,
             @Schema(description = "The day the topic became inactive; omitted when active") LocalDate inactiveSince,
@@ -80,6 +81,6 @@ public record ProjectTopics(
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record DayCount(
             @Schema(description = "A UTC date") LocalDate day,
-            long count) {
+            @Schema(description = "Traces created on the day") long count) {
     }
 }

@@ -7,6 +7,7 @@ import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.infrastructure.DatabaseAnalyticsReadOnlyFreeFormSqlConfig;
 import com.comet.opik.infrastructure.FreeFormSqlPostRunCheckConfig;
+import com.comet.opik.infrastructure.db.ClickHouseQueryLimits;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.base.Throwables;
 import io.opentelemetry.api.GlobalOpenTelemetry;
@@ -115,17 +116,11 @@ public class FreeFormSqlQueryService {
             or join it to the main query. Subqueries under IN and EXISTS are allowed.""";
 
     /** ClickHouse error codes surfaced to the caller as a clean 4xx rather than a 500. */
-    private static final int CH_TOO_MANY_ROWS = 158;
-    private static final int CH_TIMEOUT_EXCEEDED = 159;
-    private static final int CH_MEMORY_LIMIT_EXCEEDED = 241;
-    private static final int CH_TOO_MANY_ROWS_OR_BYTES = 396;
     private static final int CH_ACCESS_DENIED = 497;
     private static final int CH_SYNTAX_ERROR = 62;
     /** The account's concurrent-query cap, e.g. a dashboard loading many widgets at once: worth a retry. */
     private static final int CH_TOO_MANY_SIMULTANEOUS_QUERIES = 202;
     private static final String RETRY_AFTER_SECONDS = "1";
-    private static final Set<Integer> CH_LIMIT_CODES = Set.of(
-            CH_TOO_MANY_ROWS, CH_TIMEOUT_EXCEEDED, CH_MEMORY_LIMIT_EXCEEDED, CH_TOO_MANY_ROWS_OR_BYTES);
 
     private final FreeFormSqlQueryDAO freeFormSqlQueryDAO;
     private final FreeFormSqlEntityNameEnricher entityNameEnricher;
@@ -457,7 +452,7 @@ public class FreeFormSqlQueryService {
         }
 
         int code = serverException.getCode();
-        if (CH_LIMIT_CODES.contains(code)) {
+        if (ClickHouseQueryLimits.CODES.contains(code)) {
             // Constant message: the raw ClickHouse text (which can carry schema/tenant details) stays in logs only.
             return error(Outcome.CH_LIMIT, startMillis, Response.Status.BAD_REQUEST,
                     "Query exceeded ClickHouse limits", error);

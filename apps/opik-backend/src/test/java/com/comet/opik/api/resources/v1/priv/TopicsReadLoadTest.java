@@ -30,6 +30,10 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.google.inject.Injector;
 import com.redis.testcontainers.RedisContainer;
+import io.r2dbc.spi.ConnectionFactory;
+import io.r2dbc.spi.Result;
+import io.r2dbc.spi.Row;
+import io.r2dbc.spi.RowMetadata;
 import jakarta.ws.rs.core.HttpHeaders;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -42,6 +46,8 @@ import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
@@ -62,6 +68,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.BiFunction;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -96,6 +103,122 @@ class TopicsReadLoadTest {
     private static final String OTHER = TraceTopic.OTHER.toString();
     private static final Path REPORT = Path.of("target", "topics-read-load-test.md");
     private static final Path RUNBOOK = Path.of("docs", "ai-labels-runbook.md");
+
+    private static final String STOP_MERGES = "SYSTEM STOP MERGES trace_topics";
+    private static final String START_MERGES = "SYSTEM START MERGES trace_topics";
+    private static final String FLUSH_LOGS = "SYSTEM FLUSH LOGS";
+    private static final String ACTIVE_PARTS = """
+            SELECT count() AS n FROM system.parts
+            WHERE database = currentDatabase() AND table = 'trace_topics' AND active
+            """;
+    private static final String RUNNING_MERGES = """
+            SELECT count() AS n FROM system.merges WHERE database = currentDatabase() AND table = 'trace_topics'
+            """;
+    private static final String PROJECT_ROWS = """
+            SELECT count() AS n FROM trace_topics WHERE workspace_id = :workspace_id
+            """;
+    private static final String CREATE_TRACES = """
+            CREATE TABLE topics_load_traces (n UInt32, trace_id String, trace_created_at DateTime64(6, 'UTC'))
+            ENGINE = Memory
+            """;
+    private static final String DROP_TRACES = "DROP TABLE IF EXISTS topics_load_traces";
+
+    /** Trace n is created on window day n % 30, at least an hour after midnight. */
+    private static final String INSERT_TRACES = """
+            INSERT INTO topics_load_traces
+            SELECT number, toString(generateUUIDv7(number)),
+                addSeconds(addDays(fromUnixTimestamp64Micro(:window_from_micros, 'UTC'), number % 30),
+                    3600 + intDiv(number, 30))
+            FROM numbers(:traces)
+            """;
+
+    /** Night k labels trace n with topic (n * 7 + k) % 11 of [live..., Other]; the last night's label wins. */
+    private static final String INSERT_NIGHT = """
+            INSERT INTO trace_topics
+                (workspace_id, project_id, trace_id, trace_created_at, topic_id, source, run_id, updated_at)
+            SELECT :workspace_id, :project_id, trace_id, trace_created_at,
+                arrayElement(:labels, ((n * 7 + :night) % 11) + 1), 'night', :run_id,
+                now64(6) - toIntervalMinute(:minutes_ago)
+            FROM topics_load_traces
+            SETTINGS insert_deduplicate = 0
+            """;
+
+    /** Arrival ticks after the last night: every 20th row names the retired topic (stale). */
+    private static final String INSERT_ARRIVALS = """
+            INSERT INTO trace_topics
+                (workspace_id, project_id, trace_id, trace_created_at, topic_id, source, run_id)
+            SELECT :workspace_id, :project_id, toString(generateUUIDv7(number)),
+                greatest(now64(6, 'UTC') - toIntervalSecond(number + :offset),
+                    fromUnixTimestamp64Micro(:today_micros, 'UTC')),
+                if(number % 20 = 0, :retired_id, arrayElement(:labels, (number % 11) + 1)), 'arrival', ''
+            FROM numbers(:rows)
+            SETTINGS insert_deduplicate = 0
+            """;
+
+    /** A failed run's rows, after the last night: they must not count. */
+    private static final String INSERT_FAILED_RUN = """
+            INSERT INTO trace_topics
+                (workspace_id, project_id, trace_id, trace_created_at, topic_id, source, run_id)
+            SELECT :workspace_id, :project_id, trace_id, trace_created_at, :topic_id, 'night', :run_id
+            FROM topics_load_traces
+            WHERE n < :traces
+            SETTINGS insert_deduplicate = 0
+            """;
+
+    /** Rows at the window edges: its first microsecond counts, the one before it and its end do not. */
+    private static final String INSERT_EDGES = """
+            INSERT INTO trace_topics
+                (workspace_id, project_id, trace_id, trace_created_at, topic_id, source, run_id)
+            SELECT :workspace_id, :project_id, toString(generateUUIDv7(number)),
+                fromUnixTimestamp64Micro([:from_micros, :before_from_micros, :to_micros][number + 1], 'UTC'),
+                :topic_id, 'night', :run_id
+            FROM numbers(3)
+            """;
+
+    private static final String LIMIT_BY = """
+            SELECT topic_id, toDate(trace_created_at, 'UTC') AS day, count() AS traces
+            FROM (
+                SELECT topic_id, trace_created_at FROM trace_topics
+                WHERE workspace_id = :workspace_id AND project_id = :project_id
+                AND trace_created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
+                AND trace_created_at < fromUnixTimestamp64Micro(:to_micros, 'UTC')
+                AND (source = 'arrival' OR run_id IN :saved_run_ids)
+                ORDER BY workspace_id, project_id, trace_id, updated_at DESC, run_id DESC
+                LIMIT 1 BY workspace_id, project_id, trace_id
+            )
+            GROUP BY topic_id, day
+            ORDER BY topic_id, day
+            SETTINGS max_threads = 2, max_execution_time = 10, max_memory_usage = 1073741824,
+                max_rows_to_read = 30000000, log_comment = 'topics:load:limit_by'
+            """;
+
+    private static final String ARG_MAX = """
+            SELECT latest_topic AS topic_id, toDate(created, 'UTC') AS day, count() AS traces
+            FROM (
+                SELECT argMax(topic_id, (updated_at, run_id)) AS latest_topic, any(trace_created_at) AS created
+                FROM trace_topics
+                WHERE workspace_id = :workspace_id AND project_id = :project_id
+                AND trace_created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
+                AND trace_created_at < fromUnixTimestamp64Micro(:to_micros, 'UTC')
+                AND (source = 'arrival' OR run_id IN :saved_run_ids)
+                GROUP BY trace_id
+            )
+            GROUP BY topic_id, day
+            ORDER BY topic_id, day
+            SETTINGS max_threads = 2, max_execution_time = 10, max_memory_usage = 1073741824,
+                max_rows_to_read = 30000000, log_comment = 'topics:load:arg_max'
+            """;
+
+    private static final String QUERY_LOG = """
+            SELECT count() AS n,
+                quantileExact(0.5)(query_duration_ms) AS p50, quantileExact(0.95)(query_duration_ms) AS p95,
+                max(query_duration_ms) AS max_ms, max(read_rows) AS read_rows, max(read_bytes) AS read_bytes,
+                max(memory_usage) AS memory, max(ProfileEvents['SelectedParts']) AS parts,
+                max(ProfileEvents['SelectedMarks']) AS marks
+            FROM system.query_log
+            WHERE type = 'QueryFinish' AND startsWith(log_comment, :comment)
+            AND event_time_microseconds >= fromUnixTimestamp64Micro(:since_micros)
+            """;
 
     private final RedisContainer redis = RedisContainerUtils.newRedisContainer();
     private final GenericContainer<?> zookeeper = ClickHouseContainerUtils.newZookeeperContainer();
@@ -146,6 +269,7 @@ class TopicsReadLoadTest {
     private ClientSupport client;
     private ProjectResourceClient projectClient;
     private TransactionTemplate template;
+    private ConnectionFactory connectionFactory;
 
     @BeforeAll
     void setUpAll(ClientSupport client, Injector injector) {
@@ -153,6 +277,7 @@ class TopicsReadLoadTest {
         this.baseUrl = TestUtils.getBaseUrl(client);
         this.projectClient = new ProjectResourceClient(client, baseUrl, PodamFactoryUtils.newPodamFactory());
         this.template = injector.getInstance(TransactionTemplate.class);
+        this.connectionFactory = injector.getInstance(ConnectionFactory.class);
     }
 
     @Test
@@ -198,111 +323,83 @@ class TopicsReadLoadTest {
             return null;
         });
 
-        // Night k labels every trace with topic (n * 7 + k) % 11 of [live..., Other]; the last night's label wins.
         var labels = new ArrayList<>(live.stream().map(topic -> topic.id().toString()).toList());
         labels.add(OTHER);
-        var labelArray = labels.stream().map(id -> "'" + id + "'").collect(Collectors.joining(",", "[", "]"));
-        var tracesTable = "%s.topics_load_traces_%s".formatted(DATABASE_NAME,
-                UUID.randomUUID().toString().replace("-", ""));
-        var savedRunIds = runs.stream().map(run -> "'" + run.runId() + "'").collect(Collectors.joining(","));
-        var where = """
-                workspace_id = '%s' AND project_id = '%s'
-                AND trace_created_at >= toDateTime64('%s 00:00:00', 6, 'UTC')
-                AND trace_created_at < toDateTime64('%s 00:00:00', 6, 'UTC')
-                AND (source = 'arrival' OR run_id IN (%s))
-                """.formatted(workspaceId, projectId, windowFrom, today.plusDays(1), savedRunIds);
+        var labelArray = labels.toArray(String[]::new);
+        var window = Map.<String, Object>of(
+                "workspace_id", workspaceId,
+                "project_id", projectId.toString(),
+                "from_micros", micros(windowFrom),
+                "to_micros", micros(today.plusDays(1)),
+                "saved_run_ids", runs.stream().map(run -> run.runId().toString()).toArray(String[]::new));
         var expectedTotal = (long) TRACES + ARRIVALS;
-        try (var ch = clickHouseConnection(); var statement = ch.createStatement()) {
-            // The worst case keeps every night's rows. Background merges collapse a trace's older rows within seconds
-            // here, so they stay stopped for the first measurement.
-            statement.execute("SYSTEM STOP MERGES %s.trace_topics".formatted(DATABASE_NAME));
-            try {
-                statement.execute("CREATE TABLE %s (n UInt32, trace_id String, trace_created_at DateTime64(6, 'UTC')) "
-                        .formatted(tracesTable) + "ENGINE = Memory");
-                statement.execute("""
-                        INSERT INTO %s
-                        SELECT number, toString(generateUUIDv7(number)),
-                            addSeconds(addDays(toDateTime64('%s 00:00:00', 6, 'UTC'), number %% 30),
-                                3600 + intDiv(number, 30))
-                        FROM numbers(%d)
-                        """.formatted(tracesTable, windowFrom, TRACES));
-                for (int k = 0; k < NIGHTS; k++) {
-                    statement.execute("""
-                            INSERT INTO %s.trace_topics
-                                (workspace_id, project_id, trace_id, trace_created_at, topic_id, source, run_id,
-                                updated_at)
-                            SELECT '%s', '%s', trace_id, trace_created_at, %s[((n * 7 + %d) %% 11) + 1], 'night',
-                                '%s', now64(6) - toIntervalMinute(%d)
-                            FROM %s
-                            SETTINGS insert_deduplicate = 0
-                            """.formatted(DATABASE_NAME, workspaceId, projectId, labelArray, k,
-                            runs.get(k).runId(), 60 - k, tracesTable));
-                }
-                // Arrival ticks after the last night: every 20th row names the retired topic (stale).
-                for (int batch = 0; batch < ARRIVALS / ARRIVAL_BATCH; batch++) {
-                    statement.execute("""
-                            INSERT INTO %s.trace_topics
-                                (workspace_id, project_id, trace_id, trace_created_at, topic_id, source, run_id)
-                            SELECT '%s', '%s', toString(generateUUIDv7(number)),
-                                greatest(now64(6, 'UTC') - toIntervalSecond(number + %d),
-                                    toDateTime64('%s 00:00:00', 6, 'UTC')),
-                                if(number %% 20 = 0, '%s', %s[(number %% 11) + 1]), 'arrival', ''
-                            FROM numbers(%d)
-                            SETTINGS insert_deduplicate = 0
-                            """.formatted(DATABASE_NAME, workspaceId, projectId, batch * ARRIVAL_BATCH, today,
-                            retired.id(), labelArray, ARRIVAL_BATCH));
-                }
-                var rows = projectRows(statement, workspaceId);
-                assertThat(rows).isEqualTo((long) TRACES * NIGHTS + ARRIVALS);
-                report.append(("Seed: %,d traces x %d saved nights + %,d arrival rows in %d inserts, %d live topics + "
-                        + "1 retired.\n\n").formatted(TRACES, NIGHTS, ARRIVALS, ARRIVALS / ARRIVAL_BATCH,
-                                LIVE_TOPICS))
-                        .append("## A. Unmerged: merges stopped, %,d rows, %d active parts\n\n".formatted(rows,
-                                activeParts(statement)));
-                measure(report, statement, apiKey, workspaceName, projectId, today, expectedTotal, where);
-            } finally {
-                statement.execute("SYSTEM START MERGES %s.trace_topics".formatted(DATABASE_NAME));
+        // The worst case keeps every night's rows. Background merges collapse a trace's older rows within seconds
+        // here, so they stay stopped for the first measurement.
+        execute(STOP_MERGES, Map.of());
+        try {
+            execute(CREATE_TRACES, Map.of());
+            execute(INSERT_TRACES, Map.of("window_from_micros", micros(windowFrom), "traces", TRACES));
+            for (int k = 0; k < NIGHTS; k++) {
+                execute(INSERT_NIGHT, Map.of(
+                        "workspace_id", workspaceId,
+                        "project_id", projectId.toString(),
+                        "labels", labelArray,
+                        "night", k,
+                        "run_id", runs.get(k).runId().toString(),
+                        "minutes_ago", 60 - k));
             }
-
-            waitForMerges(statement);
-            report.append("## B. After background merges, no OPTIMIZE: %,d rows, %d active parts\n\n".formatted(
-                    projectRows(statement, workspaceId), activeParts(statement)));
-            measure(report, statement, apiKey, workspaceName, projectId, today, expectedTotal, where);
-
-            // Runbook check, with merges stopped so both reads see the same rows: a failed run relabels 1,000 traces
-            // after the last night, and three rows sit at the window edges. The API and the runbook queries must agree.
-            statement.execute("SYSTEM STOP MERGES %s.trace_topics".formatted(DATABASE_NAME));
-            try {
-                statement.execute("""
-                        INSERT INTO %s.trace_topics
-                            (workspace_id, project_id, trace_id, trace_created_at, topic_id, source, run_id)
-                        SELECT '%s', '%s', trace_id, trace_created_at, '%s', 'night', '%s'
-                        FROM %s WHERE n < %d
-                        SETTINGS insert_deduplicate = 0
-                        """.formatted(DATABASE_NAME, workspaceId, projectId, live.getFirst().id(),
-                        run(workspaceId, projectId, TopicRun.Status.FAILED, Instant.now()).runId(), tracesTable,
-                        FAILED_TRACES));
-                statement.execute("""
-                        INSERT INTO %s.trace_topics
-                            (workspace_id, project_id, trace_id, trace_created_at, topic_id, source, run_id)
-                        VALUES
-                            ('%2$s', '%3$s', toString(generateUUIDv7(1)), toDateTime64('%4$s 00:00:00', 6, 'UTC'),
-                                '%5$s', 'night', '%6$s'),
-                            ('%2$s', '%3$s', toString(generateUUIDv7(2)),
-                                toDateTime64('%4$s 00:00:00', 6, 'UTC') - toIntervalMicrosecond(1), '%5$s', 'night',
-                                '%6$s'),
-                            ('%2$s', '%3$s', toString(generateUUIDv7(3)), toDateTime64('%7$s 00:00:00', 6, 'UTC'),
-                                '%5$s', 'night', '%6$s')
-                        """.formatted(DATABASE_NAME, workspaceId, projectId, windowFrom, live.get(1).id(),
-                        lastRun.runId(), today.plusDays(1)));
-                var api = get(apiKey, workspaceName, projectId);
-                assumeTrue(today.equals(api.today()), "the UTC day changed during the test");
-                report.append("## Runbook queries against the API\n\n").append(runbookCheck(api, workspaceId,
-                        projectId, today, live.size(), lastRun));
-            } finally {
-                statement.execute("SYSTEM START MERGES %s.trace_topics".formatted(DATABASE_NAME));
-                statement.execute("DROP TABLE IF EXISTS " + tracesTable);
+            for (int batch = 0; batch < ARRIVALS / ARRIVAL_BATCH; batch++) {
+                execute(INSERT_ARRIVALS, Map.of(
+                        "workspace_id", workspaceId,
+                        "project_id", projectId.toString(),
+                        "offset", batch * ARRIVAL_BATCH,
+                        "today_micros", micros(today),
+                        "retired_id", retired.id().toString(),
+                        "labels", labelArray,
+                        "rows", ARRIVAL_BATCH));
             }
+            var rows = projectRows(workspaceId);
+            assertThat(rows).isEqualTo((long) TRACES * NIGHTS + ARRIVALS);
+            report.append(("Seed: %,d traces x %d saved nights + %,d arrival rows in %d inserts, %d live topics + "
+                    + "1 retired.\n\n").formatted(TRACES, NIGHTS, ARRIVALS, ARRIVALS / ARRIVAL_BATCH,
+                            LIVE_TOPICS))
+                    .append("## A. Unmerged: merges stopped, %,d rows, %d active parts\n\n".formatted(rows,
+                            activeParts()));
+            measure(report, apiKey, workspaceName, projectId, today, expectedTotal, window);
+        } finally {
+            execute(START_MERGES, Map.of());
+        }
+
+        waitForMerges();
+        report.append("## B. After background merges, no OPTIMIZE: %,d rows, %d active parts\n\n".formatted(
+                projectRows(workspaceId), activeParts()));
+        measure(report, apiKey, workspaceName, projectId, today, expectedTotal, window);
+
+        // Runbook check, with merges stopped so both reads see the same rows: a failed run relabels 1,000 traces
+        // after the last night, and three rows sit at the window edges. The API and the runbook queries must agree.
+        execute(STOP_MERGES, Map.of());
+        try {
+            execute(INSERT_FAILED_RUN, Map.of(
+                    "workspace_id", workspaceId,
+                    "project_id", projectId.toString(),
+                    "topic_id", live.getFirst().id().toString(),
+                    "run_id", run(workspaceId, projectId, TopicRun.Status.FAILED, Instant.now()).runId().toString(),
+                    "traces", FAILED_TRACES));
+            execute(INSERT_EDGES, Map.of(
+                    "workspace_id", workspaceId,
+                    "project_id", projectId.toString(),
+                    "from_micros", micros(windowFrom),
+                    "before_from_micros", micros(windowFrom) - 1,
+                    "to_micros", micros(today.plusDays(1)),
+                    "topic_id", live.get(1).id().toString(),
+                    "run_id", lastRun.runId().toString()));
+            var api = get(apiKey, workspaceName, projectId);
+            assumeTrue(today.equals(api.today()), "the UTC day changed during the test");
+            report.append("## Runbook queries against the API\n\n").append(runbookCheck(api, workspaceId,
+                    projectId, today, live.size(), lastRun));
+        } finally {
+            execute(START_MERGES, Map.of());
+            execute(DROP_TRACES, Map.of());
         }
 
         Files.writeString(REPORT, report);
@@ -310,8 +407,8 @@ class TopicsReadLoadTest {
     }
 
     /** 100 API calls, their counts query in the query log, then the LIMIT BY and argMax versions by hand. */
-    private void measure(StringBuilder report, java.sql.Statement statement, String apiKey, String workspaceName,
-            UUID projectId, LocalDate today, long expectedTotal, String where) throws Exception {
+    private void measure(StringBuilder report, String apiKey, String workspaceName, UUID projectId, LocalDate today,
+            long expectedTotal, Map<String, Object> window) {
         var loadStart = Instant.now();
         var millis = new double[CALLS];
         ProjectTopics body = null;
@@ -328,67 +425,42 @@ class TopicsReadLoadTest {
                 .formatted(CALLS, millis[0], CALLS - 1, percentile(rest, 0.50), percentile(rest, 0.95))
                 + "max %.1f.\n\n".formatted(percentile(rest, 1.0)));
 
-        statement.execute("SYSTEM FLUSH LOGS");
+        execute(FLUSH_LOGS, Map.of());
         report.append("The API's counts query (`%s`):\n\n".formatted(COMMENT))
-                .append(queryLog(statement, COMMENT, loadStart));
+                .append(queryLog(COMMENT, loadStart));
 
-        var settings = "SETTINGS max_threads = 2, max_execution_time = 10, max_memory_usage = 1073741824, "
-                + "max_rows_to_read = 30000000, log_comment = '%s'";
-        var limitBy = """
-                SELECT topic_id, toDate(trace_created_at, 'UTC') AS day, count() AS traces
-                FROM (
-                    SELECT topic_id, trace_created_at FROM %s.trace_topics
-                    WHERE %s
-                    ORDER BY workspace_id, project_id, trace_id, updated_at DESC, run_id DESC
-                    LIMIT 1 BY workspace_id, project_id, trace_id
-                )
-                GROUP BY topic_id, day
-                ORDER BY topic_id, day
-                """.formatted(DATABASE_NAME, where) + settings.formatted("topics:load:limit_by");
-        var argMax = """
-                SELECT latest_topic AS topic_id, toDate(created, 'UTC') AS day, count() AS traces
-                FROM (
-                    SELECT argMax(topic_id, (updated_at, run_id)) AS latest_topic, any(trace_created_at) AS created
-                    FROM %s.trace_topics
-                    WHERE %s
-                    GROUP BY trace_id
-                )
-                GROUP BY topic_id, day
-                ORDER BY topic_id, day
-                """.formatted(DATABASE_NAME, where) + settings.formatted("topics:load:arg_max");
         var handStart = Instant.now();
         List<String> limitByRows = null;
         List<String> argMaxRows = null;
         for (int i = 0; i < CALLS; i++) {
-            limitByRows = rows(statement, limitBy);
-            argMaxRows = rows(statement, argMax);
+            limitByRows = countRows(LIMIT_BY, window);
+            argMaxRows = countRows(ARG_MAX, window);
         }
         assertThat(argMaxRows).isEqualTo(limitByRows);
-        statement.execute("SYSTEM FLUSH LOGS");
+        execute(FLUSH_LOGS, Map.of());
         report.append("By hand, %d runs each, alternated, same result rows. LIMIT BY:\n\n"
                 .formatted(CALLS))
-                .append(queryLog(statement, "topics:load:limit_by", handStart))
+                .append(queryLog("topics:load:limit_by", handStart))
                 .append("argMax (the API's query):\n\n")
-                .append(queryLog(statement, "topics:load:arg_max", handStart));
+                .append(queryLog("topics:load:arg_max", handStart));
     }
 
     /** Waits until no merge of trace_topics runs and its active parts stay the same for three polls. */
-    private static void waitForMerges(java.sql.Statement statement) throws Exception {
+    private void waitForMerges() throws InterruptedException {
         long previous = -1;
         int stable = 0;
         for (int i = 0; i < 120 && stable < 3; i++) {
             Thread.sleep(1_000);
-            var parts = activeParts(statement);
-            var merging = count(statement, "SELECT count() FROM system.merges WHERE database = '%s' AND table = "
-                    .formatted(DATABASE_NAME) + "'trace_topics'");
+            var parts = activeParts();
+            var merging = count(RUNNING_MERGES);
             stable = merging == 0 && parts == previous ? stable + 1 : 0;
             previous = parts;
         }
     }
 
-    private static long projectRows(java.sql.Statement statement, String workspaceId) throws SQLException {
-        return count(statement, "SELECT count() FROM %s.trace_topics WHERE workspace_id = '%s'"
-                .formatted(DATABASE_NAME, workspaceId));
+    private long projectRows(String workspaceId) {
+        return query(PROJECT_ROWS, Map.of("workspace_id", workspaceId), (row, metadata) -> number(row, "n"))
+                .getFirst();
     }
 
     private String runbookCheck(ProjectTopics api, String workspaceId, UUID projectId, LocalDate today, int liveTopics,
@@ -427,10 +499,10 @@ class TopicsReadLoadTest {
             }
         }
         assertThat(mysqlResults).hasSize(4);
-        assertThat(String.valueOf(mysqlResults.get(0).getFirst().get("eligible"))).isIn("1", "true");
+        assertThat(String.valueOf(mysqlResults.getFirst().getFirst().get("eligible"))).isIn("1", "true");
         assertThat(mysqlResults.get(1)).hasSize(liveTopics);
         assertThat(mysqlResults.get(2).getFirst().get("last_run_id")).isEqualTo(lastRun.runId().toString());
-        var lists = mysqlResults.get(3).getFirst();
+        var lists = mysqlResults.getLast().getFirst();
         var liveIds = (String) lists.get("live_ids");
         var savedRunIds = (String) lists.get("saved_run_ids");
         assertThat(liveIds.split(",")).hasSize(liveTopics);
@@ -476,49 +548,58 @@ class TopicsReadLoadTest {
         return days.getOrDefault(today, 0L) - days.getOrDefault(today.minusDays(1), 0L);
     }
 
-    private String queryLog(java.sql.Statement statement, String comment, Instant since) throws SQLException {
-        var sql = """
-                SELECT count() AS n,
-                    quantileExact(0.5)(query_duration_ms) AS p50, quantileExact(0.95)(query_duration_ms) AS p95,
-                    max(query_duration_ms) AS max_ms, max(read_rows) AS read_rows, max(read_bytes) AS read_bytes,
-                    max(memory_usage) AS memory, max(ProfileEvents['SelectedParts']) AS parts,
-                    max(ProfileEvents['SelectedMarks']) AS marks
-                FROM system.query_log
-                WHERE type = 'QueryFinish' AND startsWith(log_comment, '%s') AND event_time_microseconds >= %s
-                """.formatted(comment, "fromUnixTimestamp64Micro(%d)".formatted(
-                ChronoUnit.MICROS.between(Instant.EPOCH, since)));
-        try (var resultSet = statement.executeQuery(sql)) {
-            resultSet.next();
-            return ("| queries | p50 ms | p95 ms | max ms | read_rows | read_bytes | memory_usage | SelectedParts | "
-                    + "SelectedMarks |\n|---|---|---|---|---|---|---|---|---|\n"
-                    + "| %d | %d | %d | %d | %,d | %,d | %,d | %d | %d |\n\n").formatted(
-                            resultSet.getLong("n"), resultSet.getLong("p50"), resultSet.getLong("p95"),
-                            resultSet.getLong("max_ms"), resultSet.getLong("read_rows"),
-                            resultSet.getLong("read_bytes"), resultSet.getLong("memory"), resultSet.getLong("parts"),
-                            resultSet.getLong("marks"));
-        }
+    private String queryLog(String comment, Instant since) {
+        var binds = Map.<String, Object>of("comment", comment,
+                "since_micros", ChronoUnit.MICROS.between(Instant.EPOCH, since));
+        return query(QUERY_LOG, binds, (row, metadata) -> ("| queries | p50 ms | p95 ms | max ms | read_rows | "
+                + "read_bytes | memory_usage | SelectedParts | SelectedMarks |\n|---|---|---|---|---|---|---|---|---|\n"
+                + "| %d | %d | %d | %d | %,d | %,d | %,d | %d | %d |\n\n").formatted(number(row, "n"),
+                        number(row, "p50"), number(row, "p95"), number(row, "max_ms"), number(row, "read_rows"),
+                        number(row, "read_bytes"), number(row, "memory"), number(row, "parts"),
+                        number(row, "marks")))
+                .getFirst();
     }
 
-    private static List<String> rows(java.sql.Statement statement, String sql) throws SQLException {
-        var rows = new ArrayList<String>();
-        try (var resultSet = statement.executeQuery(sql)) {
-            while (resultSet.next()) {
-                rows.add(resultSet.getString(1) + " " + resultSet.getString(2) + " " + resultSet.getLong(3));
-            }
-        }
-        return rows;
+    /** The result rows of a counts query, one "topic day traces" line each. */
+    private List<String> countRows(String sql, Map<String, Object> window) {
+        return query(sql, window, (row, metadata) -> row.get("topic_id", String.class) + " "
+                + row.get("day", LocalDate.class) + " " + number(row, "traces"));
     }
 
-    private static long count(java.sql.Statement statement, String sql) throws SQLException {
-        try (var resultSet = statement.executeQuery(sql)) {
-            resultSet.next();
-            return resultSet.getLong(1);
-        }
+    private void execute(String sql, Map<String, Object> binds) {
+        run(sql, binds).flatMap(Result::getRowsUpdated).then().block();
     }
 
-    private static long activeParts(java.sql.Statement statement) throws SQLException {
-        return count(statement, "SELECT count() FROM system.parts WHERE database = '%s' AND table = 'trace_topics' "
-                .formatted(DATABASE_NAME) + "AND active");
+    private <T> List<T> query(String sql, Map<String, Object> binds, BiFunction<Row, RowMetadata, T> mapper) {
+        return run(sql, binds).flatMap(result -> result.map(mapper)).collectList().block();
+    }
+
+    /**
+     * Runs a statement with its values bound, as the DAOs do: never formatted into the SQL. It runs in the app's
+     * ClickHouse database, so table names need no database.
+     */
+    private Flux<Result> run(String sql, Map<String, Object> binds) {
+        return Mono.from(connectionFactory.create()).flatMapMany(connection -> {
+            var statement = connection.createStatement(sql);
+            binds.forEach(statement::bind);
+            return statement.execute();
+        });
+    }
+
+    private static long number(Row row, String column) {
+        return ((Number) row.get(column, Object.class)).longValue();
+    }
+
+    private static long micros(LocalDate day) {
+        return ChronoUnit.MICROS.between(Instant.EPOCH, day.atStartOfDay().toInstant(ZoneOffset.UTC));
+    }
+
+    private long count(String sql) {
+        return query(sql, Map.of(), (row, metadata) -> number(row, "n")).getFirst();
+    }
+
+    private long activeParts() {
+        return count(ACTIVE_PARTS);
     }
 
     private static double percentile(double[] values, double quantile) {

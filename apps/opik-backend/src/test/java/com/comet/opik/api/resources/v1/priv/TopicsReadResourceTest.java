@@ -224,8 +224,9 @@ class TopicsReadResourceTest {
         assertThat(firstStats.name()).isEqualTo(first.name());
         assertThat(firstStats.share()).isCloseTo(6.0 / 24, within(1e-12));
         assertThat(firstStats.series()).hasSize(30)
-                .contains(new DayCount(today.minusDays(25), 1), new DayCount(today.minusDays(1), 3),
-                        new DayCount(today, 2));
+                .contains(DayCount.builder().day(today.minusDays(25)).count(1).build(),
+                        DayCount.builder().day(today.minusDays(1)).count(3).build(),
+                        DayCount.builder().day(today).count(2).build());
         assertThat(body.topics().getLast().inactiveSince()).isEqualTo(today.minusDays(2));
         var other = body.other();
         assertThat(other.id()).isEqualTo(TraceTopic.OTHER);

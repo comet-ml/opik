@@ -287,7 +287,7 @@ public class TopicsArrivalService {
                 saved = Mono.fromCallable(() -> template.inTransaction(READ_ONLY, handle -> {
                     var read = new HashMap<UUID, Saved>();
                     for (var projectId : dao(handle, until).findProjectsWithLiveTopics(toRead)) {
-                        var live = dao(handle, until).findLive(projectId);
+                        var live = dao(handle, until).findLive(workspaceId, projectId);
                         read.put(projectId, new Saved(live, dao(handle, until).findPrototypes(projectId)));
                     }
                     return read;

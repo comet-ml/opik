@@ -383,7 +383,7 @@ class TopicsRebuildServiceTest {
         ArgumentCaptor<List<TraceTopic>> labels = ArgumentCaptor.forClass(List.class);
         verify(traceTopicsDAO).insert(labels.capture());
         when(topicDAO.findStates(any())).thenReturn(List.of(state.getValue()));
-        when(topicDAO.findLive(projectId)).thenReturn(topics.getValue());
+        when(topicDAO.findLive(WORKSPACE_ID, projectId)).thenReturn(topics.getValue());
         when(topicDAO.findPrototypes(projectId)).thenReturn(prototypes.getValue());
         when(topicDAO.updateState(any(), eq(runId))).thenReturn(1);
         var previous = labels.getValue().stream()
