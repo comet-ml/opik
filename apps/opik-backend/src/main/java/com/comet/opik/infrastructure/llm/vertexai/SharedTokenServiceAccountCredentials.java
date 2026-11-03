@@ -92,9 +92,9 @@ final class SharedTokenServiceAccountCredentials extends GoogleCredentials {
         return cacheKey.hashCode();
     }
 
-    /** The inherited form prints the cached access token; the cache key would name its Redis bucket. */
+    /** The parent's form with the token masked, and without the cache key, which would name its Redis bucket. */
     @Override
     public String toString() {
-        return "SharedTokenServiceAccountCredentials{token=****}";
+        return toStringHelper().add("token", "****").toString();
     }
 }
