@@ -8,7 +8,11 @@ from .breakdown_config_field import BreakdownConfigField
 
 
 class BreakdownConfig(UniversalBaseModel):
-    field: typing.Optional[BreakdownConfigField] = None
+    field: typing.Optional[BreakdownConfigField] = pydantic.Field(default=None)
+    """
+    Field to group by. Tags are overlapping groups: each tag receives the full metric value. For cost, adding tag groups can exceed actual spend; use provider or model for additive span cost totals.
+    """
+
     metadata_key: typing.Optional[str] = None
     sub_metric: typing.Optional[str] = None
 
