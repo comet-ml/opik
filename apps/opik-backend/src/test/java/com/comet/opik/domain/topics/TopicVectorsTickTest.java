@@ -1083,6 +1083,46 @@ class TopicVectorsTickTest {
         }
 
         @Test
+        @DisplayName("an algorithm that returns null for a project's rule skips only that project for the rest of "
+                + "the tick")
+        void nullRule() {
+            var workspaceId = UUID.randomUUID().toString();
+            var labelled = UUID.randomUUID();
+            var nulled = UUID.randomUUID();
+            var first = topic(workspaceId, labelled, "Billing", null);
+            var second = topic(workspaceId, nulled, "Refunds", null);
+            saveList(List.of(first, second), List.of(prototype(first, 0, intent(0)), prototype(second, 0, intent(1))));
+            var algorithm = new KMeansTopicAlgorithm() {
+                @Override
+                public Optional<Arrival> arrival(List<Topic> live, List<TopicPrototype> prototypes) {
+                    return live.getFirst().projectId().equals(nulled) ? null : super.arrival(live, prototypes);
+                }
+            };
+            var meter = new TopicsTestMeter();
+            var arrival = new TopicsArrivalService(opikConfig.getTopics(), template, traceTopicsDAO, algorithm,
+                    meter.meter).tick();
+            var chunk = List.of(arrivalVector(workspaceId, labelled, intent(0)),
+                    arrivalVector(workspaceId, nulled, intent(1)));
+            var later = List.of(arrivalVector(workspaceId, labelled, intent(0)),
+                    arrivalVector(workspaceId, nulled, intent(1)));
+
+            arrival.label(workspaceId, "name", chunk, Instant.now().plusSeconds(30));
+            arrival.label(workspaceId, "name", later, Instant.now().plusSeconds(30));
+
+            assertThat(traceTopicsDAO.findByProject(workspaceId, labelled).collectList().block())
+                    .extracting(TraceTopic::traceId, TraceTopic::topicId)
+                    .containsExactlyInAnyOrder(tuple(chunk.get(0).traceId(), first.id()),
+                            tuple(later.get(0).traceId(), first.id()));
+            assertThat(traceTopicsDAO.findByProject(workspaceId, nulled).collectList().block()).isEmpty();
+            assertThat(meter.points("topics.arrival.failures")).singleElement().satisfies(point -> {
+                assertThat(point.get("phase")).isEqualTo("assign");
+                assertThat(point.get("error_type")).isEqualTo("NullPointerException");
+            });
+            assertThat(meter.sum("topics.arrival.labelled", "outcome", "after_failure", "workspace_id", workspaceId))
+                    .isEqualTo(1);
+        }
+
+        @Test
         @DisplayName("with less than a second left before the tick's deadline, arrival reads and writes nothing and "
                 + "counts its traces as over_budget")
         void overBudget() {

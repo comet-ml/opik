@@ -26,6 +26,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -305,7 +306,8 @@ public class TopicsArrivalService {
                     continue;
                 }
                 try {
-                    projects.put(projectId, algorithm.arrival(project.live(), project.rows()));
+                    projects.put(projectId, Objects.requireNonNull(algorithm.arrival(project.live(), project.rows()),
+                            "the topic algorithm returned a null arrival rule"));
                 } catch (RuntimeException exception) {
                     unusable.add(projectId);
                     fail(workspaceId, workspaceName, ASSIGN, exception);
