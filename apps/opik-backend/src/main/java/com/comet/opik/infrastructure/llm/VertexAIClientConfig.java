@@ -37,8 +37,7 @@ import java.util.concurrent.TimeUnit;
  * The credentials cache keeps one set of credentials per service-account key in memory, for
  * {@code credentialsCacheExpireAfterAccess} after its last call. Their OAuth token is shared by every pod through
  * Redis: it is refreshed once its remaining lifetime drops below {@code tokenCacheRefreshFraction} of the whole, and at
- * the latest {@code tokenCacheMinRefreshAhead} before it expires, under a cross-pod lock whose lease is
- * {@code tokenCacheLockTimeout}.
+ * the latest {@code tokenCacheMinRefreshAhead} before it expires.
  * <p>
  * {@code tokenCacheMinRefreshAhead} is at least the auth library's own refresh margin, 3m45s: the token has to leave
  * Redis before a pod refreshes it, or the refreshing pod is handed back the same expiring token.
@@ -51,6 +50,5 @@ public record VertexAIClientConfig(
         @NotEmpty Set<@NotNull URI> tokenUris,
         @NotNull @MinDuration(value = 1, unit = TimeUnit.SECONDS) @MaxDuration(value = 1, unit = TimeUnit.DAYS) Duration credentialsCacheExpireAfterAccess,
         @DecimalMin("0.0") @DecimalMax("0.99") double tokenCacheRefreshFraction,
-        @NotNull @MinDuration(value = 225, unit = TimeUnit.SECONDS) @MaxDuration(value = 30, unit = TimeUnit.MINUTES) Duration tokenCacheMinRefreshAhead,
-        @NotNull @MinDuration(value = 1, unit = TimeUnit.SECONDS) @MaxDuration(value = 1, unit = TimeUnit.MINUTES) Duration tokenCacheLockTimeout) {
+        @NotNull @MinDuration(value = 225, unit = TimeUnit.SECONDS) @MaxDuration(value = 30, unit = TimeUnit.MINUTES) Duration tokenCacheMinRefreshAhead) {
 }

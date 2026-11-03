@@ -4,9 +4,6 @@ import com.comet.opik.infrastructure.redis.StringRedisClient;
 import com.comet.opik.podam.PodamFactoryUtils;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.MethodSource;
 import org.redisson.api.RBucket;
 import uk.co.jemos.podam.api.PodamFactory;
 
@@ -20,7 +17,6 @@ import java.net.URI;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
@@ -72,20 +68,6 @@ class SharedTokenCacheTest {
             assertThat(elapsedMillis).isLessThan(2_000);
             assertThat(connectionClosed.get(2, TimeUnit.SECONDS)).isTrue();
         }
-    }
-
-    @ParameterizedTest(name = "lockTimeout={0}, fetchTimeout={1}")
-    @MethodSource
-    @DisplayName("the lock's lease covers the fetch, with a fifth to spare for the write")
-    void leaseCoversTheFetch(Duration lockTimeout, Duration fetchTimeout, Duration expectedLease) {
-        assertThat(SharedTokenCache.leaseFor(lockTimeout, fetchTimeout)).isEqualTo(expectedLease);
-    }
-
-    static Stream<Arguments> leaseCoversTheFetch() {
-        return Stream.of(
-                Arguments.of(Duration.ofSeconds(15), Duration.ofSeconds(10), Duration.ofSeconds(15)),
-                Arguments.of(Duration.ofSeconds(15), Duration.ofSeconds(12), Duration.ofSeconds(15)),
-                Arguments.of(Duration.ofSeconds(15), Duration.ofMinutes(1), Duration.ofSeconds(75)));
     }
 
     private static SharedTokenCache.Fetched fetchFrom(int port) {

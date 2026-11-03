@@ -36,7 +36,6 @@ import okhttp3.ConnectionPool;
 import okhttp3.Dispatcher;
 import okhttp3.OkHttpClient;
 import org.apache.commons.lang3.RandomStringUtils;
-import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -878,39 +877,6 @@ class VertexAIClientGeneratorTest {
                     .isLessThanOrEqualTo(TimeUnit.HOURS.toMillis(1)
                             - config.getVertexAIClient().tokenCacheMinRefreshAhead().toMilliseconds())
                     .isGreaterThan(TimeUnit.MINUTES.toMillis(54));
-        }
-
-        /**
-         * The lock's lease isn't renewed, so a holder still fetching after it would let another pod fetch a second
-         * token. The fetch is cut off inside the lease instead of running for as long as the endpoint stalls.
-         */
-        @Test
-        @DisplayName("a token fetch slower than the lock's lease fails inside it")
-        void slowTokenFetchFailsInsideTheLease() {
-            var stallMillis = 10_000;
-            wireMock.server().stubFor(post(urlPathMatching(TOKEN_PATH))
-                    .willReturn(aResponse()
-                            .withHeader("Content-Type", "application/json")
-                            .withBody(TOKEN_RESPONSE)
-                            .withFixedDelay(stallMillis)));
-            var config = clientConfig();
-            config.setVertexAIClient(config.getVertexAIClient().toBuilder()
-                    .tokenCacheLockTimeout(Duration.seconds(1))
-                    .build());
-            var generator = new VertexAIClientGenerator(config, registry, LlmTestClients.REMOTE_MEDIA_INLINER,
-                    LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache);
-
-            var startNanos = System.nanoTime();
-            var thrown = catchThrowable(() -> completeVia(generator, "global"));
-            var elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNanos);
-
-            assertThat(thrown).isNotNull();
-            assertThat(ExceptionUtils.getThrowableList(thrown))
-                    .anyMatch(cause -> String.valueOf(cause.getMessage())
-                            .equals("Fetching the Vertex AI OAuth token took longer than 'PT0.8S'"));
-            // each attempt's request is cancelled at its deadline (see SharedTokenCacheTest), not left to the stall
-            assertThat(elapsedMillis).isLessThan(stallMillis);
-            wireMock.server().verify(0, postRequestedFor(urlPathMatching(GENERATE_CONTENT_PATH)));
         }
 
         @Test

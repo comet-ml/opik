@@ -41,8 +41,8 @@ public class LlmProviderTokenAuthConfig {
             .seconds(10);
 
     /**
-     * Minimum lease time for the cross-pod single-flight lock around a token fetch. The lease is
-     * stretched to {@code fetchTimeout / 0.8} when that is longer, so a fetch always ends inside it.
+     * Lease time for the cross-pod single-flight lock around a token fetch, on top of
+     * {@code fetchTimeout}: the lease is their sum, so a fetch always ends inside it.
      */
     @JsonProperty
     @NotNull @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS)

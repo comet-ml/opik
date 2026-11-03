@@ -1607,8 +1607,8 @@ llmProviderTokenAuth:
   # Description: Timeout for the token fetch call to the configured auth service. Capped at 1m
   fetchTimeout: ${LLM_PROVIDER_TOKEN_AUTH_FETCH_TIMEOUT:-10s}
   # Default: 15s
-  # Description: Minimum lease time for the cross-pod single-flight lock around a token fetch;
-  # stretched to fetchTimeout / 0.8 when that is longer, so a fetch always ends inside the lease
+  # Description: Lease time for the cross-pod single-flight lock around a token fetch, on top of fetchTimeout:
+  # the lease is lockTimeout + fetchTimeout, so a fetch always ends inside it
   lockTimeout: ${LLM_PROVIDER_TOKEN_AUTH_LOCK_TIMEOUT:-15s}
   # Default: 1000000
   # Description: Maximum accepted size (in characters) of a token endpoint reply. Capped at 10000000
@@ -1773,9 +1773,6 @@ llmProviderClient:
     # the auth library refreshes it (3m45s before expiry), or a refreshing pod is handed back the same expiring token.
     # Between 3m45s and 30m
     tokenCacheMinRefreshAhead: ${LLM_PROVIDER_VERTEXAI_TOKEN_CACHE_MIN_REFRESH_AHEAD:-5m}
-    # Default: 15s
-    # Description: Lease time for the cross-pod single-flight lock around an OAuth token fetch. Between 1s and 1m
-    tokenCacheLockTimeout: ${LLM_PROVIDER_VERTEXAI_TOKEN_CACHE_LOCK_TIMEOUT:-15s}
 
 # Configuration for cache manager
 cacheManager:

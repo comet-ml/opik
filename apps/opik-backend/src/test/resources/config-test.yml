@@ -913,9 +913,6 @@ llmProviderClient:
     # the auth library refreshes it (3m45s before expiry), or a refreshing pod is handed back the same expiring token.
     # Between 3m45s and 30m
     tokenCacheMinRefreshAhead: 5m
-    # Default: 15s
-    # Description: Lease time for the cross-pod single-flight lock around an OAuth token fetch. Between 1s and 1m
-    tokenCacheLockTimeout: 15s
 
 # Configuration for cache manager
 cacheManager:

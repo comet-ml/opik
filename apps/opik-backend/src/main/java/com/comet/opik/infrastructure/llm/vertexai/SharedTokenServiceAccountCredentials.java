@@ -24,8 +24,9 @@ import java.util.Objects;
  * least {@code tokenCacheMinRefreshAhead} before that expiry, ahead of the auth library's own refresh margin: otherwise a pod
  * refreshing near the end would be handed back the same expiring token from Redis.
  *
- * <p>The fetch is bounded by {@link SharedTokenCache#FETCH_SHARE_OF_LEASE} of the lock's lease, which is not renewed,
- * and cancelled past it.
+ * <p>The fetch takes no cross-pod lock. The auth library already refreshes one credentials object at a time, and there
+ * is one per key in each pod, so each pod fetches at most once per key at a time. Pods that miss Redis together each
+ * fetch, which is harmless: every Google token stays valid until its own expiry.
  */
 final class SharedTokenServiceAccountCredentials extends GoogleCredentials {
 
@@ -37,7 +38,6 @@ final class SharedTokenServiceAccountCredentials extends GoogleCredentials {
     private final String cacheKey;
     private final double refreshFraction;
     private final Duration minRefreshAhead;
-    private final Duration lockTimeout;
 
     SharedTokenServiceAccountCredentials(@NonNull ServiceAccountCredentials delegate,
             @NonNull SharedTokenCache tokenCache, @NonNull String cacheKey, @NonNull VertexAIClientConfig config) {
@@ -47,7 +47,6 @@ final class SharedTokenServiceAccountCredentials extends GoogleCredentials {
         this.cacheKey = cacheKey;
         this.refreshFraction = config.tokenCacheRefreshFraction();
         this.minRefreshAhead = config.tokenCacheMinRefreshAhead().toJavaDuration();
-        this.lockTimeout = config.tokenCacheLockTimeout().toJavaDuration();
     }
 
     String projectId() {
@@ -56,14 +55,10 @@ final class SharedTokenServiceAccountCredentials extends GoogleCredentials {
 
     @Override
     public AccessToken refreshAccessToken() throws IOException {
-        var fetchTimeout = Duration.ofMillis((long) (lockTimeout.toMillis() * SharedTokenCache.FETCH_SHARE_OF_LEASE));
         try {
-            var value = tokenCache.get(cacheKey, lockTimeout, fetchTimeout, this::fetch).value();
+            var value = tokenCache.getWithoutLock(cacheKey, this::fetch).value();
             var cached = JsonUtils.treeToValue(JsonUtils.getJsonNodeFromString(value), CachedToken.class);
             return new AccessToken(cached.token(), new Date(cached.expiresAtEpochMillis()));
-        } catch (SharedTokenCache.FetchTimeoutException exception) {
-            throw new IOException("Fetching the Vertex AI OAuth token took longer than '%s'"
-                    .formatted(exception.getTimeout()), exception);
         } catch (UncheckedIOException exception) {
             throw exception.getCause();
         }

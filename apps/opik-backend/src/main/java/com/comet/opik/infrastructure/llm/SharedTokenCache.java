@@ -29,18 +29,17 @@ import java.util.function.Supplier;
  * failing the call. A failed fetch is never retried here: it propagates as thrown.
  *
  * <p>The lock's lease is not renewed, so a holder still fetching after it would let a waiter take the lock and fetch a
- * second value. Every fetch therefore has a hard deadline, its {@code fetchTimeout}, and the lease is stretched to cover
- * it with {@link #FETCH_SHARE_OF_LEASE} to spare for the write. A fetch past its deadline is cancelled by interrupting
- * its thread: the fetch runs on a virtual thread, where an interrupt closes the socket it is blocked on, so the
- * abandoned request ends there rather than at the HTTP client's own timeouts and retries.
+ * second value. Every locked fetch therefore has a hard deadline, its {@code fetchTimeout}, and the lease is
+ * {@code lockTimeout + fetchTimeout}, so it outlasts the fetch and leaves {@code lockTimeout} for the rest. A fetch past
+ * its deadline is cancelled by interrupting its thread: the fetch runs on a virtual thread, where an interrupt closes the
+ * socket it is blocked on, so the abandoned request ends there rather than at the HTTP client's own timeouts.
+ *
+ * <p>{@link #getWithoutLock} skips the lock for values that pods may fetch concurrently without harm.
  */
 @Slf4j
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class SharedTokenCache {
-
-    /** The share of the lock's lease a fetch may take; the rest is left for writing its value to Redis. */
-    public static final double FETCH_SHARE_OF_LEASE = 0.8;
 
     // One thread per running fetch: each blocks a caller waiting on it, so they are bounded by the callers themselves
     private static final ExecutorService FETCH_EXECUTOR = Executors.newVirtualThreadPerTaskExecutor();
@@ -79,7 +78,7 @@ public class SharedTokenCache {
      * Returns the cached value for {@code cacheKey}, or fetches, caches and returns a new one. Blocking: meant to be
      * called from a provider client's request path.
      *
-     * @param lockTimeout the minimum lease of the cross-pod fetch lock; it is stretched to cover {@code fetchTimeout}
+     * @param lockTimeout the lease of the cross-pod fetch lock beyond {@code fetchTimeout}
      * @param fetchTimeout the deadline of a fetch, past which it is cancelled with {@link FetchTimeoutException}
      */
     public Result get(@NonNull String cacheKey, @NonNull Duration lockTimeout, @NonNull Duration fetchTimeout,
@@ -89,7 +88,7 @@ public class SharedTokenCache {
             return new Result(cached, Outcome.CACHE_HIT);
         }
 
-        var lease = leaseFor(lockTimeout, fetchTimeout);
+        var lease = lockTimeout.plus(fetchTimeout);
         try {
             // A waiter first waits out the holder's lease, then holds the lock for at most one of its own
             var value = lockService
@@ -119,6 +118,21 @@ public class SharedTokenCache {
         return new Result(fetchWithin(fetchTimeout, fetch).value(), Outcome.DEGRADED_DIRECT);
     }
 
+    /**
+     * Returns the cached value for {@code cacheKey}, or fetches, caches and returns a new one, without the cross-pod
+     * lock: pods that miss at the same time each fetch. For values where that is harmless, such as OAuth tokens that
+     * stay valid until their own expiry, and whose fetch the caller already bounds and single-flights per pod.
+     */
+    public Result getWithoutLock(@NonNull String cacheKey, @NonNull Supplier<Fetched> fetch) {
+        var cached = read(cacheKey);
+        if (cached != null) {
+            return new Result(cached, Outcome.CACHE_HIT);
+        }
+        var fetched = fetch.get();
+        write(cacheKey, fetched);
+        return new Result(fetched.value(), Outcome.FETCHED);
+    }
+
     /** Drops the cached value, best-effort: a Redis failure only delays the cleanup until the bucket's own expiry. */
     public void invalidate(@NonNull String cacheKey) {
         try {
@@ -126,11 +140,6 @@ public class SharedTokenCache {
         } catch (RuntimeException exception) {
             log.warn("Failed to invalidate the cached value of '{}'", cacheKey, withoutMessageOrCauses(exception));
         }
-    }
-
-    static Duration leaseFor(Duration lockTimeout, Duration fetchTimeout) {
-        var covering = Duration.ofMillis((long) Math.ceil(fetchTimeout.toMillis() / FETCH_SHARE_OF_LEASE));
-        return covering.compareTo(lockTimeout) > 0 ? covering : lockTimeout;
     }
 
     private String fetchUnderLock(String cacheKey, Duration fetchTimeout, Supplier<Fetched> fetch) {
