@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useEffect } from "react";
+import React, { useMemo, useEffect, useState } from "react";
 import get from "lodash/get";
 import isArray from "lodash/isArray";
 
@@ -36,6 +36,11 @@ const scoringRulesOf = (rules: EvaluatorsRule[], pickedRuleIds: string[]) => {
   );
 };
 
+const waitEndOf = (trace: Trace | undefined, openedAt: number) =>
+  (trace?.end_time
+    ? Math.min(Date.parse(trace.end_time), openedAt)
+    : openedAt) + MAX_REFETCH_TIME;
+
 interface PlaygroundOutputScoresContainerProps {
   traceId: string | null;
   notRun?: boolean;
@@ -48,11 +53,7 @@ const PlaygroundOutputScoresContainer: React.FC<
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const activeProjectId = useActiveProjectId();
   const pickerRuleIds = useSelectedRuleIds();
-  const pollingStartTimeRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    pollingStartTimeRef.current = traceId ? Date.now() : null;
-  }, [traceId]);
+  const [openedAt] = useState(Date.now);
 
   const {
     data: rulesData,
@@ -84,11 +85,9 @@ const PlaygroundOutputScoresContainer: React.FC<
     {
       enabled: !!traceId && mayBeScored,
       refetchInterval: (query) => {
-        const elapsed =
-          Date.now() - (pollingStartTimeRef.current || Date.now());
-        if (elapsed > MAX_REFETCH_TIME) return false;
-
         const loadedTrace = query.state.data;
+        if (waitEndOf(loadedTrace, openedAt) < Date.now()) return false;
+
         // Unloaded picks are unknown, not empty; an incomplete list may hide a scoring rule.
         if (!loadedTrace || rulesPending || rulesTruncated) {
           return REFETCH_INTERVAL;
@@ -115,6 +114,28 @@ const PlaygroundOutputScoresContainer: React.FC<
         return REFETCH_INTERVAL;
       },
     },
+  );
+
+  const waitEnd = waitEndOf(trace, openedAt);
+  const [waitOver, setWaitOver] = useState(false);
+
+  // Polling stops at the same moment, so nothing else would re-render to stop the spinners.
+  useEffect(() => {
+    const remaining = waitEnd - Date.now();
+    setWaitOver(remaining <= 0);
+    if (remaining <= 0) return;
+    const timer = setTimeout(() => setWaitOver(true), remaining);
+    return () => clearTimeout(timer);
+  }, [waitEnd]);
+
+  const metricRuleIds = useMemo(
+    () =>
+      Object.fromEntries(
+        rules.flatMap((rule) =>
+          getScoreNamesFromRule(rule).map((name) => [name, rule.id]),
+        ),
+      ),
+    [rules],
   );
 
   // The picker stands in until the trace loads, so picked metrics show pending from the start.
@@ -159,6 +180,8 @@ const PlaygroundOutputScoresContainer: React.FC<
     <PlaygroundOutputScores
       metricNames={allMetricNames}
       metricScores={metricScores}
+      metricRuleIds={metricRuleIds}
+      waitOver={waitOver && !!traceId}
       notRun={notRun}
       className={className}
     />
