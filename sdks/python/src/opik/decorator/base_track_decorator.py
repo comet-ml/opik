@@ -469,18 +469,20 @@ class BaseTrackDecorator(abc.ABC):
 
         span_data, trace_data = pop_end_candidates()
         tracking_arguments: Dict[str, Any] = dict(
-            start_span_arguments=None,
-            opik_distributed_trace_headers=None,
+            span_data=span_data,
+            trace_data=trace_data,
             track_options=track_options,
             finally_callback=functools.partial(
                 self._after_call, flush=track_options.flush
             ),
-            started_span_data=span_data,
-            started_trace_data=trace_data,
         )
         if inspect.isgenerator(result):
-            return generator_wrappers.SyncTrackedGenerator(result, **tracking_arguments)
-        return generator_wrappers.AsyncTrackedGenerator(result, **tracking_arguments)
+            return generator_wrappers.StartedSpanSyncTrackedGenerator(
+                result, **tracking_arguments
+            )
+        return generator_wrappers.StartedSpanAsyncTrackedGenerator(
+            result, **tracking_arguments
+        )
 
     def _before_call(
         self,
