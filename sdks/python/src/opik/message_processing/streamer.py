@@ -201,7 +201,9 @@ class Streamer:
 
         self._batch_preprocessor.flush()
 
-        self._fallback_replay_manager.refresh_server_connection(timeout)
+        self._fallback_replay_manager.refresh_server_connection(
+            None if end_time is None else max(0.0, end_time - time.time())
+        )
         if self._fallback_replay_manager.has_server_connection:
             # do replay only if we have a connection to the server
             self._fallback_replay_manager.flush()

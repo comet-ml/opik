@@ -259,7 +259,9 @@ class TestShutdownWhileServerLooksUnreachable:
         ) as refresh:
             st.flush(timeout=0.5)
 
-        refresh.assert_called_once_with(0.5)
+        refresh.assert_called_once()
+        (ping_budget,) = refresh.call_args.args
+        assert 0.0 < ping_budget <= 0.5
 
     def test_close_flush__parked_messages_cannot_be_counted__not_reported_as_flushed(
         self, build_stack
