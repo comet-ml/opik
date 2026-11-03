@@ -17,6 +17,7 @@ import com.comet.opik.utils.ClientDisconnectedException;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.github.tomakehurst.wiremock.http.Fault;
+import com.google.auth.oauth2.ServiceAccountCredentials;
 import com.redis.testcontainers.RedisContainer;
 import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
@@ -57,6 +58,7 @@ import org.redisson.api.RedissonClient;
 import org.redisson.client.codec.StringCodec;
 import org.redisson.config.Config;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.lang.reflect.Method;
 import java.net.InetAddress;
@@ -878,6 +880,27 @@ class VertexAIClientGeneratorTest {
             assertThat(actualTtlMillis)
                     .isLessThanOrEqualTo(TimeUnit.MINUTES.toMillis(55))
                     .isGreaterThan(TimeUnit.MINUTES.toMillis(54));
+        }
+
+        /** Credentials may end up in a log line; the token they hold, and the key naming its Redis bucket, must not. */
+        @Test
+        @DisplayName("refreshed credentials print with the token masked and without the cache key")
+        void refreshedCredentialsPrintWithTheTokenMasked() throws Exception {
+            var cacheKey = "vertex_ai_token:" + RandomStringUtils.secure().nextAlphanumeric(64);
+            var delegate = (ServiceAccountCredentials) ServiceAccountCredentials
+                    .fromStream(
+                            new ByteArrayInputStream(serviceAccountJson(PROJECT_ID).getBytes(StandardCharsets.UTF_8)))
+                    .createScoped(clientConfig().getVertexAIClient().scope());
+            var credentials = new SharedTokenServiceAccountCredentials(delegate, tokenCache, cacheKey,
+                    clientConfig().getVertexAIClient());
+            credentials.refresh();
+            var expected = "SharedTokenServiceAccountCredentials{universeDomain=googleapis.com, "
+                    + "isExplicitUniverseDomain=false, token=****}";
+
+            var actual = credentials.toString();
+
+            assertThat(credentials.getAccessToken().getTokenValue()).isEqualTo("test-access-token");
+            assertThat(actual).isEqualTo(expected);
         }
 
         /** The exception is logged with its cause, and the key-file parser quotes an unrecognised type back. */
