@@ -25,11 +25,12 @@ RUN npm run build -- --mode $BUILD_MODE \
 
 # Production stage
 # Slim plus only the OpenTelemetry module: the -otel image is built on the full alpine variant, whose other
-# modules and curl we don't use and which bring in brotli, curl and expat CVEs. The module comes from nginx.org,
-# signed with the key slim already trusts, built for the base's nginx version.
+# modules we don't use and which bring in brotli and expat CVEs. The module comes from nginx.org, signed with the
+# key slim already trusts, pinned the way nginx's own -otel Dockerfile pins it. curl is for the compose healthcheck.
 FROM nginx:1.30.6-alpine-slim@sha256:dede8895648b461178c3bc604f7eed4423efe5220b2c4d839f5eb3d34ac3f8f7 AS nginx
+ARG OTEL_VERSION=0.1.2
 RUN apk add --no-cache -X "https://nginx.org/packages/alpine/v$(grep -oE '^[0-9]+\.[0-9]+' /etc/alpine-release)/main" \
-    "nginx-module-otel~${NGINX_VERSION}"
+    "nginx-module-otel=${NGINX_VERSION}.${OTEL_VERSION}-r${PKG_RELEASE}" curl
 
 # Add label for later inspection
 ARG BUILD_MODE=production
