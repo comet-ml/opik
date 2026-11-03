@@ -253,6 +253,24 @@ describe("Prompt - format()", () => {
         "first, second"
       );
     });
+
+    it("should not HTML-escape substituted values", () => {
+      const prompt = new Prompt(
+        {
+          ...basicPromptData,
+          prompt: "Q: {{ question }} {{ url }}",
+          type: PromptType.JINJA2,
+        },
+        mockOpikClient
+      );
+
+      expect(
+        prompt.format({
+          question: `Is 1 < 2 & "x" == 'x'?`,
+          url: "https://example.com/a.png?w=1&h=2",
+        })
+      ).toBe(`Q: Is 1 < 2 & "x" == 'x'? https://example.com/a.png?w=1&h=2`);
+    });
   });
 
   describe("error handling", () => {
