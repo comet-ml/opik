@@ -31,7 +31,7 @@ chartMigration:
   # Enable this for the first upgrade that includes a migration from Bitnami charts and images
   # After successful migration, set this back to false
   enabled: true
-  image: "alpine/kubectl:1.35.0"
+  image: "alpine/kubectl:1.37.2"
   # Service account name (must have permissions to delete StatefulSets and Deployments)
   serviceAccountName: ""
   # Node selector for the migration job pod (falls back to global nodeSelector if not specified)
@@ -128,7 +128,7 @@ component:
       image:
         registry: docker.io
         repository: curlimages/curl
-        tag: 8.12.1
+        tag: 8.23.0
       # Resource requests/limits for the `wait-for-clickhouse-service` init container.
       # Empty ({}) by default — no resources set.
       resources: {}
@@ -140,7 +140,7 @@ component:
       image:
         registry: docker.io
         repository: busybox
-        tag: 1.36
+        tag: 1.38
       # Resource requests/limits for the `wait-for-mysql-service` init container.
       # Empty ({}) by default — no resources set.
       resources: {}
@@ -352,7 +352,7 @@ component:
       image:
         registry: docker.io
         repository: busybox
-        tag: "1.36"
+        tag: "1.38"
       # Resource requests/limits for the `wait-for-redis-service` init container.
       # Empty ({}) by default — no resources set.
       resources: {}
@@ -789,7 +789,7 @@ altinity-clickhouse-operator:
   crdHook:
     image:
       repository: alpine/kubectl
-      tag: "1.35.0"
+      tag: "1.37.2"
   metrics:
     enabled: false
   serviceMonitor:
@@ -950,7 +950,7 @@ clickhouse:
   # clones the schema to the new replicas. Installing directly on >= 2 replicas prevents the analytics
   # migrations from completing on a fresh cluster. See the self-host/scaling docs.
   replicasCount: 1
-  image: clickhouse/clickhouse-server:26.3.62.3
+  image: clickhouse/clickhouse-server:26.10.3.7
   storage: 50Gi
   logsLevel: information
   # -- Rotation cap for the ClickHouse file logs. No volume is mounted for them, so they land on the node's root disk
@@ -1160,7 +1160,7 @@ clickhouse:
       # nameOverride or fullnameOverride: the job is namespace-scoped and finds the
       # operator by its default app.kubernetes.io/name, so it could not bounce it.
       enabled: true
-      image: "alpine/kubectl:1.35.0"
+      image: "alpine/kubectl:1.37.2"
       # Total budget for the whole run (all replicas: operator bounce + rebuild +
       # reschedule + wait Ready), shared across migration and readiness.
       pollTimeoutSeconds: 1200
@@ -1228,7 +1228,7 @@ clickhouse:
       # Backups written by the SQL-based CronJob above cannot be restored by it.
       backupName: ""
       # Override with any image that has bash and curl — the job needs nothing else.
-      image: "amazon/aws-cli:2.27.49"
+      image: "amazon/aws-cli:2.39.3"
       # Hard cap on the job runtime (seconds) so a stuck restore whose status
       # never resolves cannot run forever. Default: 24h.
       activeDeadlineSeconds: 86400
@@ -1245,7 +1245,7 @@ clickhouse:
       tolerations: []  # Defaults to .Values.clickhouse.tolerations if not specified
   backupServer:
     enabled: false
-    image: altinity/clickhouse-backup:2.7.4
+    image: altinity/clickhouse-backup:2.8.3
     port: 7171
     # -- (object) securityContext of the clickhouse-backup sidecar; it inherits the pod's uid 101,
     # so it needs the same explicit allowPrivilegeEscalation as `clickhouse.securityContext`.
@@ -1346,7 +1346,7 @@ zookeeper:
   image:
     registry: docker.io
     repository: zookeeper
-    tag: "3.9.4"
+    tag: "3.9.6"
     imagePullPolicy: IfNotPresent
   replicaCount: 1
   podDisruptionBudget:
