@@ -74,8 +74,10 @@ const RetentionBanner = ({ onChangeHeight, hidden }: RetentionBannerProps) => {
     (spanQuota?.used || 0) / (spanQuota?.limit || 1) <
     SHOW_BANNER_MIN_THRESHOLD;
 
-  // Until membership loads, admins can't be told apart from members, so the wrong message would flash.
-  const isMembershipLoading = !organization || !organizationMembers;
+  // The organization's role picks the message, so wait for it to avoid flashing the wrong one; only the
+  // member message lists the admins, so admins don't wait for (or depend on) the member list.
+  const isMembershipLoading =
+    !organization || (!isOrganizationAdmin && !organizationMembers);
   const isUsageWarningHidden = !spanQuota || isUsedLess80 || closed;
   const hideBanner =
     !user || (isTrialExpired ? isMembershipLoading : isUsageWarningHidden);

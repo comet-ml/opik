@@ -120,12 +120,31 @@ describe("RetentionBanner", () => {
       );
     });
 
-    it("waits for the organization members before rendering", () => {
+    it("waits for the organization before rendering", () => {
+      hooks.useOrganizations.mockReturnValue({ data: undefined });
+
+      const { container } = renderBanner();
+
+      expect(container).toBeEmptyDOMElement();
+    });
+
+    it("waits for the member list before showing a non-admin the admin names", () => {
+      givenRole(ORGANIZATION_ROLE_TYPE.member);
       hooks.useOrganizationMembers.mockReturnValue({ data: undefined });
 
       const { container } = renderBanner();
 
       expect(container).toBeEmptyDOMElement();
+    });
+
+    it("shows an admin the payment link without waiting for the member list", () => {
+      hooks.useOrganizationMembers.mockReturnValue({ data: undefined });
+
+      renderBanner();
+
+      expect(
+        screen.getByRole("link", { name: "Update your payment details" }),
+      ).toBeVisible();
     });
 
     it("cannot be dismissed", () => {
