@@ -116,11 +116,18 @@ class Equals(base_metric.BaseMetric):
                 f"got output={output!r}, reference={reference!r}"
             )
 
+        value_left: Optional[str] = None
+        value_right: Optional[str] = None
         if _is_container(output) and _is_container(reference):
             normalize = _keep_case if self._case_sensitive else str.lower
-            value_left = _canonical_text(output, normalize, set())
-            value_right = _canonical_text(reference, normalize, set())
-        else:
+            try:
+                value_left = _canonical_text(output, normalize, set())
+                value_right = _canonical_text(reference, normalize, set())
+            except RecursionError:
+                # Too deeply nested to canonicalize: compare by str() as before.
+                value_left = value_right = None
+
+        if value_left is None or value_right is None:
             # Convert to string to handle numeric and other types
             output_str = str(output)
             reference_str = str(reference)

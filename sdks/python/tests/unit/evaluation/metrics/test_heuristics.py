@@ -1,3 +1,4 @@
+import collections
 import concurrent.futures
 import math
 import re
@@ -177,6 +178,11 @@ def test_evaluation__equals_with_numeric_inputs():
         (frozenset({"x", "y", "z"}), frozenset({"z", "y", "x"})),
         ({"a": "Hello"}, {"a": "hello"}),
         ({"B": 1, "a": 2}, {"a": 2, "b": 1}),
+        # 1 and 9 share a hash slot, so these two sets iterate in different orders.
+        ({1, 9}, {9, 1}),
+        ({1: "a", "1": "b", None: "c"}, {None: "c", "1": "b", 1: "a"}),
+        (collections.OrderedDict([("b", 2), ("a", 1)]), {"a": 1, "b": 2}),
+        (collections.defaultdict(list, {"b": [2], "a": [1]}), {"a": [1], "b": [2]}),
     ],
 )
 def test_equals__containers_with_same_content__score_one(output, reference):
@@ -199,6 +205,8 @@ def test_equals__containers_with_same_content__score_one(output, reference):
         ({"a": 1}, '{"a": 1}'),
         ({"A": 1, "a": 2}, {"A": 2, "a": 1}),
         (frozenset({"x"}), {"x"}),
+        ((1, 2), (2, 1)),
+        (collections.namedtuple("Point", "x y")(1, 2), (1, 2)),
     ],
 )
 def test_equals__containers_with_different_content__score_zero(output, reference):
@@ -235,9 +243,39 @@ def test_equals__self_referencing_containers__do_not_recurse_forever():
     output.append(output)
     reference: list = [1]
     reference.append(reference)
+    output_dict: dict = {"a": 1}
+    output_dict["self"] = output_dict
+    reference_dict: dict = {"a": 1}
+    reference_dict["self"] = reference_dict
     metric = equals.Equals(track=False)
 
     assert metric.score(output=output, reference=reference) == ScoreResult(
+        name=metric.name, value=1.0, reason=None, metadata=None
+    )
+    assert metric.score(output=output_dict, reference=reference_dict) == ScoreResult(
+        name=metric.name, value=1.0, reason=None, metadata=None
+    )
+
+
+def test_equals__repeated_reference__rendered_in_full():
+    shared = [1]
+    metric = equals.Equals(track=False)
+
+    assert metric.score(output=[shared, shared], reference=[[1], [1]]) == ScoreResult(
+        name=metric.name, value=1.0, reason=None, metadata=None
+    )
+
+
+def test_equals__deeply_nested_containers__fall_back_to_str():
+    def nest(depth: int) -> dict:
+        value: dict = {"k": 0}
+        for _ in range(depth):
+            value = {"k": value}
+        return value
+
+    metric = equals.Equals(track=False)
+
+    assert metric.score(output=nest(700), reference=nest(700)) == ScoreResult(
         name=metric.name, value=1.0, reason=None, metadata=None
     )
 
