@@ -713,6 +713,44 @@ class TestLLMJudgeRetries:
         assert len(results) == 1
         assert results[0].value == 1.0
 
+    def test_score__non_object_json__retries_and_succeeds(self):
+        calls = {"n": 0}
+        valid = (
+            '{"assertion_1": {"score": true, "reason": "contains PASS", '
+            '"confidence": 1.0}}'
+        )
+
+        class FlakyModel:
+            def generate_chat_completion(self, messages, response_format=None):
+                calls["n"] += 1
+                content = '[{"assertion_1": {}}]' if calls["n"] == 1 else valid
+                return {"role": "assistant", "content": content}
+
+        evaluator = self._judge_with_model(FlakyModel())
+        results = evaluator.score(input="q", output="PASS")
+
+        assert calls["n"] == 2
+        assert len(results) == 1
+        assert results[0].value == 1.0
+        assert results[0].scoring_failed is False
+
+    def test_score__non_object_json_after_retries__returns_failed_results(self):
+        calls = {"n": 0}
+
+        class MalformedModel:
+            def generate_chat_completion(self, messages, response_format=None):
+                calls["n"] += 1
+                return {"role": "assistant", "content": "null"}
+
+        evaluator = self._judge_with_model(MalformedModel())
+        results = evaluator.score(input="q", output="PASS")
+
+        assert calls["n"] == 3
+        assert len(results) == 1
+        assert results[0].scoring_failed is True
+        assert results[0].category_name == "suite_assertion"
+        assert results[0].metadata["raw_output"] == "null"
+
     def test_score__permanent_llm_error__not_retried(self):
         from opik import exceptions
 
@@ -774,6 +812,28 @@ class TestLLMJudgeRetries:
         assert calls["n"] == 2
         assert len(results) == 1
         assert results[0].value == 1.0
+
+    @pytest.mark.asyncio
+    async def test_ascore__non_object_json__retries_and_succeeds(self):
+        calls = {"n": 0}
+        valid = (
+            '{"assertion_1": {"score": true, "reason": "contains PASS", '
+            '"confidence": 1.0}}'
+        )
+
+        class FlakyAsyncModel:
+            async def agenerate_chat_completion(self, messages, response_format=None):
+                calls["n"] += 1
+                content = "42" if calls["n"] == 1 else valid
+                return {"role": "assistant", "content": content}
+
+        evaluator = self._judge_with_model(FlakyAsyncModel())
+        results = await evaluator.ascore(input="q", output="PASS")
+
+        assert calls["n"] == 2
+        assert len(results) == 1
+        assert results[0].value == 1.0
+        assert results[0].scoring_failed is False
 
     @pytest.mark.asyncio
     async def test_ascore__permanent_llm_error__not_retried(self):
