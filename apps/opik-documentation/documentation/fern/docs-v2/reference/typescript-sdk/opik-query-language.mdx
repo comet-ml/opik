@@ -196,6 +196,12 @@ const recentThreads = await client.searchThreads({
   projectName: "my-project",
   filterString: 'start_time >= "2024-01-01T00:00:00Z"'
 });
+
+// Filter to threads that have comments
+const commentedThreads = await client.searchThreads({
+  projectName: "my-project",
+  filterString: 'comments is_not_empty'
+});
 ```
 
 ### Searching Traces
@@ -227,6 +233,12 @@ const prodTraces = await client.searchTraces({
 const goodProdTraces = await client.searchTraces({
   projectName: "my-project",
   filterString: 'environment = "production" AND feedback_scores.accuracy > 0.9'
+});
+
+// Filter to traces nobody has commented on yet
+const uncommentedTraces = await client.searchTraces({
+  projectName: "my-project",
+  filterString: 'comments is_empty'
 });
 ```
 

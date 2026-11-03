@@ -41,7 +41,7 @@ describe("OpikQueryLanguage", () => {
 
     it("should parse feedback scores with quoted key", () => {
       const oql = new OpikQueryLanguage(
-        'feedback_scores."Answer Relevance" < 0.8'
+        'feedback_scores."Answer Relevance" < 0.8',
       );
       const parsed = oql.getFilterExpressions();
 
@@ -187,9 +187,22 @@ describe("OpikQueryLanguage", () => {
       });
     });
 
+    it.each([
+      ["traces", "is_empty", OpikQueryLanguage.forTraces],
+      ["traces", "is_not_empty", OpikQueryLanguage.forTraces],
+      ["threads", "is_empty", OpikQueryLanguage.forThreads],
+      ["threads", "is_not_empty", OpikQueryLanguage.forThreads],
+    ])("should parse comments %s for %s", (_name, operator, factory) => {
+      const parsed = factory(`comments ${operator}`).getFilterExpressions();
+
+      expect(parsed).toEqual([
+        { field: "comments", operator, value: null, type: "comments" },
+      ]);
+    });
+
     it("should parse valueless operators in complex query", () => {
       const oql = OpikQueryLanguage.forTraces(
-        'tags is_not_empty and duration > 100'
+        "tags is_not_empty and duration > 100",
       );
       const parsed = oql.getFilterExpressions();
 
@@ -208,7 +221,7 @@ describe("OpikQueryLanguage", () => {
 
     it("should parse multiple filters with AND", () => {
       const oql = OpikQueryLanguage.forThreads(
-        'status = "active" and duration > 100'
+        'status = "active" and duration > 100',
       );
       const parsed = oql.getFilterExpressions();
 
@@ -315,9 +328,7 @@ describe("OpikQueryLanguage", () => {
 
     it("should throw error for OR connector", () => {
       expect(() => {
-        OpikQueryLanguage.forThreads(
-          'status = "active" or duration > 100'
-        );
+        OpikQueryLanguage.forThreads('status = "active" or duration > 100');
       }).toThrow(/OR is not currently supported/);
     });
 
@@ -347,7 +358,7 @@ describe("OpikQueryLanguage", () => {
 
     it("should throw error for trace field in prompt query", () => {
       expect(() => {
-        OpikQueryLanguage.forPrompts('usage.total_tokens > 100');
+        OpikQueryLanguage.forPrompts("usage.total_tokens > 100");
       }).toThrow(/is not supported/);
     });
 
@@ -357,6 +368,24 @@ describe("OpikQueryLanguage", () => {
       }).toThrow(/is not supported/);
     });
 
+    it.each([
+      ["traces", 'comments = "x"', OpikQueryLanguage.forTraces],
+      ["traces", 'comments contains "x"', OpikQueryLanguage.forTraces],
+      ["threads", 'comments = "x"', OpikQueryLanguage.forThreads],
+    ])(
+      "should reject value operators on comments for %s: %s",
+      (_name, filter, factory) => {
+        expect(() => factory(filter)).toThrow(
+          /is not supported for field comments/,
+        );
+      },
+    );
+
+    it("should reject comments for spans", () => {
+      expect(() => OpikQueryLanguage.forSpans("comments is_empty")).toThrow(
+        /is not supported/,
+      );
+    });
   });
 
   describe("parsedFilters JSON output", () => {
@@ -449,9 +478,7 @@ describe("OpikQueryLanguage", () => {
 
     it.each(threadFields)('should parse thread field "%s"', (field) => {
       const operator = field === "tags" ? "contains" : "=";
-      const oql = OpikQueryLanguage.forThreads(
-        `${field} ${operator} "test"`
-      );
+      const oql = OpikQueryLanguage.forThreads(`${field} ${operator} "test"`);
       const parsed = oql.getFilterExpressions();
 
       expect(parsed).toHaveLength(1);
@@ -474,20 +501,20 @@ describe("OpikQueryLanguage", () => {
       (field) => {
         const operator = field === "tags" ? "contains" : "=";
         const oql = OpikQueryLanguage.forPromptVersions(
-          `${field} ${operator} "test"`
+          `${field} ${operator} "test"`,
         );
         const parsed = oql.getFilterExpressions();
 
         expect(parsed).toHaveLength(1);
         expect(parsed![0].field).toBe(field);
-      }
+      },
     );
   });
 
   describe("complex queries", () => {
     it("should parse query with multiple conditions", () => {
       const oql = OpikQueryLanguage.forTraces(
-        'name contains "test" and thread_id = "abc123" and duration > 100'
+        'name contains "test" and thread_id = "abc123" and duration > 100',
       );
       const parsed = oql.getFilterExpressions();
 
@@ -511,7 +538,7 @@ describe("OpikQueryLanguage", () => {
 
     it("should parse query with mixed operators", () => {
       const oql = new OpikQueryLanguage(
-        'usage.total_tokens >= 100 and total_estimated_cost < 0.5 and name != "excluded"'
+        'usage.total_tokens >= 100 and total_estimated_cost < 0.5 and name != "excluded"',
       );
       const parsed = oql.getFilterExpressions();
 
@@ -535,7 +562,7 @@ describe("OpikQueryLanguage", () => {
 
     it("should parse prompt queries with multiple conditions", () => {
       const oql = OpikQueryLanguage.forPrompts(
-        'tags contains "production" and version_count > 1 and created_by = "user@example.com"'
+        'tags contains "production" and version_count > 1 and created_by = "user@example.com"',
       );
       const parsed = oql.getFilterExpressions();
 
@@ -559,7 +586,7 @@ describe("OpikQueryLanguage", () => {
 
     it("should parse prompt queries with date filters", () => {
       const oql = OpikQueryLanguage.forPrompts(
-        'created_at >= "2024-01-01T00:00:00Z" and template_structure = "chat"'
+        'created_at >= "2024-01-01T00:00:00Z" and template_structure = "chat"',
       );
       const parsed = oql.getFilterExpressions();
 
@@ -575,7 +602,6 @@ describe("OpikQueryLanguage", () => {
         value: "chat",
       });
     });
-
   });
 
   describe("prompt version filters", () => {
@@ -608,14 +634,14 @@ describe("OpikQueryLanguage", () => {
           op,
           input,
           expected,
-        }))
+        })),
       );
 
       it.each(cases)(
         "parses $field $op $input",
         ({ field, op, input, expected }) => {
           const oql = OpikQueryLanguage.forPromptVersions(
-            `${field} ${op} ${input}`
+            `${field} ${op} ${input}`,
           );
           const parsed = oql.getFilterExpressions();
 
@@ -625,20 +651,20 @@ describe("OpikQueryLanguage", () => {
             operator: op,
             value: expected,
           });
-        }
+        },
       );
     });
 
     describe("STRING_STATE_DB field rejects ordering operators", () => {
       const cases = STRING_STATE_DB_FIELDS.flatMap((field) =>
-        STRING_STATE_DB_UNSUPPORTED_OPS.map((op) => ({ field, op }))
+        STRING_STATE_DB_UNSUPPORTED_OPS.map((op) => ({ field, op })),
       );
 
       it.each(cases)("rejects $field $op", ({ field, op }) => {
         expect(() => {
           OpikQueryLanguage.forPromptVersions(`${field} ${op} "v2"`);
         }).toThrow(
-          new RegExp(`Operator ${op} is not supported for field ${field}`)
+          new RegExp(`Operator ${op} is not supported for field ${field}`),
         );
       });
     });
@@ -646,7 +672,12 @@ describe("OpikQueryLanguage", () => {
     describe("non-STRING_STATE_DB field happy paths", () => {
       it.each([
         // type — ENUM-like, only = / !=
-        { expr: 'type = "MUSTACHE"', field: "type", op: "=", value: "MUSTACHE" },
+        {
+          expr: 'type = "MUSTACHE"',
+          field: "type",
+          op: "=",
+          value: "MUSTACHE",
+        },
         { expr: 'type != "JINJA2"', field: "type", op: "!=", value: "JINJA2" },
         // tags — LIST_OPS
         { expr: 'tags = "prod"', field: "tags", op: "=", value: "prod" },
@@ -738,7 +769,7 @@ describe("OpikQueryLanguage", () => {
         expect(() => {
           OpikQueryLanguage.forPromptVersions(`${field} ${op} ${value}`);
         }).toThrow(
-          new RegExp(`Operator ${op} is not supported for field ${field}`)
+          new RegExp(`Operator ${op} is not supported for field ${field}`),
         );
       });
     });
@@ -759,10 +790,12 @@ describe("OpikQueryLanguage", () => {
       ])("rejects version_number $op", ({ op, value }) => {
         expect(() => {
           OpikQueryLanguage.forPromptVersions(
-            `version_number ${op}${value ? " " + value : ""}`
+            `version_number ${op}${value ? " " + value : ""}`,
           );
         }).toThrow(
-          new RegExp(`Operator ${op} is not supported for field version_number`)
+          new RegExp(
+            `Operator ${op} is not supported for field version_number`,
+          ),
         );
       });
 
@@ -773,28 +806,25 @@ describe("OpikQueryLanguage", () => {
         { op: "not_contains", input: '"draft"', expected: "draft" },
         { op: "starts_with", input: '"v1."', expected: "v1." },
         { op: "ends_with", input: '"-rc"', expected: "-rc" },
-      ])(
-        "parses version_number $op $input",
-        ({ op, input, expected }) => {
-          const oql = OpikQueryLanguage.forPromptVersions(
-            `version_number ${op} ${input}`
-          );
-          const parsed = oql.getFilterExpressions();
+      ])("parses version_number $op $input", ({ op, input, expected }) => {
+        const oql = OpikQueryLanguage.forPromptVersions(
+          `version_number ${op} ${input}`,
+        );
+        const parsed = oql.getFilterExpressions();
 
-          expect(parsed).toHaveLength(1);
-          expect(parsed![0]).toMatchObject({
-            field: "version_number",
-            operator: op,
-            value: expected,
-          });
-        }
-      );
+        expect(parsed).toHaveLength(1);
+        expect(parsed![0]).toMatchObject({
+          field: "version_number",
+          operator: op,
+          value: expected,
+        });
+      });
     });
 
     describe("metadata and complex queries", () => {
       it("parses metadata with nested key", () => {
         const oql = OpikQueryLanguage.forPromptVersions(
-          'metadata.environment = "prod"'
+          'metadata.environment = "prod"',
         );
         const parsed = oql.getFilterExpressions();
 
@@ -809,7 +839,7 @@ describe("OpikQueryLanguage", () => {
 
       it("parses multiple conditions chained with AND", () => {
         const oql = OpikQueryLanguage.forPromptVersions(
-          'version_number = "v3" and tags contains "production" and created_at >= "2024-01-01T00:00:00Z"'
+          'version_number = "v3" and tags contains "production" and created_at >= "2024-01-01T00:00:00Z"',
         );
         const parsed = oql.getFilterExpressions();
 
@@ -842,7 +872,7 @@ describe("OpikQueryLanguage", () => {
   describe("in / not_in operators", () => {
     it("should parse in operator on enum field (trace)", () => {
       const oql = OpikQueryLanguage.forTraces(
-        'environment in ("prod", "staging")'
+        'environment in ("prod", "staging")',
       );
       const parsed = oql.getFilterExpressions();
 
@@ -868,7 +898,7 @@ describe("OpikQueryLanguage", () => {
 
     it("should parse in operator chained with AND", () => {
       const oql = OpikQueryLanguage.forTraces(
-        'environment in ("a", "b") and input contains "hello"'
+        'environment in ("a", "b") and input contains "hello"',
       );
       const parsed = oql.getFilterExpressions();
 
@@ -887,7 +917,7 @@ describe("OpikQueryLanguage", () => {
 
     it("should parse in operator on enum field (span)", () => {
       const oql = OpikQueryLanguage.forSpans(
-        'environment in ("debug", "prod")'
+        'environment in ("debug", "prod")',
       );
       const parsed = oql.getFilterExpressions();
 

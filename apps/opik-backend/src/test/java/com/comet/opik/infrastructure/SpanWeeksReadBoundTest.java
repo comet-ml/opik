@@ -94,6 +94,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -510,15 +511,21 @@ class SpanWeeksReadBoundTest {
     }
 
     /**
-     * A search keeps the page pushdown, whose spans reads take every trace of the page's threads, the ones the search
-     * drops included: the search matches the trace by id, so its copy in the same thread must not count.
+     * A search keeps the page pushdown and picks threads: the search matches the far-future trace by id, and the
+     * thread counts the spans of all its traces, its copy in the same thread included, as without the search.
      */
     @Test
-    void threadListSearchCountsOnlyTheSpansOfTheMatchingTrace() {
+    void threadListSearchCountsTheSpansOfAllTheMatchingThreadTraces() {
         var trace = fixtures.createFarFutureTrace();
-        fixtures.createThisWeekCopy(trace, trace.trace().threadId());
+        var copy = fixtures.createThisWeekCopy(trace, trace.trace().threadId());
 
-        var expectedThreads = List.of(expectedThread(trace));
+        var expectedUsage = new HashMap<>(trace.totalUsage());
+        copy.totalUsage().forEach((key, value) -> expectedUsage.merge(key, value, Long::sum));
+        var expectedThreads = List.of(expectedThread(trace).toBuilder()
+                .numberOfMessages(4L)
+                .totalEstimatedCost(trace.totalCost().add(copy.totalCost()))
+                .usage(expectedUsage)
+                .build());
         // Threads are materialised from their traces asynchronously.
         Awaitility.await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
             var actualThreads = traceResourceClient.getTraceThreads(trace.projectId(), null, API_KEY, WORKSPACE_NAME,
