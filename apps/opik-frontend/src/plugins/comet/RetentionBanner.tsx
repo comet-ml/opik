@@ -49,14 +49,15 @@ const RetentionBanner = ({ onChangeHeight, hidden }: RetentionBannerProps) => {
     return org.id === workspace?.organizationId;
   });
 
-  const { data: organizationMembers } = useOrganizationMembers(
-    {
-      organizationId: organization?.id ?? "",
-    },
-    {
-      enabled: !!organization?.id,
-    },
-  );
+  const { data: organizationMembers, isError: isMembersError } =
+    useOrganizationMembers(
+      {
+        organizationId: organization?.id ?? "",
+      },
+      {
+        enabled: !!organization?.id,
+      },
+    );
 
   const { admins, firstThreeAdmins } = useMemo(() => {
     const admins = organizationMembers?.filter?.(
@@ -74,10 +75,12 @@ const RetentionBanner = ({ onChangeHeight, hidden }: RetentionBannerProps) => {
     (spanQuota?.used || 0) / (spanQuota?.limit || 1) <
     SHOW_BANNER_MIN_THRESHOLD;
 
-  // The organization's role picks the message, so wait for it to avoid flashing the wrong one; only the
-  // member message lists the admins, so admins don't wait for (or depend on) the member list.
+  // The organization's role picks the message, so wait for it to avoid flashing the wrong one. Only the
+  // member message lists the admins, and the names are optional: members wait while the list loads,
+  // but a failed request still shows the message, just without names.
   const isMembershipLoading =
-    !organization || (!isOrganizationAdmin && !organizationMembers);
+    !organization ||
+    (!isOrganizationAdmin && !organizationMembers && !isMembersError);
   const isUsageWarningHidden = !spanQuota || isUsedLess80 || closed;
   const hideBanner =
     !user || (isTrialExpired ? isMembershipLoading : isUsageWarningHidden);
@@ -85,7 +88,9 @@ const RetentionBanner = ({ onChangeHeight, hidden }: RetentionBannerProps) => {
   const isExceededLimit = !!spanQuota && spanQuota.used >= spanQuota.limit;
 
   const renderAdminNames = () => {
-    const isOneAdmin = firstThreeAdmins?.length === 1;
+    if (!firstThreeAdmins?.length) return "admins";
+
+    const isOneAdmin = firstThreeAdmins.length === 1;
 
     return (
       <>

@@ -137,6 +137,20 @@ describe("RetentionBanner", () => {
       expect(container).toBeEmptyDOMElement();
     });
 
+    it("still tells a non-admin to ask their admins when the member list fails to load", () => {
+      givenRole(ORGANIZATION_ROLE_TYPE.member);
+      hooks.useOrganizationMembers.mockReturnValue({
+        data: undefined,
+        isError: true,
+      });
+
+      renderBanner();
+
+      expect(screen.getByRole("region")).toHaveTextContent(
+        "Ask your organization admins to update the payment details.",
+      );
+    });
+
     it("shows an admin the payment link without waiting for the member list", () => {
       hooks.useOrganizationMembers.mockReturnValue({ data: undefined });
 
