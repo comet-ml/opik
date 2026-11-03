@@ -11,4 +11,5 @@ export interface GetTraceStatsRequest {
     search?: string;
     fromTime?: Date;
     toTime?: Date;
+    annotationQueueId?: string;
 }

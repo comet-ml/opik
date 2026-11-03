@@ -29,7 +29,7 @@ This guide explains how to integrate Opik with the TypeSafe AI Python SDK (`type
 
 First, ensure you have both `opik` and `typesafe-sdk` packages installed:
 
-```bash
+```bash wordWrap
 pip install opik "typesafe-sdk>=0.7.0,<1"
 ```
 
@@ -48,13 +48,13 @@ In order to configure TypeSafe AI, you will need to have your TypeSafe AI API ke
 
 You can set it as an environment variable:
 
-```bash
+```bash wordWrap
 export TYPESAFE_API_KEY="YOUR_API_KEY"
 ```
 
 Or set it programmatically:
 
-```python
+```python wordWrap
 import os
 import getpass
 
@@ -66,7 +66,7 @@ if "TYPESAFE_API_KEY" not in os.environ:
 
 In order to log TypeSafe AI calls to Opik, wrap the TypeSafe client with `track_typesafe`. All calls made with the wrapped client will be logged to Opik. If the call is made inside a function decorated with `@track`, it is logged as part of that function's trace, so you can see the decision in the context of the step that requested it:
 
-```python
+```python wordWrap
 import os
 from typesafe_sdk import Choice, Noul, Score, TypeSafeClient
 from opik import track
@@ -107,7 +107,7 @@ The trace can now be viewed in the Opik UI, with the TypeSafe AI call nested und
 
 `track_typesafe` works the same way with the async client:
 
-```python
+```python wordWrap
 import asyncio
 from typesafe_sdk import AsyncTypeSafeClient, Noul
 from opik.integrations.typesafe import track_typesafe
@@ -129,7 +129,7 @@ asyncio.run(main())
 
 If you call the TypeSafe AI REST API directly instead of using `typesafe-sdk`, you can still log the calls to Opik. Wrap the request in a function decorated with `@track(type="llm")` and, before returning, use `opik_context.update_current_span` to record the usage, provider and model:
 
-```python
+```python wordWrap
 import os
 import requests
 from opik import opik_context, track

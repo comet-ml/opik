@@ -6,40 +6,26 @@ import jakarta.validation.constraints.Min;
 import lombok.AccessLevel;
 import lombok.Data;
 import lombok.Getter;
-
-import java.util.Arrays;
-import java.util.Objects;
-import java.util.Set;
-import java.util.stream.Collectors;
+import lombok.NonNull;
 
 @Data
 public class CustomChartsConfig {
 
     /**
-     * Workspaces allowed to use Custom Charts, comma-separated. Empty (the default) disables the feature
-     * everywhere.
+     * Whether Custom Charts is on for every workspace. Off (the default) disables the feature everywhere.
      *
-     * <p>Held as a String because Dropwizard substitutes env vars as scalars, so a comma-separated value cannot
-     * bind to a collection; {@link #enabledWorkspaceIds()} splits, strips and drops blanks.
-     *
-     * <p>Nullable rather than {@code @NotNull}: Null and blank both mean "no workspace allowlisted".
-     *
-     * <p>No getter, so the raw string cannot be matched against directly; read it via {@link #enabledWorkspaceIds()}.
+     * <p>No getter, so it cannot be read without Ollie's toggle; read it via {@link #isEnabled(ServiceTogglesConfig)}.
      */
     @JsonProperty
     @Getter(AccessLevel.NONE)
-    private String enabledWorkspaces;
+    private boolean enabled;
 
     /**
-     * The parsed, stripped, blank-free set of allowlisted workspace ids. Deliberately neither cached nor named as a
-     * bean getter: Lombok's toString/equals/hashCode and Jackson call getters, and a cached parse taken before the
-     * field was bound kept an empty allowlist for the life of the process.
+     * Whether Custom Charts may be used: Ollie is on and the feature is enabled. The one check behind the chart
+     * endpoints, the UI toggle and the health check, so they cannot drift apart.
      */
-    public Set<String> enabledWorkspaceIds() {
-        return Arrays.stream(Objects.toString(enabledWorkspaces, "").split(","))
-                .map(String::strip)
-                .filter(workspaceId -> !workspaceId.isEmpty())
-                .collect(Collectors.toUnmodifiableSet());
+    public boolean isEnabled(@NonNull ServiceTogglesConfig serviceToggles) {
+        return serviceToggles.isOllieEnabled() && enabled;
     }
 
     /**

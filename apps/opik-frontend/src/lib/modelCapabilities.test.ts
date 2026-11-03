@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { supportsAudioInput } from "@/lib/modelCapabilities";
+import {
+  getMaxOutputTokens,
+  getOpenRouterMaxOutputTokens,
+  supportsAudioInput,
+} from "@/lib/modelCapabilities";
 import { CUSTOM_PROVIDER_MODEL_PREFIX } from "@/constants/providers";
 import { PROVIDER_MODEL_TYPE } from "@/types/providers";
 
@@ -62,5 +66,58 @@ describe("supportsAudioInput", () => {
 
   it.each(["", null, undefined])("returns false for %p", (model) => {
     expect(supportsAudioInput(model)).toBe(false);
+  });
+});
+
+describe("getMaxOutputTokens", () => {
+  it.each([
+    [PROVIDER_MODEL_TYPE.GPT_4O_MINI, 16384],
+    [PROVIDER_MODEL_TYPE.GPT_4, 4096],
+    [PROVIDER_MODEL_TYPE.GPT_O3, 100000],
+    [PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5, 64000],
+    [PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_5_5, 128000],
+    [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5_5, 128000],
+    [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6, 128000],
+    [PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_4_6, 128000],
+  ])("reads the limit of %s from the pricing data", (model, limit) => {
+    expect(getMaxOutputTokens(model)).toBe(limit);
+  });
+
+  it.each([PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_1, "", undefined])(
+    "knows no limit for %s",
+    (model) => {
+      expect(getMaxOutputTokens(model)).toBeUndefined();
+    },
+  );
+});
+
+describe("getOpenRouterMaxOutputTokens", () => {
+  it.each([
+    {
+      reads: "a model's own OpenRouter row",
+      model: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_5_CONTENT_SAFETY,
+      limit: 117964,
+    },
+    {
+      reads: "a variant's own row over its base model's",
+      model: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_5_CONTENT_SAFETY_FREE,
+      limit: 8192,
+    },
+    {
+      reads: "the base model's row for a variant without its own",
+      model:
+        PROVIDER_MODEL_TYPE.COGNITIVECOMPUTATIONS_DOLPHIN_MISTRAL_24B_VENICE_EDITION_FREE,
+      limit: 8192,
+    },
+    {
+      reads: "no other provider's row",
+      model: "openai/computer-use-preview",
+      limit: undefined,
+    },
+    { reads: "nothing for an empty id", model: "", limit: undefined },
+    { reads: "nothing for null", model: null, limit: undefined },
+    { reads: "nothing for undefined", model: undefined, limit: undefined },
+  ])("reads $reads", ({ model, limit }) => {
+    expect(getOpenRouterMaxOutputTokens(model)).toBe(limit);
   });
 });

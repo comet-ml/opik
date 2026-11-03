@@ -354,6 +354,33 @@ describe.skipIf(!shouldRunApiTests)(
         expect(prompt).toBeDefined();
         expect(prompt.name).toBe(promptName);
       });
+
+      it("should not version an unchanged prompt when another project has a prompt of the same name", async () => {
+        const promptName = `test-prompt-same-name-${testTimestamp}`;
+        const otherProject = `other-prompt-project-${testTimestamp}`;
+
+        // Created first, so a name-only lookup resolves to this prompt
+        const otherPrompt = await client.createPrompt({
+          name: promptName,
+          prompt: "Hello from the other project, {{name}}!",
+          projectName: otherProject,
+        });
+        createdPromptIds.push(otherPrompt.id!);
+
+        const prompt = await client.createPrompt({
+          name: promptName,
+          prompt: "Hello {{name}}!",
+        });
+        createdPromptIds.push(prompt.id!);
+        const expectedVersions = await prompt.getVersions();
+
+        const unchanged = await client.createPrompt({
+          name: promptName,
+          prompt: "Hello {{name}}!",
+        });
+
+        expect(await unchanged.getVersions()).toEqual(expectedVersions);
+      }, 30000);
     });
 
     describe("End-to-end: dataset + experiment + prompt with same project", () => {

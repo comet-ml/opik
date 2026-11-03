@@ -170,6 +170,15 @@ public interface PromptDAO {
             @Define("filters") String filters,
             @BindMap Map<String, Object> filterMapping);
 
+    /**
+     * Finds prompts by id, each with its latest version: the one with the highest id.
+     *
+     * <p>Grouping by the whole {@code (workspace_id, prompt_id, version_type)} index prefix lets {@code MAX(id)}
+     * skip-scan to each prompt's last index entry. Grouping by {@code prompt_id} alone, or a {@code ROW_NUMBER}
+     * window, reads every version. The prompts are joined on {@code latest_ids.prompt_id}: joined on the version's own
+     * {@code prompt_id}, MySQL reads every version of each prompt through the prompt id index and probes
+     * {@code latest_ids} for each one.
+     */
     @SqlQuery("""
             WITH selected_prompts AS (
             	SELECT
@@ -184,16 +193,20 @@ public interface PromptDAO {
             	FROM prompts AS p
             	WHERE workspace_id = :workspace_id
             	<if(ids)> AND id IN (<ids>) <endif>
-            ), pv_ranked AS (
-                SELECT pv.*,
-                    ROW_NUMBER() OVER (PARTITION BY pv.prompt_id ORDER BY pv.id DESC) AS rn
-                FROM prompt_versions pv
-                WHERE pv.workspace_id = :workspace_id AND pv.version_type = 'prompt_version'
-                <if(ids)> AND pv.prompt_id IN (<ids>) <endif>
+            ), latest_ids AS (
+                SELECT prompt_id, MAX(id) AS id
+                FROM prompt_versions
+                WHERE workspace_id = :workspace_id AND version_type = 'prompt_version'
+                <if(ids)> AND prompt_id IN (<ids>) <endif>
+                GROUP BY workspace_id, prompt_id, version_type
+            ), pv_latest AS (
+                SELECT li.prompt_id AS latest_prompt_id, pv.*
+                FROM latest_ids li
+                INNER JOIN prompt_versions pv ON pv.id = li.id AND pv.workspace_id = :workspace_id
             ), active_envs AS (
                 SELECT pve.version_id, pve.environment
                 FROM prompt_version_envs pve
-                INNER JOIN pv_ranked pvr ON pvr.id = pve.version_id AND pvr.rn = 1
+                INNER JOIN pv_latest pvr ON pvr.id = pve.version_id
                 WHERE pve.workspace_id = :workspace_id AND pve.ended_at IS NULL
             ), ver_envs AS (
                 SELECT version_id, JSON_ARRAYAGG(environment) AS environments
@@ -218,10 +231,9 @@ public interface PromptDAO {
                 'last_updated_at', pvr.last_updated_at,
                 'last_updated_by', pvr.last_updated_by
               ) AS latest_version,
-              pvr.prompt_id
-              FROM pv_ranked pvr
+              pvr.latest_prompt_id AS prompt_id
+              FROM pv_latest pvr
               LEFT JOIN ver_envs ve ON ve.version_id = pvr.id
-              WHERE pvr.rn = 1
             )
             SELECT sp.*, lv.latest_version
             FROM selected_prompts sp

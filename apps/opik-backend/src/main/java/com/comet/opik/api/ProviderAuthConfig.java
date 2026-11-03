@@ -1,5 +1,6 @@
 package com.comet.opik.api;
 
+import com.comet.opik.infrastructure.net.LoggableUrl;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -120,15 +121,12 @@ public record ProviderAuthConfig(
                 .build();
     }
 
+    /** With the credential values masked, and the token URL's scheme, host and port only. */
     @Override
     public String toString() {
-        return "ProviderAuthConfig{" +
-                "tokenUrl='" + tokenUrl + '\'' +
-                ", sendAs=" + sendAs +
-                ", credentials=" + credentials +
-                ", tokenField='" + tokenField + '\'' +
-                ", expiresField='" + expiresField + '\'' +
-                ", fallbackTtlSeconds=" + fallbackTtlSeconds +
-                '}';
+        return """
+                ProviderAuthConfig{tokenUrl=%s, sendAs=%s, credentials=%s, tokenField='%s', expiresField='%s', \
+                fallbackTtlSeconds=%s}""".formatted(LoggableUrl.of(tokenUrl), sendAs, credentials, tokenField,
+                expiresField, fallbackTtlSeconds);
     }
 }

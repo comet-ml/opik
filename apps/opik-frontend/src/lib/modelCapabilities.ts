@@ -1,4 +1,6 @@
+import isNumber from "lodash/isNumber";
 import modelPricing from "@/data/model_prices_and_context_window.json";
+import openRouterModelPricing from "@/data/model_prices_openrouter.json";
 import { CUSTOM_PROVIDER_MODEL_PREFIX } from "@/constants/providers";
 import { DECISION_MODELS } from "@/constants/decisionModels";
 
@@ -20,7 +22,14 @@ type ModelPricingEntry = {
 const normalizeModelName = (value: string) =>
   value.trim().toLowerCase().replace(/\./g, "-");
 
-const modelEntries = modelPricing as Record<string, ModelPricingEntry>;
+/**
+ * LiteLLM's pricing data no longer lists OpenRouter models, so they come from a file generated from OpenRouter's
+ * model list.
+ */
+const modelEntries = {
+  ...modelPricing,
+  ...openRouterModelPricing,
+} as Record<string, ModelPricingEntry>;
 
 const VISION_CAPABILITIES = new Map<string, boolean>();
 const NORMALIZED_VISION_CAPABILITIES = new Map<string, boolean>();
@@ -53,6 +62,22 @@ Object.entries(modelEntries).forEach(([modelName, entry]) => {
   NORMALIZED_VISION_CAPABILITIES.set(
     normalizeModelName(modelName),
     supportsVision,
+  );
+});
+
+const MAX_OUTPUT_TOKENS = new Map<string, number>();
+const NORMALIZED_MAX_OUTPUT_TOKENS = new Map<string, number>();
+
+Object.entries(modelEntries).forEach(([modelName, entry]) => {
+  const maxOutputTokens = entry?.max_output_tokens;
+  if (!modelName || !isNumber(maxOutputTokens)) {
+    return;
+  }
+
+  MAX_OUTPUT_TOKENS.set(modelName, maxOutputTokens);
+  NORMALIZED_MAX_OUTPUT_TOKENS.set(
+    normalizeModelName(modelName),
+    maxOutputTokens,
   );
 });
 
@@ -146,6 +171,44 @@ export const supportsImageInput = (model?: string | null): boolean => {
 
   // Default to false if no match found
   return false;
+};
+
+export const getMaxOutputTokens = (
+  model?: string | null,
+): number | undefined => {
+  if (!model) {
+    return undefined;
+  }
+
+  const exact = MAX_OUTPUT_TOKENS.get(model);
+  if (exact !== undefined) {
+    return exact;
+  }
+
+  for (const key of candidateKeys(model)) {
+    const maxOutputTokens = NORMALIZED_MAX_OUTPUT_TOKENS.get(key);
+    if (maxOutputTokens !== undefined) {
+      return maxOutputTokens;
+    }
+  }
+
+  return undefined;
+};
+
+// OpenRouter's own rows only: getMaxOutputTokens falls back to the bare id, which finds another provider's
+// limit (computer-use-preview's 1024 for openai/computer-use-preview, which OpenRouter does not list).
+// Many routing variants (`:free`, `:batch`) have no row, so they read the base model's; a variant's own
+// row comes first because its limit can differ from the base model's.
+export const getOpenRouterMaxOutputTokens = (
+  model?: string | null,
+): number | undefined => {
+  if (!model) {
+    return undefined;
+  }
+  return (
+    MAX_OUTPUT_TOKENS.get(`openrouter/${model}`) ??
+    MAX_OUTPUT_TOKENS.get(`openrouter/${model.split(":")[0]}`)
+  );
 };
 
 const SNAPSHOT_DATE_SUFFIX = /-\d{4}-\d{2}-\d{2}$/;

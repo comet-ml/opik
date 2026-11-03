@@ -29,7 +29,7 @@ Once we have this conversation, we can use Opik evaluation features to score the
 In order to perform multi-turn evaluation, we need to create a user simulator that will generate
 the user's response based on previous turns
 
-```python title="User simulator" maxLines=1000
+```python title="User simulator" maxLines=1000 wordWrap
 from opik.simulation import SimulatedUser
 
 user_simulator = SimulatedUser(
@@ -63,7 +63,7 @@ turn evaluate.
         In order to more easily keep track of the scenarios we will be running, let's create a
         dataset with the user personas we will be using:
 
-        ```python title="Create dataset with user personas" maxLines=1000
+        ```python title="Create dataset with user personas" maxLines=1000 wordWrap
         import opik
 
         opik_client = opik.Opik()
@@ -83,7 +83,7 @@ turn evaluate.
 
         Here is an example using LangChain:
 
-        ```python title="Example agent app (LangChain)" maxLines=1000
+        ```python title="Example agent app (LangChain)" maxLines=1000 wordWrap
         from langchain.agents import create_agent
         from opik.integrations.langchain import OpikTracer
 
@@ -113,7 +113,7 @@ turn evaluate.
     <Step title="3. Run the simulations">
         Now that we have a dataset with the user personas, we can run the simulations:
 
-        ```python title="Run simulations" maxLines=1000
+        ```python title="Run simulations" maxLines=1000 wordWrap
         import opik
         from opik.simulation import SimulatedUser, run_simulation
 
@@ -167,7 +167,7 @@ metrics or [create your own](/evaluation/metrics/custom_conversation_metric).
 If you've used the `run_simulation` function, you will already have a list of conversation messages
 that you can pass directly to the metrics, otherwise you can use the `evaluate_threads` function:
 <CodeBlock>
-    ```python title="Scoring simulations" maxLines=1000
+    ```python title="Scoring simulations" maxLines=1000 wordWrap
     import opik
     from opik.evaluation.metrics import ConversationalCoherenceMetric, UserFrustrationMetric
 
@@ -201,7 +201,7 @@ that you can pass directly to the metrics, otherwise you can use the `evaluate_t
         )
     ```
 
-    ```python title="Using evaluate_threads"
+    ```python title="Using evaluate_threads" wordWrap
     import opik
     from opik.evaluation import evaluate_threads
     from opik.evaluation.metrics import ConversationalCoherenceMetric, UserFrustrationMetric

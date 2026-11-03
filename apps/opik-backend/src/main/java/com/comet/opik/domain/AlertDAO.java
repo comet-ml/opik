@@ -55,6 +55,7 @@ public interface AlertDAO {
                     a.enabled as enabled,
                     a.alert_type as alert_type,
                     a.metadata as metadata,
+                    a.custom_fields as custom_fields,
                     a.project_id as project_id,
                     a.created_at as created_at,
                     a.created_by as created_by,
@@ -135,8 +136,8 @@ public interface AlertDAO {
             """;
 
     @SqlUpdate("""
-            INSERT INTO alerts (id, name, enabled, alert_type, metadata, webhook_id, workspace_id, project_id, created_by, last_updated_by, created_at)
-            VALUES (:bean.id, :bean.name, :bean.enabled, :bean.alertType, :bean.metadata, :webhookId, :workspaceId, :bean.projectId, :bean.createdBy, :bean.lastUpdatedBy, COALESCE(:bean.createdAt, CURRENT_TIMESTAMP(6)))
+            INSERT INTO alerts (id, name, enabled, alert_type, metadata, custom_fields, webhook_id, workspace_id, project_id, created_by, last_updated_by, created_at)
+            VALUES (:bean.id, :bean.name, :bean.enabled, :bean.alertType, :bean.metadata, :bean.customFields, :webhookId, :workspaceId, :bean.projectId, :bean.createdBy, :bean.lastUpdatedBy, COALESCE(:bean.createdAt, CURRENT_TIMESTAMP(6)))
             """)
     void save(@Bind("workspaceId") String workspaceId, @BindMethods("bean") Alert alert,
             @Bind("webhookId") UUID webhookId);
@@ -164,6 +165,7 @@ public interface AlertDAO {
                     a.enabled as enabled,
                     a.alert_type as alert_type,
                     a.metadata as metadata,
+                    a.custom_fields as custom_fields,
                     a.project_id as project_id,
                     a.created_at as created_at,
                     a.created_by as created_by,
@@ -325,6 +327,7 @@ public interface AlertDAO {
 
             // Parse metadata JSON to Map using column mapper
             Map<String, String> metadata = MAP_MAPPER.map(rs, "metadata", ctx);
+            Map<String, String> customFields = MAP_MAPPER.map(rs, "custom_fields", ctx);
 
             UUID projectId = Optional.ofNullable(rs.getString("project_id"))
                     .map(UUID::fromString)
@@ -337,6 +340,7 @@ public interface AlertDAO {
                     .enabled(rs.getBoolean("enabled"))
                     .alertType(alertType)
                     .metadata(metadata)
+                    .customFields(customFields)
                     .webhook(webhook)
                     .triggers(triggers)
                     .createdAt(rs.getTimestamp("created_at").toInstant())

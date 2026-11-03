@@ -1004,6 +1004,7 @@ class TracesClient:
         search: typing.Optional[str] = None,
         from_time: typing.Optional[dt.datetime] = None,
         to_time: typing.Optional[dt.datetime] = None,
+        annotation_queue_id: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> ProjectStatsPublic:
         """
@@ -1022,6 +1023,8 @@ class TracesClient:
         from_time : typing.Optional[dt.datetime]
 
         to_time : typing.Optional[dt.datetime]
+
+        annotation_queue_id : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1044,6 +1047,7 @@ class TracesClient:
             search=search,
             from_time=from_time,
             to_time=to_time,
+            annotation_queue_id=annotation_queue_id,
             request_options=request_options,
         )
         return _response.data
@@ -2777,6 +2781,7 @@ class AsyncTracesClient:
         search: typing.Optional[str] = None,
         from_time: typing.Optional[dt.datetime] = None,
         to_time: typing.Optional[dt.datetime] = None,
+        annotation_queue_id: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> ProjectStatsPublic:
         """
@@ -2795,6 +2800,8 @@ class AsyncTracesClient:
         from_time : typing.Optional[dt.datetime]
 
         to_time : typing.Optional[dt.datetime]
+
+        annotation_queue_id : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2820,6 +2827,7 @@ class AsyncTracesClient:
             search=search,
             from_time=from_time,
             to_time=to_time,
+            annotation_queue_id=annotation_queue_id,
             request_options=request_options,
         )
         return _response.data

@@ -29,7 +29,7 @@ The server is optional and disabled by default. You need it to run the built-in 
 
 If you self-host Opik with Docker Compose, start the guardrails backend by passing the `--guardrails` flag:
 
-```bash
+```bash wordWrap
 ./opik.sh --guardrails
 ```
 
@@ -41,26 +41,26 @@ You can also run the guardrails backend on its own, which is useful when you wan
 
 The image is not published to a registry, so build it locally from `apps/opik-guardrails-backend` (only needed once):
 
-```bash
+```bash wordWrap
 cd apps/opik-guardrails-backend
 docker build -t opik-guardrails-backend:latest .
 ```
 
 Run it with GPU acceleration:
 
-```bash
+```bash wordWrap
 docker run -p 5000:5000 --gpus all opik-guardrails-backend:latest
 ```
 
 Or run it CPU-only:
 
-```bash
+```bash wordWrap
 docker run -p 5000:5000 opik-guardrails-backend:latest
 ```
 
 The server listens on port `5000`. Confirm it is up with the health check:
 
-```bash
+```bash wordWrap
 curl http://localhost:5000/healthcheck
 # OK
 ```
@@ -94,7 +94,7 @@ The model is downloaded lazily the first time the prompt injection guardrail is 
 
 For example, to pin inference to the second GPU:
 
-```bash
+```bash wordWrap
 docker run -p 5000:5000 --gpus all -e OPIK_GUARDRAILS_DEVICE=cuda:1 opik-guardrails-backend:latest
 ```
 
@@ -102,7 +102,7 @@ The service detects at startup whether CUDA is available. If no GPU is present, 
 
 If you run the server at a custom address (for example, on a separate node), point the Python SDK at it with the `OPIK_GUARDRAILS_URL_OVERRIDE` environment variable:
 
-```bash
+```bash wordWrap
 export OPIK_GUARDRAILS_URL_OVERRIDE=http://my-guardrails-host:5000
 ```
 
@@ -117,7 +117,7 @@ Most users never call the server directly — the [Python SDK](/guardrails/guard
 
 Send a `POST` request to `/api/v1/guardrails/validations` with the text to check and a list of validations to run:
 
-```bash
+```bash wordWrap
 curl -X POST http://localhost:5000/api/v1/guardrails/validations \
   -H "Content-Type: application/json" \
   -d '{
@@ -162,7 +162,7 @@ The response reports an overall `validation_passed` flag plus per-validation res
 
     **Example response:**
 
-    ```json
+    ```json wordWrap
     {
       "validation_passed": false,
       "validations": [

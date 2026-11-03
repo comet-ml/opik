@@ -50,7 +50,7 @@ import java.util.concurrent.CompletionException;
  * <li>{@code POST /} — scope in the body. Eight tables; those carrying {@code project_id} in their primary key are
  * restricted to {@code project_id} when supplied and cover the workspace when it is not, while {@code experiments},
  * {@code experiment_items} and {@code dataset_items} always cover the workspace. Gated on {@code ollieEnabled} and
- * {@code customCharts.enabledWorkspaces}.</li>
+ * {@code customCharts.enabled}.</li>
  * <li>{@code POST /projects/{projectId}} — scope in the path, and the older of the two. Three tables, every one
  * bound to workspace <em>and</em> project; its request body has no project field at all. Gated on
  * {@code ollieEnabled}. It is expected to be removed once its callers move to the endpoint above, which is why
@@ -122,13 +122,13 @@ public class AnalyticsQueriesResource {
     public Response executeScopedQuery(
             @RequestBody(content = @Content(schema = @Schema(implementation = ScopedAnalyticsQueryRequest.class))) @NotNull @Valid ScopedAnalyticsQueryRequest request) {
 
-        String workspaceId = requestContext.get().getWorkspaceId();
-        if (!serviceToggles.isOllieEnabled()
-                || !customCharts.enabledWorkspaceIds().contains(workspaceId)) {
+        if (!customCharts.isEnabled(serviceToggles)) {
             return Response.status(Response.Status.NOT_IMPLEMENTED).build();
         }
 
         RedactionGuard.rejectUnmaskable(requestContext.get().isRedactResponse(), "Custom Charts free-form SQL");
+
+        String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Executing Custom Charts SQL for workspace '{}', project '{}'", workspaceId,
                 request.projectId() == null ? "all" : request.projectId());

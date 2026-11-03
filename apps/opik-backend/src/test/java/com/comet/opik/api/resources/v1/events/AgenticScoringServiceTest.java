@@ -3,13 +3,17 @@ package com.comet.opik.api.resources.v1.events;
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.api.resources.v1.events.tools.ToolRegistry;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
+import com.comet.opik.infrastructure.llm.LlmModelRegistryTestUtils;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.databind.JsonNode;
 import dev.langchain4j.model.chat.request.ToolChoice;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -44,7 +48,8 @@ class AgenticScoringServiceTest {
 
     @BeforeEach
     void setUp() {
-        agenticScoringService = new AgenticScoringServiceImpl(onlineScoringConfig, new ToolRegistry(Set.of()));
+        agenticScoringService = new AgenticScoringServiceImpl(onlineScoringConfig, new ToolRegistry(Set.of()),
+                LlmModelRegistryTestUtils.bundledRegistry());
     }
 
     @Test
@@ -145,7 +150,39 @@ class AgenticScoringServiceTest {
     @MethodSource("firstRoundToolChoices")
     @DisplayName("firstRoundToolChoice forces a tool call except where the provider rejects one")
     void firstRoundToolChoicePerProvider(LlmProvider provider, ToolChoice expected) {
-        assertThat(agenticScoringService.firstRoundToolChoice(provider)).isEqualTo(expected);
+        var model = LlmAsJudgeModelParameters.builder().name("judge-" + RandomStringUtils.secure().nextAlphanumeric(8))
+                .build();
+
+        assertThat(agenticScoringService.firstRoundToolChoice(provider, model)).isEqualTo(expected);
+    }
+
+    static Stream<Arguments> firstRoundToolChoicesPerClaude() {
+        var thinkingBudget = JsonUtils
+                .getJsonNodeFromString("{\"thinking\": {\"type\": \"enabled\", \"budget_tokens\": 1024}}");
+        var adaptiveThinking = JsonUtils.getJsonNodeFromString("{\"thinking\": {\"type\": \"adaptive\"}}");
+        var effort = JsonUtils.getJsonNodeFromString("{\"output_config\": {\"effort\": \"low\"}}");
+        return Stream.of(
+                arguments(LlmProvider.ANTHROPIC, "claude-opus-5-5", null, ToolChoice.AUTO),
+                arguments(LlmProvider.ANTHROPIC, "claude-sonnet-5-5", null, ToolChoice.AUTO),
+                arguments(LlmProvider.ANTHROPIC, "claude-fable-5-1", null, ToolChoice.AUTO),
+                arguments(LlmProvider.OPEN_ROUTER, "anthropic/claude-sonnet-5.5", null, ToolChoice.AUTO),
+                arguments(LlmProvider.ANTHROPIC, "claude-haiku-5-5", null, ToolChoice.REQUIRED),
+                arguments(LlmProvider.ANTHROPIC, "claude-haiku-4-5-20251001", null, ToolChoice.REQUIRED),
+                arguments(LlmProvider.ANTHROPIC, "claude-sonnet-4-6", thinkingBudget, ToolChoice.AUTO),
+                arguments(LlmProvider.ANTHROPIC, "claude-sonnet-4-6", adaptiveThinking, ToolChoice.REQUIRED),
+                arguments(LlmProvider.ANTHROPIC, "claude-sonnet-4-6", effort, ToolChoice.REQUIRED),
+                arguments(LlmProvider.OPEN_AI, "gpt-6-luna", null, ToolChoice.REQUIRED));
+    }
+
+    @ParameterizedTest(name = "{1} {2} -> {3}")
+    @MethodSource("firstRoundToolChoicesPerClaude")
+    @DisplayName("firstRoundToolChoice leaves the choice to a Claude that refuses a forced one or thinks on a budget")
+    void firstRoundToolChoicePerClaude(LlmProvider provider, String model, JsonNode customParameters,
+            ToolChoice expected) {
+        var modelParameters = LlmAsJudgeModelParameters.builder().name(model).customParameters(customParameters)
+                .build();
+
+        assertThat(agenticScoringService.firstRoundToolChoice(provider, modelParameters)).isEqualTo(expected);
     }
 
     @Test

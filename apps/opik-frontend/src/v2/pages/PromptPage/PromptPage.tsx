@@ -5,6 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
 import { usePromptIdFromURL } from "@/v2/pages/PromptPage/usePromptIdFromURL";
 import usePromptById from "@/api/prompts/usePromptById";
+import { useRedirectToOwnProject } from "@/v2/hooks/useRedirectToOwnProject";
 import PromptTab from "@/v2/pages/PromptPage/PromptTab/PromptTab";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
@@ -34,6 +35,7 @@ const PromptPage: React.FunctionComponent = () => {
     { promptId },
     { enabled: !!promptId, refetchInterval: 30000 },
   );
+  useRedirectToOwnProject(prompt?.project_id);
   const promptName = prompt?.name || "";
   const setBreadcrumbParam = useBreadcrumbsStore((state) => state.setParam);
 

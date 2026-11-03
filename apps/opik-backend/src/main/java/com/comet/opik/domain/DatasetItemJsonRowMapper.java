@@ -10,8 +10,7 @@ import lombok.experimental.UtilityClass;
 import java.util.UUID;
 
 /**
- * Builds the {@code JSONEachRow} row for a dataset item, for the write path behind
- * {@code bulkInsert.v2ClientEnabled}.
+ * Builds the {@code JSONEachRow} row for a dataset item.
  *
  * <p>The counterpart of the {@code INSERT} template's parameter binding in {@code DatasetItemDAO}: the
  * two must produce identical cells, since the toggle is meant to be safe to flip either way on a

@@ -1,4 +1,4 @@
-from .base_model import OpikBaseModel
+from .base_model import ModelFeatures, OpikBaseModel
 from .litellm.litellm_chat_model import LiteLLMChatModel
 from .langchain.langchain_chat_model import LangchainChatModel
 from .anthropic.anthropic_chat_model import AnthropicChatModel
@@ -9,6 +9,7 @@ from .model_capabilities import (
 )
 
 __all__ = [
+    "ModelFeatures",
     "OpikBaseModel",
     "LiteLLMChatModel",
     "LangchainChatModel",

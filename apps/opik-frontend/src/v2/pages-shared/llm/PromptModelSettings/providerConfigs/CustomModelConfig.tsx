@@ -5,25 +5,39 @@ import { jsonLanguage } from "@codemirror/lang-json";
 
 import SliderInputControl from "@/shared/SliderInputControl/SliderInputControl";
 import PromptModelSettingsTooltipContent from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
-import { LLMCustomConfigsType, PROVIDER_MODEL_TYPE } from "@/types/providers";
+import {
+  LLMCustomConfigsType,
+  LLMPromptConfigsType,
+  PROVIDER_MODEL_TYPE,
+  PROVIDER_TYPE,
+} from "@/types/providers";
 import { DEFAULT_CUSTOM_CONFIGS } from "@/constants/llm";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import useJsonInput from "@/hooks/useJsonInput";
 import { Label } from "@/ui/label";
 import { FormErrorSkeleton } from "@/ui/form";
 import isUndefined from "lodash/isUndefined";
-import { resolveSamplingParams } from "@/lib/modelUtils";
+import { getRequestParameters, resolveSamplingParams } from "@/lib/modelUtils";
+import {
+  getExtraBodySliderOverlap,
+  isSentToProvider,
+} from "@/lib/extraBodyParameters";
 import ExclusiveSamplingParams, {
   resolveSamplingPresentation,
 } from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/ExclusiveSamplingParams";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { Info } from "lucide-react";
 import { ModelConfigParam } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
+import {
+  NO_OUTPUT_LIMIT_TOOLTIP,
+  getNoOutputLimitHint,
+} from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/noOutputLimit";
 
 interface CustomModelConfigProps {
   configs: Partial<LLMCustomConfigsType>;
   onChange: (configs: Partial<LLMCustomConfigsType>) => void;
   model?: PROVIDER_MODEL_TYPE | "";
+  provider?: PROVIDER_TYPE;
   unsupportedParams?: ReadonlySet<ModelConfigParam>;
 }
 
@@ -31,6 +45,7 @@ const CustomModelConfig = ({
   configs,
   onChange,
   model,
+  provider,
   unsupportedParams,
 }: CustomModelConfigProps) => {
   const supports = (param: ModelConfigParam) => !unsupportedParams?.has(param);
@@ -50,6 +65,30 @@ const CustomModelConfig = ({
       value: configs.custom_parameters,
       onChange: handleExtraBodyParametersChange,
     });
+  const requestParameters = getRequestParameters(
+    model ?? "",
+    configs as LLMPromptConfigsType,
+  );
+  const isSentToRequest = (key: string) =>
+    isSentToProvider(provider, key, requestParameters[key]);
+  const {
+    sliderKeysInExtraBody,
+    sliderKeyNextToExtraBody,
+    extraBodyKeyNextToSlider,
+  } = getExtraBodySliderOverlap({
+    extraBody: configs.custom_parameters,
+    provider,
+    exclusiveSampling: sampling === "exclusive",
+    sentSliders: {
+      temperature: isSentToRequest("temperature"),
+      top_p: supports("topP") && isSentToRequest("top_p"),
+      max_completion_tokens:
+        supports("maxCompletionTokens") &&
+        isSentToRequest("max_completion_tokens"),
+      frequency_penalty: isSentToRequest("frequency_penalty"),
+      presence_penalty: isSentToRequest("presence_penalty"),
+    },
+  });
 
   return (
     <div className="flex w-72 flex-col gap-6">
@@ -71,7 +110,7 @@ const CustomModelConfig = ({
               onChange={(v) => onChange({ temperature: v })}
               id="temperature"
               min={0}
-              max={1}
+              max={2}
               step={0.01}
               defaultValue={DEFAULT_CUSTOM_CONFIGS.TEMPERATURE}
               label="Temperature"
@@ -92,10 +131,14 @@ const CustomModelConfig = ({
             min={0}
             max={10000}
             step={1}
+            integer
+            hint={getNoOutputLimitHint(configs.maxCompletionTokens)}
             defaultValue={DEFAULT_CUSTOM_CONFIGS.MAX_COMPLETION_TOKENS}
             label="Max output tokens"
             tooltip={
-              <PromptModelSettingsTooltipContent text="The maximum number of tokens to generate shared between the prompt and completion. The exact limit varies by model. (One token is roughly 4 characters for standard English text)." />
+              <PromptModelSettingsTooltipContent
+                text={`The maximum number of tokens the model can generate in its response. The prompt does not count toward it. On reasoning models, reasoning tokens count toward it too, so a low limit can leave the response empty. The exact limit varies by model. ${NO_OUTPUT_LIMIT_TOOLTIP} (One token is roughly 4 characters for standard English text).`}
+              />
             }
           />
         )}
@@ -123,8 +166,8 @@ const CustomModelConfig = ({
           value={configs.frequencyPenalty}
           onChange={(v) => onChange({ frequencyPenalty: v })}
           id="frequencyPenalty"
-          min={0}
-          max={1}
+          min={-2}
+          max={2}
           step={0.01}
           defaultValue={DEFAULT_CUSTOM_CONFIGS.FREQUENCY_PENALTY}
           label="Frequency penalty"
@@ -139,8 +182,8 @@ const CustomModelConfig = ({
           value={configs.presencePenalty}
           onChange={(v) => onChange({ presencePenalty: v })}
           id="presencePenalty"
-          min={0}
-          max={1}
+          min={-2}
+          max={2}
           step={0.01}
           defaultValue={DEFAULT_CUSTOM_CONFIGS.PRESENCE_PENALTY}
           label="Presence penalty"
@@ -213,7 +256,27 @@ const CustomModelConfig = ({
             }}
           />
         </div>
-        {showInvalidJSON && <FormErrorSkeleton>Invalid JSON</FormErrorSkeleton>}
+        {showInvalidJSON ? (
+          <FormErrorSkeleton>
+            {configs.custom_parameters
+              ? "Invalid JSON, not saved. Runs keep the last valid JSON."
+              : "Invalid JSON, not saved."}
+          </FormErrorSkeleton>
+        ) : (
+          <>
+            {sliderKeysInExtraBody.length > 0 && (
+              <p className="comet-body-xs text-light-slate">
+                Sent instead of the slider: {sliderKeysInExtraBody.join(", ")}
+              </p>
+            )}
+            {extraBodyKeyNextToSlider && (
+              <p className="comet-body-xs text-light-slate">
+                {extraBodyKeyNextToSlider} is sent next to{" "}
+                {sliderKeyNextToExtraBody}. Claude may reject the two together.
+              </p>
+            )}
+          </>
+        )}
       </div>
     </div>
   );

@@ -14,8 +14,6 @@ import useLocalStorageState from "use-local-storage-state";
 
 import { OnChangeFn } from "@/types/shared";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/ui/dialog";
-import ZoomPanContainer from "@/shared/ZoomPanContainer/ZoomPanContainer";
-import MermaidDiagram from "@/shared/MermaidDiagram/MermaidDiagram";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -28,7 +26,7 @@ import TraceTreeViewer from "./TraceTreeViewer/TraceTreeViewer";
 import TraceAIViewer from "./TraceAIViewer/TraceAIViewer";
 import AnnotatePanel from "./AnnotatePanel/AnnotatePanel";
 import AgentGraphHeader from "./AgentGraphHeader";
-import AgentGraphTab from "./TraceDataViewer/AgentGraphTab";
+import ClickableAgentGraph from "./ClickableAgentGraph";
 import NoData from "@/shared/NoData/NoData";
 import { BASE_TRACE_DATA_TYPE, Span } from "@/types/traces";
 import ResizableSidePanel from "@/shared/ResizableSidePanel/ResizableSidePanel";
@@ -135,7 +133,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
 }) => {
   const [activeSection, setActiveSection] =
     useDetailsActionSectionState("lastSection");
-  const { flattenedTree } = useTreeDetailsStore();
+  const { flattenedTree, expandToRow } = useTreeDetailsStore();
   const [isGraphCollapsed = false, setIsGraphCollapsed] = useQueryParam(
     `trace_panel_graph_collapsed`,
     BooleanParam,
@@ -216,6 +214,15 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
   const handleRowSelect = useCallback(
     (id: string) => setSpanId(id === traceId ? "" : id),
     [setSpanId, traceId],
+  );
+
+  const handleGraphRowSelect = useCallback(
+    (id: string) => {
+      expandToRow(id);
+      setIsGraphFullscreen(false);
+      handleRowSelect(id);
+    },
+    [expandToRow, handleRowSelect],
   );
 
   const dataToView = useMemo(() => {
@@ -419,7 +426,12 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
                         border="bottom"
                       />
                       <div className="flex-auto overflow-hidden p-2">
-                        <AgentGraphTab data={agentGraphData} />
+                        <ClickableAgentGraph
+                          data={agentGraphData}
+                          treeData={treeData}
+                          rowId={spanId || traceId}
+                          onSelectRow={handleGraphRowSelect}
+                        />
                       </div>
                     </div>
                   </ResizablePanel>
@@ -521,9 +533,12 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
                 <DialogTitle>Agent graph</DialogTitle>
               </DialogHeader>
               <div className="flex-auto overflow-hidden">
-                <ZoomPanContainer expandButton={false}>
-                  <MermaidDiagram chart={agentGraphData.data} />
-                </ZoomPanContainer>
+                <ClickableAgentGraph
+                  data={agentGraphData}
+                  treeData={treeData}
+                  rowId={spanId || traceId}
+                  onSelectRow={handleGraphRowSelect}
+                />
               </div>
             </DialogContent>
           </Dialog>

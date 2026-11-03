@@ -12,6 +12,16 @@ export interface AgentInsightsJob {
     lastFailureReason?: string;
     lastFailureDetail?: string;
     lastFailedAt?: Date;
+    /** Project guidance sent to every run; null when none */
+    guidance?: string;
+    /** Who last saved the guidance */
+    guidanceUpdatedBy?: string;
+    /** When the guidance was last saved */
+    guidanceUpdatedAt?: Date;
+    /** Bumped each time the guidance text changes; 0 = never saved */
+    guidanceVersion?: number;
+    /** Guidance version the current results were produced with; null = no run since guidance existed */
+    resultsGuidanceVersion?: number;
     createdAt?: Date;
     createdBy?: string;
     lastUpdatedAt?: Date;

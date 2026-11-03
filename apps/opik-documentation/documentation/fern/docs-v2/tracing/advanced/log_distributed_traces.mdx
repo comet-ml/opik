@@ -15,7 +15,7 @@ For the purposes of this guide, we will assume that you have a simple LLM applic
 
 The Python SDK includes some helper functions to make it easier to fetch headers in the client and ingest them in the server:
 
-```python title="client.py"
+```python title="client.py" wordWrap
 from opik import track, opik_context
 
 @track()
@@ -32,7 +32,7 @@ def my_client_function(prompt: str) -> str:
 
 On the server side, you can pass the headers to your decorated function:
 
-```python title="server.py"
+```python title="server.py" wordWrap
 from opik import track
 from fastapi import FastAPI, Request
 
@@ -57,7 +57,7 @@ def generate_llm_response(request: Request) -> str:
 
 As an alternative to passing `opik_distributed_trace_headers` as a parameter, you can use the `distributed_headers()` context manager for more explicit control over distributed header handling. This approach provides automatic cleanup, error handling, and optional data flushing.
 
-```python title="server.py"
+```python title="server.py" wordWrap
 from opik import track
 from opik.decorator.context_manager import distributed_headers
 from fastapi import FastAPI, Request
@@ -111,7 +111,7 @@ On the receiving side, the helper translates these headers into two OpenTelemetr
 <Tabs>
 <Tab title="Python" value="python">
 
-```python title="client.py"
+```python title="client.py" wordWrap
 import requests
 from opik import opik_context, track
 
@@ -132,7 +132,7 @@ def my_client_function(prompt: str) -> str:
 </Tab>
 <Tab title="TypeScript" value="typescript">
 
-```ts title="client.ts"
+```ts title="client.ts" wordWrap
 import { getDistributedTraceHeaders, track } from "opik";
 
 const myClientFunction = track(
@@ -167,7 +167,7 @@ In Python, `OpikSpanProcessor` ships with the main `opik` package under `opik.in
 <Tabs>
 <Tab title="Python" value="python">
 
-```python title="server.py"
+```python title="server.py" wordWrap
 from fastapi import FastAPI, Request
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
@@ -205,7 +205,7 @@ def generate_response(request: Request) -> str:
 </Tab>
 <Tab title="TypeScript" value="typescript">
 
-```ts title="server.ts"
+```ts title="server.ts" wordWrap
 import http from "node:http";
 import { context, trace } from "@opentelemetry/api";
 import {

@@ -103,8 +103,8 @@ public class AuthTestUtils {
                 post(urlPathEqualTo("/opik/auth"))
                         .withHeader(HttpHeaders.AUTHORIZATION, equalTo(apiKey))
                         .withRequestBody(matchingJsonPath("$.workspaceName", equalTo(workspaceName)))
-                        .withRequestBody(
-                                matchingJsonPath("$.requiredPermissions[0]", equalTo(requiredPermission)))
+                        .withRequestBody(matchingJsonPath(
+                                "$.requiredPermissions[?(@ == '%s')]".formatted(requiredPermission)))
                         .willReturn(forbidden()));
     }
 

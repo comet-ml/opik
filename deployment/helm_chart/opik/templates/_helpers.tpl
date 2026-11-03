@@ -57,6 +57,34 @@ component: clickhouse
 {{- end }}
 
 {{/*
+ClickHouse LWD-reclaim merge settings (conf.d/merge_tree.xml), from clickhouse.forceMerge.
+*/}}
+{{- define "opik.clickhouse.mergeTreeXml" -}}
+{{- $fm := .Values.clickhouse.forceMerge -}}
+{{- /* A malformed value would render 0, which ClickHouse reads as "off", so fail instead. */ -}}
+{{- range $key, $min := dict "minAgeSeconds" 1 "maxBytesToMergeAtMaxSpaceInPool" 1 "numberOfFreeEntriesInPoolToLowerMaxSizeOfMerge" 0 -}}
+{{- $v := get $fm $key -}}
+{{- if not (or (kindIs "float64" $v) (kindIs "int" $v) (kindIs "int64" $v)) -}}
+{{- fail (printf "clickhouse.forceMerge.%s must be a number, got %v" $key $v) -}}
+{{- end -}}
+{{- if or (ne (float64 $v) (float64 (int64 $v))) (lt (int64 $v) (int64 $min)) -}}
+{{- fail (printf "clickhouse.forceMerge.%s must be an integer >= %d, got %v" $key $min $v) -}}
+{{- end -}}
+{{- end -}}
+{{- if not (kindIs "bool" $fm.onPartitionOnly) -}}
+{{- fail (printf "clickhouse.forceMerge.onPartitionOnly must be true or false, got %v" $fm.onPartitionOnly) -}}
+{{- end -}}
+<clickhouse>
+  <merge_tree>
+    <max_bytes_to_merge_at_max_space_in_pool>{{ int64 $fm.maxBytesToMergeAtMaxSpaceInPool }}</max_bytes_to_merge_at_max_space_in_pool>
+    <min_age_to_force_merge_seconds>{{ int64 $fm.minAgeSeconds }}</min_age_to_force_merge_seconds>
+    <min_age_to_force_merge_on_partition_only>{{ ternary 1 0 $fm.onPartitionOnly }}</min_age_to_force_merge_on_partition_only>
+    <number_of_free_entries_in_pool_to_lower_max_size_of_merge>{{ int64 $fm.numberOfFreeEntriesInPoolToLowerMaxSizeOfMerge }}</number_of_free_entries_in_pool_to_lower_max_size_of_merge>
+  </merge_tree>
+</clickhouse>
+{{- end }}
+
+{{/*
 ClickHouse tiered-storage server config (conf.d/storage.xml).
 
 Renders the hot -> cold storage policy per Section 5.3 of the Hyperscale plan.
@@ -244,3 +272,40 @@ Usage:
     {{- $value }}
 {{- end }}
 {{- end -}}
+
+{{/*
+ALERTS_EVENTBRIDGE_* backend env from alerts.awsEventBridge, as a YAML map; empty when disabled.
+Validates like the backend's startup checks, so a bad value fails the render instead of crash-looping
+the pod. REGION is left out when empty so the backend resolves it from the ARN or the pod's region.
+*/}}
+{{- define "opik.alerts.awsEventBridgeEnv" -}}
+{{- $eb := (.Values.alerts | default dict).awsEventBridge | default dict -}}
+{{- $env := dict -}}
+{{- if $eb.enabled -}}
+{{- if not (kindIs "bool" $eb.enabled) -}}
+{{- fail (printf "alerts.awsEventBridge.enabled must be true or false, got %v" $eb.enabled) -}}
+{{- end -}}
+{{- $bus := required "alerts.awsEventBridge.eventBus is required when alerts.awsEventBridge.enabled is true" $eb.eventBus | toString -}}
+{{- $regionPattern := "[a-z]{2,4}(-[a-z]+)+-[0-9]+" -}}
+{{- $namePattern := "[.\\-_A-Za-z0-9]{1,256}" -}}
+{{- $arnPattern := printf "^arn:aws[a-z-]*:events:(%s):[0-9]{12}:event-bus/%s$" $regionPattern $namePattern -}}
+{{- $isArn := regexMatch $arnPattern $bus -}}
+{{- /* Custom bus names can't contain '/'; only partner buses can, and they aren't PutEvents targets. */ -}}
+{{- if not (or $isArn (regexMatch (printf "^%s$" $namePattern) $bus)) -}}
+{{- fail (printf "alerts.awsEventBridge.eventBus must be a bus name or an event-bus ARN, got %q" $bus) -}}
+{{- end -}}
+{{- $_ := set $env "ALERTS_EVENTBRIDGE_ENABLED" "true" -}}
+{{- $_ := set $env "ALERTS_EVENTBRIDGE_EVENT_BUS" $bus -}}
+{{- with $eb.region -}}
+{{- $region := toString . -}}
+{{- if not (regexMatch (printf "^%s$" $regionPattern) $region) -}}
+{{- fail (printf "alerts.awsEventBridge.region must be an AWS region such as us-east-1, got %q" $region) -}}
+{{- end -}}
+{{- if and $isArn (ne $region (index (splitList ":" $bus) 3)) -}}
+{{- fail (printf "alerts.awsEventBridge.region %q does not match the region of eventBus %q" $region $bus) -}}
+{{- end -}}
+{{- $_ := set $env "ALERTS_EVENTBRIDGE_REGION" $region -}}
+{{- end -}}
+{{- end -}}
+{{- toYaml $env -}}
+{{- end }}

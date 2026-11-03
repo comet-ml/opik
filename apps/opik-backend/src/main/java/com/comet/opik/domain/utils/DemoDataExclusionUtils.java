@@ -31,7 +31,7 @@ import java.util.stream.Collectors;
  * distinct rows to the engine, not one row stored twice, and billing counts both.
  *
  * <p>Reaching that state takes a reused id: the single-entity write paths reject an existing id presented under
- * another project, while {@code BULK_INSERT} binds the project the request asked for without reading the stored
+ * another project, while the bulk span insert writes the project the request asked for without reading the stored
  * row. Either way the per-project usage breakdown has always reported such an id once per project, its query
  * having always grouped by project. What the folds change is that the workspace and BI totals now agree with it,
  * where the workspace-grouped {@code COUNT(DISTINCT id)} they replaced collapsed on {@code id} alone — a column

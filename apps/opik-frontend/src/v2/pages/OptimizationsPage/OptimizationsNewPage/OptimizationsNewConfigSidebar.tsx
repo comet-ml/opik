@@ -165,7 +165,7 @@ const OptimizationsNewConfigSidebar: React.FC<
                   placeholder={
                     isPreparingDataset
                       ? "Preparing dataset..."
-                      : "Select item source"
+                      : "Select an item source"
                   }
                   disabled={isPreparingDataset}
                   className="h-8 w-full"

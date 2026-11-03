@@ -13,6 +13,7 @@ import com.comet.opik.api.resources.v1.events.tools.StringTruncator;
 import com.comet.opik.domain.evaluators.python.PythonScoreResult;
 import com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest;
 import com.comet.opik.domain.llm.structuredoutput.StructuredOutputStrategy;
+import com.comet.opik.infrastructure.llm.MediaContentUtils;
 import com.comet.opik.infrastructure.log.LogContextAware;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateParseUtils;
@@ -26,13 +27,10 @@ import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import com.google.common.annotations.VisibleForTesting;
 import com.jayway.jsonpath.JsonPath;
 import com.jayway.jsonpath.PathNotFoundException;
-import dev.langchain4j.data.message.AudioContent;
 import dev.langchain4j.data.message.ChatMessage;
-import dev.langchain4j.data.message.ImageContent;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.TextContent;
 import dev.langchain4j.data.message.UserMessage;
-import dev.langchain4j.data.message.VideoContent;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import lombok.AllArgsConstructor;
@@ -850,19 +848,19 @@ public class OnlineScoringEngine {
                 case "image_url" -> {
                     if (part.imageUrl() != null && part.imageUrl().url() != null) {
                         var url = TemplateParseUtils.render(part.imageUrl().url(), replacements, promptType);
-                        builder.addContent(ImageContent.from(url));
+                        builder.addContent(MediaContentUtils.toImageContent(url));
                     }
                 }
                 case "video_url" -> {
                     if (part.videoUrl() != null && part.videoUrl().url() != null) {
                         var url = TemplateParseUtils.render(part.videoUrl().url(), replacements, promptType);
-                        builder.addContent(VideoContent.from(url));
+                        builder.addContent(MediaContentUtils.toVideoContent(url));
                     }
                 }
                 case "audio_url" -> {
                     if (part.audioUrl() != null && part.audioUrl().url() != null) {
                         var url = TemplateParseUtils.render(part.audioUrl().url(), replacements, promptType);
-                        builder.addContent(AudioContent.from(url));
+                        builder.addContent(MediaContentUtils.toAudioContent(url));
                     }
                 }
                 default -> log.warn("Unknown content type: {}", part.type());

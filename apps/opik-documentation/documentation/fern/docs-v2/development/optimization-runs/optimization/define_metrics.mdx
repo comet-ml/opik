@@ -15,7 +15,7 @@ Metrics drive optimizer decisions. This guide highlights the fastest way to pick
 
 A metric is a callable with the signature `(dataset_item, llm_output) -> ScoreResult | float`. Use `ScoreResult` to attach names and reasons.
 
-```python
+```python wordWrap
 from opik.evaluation.metrics.score_result import ScoreResult
 
 def short_answer(item, output):
@@ -31,7 +31,7 @@ def short_answer(item, output):
 
 Use `MultiMetricObjective` to balance multiple goals (accuracy, style, safety).
 
-```python
+```python wordWrap
 from opik_optimizer import MultiMetricObjective
 from opik.evaluation.metrics import LevenshteinRatio, AnswerRelevance
 
@@ -55,7 +55,7 @@ objective = MultiMetricObjective(
 
 You can optimize for efficiency alongside quality by including span-based metrics like cost and duration in your composite objective. These metrics require access to the `task_span` parameter:
 
-```python
+```python wordWrap
 from opik_optimizer import MultiMetricObjective
 from opik.evaluation.metrics import AnswerRelevance
 from opik_optimizer.metrics import SpanCost, SpanDuration
@@ -119,7 +119,7 @@ Opik Optimizer also ships built-in metric helpers for common optimization setups
 
 Example with built-ins:
 
-```python
+```python wordWrap
 from opik_optimizer import MultiMetricObjective
 from opik_optimizer.metrics import LevenshteinAccuracyMetric, SpanCost, SpanDuration
 

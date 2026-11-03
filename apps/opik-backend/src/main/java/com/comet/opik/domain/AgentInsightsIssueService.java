@@ -20,13 +20,16 @@ import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.IntStream;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
@@ -73,39 +76,61 @@ class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
 
         projectService.get(report.projectId(), workspaceId);
 
-        int issueCount = report.issues().size();
-        boolean allClear = issueCount == 0;
-
         log.info("Reporting agent insights issues for project '{}' on report day '{}' in workspace '{}': {}",
-                report.projectId(), report.reportDay(), workspaceId, allClear ? "all clear" : issueCount);
+                report.projectId(), report.reportDay(), workspaceId,
+                report.issues().isEmpty() ? "all clear" : report.issues().size());
 
-        List<UUID> issueIds = report.issues().stream()
-                .map(issue -> issue.id() != null ? issue.id() : idGenerator.generateId())
-                .toList();
-        List<UUID> detailIds = report.issues().stream()
-                .map(issue -> idGenerator.generateId())
-                .toList();
-        List<String> metadata = report.issues().stream()
+        // Ids and metadata are prepared before the transaction so it holds the connection only for the writes;
+        // inside, the scope check picks which of them are kept, by issue index.
+        List<String> serializedMetadataByIssueIndex = report.issues().stream()
                 .map(issue -> issue.metadata() == null ? null : JsonUtils.writeValueAsString(issue.metadata()))
                 .toList();
+        List<UUID> issueIdByIssueIndex = report.issues().stream()
+                .map(issue -> issue.id() != null ? issue.id() : idGenerator.generateId())
+                .toList();
+        List<UUID> detailIdByIssueIndex = report.issues().stream()
+                .map(issue -> idGenerator.generateId())
+                .toList();
 
-        transactionTemplate.inTransaction(WRITE, handle -> {
+        int storedIssueCount = transactionTemplate.inTransaction(WRITE, handle -> {
             AgentInsightsIssueDAO dao = handle.attach(AgentInsightsIssueDAO.class);
 
-            if (!allClear) {
-                dao.upsertIssues(workspaceId, report.projectId(), userName, issueIds, report.issues());
+            // The id is the whole primary key: an id owned by another workspace or project is dropped, details too.
+            Set<UUID> issueIdsOutsideScope = explicitIds.isEmpty()
+                    ? Set.of()
+                    : dao.findIdsOutsideScope(workspaceId, report.projectId(), explicitIds);
+            if (!issueIdsOutsideScope.isEmpty()) {
+                log.warn("Skipping '{}' reported agent insights issues that belong to another workspace or project, "
+                        + "project '{}', workspace '{}'", issueIdsOutsideScope.size(), report.projectId(), workspaceId);
+            }
+            List<Integer> keptIssueIndexes = IntStream.range(0, report.issues().size())
+                    .filter(i -> report.issues().get(i).id() == null
+                            || !issueIdsOutsideScope.contains(report.issues().get(i).id()))
+                    .boxed()
+                    .toList();
+            List<AgentInsightsReport.ReportedIssue> keptIssues = keptIssueIndexes.stream()
+                    .map(report.issues()::get)
+                    .toList();
+
+            if (!keptIssues.isEmpty()) {
+                List<UUID> issueIds = keptIssueIndexes.stream().map(issueIdByIssueIndex::get).toList();
+                List<UUID> detailIds = keptIssueIndexes.stream().map(detailIdByIssueIndex::get).toList();
+                List<String> metadata = keptIssueIndexes.stream()
+                        .map(serializedMetadataByIssueIndex::get)
+                        .toList();
+                dao.upsertIssues(workspaceId, report.projectId(), userName, issueIds, keptIssues);
                 dao.upsertDetails(workspaceId, report.projectId(), report.reportDay(), userName,
-                        detailIds, issueIds, report.issues(), metadata);
+                        detailIds, issueIds, keptIssues, metadata);
             }
 
             handle.attach(AgentInsightsJobDAO.class)
                     .markScanned(workspaceId, report.projectId(), userName);
 
-            return null;
+            return keptIssues.size();
         });
 
         AgentInsightsMetrics.REPORTS_RECEIVED.add(1);
-        AgentInsightsMetrics.ISSUES_REPORTED.add(report.issues().size());
+        AgentInsightsMetrics.ISSUES_REPORTED.add(storedIssueCount);
     }
 
     @Override
@@ -169,13 +194,21 @@ class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
+        // The note explains a "not useful" close, so it is kept only with that status; any other status clears it.
+        // Closing without the field leaves the stored note alone (null while the issue was not closed); a blank
+        // note clears it.
+        boolean closing = update.status() == AgentInsightsIssueStatus.CLOSED;
+        boolean keepCloseNote = closing && update.closeNote() == null;
+        String closeNote = closing ? StringUtils.trimToNull(update.closeNote()) : null;
+
         log.info("Updating agent insights issue '{}' status to '{}' for project '{}' in workspace '{}'",
                 issueId, update.status(), update.projectId(), workspaceId);
 
         transactionTemplate.inTransaction(WRITE, handle -> {
             AgentInsightsIssueDAO dao = handle.attach(AgentInsightsIssueDAO.class);
 
-            int updated = dao.updateStatus(workspaceId, update.projectId(), issueId, update.status(), userName);
+            int updated = dao.updateStatus(workspaceId, update.projectId(), issueId, update.status(), closeNote,
+                    keepCloseNote, userName);
             if (updated == 0) {
                 throw new NotFoundException("Agent insights issue '%s' not found".formatted(issueId));
             }

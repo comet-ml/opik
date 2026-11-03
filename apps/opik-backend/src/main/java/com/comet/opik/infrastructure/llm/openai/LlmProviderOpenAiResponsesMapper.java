@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.llm.openai;
 
 import com.comet.opik.domain.llm.MessageContentNormalizer;
+import com.comet.opik.infrastructure.llm.OpenAiCompatFinishReasons;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openai.models.ReasoningEffort;
@@ -36,7 +37,6 @@ import dev.langchain4j.model.openai.internal.shared.PromptTokensDetails;
 import dev.langchain4j.model.openai.internal.shared.Usage;
 import dev.langchain4j.model.openaiofficial.OpenAiOfficialResponsesChatRequestParameters;
 import dev.langchain4j.model.openaiofficial.OpenAiOfficialTokenUsage;
-import dev.langchain4j.model.output.FinishReason;
 import dev.langchain4j.model.output.TokenUsage;
 import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
@@ -89,9 +89,11 @@ class LlmProviderOpenAiResponsesMapper {
         Optional.ofNullable(request.temperature()).ifPresent(builder::temperature);
         Optional.ofNullable(request.topP()).ifPresent(builder::topP);
         Optional.ofNullable(resolveMaxOutputTokens(request)).ifPresent(builder::maxOutputTokens);
+        // No penalties, stop or seed: langchain4j's validate() throws UnsupportedFeatureException for them, and the
+        // playground sends penalties of 0 by default, so mapping them would fail ordinary requests. The catalog's
+        // responses_api route has ParamResolver drop them before this runs; a user who needs them switches the key's
+        // openai_pipeline_mode to Chat Completions.
         Optional.ofNullable(toResponsesParameters(request)).ifPresent(builder::parameters);
-
-        warnIfDroppedSamplingParam(request);
 
         if (CollectionUtils.isNotEmpty(request.tools())) {
             builder.toolSpecifications(toToolSpecifications(request.tools()));
@@ -147,7 +149,7 @@ class LlmProviderOpenAiResponsesMapper {
                 .choices(List.of(ChatCompletionChoice.builder()
                         .index(0)
                         .delta(Delta.builder().build())
-                        .finishReason(toFinishReasonString(response.finishReason()))
+                        .finishReason(OpenAiCompatFinishReasons.toWireValue(response.finishReason()))
                         .build()))
                 .usage(toUsage(response.tokenUsage()))
                 .build();
@@ -211,7 +213,7 @@ class LlmProviderOpenAiResponsesMapper {
         return ChatCompletionChoice.builder()
                 .index(0)
                 .message(assistantBuilder.build())
-                .finishReason(toFinishReasonString(response.finishReason()))
+                .finishReason(OpenAiCompatFinishReasons.toWireValue(response.finishReason()))
                 .build();
     }
 
@@ -386,43 +388,6 @@ class LlmProviderOpenAiResponsesMapper {
                     .ifPresent(builder::completionTokensDetails);
         }
         return builder.build();
-    }
-
-    private String toFinishReasonString(FinishReason finishReason) {
-        if (finishReason == null) {
-            return null;
-        }
-        return switch (finishReason) {
-            case STOP -> "stop";
-            case LENGTH -> "length";
-            case TOOL_EXECUTION -> "tool_calls";
-            case CONTENT_FILTER -> "content_filter";
-            default -> "other";
-        };
-    }
-
-    /**
-     * {@code frequency_penalty}, {@code presence_penalty}, {@code stop}, and {@code top_k} are NOT
-     * supported by the OpenAI Responses API — langchain4j's
-     * {@code OpenAiOfficialResponsesChatModel.validate()} throws {@code UnsupportedFeatureException}
-     * for any of them. Clients (notably the playground) often send {@code frequency_penalty: 0} /
-     * {@code presence_penalty: 0} as framework defaults even when the user didn't tune them, so the
-     * request would fail before reaching OpenAI. We silently drop these fields rather than 500 the
-     * call; a user who explicitly tunes them and expects them to apply should use
-     * {@code pipeline_mode=CHAT_COMPLETIONS_API}.
-     */
-    private void warnIfDroppedSamplingParam(ChatCompletionRequest request) {
-        if (request.frequencyPenalty() != null && request.frequencyPenalty() != 0.0) {
-            log.debug("Dropping unsupported 'frequency_penalty'='{}' for OpenAI Responses API",
-                    request.frequencyPenalty());
-        }
-        if (request.presencePenalty() != null && request.presencePenalty() != 0.0) {
-            log.debug("Dropping unsupported 'presence_penalty'='{}' for OpenAI Responses API",
-                    request.presencePenalty());
-        }
-        if (CollectionUtils.isNotEmpty(request.stop())) {
-            log.debug("Dropping unsupported 'stop'='{}' for OpenAI Responses API", request.stop());
-        }
     }
 
     /**

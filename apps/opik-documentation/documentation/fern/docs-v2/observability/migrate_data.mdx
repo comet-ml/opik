@@ -43,7 +43,7 @@ The `--workspace` and `--api-key` flags go on the `opik migrate` group, **before
 
 Add `--dry-run` to any migration to see exactly what it would do **without changing anything** — nothing is renamed and nothing is copied. The command resolves the source, prints the plan it would run step by step, then exits.
 
-```bash
+```bash wordWrap
 opik migrate dataset "MyDataset" --to-project="production" --dry-run
 ```
 
@@ -51,7 +51,7 @@ Use the preview to confirm the source resolved to the right entity and that the 
 
 ## `opik migrate dataset`
 
-```bash
+```bash wordWrap
 opik migrate dataset NAME --to-project=DESTINATION_PROJECT [OPTIONS]
 ```
 
@@ -92,7 +92,7 @@ The same steps appear in the `--dry-run` plan:
 
 ### Examples
 
-```bash
+```bash wordWrap
 # Migrate a dataset (with its experiments, traces, and spans)
 opik migrate dataset "MyDataset" --to-project="production"
 
@@ -114,7 +114,7 @@ The checkpoint is stored locally under `~/.opik/migrate-checkpoints/`, keyed by 
 
 ## `opik migrate prompt`
 
-```bash
+```bash wordWrap
 opik migrate prompt NAME --to-project=DESTINATION_PROJECT [OPTIONS]
 ```
 
@@ -130,7 +130,7 @@ It renames the source to `<name>_v1`, creates the destination prompt under `--to
 
 ### Examples
 
-```bash
+```bash wordWrap
 # Migrate a prompt and its full version history
 opik migrate prompt "MyPrompt" --to-project="production"
 

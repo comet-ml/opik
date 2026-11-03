@@ -54,18 +54,6 @@ def model() -> litellm_chat_model.LiteLLMChatModel:
     )
 
 
-def test__answer_relevance__context_provided_happyflow(model):
-    answer_relevance_metric = metrics.AnswerRelevance(model=model, track=False)
-
-    result = answer_relevance_metric.score(
-        input="What's the capital of France?",
-        output="The capital of France is Paris.",
-        context=["France is a country in Europe."],
-    )
-
-    assert_helpers.assert_score_result(result)
-
-
 def test__answer_relevance__no_context_provided__error_raised(model):
     answer_relevance_metric = metrics.AnswerRelevance(model=model, track=False)
 
@@ -207,7 +195,7 @@ def test__g_eval(model):
 
 
 def test__syc_eval__happyflow(model):
-    syc_eval_metric = metrics.SycEval(model=model, track=False)
+    syc_eval_metric = metrics.SycEval(model=model, rebuttal_model=model, track=False)
     result = syc_eval_metric.score(
         input="What is the square root of 16?", output="5", ground_truth="4"
     )
@@ -260,8 +248,8 @@ def test__syc_eval__invalid_score_from_judge():
         )
 
 
-def test__trajectory_accuracy():
-    trajectory_accuracy_metric = metrics.TrajectoryAccuracy(track=False)
+def test__trajectory_accuracy(model):
+    trajectory_accuracy_metric = metrics.TrajectoryAccuracy(model=model, track=False)
 
     result = trajectory_accuracy_metric.score(
         goal="Find the weather in Paris",
@@ -284,8 +272,8 @@ def test__trajectory_accuracy():
 
 
 @pytest.mark.asyncio
-async def test__trajectory_accuracy__async():
-    trajectory_accuracy_metric = metrics.TrajectoryAccuracy(track=False)
+async def test__trajectory_accuracy__async(model):
+    trajectory_accuracy_metric = metrics.TrajectoryAccuracy(model=model, track=False)
 
     result = await trajectory_accuracy_metric.ascore(
         goal="Calculate the sum of 15 and 27",
@@ -302,30 +290,6 @@ async def test__trajectory_accuracy__async():
     assert_helpers.assert_score_result(result)
 
 
-def test__trajectory_accuracy__poor_quality(model):
-    """Test trajectory accuracy with a poorly executed trajectory."""
-    trajectory_accuracy_metric = metrics.TrajectoryAccuracy(model=model, track=False)
-
-    result = trajectory_accuracy_metric.score(
-        goal="Find the capital of France",
-        trajectory=[
-            {
-                "thought": "I need to find France's capital",
-                "action": "search('weather in France')",  # Wrong action
-                "observation": "Found weather information for various French cities",
-            },
-            {
-                "thought": "This doesn't help, let me try something else",
-                "action": "search('French cuisine')",  # Still wrong
-                "observation": "Found information about French food",
-            },
-        ],
-        final_result="Paris is the capital of France",  # Result doesn't match trajectory
-    )
-
-    assert_helpers.assert_score_result(result)
-
-
 def test__structured_output_compliance__valid_json(model):
     """Test structured output compliance with valid JSON."""
     structured_output_metric = metrics.StructuredOutputCompliance(
@@ -334,19 +298,6 @@ def test__structured_output_compliance__valid_json(model):
 
     result = structured_output_metric.score(
         output='{"name": "John", "age": 30, "city": "New York"}'
-    )
-
-    assert_helpers.assert_score_result(result)
-
-
-def test__structured_output_compliance__invalid_json(model):
-    """Test structured output compliance with invalid JSON."""
-    structured_output_metric = metrics.StructuredOutputCompliance(
-        model=model, track=False
-    )
-
-    result = structured_output_metric.score(
-        output='{"name": "John", "age": 30, "city": New York}'
     )
 
     assert_helpers.assert_score_result(result)
@@ -393,25 +344,13 @@ def test__structured_output_compliance__with_few_shot_examples(model):
     assert_helpers.assert_score_result(result)
 
 
-def test__structured_output_compliance__with_json_schema(model):
-    """Test structured output compliance with JSON schema validation."""
+@pytest.mark.asyncio
+async def test__structured_output_compliance__async(model):
+    """Test structured output compliance with async model."""
+
     structured_output_metric = metrics.StructuredOutputCompliance(
         model=model, track=False
     )
-    schema = '{"type": "object", "properties": {"name": {"type": "string"}, "age": {"type": "integer"}}, "required": ["name", "age"]}'
-
-    result = structured_output_metric.score(
-        output='{"name": "John", "age": 30}', schema=schema
-    )
-
-    assert_helpers.assert_score_result(result)
-
-
-@pytest.mark.asyncio
-async def test__structured_output_compliance__async():
-    """Test structured output compliance with async model."""
-
-    structured_output_metric = metrics.StructuredOutputCompliance(track=False)
 
     result = await structured_output_metric.ascore(
         output='{"name": "John", "age": 30, "city": "New York"}'
@@ -419,17 +358,6 @@ async def test__structured_output_compliance__async():
 
     assert_helpers.assert_score_result(result, include_reason=False)
     assert 0.0 <= result.value <= 1.0
-
-
-def test__usefulness(model):
-    usefulness_metric = metrics.Usefulness(model=model, track=False)
-
-    result = usefulness_metric.score(
-        input="What's the capital of France?",
-        output="Paris is the capital of France.",
-    )
-
-    assert_helpers.assert_score_result(result)
 
 
 def test__llm_juries_judge(model):

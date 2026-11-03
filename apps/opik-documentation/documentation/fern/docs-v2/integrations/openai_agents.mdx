@@ -33,7 +33,7 @@ flow in our Open-Source platform.
 
 First, ensure you have both `opik` and `openai-agents` packages installed:
 
-```bash
+```bash wordWrap
 pip install opik openai-agents
 ```
 
@@ -52,13 +52,13 @@ In order to use OpenAI Agents, you will need to configure your OpenAI API key. Y
 
 You can set them as environment variables:
 
-```bash
+```bash wordWrap
 export OPENAI_API_KEY="YOUR_API_KEY"
 ```
 
 Or set them programmatically:
 
-```python
+```python wordWrap
 import os
 import getpass
 
@@ -70,7 +70,7 @@ if "OPENAI_API_KEY" not in os.environ:
 
 To enable logging to Opik, simply add the following two lines of code to your existing OpenAI Agents code:
 
-```python
+```python wordWrap
 import os
 from agents import Agent, Runner
 from agents import set_trace_processors
@@ -100,7 +100,7 @@ print(result.final_output)
 
 You can create agents with custom function tools. The `OpikTracingProcessor` automatically captures all tool calls as well:
 
-```python
+```python wordWrap
 from agents import Agent, Runner, function_tool, set_trace_processors
 from opik.integrations.openai.agents import OpikTracingProcessor
 
@@ -183,7 +183,7 @@ for i, query in enumerate(queries, 1):
 
 If you need more visibility into what happens inside your tool functions, you can use the `@track` decorator to trace specific steps within the tool execution:
 
-```python
+```python wordWrap
 from agents import Agent, Runner, function_tool, set_trace_processors
 from opik.integrations.openai.agents import OpikTracingProcessor
 from opik import track
@@ -224,7 +224,7 @@ print(result.final_output)
 
 When you are running multi-turn conversations with OpenAI Agents using [OpenAI Agents trace API](https://openai.github.io/openai-agents-python/running_agents/#conversationschat-threads), Opik integration automatically use the trace group_id as the Thread ID so you can easily review conversation inside Opik. Here is an example below:
 
-```python
+```python wordWrap
 async def main():
     agent = Agent(name="Assistant", instructions="Reply very concisely.")
 

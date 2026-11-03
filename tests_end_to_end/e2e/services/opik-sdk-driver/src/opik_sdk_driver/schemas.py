@@ -405,6 +405,64 @@ class ExperimentReadItemsRequest(BaseModel):
     workspace: str | None = None
 
 
+class ExperimentLifecycleRequest(BaseModel):
+    """One experiment, read for its lifecycle fields.
+
+    `ids` on the cancel request rather than a single id because
+    `cancel_experiments` takes a sequence, and a caller asserting that the stop
+    is scoped to what it named has to be able to name more than one.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    experiment_id: str
+    workspace: str | None = None
+
+
+class ExperimentCancelRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ids: list[str]
+    workspace: str | None = None
+
+
+class ExperimentCancelResponse(BaseModel):
+    """What the SDK call returned, which for this endpoint is nothing.
+
+    Stated explicitly rather than answering an empty body: the claim the caller
+    makes is that `cancel_experiments` was REACHABLE on the regenerated client
+    and did not raise, which is a different claim from the stop having applied —
+    that one is only readable off the experiment's own status afterwards.
+    """
+
+    requested: int
+    returned_none: bool
+
+
+class ExperimentLifecycleResponse(BaseModel):
+    """An experiment's lifecycle as the regenerated Python client deserialises it.
+
+    Every field is `| None` because `ExperimentPublic` types each one optional,
+    and that optionality is a fact about the API the caller must assert away
+    rather than one this route may paper over: substituting `"completed"` for a
+    dropped `status` here would reproduce the backend's own
+    `ExperimentStatus.fromString` fallback inside the bridge and make the
+    regression invisible.
+
+    `status` is passed through as the raw string the model carries.
+    `ExperimentPublicStatus` is a `Literal[...] | Any` union, so pydantic admits
+    any value — which means a status the client does not know is reported here
+    rather than rejected, and the caller compares it against what it expects.
+    """
+
+    experiment_id: str
+    status: str | None
+    finished_at: str | None
+    created_at: str | None
+    trace_count: int | None
+    dataset_item_count: int | None
+
+
 class ExperimentItemFingerprint(BaseModel):
     """The identity of one experiment item, in the order the read returned it.
 
@@ -594,6 +652,66 @@ class TestSuiteRunRequest(BaseModel):
     experiment_name: str
     judge_model: str | None = None
     workspace: str | None = None
+    # Return every assertion score result the run produced, per item and per
+    # run, rather than only the pass/fail tallies.
+    #
+    # Off by default, and the default is the honest one for the existing
+    # callers: a run judged by a real model produces assertion reasons that are
+    # model prose, so a spec reading them would be asserting on LLM output. It
+    # is opt-in for the one shape where the results are mechanical — a schema
+    # item whose type the judge cannot score, where the result is built by the
+    # SDK without a provider call and its text is a fixed sentence.
+    include_assertions: bool = False
+
+
+class TestSuiteSchemaItem(BaseModel):
+    """One `LLMJudgeSchemaItem` as a caller asks for it.
+
+    `type` is the whole reason this route exists: the public
+    `create_test_suite(global_assertions=[...])` / `update_test_settings`
+    shorthand builds an `LLMJudge` from plain strings, and every item it writes
+    is `BOOLEAN`. A numeric item cannot be expressed through it at all.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    type: Literal["BOOLEAN", "INTEGER", "DOUBLE"]
+    description: str
+
+
+class TestSuiteEvaluatorSchemaRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    suite_name: str
+    project_name: str
+    #: In schema order, which is the order the run's results come back in.
+    schema_items: list[TestSuiteSchemaItem]
+    workspace: str | None = None
+
+
+class TestSuiteEvaluatorSchemaResponse(BaseModel):
+    suite_id: str
+    #: The version the write landed on, read back from the backend.
+    version_name: str | None
+    #: `get_global_assertions()` over a suite re-read after the write.
+    global_assertions: list[str]
+    #: The evaluator schema as the backend answers it, so a caller can assert
+    #: the `type` survived the round trip rather than only the description.
+    schema_items: list[TestSuiteSchemaItem]
+
+
+class TestSuiteAssertionResult(BaseModel):
+    """One `ScoreResult` the run produced, with the item and run it came from."""
+
+    dataset_item_id: str
+    trial_id: int
+    name: str
+    value: float
+    reason: str | None
+    category_name: str | None
+    scoring_failed: bool
+    metadata: dict[str, Any] | None
 
 
 class TestSuiteInsertItemsRequest(BaseModel):
@@ -642,6 +760,17 @@ class TestSuiteRunResponse(BaseModel):
     items_passed: int
     items_failed: int
     items_total: int
+    #: Items the run covered, as `item_results` keys. Distinct from
+    #: `items_total` on purpose: a caller asserting "every item was covered"
+    #: wants the id set, since a run that covered one item twice and another
+    #: never still reports the right total.
+    item_ids: list[str] = []
+    #: `None` unless the request asked for them, which keeps "the caller did
+    #: not ask" distinct from "the run produced no assertion results" — the
+    #: second being a real and interesting answer.
+    item_assertions: list[TestSuiteAssertionResult] | None = None
+    #: Wall-clock seconds `TestSuiteResult` reports for the whole run.
+    total_time: float | None = None
 
 
 class TextPromptCreate(BaseModel):
@@ -787,3 +916,145 @@ class StreamReadsRequest(BaseModel):
 class StreamReadsResponse(BaseModel):
     traces: list[StreamReadResult] = []
     spans: list[StreamReadResult] = []
+
+
+class OllamaChatCall(BaseModel):
+    """One `chat()` call the ollama-integration route is to make.
+
+    Each field selects a branch of `track_ollama` that is reached no other way,
+    so a caller describes the call rather than the assertion:
+
+    - `stream` takes the aggregator path, where the decorator folds a chunk
+      sequence into one span instead of ending the span on a `ChatResponse`.
+    - `use_async` swaps `ollama.Client` for `ollama.AsyncClient`, which the
+      decorator wraps through a separate stream wrapper.
+    - `provider` overrides the `ollama` default recorded on every span.
+    - `parent_name`, when set, makes the call from inside an `@opik.track`
+      function, so the chat span has a parent to be attached to.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Echoed back so a caller can match a result to its call without relying on
+    # order, the same reason `StreamReadShape` carries `key`.
+    label: str
+    stream: bool = False
+    use_async: bool = False
+    provider: str | None = None
+    parent_name: str | None = None
+
+
+class OllamaChatRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    project_name: str
+    # Echoed by the mock responder onto every chunk, and read back off the span
+    # by the caller — so a tracker that stopped recording the requested model
+    # fails rather than matching a hardcoded name.
+    model: str
+    prompt: str
+    calls: list[OllamaChatCall]
+    workspace: str | None = None
+
+
+class OllamaChatResult(BaseModel):
+    label: str
+    # What the caller's own `chat()` returned, aggregated for a streamed call.
+    # The tracker must not change it: a wrapper that swallowed the last chunk
+    # would be invisible in Opik and obvious here.
+    content: str
+    model: str
+    # How many chunks a streamed call yielded, and 0 for a non-streamed one.
+    # Load-bearing: "the streamed call produced ONE span" is only a claim about
+    # aggregation if the stream really arrived in several chunks, and a caller
+    # that could not see this would pass identically against a one-chunk mock.
+    chunk_count: int
+
+
+class OllamaChatResponse(BaseModel):
+    """What the calls returned, plus the facts that live only in the process.
+
+    `double_track_is_noop` is the `opik_tracked` guard: `track_ollama` called
+    twice on one client must return the same object with the same bound `chat`,
+    and a second wrap would be invisible from the outside except as doubled
+    spans — which is a weaker and much slower way to observe it.
+    """
+
+    double_track_is_noop: bool
+    calls: list[OllamaChatResult]
+
+
+class TrackedGeneratorCall(BaseModel):
+    """One `@opik.track`ed call the generator route is to make.
+
+    `shape` selects HOW the consumer stops, and each value is a way a user stops
+    reading a streamed response early — the thing that left no trace at all
+    before opik#8518:
+
+    - `break_after` — a `for` loop that `break`s after `take` items, the
+      ordinary case.
+    - `bare_next` — a single `next()` and nothing more, i.e. a peek.
+    - `islice` — `itertools.islice` stopping short of the end, where the
+      consumer never touches the generator itself.
+    - `consumer_raises` — an exception raised in the CONSUMER's loop body after
+      `take` items and caught outside the loop. The generator itself does not
+      fail, so this must still be reported as a successful partial span rather
+      than an errored one.
+
+    And two controls, which are not early exits at all:
+
+    - `exhaust` — a generator read to the end, which raises `StopIteration` and
+      so was always reported.
+    - `plain_function` — a tracked NON-generator. Both exist so that "the trace
+      is there" cannot be confused with "the SDK reached this environment": a
+      red result on an early-exit shape next to a green one on a control is a
+      product finding, and a red everywhere is a connectivity problem.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Also the tracked function's `name`, so the trace is addressable by it.
+    # Echoed back for the same reason `OllamaChatCall.label` is: a result is
+    # matched to its call rather than to its position.
+    label: str
+    shape: Literal[
+        "break_after",
+        "bare_next",
+        "islice",
+        "consumer_raises",
+        "exhaust",
+        "plain_function",
+    ]
+    # How many items the consumer takes before stopping. Ignored by `exhaust`
+    # and `plain_function`.
+    take: int = 1
+
+
+class TrackedGeneratorRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    project_name: str
+    # What the generator yields, in order. Supplied by the caller rather than
+    # fixed here so the caller can derive the span output it expects — the
+    # decorator records `"".join(str(item) for item in consumed)` — without a
+    # second copy of the list living in this file.
+    items: list[str]
+    calls: list[TrackedGeneratorCall]
+    workspace: str | None = None
+
+
+class TrackedGeneratorResult(BaseModel):
+    label: str
+    # What the consumer actually received before it stopped. The one fact that
+    # exists only inside this process, and what makes the span's output
+    # assertable: a span recording more or less than this is wrong, and a
+    # caller that could not see it could only assert presence.
+    consumed: list[str]
+    # The exception type the consumer caught, for `consumer_raises`; null
+    # otherwise. Asserted rather than decoration: if the raise never happened,
+    # that shape degenerates into `break_after` and proves nothing extra.
+    caught: str | None = None
+
+
+class TrackedGeneratorResponse(BaseModel):
+    calls: list[TrackedGeneratorResult]

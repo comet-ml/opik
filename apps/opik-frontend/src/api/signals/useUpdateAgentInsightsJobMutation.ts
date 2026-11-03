@@ -19,15 +19,22 @@ const useUpdateAgentInsightsJobMutation = () => {
   const { toast } = useToast();
 
   return useMutation({
+    // PATCH 404s before the project has a job; create it (disabled) and retry,
+    // like the trigger mutation does.
     mutationFn: async ({
       projectId,
       status,
     }: UseUpdateAgentInsightsJobMutationParams) => {
-      const { data } = await api.patch(
-        `${AGENT_INSIGHTS_REST_ENDPOINT}jobs/${projectId}`,
-        { status },
-      );
-      return data;
+      const url = `${AGENT_INSIGHTS_REST_ENDPOINT}jobs/${projectId}`;
+      try {
+        const { data } = await api.patch(url, { status });
+        return data;
+      } catch (error) {
+        if ((error as AxiosError)?.response?.status !== 404) throw error;
+        await api.post(url);
+        const { data } = await api.patch(url, { status });
+        return data;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [AGENT_INSIGHTS_JOB_KEY] });

@@ -9,12 +9,15 @@ import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.redis.testcontainers.RedisContainer;
+import io.dropwizard.jersey.errors.ErrorMessage;
 import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -23,6 +26,7 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
+import static com.comet.opik.api.resources.utils.TestHttpClientUtils.MATRIX_PARAMETERS_RESPONSE;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -82,6 +86,18 @@ class IsAliveE2ETest {
 
         var expectedResponse = IsAliveResource.VersionResponse.builder().version(TEST_VERSION).build();
         assertThat(actualResponse).isEqualTo(expectedResponse);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"/is-alive;check=1/ping", "/is-alive/ping;check=1"})
+    @DisplayName("Should return 404 when the path carries matrix parameters")
+    void testIsAliveWithMatrixParameters(String path) {
+        try (var response = client.target(baseURI + path)
+                .request()
+                .get()) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+            assertThat(response.readEntity(ErrorMessage.class)).isEqualTo(MATRIX_PARAMETERS_RESPONSE);
+        }
     }
 
     private IsAliveResource.IsAliveResponse callIsAliveAndAssertOk() {

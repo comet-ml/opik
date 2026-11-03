@@ -33,7 +33,7 @@ Helicone provides a comprehensive observability layer for LLM applications with 
 
 First, ensure you have both `opik` and `openai` packages installed:
 
-```bash
+```bash wordWrap
 pip install opik openai
 ```
 
@@ -52,13 +52,13 @@ You'll need a Helicone API key. You can get one by signing up at [Helicone](http
 
 Set your API key as an environment variable:
 
-```bash
+```bash wordWrap
 export HELICONE_API_KEY="YOUR_HELICONE_API_KEY"
 ```
 
 Or set it programmatically:
 
-```python
+```python wordWrap
 import os
 import getpass
 
@@ -73,7 +73,7 @@ Since Helicone provides an OpenAI-compatible proxy, we can use the [Opik OpenAI 
 
 ### Simple LLM Call
 
-```python
+```python wordWrap
 import os
 from opik.integrations.openai import track_openai
 from openai import OpenAI
@@ -106,7 +106,7 @@ print(response.choices[0].message.content)
 
 If you have multiple steps in your LLM pipeline, you can use the `@track` decorator to log the traces for each step. If Helicone is called within one of these steps, the LLM call will be associated with that corresponding step:
 
-```python
+```python wordWrap
 import os
 from opik import track
 from opik.integrations.openai import track_openai

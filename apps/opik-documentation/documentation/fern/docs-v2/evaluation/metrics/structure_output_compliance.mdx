@@ -8,7 +8,7 @@ The `StructuredOutputCompliance` metric allows you to verify whether a given LLM
 
 You can use the `StructuredOutputCompliance` metric as follows:
 
-```python
+```python wordWrap
 from opik.evaluation.metrics import StructuredOutputCompliance
 from pydantic import BaseModel, Field
 
@@ -46,7 +46,7 @@ Opik uses an LLM as a Judge to evaluate the structural compliance. The default m
 
 The prompt used by the LLM looks like this:
 
-```markdown
+```markdown wordWrap
 You are an expert in structured data validation. Your task is to determine whether the given OUTPUT complies with the expected STRUCTURE. The structure may be described as a JSON schema, a Pydantic model, or simply implied to be valid JSON.
 
 Guidelines:

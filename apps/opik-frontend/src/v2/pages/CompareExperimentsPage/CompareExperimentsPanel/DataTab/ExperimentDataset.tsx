@@ -15,8 +15,6 @@ import ExperimentDatasetItems from "@/v2/pages/CompareExperimentsPage/CompareExp
 import useLocalStorageState from "use-local-storage-state";
 import difference from "lodash/difference";
 import union from "lodash/union";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
-import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import { useLocation } from "@tanstack/react-router";
 import NavigationTag from "@/shared/NavigationTag/NavigationTag";
 import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
@@ -115,22 +113,19 @@ const ExperimentDataset = ({ data, datasetItemId }: ExperimentDatasetProps) => {
     <div ref={containerRef} className="min-w-72 max-w-full flex-1 pr-6 pt-4">
       <div className="flex items-center justify-between gap-2 pb-4">
         <div className="flex min-w-0 shrink items-center gap-1">
-          <h4 className="comet-body-accented truncate">Test suite item</h4>
-          <ExplainerIcon
-            {...EXPLAINERS_MAP[EXPLAINER_ID.whats_the_test_suite_item]}
-          />
+          <h4 className="comet-body-accented truncate">Dataset item</h4>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {datasetItemId && (
             <NavigationTag
               id={datasetId}
-              name="View in test suite"
+              name="View in dataset"
               resource={RESOURCE_TYPE.datasetItem}
               search={{
                 row: datasetItemId,
                 from: currentHref,
               }}
-              tooltipContent="View this item in the test suite"
+              tooltipContent="View this item in the dataset"
               className="h-8"
             />
           )}

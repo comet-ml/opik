@@ -8,7 +8,7 @@ from opik_backend.executor import CodeExecutorBase
 from opik_backend.http_utils import build_error_response
 from opik_backend.payload_types import PayloadType
 from opik_backend.process_worker import required_score_params
-from opik_backend.score_validation import has_usable_score
+from opik_backend.score_validation import rejection_reason
 
 # Built-ins the scorer injects rather than resolving from a trace/span path.
 RESERVED_BUILT_INS = frozenset({"spans"})
@@ -104,20 +104,32 @@ def execute_evaluator_python():
     # Get the executor from app context and run the code
     response = get_executor().run_scoring(code, data, payload_type)
 
-    if "error" in response:
-        abort(response["code"], response["error"])
-
-    scores = response.get("scores", [])
-    if len(scores) == 0:
+    # The same helper decides the telemetry outcome inside the executor, so the counter and
+    # the HTTP layer cannot disagree about what counts as a served response.
+    reason = rejection_reason(response)
+    if reason == "error_payload":
+        # A metric can print its own error object without a `code`, or with a
+        # non-integer one; that is still a client-side failure rather than a server error.
+        status_code = response.get("code")
+        abort(
+            status_code
+            if isinstance(status_code, int)
+            and not isinstance(status_code, bool)
+            and 400 <= status_code < 600
+            else 400,
+            response["error"],
+        )
+    if reason == "no_scores":
         current_app.logger.info("Missing ScoreResult in code '%s'", code)
         abort(400, "The provided 'code' field didn't return any 'opik.evaluation.metrics.ScoreResult'")
-
-    # A mixed list is passed through on purpose: the usable scores still reach the backend, which drops
-    # the rest and names them on the rule's log stream. Only a wholly unusable response is rejected,
-    # which is the same class of user error as returning no ScoreResult at all, just above.
-    if not has_usable_score(scores):
+    if reason == "no_usable_score":
+        # A mixed list is passed through on purpose: the usable scores still reach the backend,
+        # which drops the rest and names them on the rule's log stream. Only a wholly unusable
+        # response is rejected, which is the same class of user error as returning no ScoreResult.
         current_app.logger.info("No usable ScoreResult in code '%s'", code)
         abort(400, "The provided 'code' field didn't return any usable "
                    "'opik.evaluation.metrics.ScoreResult'")
+    if reason is not None:
+        abort(400, "The provided 'code' field returned an unreadable result")
 
-    return jsonify({"scores": scores})
+    return jsonify({"scores": response["scores"]})

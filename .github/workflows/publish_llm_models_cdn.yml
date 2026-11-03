@@ -1,0 +1,51 @@
+name: Publish LLM Models to CDN
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - apps/opik-backend/src/main/resources/llm-models-default.yaml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    # A manual run from any other branch would publish YAML that was never merged.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-access-key-id: ${{ secrets.AWS_OPIK_CDN_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_OPIK_CDN_SECRET }}
+          aws-region: us-east-1
+          role-to-assume: ${{ vars.AWS_OPIK_CDN_ROLE }}
+          role-session-name: sync-provider-models
+
+      - name: Upload YAML to S3
+        run: |
+          aws s3 cp \
+            apps/opik-backend/src/main/resources/llm-models-default.yaml \
+            ${{ vars.AWS_OPIK_CDN_BUCKET }}/llm-models-default.yaml \
+            --cache-control "max-age=300"
+
+      - name: Invalidate CloudFront distribution
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ secrets.AWS_OPIK_CDN_DISTRIBUTION }} \
+            --paths "/opik/llm-models-default.yaml"

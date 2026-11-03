@@ -50,7 +50,7 @@ We provide multiple ways to develop the frontend. Choose the approach that best 
 
     <Tabs>
       <Tab title="Linux/Mac">
-        ```bash
+        ```bash wordWrap
         # From repository root - restart everything
         scripts/dev-runner.sh
 
@@ -59,7 +59,7 @@ We provide multiple ways to develop the frontend. Choose the approach that best 
         ```
       </Tab>
       <Tab title="Windows">
-        ```powershell
+        ```powershell wordWrap
         # From repository root - restart everything
         scripts\dev-runner.ps1
 
@@ -78,7 +78,7 @@ We provide multiple ways to develop the frontend. Choose the approach that best 
     - Easy debugging with browser dev tools
 
     **Prerequisites:**
-    - Node.js 18+ with npm. You can download it from [nodejs.org](https://nodejs.org/).
+    - Node.js 24+ with npm. You can download it from [nodejs.org](https://nodejs.org/).
     - Java Development Kit (JDK) 25 (for backend)
     - Apache Maven 3.8+ (for backend)
   </Tab>
@@ -90,7 +90,7 @@ We provide multiple ways to develop the frontend. Choose the approach that best 
 
     <Tabs>
       <Tab title="Linux/Mac">
-        ```bash
+        ```bash wordWrap
         # From repository root
         ./opik.sh --build
 
@@ -99,7 +99,7 @@ We provide multiple ways to develop the frontend. Choose the approach that best 
         ```
       </Tab>
       <Tab title="Windows">
-        ```powershell
+        ```powershell wordWrap
         # From repository root
         .\opik.ps1 --build
 
@@ -128,53 +128,53 @@ We provide multiple ways to develop the frontend. Choose the approach that best 
     <Tabs>
       <Tab title="Linux/Mac">
         1. **Start backend services:** this enables `CORS: true` in the backend service for local frontend development.
-           ```bash
+           ```bash wordWrap
            ./opik.sh --backend --port-mapping
            ```
           Check that the backend is running: http://localhost:8080/is-alive/ping
 
         2. **Configure environment variables:**
            Update `apps/opik-frontend/.env.development`:
-           ```ini
+           ```ini wordWrap
            VITE_BASE_URL=/
            VITE_BASE_API_URL=http://localhost:8080
            ```
           This tells the frontend development server where to find the backend API.
 
         3. **Install dependencies:**
-           ```bash
+           ```bash wordWrap
            cd apps/opik-frontend
            npm install
            ```
 
         4. **Start the frontend:**
-           ```bash
+           ```bash wordWrap
            npm run start
            ```
       </Tab>
       <Tab title="Windows">
         1. **Start backend services:** this enables `CORS: true` in the backend service for local frontend development.
-           ```powershell
+           ```powershell wordWrap
            .\opik.ps1 --backend --port-mapping
            ```
           Check that the backend is running: http://localhost:8080/is-alive/ping
 
         2. **Configure environment variables:**
            Update `apps\opik-frontend\.env.development`:
-           ```ini
+           ```ini wordWrap
            VITE_BASE_URL=/
            VITE_BASE_API_URL=http://localhost:8080
            ```
           This tells the frontend development server where to find the backend API.
 
         3. **Install dependencies:**
-           ```powershell
+           ```powershell wordWrap
            cd apps\opik-frontend
            npm install
            ```
 
         4. **Start the frontend:**
-           ```powershell
+           ```powershell wordWrap
            npm run start
            ```
       </Tab>
@@ -183,7 +183,7 @@ We provide multiple ways to develop the frontend. Choose the approach that best 
     Access the UI at `http://localhost:5174`.
 
     **Prerequisites:**
-    - Node.js 18+ with npm. You can download it from [nodejs.org](https://nodejs.org/).
+    - Node.js 24+ with npm. You can download it from [nodejs.org](https://nodejs.org/).
     - Docker and Docker Compose (for backend)
   </Tab>
 </Tabs>
@@ -200,13 +200,13 @@ Before submitting a Pull Request, please ensure your code passes the following c
   <Tab value="Using dev-runner" title="Using dev-runner (Recommended)">
     <Tabs>
       <Tab title="Linux/Mac">
-        ```bash
+        ```bash wordWrap
         # From repository root
         scripts/dev-runner.sh --lint-fe
         ```
       </Tab>
       <Tab title="Windows">
-        ```powershell
+        ```powershell wordWrap
         # From repository root
         scripts\dev-runner.ps1 --lint-fe
         ```
@@ -214,7 +214,7 @@ Before submitting a Pull Request, please ensure your code passes the following c
     </Tabs>
   </Tab>
   <Tab value="Manual npm" title="Manual npm">
-    ```bash
+    ```bash wordWrap
     cd apps/opik-frontend
     npm run lint
     ```
@@ -225,7 +225,7 @@ Before submitting a Pull Request, please ensure your code passes the following c
 
 Run these commands from the `apps/opik-frontend` directory:
 
-```bash
+```bash wordWrap
 cd apps/opik-frontend
 
 npm run typecheck # TypeScript type checking

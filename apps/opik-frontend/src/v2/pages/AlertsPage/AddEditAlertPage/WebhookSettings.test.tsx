@@ -1,0 +1,125 @@
+import React from "react";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { useForm } from "react-hook-form";
+import { Form } from "@/ui/form";
+import { TooltipProvider } from "@/ui/tooltip";
+import { ALERT_TYPE } from "@/types/alerts";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
+import WebhookSettings from "./WebhookSettings";
+import { AlertFormType, MAX_CUSTOM_FIELDS } from "./schema";
+
+const mockIsFeatureEnabled = vi.fn();
+
+vi.mock("@/contexts/feature-toggles-provider", () => ({
+  useIsFeatureEnabled: (feature: FeatureToggleKeys) =>
+    mockIsFeatureEnabled(feature),
+}));
+
+const Harness: React.FC<{ customFields?: AlertFormType["customFields"] }> = ({
+  customFields = [],
+}) => {
+  const form = useForm<AlertFormType>({
+    defaultValues: {
+      name: "",
+      enabled: true,
+      alertType: ALERT_TYPE.general,
+      routingKey: "",
+      url: "",
+      secretToken: "",
+      headers: [],
+      customFields,
+      triggers: [],
+    },
+  });
+
+  return (
+    <TooltipProvider>
+      <Form {...form}>
+        <WebhookSettings
+          form={form}
+          onTestConnection={() => undefined}
+          isTestPending={false}
+          isPending={false}
+        />
+      </Form>
+    </TooltipProvider>
+  );
+};
+
+const NOTE =
+  "Triggered alerts are also published to the deployment's AWS EventBridge bus.";
+
+describe("WebhookSettings", () => {
+  beforeEach(() => {
+    mockIsFeatureEnabled.mockReset();
+  });
+
+  it("shows the EventBridge note when the toggle is on", () => {
+    mockIsFeatureEnabled.mockImplementation(
+      (feature: FeatureToggleKeys) =>
+        feature === FeatureToggleKeys.EVENT_BRIDGE_ALERTS_ENABLED,
+    );
+
+    render(<Harness />);
+
+    expect(screen.getByText(NOTE)).toBeInTheDocument();
+    expect(screen.getByTestId("alert-webhook-url-input")).toBeInTheDocument();
+  });
+
+  it("hides the EventBridge note when the toggle is off", () => {
+    mockIsFeatureEnabled.mockReturnValue(false);
+
+    render(<Harness />);
+
+    expect(screen.queryByText(NOTE)).not.toBeInTheDocument();
+  });
+
+  it("shows custom fields in advanced settings when the toggle is on", () => {
+    mockIsFeatureEnabled.mockImplementation(
+      (feature: FeatureToggleKeys) =>
+        feature === FeatureToggleKeys.EVENT_BRIDGE_ALERTS_ENABLED,
+    );
+
+    render(<Harness />);
+    fireEvent.click(screen.getByText("Advanced webhook settings"));
+
+    expect(screen.getByText("Headers (optional)")).toBeInTheDocument();
+    expect(screen.getByText("Custom fields (optional)")).toBeInTheDocument();
+  });
+
+  it("hides custom fields in advanced settings when the toggle is off", () => {
+    mockIsFeatureEnabled.mockReturnValue(false);
+
+    render(<Harness />);
+    fireEvent.click(screen.getByText("Advanced webhook settings"));
+
+    expect(screen.getByText("Headers (optional)")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Custom fields (optional)"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("disables adding custom fields once the maximum is reached", () => {
+    mockIsFeatureEnabled.mockImplementation(
+      (feature: FeatureToggleKeys) =>
+        feature === FeatureToggleKeys.EVENT_BRIDGE_ALERTS_ENABLED,
+    );
+    const fields = (count: number) =>
+      Array.from({ length: count }, (_, i) => ({
+        key: `key-${i}`,
+        value: "value",
+      }));
+
+    const { unmount } = render(
+      <Harness customFields={fields(MAX_CUSTOM_FIELDS - 1)} />,
+    );
+    fireEvent.click(screen.getByText("Advanced webhook settings"));
+    const addField = screen.getByRole("button", { name: "Add field" });
+    expect(addField).toBeEnabled();
+
+    fireEvent.click(addField);
+    expect(screen.getByRole("button", { name: "Add field" })).toBeDisabled();
+    unmount();
+  });
+});

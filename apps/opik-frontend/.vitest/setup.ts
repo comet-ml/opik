@@ -25,6 +25,15 @@ global.Worker = class Worker {
     removeEventListener() {}
     dispatchEvent() { return true; }
   } as any;
+// Node 25+ defines its own localStorage/sessionStorage globals, which vitest < 5
+// keeps instead of happy-dom's, so install happy-dom storages explicitly.
+for (const key of ['localStorage', 'sessionStorage'] as const) {
+  Object.defineProperty(globalThis, key, {
+    value: new Storage(),
+    configurable: true,
+    writable: true,
+  })
+}
 // jsdom has no Web Animations API, which MorphDialog uses to morph modal <-> panel
 if (typeof Element.prototype.animate === 'undefined') {
   Element.prototype.animate = function () {

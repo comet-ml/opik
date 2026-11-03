@@ -115,6 +115,9 @@ jobs:
         - name: Run cold-tier migration script tests
           run: deployment/helm_chart/opik/tests/shell/cold_tier_migration_script_test.sh
 
+        - name: Run tiered-storage TTL script tests
+          run: deployment/helm_chart/opik/tests/shell/tiered_storage_ttl_script_test.sh
+
   # Prove the chart renders equivalently under Helm 3.x and Helm 4.x so we can ship
   # Helm 4 support without changing behavior for Helm 3 users (DND-537). Each version
   # resolves its own dependencies (`helm dependency build`) and renders from scratch.

@@ -88,7 +88,7 @@ Heuristic metrics are ideal when you need reproducible checks such as exact matc
 By default, Opik uses GPT-5-nano from OpenAI as the LLM to evaluate the output of other LLMs. However, you can easily switch to another LLM provider by specifying a different `model` parameter.
 
 <CodeBlocks>
-```python title="Python" language="python"
+```python title="Python" language="python" wordWrap
 from opik.evaluation.metrics import Hallucination
 
 metric = Hallucination(model="bedrock/us.anthropic.claude-sonnet-4-6")
@@ -100,7 +100,7 @@ output="The capital of France is Paris. It is famous for its iconic Eiffel Tower
 
 ````
 
-```typescript title="TypeScript" language="typescript"
+```typescript title="TypeScript" language="typescript" wordWrap
 import { Hallucination } from 'opik';
 import { openai } from '@ai-sdk/openai';
 

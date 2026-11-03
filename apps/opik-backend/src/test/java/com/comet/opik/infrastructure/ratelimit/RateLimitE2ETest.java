@@ -53,6 +53,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.redisson.api.RedissonReactiveClient;
+import org.redisson.client.codec.LongCodec;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -274,6 +276,38 @@ class RateLimitE2ETest {
         assertThat(page.total()).isEqualTo(LIMIT * 2);
         assertThat(page.size()).isEqualTo(LIMIT * 2);
 
+    }
+
+    @Test
+    @DisplayName("Rate limit: When the counter is left without a TTL and the permits set is empty, Then fail open and self-heal")
+    void rateLimit__whenCounterHasNoTtlAndPermitsAreEmpty__thenFailOpenAndSelfHeal(
+            RedissonReactiveClient redisClient) {
+
+        String apiKey = UUID.randomUUID().toString();
+        String user = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId, user);
+
+        String projectName = UUID.randomUUID().toString();
+
+        assertThat(triggerBatchCallsWithApiKey(1, projectName, apiKey, workspaceName))
+                .isEqualTo(Map.of(HttpStatus.SC_NO_CONTENT, 1L));
+
+        // No API produces this state: the old header path's SET dropped the counter's TTL, then the permits set
+        // expired first. The acquire script errors on it before its own pexpire, so only expireIfNotSet heals it.
+        String generalBucket = "{rate-limit:%s-%s}".formatted(RateLimited.GENERAL_EVENTS, apiKey);
+        redisClient.getBucket(generalBucket + ":value", LongCodec.INSTANCE).set(0L).block();
+        redisClient.getKeys().delete(generalBucket + ":permits").block();
+
+        assertThat(triggerBatchCallsWithApiKey(1, projectName, apiKey, workspaceName))
+                .isEqualTo(Map.of(HttpStatus.SC_NO_CONTENT, 1L));
+
+        SingleDelay.timer(LIMIT_DURATION_IN_SECONDS * 2, TimeUnit.SECONDS).blockingGet();
+
+        assertThat(triggerBatchCallsWithApiKey(LIMIT * 2, projectName, apiKey, workspaceName))
+                .isEqualTo(Map.of(HttpStatus.SC_NO_CONTENT, LIMIT, HttpStatus.SC_TOO_MANY_REQUESTS, LIMIT));
     }
 
     @Test

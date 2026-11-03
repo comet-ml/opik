@@ -16,7 +16,7 @@ describe("ProjectMetricsWidget breakdown", () => {
   });
 
   describe("getCompatibleBreakdownFields", () => {
-    it.each([METRIC_NAME_TYPE.THREAD_COST, METRIC_NAME_TYPE.SPAN_COST])(
+    it.each([METRIC_NAME_TYPE.THREAD_COST])(
       "offers only no grouping for %s",
       (metricName) => {
         expect(getCompatibleBreakdownFields(metricName)).toEqual([
@@ -24,6 +24,20 @@ describe("ProjectMetricsWidget breakdown", () => {
         ]);
       },
     );
+
+    it("offers all span breakdowns for span cost", () => {
+      expect(getCompatibleBreakdownFields(METRIC_NAME_TYPE.SPAN_COST)).toEqual([
+        BREAKDOWN_FIELD.NONE,
+        BREAKDOWN_FIELD.TAGS,
+        BREAKDOWN_FIELD.METADATA,
+        BREAKDOWN_FIELD.NAME,
+        BREAKDOWN_FIELD.ERROR_INFO,
+        BREAKDOWN_FIELD.ERROR_TYPE,
+        BREAKDOWN_FIELD.MODEL,
+        BREAKDOWN_FIELD.PROVIDER,
+        BREAKDOWN_FIELD.TYPE,
+      ]);
+    });
 
     it.each([
       [METRIC_NAME_TYPE.COST, BREAKDOWN_FIELD.METADATA],

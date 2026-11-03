@@ -140,7 +140,7 @@ class SpanJsonRowMapperTest {
     }
 
     @Test
-    @DisplayName("writes exactly the columns BULK_INSERT lists, no more and no fewer")
+    @DisplayName("writes exactly the span table's columns, no more and no fewer")
     void writesExactlyTheExpectedColumns() {
         // See TraceJsonRowMapperTest: the column set is the part of the row that breaks silently.
         var row = SpanJsonRowMapper.toJsonRow(span(), user, workspaceId, nowForBatch, cost, "1.1", false,
