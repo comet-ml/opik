@@ -1,4 +1,5 @@
 import pandas as pd
+import pytest
 import pandas.testing
 import json
 import tempfile
@@ -469,3 +470,15 @@ def test_from_jsonl_file__file_with_empty_lines():
         }
     finally:
         os.unlink(temp_file_path)
+
+
+def test_from_json__json_is_not_an_array__raises_a_named_value_error():
+    with pytest.raises(ValueError, match="JSON array"):
+        converters.from_json('{"input": "hello"}', keys_mapping={}, ignore_keys=[])
+
+
+def test_from_json__array_element_is_not_an_object__raises_a_named_value_error():
+    with pytest.raises(ValueError, match="index 1"):
+        converters.from_json(
+            '[{"input": "hello"}, 42]', keys_mapping={}, ignore_keys=[]
+        )

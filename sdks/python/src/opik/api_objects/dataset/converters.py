@@ -134,7 +134,21 @@ def to_json(items: List[dataset_item.DatasetItem], keys_mapping: Dict[str, str])
 def from_json(
     value: str, keys_mapping: Dict[str, str], ignore_keys: List[str]
 ) -> List[dataset_item.DatasetItem]:
-    item_dicts: List[Dict[str, Any]] = json.loads(value)
+    item_dicts = json.loads(value)
+
+    if not isinstance(item_dicts, list):
+        raise ValueError(
+            "Expected a JSON array of objects, got "
+            f"{type(item_dicts).__name__}: {value[:100]!r}"
+        )
+
+    for index, item_dict in enumerate(item_dicts):
+        if not isinstance(item_dict, dict):
+            raise ValueError(
+                f"Expected every element of the JSON array to be an object, "
+                f"got {type(item_dict).__name__} at index {index}"
+            )
+
     return [
         _item_from_dict(item_dict, keys_mapping, ignore_keys)
         for item_dict in item_dicts
