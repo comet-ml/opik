@@ -31,6 +31,7 @@ import org.redisson.config.Config;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
@@ -46,6 +47,9 @@ import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Auth Token Provider Test")
@@ -122,7 +126,7 @@ class AuthTokenProviderTest {
     }
 
     private List<String> cachedKeys(UUID providerId) {
-        var keys = new java.util.ArrayList<String>();
+        var keys = new ArrayList<String>();
         redisson.getKeys()
                 .getKeys(KeysScanOptions.defaults().pattern("llm_auth_token:%s:*".formatted(providerId)))
                 .forEach(keys::add);
@@ -411,10 +415,10 @@ class AuthTokenProviderTest {
                 CLIENT);
         // the "waiter": its lock wait elapses (empty result), but only after the holder has
         // written — exactly the sequence the timed-out-waiter re-read is for
-        LockService timedOutLock = org.mockito.Mockito.mock(LockService.class);
-        org.mockito.Mockito.when(timedOutLock.executeWithLockCustomExpire(
-                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
-                org.mockito.ArgumentMatchers.any()))
+        LockService timedOutLock = mock(LockService.class);
+        when(timedOutLock.executeWithLockCustomExpire(
+                any(), any(),
+                any()))
                 .thenAnswer(invocation -> Mono.fromRunnable(() -> holder.bearer("ws", providerId, wrap(recipe)))
                         .then(Mono.empty()));
         var waiter = new AuthTokenProvider(new SharedTokenCache(stringRedisClient, timedOutLock), relaxedConfig(),
@@ -518,7 +522,8 @@ class AuthTokenProviderTest {
     @Test
     @DisplayName("a Redis outage degrades to a direct fetch instead of failing the call")
     void redisOutageDegradesToDirectFetch() {
-        var flakyRedis = RedisContainerUtils.newRedisContainer();
+        // its own container: a reused one would be the class's, and stopping it would fail the tests after this
+        var flakyRedis = RedisContainerUtils.newRedisContainer().withReuse(false);
         flakyRedis.start();
         var flakyConfig = new Config();
         flakyConfig.useSingleServer()

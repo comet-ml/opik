@@ -1607,7 +1607,8 @@ llmProviderTokenAuth:
   # Description: Timeout for the token fetch call to the configured auth service. Capped at 1m
   fetchTimeout: ${LLM_PROVIDER_TOKEN_AUTH_FETCH_TIMEOUT:-10s}
   # Default: 15s
-  # Description: Lease time for the cross-pod single-flight lock around a token fetch
+  # Description: Minimum lease time for the cross-pod single-flight lock around a token fetch;
+  # stretched to fetchTimeout / 0.8 when that is longer, so a fetch always ends inside the lease
   lockTimeout: ${LLM_PROVIDER_TOKEN_AUTH_LOCK_TIMEOUT:-15s}
   # Default: 1000000
   # Description: Maximum accepted size (in characters) of a token endpoint reply. Capped at 10000000

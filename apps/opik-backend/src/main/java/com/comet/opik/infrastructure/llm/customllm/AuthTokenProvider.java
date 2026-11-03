@@ -137,6 +137,9 @@ public class AuthTokenProvider {
         } catch (AuthTokenException exception) {
             recordRequestMetric(workspaceId, providerId, "failed");
             throw exception;
+        } catch (SharedTokenCache.FetchTimeoutException exception) {
+            recordRequestMetric(workspaceId, providerId, "failed");
+            throw slowReply(authConfig.value());
         }
         recordRequestMetric(workspaceId, providerId, switch (result.outcome()) {
             case CACHE_HIT -> "cache_hit";
@@ -225,10 +228,10 @@ public class AuthTokenProvider {
                 throw new IOException("the deadline closed the body");
             }
         } catch (IOException | ProcessingException exception) {
-            if (deadline != null && deadline.expired()) {
+            // an interrupt is the token cache cancelling a fetch past its deadline
+            if ((deadline != null && deadline.expired()) || Thread.currentThread().isInterrupted()) {
                 recordFetchMetric(startNanos, "slow_reply", origin);
-                throw new AuthTokenException("token reply from '%s' took longer than the fetch timeout"
-                        .formatted(authConfig.tokenUrl()), null, true);
+                throw slowReply(authConfig);
             }
             // the guard checks each address connected to as well, refusing a host that no longer resolves as above
             var refused = ExceptionUtils.throwableOfType(exception, RefusedHostException.class);
@@ -276,6 +279,11 @@ public class AuthTokenProvider {
         long ttlSeconds = resolveTtlSeconds(root, authConfig, startNanos, origin);
         recordFetchMetric(startNanos, "success", origin);
         return new FetchedToken(tokenNode.asText(), ttlSeconds);
+    }
+
+    private static AuthTokenException slowReply(ProviderAuthConfig authConfig) {
+        return new AuthTokenException("token reply from '%s' took longer than the fetch timeout"
+                .formatted(authConfig.tokenUrl()), null, true);
     }
 
     private Invocation buildRequest(ProviderAuthConfig authConfig) {

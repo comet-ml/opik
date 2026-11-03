@@ -5,12 +5,18 @@ import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.infrastructure.redis.StringRedisClient;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import lombok.Getter;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Supplier;
 
 /**
@@ -21,11 +27,23 @@ import java.util.function.Supplier;
  * freshness is simply key existence and Redis's clock is the single source of truth. Cold-cache bursts collapse into a
  * single fetch via the distributed lock; on any Redis or lock failure the cache degrades to a direct fetch rather than
  * failing the call. A failed fetch is never retried here: it propagates as thrown.
+ *
+ * <p>The lock's lease is not renewed, so a holder still fetching after it would let a waiter take the lock and fetch a
+ * second value. Every fetch therefore has a hard deadline, its {@code fetchTimeout}, and the lease is stretched to cover
+ * it with {@link #FETCH_SHARE_OF_LEASE} to spare for the write. A fetch past its deadline is cancelled by interrupting
+ * its thread: the fetch runs on a virtual thread, where an interrupt closes the socket it is blocked on, so the
+ * abandoned request ends there rather than at the HTTP client's own timeouts and retries.
  */
 @Slf4j
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class SharedTokenCache {
+
+    /** The share of the lock's lease a fetch may take; the rest is left for writing its value to Redis. */
+    public static final double FETCH_SHARE_OF_LEASE = 0.8;
+
+    // One thread per running fetch: each blocks a caller waiting on it, so they are bounded by the callers themselves
+    private static final ExecutorService FETCHES = Executors.newVirtualThreadPerTaskExecutor();
 
     /** A fetched value and how long other calls may be served it; zero or less is not cached at all. */
     public record Fetched(@NonNull String value, @NonNull Duration cacheFor) {
@@ -43,6 +61,17 @@ public class SharedTokenCache {
     public record Result(@NonNull String value, @NonNull Outcome outcome) {
     }
 
+    /** A fetch ran past its deadline and was cancelled. */
+    @Getter
+    public static final class FetchTimeoutException extends RuntimeException {
+        private final Duration timeout;
+
+        private FetchTimeoutException(Duration timeout) {
+            super("Fetch took longer than '%s'".formatted(timeout));
+            this.timeout = timeout;
+        }
+    }
+
     private final @NonNull StringRedisClient redisClient;
     private final @NonNull LockService lockService;
 
@@ -50,8 +79,8 @@ public class SharedTokenCache {
      * Returns the cached value for {@code cacheKey}, or fetches, caches and returns a new one. Blocking: meant to be
      * called from a provider client's request path.
      *
-     * @param lockTimeout the lease of the cross-pod fetch lock, and how long a waiter waits for it
-     * @param fetchTimeout how long a holder's fetch may take, on top of the lock wait
+     * @param lockTimeout the minimum lease of the cross-pod fetch lock; it is stretched to cover {@code fetchTimeout}
+     * @param fetchTimeout the deadline of a fetch, past which it is cancelled with {@link FetchTimeoutException}
      */
     public Result get(@NonNull String cacheKey, @NonNull Duration lockTimeout, @NonNull Duration fetchTimeout,
             @NonNull Supplier<Fetched> fetch) {
@@ -60,13 +89,16 @@ public class SharedTokenCache {
             return new Result(cached, Outcome.CACHE_HIT);
         }
 
+        var lease = leaseFor(lockTimeout, fetchTimeout);
         try {
+            // A waiter first waits out the holder's lease, then holds the lock for at most one of its own
             var value = lockService
                     .executeWithLockCustomExpire(
                             new LockService.Lock(cacheKey + ":fetch-lock"),
-                            Mono.fromCallable(() -> fetchUnderLock(cacheKey, fetch)),
-                            lockTimeout)
-                    .block(lockTimeout.plus(fetchTimeout));
+                            Mono.fromCallable(() -> fetchUnderLock(cacheKey, fetchTimeout, fetch)),
+                            lease)
+                    .timeout(lease.multipliedBy(2), Mono.empty())
+                    .block();
             if (value != null) {
                 return new Result(value, Outcome.FETCHED);
             }
@@ -84,7 +116,7 @@ public class SharedTokenCache {
                     withoutMessageOrCauses(exception));
         }
 
-        return new Result(fetch.get().value(), Outcome.DEGRADED_DIRECT);
+        return new Result(fetchWithin(fetchTimeout, fetch).value(), Outcome.DEGRADED_DIRECT);
     }
 
     /** Drops the cached value, best-effort: a Redis failure only delays the cleanup until the bucket's own expiry. */
@@ -96,7 +128,12 @@ public class SharedTokenCache {
         }
     }
 
-    private String fetchUnderLock(String cacheKey, Supplier<Fetched> fetch) {
+    static Duration leaseFor(Duration lockTimeout, Duration fetchTimeout) {
+        var covering = Duration.ofMillis((long) Math.ceil(fetchTimeout.toMillis() / FETCH_SHARE_OF_LEASE));
+        return covering.compareTo(lockTimeout) > 0 ? covering : lockTimeout;
+    }
+
+    private String fetchUnderLock(String cacheKey, Duration fetchTimeout, Supplier<Fetched> fetch) {
         // another pod may have refreshed while this one waited on the lock
         var cached = read(cacheKey);
         if (cached != null) {
@@ -104,12 +141,34 @@ public class SharedTokenCache {
         }
         Fetched fetched;
         try {
-            fetched = fetch.get();
+            fetched = fetchWithin(fetchTimeout, fetch);
         } catch (RuntimeException exception) {
             throw new FetchFailedException(exception);
         }
         write(cacheKey, fetched);
         return fetched.value();
+    }
+
+    private static Fetched fetchWithin(Duration fetchTimeout, Supplier<Fetched> fetch) {
+        var running = FETCHES.submit(fetch::get);
+        try {
+            return running.get(fetchTimeout.toMillis(), TimeUnit.MILLISECONDS);
+        } catch (TimeoutException exception) {
+            running.cancel(true);
+            throw new FetchTimeoutException(fetchTimeout);
+        } catch (InterruptedException exception) {
+            running.cancel(true);
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while waiting for a fetch", exception);
+        } catch (ExecutionException exception) {
+            if (exception.getCause() instanceof RuntimeException failure) {
+                throw failure;
+            }
+            if (exception.getCause() instanceof Error error) {
+                throw error;
+            }
+            throw new IllegalStateException(exception.getCause());
+        }
     }
 
     private String read(String cacheKey) {

@@ -908,9 +908,8 @@ class VertexAIClientGeneratorTest {
             assertThat(ExceptionUtils.getThrowableList(thrown))
                     .anyMatch(cause -> String.valueOf(cause.getMessage())
                             .equals("Fetching the Vertex AI OAuth token took longer than 'PT0.8S'"));
+            // each attempt's request is cancelled at its deadline (see SharedTokenCacheTest), not left to the stall
             assertThat(elapsedMillis).isLessThan(stallMillis);
-            // every attempt timed out on the same stalled request instead of starting its own
-            wireMock.server().verify(1, postRequestedFor(urlPathMatching(TOKEN_PATH)));
             wireMock.server().verify(0, postRequestedFor(urlPathMatching(GENERATE_CONTENT_PATH)));
         }
 
