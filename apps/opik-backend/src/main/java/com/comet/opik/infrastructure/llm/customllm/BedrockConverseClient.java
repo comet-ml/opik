@@ -22,7 +22,13 @@ class BedrockConverseClient {
     private final String apiKey;
 
     JsonNode converse(@NonNull String modelId, @NonNull ObjectNode body) {
-        return JsonUtils.getJsonNodeFromString(httpClient.execute(request(modelId, "converse", body)).body());
+        var response = JsonUtils.getJsonNodeFromStringWithFallback(
+                httpClient.execute(request(modelId, "converse", body)).body());
+        // Bedrock answers a path it doesn't serve with a 200 and {"Output": {"__type": "...UnknownOperationException"}}
+        if (!response.path("output").path("message").isObject()) {
+            throw new ProviderRequestRefusedException(ProviderRequestRefusedException.Reason.BEDROCK_CONVERSE_URL);
+        }
+        return response;
     }
 
     void converseStream(@NonNull String modelId, @NonNull ObjectNode body, @NonNull ServerSentEventListener listener) {

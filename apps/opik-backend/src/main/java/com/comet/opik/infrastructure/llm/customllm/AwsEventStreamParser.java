@@ -42,11 +42,20 @@ class AwsEventStreamParser implements ServerSentEventParser {
     @Override
     public void parse(@NonNull InputStream body, @NonNull ServerSentEventListener listener) {
         try {
+            var firstFrame = true;
             while (true) {
                 var prelude = body.readNBytes(PRELUDE_LENGTH);
                 if (prelude.length == 0) {
                     return;
                 }
+                // Bedrock answers a path it doesn't serve with a 200 and a JSON body. A frame starts with its length,
+                // whose first byte is 0 or 1 under the 16 MB cap, never '{'.
+                if (firstFrame && prelude[0] == '{') {
+                    listener.onError(new ProviderRequestRefusedException(
+                            ProviderRequestRefusedException.Reason.BEDROCK_CONVERSE_URL));
+                    return;
+                }
+                firstFrame = false;
                 if (prelude.length < PRELUDE_LENGTH) {
                     throw new IOException("Truncated event stream prelude");
                 }

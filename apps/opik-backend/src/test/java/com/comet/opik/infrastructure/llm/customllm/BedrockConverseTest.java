@@ -70,6 +70,9 @@ class BedrockConverseTest {
              "stopReason": "end_turn", "usage": {"inputTokens": 12, "outputTokens": 3, "totalTokens": 15},
              "metrics": {"latencyMs": 300}}
             """;
+    private static final String UNKNOWN_OPERATION_RESPONSE = """
+            {"Output": {"__type": "com.amazon.coral.service#UnknownOperationException"}, "Version": "1.0"}
+            """;
 
     private final AuthTokenProvider authTokenProvider = mock(AuthTokenProvider.class);
     private final OpenAICompatibleServiceProvider serviceProvider = new OpenAICompatibleServiceProvider(
@@ -287,6 +290,29 @@ class BedrockConverseTest {
             assertThat(message.getMessage())
                     .isEqualTo("Malformed input request, please reformat your input and try again.");
         });
+    }
+
+    @Test
+    void reportsAUrlThatDoesNotServeConverseInsteadOfAnEmptyAnswer() {
+        bedrock.stubFor(post(urlEqualTo(CONVERSE_PATH)).willReturn(okJson(UNKNOWN_OPERATION_RESPONSE)));
+        var service = serviceProvider.getService(config());
+
+        var thrown = catchThrowable(
+                () -> service.generate(request(List.of(OpikUserMessage.from("Hi")), 10), "workspace"));
+
+        assertThat(thrown).isInstanceOf(ProviderRequestRefusedException.class)
+                .hasMessageContaining("doesn't serve the Bedrock Converse API");
+    }
+
+    @Test
+    void reportsAUrlThatDoesNotServeConverseStreamInsteadOfACorruptStream() {
+        bedrock.stubFor(post(urlEqualTo(STREAM_PATH)).willReturn(okJson(UNKNOWN_OPERATION_RESPONSE)));
+        var stream = stream();
+
+        assertThat(stream.done()).failsWithin(10, TimeUnit.SECONDS).withThrowableThat()
+                .havingRootCause().isInstanceOf(ProviderRequestRefusedException.class)
+                .withMessageContaining("doesn't serve the Bedrock Converse API");
+        assertThat(stream.chunks()).isEmpty();
     }
 
     @ParameterizedTest

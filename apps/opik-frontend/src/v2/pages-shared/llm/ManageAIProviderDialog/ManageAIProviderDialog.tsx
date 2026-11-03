@@ -118,8 +118,19 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
       .filter(Boolean) as string[];
   }, [effectiveConfiguredProvidersList]);
 
+  const calculatedProviderKey = useMemo(() => {
+    return effectiveConfiguredProvidersList?.find(
+      (p) => selectedProviderId === p.id,
+    );
+  }, [effectiveConfiguredProvidersList, selectedProviderId]);
+
   const form: UseFormReturn<AIProviderFormType> = useForm<AIProviderFormType>({
-    resolver: zodResolver(createAIProviderFormSchema(existingProviderNames)),
+    resolver: zodResolver(
+      createAIProviderFormSchema(
+        existingProviderNames,
+        providerKey ?? calculatedProviderKey,
+      ),
+    ),
     defaultValues: {
       provider: providerKey?.provider ?? defaultProvider,
       composedProviderType:
@@ -156,12 +167,6 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
   });
 
   const provider = form.watch("provider") as PROVIDER_TYPE | undefined;
-
-  const calculatedProviderKey = useMemo(() => {
-    return effectiveConfiguredProvidersList?.find(
-      (p) => selectedProviderId === p.id,
-    );
-  }, [effectiveConfiguredProvidersList, selectedProviderId]);
 
   const isConfiguredProvider = Boolean(calculatedProviderKey);
   const isEdit = Boolean(providerKey || calculatedProviderKey);
