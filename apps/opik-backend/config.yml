@@ -1766,8 +1766,13 @@ llmProviderClient:
     credentialsCacheExpireAfterAccess: ${LLM_PROVIDER_VERTEXAI_CREDENTIALS_CACHE_EXPIRE_AFTER_ACCESS:-15m}
     # Default: 0.25
     # Description: Refresh the OAuth token shared by every pod once its remaining lifetime drops below this fraction
-    # of the total lifetime. It is always refreshed at least 5 minutes before it expires
+    # of the total lifetime, and at the latest tokenCacheMinRefreshAhead before it expires
     tokenCacheRefreshFraction: ${LLM_PROVIDER_VERTEXAI_TOKEN_CACHE_REFRESH_FRACTION:-0.25}
+    # Default: 5m
+    # Description: How long before its expiry the shared OAuth token leaves Redis at the latest. It has to leave before
+    # the auth library refreshes it (3m45s before expiry), or a refreshing pod is handed back the same expiring token.
+    # Between 3m45s and 30m
+    tokenCacheMinRefreshAhead: ${LLM_PROVIDER_VERTEXAI_TOKEN_CACHE_MIN_REFRESH_AHEAD:-5m}
     # Default: 15s
     # Description: Lease time for the cross-pod single-flight lock around an OAuth token fetch. Between 1s and 1m
     tokenCacheLockTimeout: ${LLM_PROVIDER_VERTEXAI_TOKEN_CACHE_LOCK_TIMEOUT:-15s}

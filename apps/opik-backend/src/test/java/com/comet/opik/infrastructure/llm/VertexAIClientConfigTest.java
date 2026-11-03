@@ -27,6 +27,7 @@ class VertexAIClientConfigTest {
                 .tokenUris(Set.of(URI.create("https://oauth2.googleapis.com/token")))
                 .credentialsCacheExpireAfterAccess(expireAfterAccess)
                 .tokenCacheRefreshFraction(0.25)
+                .tokenCacheMinRefreshAhead(Duration.minutes(5))
                 .tokenCacheLockTimeout(lockTimeout)
                 .build();
     }
@@ -60,5 +61,38 @@ class VertexAIClientConfigTest {
                 Arguments.of(Duration.hours(25), Duration.seconds(15), "credentialsCacheExpireAfterAccess"),
                 Arguments.of(Duration.minutes(15), Duration.milliseconds(999), "tokenCacheLockTimeout"),
                 Arguments.of(Duration.minutes(15), Duration.seconds(61), "tokenCacheLockTimeout"));
+    }
+
+    @ParameterizedTest(name = "minRefreshAhead={0}")
+    @MethodSource
+    @DisplayName("the token's minimum refresh-ahead is accepted from the auth library's margin up to 30 minutes")
+    void minRefreshAheadWithinItsBoundsPasses(Duration minRefreshAhead) {
+        var config = config(Duration.minutes(15), Duration.seconds(15)).toBuilder()
+                .tokenCacheMinRefreshAhead(minRefreshAhead)
+                .build();
+
+        assertThat(validator.validate(config)).isEmpty();
+    }
+
+    static Stream<Duration> minRefreshAheadWithinItsBoundsPasses() {
+        return Stream.of(Duration.seconds(225), Duration.minutes(5), Duration.minutes(30));
+    }
+
+    /** Below the auth library's 3m45s refresh margin, a refreshing pod would be handed back the expiring token. */
+    @ParameterizedTest(name = "minRefreshAhead={0}")
+    @MethodSource
+    @DisplayName("a minimum refresh-ahead outside its bounds fails startup")
+    void minRefreshAheadPastItsBoundsFails(Duration minRefreshAhead) {
+        var config = config(Duration.minutes(15), Duration.seconds(15)).toBuilder()
+                .tokenCacheMinRefreshAhead(minRefreshAhead)
+                .build();
+
+        assertThat(validator.validate(config))
+                .extracting(violation -> violation.getPropertyPath().toString())
+                .containsExactly("tokenCacheMinRefreshAhead");
+    }
+
+    static Stream<Duration> minRefreshAheadPastItsBoundsFails() {
+        return Stream.of(Duration.seconds(224), Duration.seconds(1801));
     }
 }

@@ -21,15 +21,13 @@ import java.util.Objects;
  *
  * <p>Between refreshes the token is held in memory like any {@link GoogleCredentials}, so a call doesn't reach Redis.
  * The token's own expiry travels with it, so every pod refreshes against the real expiry. The bucket is evicted at
- * least {@link #MIN_REFRESH_AHEAD} before that expiry, ahead of the auth library's own refresh margin: otherwise a pod
+ * least {@code tokenCacheMinRefreshAhead} before that expiry, ahead of the auth library's own refresh margin: otherwise a pod
  * refreshing near the end would be handed back the same expiring token from Redis.
  *
  * <p>The fetch is bounded by {@link SharedTokenCache#FETCH_SHARE_OF_LEASE} of the lock's lease, which is not renewed,
  * and cancelled past it.
  */
 final class SharedTokenServiceAccountCredentials extends GoogleCredentials {
-
-    static final Duration MIN_REFRESH_AHEAD = Duration.ofMinutes(5);
 
     private record CachedToken(@NonNull String token, long expiresAtEpochMillis) {
     }
@@ -38,6 +36,7 @@ final class SharedTokenServiceAccountCredentials extends GoogleCredentials {
     private final transient SharedTokenCache tokenCache;
     private final String cacheKey;
     private final double refreshFraction;
+    private final Duration minRefreshAhead;
     private final Duration lockTimeout;
 
     SharedTokenServiceAccountCredentials(@NonNull ServiceAccountCredentials delegate,
@@ -47,6 +46,7 @@ final class SharedTokenServiceAccountCredentials extends GoogleCredentials {
         this.tokenCache = tokenCache;
         this.cacheKey = cacheKey;
         this.refreshFraction = config.tokenCacheRefreshFraction();
+        this.minRefreshAhead = config.tokenCacheMinRefreshAhead().toJavaDuration();
         this.lockTimeout = config.tokenCacheLockTimeout().toJavaDuration();
     }
 
@@ -83,7 +83,7 @@ final class SharedTokenServiceAccountCredentials extends GoogleCredentials {
 
     private Duration cacheFor(Duration lifetime) {
         var byFraction = Duration.ofMillis((long) (lifetime.toMillis() * (1 - refreshFraction)));
-        var latest = lifetime.minus(MIN_REFRESH_AHEAD);
+        var latest = lifetime.minus(minRefreshAhead);
         return byFraction.compareTo(latest) < 0 ? byFraction : latest;
     }
 
