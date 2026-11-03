@@ -785,7 +785,9 @@ export class OptimizationStudioPage {
    * gear renders in the same pass as the resolved model.
    */
   async hasModelParameters(): Promise<boolean> {
-    return (await this.modelParametersTrigger().count()) > 0;
+    return test.step('check whether the prompt model has a parameters gear', async () => {
+      return (await this.modelParametersTrigger().count()) > 0;
+    });
   }
 
   /**

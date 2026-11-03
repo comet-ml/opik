@@ -916,12 +916,14 @@ export class OnlineEvaluationPage {
    * options mid-click (seen on staging 2.2.138).
    */
   async openDecisionModelSelect(): Promise<Locator> {
-    const listbox = this.page.getByRole('listbox');
-    await expect(async () => {
-      if (!(await listbox.isVisible())) await this.decisionModelSelect.click({ timeout: 2_000 });
-      await expect(listbox).toBeVisible({ timeout: 2_000 });
-    }).toPass({ timeout: 15_000 });
-    return listbox;
+    return test.step('open the decision-model select', async () => {
+      const listbox = this.page.getByRole('listbox');
+      await expect(async () => {
+        if (!(await listbox.isVisible())) await this.decisionModelSelect.click({ timeout: 2_000 });
+        await expect(listbox).toBeVisible({ timeout: 2_000 });
+      }).toPass({ timeout: 15_000 });
+      return listbox;
+    });
   }
 
   async chooseDecisionModel(model: string): Promise<void> {
