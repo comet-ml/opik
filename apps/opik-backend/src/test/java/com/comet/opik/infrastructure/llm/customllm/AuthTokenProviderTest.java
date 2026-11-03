@@ -50,6 +50,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -447,17 +448,18 @@ class AuthTokenProviderTest {
         var lockService = LockServiceTestUtils.newLockService(redisson);
         var recipe = wrap(oauthRecipe().build());
         var providerId = UUID.randomUUID();
-        var pods = List.of(
-                new AuthTokenProvider(new SharedTokenCache(stringRedisClient, lockService), config, CLIENT),
-                new AuthTokenProvider(new SharedTokenCache(stringRedisClient, lockService), config, CLIENT));
+        var firstPod = new AuthTokenProvider(new SharedTokenCache(stringRedisClient, lockService), config, CLIENT);
+        var secondPod = new AuthTokenProvider(new SharedTokenCache(stringRedisClient, lockService), config, CLIENT);
 
         try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
-            var bearers = pods.stream()
-                    .map(pod -> executor.submit(() -> pod.bearer("ws", providerId, recipe)))
-                    .toList();
-            for (var bearer : bearers) {
-                assertThat(bearer.get(30, TimeUnit.SECONDS)).isEqualTo("tok-slow");
-            }
+            var firstBearer = executor.submit(() -> firstPod.bearer("ws", providerId, recipe));
+            // the second pod starts only once the first is fetching, so it misses Redis and has to wait on the lock
+            await().atMost(5, TimeUnit.SECONDS)
+                    .until(() -> wireMock.findAll(postRequestedFor(urlEqualTo(TOKEN_PATH))).size() == 1);
+            var secondBearer = executor.submit(() -> secondPod.bearer("ws", providerId, recipe));
+
+            assertThat(firstBearer.get(30, TimeUnit.SECONDS)).isEqualTo("tok-slow");
+            assertThat(secondBearer.get(30, TimeUnit.SECONDS)).isEqualTo("tok-slow");
         }
 
         wireMock.verify(exactly(1), postRequestedFor(urlEqualTo(TOKEN_PATH)));
