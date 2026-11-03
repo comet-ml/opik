@@ -898,6 +898,7 @@ export enum PROVIDER_MODEL_TYPE {
   Z_AI_GLM_5_3_FLASH = "z-ai/glm-5.3-flash",
   Z_AI_GLM_5_3_FLASH_BATCH = "z-ai/glm-5.3-flash:batch",
   Z_AI_GLM_5_3_FLASHX = "z-ai/glm-5.3-flashx",
+  Z_AI_GLM_5_3_FLASHX_LEGAL = "z-ai/glm-5.3-flashx-legal",
   Z_AI_GLM_5_3_PRIME = "z-ai/glm-5.3-prime",
   Z_AI_GLM_5_3_BATCH = "z-ai/glm-5.3:batch",
   Z_AI_GLM_5V_TURBO = "z-ai/glm-5v-turbo",
@@ -1016,6 +1017,14 @@ export const OPENAI_PIPELINE_MODE_VALUES = [
 
 export type OpenAiPipelineMode = (typeof OPENAI_PIPELINE_MODE_VALUES)[number];
 
+export const BEDROCK_API_VALUES = [
+  "chat_completions",
+  "anthropic_messages",
+  "converse",
+] as const;
+
+export type BedrockApi = (typeof BEDROCK_API_VALUES)[number];
+
 export interface ProviderKeyConfiguration {
   location?: string;
   models?: string;
@@ -1030,6 +1039,7 @@ export interface ProviderKeyConfiguration {
   /** OpenAI (OPIK-6833): which OpenAI pipeline to route through. Backend parses case-insensitively
    * and falls back to chat_completions_api on unknown values. */
   openai_pipeline_mode?: OpenAiPipelineMode;
+  bedrock_api?: BedrockApi;
 }
 
 /** Read-back sentinel for secret credential values: the backend never returns a stored secret,
@@ -1065,6 +1075,8 @@ export interface BaseProviderKey {
   created_at: string;
   provider: PROVIDER_TYPE;
   ui_composed_provider: COMPOSED_PROVIDER_TYPE;
+  // masked by the backend, or the string "null" when no key is stored
+  api_key?: string;
   configuration: ProviderKeyConfiguration;
   headers?: Record<string, string>;
   auth_config?: ProviderAuthConfig;
