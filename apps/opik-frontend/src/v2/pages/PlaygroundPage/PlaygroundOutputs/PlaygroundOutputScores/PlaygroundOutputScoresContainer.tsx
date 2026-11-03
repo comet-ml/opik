@@ -37,9 +37,7 @@ const scoringRulesOf = (rules: EvaluatorsRule[], pickedRuleIds: string[]) => {
 };
 
 const waitEndOf = (trace: Trace | undefined, openedAt: number) =>
-  (trace?.end_time
-    ? Math.min(Date.parse(trace.end_time), openedAt)
-    : openedAt) + MAX_REFETCH_TIME;
+  (trace?.end_time ? Date.parse(trace.end_time) : openedAt) + MAX_REFETCH_TIME;
 
 interface PlaygroundOutputScoresContainerProps {
   traceId: string | null;
