@@ -662,3 +662,73 @@ def test_insert__typed_dataset_items__accepted_like_dicts():
         "dict",
         "typed",
     ]
+
+
+def test_insert__deduplication_failure_invalidates_hash_cache(monkeypatch):
+    """When a deduplicated insert dies mid-upload, the hashes it pre-cached for
+    items it never confirmed persisted must be dropped, so the dataset no longer
+    believes those items are already on the backend.
+
+    `_deduplicating` records each item's hash as it is yielded, before the writer
+    has sent it. Without invalidating the cache on failure, a later insert of the
+    same items would skip them as 'already present'.
+    """
+    _small_batches(monkeypatch, size=2)
+    mock_rest_client = _mock_rest_client()
+
+    def failing_upload() -> None:
+        raise ValueError("backend rejected batch")
+
+    capture = UploadCapture(on_request=failing_upload)
+    dataset = make_dataset(Dataset, mock_rest_client, capture)
+
+    with pytest.raises(ValueError, match="backend rejected batch"):
+        dataset.insert(_make_items(3), num_threads=1)
+
+    assert dataset.__internal_api__hashes_synced__ is False, (
+        "A failed deduplicated insert must invalidate the local hash cache"
+    )
+
+
+def test_insert__deduplication_failure_retry_resends_items(monkeypatch):
+    """Regression: a retry of a failed deduplicated insert must re-send the lost
+    items instead of silently skipping them as already-present duplicates.
+
+    Without the fix, the first (failed) insert caches the item hashes; the retry
+    then finds them in the local cache and drops every item, so nothing reaches
+    the backend on the second attempt either.
+    """
+    _small_batches(monkeypatch, size=2)
+    mock_rest_client = _mock_rest_client()
+
+    attempts = {"n": 0}
+
+    def fail_first_then_succeed() -> None:
+        attempts["n"] += 1
+        if attempts["n"] == 1:
+            raise ValueError("backend rejected batch")
+
+    capture = UploadCapture(on_request=fail_first_then_succeed)
+    dataset = make_dataset(Dataset, mock_rest_client, capture)
+
+    with pytest.raises(ValueError, match="backend rejected batch"):
+        dataset.insert(_make_items(3), num_threads=1)
+
+    # The retry reaches the backend again. Model an empty backend -- the failed
+    # attempt persisted nothing -- by clearing the local cache without a network
+    # call, exactly as a real sync would when the backend holds no items.
+    monkeypatch.setattr(
+        dataset,
+        "__internal_api__sync_hashes__",
+        lambda: (
+            setattr(dataset, "_hashes", set()),
+            setattr(dataset, "_hashes_synced", True),
+        ),
+    )
+
+    dataset.insert(_make_items(3), num_threads=1)
+
+    assert len(capture.items) == 3, (
+        "All items lost on the failed attempt must be re-sent on retry, not "
+        "skipped as already-present duplicates"
+    )

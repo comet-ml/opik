@@ -992,6 +992,13 @@ class Dataset(DatasetExportOperations):
                     writer.add(self._item_payload(item))
                 writer.flush()
             except BaseException:
+                # A pass that raised may have cached hashes for items it never
+                # confirmed persisted: `_deduplicating` records each item's hash as it is
+                # yielded, before the writer has sent it. Drop the local cache so the next
+                # deduplicated insert re-syncs from the backend instead of silently
+                # skipping the items that were lost on this attempt.
+                if deduplication:
+                    self._hashes_synced = False
                 # Still close and join the pool, but let the producer's exception stand:
                 # a body that failed earlier would otherwise replace the error that
                 # explains why the upload stopped here.
