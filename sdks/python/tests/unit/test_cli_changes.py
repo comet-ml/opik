@@ -481,7 +481,7 @@ class TestExportAllExperimentsSemaphore:
                 ),
                 patch(
                     "opik.cli.exports.all.export_collected_trace_ids",
-                    return_value=(0, 0),
+                    return_value=(0, 0, 0),
                 ),
             ):
                 (
@@ -489,6 +489,7 @@ class TestExportAllExperimentsSemaphore:
                     exp_skipped,
                     traces_exported,
                     traces_skipped,
+                    traces_failed,
                     _had_errors,
                 ) = _export_all_experiments(
                     client=MagicMock(),
@@ -506,3 +507,4 @@ class TestExportAllExperimentsSemaphore:
         # If the semaphore callback was missing the test would hang before this line.
         assert exp_exported + exp_skipped == num_experiments
         assert exp_exported == num_experiments
+        assert traces_failed == 0

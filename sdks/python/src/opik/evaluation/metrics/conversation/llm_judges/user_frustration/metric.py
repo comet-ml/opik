@@ -270,7 +270,9 @@ def _score_from_verdicts(
     if len(verdicts) == 0:
         return 0.0
 
-    frustrated_count = sum(v.verdict.strip().lower() == "yes" for v in verdicts)
+    frustrated_count = sum(
+        parsing_helpers.normalize_verdict(v.verdict) == "yes" for v in verdicts
+    )
     return frustrated_count / len(verdicts)
 
 
@@ -280,7 +282,8 @@ def _extract_frustrations_from_verdicts(
     return [
         {"message_number": f"{index + 1}", "reason": verdict.reason}
         for index, verdict in enumerate(verdicts)
-        if verdict.verdict.strip().lower() == "yes" and verdict.reason is not None
+        if parsing_helpers.normalize_verdict(verdict.verdict) == "yes"
+        and verdict.reason is not None
     ]
 
 
