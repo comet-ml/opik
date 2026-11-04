@@ -1,8 +1,15 @@
 package com.comet.opik.domain.cost;
 
+import com.comet.opik.api.modelprice.CustomModelPriceHistoryPage;
+import com.comet.opik.api.modelprice.CustomModelPriceList;
+import com.comet.opik.api.modelprice.CustomModelPriceResolution;
+import com.comet.opik.api.modelprice.CustomModelPriceResolveRequest;
+import com.comet.opik.api.modelprice.CustomModelPriceRow;
 import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.infrastructure.auth.OrganizationResolver;
 import com.comet.opik.infrastructure.cache.CacheEvict;
 import com.comet.opik.infrastructure.cache.Cacheable;
+import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.inject.ImplementedBy;
 import com.google.inject.Singleton;
@@ -16,6 +23,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import javax.annotation.Nullable;
 
 import java.util.List;
+import java.util.UUID;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
@@ -37,8 +45,14 @@ public interface ModelPriceService {
     /** What {@link #replaceAll} would change, without writing anything. */
     Mono<ModelPriceReplaceResult> previewReplaceAll(@NonNull String organizationId, @NonNull ReplaceRequest request);
 
-    /** The price layers a workspace's spans are priced with: its organization's rows, or the built-in list only. */
-    Mono<PriceLayers> layersFor(@NonNull String workspaceId);
+    Mono<CustomModelPriceList> findRows(@NonNull String organizationId);
+
+    Mono<CustomModelPriceHistoryPage> findHistory(@NonNull String organizationId, int page, int size);
+
+    /** The price layers the current workspace's spans are priced with: its organization's rows, or built-in only. */
+    Mono<PriceLayers> layersFor();
+
+    Mono<CustomModelPriceResolution> resolve(@NonNull CustomModelPriceResolveRequest request);
 }
 
 @Singleton
@@ -46,14 +60,14 @@ public interface ModelPriceService {
 class ModelPriceServiceImpl implements ModelPriceService {
 
     private final TransactionTemplate transactionTemplate;
-    private final WorkspaceOrganizationLookup organizationLookup;
+    private final OrganizationResolver organizationResolver;
     private final ModelPriceStore store;
 
     @Inject
     ModelPriceServiceImpl(@NonNull TransactionTemplate transactionTemplate, @NonNull IdGenerator idGenerator,
-            @NonNull WorkspaceOrganizationLookup organizationLookup) {
+            @NonNull OrganizationResolver organizationResolver) {
         this.transactionTemplate = transactionTemplate;
-        this.organizationLookup = organizationLookup;
+        this.organizationResolver = organizationResolver;
         this.store = new ModelPriceStore(idGenerator::generateId);
     }
 
@@ -98,10 +112,42 @@ class ModelPriceServiceImpl implements ModelPriceService {
     }
 
     @Override
-    public Mono<PriceLayers> layersFor(@NonNull String workspaceId) {
-        return organizationLookup.organizationOf(workspaceId)
+    public Mono<CustomModelPriceList> findRows(@NonNull String organizationId) {
+        return Mono.fromCallable(() -> transactionTemplate.inTransaction(READ_ONLY, handle -> {
+            var dao = handle.attach(ModelPriceDAO.class);
+            long version = dao.findList(organizationId).map(ModelPriceDAO.ListHeader::version).orElse(0L);
+            return new CustomModelPriceList(version,
+                    dao.findRows(organizationId).stream().map(CustomModelPriceRow::from).toList());
+        })).subscribeOn(Schedulers.boundedElastic());
+    }
+
+    @Override
+    public Mono<CustomModelPriceHistoryPage> findHistory(@NonNull String organizationId, int page, int size) {
+        return Mono.fromCallable(() -> transactionTemplate.inTransaction(READ_ONLY, handle -> {
+            var dao = handle.attach(ModelPriceDAO.class);
+            var entries = dao.findHistory(organizationId, size, (page - 1) * size).stream()
+                    .map(row -> new CustomModelPriceHistoryPage.Entry(row.listVersion(), UUID.fromString(row.rowId()),
+                            row.action(), jsonOrNull(row.beforeRow()), jsonOrNull(row.afterRow()), row.createdAt(),
+                            row.createdBy()))
+                    .toList();
+            return new CustomModelPriceHistoryPage(page, entries.size(), dao.countHistory(organizationId), entries);
+        })).subscribeOn(Schedulers.boundedElastic());
+    }
+
+    @Override
+    public Mono<PriceLayers> layersFor() {
+        return organizationResolver.organizationId()
                 .flatMap(organizationId -> findOrganizationList(organizationId).map(ModelPriceList::toLayers))
                 .defaultIfEmpty(PriceLayers.BUILT_IN_ONLY);
+    }
+
+    @Override
+    public Mono<CustomModelPriceResolution> resolve(@NonNull CustomModelPriceResolveRequest request) {
+        return layersFor().map(layers -> ModelPriceExplainer.explain(request, layers));
+    }
+
+    private static JsonNode jsonOrNull(@Nullable String json) {
+        return json == null ? null : JsonUtils.getJsonNodeFromString(json);
     }
 
     private CustomModelPriceValidator.Result validate(ReplaceRequest request) {

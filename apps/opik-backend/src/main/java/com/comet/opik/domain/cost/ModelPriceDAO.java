@@ -28,6 +28,7 @@ import java.util.UUID;
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 @RegisterRowMapper(ModelPriceDAO.ModelPriceRowMapper.class)
 @RegisterConstructorMapper(ModelPriceDAO.ListHeader.class)
+@RegisterConstructorMapper(ModelPriceDAO.HistoryRow.class)
 interface ModelPriceDAO {
 
     record ListHeader(long version, int rowCount) {
@@ -35,6 +36,10 @@ interface ModelPriceDAO {
 
     // A created row has no before, a deleted row no after.
     record HistoryEntry(UUID id, UUID rowId, String action, @Nullable String beforeRow, @Nullable String afterRow) {
+    }
+
+    record HistoryRow(long listVersion, String rowId, String action, @Nullable String beforeRow,
+            @Nullable String afterRow, Instant createdAt, String createdBy) {
     }
 
     // Not INSERT IGNORE: on an existing row that takes a shared lock, and two saves holding one each then deadlock on
@@ -87,6 +92,15 @@ interface ModelPriceDAO {
             " :entry.afterRow, :userName)")
     void insertHistory(@Bind("organizationId") String organizationId, @Bind("listVersion") long listVersion,
             @BindMethods("entry") List<HistoryEntry> entries, @Bind("userName") String userName);
+
+    @SqlQuery("SELECT list_version, row_id, action, before_row, after_row, created_at, created_by" +
+            " FROM model_prices_history WHERE organization_id = :organizationId" +
+            " ORDER BY list_version DESC, created_at DESC, id LIMIT :limit OFFSET :offset")
+    List<HistoryRow> findHistory(@Bind("organizationId") String organizationId, @Bind("limit") int limit,
+            @Bind("offset") int offset);
+
+    @SqlQuery("SELECT COUNT(*) FROM model_prices_history WHERE organization_id = :organizationId")
+    long countHistory(@Bind("organizationId") String organizationId);
 
     class ModelPriceRowMapper implements RowMapper<ModelPriceRow> {
 
