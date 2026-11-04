@@ -142,7 +142,7 @@ class GeminiCatalogRefusalsTest {
 
     @Test
     void theChangeListNamesEachRefusedSettingForAModelWithoutACuratedRow() {
-        assertThat(paramResolver.resolve(request("gemini-4-argon"), null).changes()).isEqualTo(REFUSALS);
+        assertThat(paramResolver.resolve(request("gemini-5-pro"), null).changes()).isEqualTo(REFUSALS);
         assertThat(paramResolver.resolve(request("vertex_ai/gemini-3.8-flash-cyber"), null).changes())
                 .isEqualTo(REFUSALS);
     }
