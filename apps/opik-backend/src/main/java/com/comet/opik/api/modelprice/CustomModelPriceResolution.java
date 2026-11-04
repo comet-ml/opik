@@ -8,7 +8,7 @@ import lombok.NonNull;
 
 import java.util.List;
 
-@Builder
+@Builder(toBuilder = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record CustomModelPriceResolution(
         @NonNull String model,
@@ -20,6 +20,7 @@ public record CustomModelPriceResolution(
         @Schema(description = "Absent when no row prices the model") Match match,
         @Schema(description = "The rates that went into the cost") @NonNull List<Line> lines) {
 
+    @Builder(toBuilder = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record Match(
             @NonNull String provider,
@@ -28,6 +29,7 @@ public record CustomModelPriceResolution(
             @Schema(description = "For an alias row, the organization's row it led to; absent when it led to a built-in price") CustomModelPriceRow targetRow) {
     }
 
+    @Builder(toBuilder = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record Line(
             @Schema(example = "input") @NonNull String name,

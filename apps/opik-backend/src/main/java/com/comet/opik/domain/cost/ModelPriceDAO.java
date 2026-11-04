@@ -97,7 +97,7 @@ interface ModelPriceDAO {
             " FROM model_prices_history WHERE organization_id = :organizationId" +
             " ORDER BY list_version DESC, created_at DESC, id LIMIT :limit OFFSET :offset")
     List<HistoryRow> findHistory(@Bind("organizationId") String organizationId, @Bind("limit") int limit,
-            @Bind("offset") int offset);
+            @Bind("offset") long offset);
 
     @SqlQuery("SELECT COUNT(*) FROM model_prices_history WHERE organization_id = :organizationId")
     long countHistory(@Bind("organizationId") String organizationId);

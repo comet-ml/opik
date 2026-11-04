@@ -30,10 +30,11 @@ class ModelPricesResourceToggleTest {
     static Stream<Named<Function<ModelPricesResource, Response>>> endpoints() {
         return Stream.of(
                 Named.of("find", ModelPricesResource::find),
-                Named.of("replace", resource -> resource.replace(false, new CustomModelPriceReplace(List.of(), 0L))),
+                Named.of("replace", resource -> resource.replace(false,
+                        CustomModelPriceReplace.builder().rows(List.of()).expectedVersion(0L).build())),
                 Named.of("history", resource -> resource.findHistory(1, 100)),
                 Named.of("resolve", resource -> resource.resolve(
-                        new CustomModelPriceResolveRequest("gpt-5-mini", "openai", null))));
+                        CustomModelPriceResolveRequest.builder().model("gpt-5-mini").provider("openai").build())));
     }
 
     @ParameterizedTest

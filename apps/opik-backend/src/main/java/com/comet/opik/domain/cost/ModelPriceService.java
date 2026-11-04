@@ -116,8 +116,10 @@ class ModelPriceServiceImpl implements ModelPriceService {
         return Mono.fromCallable(() -> transactionTemplate.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(ModelPriceDAO.class);
             long version = dao.findList(organizationId).map(ModelPriceDAO.ListHeader::version).orElse(0L);
-            return new CustomModelPriceList(version,
-                    dao.findRows(organizationId).stream().map(CustomModelPriceRow::from).toList());
+            return CustomModelPriceList.builder()
+                    .version(version)
+                    .rows(dao.findRows(organizationId).stream().map(CustomModelPriceRow::from).toList())
+                    .build();
         })).subscribeOn(Schedulers.boundedElastic());
     }
 
@@ -125,12 +127,23 @@ class ModelPriceServiceImpl implements ModelPriceService {
     public Mono<CustomModelPriceHistoryPage> findHistory(@NonNull String organizationId, int page, int size) {
         return Mono.fromCallable(() -> transactionTemplate.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(ModelPriceDAO.class);
-            var entries = dao.findHistory(organizationId, size, (page - 1) * size).stream()
-                    .map(row -> new CustomModelPriceHistoryPage.Entry(row.listVersion(), UUID.fromString(row.rowId()),
-                            row.action(), jsonOrNull(row.beforeRow()), jsonOrNull(row.afterRow()), row.createdAt(),
-                            row.createdBy()))
+            var entries = dao.findHistory(organizationId, size, (long) (page - 1) * size).stream()
+                    .map(row -> CustomModelPriceHistoryPage.Entry.builder()
+                            .listVersion(row.listVersion())
+                            .rowId(UUID.fromString(row.rowId()))
+                            .action(row.action())
+                            .before(jsonOrNull(row.beforeRow()))
+                            .after(jsonOrNull(row.afterRow()))
+                            .createdAt(row.createdAt())
+                            .createdBy(row.createdBy())
+                            .build())
                     .toList();
-            return new CustomModelPriceHistoryPage(page, entries.size(), dao.countHistory(organizationId), entries);
+            return CustomModelPriceHistoryPage.builder()
+                    .page(page)
+                    .size(entries.size())
+                    .total(dao.countHistory(organizationId))
+                    .content(entries)
+                    .build();
         })).subscribeOn(Schedulers.boundedElastic());
     }
 
