@@ -122,6 +122,24 @@ class CostServicePriceTest {
         assertThat(priced.source()).isEqualTo(CostSource.ORGANIZATION);
     }
 
+    private static Stream<Arguments> spansWithoutUsage() {
+        return Stream.of(
+                Arguments.of("no usage", null),
+                Arguments.of("empty usage", Map.of()),
+                Arguments.of("zero counts", usage(0, 0, 0)));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("spansWithoutUsage")
+    void priceOfASpanWithoutUsageKeepsItsMetadataCostOverAnOrganizationRow(String description,
+            Map<String, Integer> usage) {
+        var priced = CostService.price("gpt-5-mini", "openai", usage, HALF_A_DOLLAR_METADATA,
+                layers(fixed("gpt-5-mini", "openai", "1.00", "10.00")));
+
+        assertThat(priced.cost()).isEqualByComparingTo("0.5");
+        assertThat(priced.source()).isEqualTo(CostSource.METADATA);
+    }
+
     @Test
     void priceOfAnAliasToAFreeOrganizationRowIsFree() {
         var priced = CostService.price("aide-gpt-5-mini", "azure", usage(1000, 0, 500), HALF_A_DOLLAR_METADATA,
