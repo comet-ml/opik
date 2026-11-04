@@ -49,6 +49,10 @@ public class AsyncUtils {
                 .put(RequestContext.WORKSPACE_ID, workspaceId);
     }
 
+    public static Context setOrganizationId(Context ctx, @Nullable String organizationId) {
+        return StringUtils.isBlank(organizationId) ? ctx : ctx.put(RequestContext.ORGANIZATION_ID, organizationId);
+    }
+
     /**
      * Runs {@code consume} over a ClickHouse v2 client response and closes that response exactly once,
      * whatever happens to the subscriber. <b>Callers must not close it themselves</b> — no

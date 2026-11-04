@@ -184,7 +184,8 @@ class TraceServiceImpl implements TraceService {
                                         var savedTrace = processedTrace.toBuilder().projectId(project.id())
                                                 .projectName(projectName).build();
                                         eventBus.post(new TracesCreated(List.of(savedTrace), workspaceId, userName,
-                                                workspaceName, cipxDeviceId));
+                                                workspaceName, cipxDeviceId,
+                                                ctx.getOrDefault(RequestContext.ORGANIZATION_ID, null)));
                                     }));
                 }));
     }
@@ -246,7 +247,8 @@ class TraceServiceImpl implements TraceService {
                             .flatMap(traces -> dao.batchInsert(traces)
                                     .doOnSuccess(__ -> {
                                         eventBus.post(new TracesCreated(traces, workspaceId, userName,
-                                                workspaceName, cipxDeviceId));
+                                                workspaceName, cipxDeviceId,
+                                                ctx.getOrDefault(RequestContext.ORGANIZATION_ID, null)));
                                     }));
                 }));
     }
@@ -374,7 +376,8 @@ class TraceServiceImpl implements TraceService {
                                                 ctx.get(RequestContext.USER_NAME),
                                                 traceUpdate,
                                                 ctx.getOrDefault(RequestContext.WORKSPACE_NAME, ""),
-                                                Map.of(id, project.id()))))
+                                                Map.of(id, project.id()),
+                                                ctx.getOrDefault(RequestContext.ORGANIZATION_ID, null))))
                                         .doOnSuccess(__ -> eventBus.post(new TraceCostIntelligenceChanged(
                                                 Map.of(id, project.id()), traceUpdate,
                                                 ctx.get(RequestContext.WORKSPACE_ID),
@@ -402,7 +405,8 @@ class TraceServiceImpl implements TraceService {
                                 .doOnSuccess(__ -> {
                                     log.info("Completed batch update for '{}' traces", batchUpdate.ids().size());
                                     eventBus.post(new TracesUpdated(projectIds, batchUpdate.ids(), workspaceId,
-                                            userName, batchUpdate.update(), workspaceName, traceToProjectMap));
+                                            userName, batchUpdate.update(), workspaceName, traceToProjectMap,
+                                            ctx.getOrDefault(RequestContext.ORGANIZATION_ID, null)));
                                     eventBus.post(new TraceCostIntelligenceChanged(traceToProjectMap,
                                             batchUpdate.update(), workspaceId, userName, cipxDeviceId));
                                 });

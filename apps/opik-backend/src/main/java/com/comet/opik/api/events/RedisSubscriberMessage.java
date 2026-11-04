@@ -49,4 +49,12 @@ public interface RedisSubscriberMessage {
     default RedisSubscriberMessage withWorkspaceName(String workspaceName) {
         return this;
     }
+
+    default String organizationId() {
+        return null;
+    }
+
+    default RedisSubscriberMessage withOrganizationId(String organizationId) {
+        return this;
+    }
 }

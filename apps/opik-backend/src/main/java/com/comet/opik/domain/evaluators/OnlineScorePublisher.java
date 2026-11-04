@@ -10,6 +10,7 @@ import com.comet.opik.api.events.TraceThreadToScoreUserDefinedMetricPython;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.OnlineScoringStreamConfigurationAdapter;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
+import com.comet.opik.infrastructure.auth.OrganizationResolver;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.redis.RedisStreamUtils;
 import com.google.inject.ImplementedBy;
@@ -96,16 +97,19 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
     private final AutomationRuleEvaluatorService automationRuleEvaluatorService;
     private final Map<AutomationRuleEvaluatorType, OnlineScoringStreamConfigurationAdapter> streamConfigurations;
     private final ServiceTogglesConfig serviceTogglesConfig;
+    private final OrganizationResolver organizationResolver;
     private final LongCounter enqueueCounter;
 
     @Inject
     public OnlineScorePublisherImpl(@NonNull @Config("onlineScoring") OnlineScoringConfig config,
             @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceTogglesConfig,
             @NonNull RedissonReactiveClient redisClient,
-            @NonNull AutomationRuleEvaluatorService automationRuleEvaluatorService) {
+            @NonNull AutomationRuleEvaluatorService automationRuleEvaluatorService,
+            @NonNull OrganizationResolver organizationResolver) {
         this.redisClient = redisClient;
         this.automationRuleEvaluatorService = automationRuleEvaluatorService;
         this.serviceTogglesConfig = serviceTogglesConfig;
+        this.organizationResolver = organizationResolver;
         this.enqueueCounter = GlobalOpenTelemetry.getMeter(METRIC_NAMESPACE)
                 .counterBuilder("%s_enqueue_total".formatted(METRIC_NAMESPACE))
                 .setDescription("Messages pushed to the online-scoring Redis stream, by evaluator type, workspace and "
@@ -139,7 +143,7 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
                     WORKSPACE_ID_KEY, workspaceId, WORKSPACE_NAME_KEY, workspaceName, RESULT_KEY, "success");
             var errorAttrs = Attributes.of(EVALUATOR_TYPE_KEY, type.getType(),
                     WORKSPACE_ID_KEY, workspaceId, WORKSPACE_NAME_KEY, workspaceName, RESULT_KEY, "error");
-            return Flux.fromIterable(messages)
+            return organizationIdOrBlank().flatMapMany(organizationId -> Flux.fromIterable(messages)
                     // Stamp the workspace name resolved from the reactive context onto messages that don't
                     // already carry one, so async consumers and their per-workspace metrics get a real name.
                     // Context-less producers (e.g. the closing-thread job) have no name to stamp; those
@@ -148,6 +152,11 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
                             && StringUtils.isBlank(scoped.workspaceName())
                             && StringUtils.isNotBlank(ctxWorkspaceName)
                                     ? scoped.withWorkspaceName(ctxWorkspaceName)
+                                    : message)
+                    .map(message -> message instanceof RedisSubscriberMessage scoped
+                            && StringUtils.isBlank(scoped.organizationId())
+                            && StringUtils.isNotBlank(organizationId)
+                                    ? scoped.withOrganizationId(organizationId)
                                     : message)
                     .flatMap(message -> stream.add(RedisStreamUtils.buildAddArgs(
                             OnlineScoringConfig.PAYLOAD_FIELD, message, config))
@@ -158,11 +167,20 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
                             .doOnError(throwable -> {
                                 enqueueCounter.add(1, errorAttrs);
                                 log.error("Error sending message", throwable);
-                            }));
+                            })));
         }).then()
                 // Run the enqueue (Redis stream writes) off the caller's thread — e.g. the EventBus thread for
                 // the samplers — on a bounded worker pool.
                 .subscribeOn(Schedulers.boundedElastic());
+    }
+
+    private Mono<String> organizationIdOrBlank() {
+        return organizationResolver.organizationId()
+                .onErrorResume(error -> {
+                    log.warn("Failed to resolve the organization; enqueueing without it", error);
+                    return Mono.empty();
+                })
+                .defaultIfEmpty("");
     }
 
     public Mono<Void> enqueueThreadMessage(@NonNull List<String> threadIds, @NonNull UUID ruleId,

@@ -20,6 +20,7 @@ public class TracesCreated extends BaseEvent {
     // for callers that don't carry it; consumers fall back to workspaceId.
     private final @Nullable String workspaceName;
     private final @Nullable String cipxDeviceId;
+    private final @Nullable String organizationId;
 
     public TracesCreated(@NonNull List<Trace> traces, @NonNull String workspaceId, @NonNull String userName) {
         this(traces, workspaceId, userName, null);
@@ -32,10 +33,16 @@ public class TracesCreated extends BaseEvent {
 
     public TracesCreated(@NonNull List<Trace> traces, @NonNull String workspaceId, @NonNull String userName,
             @Nullable String workspaceName, @Nullable String cipxDeviceId) {
+        this(traces, workspaceId, userName, workspaceName, cipxDeviceId, null);
+    }
+
+    public TracesCreated(@NonNull List<Trace> traces, @NonNull String workspaceId, @NonNull String userName,
+            @Nullable String workspaceName, @Nullable String cipxDeviceId, @Nullable String organizationId) {
         super(workspaceId, userName);
         this.traces = traces;
         this.workspaceName = workspaceName;
         this.cipxDeviceId = cipxDeviceId;
+        this.organizationId = organizationId;
     }
 
     public Set<UUID> projectIds() {

@@ -161,7 +161,7 @@ public class OnlineScoringSampler {
                 completeTraces.size(), tracesBatch.traces().size(), tracesBatch.workspaceId());
 
         sampleAndScore(completeTraces, tracesBatch.workspaceId(), tracesBatch.userName(),
-                tracesBatch.workspaceName());
+                tracesBatch.workspaceName(), tracesBatch.organizationId());
     }
 
     /**
@@ -191,10 +191,12 @@ public class OnlineScoringSampler {
                         .put(RequestContext.USER_NAME, event.userName()))
                 .block();
 
-        sampleAndScore(traces, event.workspaceId(), event.userName(), event.workspaceName());
+        sampleAndScore(traces, event.workspaceId(), event.userName(), event.workspaceName(),
+                event.organizationId());
     }
 
-    private void sampleAndScore(List<Trace> traces, String workspaceId, String userName, String workspaceName) {
+    private void sampleAndScore(List<Trace> traces, String workspaceId, String userName, String workspaceName,
+            String organizationId) {
         if (CollectionUtils.isEmpty(traces)) {
             log.info("No traces to score for workspace '{}'", workspaceId);
             return;
@@ -256,7 +258,7 @@ public class OnlineScoringSampler {
                     case LLM_AS_JUDGE -> {
                         var messages = samples
                                 .map(trace -> toLlmAsJudgeMessage(workspaceId, userName, workspaceName,
-                                        (AutomationRuleEvaluatorLlmAsJudge) evaluator, trace))
+                                        organizationId, (AutomationRuleEvaluatorLlmAsJudge) evaluator, trace))
                                 .toList();
                         logSampledTrace(evaluator, messages, scorableTraces.size());
                         if (!messages.isEmpty()) {
@@ -392,8 +394,7 @@ public class OnlineScoringSampler {
     }
 
     private TraceToScoreLlmAsJudge toLlmAsJudgeMessage(String workspaceId, String userName, String workspaceName,
-            AutomationRuleEvaluatorLlmAsJudge evaluator,
-            Trace trace) {
+            String organizationId, AutomationRuleEvaluatorLlmAsJudge evaluator, Trace trace) {
         return TraceToScoreLlmAsJudge.builder()
                 .trace(trace)
                 .ruleId(evaluator.getId())
@@ -402,6 +403,7 @@ public class OnlineScoringSampler {
                 .workspaceId(workspaceId)
                 .userName(userName)
                 .workspaceName(workspaceName)
+                .organizationId(organizationId)
                 .scoreNameMapping(Map.of())
                 .promptType(PromptType.MUSTACHE)
                 .build();
