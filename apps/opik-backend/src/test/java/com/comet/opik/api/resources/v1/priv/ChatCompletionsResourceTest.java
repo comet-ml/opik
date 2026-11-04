@@ -53,6 +53,7 @@ import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
+import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.http.HttpStatus;
 import org.junit.jupiter.api.BeforeAll;
@@ -66,7 +67,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
-import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
@@ -1537,7 +1537,7 @@ class ChatCompletionsResourceTest {
             var html = "<html><body>%s</body></html>".formatted(marker);
             var converseMessage = JsonUtils.writeValueAsString(Map.of("message", marker));
             var generic = UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
-            return Stream.of(
+            return withAndWithoutStreaming(
                     arguments(BedrockRoute.CONVERSE, aResponse().withStatus(HttpStatus.SC_NOT_FOUND)
                             .withHeader("Content-Type", "text/html").withBody(html), marker, HttpStatus.SC_NOT_FOUND,
                             generic),
@@ -1564,38 +1564,44 @@ class ChatCompletionsResourceTest {
                             marker));
         }
 
+        private Stream<Arguments> withAndWithoutStreaming(Arguments... cases) {
+            return Stream.of(cases).flatMap(arguments -> Stream.of(false, true)
+                    .map(stream -> arguments(ArrayUtils.add(arguments.get(), stream))));
+        }
+
         @ParameterizedTest
         @MethodSource
         @DisplayName("a Bedrock provider's text reaches the caller only as a documented error, and never the logs")
         void providerTextIsReturnedOnlyAsADocumentedErrorAndNeverLogged(BedrockRoute route,
-                ResponseDefinitionBuilder reply, String marker, int expectedStatus, String expectedMessage) {
+                ResponseDefinitionBuilder reply, String marker, int expectedStatus, String expectedMessage,
+                boolean stream) {
             var workspaceName = RandomStringUtils.randomAlphanumeric(20);
             mockTargetWorkspace(workspaceName, UUID.randomUUID().toString());
             createBedrockProvider(workspaceName, route);
             WIRE_MOCK.server().stubFor(post(urlPathMatching(PROVIDER_PATHS)).willReturn(reply));
-            var request = ChatCompletionRequest.builder().stream(false).model(route.model()).addUserMessage("ping")
-                    .build();
-            var streamed = ChatCompletionRequest.builder().stream(true).model(route.model()).addUserMessage("ping")
+            var request = ChatCompletionRequest.builder().stream(stream).model(route.model()).addUserMessage("ping")
                     .build();
             var actualErrors = new ArrayList<ErrorMessage>();
 
-            var actualEvents = LogCaptureUtils.logEventsOf(() -> {
-                actualErrors.add(chatCompletionsClient.create(API_KEY, workspaceName, request, expectedStatus));
-                actualErrors.addAll(chatCompletionsClient.createAndGetStreamedError(API_KEY, workspaceName,
-                        streamed));
-            });
+            var actualEvents = LogCaptureUtils.logEventsOf(
+                    () -> actualErrors.addAll(errorsOf(workspaceName, request, expectedStatus)));
 
-            assertThat(actualErrors).hasSize(2).allSatisfy(error -> {
+            assertThat(actualErrors).singleElement().satisfies(error -> {
                 assertThat(error.getCode()).isEqualTo(expectedStatus);
                 assertThat(error.getMessage()).isEqualTo(expectedMessage);
             });
             assertThat(actualEvents).isNotEmpty().noneMatch(event -> event.contains(marker));
         }
 
+        private Stream<Arguments> redirectIsNotFollowed() {
+            return withAndWithoutStreaming(arguments(BedrockRoute.CONVERSE),
+                    arguments(BedrockRoute.ANTHROPIC_MESSAGES));
+        }
+
         @ParameterizedTest
-        @EnumSource(BedrockRoute.class)
+        @MethodSource
         @DisplayName("a Bedrock provider's redirect isn't followed, streamed or not")
-        void redirectIsNotFollowed(BedrockRoute route) {
+        void redirectIsNotFollowed(BedrockRoute route, boolean stream) {
             var workspaceName = RandomStringUtils.randomAlphanumeric(20);
             mockTargetWorkspace(workspaceName, UUID.randomUUID().toString());
             createBedrockProvider(workspaceName, route);
@@ -1603,21 +1609,22 @@ class ChatCompletionsResourceTest {
             WIRE_MOCK.server().stubFor(post(urlPathMatching(PROVIDER_PATHS))
                     .willReturn(aResponse().withStatus(307).withHeader("Location", redirectTarget)));
             WIRE_MOCK.server().stubFor(any(urlPathEqualTo(redirectTarget)).willReturn(okJson("{}")));
-            var request = ChatCompletionRequest.builder().stream(false).model(route.model()).addUserMessage("ping")
-                    .build();
-            var streamed = ChatCompletionRequest.builder().stream(true).model(route.model()).addUserMessage("ping")
+            var request = ChatCompletionRequest.builder().stream(stream).model(route.model()).addUserMessage("ping")
                     .build();
 
-            var actualError = chatCompletionsClient.create(API_KEY, workspaceName, request,
-                    HttpStatus.SC_INTERNAL_SERVER_ERROR);
-            var actualStreamedErrors = chatCompletionsClient.createAndGetStreamedError(API_KEY, workspaceName,
-                    streamed);
+            var actualErrors = errorsOf(workspaceName, request, HttpStatus.SC_INTERNAL_SERVER_ERROR);
 
-            assertThat(actualError.getMessage()).isEqualTo(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
-            assertThat(actualStreamedErrors).extracting(ErrorMessage::getMessage)
+            assertThat(actualErrors).extracting(ErrorMessage::getMessage)
                     .containsExactly(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
-            WIRE_MOCK.server().verify(moreThanOrExactly(2), postRequestedFor(urlPathMatching(PROVIDER_PATHS)));
+            WIRE_MOCK.server().verify(moreThanOrExactly(1), postRequestedFor(urlPathMatching(PROVIDER_PATHS)));
             WIRE_MOCK.server().verify(0, anyRequestedFor(urlPathEqualTo(redirectTarget)));
+        }
+
+        private List<ErrorMessage> errorsOf(String workspaceName, ChatCompletionRequest request,
+                int expectedStatus) {
+            return Boolean.TRUE.equals(request.stream())
+                    ? chatCompletionsClient.createAndGetStreamedError(API_KEY, workspaceName, request)
+                    : List.of(chatCompletionsClient.create(API_KEY, workspaceName, request, expectedStatus));
         }
 
         private void createBedrockProvider(String workspaceName, BedrockRoute route) {
