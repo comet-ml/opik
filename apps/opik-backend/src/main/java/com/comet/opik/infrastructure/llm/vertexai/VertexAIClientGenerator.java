@@ -105,7 +105,7 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
     }
 
     VertexAiChatModel newVertexAIClient(LlmProviderClientApiConfig apiKey, ChatCompletionRequest request) {
-        return buildPerCallClient(apiKey, request, (client, calls, model) -> {
+        return buildPerCallModel(apiKey, request, (client, calls, model) -> {
             var builder = GoogleGenAiChatModel.builder()
                     .client(client)
                     .modelName(model);
@@ -126,7 +126,7 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
 
     VertexAiStreamingChatModel newVertexAIStreamingClient(@NonNull LlmProviderClientApiConfig apiKey,
             @NonNull ChatCompletionRequest request) {
-        return buildPerCallClient(apiKey, request, (client, calls, model) -> {
+        return buildPerCallModel(apiKey, request, (client, calls, model) -> {
             var builder = GoogleGenAiStreamingChatModel.builder()
                     .client(client)
                     .modelName(model);
@@ -160,10 +160,10 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
         params.wireBudgetFor(model).ifPresent(budget);
     }
 
-    // A Client per call, on the shared transport, so that the call's own calls can be cancelled. Built here rather
-    // than by the model builder, which keeps its client private.
-    private <T> T buildPerCallClient(LlmProviderClientApiConfig apiKey, ChatCompletionRequest request,
-            PerCallClientFactory<T> factory) {
+    // A model on its own Client per call, on the shared transport, so that the call's own calls can be cancelled. The
+    // Client is built here rather than by the model builder, which keeps its client private.
+    private <T> T buildPerCallModel(LlmProviderClientApiConfig apiKey, ChatCompletionRequest request,
+            PerCallModelFactory<T> factory) {
         // The enum fallback mirrors LlmProviderFactoryImpl's routing, so every model it sends here can be built here.
         var modelId = registryService.findModel(request.model())
                 .filter(result -> result.provider() == LlmProvider.VERTEX_AI)
@@ -176,7 +176,7 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
     }
 
     @FunctionalInterface
-    private interface PerCallClientFactory<T> {
+    private interface PerCallModelFactory<T> {
         T create(Client client, CancellableCalls calls, String model);
     }
 
