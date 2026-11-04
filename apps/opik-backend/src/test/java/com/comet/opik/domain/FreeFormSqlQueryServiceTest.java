@@ -10,6 +10,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.HttpHeaders;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -200,13 +201,16 @@ class FreeFormSqlQueryServiceTest {
     @DisplayName("a ClickHouse limit error is a 400 with a constant message, not a 500")
     void limitErrorIsBadRequest(int code, String message) {
         givenClickHouseReturnsOneRow();
-        when(dao.execute(any(), anyString(), anyString(), anyString(), anyString()))
+        var projectId = UUID.randomUUID();
+        var clickHouseMessage = "DB::Exception: " + RandomStringUtils.randomAlphanumeric(20);
+        when(dao.execute(eq(FreeFormSqlAccount.STANDARD), eq(WORKSPACE), eq(projectId.toString()), eq(QUERY),
+                anyString()))
                 .thenReturn(CompletableFuture.failedFuture(
-                        new ServerException(code, "DB::Exception: limit exceeded on opik.spans", 500, "query-id")));
+                        new ServerException(code, clickHouseMessage, 500, UUID.randomUUID().toString())));
 
-        assertThatThrownBy(() -> service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, UUID.randomUUID(), QUERY)
+        assertThatThrownBy(() -> service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, projectId, QUERY)
                 .join()).cause().satisfies(error -> {
-                    assertThat(error).isInstanceOf(BadRequestException.class);
+                    assertThat(error).isExactlyInstanceOf(BadRequestException.class);
                     assertThat(((WebApplicationException) error).getResponse().getEntity())
                             .isEqualTo(new ErrorMessage(List.of(message)));
                 });
