@@ -164,4 +164,19 @@ class ModelPriceResolverTest {
         assertThat(match.customRow()).isNull();
         assertThat(match.price()).isSameAs(ModelPriceTable.get("gpt-5-mini", "openai"));
     }
+
+    @Test
+    void resolveAliasToARowThatPricesNothingFallsBackToTheBuiltInRow() {
+        var aliasRow = alias("gpt-5-mini", "openai", "aide-unlisted", "openai");
+        var targetRow = CustomModelPrice.builder()
+                .modelName("aide-unlisted")
+                .provider("openai")
+                .kind(CustomModelPrice.Kind.FIXED)
+                .build();
+
+        var match = ModelPriceResolver.resolve("gpt-5-mini", "openai", layers(aliasRow, targetRow)).orElseThrow();
+
+        assertThat(match.customRow()).isNull();
+        assertThat(match.price()).isSameAs(ModelPriceTable.get("gpt-5-mini", "openai"));
+    }
 }
