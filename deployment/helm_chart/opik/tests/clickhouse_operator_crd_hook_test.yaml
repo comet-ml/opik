@@ -14,7 +14,7 @@ tests:
           of: Job
       - equal:
           path: spec.template.spec.containers[0].image
-          value: alpine/kubectl:1.35.0
+          value: alpine/kubectl:1.37.2
       - notMatchRegex:
           path: spec.template.spec.containers[0].image
           pattern: bitnami
