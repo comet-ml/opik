@@ -19292,6 +19292,8 @@ components:
           type: boolean
         thinksByDefault:
           type: boolean
+        onlyRoute:
+          type: string
         routes:
           type: object
           additionalProperties:
@@ -21239,6 +21241,9 @@ components:
       properties:
         field:
           type: string
+          description: "Field to group by. Tags are overlapping groups: each tag receives\
+            \ the full metric value. For cost, adding tag groups can exceed actual\
+            \ spend; use provider or model for additive span cost totals."
           enum:
           - none
           - tags
@@ -24053,6 +24058,9 @@ components:
       properties:
         field:
           type: string
+          description: "Field to group by. Tags are overlapping groups: each tag receives\
+            \ the full metric value. For cost, adding tag groups can exceed actual\
+            \ spend; use provider or model for additive span cost totals."
           enum:
           - none
           - tags

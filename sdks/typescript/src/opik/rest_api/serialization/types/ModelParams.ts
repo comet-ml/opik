@@ -22,6 +22,7 @@ export const ModelParams: core.serialization.ObjectSchema<serializers.ModelParam
         tools: ToolsParam.optional(),
         samplingExclusive: core.serialization.boolean().optional(),
         thinksByDefault: core.serialization.boolean().optional(),
+        onlyRoute: core.serialization.string().optional(),
         routes: core.serialization
             .record(
                 core.serialization.string(),
@@ -44,6 +45,7 @@ export declare namespace ModelParams {
         tools?: ToolsParam.Raw | null;
         samplingExclusive?: boolean | null;
         thinksByDefault?: boolean | null;
+        onlyRoute?: string | null;
         routes?: Record<string, serializers.ModelParams.Raw> | null;
     }
 }

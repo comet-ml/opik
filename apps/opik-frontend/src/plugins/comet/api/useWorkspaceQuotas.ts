@@ -9,7 +9,8 @@ interface WorkspaceQuota {
 }
 
 interface WorkspaceQuotasResponse {
-  quotas: WorkspaceQuota[];
+  quotas: WorkspaceQuota[] | null;
+  trialExpired?: boolean;
 }
 
 interface UseWorkspaceQuotas {
@@ -28,12 +29,12 @@ const getWorkspaceQuotas = async (
     },
   );
 
-  return response?.data?.quotas;
+  return response?.data;
 };
 
 const useWorkspaceQuotas = (
   { workspaceName }: UseWorkspaceQuotas,
-  options: QueryConfig<WorkspaceQuota[]>,
+  options: QueryConfig<WorkspaceQuotasResponse>,
 ) => {
   return useQuery({
     queryKey: ["workspace-quotas", { workspaceName }],
