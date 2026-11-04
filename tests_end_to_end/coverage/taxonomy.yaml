@@ -492,6 +492,28 @@ areas:
       # sentinel that keeps a root span parentless across an update that says
       # nothing about the parent.
       update-span-api:        { covered: false }
+      # New for 2.2.140, from the release pass's own staging exploration of
+      # opik#9311 (OPIK-9029). `coverage/pending/` held nothing this release, so
+      # this key is authored here directly, as 2.2.139's two were.
+      #
+      # Its own key, and NOT `span-tree-expand`, which the exploration candidate
+      # reached for. The note above settles that: "that key is the panel's tree
+      # widget". It is also already `covered: true` at t2, so folding a
+      # server-side read question under it would retire the question for good —
+      # the same call this area has now made three times (see
+      # `ts-sdk-openai-tracker-usage` and its two siblings).
+      #
+      # Not `update-span-api` either, though both are `/spans/{id}`: that one is
+      # the PATCH and what a partial write preserves. This is the GET, and what
+      # it does when the id resolves to more than one row.
+      #
+      # Deliberately named for the READ rather than for any surface. The
+      # frontend's only by-id span consumer is the Add-to-dataset dialog's
+      # advanced-mapping Preview (`useMappingSampleEntities`); the trace panel
+      # fills its tree and detail pane from the by-trace listing, so a panel
+      # assertion would pass against the build this is about. A capability key
+      # naming a widget would have made that confusion permanent.
+      span-by-id-fan-out:     { covered: false, note: "GET /v1/private/spans/{id} for a span id written under MORE THAN ONE project (opik#9311): the by-ids query dedups per (workspace_id, project_id, id), so the id returns a row per project, and the strict single-item reducer behind SpanDAO.getById used to answer that second row with IndexOutOfBoundsException — a hard 500 on a read every span-detail consumer depends on. Asserted as 200 plus WHICH write the read resolves to, over two orderings that are needed together: the natural one (the later write is also the later-created, higher-id project) proves the read no longer 500s, and an inverted one (the later write is the LOWER-id project, with the id order itself asserted under java.util.UUID.compareTo's signed semantics) is what separates the documented LATEST_SPAN_ORDER — comparing(lastUpdatedAt).thenComparing(projectId) — from its most plausible impostor, a resolver ordering by project id. Each copy carries its own `input` and `name`, so a resolver returning the right project's row with another's content fails too; each write is polled through the project-scoped by-trace read (which cannot fan out) before the next one, so the write ORDER is imposed rather than raced. NOT covered: the Add-to-dataset mapping Preview, which is the one UI surface that issues this read; whether the second write is REFUSED anywhere (nothing refuses it, which is why the fan-out exists); and the `GET /v1/private/spans` listing, which is project-scoped and cannot fan out." }
       export-traces:          { covered: false, note: "EXPORT_ENABLED flag" }
 
     # ---- visual dimension (opt-in; page/state-shaped) ----
