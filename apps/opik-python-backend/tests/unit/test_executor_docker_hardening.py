@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from opik_backend import docker_daemon_config
 from opik_backend.docker_daemon_config import (
     ALLOW_NETWORK_ENV_VAR,
     HARDENING_ENV_VAR,
@@ -147,3 +148,61 @@ def test_malformed_mounted_daemon_config_fails(tmp_path):
 
     with pytest.raises(ValueError):
         write_hardened_config(str(operator_config_path), str(tmp_path / "out" / "daemon.json"))
+
+
+@pytest.mark.parametrize("content", ["null", "[]", "42", "\"text\""])
+def test_non_object_mounted_daemon_config_fails(tmp_path, content):
+    operator_config_path = tmp_path / "daemon.json"
+    operator_config_path.write_text(content)
+
+    with pytest.raises(ValueError, match="must hold a JSON object"):
+        write_hardened_config(str(operator_config_path), str(tmp_path / "out" / "daemon.json"))
+
+
+@pytest.fixture
+def config_paths(tmp_path, monkeypatch):
+    operator_config_path = tmp_path / "etc" / "daemon.json"
+    hardened_config_path = tmp_path / "run" / "daemon.json"
+    monkeypatch.setattr(docker_daemon_config, "OPERATOR_CONFIG_PATH", str(operator_config_path))
+    monkeypatch.setattr(docker_daemon_config, "HARDENED_CONFIG_PATH", str(hardened_config_path))
+    return operator_config_path, hardened_config_path
+
+
+@pytest.mark.parametrize("hardening", [None, "false"])
+def test_entrypoint_contract_prints_nothing_when_off(monkeypatch, capsys, config_paths, hardening):
+    if hardening is not None:
+        monkeypatch.setenv(HARDENING_ENV_VAR, hardening)
+
+    docker_daemon_config.main()
+
+    assert capsys.readouterr().out == ""
+    assert not config_paths[1].exists()
+
+
+def test_entrypoint_contract_prints_config_path_when_on(monkeypatch, capsys, config_paths):
+    monkeypatch.setenv(HARDENING_ENV_VAR, "true")
+
+    docker_daemon_config.main()
+
+    assert capsys.readouterr().out == f"{config_paths[1]}\n"
+    assert json.loads(config_paths[1].read_text())["userns-remap"] == "default"
+
+
+@pytest.mark.parametrize(
+    "hardening, mounted_content, expected_error",
+    [("yes", None, "must be true or false"), ("true", "{not json", "Expecting"), ("true", "[]", "JSON object")],
+)
+def test_entrypoint_contract_fails_startup(
+    monkeypatch, capsys, config_paths, hardening, mounted_content, expected_error
+):
+    monkeypatch.setenv(HARDENING_ENV_VAR, hardening)
+    if mounted_content is not None:
+        config_paths[0].parent.mkdir()
+        config_paths[0].write_text(mounted_content)
+
+    with pytest.raises(SystemExit) as exit_info:
+        docker_daemon_config.main()
+
+    assert exit_info.value.code.startswith("Docker daemon hardening failed")
+    assert expected_error in exit_info.value.code
+    assert capsys.readouterr().out == ""

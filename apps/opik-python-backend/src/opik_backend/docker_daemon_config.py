@@ -39,6 +39,8 @@ def write_hardened_config(operator_config_path: str, hardened_config_path: str) 
     if os.path.exists(operator_config_path):
         with open(operator_config_path) as f:
             config = json.load(f)
+        if not isinstance(config, dict):
+            raise ValueError(f"{operator_config_path} must hold a JSON object, not {type(config).__name__}")
     allow_network = os.getenv(ALLOW_NETWORK_ENV_VAR, "false").lower() == "true"
     os.makedirs(os.path.dirname(hardened_config_path), exist_ok=True)
     with open(hardened_config_path, "w") as f:
@@ -46,13 +48,15 @@ def write_hardened_config(operator_config_path: str, hardened_config_path: str) 
 
 
 def main() -> None:
-    """Prints the daemon config file to pass to dockerd, or nothing when hardening is off."""
+    """With hardening on, writes the merged config to HARDENED_CONFIG_PATH and prints that path on stdout for
+    entrypoint.sh to pass to dockerd as --config-file. With hardening off, prints nothing. Exits non-zero on a bad
+    setting or an unreadable or unwritable config."""
     try:
         if not hardening_enabled():
             return
         write_hardened_config(OPERATOR_CONFIG_PATH, HARDENED_CONFIG_PATH)
     except (ValueError, OSError) as e:
-        sys.exit(f"Docker daemon hardening failed: {e}")
+        sys.exit(f"Docker daemon hardening failed ({OPERATOR_CONFIG_PATH} -> {HARDENED_CONFIG_PATH}): {e}")
     print(f"Docker daemon hardening enabled, config: {HARDENED_CONFIG_PATH}", file=sys.stderr)
     print(HARDENED_CONFIG_PATH)
 
