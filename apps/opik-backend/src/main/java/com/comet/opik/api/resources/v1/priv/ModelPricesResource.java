@@ -105,8 +105,8 @@ public class ModelPricesResource {
                         .map(CustomModelPriceReplaceResult::from)
                         .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                         .block();
-                log.info("{} model prices, workspace '{}', version '{}', saved '{}'",
-                        dryRun ? "Previewed" : "Replaced", workspaceId, result.version(), result.saved());
+                log.info("Finished replacing model prices, workspace '{}', dry run '{}', version '{}', saved '{}'",
+                        workspaceId, dryRun, result.version(), result.saved());
                 return Response.ok(result).build();
             } catch (ModelPriceValidationException exception) {
                 log.info("Refused model prices, workspace '{}', errors '{}'", workspaceId,
