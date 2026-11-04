@@ -26,7 +26,7 @@ const toText = (value: unknown): string =>
   typeof value === "object" ? JSON.stringify(value) : String(value);
 
 const formatCell = (value: unknown): string => {
-  if (isEmpty(value)) return "—";
+  if (isEmpty(value)) return "-";
   if (typeof value === "number") {
     return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
   }

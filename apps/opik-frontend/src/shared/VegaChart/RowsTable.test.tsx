@@ -24,10 +24,10 @@ describe("RowsTable", () => {
     expect(columnValues(0)).toEqual(["gpt-4o", "claude", "llama", "mistral"]);
 
     fireEvent.click(screen.getByText("cost"));
-    expect(columnValues(1)).toEqual(["10", "9.5", "2", "—"]);
+    expect(columnValues(1)).toEqual(["10", "9.5", "2", "-"]);
 
     fireEvent.click(screen.getByText("cost"));
-    expect(columnValues(1)).toEqual(["2", "9.5", "10", "—"]);
+    expect(columnValues(1)).toEqual(["2", "9.5", "10", "-"]);
   });
 
   it("sorts text columns alphabetically", () => {
@@ -47,7 +47,7 @@ describe("RowsTable", () => {
         onSortingChange={onSortingChange}
       />,
     );
-    expect(columnValues(1)).toEqual(["10", "9.5", "2", "—"]);
+    expect(columnValues(1)).toEqual(["10", "9.5", "2", "-"]);
 
     fireEvent.click(screen.getByText("cost"));
     expect(onSortingChange).toHaveBeenCalledWith([{ id: "cost", desc: false }]);
