@@ -47,12 +47,13 @@ public class CostService {
 
     /**
      * Like {@link #calculateCost}, with the organization's prices layered over the built-in ones. A cost the
-     * organization's rows decide is kept even at 0, as 0 is how they make a model free.
+     * organization's rows decide for a span with usage is kept even at 0, as 0 is how they make a model free. A span
+     * with no usage gives the rows nothing to price, so it keeps its metadata cost.
      */
     public static PricedCost price(@Nullable String modelName, @Nullable String provider,
             @Nullable Map<String, Integer> usage, @Nullable JsonNode metadata, @NonNull PriceLayers layers) {
         Estimate estimate = estimateCost(modelName, provider, usage, layers);
-        if (estimate.fromOrganization()) {
+        if (estimate.fromOrganization() && hasUsage(usage)) {
             return new PricedCost(estimate.cost(), CostSource.ORGANIZATION);
         }
         if (estimate.cost().compareTo(BigDecimal.ZERO) > 0) {
@@ -60,6 +61,10 @@ public class CostService {
         }
         BigDecimal metadataCost = getCostFromMetadata(metadata);
         return new PricedCost(metadataCost, metadataCost.signum() == 0 ? CostSource.NONE : CostSource.METADATA);
+    }
+
+    private static boolean hasUsage(@Nullable Map<String, Integer> usage) {
+        return usage != null && usage.values().stream().anyMatch(count -> count != null && count > 0);
     }
 
     // Pricing runs while spans are ingested, so it never fails the caller: an error while pricing gives no estimate.
