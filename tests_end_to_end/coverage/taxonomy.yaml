@@ -604,6 +604,47 @@ areas:
       # The capability is in the `threads` area even though the spec lives in
       # trace-explore/ — that is this area's `spec_dir`, shared with traces.
       message-wrapping:        { covered: false, note: "Thread message content with no break opportunity stays inside its container instead of overflowing it (opik#9234): a four-turn thread seeded with a 400-character unspaced token, a break-free URL and a wide nested JSON object, measured rather than eyeballed — the message container's scrollWidth equals its clientWidth, and no descendant of any [data-trace-message-id] has a box starting left of or ending right of that container. The left half is the reported bug and the one a scrollbar cannot rescue: the container is overflow-y-auto, so the X axis is auto too and content past the RIGHT edge becomes a scrollbar, while content past the LEFT edge is simply unreachable in a left-to-right layout. Asserted at a 1600px and a 900px viewport, on the thread detail panel AND on the SME annotator thread view, which renders the same shared TraceMessages component from a separate layout at a much narrower message column. Also covers the list's trailing space (pb-6), asserted only once the thread is proven taller than its container, since a short thread leaves space below the last message whatever the padding is. The fixture proves it can discriminate before any box is read: every turn's input and output must still be an OBJECT when read back, because TraceMessage renders an object through the JSON view the fix touched and anything else through MarkdownPreview, which breaks long words with or without opik#9234. NOT covered: the annotation-queues annotator view (a third surface rendering the same component), and the appearance of the wrap — no pixel snapshot is taken, so a break at the wrong place inside a word would pass." }
+      # New for 2.2.139, from the release pass's own staging exploration of
+      # opik#8724 (the comments filter). `coverage/pending/` held nothing this
+      # release, so this key and the one below it are authored here directly.
+      #
+      # Its own key, and NOT `traces.filter-traces`, which that half of the same
+      # exploration candidate uses. The two halves are two different SQL clauses
+      # over two different endpoints: `FilterQueryBuilder` maps
+      # `TraceField.COMMENTS` to a subquery scoped `entity_type = 'trace'` on
+      # `GET /traces`, and `TraceThreadField.COMMENTS` to one scoped
+      # `entity_type = 'thread'` keyed on `thread_model_id` on
+      # `GET /traces/threads`. A build that dropped the entity-type scope from
+      # one of them leaves the other correct, which is exactly why they cannot
+      # share a key. The same reasoning `environment-filter` above was given.
+      #
+      # Not `list-threads` either: that key is the Threads table listing seeded
+      # conversations and is already `covered: true` at t1, so folding a filter
+      # under it would retire the question permanently.
+      #
+      # The capability is in the `threads` area even though the spec lives in
+      # trace-explore/ — that is this area's `spec_dir`, shared with traces.
+      comments-filter:         { covered: false, note: "The Threads tab's `comments` filter and the `entity_type = 'thread'` scope behind it (opik#8724), asserted as EXACTNESS on both surfaces over a 3-thread project where the two decoys are the discriminators: one thread carries a THREAD comment, one carries a TRACE comment on the trace inside it, and one carries none. `is_not_empty` must return exactly the first — a lookup that joined the comments table without scoping by entity type returns two — and `is_empty` exactly the complementary pair, with the envelope `total` pinned alongside the id set so a leak fails on the count as well as on the contents. Then the same question through the UI: the chip is picked from the All filters manager, and the rendered `data-row-id` set is asserted to equal the API's answer row for row rather than merely to contain the expected thread. NOT covered: the `contains`/`=` operators, which `COMMENTS_OPERATORS` does not expose for this chip (`is_not_empty`/`is_empty` only), and comment TEXT matching, which no filter offers." }
+      # New for 2.2.139, from the release pass's own staging exploration of
+      # opik#9329 (OPIK-8650's sibling), as that candidate explicitly asked for.
+      #
+      # Its own key, and NOT `open-thread-panel`, which is what the candidate
+      # reached for while saying in the same breath that it was the "honest
+      # closest" rather than the right one. `open-thread-panel` is already
+      # `covered: true` at t1 via `thread-logging-smoke.spec.ts` — that the panel
+      # opens at all — and every assertion in it passes over a search box that
+      # narrows to the wrong turns, highlights nothing, or never restores.
+      #
+      # Not `free-text-search` either, though the name is nearly identical: that
+      # key is `ThreadDAO`'s server-side `search` param over the Threads TABLE,
+      # a different endpoint answering a different question (which threads to
+      # list). This one is entirely client-side inside the already-open panel —
+      # `useThreadSearch` over the rendered DOM — and the two can regress
+      # independently.
+      #
+      # The capability is in the `threads` area even though the spec lives in
+      # trace-explore/ — that is this area's `spec_dir`, shared with traces.
+      panel-message-search:    { covered: false, note: "The thread detail panel's own \"Search messages\" box (opik#9329): client-side narrowing of the rendered turns plus the CSS Custom Highlight ranges `useThreadSearch` registers, over a 6-turn thread carrying planted tokens placed so narrowing and highlighting cannot be satisfied by each other — one token only in a turn's INPUT, one only in another's OUTPUT, and one appearing twice in one turn's input and once in a third turn's output. Asserted per term: which turns survive (by trace id, as a set), how many ranges sit in the `thread-search-match` highlight, and which of them is the `thread-search-current-match` — stepped with ArrowDown through 1, 2, 0 to pin the wrap-around and ArrowUp back to 2, since `findNext`/`findPrev` are modular and an off-by-one there is invisible to a count. Also the three guards the PR iterated on: a whitespace-only term is no search (every turn shown, zero ranges, because `searchTerm` is trimmed before it reaches either the filter or the highlighter), a non-matching term shows the \"No messages match your search\" empty state, and Escape restores every turn and empties the highlight registry. The highlight count is read from `CSS.highlights` rather than from any element, because the API paints ranges with no DOM of their own — there is nothing to select. NOT covered: the scroll-into-view and the `<details>`-reveal branches of `revealRange`/`scrollRangeIntoView` (both are positioning, asserted nowhere), and the match's rendered COLOUR." }
 
     visual:
       logs-threads-view:   { covered: true,  state: default, spec: "visual-comparison.spec.ts 03" }
