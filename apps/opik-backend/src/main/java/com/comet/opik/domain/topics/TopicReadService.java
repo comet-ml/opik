@@ -40,7 +40,8 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
  * <li>{@code collecting}: eligible, no live topic; the body says how many traces with a vector the window has and how
  * many the first build needs.</li>
  * <li>{@code ready}: eligible with live topics; {@link TopicsCounts} folds the counts of
- * {@link TraceTopicsDAO#countByTopicAndDay}.</li>
+ * {@link TraceTopicsDAO#countByTopicAndDay}, and the counts of the project's last two saved runs into
+ * {@code run_change}.</li>
  * </ul>
  * MySQL is read first, in one read-only transaction, then ClickHouse, with no lock: a night that saves in between makes
  * some of the request's rows stale, which count as Other. A ClickHouse read that trips a query limit or the client
@@ -108,10 +109,17 @@ public class TopicReadService {
             var topicDAO = handle.attach(TopicDAO.class);
             var live = topicDAO.findLive(workspaceId, projectId);
             var state = topicDAO.findState(workspaceId, projectId).orElse(null);
-            var savedRunIds = live.isEmpty()
-                    ? List.<UUID>of()
-                    : handle.attach(TopicRunDAO.class).findSavedRunIds(workspaceId, projectId);
-            return Optional.of(ProjectSnapshot.builder().live(live).state(state).savedRunIds(savedRunIds).build());
+            if (live.isEmpty()) {
+                return Optional.of(ProjectSnapshot.builder().live(live).state(state).savedRunIds(List.of())
+                        .runCounts(List.of()).build());
+            }
+            var runDAO = handle.attach(TopicRunDAO.class);
+            return Optional.of(ProjectSnapshot.builder()
+                    .live(live)
+                    .state(state)
+                    .savedRunIds(runDAO.findSavedRunIds(workspaceId, projectId))
+                    .runCounts(runDAO.findLastTwoRunCounts(workspaceId, projectId))
+                    .build());
         });
         if (snapshot.isEmpty()) {
             return TopicsCounts.window(today).status(ProjectTopics.Status.DISABLED).build();
@@ -137,7 +145,7 @@ public class TopicReadService {
                 .countByTopicAndDay(workspaceId, projectId, from, to, snapshot.get().savedRunIds(),
                         MAX_EXECUTION_SECONDS)
                 .collectList());
-        return TopicsCounts.ready(today, live, state, rows);
+        return TopicsCounts.ready(today, live, state, rows, snapshot.get().runCounts());
     }
 
     /** Blocks on a ClickHouse read; a query limit or the client timeout becomes a 503 with Retry-After. */
@@ -168,6 +176,7 @@ public class TopicReadService {
 
     /** The MySQL reads of one request, taken in one transaction. */
     @Builder(toBuilder = true)
-    private record ProjectSnapshot(List<Topic> live, TopicProjectState state, List<UUID> savedRunIds) {
+    private record ProjectSnapshot(List<Topic> live, TopicProjectState state, List<UUID> savedRunIds,
+            List<TopicRunCount> runCounts) {
     }
 }

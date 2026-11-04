@@ -112,11 +112,23 @@ class TopicReadServiceTest {
                         TopicDayCount.builder().topicId(topic.id()).day(TODAY).traces(5).build(),
                         TopicDayCount.builder().topicId(UUID.randomUUID()).day(TODAY).traces(2).build()));
 
+        var last = UUID.randomUUID();
+        var lastAt = Instant.parse("2026-11-03T02:10:00Z");
+        var previous = UUID.randomUUID();
+        var previousAt = Instant.parse("2026-11-02T02:10:00Z");
+        when(runDAO.findLastTwoRunCounts(WORKSPACE_ID, projectId)).thenReturn(List.of(
+                runCount(last, lastAt, topic.id(), 5, 1), runCount(last, lastAt, TraceTopic.OTHER, 0, null),
+                runCount(previous, previousAt, topic.id(), 2, 1),
+                runCount(previous, previousAt, TraceTopic.OTHER, 2, null)));
+
         var body = service.get(WORKSPACE_ID, WORKSPACE_NAME, projectId);
 
         assertThat(body.status()).isEqualTo(ProjectTopics.Status.READY);
         assertThat(body.totalTraces()).isEqualTo(7L);
         assertThat(body.other().stale()).isEqualTo(2);
+        // The counts of the last two saved runs, read in the same transaction, fold into run_change.
+        assertThat(body.topics().getFirst().runChange().count()).isEqualTo(3);
+        assertThat(body.other().runChange().count()).isEqualTo(-2);
         assertThat(meter.points(DURATION)).singleElement()
                 .satisfies(point -> assertThat(point.get("status")).isEqualTo("ready"));
         assertThat(meter.points(STALE)).singleElement().satisfies(point -> {
@@ -247,6 +259,18 @@ class TopicReadServiceTest {
                 .name("Refund requests")
                 .definition("Users ask to get their money back.")
                 .born(TODAY.minusDays(10))
+                .build();
+    }
+
+    private static TopicRunCount runCount(UUID runId, Instant savedAt, UUID topicId, long traces, Integer rank) {
+        return TopicRunCount.builder()
+                .runId(runId)
+                .workspaceId(WORKSPACE_ID)
+                .projectId(UUID.randomUUID())
+                .topicId(topicId)
+                .traces(traces)
+                .rank(rank)
+                .savedAt(savedAt)
                 .build();
     }
 }

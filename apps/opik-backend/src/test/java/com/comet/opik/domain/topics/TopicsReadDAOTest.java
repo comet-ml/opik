@@ -33,6 +33,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
@@ -209,6 +210,26 @@ class TopicsReadDAOTest {
     }
 
     @Test
+    @DisplayName("last two runs' counts: the two latest saved_at, newest first, by rank with Other last; not an older "
+            + "run, not another project's, not the same project id under another workspace")
+    void lastTwoRunCounts() {
+        var workspaceId = workspaceId();
+        var projectId = UUID.randomUUID();
+        var topicId = UUID.randomUUID();
+        saveRunCounts(workspaceId, projectId, NOON.minus(Duration.ofDays(2)), topicId);
+        var previous = saveRunCounts(workspaceId, projectId, NOON.minus(Duration.ofDays(1)), topicId);
+        var last = saveRunCounts(workspaceId, projectId, NOON, topicId);
+        saveRunCounts(workspaceId, UUID.randomUUID(), NOON.plus(Duration.ofHours(1)), topicId);
+        saveRunCounts(workspaceId(), projectId, NOON.plus(Duration.ofHours(1)), topicId);
+
+        var found = template.inTransaction(READ_ONLY,
+                handle -> handle.attach(TopicRunDAO.class).findLastTwoRunCounts(workspaceId, projectId));
+
+        assertThat(found).usingRecursiveComparison()
+                .isEqualTo(Stream.concat(last.stream(), previous.stream()).toList());
+    }
+
+    @Test
     @DisplayName("live topics and the project state: filtered by workspace too; retired topics are left out")
     void liveTopicsAndState() {
         var workspaceId = workspaceId();
@@ -276,6 +297,19 @@ class TopicsReadDAOTest {
                 .source(source)
                 .runId(runId)
                 .build();
+    }
+
+    /** One saved run's counts, Other inserted first; returned as the read orders them, the topic then Other. */
+    private List<TopicRunCount> saveRunCounts(String workspaceId, UUID projectId, Instant savedAt, UUID topicId) {
+        var runId = ID_GENERATOR.generateId();
+        var other = TopicRunCount.builder().runId(runId).workspaceId(workspaceId).projectId(projectId)
+                .topicId(TraceTopic.OTHER).traces(3).savedAt(savedAt).build();
+        var topic = other.toBuilder().topicId(topicId).traces(7).rank(1).build();
+        template.inTransaction(WRITE, handle -> {
+            handle.attach(TopicRunDAO.class).insertCounts(List.of(other, topic));
+            return null;
+        });
+        return List.of(topic, other);
     }
 
     private UUID run(String workspaceId, UUID projectId, TopicRun.Status status) {

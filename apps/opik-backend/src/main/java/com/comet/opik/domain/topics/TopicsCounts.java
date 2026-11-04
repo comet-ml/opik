@@ -2,10 +2,13 @@ package com.comet.opik.domain.topics;
 
 import com.comet.opik.api.ProjectTopics;
 import com.comet.opik.api.ProjectTopics.DayCount;
+import com.comet.opik.api.ProjectTopics.OtherRunChange;
 import com.comet.opik.api.ProjectTopics.OtherStats;
+import com.comet.opik.api.ProjectTopics.RunChange;
 import com.comet.opik.api.ProjectTopics.TopicStats;
 import com.comet.opik.domain.topics.TraceTopicsDAO.TopicDayCount;
 import jakarta.annotation.Nullable;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 
@@ -16,21 +19,26 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.IntStream;
 
 /**
- * The topics read API's {@code ready} body from a project's live topics, its state and the per topic and day counts of
- * {@link TraceTopicsDAO#countByTopicAndDay}. The window is the 30 UTC days that end with today, the window of
+ * The topics read API's {@code ready} body from a project's live topics, its state, the per topic and day counts of
+ * {@link TraceTopicsDAO#countByTopicAndDay} and the counts of its last two saved runs
+ * ({@link TopicRunDAO#findLastTwoRunCounts}). The window is the 30 UTC days that end with today, the window of
  * tomorrow's night.
  * <ul>
  * <li>Only the window's days count: a row of another day is skipped.</li>
  * <li>A row of an id that is neither a live topic nor Other (a topic retired since the trace was labelled) counts as
  * Other and as {@code stale}.</li>
- * <li>{@code change} is today minus yesterday; {@code share} is over all the window's traces, Other included.</li>
- * <li>Rank: active topics by count, then inactive ones by count; ties by born, then id (the order of
- * {@link TopicDAO#findLive}).</li>
+ * <li>{@code share} is over all the window's traces, Other included.</li>
+ * <li>Rank: {@link TopicRanking} on the window counts: active topics by count, then inactive ones by count; ties by
+ * born, then id.</li>
+ * <li>{@code run_change}: the last saved run's counts against the run before's. A topic without a row in both runs
+ * has none, as has Other with fewer than two runs.</li>
  * <li>New: born after the first build's date and at most {@value #NEW_DAYS} days ago, so a first build's topics are
  * never New, as in the night's newborn rule.</li>
  * </ul>
@@ -40,9 +48,6 @@ public class TopicsCounts {
 
     static final int WINDOW_DAYS = 30;
     static final int NEW_DAYS = 7;
-
-    private static final Comparator<Topic> RANK_TIES = Comparator.comparing(Topic::born)
-            .thenComparing(topic -> topic.id().toString());
 
     public static LocalDate windowFrom(@NonNull LocalDate today) {
         return today.minusDays(WINDOW_DAYS - 1);
@@ -63,7 +68,8 @@ public class TopicsCounts {
     }
 
     public static ProjectTopics ready(@NonNull LocalDate today, @NonNull List<Topic> live,
-            @Nullable TopicProjectState state, @NonNull List<TopicDayCount> rows) {
+            @Nullable TopicProjectState state, @NonNull List<TopicDayCount> rows,
+            @NonNull List<TopicRunCount> runCounts) {
         var from = windowFrom(today);
         var days = new HashMap<UUID, long[]>();
         live.forEach(topic -> days.put(topic.id(), new long[WINDOW_DAYS]));
@@ -90,9 +96,8 @@ public class TopicsCounts {
                 ? null
                 : LocalDate.ofInstant(state.firstBuiltAt(), ZoneOffset.UTC);
         var ranked = new ArrayList<>(live);
-        ranked.sort(Comparator.<Topic, Boolean>comparing(topic -> topic.inactiveSince() != null)
-                .thenComparing(topic -> sum(days.get(topic.id())), Comparator.reverseOrder())
-                .thenComparing(RANK_TIES));
+        ranked.sort(TopicRanking.order(topic -> sum(days.get(topic.id()))));
+        var runs = RunPair.of(runCounts);
         var topics = IntStream.range(0, ranked.size())
                 .mapToObj(i -> {
                     var topic = ranked.get(i);
@@ -107,8 +112,8 @@ public class TopicsCounts {
                             .inactiveSince(topic.inactiveSince())
                             .count(sum(topicDays))
                             .share(share(sum(topicDays), total))
-                            .change(change(topicDays))
                             .rank(i + 1)
+                            .runChange(runs.topic(topic.id()))
                             .series(series(from, topicDays))
                             .build();
                 })
@@ -125,7 +130,7 @@ public class TopicsCounts {
                         .count(sum(other))
                         .stale(stale)
                         .share(share(sum(other), total))
-                        .change(change(other))
+                        .runChange(runs.other())
                         .series(series(from, other))
                         .build())
                 .build();
@@ -150,8 +155,69 @@ public class TopicsCounts {
                 .toList();
     }
 
-    private static long change(long[] days) {
-        return days[WINDOW_DAYS - 1] - days[WINDOW_DAYS - 2];
+    /**
+     * The rows of the project's last two saved runs by topic id: {@code last} has the latest {@code saved_at} (then
+     * the greater run id), {@code previous} the one before. Both are empty with fewer than two runs.
+     */
+    @Builder(toBuilder = true)
+    private record RunPair(Map<UUID, TopicRunCount> last, long lastTotal, Map<UUID, TopicRunCount> previous,
+            long previousTotal) {
+
+        static RunPair of(List<TopicRunCount> rows) {
+            var runs = new LinkedHashMap<UUID, Map<UUID, TopicRunCount>>();
+            rows.stream()
+                    .sorted(Comparator.comparing(TopicRunCount::savedAt)
+                            .thenComparing(row -> row.runId().toString())
+                            .reversed())
+                    .forEach(row -> runs.computeIfAbsent(row.runId(), id -> new HashMap<>()).put(row.topicId(), row));
+            if (runs.size() < 2) {
+                return RunPair.builder().last(Map.of()).previous(Map.of()).build();
+            }
+            var iterator = runs.values().iterator();
+            var last = iterator.next();
+            var previous = iterator.next();
+            return RunPair.builder()
+                    .last(last)
+                    .lastTotal(total(last))
+                    .previous(previous)
+                    .previousTotal(total(previous))
+                    .build();
+        }
+
+        RunChange topic(UUID topicId) {
+            var now = last.get(topicId);
+            var before = previous.get(topicId);
+            if (now == null || before == null || now.rank() == null || before.rank() == null) {
+                return null;
+            }
+            return RunChange.builder()
+                    .count(now.traces() - before.traces())
+                    .countRatio(ratio(now, before))
+                    .share(share(now.traces(), lastTotal) - share(before.traces(), previousTotal))
+                    .rank(before.rank() - now.rank())
+                    .build();
+        }
+
+        OtherRunChange other() {
+            var now = last.get(TraceTopic.OTHER);
+            var before = previous.get(TraceTopic.OTHER);
+            if (now == null || before == null) {
+                return null;
+            }
+            return OtherRunChange.builder()
+                    .count(now.traces() - before.traces())
+                    .countRatio(ratio(now, before))
+                    .share(share(now.traces(), lastTotal) - share(before.traces(), previousTotal))
+                    .build();
+        }
+
+        private static Double ratio(TopicRunCount now, TopicRunCount before) {
+            return before.traces() == 0 ? null : (double) (now.traces() - before.traces()) / before.traces();
+        }
+
+        private static long total(Map<UUID, TopicRunCount> run) {
+            return run.values().stream().mapToLong(TopicRunCount::traces).sum();
+        }
     }
 
     private static double share(long count, long total) {

@@ -897,10 +897,10 @@ Every body has `today`, `window_from` and `window_until` (UTC dates, both ends i
   left. They are missing from `total_traces` until a later saved night labels them. A trace that no later night's
   window covers stays missing.
 - **Numbers.** `count`: the topic's traces in the window. `total_traces`: all counted traces, Other included. `share`:
-  `count / total_traces`, 0 with no trace. `change`: today's count minus yesterday's; today is partial. `series`: 30
-  `{day, count}` entries, oldest first, today last. `rank`: active topics first, then inactive ones (`inactive_since`
-  set), each by `count` descending, then `born`, then `id`. `is_new`: born after the first build's date and in the last
-  7 days.
+  `count / total_traces`, 0 with no trace. `series`: 30 `{day, count}` entries, oldest first, today last. `rank`:
+  active topics first, then inactive ones (`inactive_since` set), each by `count` descending, then `born`, then `id`.
+  `is_new`: born after the first build's date and in the last 7 days. `run_change`: the change between the last two
+  saved runs (see "Changes since the last run").
 - **`labelled_from`.** The first day in the window with any row, omitted with no row. Zeros before it mean nothing was
   labelled yet (a new opt-in, or a first build that kept only the newest 30,000 traces), not that there was no traffic.
 
@@ -960,10 +960,58 @@ GROUP BY topic, day
 ORDER BY day, topic;
 ```
 
-From the result: a topic's `count` is the sum of its `traces`, `total_traces` is the sum of all rows, `change` is
-today's row minus yesterday's, and `other.stale` is the sum of `stale`. To compare with the API, run the query right
+From the result: a topic's `count` is the sum of its `traces`, `total_traces` is the sum of all rows, and
+`other.stale` is the sum of `stale`. To compare with the API, run the query right
 after the API call, on the same UTC date, and outside the night's hours (from `TOPICS_NIGHTLY_SCHEDULE` until
 `TOPICS_NIGHTLY_BUDGET` later): a night that saves between the two reads changes the counts.
+
+### Changes since the last run
+
+`run_change`, on each topic and on `other`, compares the project's last two saved nightly runs. Each saved run writes
+its counts to the MySQL table `topic_run_counts`, in its save transaction: one row per live topic with `traces` (its
+count in the run's window) and `rank`, and one row for Other (the all-zeros `topic_id`, no rank). ClickHouse cannot
+give these numbers back: after merges, `trace_topics` keeps only the latest row per trace, so an older run's labels
+are gone.
+
+- `count`: the last run's `traces` minus the run before's.
+- `count_ratio`: `count` over the run before's `traces`. Omitted when those are 0.
+- `share`: the last run's share minus the run before's, in share units: 0.007 is 0.7 points. A run's share is a row's
+  `traces` over the sum of the run's rows.
+- `rank`: the run before's rank minus the last run's. Positive means the topic moved up. Other has no `rank`.
+- A topic born in the last run has no row in the run before, so it has no `run_change`. With fewer than two saved
+  runs, no topic has one, and neither has Other.
+
+The topic's own `count`, `share` and `rank` are the live window's, from ClickHouse at request time. `run_change` uses
+only the saved runs, so it changes once a night.
+
+```sql
+-- MySQL: run_change per topic, as the API computes it. Other is the all-zeros topic_id. A live topic missing from the
+-- result has no run_change.
+WITH last_runs AS (
+    SELECT run_id, ROW_NUMBER() OVER (ORDER BY MAX(saved_at) DESC, run_id DESC) AS n
+    FROM topic_run_counts
+    WHERE workspace_id = '<workspace_id>' AND project_id = '<project_id>'
+    GROUP BY run_id
+),
+counts AS (
+    SELECT r.n, c.topic_id, c.traces, c.`rank`,
+           CAST(c.traces AS DOUBLE) / SUM(c.traces) OVER (PARTITION BY r.n) AS share
+    FROM topic_run_counts c
+    JOIN last_runs r ON r.run_id = c.run_id
+    WHERE r.n <= 2
+)
+SELECT l.topic_id,
+       l.traces,
+       p.traces AS previous_traces,
+       l.traces - p.traces AS count,
+       CAST(l.traces - p.traces AS DOUBLE) / NULLIF(p.traces, 0) AS count_ratio,
+       l.share - p.share AS share,
+       p.`rank` - l.`rank` AS `rank`
+FROM counts l
+JOIN counts p ON p.topic_id = l.topic_id AND p.n = 2
+WHERE l.n = 1
+ORDER BY l.`rank` IS NULL, l.`rank`;
+```
 
 ### Errors
 

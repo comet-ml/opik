@@ -396,7 +396,7 @@ class TopicsReadLoadTest {
             var api = get(apiKey, workspaceName, projectId);
             assumeTrue(today.equals(api.today()), "the UTC day changed during the test");
             report.append("## Runbook queries against the API\n\n").append(runbookCheck(api, workspaceId,
-                    projectId, today, live.size(), lastRun));
+                    projectId, live.size(), lastRun));
         } finally {
             execute(START_MERGES, Map.of());
             execute(DROP_TRACES, Map.of());
@@ -463,11 +463,11 @@ class TopicsReadLoadTest {
                 .getFirst();
     }
 
-    private String runbookCheck(ProjectTopics api, String workspaceId, UUID projectId, LocalDate today, int liveTopics,
+    private String runbookCheck(ProjectTopics api, String workspaceId, UUID projectId, int liveTopics,
             TopicRun lastRun) throws Exception {
         var runbook = Files.readString(RUNBOOK);
         var section = runbook.substring(runbook.indexOf("### Reading a project by hand"),
-                runbook.indexOf("### Errors"));
+                runbook.indexOf("### Changes since the last run"));
         var blocks = Pattern.compile("```sql\n(.*?)```", Pattern.DOTALL).matcher(section).results()
                 .map(match -> match.group(1)
                         .replace("<workspace_id>", workspaceId)
@@ -527,25 +527,19 @@ class TopicsReadLoadTest {
         for (TopicStats topic : api.topics()) {
             var days = counts.getOrDefault(topic.id().toString(), Map.of());
             assertThat(sum(days)).as(topic.name()).isEqualTo(topic.count());
-            assertThat(change(days, today)).as(topic.name()).isEqualTo(topic.change());
         }
         var other = counts.getOrDefault(OTHER, Map.of());
         assertThat(sum(other)).isEqualTo(api.other().count());
-        assertThat(change(other, today)).isEqualTo(api.other().change());
         assertThat(stale).isEqualTo(api.other().stale());
         return ("MySQL block: %d statements ran (eligible 1, %d live topics, state, %d-character saved_run_ids "
-                + "list). ClickHouse block: equal to the API for every topic's count and change, Other's count, "
-                + "change and stale (%d), and total_traces (%,d), after a failed run relabelled %,d traces and three "
+                + "list). ClickHouse block: equal to the API for every topic's count, Other's count and stale "
+                + "(%d), and total_traces (%,d), after a failed run relabelled %,d traces and three "
                 + "rows were put at the window edges.\n").formatted(mysqlResults.size() + 1, liveTopics,
                         savedRunIds.length(), stale, total, FAILED_TRACES);
     }
 
     private static long sum(Map<LocalDate, Long> days) {
         return days.values().stream().mapToLong(Long::longValue).sum();
-    }
-
-    private static long change(Map<LocalDate, Long> days, LocalDate today) {
-        return days.getOrDefault(today, 0L) - days.getOrDefault(today.minusDays(1), 0L);
     }
 
     private String queryLog(String comment, Instant since) {

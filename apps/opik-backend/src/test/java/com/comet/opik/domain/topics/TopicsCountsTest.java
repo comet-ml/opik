@@ -2,12 +2,15 @@ package com.comet.opik.domain.topics;
 
 import com.comet.opik.api.ProjectTopics;
 import com.comet.opik.api.ProjectTopics.DayCount;
+import com.comet.opik.api.ProjectTopics.OtherRunChange;
+import com.comet.opik.api.ProjectTopics.RunChange;
 import com.comet.opik.api.ProjectTopics.TopicStats;
 import com.comet.opik.domain.topics.TraceTopicsDAO.TopicDayCount;
 import org.assertj.core.groups.Tuple;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -74,24 +77,6 @@ class TopicsCountsTest {
     }
 
     @Test
-    @DisplayName("change: today minus yesterday; with no row yesterday it is today's count, with none today it is "
-            + "minus yesterday's")
-    void change() {
-        var onlyToday = topic(FIRST_BUILD, null);
-        var onlyYesterday = topic(FIRST_BUILD, null);
-        var both = topic(FIRST_BUILD, null);
-        var body = fold(List.of(onlyToday, onlyYesterday, both), List.of(
-                row(onlyToday, TODAY, 4),
-                row(onlyYesterday, TODAY.minusDays(1), 3),
-                row(both, TODAY.minusDays(1), 2),
-                row(both, TODAY, 7)));
-
-        assertThat(stats(body, onlyToday).change()).isEqualTo(4);
-        assertThat(stats(body, onlyYesterday).change()).isEqualTo(-3);
-        assertThat(stats(body, both).change()).isEqualTo(5);
-    }
-
-    @Test
     @DisplayName("rank: active topics by count, then inactive ones by count; ties by born, then id")
     void rank() {
         var big = topic(FIRST_BUILD, null);
@@ -149,7 +134,8 @@ class TopicsCountsTest {
         var freshBuild = STATE.toBuilder().firstBuiltAt(TODAY.minusDays(2).atTime(2, 0).toInstant(ZoneOffset.UTC))
                 .build();
         var builtTwoDaysAgo = topic(TODAY.minusDays(2), null);
-        assertThat(TopicsCounts.ready(TODAY, List.of(builtTwoDaysAgo), freshBuild, List.of()).topics().getFirst()
+        assertThat(TopicsCounts.ready(TODAY, List.of(builtTwoDaysAgo), freshBuild, List.of(), List.of()).topics()
+                .getFirst()
                 .isNew()).isFalse();
     }
 
@@ -169,7 +155,6 @@ class TopicsCountsTest {
         assertThat(other.id()).isEqualTo(TraceTopic.OTHER);
         assertThat(other.count()).isEqualTo(6);
         assertThat(other.stale()).isEqualTo(4);
-        assertThat(other.change()).isEqualTo(0);
         assertThat(other.series().getLast()).isEqualTo(DayCount.builder().day(TODAY).count(3).build());
         assertThat(other.share()).isCloseTo(6.0 / 11, within(1e-12));
         assertThat(body.totalTraces()).isEqualTo(11L);
@@ -184,7 +169,6 @@ class TopicsCountsTest {
 
         var stats = stats(body, quiet);
         assertThat(stats.count()).isZero();
-        assertThat(stats.change()).isZero();
         assertThat(stats.series()).hasSize(30).allSatisfy(day -> assertThat(day.count()).isZero());
     }
 
@@ -209,7 +193,7 @@ class TopicsCountsTest {
     @DisplayName("a project with no saved run yet: no last run, no topic is New")
     void noState() {
         var topic = topic(TODAY, null);
-        var body = TopicsCounts.ready(TODAY, List.of(topic), null, List.of(row(topic, TODAY, 1)));
+        var body = TopicsCounts.ready(TODAY, List.of(topic), null, List.of(row(topic, TODAY, 1)), List.of());
 
         assertThat(body.lastRunAt()).isNull();
         assertThat(body.topics().getFirst().isNew()).isFalse();
@@ -228,8 +212,90 @@ class TopicsCountsTest {
         assertThat(stats(body, topic).series().getLast()).isEqualTo(DayCount.builder().day(TODAY).count(2).build());
     }
 
+    @Test
+    @DisplayName("run_change: none with no saved run's counts, and none with one run's")
+    void runChangeNeedsTwoRuns() {
+        var topic = topic(FIRST_BUILD, null);
+        var rows = List.of(row(topic, TODAY, 3));
+        var runId = UUID.randomUUID();
+
+        var none = fold(List.of(topic), rows, List.of());
+        var one = fold(List.of(topic), rows, List.of(
+                runCount(runId, LAST_RUN, topic.id(), 3, 1),
+                runCount(runId, LAST_RUN, TraceTopic.OTHER, 1, null)));
+
+        assertThat(none.topics().getFirst().runChange()).isNull();
+        assertThat(none.other().runChange()).isNull();
+        assertThat(one.topics().getFirst().runChange()).isNull();
+        assertThat(one.other().runChange()).isNull();
+    }
+
+    @Test
+    @DisplayName("run_change: the run with the later saved_at against the one before; count, ratio, share in share "
+            + "units, rank up and down, Other without a rank")
+    void runChange() {
+        var grew = topic(FIRST_BUILD, null);
+        var shrank = topic(FIRST_BUILD, null);
+        var previous = UUID.randomUUID();
+        var last = UUID.randomUUID();
+        var before = LAST_RUN.minus(Duration.ofDays(1));
+        // In no order: the fold finds the last run by saved_at.
+        var body = fold(List.of(grew, shrank), List.of(row(grew, TODAY, 1)), List.of(
+                runCount(last, LAST_RUN, grew.id(), 60, 1),
+                runCount(previous, before, shrank.id(), 40, 1),
+                runCount(last, LAST_RUN, TraceTopic.OTHER, 10, null),
+                runCount(previous, before, grew.id(), 20, 2),
+                runCount(last, LAST_RUN, shrank.id(), 30, 2),
+                runCount(previous, before, TraceTopic.OTHER, 40, null)));
+
+        assertThat(stats(body, grew).runChange()).usingRecursiveComparison().isEqualTo(RunChange.builder()
+                .count(40).countRatio(2.0).share(60.0 / 100 - 20.0 / 100).rank(1).build());
+        assertThat(stats(body, shrank).runChange()).usingRecursiveComparison().isEqualTo(RunChange.builder()
+                .count(-10).countRatio(-0.25).share(30.0 / 100 - 40.0 / 100).rank(-1).build());
+        assertThat(body.other().runChange()).usingRecursiveComparison().isEqualTo(OtherRunChange.builder()
+                .count(-30).countRatio(-0.75).share(10.0 / 100 - 40.0 / 100).build());
+    }
+
+    @Test
+    @DisplayName("run_change: none for a topic new in the last run; no count ratio when the run before had 0 traces")
+    void runChangeNewTopicAndZero() {
+        var newborn = topic(TODAY.minusDays(1), null);
+        var quiet = topic(FIRST_BUILD, null);
+        var previous = UUID.randomUUID();
+        var last = UUID.randomUUID();
+        var before = LAST_RUN.minus(Duration.ofDays(1));
+        var body = fold(List.of(newborn, quiet), List.of(), List.of(
+                runCount(previous, before, quiet.id(), 0, 1),
+                runCount(previous, before, TraceTopic.OTHER, 10, null),
+                runCount(last, LAST_RUN, newborn.id(), 6, 1),
+                runCount(last, LAST_RUN, quiet.id(), 4, 2),
+                runCount(last, LAST_RUN, TraceTopic.OTHER, 0, null)));
+
+        assertThat(stats(body, newborn).runChange()).isNull();
+        assertThat(stats(body, quiet).runChange()).usingRecursiveComparison().isEqualTo(RunChange.builder()
+                .count(4).countRatio(null).share(4.0 / 10 - 0.0 / 10).rank(-1).build());
+        assertThat(body.other().runChange()).usingRecursiveComparison().isEqualTo(OtherRunChange.builder()
+                .count(-10).countRatio(-1.0).share(0.0 / 10 - 10.0 / 10).build());
+    }
+
     private static ProjectTopics fold(List<Topic> live, List<TopicDayCount> rows) {
-        return TopicsCounts.ready(TODAY, live, STATE, rows);
+        return fold(live, rows, List.of());
+    }
+
+    private static ProjectTopics fold(List<Topic> live, List<TopicDayCount> rows, List<TopicRunCount> runCounts) {
+        return TopicsCounts.ready(TODAY, live, STATE, rows, runCounts);
+    }
+
+    private static TopicRunCount runCount(UUID runId, Instant savedAt, UUID topicId, long traces, Integer rank) {
+        return TopicRunCount.builder()
+                .runId(runId)
+                .workspaceId(WORKSPACE_ID)
+                .projectId(PROJECT_ID)
+                .topicId(topicId)
+                .traces(traces)
+                .rank(rank)
+                .savedAt(savedAt)
+                .build();
     }
 
     private static TopicStats stats(ProjectTopics body, Topic topic) {

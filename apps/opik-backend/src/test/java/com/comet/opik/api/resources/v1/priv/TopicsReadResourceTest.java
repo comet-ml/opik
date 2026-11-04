@@ -2,6 +2,8 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.ProjectTopics;
 import com.comet.opik.api.ProjectTopics.DayCount;
+import com.comet.opik.api.ProjectTopics.OtherRunChange;
+import com.comet.opik.api.ProjectTopics.RunChange;
 import com.comet.opik.api.ProjectTopics.TopicStats;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -21,7 +23,9 @@ import com.comet.opik.domain.ailabels.AiLabelWorkspaceDAO;
 import com.comet.opik.domain.topics.Topic;
 import com.comet.opik.domain.topics.TopicDAO;
 import com.comet.opik.domain.topics.TopicProjectState;
+import com.comet.opik.domain.topics.TopicRanking;
 import com.comet.opik.domain.topics.TopicRun;
+import com.comet.opik.domain.topics.TopicRunCount;
 import com.comet.opik.domain.topics.TopicRunDAO;
 import com.comet.opik.domain.topics.TopicVector;
 import com.comet.opik.domain.topics.TopicVectorsDAO;
@@ -54,16 +58,23 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.infrastructure.RateLimitConfig.LimitConfig;
@@ -87,6 +98,7 @@ class TopicsReadResourceTest {
     private static final String RATE_LIMIT_BUCKET = "getProjectTopics";
     private static final int RATE_LIMIT = 3;
     private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
+    private static final Path RUNBOOK = Path.of("docs", "ai-labels-runbook.md");
 
     private final RedisContainer redis = RedisContainerUtils.newRedisContainer();
     private final GenericContainer<?> zookeeper = ClickHouseContainerUtils.newZookeeperContainer();
@@ -159,7 +171,7 @@ class TopicsReadResourceTest {
     }
 
     @Test
-    @DisplayName("ready: per topic counts, shares, changes, ranks, series and New as seeded; a retired topic's rows "
+    @DisplayName("ready: per topic counts, shares, ranks, series and New as seeded; a retired topic's rows "
             + "count as stale Other; rows of a failed run and rows outside the window do not count")
     void ready() {
         var caller = caller();
@@ -216,10 +228,10 @@ class TopicsReadResourceTest {
         assertThat(body.labelledFrom()).isEqualTo(today.minusDays(25));
         assertThat(body.vectorsInWindow()).isNull();
         assertThat(body.topics()).extracting(TopicStats::id, TopicStats::rank, TopicStats::count,
-                TopicStats::change, TopicStats::isNew).containsExactly(
-                        tuple(first.id(), 1, 6L, -1L, false),
-                        tuple(newborn.id(), 2, 5L, 5L, true),
-                        tuple(inactive.id(), 3, 10L, -10L, false));
+                TopicStats::isNew).containsExactly(
+                        tuple(first.id(), 1, 6L, false),
+                        tuple(newborn.id(), 2, 5L, true),
+                        tuple(inactive.id(), 3, 10L, false));
         var firstStats = body.topics().getFirst();
         assertThat(firstStats.name()).isEqualTo(first.name());
         assertThat(firstStats.share()).isCloseTo(6.0 / 24, within(1e-12));
@@ -232,8 +244,71 @@ class TopicsReadResourceTest {
         assertThat(other.id()).isEqualTo(TraceTopic.OTHER);
         assertThat(other.count()).isEqualTo(3);
         assertThat(other.stale()).isEqualTo(2);
-        assertThat(other.change()).isEqualTo(-1);
         assertThat(other.share()).isCloseTo(3.0 / 24, within(1e-12));
+    }
+
+    @Test
+    @DisplayName("run_change: the last two saved runs' counts, equal to the runbook's query; none for a topic new in "
+            + "the last run; an older run is not read")
+    void runChange() throws Exception {
+        var caller = caller();
+        var projectId = project(caller);
+        optIn(caller.workspaceId());
+        var today = LocalDate.now(ZoneOffset.UTC);
+        var grew = topic(caller.workspaceId(), projectId, today.minusDays(20), null, null);
+        var shrank = topic(caller.workspaceId(), projectId, today.minusDays(20), null, null);
+        var newborn = topic(caller.workspaceId(), projectId, today.minusDays(1), null, null);
+        var lastAt = Instant.now().truncatedTo(ChronoUnit.MICROS);
+        template.inTransaction(WRITE, handle -> {
+            handle.attach(TopicDAO.class).insertTopics(List.of(grew, shrank, newborn));
+            var runs = handle.attach(TopicRunDAO.class);
+            runs.insertCounts(runCounts(caller.workspaceId(), projectId, lastAt.minus(Duration.ofDays(2)), 5,
+                    grew.toBuilder().size(90).build(), shrank.toBuilder().size(5).build()));
+            runs.insertCounts(runCounts(caller.workspaceId(), projectId, lastAt.minus(Duration.ofDays(1)), 40,
+                    grew.toBuilder().size(20).build(), shrank.toBuilder().size(40).build()));
+            runs.insertCounts(runCounts(caller.workspaceId(), projectId, lastAt, 10,
+                    grew.toBuilder().size(60).build(), shrank.toBuilder().size(25).build(),
+                    newborn.toBuilder().size(5).build()));
+            return null;
+        });
+
+        var body = get(caller, projectId);
+
+        assertThat(body.status()).isEqualTo(ProjectTopics.Status.READY);
+        assertThat(runChange(body, grew)).usingRecursiveComparison().isEqualTo(RunChange.builder()
+                .count(40).countRatio(2.0).share(60.0 / 100 - 20.0 / 100).rank(1).build());
+        assertThat(runChange(body, shrank)).usingRecursiveComparison().isEqualTo(RunChange.builder()
+                .count(-15).countRatio(-0.375).share(25.0 / 100 - 40.0 / 100).rank(-1).build());
+        assertThat(runChange(body, newborn)).isNull();
+        assertThat(body.other().runChange()).usingRecursiveComparison().isEqualTo(OtherRunChange.builder()
+                .count(-30).countRatio(-0.75).share(10.0 / 100 - 40.0 / 100).build());
+
+        // The runbook's query, run as written, gives the same changes: Other with no rank, no row for the newborn.
+        record Change(long count, Double countRatio, double share, Integer rank) {
+        }
+        var fromApi = new HashMap<UUID, Change>();
+        body.topics().stream().filter(topic -> topic.runChange() != null).forEach(topic -> fromApi.put(topic.id(),
+                new Change(topic.runChange().count(), topic.runChange().countRatio(), topic.runChange().share(),
+                        topic.runChange().rank())));
+        var other = body.other().runChange();
+        fromApi.put(TraceTopic.OTHER, new Change(other.count(), other.countRatio(), other.share(), null));
+        var fromRunbook = new HashMap<UUID, Change>();
+        try (var connection = DriverManager.getConnection(mysql.getJdbcUrl(), mysql.getUsername(),
+                mysql.getPassword());
+                var statement = connection.createStatement();
+                var resultSet = statement.executeQuery(runbookQuery("### Changes since the last run",
+                        caller.workspaceId(), projectId))) {
+            while (resultSet.next()) {
+                fromRunbook.put(UUID.fromString(resultSet.getString("topic_id")), new Change(
+                        resultSet.getLong("count"),
+                        resultSet.getObject("count_ratio") == null ? null : resultSet.getDouble("count_ratio"),
+                        resultSet.getDouble("share"),
+                        resultSet.getObject("rank") == null ? null : resultSet.getInt("rank")));
+            }
+        }
+        assertThat(fromRunbook).usingRecursiveComparison()
+                .withComparatorForType((a, b) -> Math.abs(a - b) < 1e-12 ? 0 : Double.compare(a, b), Double.class)
+                .isEqualTo(fromApi);
     }
 
     @Test
@@ -364,6 +439,33 @@ class TopicsReadResourceTest {
 
     private UUID project(Caller caller) {
         return projectClient.createProject("topics-" + UUID.randomUUID(), caller.apiKey(), caller.workspaceName());
+    }
+
+    /** A saved run's counts: the topics ranked by size as a night ranks them, then Other. */
+    private static List<TopicRunCount> runCounts(String workspaceId, UUID projectId, Instant savedAt, long other,
+            Topic... sized) {
+        return TopicRanking.runCounts(ID_GENERATOR.generateId(), workspaceId, projectId, List.of(sized), other,
+                savedAt);
+    }
+
+    private static RunChange runChange(ProjectTopics body, Topic topic) {
+        return body.topics().stream().filter(stats -> stats.id().equals(topic.id())).findFirst().orElseThrow()
+                .runChange();
+    }
+
+    /** The single SQL block of a runbook section, with the workspace and the project filled in. */
+    private static String runbookQuery(String heading, String workspaceId, UUID projectId) throws IOException {
+        var runbook = Files.readString(RUNBOOK);
+        int start = runbook.indexOf(heading);
+        assertThat(start).isNotNegative();
+        var section = runbook.substring(start, runbook.indexOf("\n### ", start + heading.length()));
+        var blocks = Pattern.compile("```sql\n(.*?)```", Pattern.DOTALL).matcher(section).results()
+                .map(match -> match.group(1))
+                .toList();
+        assertThat(blocks).hasSize(1);
+        return blocks.getFirst().strip().replaceAll(";$", "")
+                .replace("<workspace_id>", workspaceId)
+                .replace("<project_id>", projectId.toString());
     }
 
     private void optIn(String workspaceId) {

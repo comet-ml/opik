@@ -43,7 +43,7 @@ public class TopicsReadResource {
     private final @NonNull Provider<RequestContext> requestContext;
 
     @GET
-    @Operation(operationId = "getProjectTopics", summary = "Get a project's topics", description = "The project's topics over the last 30 UTC days, today included: per topic its count, share, today's change and a daily series, plus Other. status is disabled when the workspace is not opted in to topics, collecting while the project has no topics yet, and ready otherwise. Fields of other states are omitted.", responses = {
+    @Operation(operationId = "getProjectTopics", summary = "Get a project's topics", description = "The project's topics over the last 30 UTC days, today included: per topic its count, share, rank, the change since the last saved nightly run and a daily series, plus Other. status is disabled when the workspace is not opted in to topics, collecting while the project has no topics yet, and ready otherwise. Fields of other states are omitted.", responses = {
             @ApiResponse(responseCode = "200", description = "The project's topics", content = @Content(schema = @Schema(implementation = ProjectTopics.class))),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),

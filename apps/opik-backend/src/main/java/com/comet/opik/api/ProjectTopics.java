@@ -59,8 +59,10 @@ public record ProjectTopics(
             @Schema(description = "The day the topic became inactive; omitted when active") LocalDate inactiveSince,
             @Schema(description = "Traces of the topic in the window") long count,
             @Schema(description = "count / total_traces, from 0 to 1, not rounded") double share,
-            @Schema(description = "Traces today minus traces yesterday; today is not over") long change,
             @Schema(description = "1-based: active topics by count, then inactive ones by count") int rank,
+            @Schema(description = "The change from the saved nightly run before the last one to the last one; "
+                    + "omitted when the topic has no count in the run before: a new topic, or fewer than two saved "
+                    + "runs") RunChange runChange,
             @Schema(description = "30 days, oldest first, today last") List<DayCount> series) {
     }
 
@@ -72,8 +74,36 @@ public record ProjectTopics(
             @Schema(description = "Traces with no topic in the window, stale included") long count,
             @Schema(description = "Of count: traces labelled with a topic that is no longer live") long stale,
             @Schema(description = "count / total_traces, from 0 to 1, not rounded") double share,
-            @Schema(description = "Traces today minus traces yesterday; today is not over") long change,
+            @Schema(description = "The change from the saved nightly run before the last one to the last one; "
+                    + "omitted with fewer than two saved runs") OtherRunChange runChange,
             @Schema(description = "30 days, oldest first, today last") List<DayCount> series) {
+    }
+
+    /**
+     * A topic's change between the project's last two saved nightly runs, from the counts each run saved. A run's
+     * share is the topic's traces over all the run's traces, Other included.
+     */
+    @Builder(toBuilder = true)
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public record RunChange(
+            @Schema(description = "Traces in the last run's window minus traces in the run before's") long count,
+            @Schema(description = "count / the run before's traces; omitted when those are 0") Double countRatio,
+            @Schema(description = "The last run's share minus the run before's, in share units: 0.007 is 0.7 "
+                    + "points") double share,
+            @Schema(description = "The rank in the run before minus the rank in the last run; positive when the "
+                    + "topic moved up") int rank) {
+    }
+
+    /** Other's change between the project's last two saved nightly runs, as {@link RunChange} without a rank. */
+    @Builder(toBuilder = true)
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public record OtherRunChange(
+            @Schema(description = "Traces in the last run's window minus traces in the run before's") long count,
+            @Schema(description = "count / the run before's traces; omitted when those are 0") Double countRatio,
+            @Schema(description = "The last run's share minus the run before's, in share units: 0.007 is 0.7 "
+                    + "points") double share) {
     }
 
     @Builder(toBuilder = true)
