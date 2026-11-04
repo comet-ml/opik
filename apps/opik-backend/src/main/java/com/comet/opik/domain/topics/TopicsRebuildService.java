@@ -49,9 +49,9 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
  * project at a time.
  *
  * <p>The save writes {@code trace_topics} first, then one MySQL transaction: the new topics, the project's prototypes
- * (replaced), its state and the run as {@code saved}. A failure before the save writes nothing but the failed run; a
- * MySQL failure after the ClickHouse insert leaves rows no saved run points at, which the next night's insert replaces
- * (the latest row per trace wins).
+ * (replaced), its state, the run's counts ({@code topic_run_counts}) and the run as {@code saved}. A failure before the
+ * save writes nothing but the failed run; a MySQL failure after the ClickHouse insert leaves rows no saved run points
+ * at, which the next night's insert replaces (the latest row per trace wins).
  */
 @Slf4j
 @Singleton
@@ -483,11 +483,13 @@ public class TopicsRebuildService {
                         .build());
             }
             var statsJson = stats.toString();
+            long other = traceTopics.stream().filter(row -> TraceTopic.OTHER.equals(row.topicId())).count();
             boolean attempted = false;
             try {
                 attempted = true;
                 traceTopicsDAO.insert(traceTopics).block();
                 var now = Instant.now();
+                var counts = TopicRanking.runCounts(runId, workspaceId, projectId, topics, other, now);
                 template.inTransaction(WRITE, handle -> {
                     var topicDAO = handle.attach(TopicDAO.class);
                     // First, so a run that saved this project meanwhile fails the save before anything else.
@@ -507,7 +509,9 @@ public class TopicsRebuildService {
                     if (!prototypes.isEmpty()) {
                         topicDAO.insertPrototypes(prototypes);
                     }
-                    if (handle.attach(TopicRunDAO.class).markSaved(runId, now, statsJson) != 1) {
+                    var runDAO = handle.attach(TopicRunDAO.class);
+                    runDAO.insertCounts(counts);
+                    if (runDAO.markSaved(runId, now, statsJson) != 1) {
                         // Failed meanwhile, by its timeout: roll the save back.
                         throw new TopicsRunException(Code.TIMEOUT, "the run ended before its save committed");
                     }

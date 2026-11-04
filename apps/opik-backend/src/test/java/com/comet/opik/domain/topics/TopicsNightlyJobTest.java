@@ -56,6 +56,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -273,6 +274,25 @@ class TopicsNightlyJobTest {
         topics.forEach(topic -> assertThat(traceTopics.stream().filter(row -> row.topicId().equals(topic.id())))
                 .hasSize(topic.size()));
 
+        // The run's counts: each topic's labels and size, ranked 1..n by size, then Other; they add up to the window.
+        var labelled = traceTopics.stream().collect(Collectors.groupingBy(TraceTopic::topicId, Collectors.counting()));
+        var counts = counts(built);
+        assertThat(counts).hasSize(topics.size() + 1).allSatisfy(count -> {
+            assertThat(count.runId()).isEqualTo(runId);
+            assertThat(count.workspaceId()).isEqualTo(workspaceId);
+            assertThat(count.savedAt()).isEqualTo(run.getFirst().finishedAt());
+            assertThat(count.traces()).isEqualTo(labelled.getOrDefault(count.topicId(), 0L));
+        });
+        assertThat(counts.stream().mapToLong(TopicRunCount::traces).sum()).isEqualTo(BUILT);
+        var ranks = new ArrayList<Integer>(java.util.stream.IntStream.rangeClosed(1, topics.size()).boxed().toList());
+        ranks.add(null);
+        assertThat(counts).extracting(TopicRunCount::rank).containsExactlyElementsOf(ranks);
+        assertThat(counts.getLast().topicId()).isEqualTo(TraceTopic.OTHER);
+        assertThat(counts.subList(0, topics.size())).extracting(TopicRunCount::traces)
+                .isSortedAccordingTo(Comparator.reverseOrder());
+        topics.forEach(topic -> assertThat(counts).filteredOn(count -> count.topicId().equals(topic.id()))
+                .singleElement().satisfies(count -> assertThat(count.traces()).isEqualTo(topic.size())));
+
         assertThat(state(built)).satisfies(state -> {
             assertThat(state.rebuilds()).isEqualTo(1);
             assertThat(state.lastRunId()).isEqualTo(runId);
@@ -405,6 +425,7 @@ class TopicsNightlyJobTest {
                     assertThat(run.errorMessage()).contains("another run saved this project meanwhile");
                 }));
         assertThat(topics(projectId)).isEmpty();
+        assertThat(counts(projectId)).isEmpty();
         assertThat(state(projectId).lastRunId()).isEqualTo(other);
         assertThat(traceTopicsDAO.findByProject(workspaceId, projectId).collectList().block()).isEmpty();
     }
@@ -433,6 +454,7 @@ class TopicsNightlyJobTest {
                     assertThat(run.errorMessage()).contains("the project was deleted during the run");
                 }));
         assertThat(topics(projectId)).isEmpty();
+        assertThat(counts(projectId)).isEmpty();
         List<TopicProjectState> states = template.inTransaction(READ_ONLY,
                 handle -> handle.attach(TopicDAO.class).findStates(Set.of(projectId)));
         assertThat(states).isEmpty();
@@ -440,7 +462,7 @@ class TopicsNightlyJobTest {
     }
 
     @Test
-    @DisplayName("deleting a project deletes its topics, prototypes, state and runs")
+    @DisplayName("deleting a project deletes its topics, prototypes, state, runs and run counts")
     void projectDeleted() {
         var workspaceId = enabledWorkspace();
         var projectId = UUID.randomUUID();
@@ -456,8 +478,10 @@ class TopicsNightlyJobTest {
         assertThat(prototypes(projectId)).isEmpty();
         assertThat(state(projectId)).isNull();
         assertThat(runs(projectId)).isEmpty();
+        assertThat(counts(projectId)).isEmpty();
         assertThat(topics(kept)).isNotEmpty();
         assertThat(runs(kept)).hasSize(1);
+        assertThat(counts(kept)).isNotEmpty();
     }
 
     @Test
@@ -616,6 +640,25 @@ class TopicsNightlyJobTest {
         });
     }
 
+    @Test
+    @DisplayName("housekeeping deletes run counts saved before the runs retention, and keeps newer ones")
+    void housekeepingDeletesOldRunCounts() {
+        var workspaceId = enabledWorkspace();
+        var projectId = UUID.randomUUID();
+        var old = UUID.randomUUID();
+        var recent = UUID.randomUUID();
+        template.inTransaction(WRITE, handle -> {
+            handle.attach(TopicRunDAO.class).insertCounts(List.of(
+                    otherCount(old, workspaceId, projectId, Instant.now().minus(Duration.ofDays(91))),
+                    otherCount(recent, workspaceId, projectId, Instant.now().minus(Duration.ofDays(1)))));
+            return null;
+        });
+
+        nightlyService.runNight(Instant.now());
+
+        assertThat(counts(projectId)).extracting(TopicRunCount::runId).containsExactly(recent);
+    }
+
     private void assertFailedWithNothingWritten(String workspaceId, UUID projectId, String errorCode) {
         assertThat(runs(projectId)).singleElement().satisfies(run -> {
             assertThat(run.status()).isEqualTo(TopicRun.Status.FAILED);
@@ -626,7 +669,19 @@ class TopicsNightlyJobTest {
         assertThat(topics(projectId)).isEmpty();
         assertThat(prototypes(projectId)).isEmpty();
         assertThat(state(projectId)).isNull();
+        assertThat(counts(projectId)).isEmpty();
         assertThat(traceTopicsDAO.findByProject(workspaceId, projectId).collectList().block()).isEmpty();
+    }
+
+    private static TopicRunCount otherCount(UUID runId, String workspaceId, UUID projectId, Instant savedAt) {
+        return TopicRunCount.builder()
+                .runId(runId)
+                .workspaceId(workspaceId)
+                .projectId(projectId)
+                .topicId(TraceTopic.OTHER)
+                .traces(10)
+                .savedAt(savedAt)
+                .build();
     }
 
     /** The night after the fixture's last trace: its window is the fixture's. */
@@ -737,6 +792,11 @@ class TopicsNightlyJobTest {
 
     private List<Topic> topics(UUID projectId) {
         return template.inTransaction(READ_ONLY, handle -> handle.attach(TopicDAO.class).findLive(projectId));
+    }
+
+    private List<TopicRunCount> counts(UUID projectId) {
+        return template.inTransaction(READ_ONLY,
+                handle -> handle.attach(TopicRunDAO.class).findCountsByProject(projectId));
     }
 
     private List<TopicPrototype> prototypes(UUID projectId) {
