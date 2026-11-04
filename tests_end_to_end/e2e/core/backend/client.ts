@@ -6723,11 +6723,6 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
-     * Trace ids visible for a project under `filters` and an optional window —
-     * `GET /v1/private/traces`. Returned as ids only: these tests assert *which*
-     * traces a scoped view is entitled to, never their content.
-     */
-    /**
      * One page of `GET /v1/private/traces` under `filters`, as the envelope's
      * `total` plus the row ids — the full answer, not just the rows.
      *
@@ -6765,6 +6760,14 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       return { total: page.total, ids: (page.content ?? []).map((t) => String(t.id)) };
     },
 
+    /**
+     * Trace ids visible for a project under `filters` and an optional window —
+     * `GET /v1/private/traces`. Returned as ids only: these tests assert *which*
+     * traces a scoped view is entitled to, never their content.
+     *
+     * Use `listTracePage` above when the envelope's `total` is part of the
+     * question — a filter can return the right rows beside a wrong count.
+     */
     async listTraceIds(
       args: { projectId: string; filters?: BackendFilter[]; size?: number } & ReadWindow,
     ): Promise<string[]> {
