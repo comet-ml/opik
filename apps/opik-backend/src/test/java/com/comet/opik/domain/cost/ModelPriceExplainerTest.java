@@ -43,10 +43,19 @@ class ModelPriceExplainerTest {
 
     private static CustomModelPriceResolveRequest request(String model, String provider, int promptTokens,
             int cachedTokens, int completionTokens) {
-        return new CustomModelPriceResolveRequest(model, provider, Map.of(
-                "prompt_tokens", promptTokens,
-                "prompt_tokens_details.cached_tokens", cachedTokens,
-                "completion_tokens", completionTokens));
+        return CustomModelPriceResolveRequest.builder()
+                .model(model)
+                .provider(provider)
+                .usage(Map.of(
+                        "prompt_tokens", promptTokens,
+                        "prompt_tokens_details.cached_tokens", cachedTokens,
+                        "completion_tokens", completionTokens))
+                .build();
+    }
+
+    private static CustomModelPriceResolution.Line expectedLine(String name, String ratePerMillion, String source) {
+        return CustomModelPriceResolution.Line.builder().name(name).ratePerMillion(ratePerMillion).source(source)
+                .build();
     }
 
     private static CustomModelPriceResolution.Line line(CustomModelPriceResolution resolution, String name) {
@@ -69,11 +78,11 @@ class ModelPriceExplainerTest {
         assertThat(resolution.match().targetRow()).isNull();
         assertThat(resolution.lines()).extracting(CustomModelPriceResolution.Line::name)
                 .containsExactly("input", "output", "cache_read", "cache_write");
-        assertThat(line(resolution, "input")).isEqualTo(new CustomModelPriceResolution.Line("input", "1",
+        assertThat(line(resolution, "input")).isEqualTo(expectedLine("input", "1",
                 "organization"));
-        assertThat(line(resolution, "output")).isEqualTo(new CustomModelPriceResolution.Line("output", "10",
+        assertThat(line(resolution, "output")).isEqualTo(expectedLine("output", "10",
                 "organization"));
-        assertThat(line(resolution, "cache_read")).isEqualTo(new CustomModelPriceResolution.Line("cache_read",
+        assertThat(line(resolution, "cache_read")).isEqualTo(expectedLine("cache_read",
                 "0.025", "built_in"));
     }
 
@@ -105,9 +114,9 @@ class ModelPriceExplainerTest {
         assertThat(resolution.costSource()).isEqualTo("organization");
         assertThat(resolution.match().row().kind()).isEqualTo("alias");
         assertThat(resolution.match().targetRow()).isNull();
-        assertThat(line(resolution, "input")).isEqualTo(new CustomModelPriceResolution.Line("input", "0.25",
+        assertThat(line(resolution, "input")).isEqualTo(expectedLine("input", "0.25",
                 "built_in"));
-        assertThat(line(resolution, "output")).isEqualTo(new CustomModelPriceResolution.Line("output", "2",
+        assertThat(line(resolution, "output")).isEqualTo(expectedLine("output", "2",
                 "built_in"));
     }
 
@@ -136,7 +145,8 @@ class ModelPriceExplainerTest {
 
     @Test
     void withoutUsageTheRatesStillShowAndNothingIsCharged() {
-        var resolution = ModelPriceExplainer.explain(new CustomModelPriceResolveRequest("gpt-5-mini", "openai", null),
+        var resolution = ModelPriceExplainer.explain(
+                CustomModelPriceResolveRequest.builder().model("gpt-5-mini").provider("openai").build(),
                 layers(fixed("gpt-5-mini", "openai", "1.00", "10.00")));
 
         assertThat(resolution.cost()).isEqualTo("0");

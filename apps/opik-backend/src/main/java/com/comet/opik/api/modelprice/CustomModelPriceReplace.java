@@ -5,9 +5,11 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
+import lombok.Builder;
 
 import java.util.List;
 
+@Builder(toBuilder = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record CustomModelPriceReplace(
         @NotNull @Schema(description = "The whole list after the change; rows left out are deleted") List<JsonNode> rows,

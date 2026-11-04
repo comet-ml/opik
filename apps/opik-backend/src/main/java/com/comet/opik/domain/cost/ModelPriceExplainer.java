@@ -39,11 +39,12 @@ class ModelPriceExplainer {
     }
 
     private CustomModelPriceResolution.Match matchOf(ModelPriceResolver.PriceMatch match) {
-        return new CustomModelPriceResolution.Match(
-                match.provider(),
-                match.nameForm().name().toLowerCase(Locale.ROOT),
-                Optional.ofNullable(match.customRow()).map(CustomModelPriceRow::from).orElse(null),
-                Optional.ofNullable(match.targetRow()).map(CustomModelPriceRow::from).orElse(null));
+        return CustomModelPriceResolution.Match.builder()
+                .provider(match.provider())
+                .nameForm(match.nameForm().name().toLowerCase(Locale.ROOT))
+                .row(Optional.ofNullable(match.customRow()).map(CustomModelPriceRow::from).orElse(null))
+                .targetRow(Optional.ofNullable(match.targetRow()).map(CustomModelPriceRow::from).orElse(null))
+                .build();
     }
 
     private List<CustomModelPriceResolution.Line> linesOf(ModelPriceResolver.PriceMatch match) {
@@ -67,7 +68,10 @@ class ModelPriceExplainer {
             Function<CustomModelPrice, BigDecimal> field) {
         boolean fromOrganization = row != null && field.apply(row) != null;
         String source = fromOrganization ? ORGANIZATION : perToken.signum() > 0 ? BUILT_IN : NONE;
-        return new CustomModelPriceResolution.Line(name, perToken.movePointRight(6).stripTrailingZeros()
-                .toPlainString(), source);
+        return CustomModelPriceResolution.Line.builder()
+                .name(name)
+                .ratePerMillion(perToken.movePointRight(6).stripTrailingZeros().toPlainString())
+                .source(source)
+                .build();
     }
 }

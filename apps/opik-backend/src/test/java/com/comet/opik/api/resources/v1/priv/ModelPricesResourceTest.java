@@ -267,6 +267,24 @@ class ModelPricesResourceTest {
     }
 
     @Test
+    void historyPageFarPastTheEndIsEmpty() {
+        replace(List.of(fixed("gpt-4o", "openai", "2.00", "8.00")));
+
+        try (var response = client.target(URL_TEMPLATE.formatted(baseURI) + "/history")
+                .queryParam("page", Integer.MAX_VALUE)
+                .queryParam("size", 1000)
+                .request()
+                .get()) {
+            var history = response.readEntity(CustomModelPriceHistoryPage.class);
+
+            assertThat(response.getStatus()).isEqualTo(200);
+            assertThat(history.page()).isEqualTo(Integer.MAX_VALUE);
+            assertThat(history.content()).isEmpty();
+            assertThat(history.total()).isPositive();
+        }
+    }
+
+    @Test
     void resolveExplainsTheOrganizationsPrice() {
         long version = replace(List.of(alias("aide-gpt-5-mini", "azure", "gpt-5-mini", "azure"),
                 fixed("gpt-5-mini", "azure", "1.00", "10.00"))).version();
