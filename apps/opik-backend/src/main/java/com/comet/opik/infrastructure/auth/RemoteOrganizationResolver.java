@@ -9,7 +9,6 @@ class RemoteOrganizationResolver implements OrganizationResolver {
     static final String UNKNOWN_ORGANIZATION = "The organization of this workspace is unknown, so its organization "
             + "settings can't be changed";
 
-    // The default organization never belongs to a Comet install.
     @Override
     public Mono<String> organizationId() {
         return Mono.deferContextual(ctx -> Mono.justOrEmpty(ctx.<String>getOrEmpty(RequestContext.ORGANIZATION_ID)
