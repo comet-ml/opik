@@ -1,5 +1,5 @@
 import React from "react";
-import { Sparkles } from "lucide-react";
+import { Megaphone } from "lucide-react";
 
 import { Button } from "@/ui/button";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
@@ -20,15 +20,15 @@ const WhatsNewButton: React.FC = () => {
   return (
     <TooltipWrapper content="What's new?">
       <Button
-        variant="outline"
+        variant="minimal"
         size="icon-sm"
         className="relative"
         onClick={open}
         aria-label="What's new"
       >
-        <Sparkles />
+        <Megaphone />
         {hasUnseenRelease && (
-          <span className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-primary" />
+          <span className="absolute right-1 top-1 size-2 rounded-full bg-primary" />
         )}
       </Button>
     </TooltipWrapper>

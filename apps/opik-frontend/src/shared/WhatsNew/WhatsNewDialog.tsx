@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { SheetDescription, SheetTitle } from "@/ui/sheet";
+import { SheetDescription, SheetTopBar } from "@/ui/sheet";
 import { Separator } from "@/ui/separator";
 import { Tag } from "@/ui/tag";
 import { Spinner } from "@/ui/spinner";
@@ -191,26 +191,32 @@ const WhatsNewDialog: React.FC = () => {
   };
 
   return (
-    <SideDialog open={isOpen} setOpen={setOpen}>
-      <div className="flex size-full min-w-fit flex-col px-20 pb-20">
-        <SheetTitle className="comet-title-xl my-3 text-left">
-          What&apos;s new
-        </SheetTitle>
-        <SheetDescription className="comet-body-s mb-8 text-muted-slate">
+    <SideDialog
+      open={isOpen}
+      setOpen={setOpen}
+      header={<SheetTopBar variant="info" title="What's new" />}
+    >
+      <div className="flex h-[calc(100%-var(--header-height))] flex-col px-20 pt-6">
+        <SheetDescription className="comet-body-s mb-6 shrink-0 text-muted-slate">
           {renderSubtitle()}
         </SheetDescription>
 
+        {/* Each column scrolls on its own, so the version history stays in place while the
+            reader moves through the notes, and a long history (cloud deploys most releases)
+            scrolls without pushing the notes down. */}
         <div className="flex min-h-0 grow gap-10">
-          <aside className="w-64 shrink-0">
-            <h3 className="comet-body-s-accented mb-2 px-3">Version history</h3>
-            <div className="flex flex-col">
+          <aside className="flex w-64 shrink-0 flex-col">
+            <h3 className="comet-body-s-accented mb-2 shrink-0 px-3">
+              Version history
+            </h3>
+            <div className="flex min-h-0 flex-col overflow-y-auto pb-6">
               <VersionHistoryItem
                 label="Current version"
                 description={currentVersion ?? null}
                 selected={selectedVersion === CURRENT_SELECTION}
                 onClick={() => setSelectedVersion(CURRENT_SELECTION)}
               />
-              <Separator className="my-2" />
+              <Separator className="my-2 shrink-0" />
               {deployedVersions.map((deployed) => (
                 <VersionHistoryItem
                   key={deployed.version}
@@ -223,7 +229,9 @@ const WhatsNewDialog: React.FC = () => {
             </div>
           </aside>
 
-          <div className="min-w-0 grow overflow-auto">{renderContent()}</div>
+          <div className="min-w-0 grow overflow-y-auto pb-20">
+            {renderContent()}
+          </div>
         </div>
       </div>
     </SideDialog>
