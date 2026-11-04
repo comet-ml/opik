@@ -1,11 +1,15 @@
 package com.comet.opik.domain.topics;
 
+import com.comet.opik.api.Source;
+import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
+import com.comet.opik.api.resources.utils.TopicsTraces;
+import com.comet.opik.api.resources.utils.TopicsTraces.TraceRow;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.TestIdGeneratorFactory;
@@ -14,6 +18,7 @@ import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.google.inject.Injector;
 import com.redis.testcontainers.RedisContainer;
+import io.r2dbc.spi.ConnectionFactory;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -30,6 +35,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -82,11 +88,13 @@ class TopicsReadDAOTest {
 
     private TraceTopicsDAO traceTopicsDAO;
     private TransactionTemplate template;
+    private ConnectionFactory connectionFactory;
 
     @BeforeAll
     void setUpAll(Injector injector) {
         traceTopicsDAO = injector.getInstance(TraceTopicsDAO.class);
         template = injector.getInstance(TransactionTemplate.class);
+        connectionFactory = injector.getInstance(ConnectionFactory.class);
     }
 
     @Test
@@ -175,6 +183,36 @@ class TopicsReadDAOTest {
                 TopicDayCount.builder().topicId(topicId).day(TODAY).traces(2).build(),
                 TopicDayCount.builder().topicId(topicId).day(TODAY.minusDays(1)).traces(1).build(),
                 TopicDayCount.builder().topicId(TraceTopic.OTHER).day(TODAY).traces(1).build());
+    }
+
+    @Test
+    @DisplayName("only the traces Logs shows count: source sdk, or unknown from before sources, with visibility "
+            + "default; experiment, playground, optimization, evaluator and hidden traces have rows but do not count")
+    void onlyTracesLogsShows() {
+        var workspaceId = workspaceId();
+        var projectId = UUID.randomUUID();
+        var topicId = UUID.randomUUID();
+        var kinds = List.of(
+                List.of(Source.SDK.getValue(), VisibilityMode.DEFAULT.getValue()),
+                List.of(Source.UNKNOWN_VALUE, VisibilityMode.DEFAULT.getValue()),
+                List.of(Source.EXPERIMENT.getValue(), VisibilityMode.DEFAULT.getValue()),
+                List.of(Source.PLAYGROUND.getValue(), VisibilityMode.DEFAULT.getValue()),
+                List.of(Source.OPTIMIZATION.getValue(), VisibilityMode.DEFAULT.getValue()),
+                List.of(Source.EVALUATOR.getValue(), VisibilityMode.HIDDEN.getValue()),
+                List.of(Source.EXPERIMENT.getValue(), VisibilityMode.HIDDEN.getValue()),
+                List.of(Source.SDK.getValue(), VisibilityMode.HIDDEN.getValue()));
+        var rows = new ArrayList<TraceTopic>();
+        var traces = new ArrayList<TraceRow>();
+        for (var kind : kinds) {
+            var row = arrival(workspaceId, projectId, NOON, topicId);
+            rows.add(row);
+            traces.add(new TraceRow(workspaceId, projectId, row.traceId(), NOON, kind.get(0), kind.get(1)));
+        }
+        traceTopicsDAO.insert(rows).block();
+        TopicsTraces.insert(connectionFactory, "traces", traces);
+
+        assertThat(count(workspaceId, projectId, Set.of()))
+                .containsExactly(TopicDayCount.builder().topicId(topicId).day(TODAY).traces(2).build());
     }
 
     @Test
@@ -268,8 +306,12 @@ class TopicsReadDAOTest {
                 MAX_EXECUTION_SECONDS).collectList().block();
     }
 
+    /** The rows, and a trace Logs shows for each: only those count. */
     private void insert(TraceTopic... rows) {
         traceTopicsDAO.insert(List.of(rows)).block();
+        TopicsTraces.insert(connectionFactory, "traces", Stream.of(rows)
+                .map(row -> TraceRow.shown(row.workspaceId(), row.projectId(), row.traceId(), row.traceCreatedAt()))
+                .toList());
     }
 
     private static TraceTopic arrival(String workspaceId, UUID projectId, Instant createdAt, UUID topicId) {

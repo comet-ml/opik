@@ -47,6 +47,7 @@ import java.util.concurrent.CancellationException;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
@@ -705,6 +706,28 @@ public class TopicsRebuildService {
             return new TopicsRunException(Code.SAVE, "another run saved this project meanwhile", cause);
         }
 
+        /**
+         * Per topic id ({@link TraceTopic#OTHER} for Other), tonight's rows of the window's traces the Logs page lists:
+         * the run's counts, as the read API counts. Topics are built from every trace of the window. The read starts at
+         * the window's earliest row, so a window cut to its newest traces reads no older ones.
+         */
+        private Map<UUID, Long> shownCounts(List<TopicWindowRow> rows, List<TraceTopic> traceTopics) {
+            if (rows.isEmpty()) {
+                return Map.of();
+            }
+            var earliest = rows.stream().map(TopicWindowRow::traceCreatedAt).min(Comparator.naturalOrder()).get();
+            Set<UUID> shown;
+            try {
+                shown = traceTopicsDAO.findLogsTraceIds(workspaceId, projectId, earliest, to,
+                        Math.max(1, config.getNightly().getProjectTimeout().toSeconds())).block();
+            } catch (RuntimeException exception) {
+                throw new TopicsRunException(Code.WINDOW_READ, "the read of the traces Logs lists failed", exception);
+            }
+            return traceTopics.stream()
+                    .filter(row -> shown.contains(row.traceId()))
+                    .collect(Collectors.groupingBy(TraceTopic::topicId, Collectors.counting()));
+        }
+
         private void save(List<TopicWindowRow> rows, int[] labels, List<Topic> topics,
                 List<TopicPrototype> prototypes) {
             var traceTopics = new ArrayList<TraceTopic>(rows.size());
@@ -720,13 +743,14 @@ public class TopicsRebuildService {
                         .build());
             }
             var statsJson = stats.toString();
-            long other = traceTopics.stream().filter(row -> TraceTopic.OTHER.equals(row.topicId())).count();
+            var shown = shownCounts(rows, traceTopics);
             boolean attempted = false;
             try {
                 attempted = true;
                 traceTopicsDAO.insert(traceTopics).block();
                 var now = Instant.now();
-                var counts = TopicRanking.runCounts(runId, workspaceId, projectId, topics, other, now);
+                var counts = TopicRanking.runCounts(runId, workspaceId, projectId, topics,
+                        topic -> shown.getOrDefault(topic.id(), 0L), shown.getOrDefault(TraceTopic.OTHER, 0L), now);
                 template.inTransaction(WRITE, handle -> {
                     var topicDAO = handle.attach(TopicDAO.class);
                     // First, so a run that saved this project meanwhile fails the save before anything else.
@@ -833,14 +857,15 @@ public class TopicsRebuildService {
             var live = new ArrayList<Topic>();
             inserted.stream().filter(topic -> topic.retiredAt() == null).forEach(live::add);
             updated.stream().filter(topic -> topic.retiredAt() == null).forEach(live::add);
-            long other = traceTopics.stream().filter(row -> TraceTopic.OTHER.equals(row.topicId())).count();
+            var shown = shownCounts(rows, traceTopics);
             var statsJson = stats.toString();
             boolean attempted = false;
             try {
                 attempted = true;
                 traceTopicsDAO.insert(traceTopics).block();
                 var now = Instant.now();
-                var counts = TopicRanking.runCounts(runId, workspaceId, projectId, live, other, now);
+                var counts = TopicRanking.runCounts(runId, workspaceId, projectId, live,
+                        topic -> shown.getOrDefault(topic.id(), 0L), shown.getOrDefault(TraceTopic.OTHER, 0L), now);
                 template.inTransaction(WRITE, handle -> {
                     var topicDAO = handle.attach(TopicDAO.class);
                     // First, so a run that saved this project meanwhile fails the save before anything else.

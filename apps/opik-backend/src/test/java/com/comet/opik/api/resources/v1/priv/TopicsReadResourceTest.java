@@ -5,8 +5,10 @@ import com.comet.opik.api.ProjectTopics.DayCount;
 import com.comet.opik.api.ProjectTopics.OtherRunChange;
 import com.comet.opik.api.ProjectTopics.RunChange;
 import com.comet.opik.api.ProjectTopics.TopicStats;
+import com.comet.opik.api.Source;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceSearchStreamRequest;
+import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.TraceField;
 import com.comet.opik.api.filter.TraceFilter;
@@ -20,6 +22,8 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import com.comet.opik.api.resources.utils.TestUtils;
+import com.comet.opik.api.resources.utils.TopicsTraces;
+import com.comet.opik.api.resources.utils.TopicsTraces.TraceRow;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
@@ -48,6 +52,7 @@ import com.comet.opik.podam.PodamFactoryUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.inject.Injector;
 import com.redis.testcontainers.RedisContainer;
+import io.r2dbc.spi.ConnectionFactory;
 import jakarta.ws.rs.client.Invocation;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
@@ -171,6 +176,7 @@ class TopicsReadResourceTest {
     private TraceTopicsDAO traceTopicsDAO;
     private TopicVectorsDAO vectorsDAO;
     private OpikConfiguration opikConfig;
+    private ConnectionFactory connectionFactory;
 
     @BeforeAll
     void setUpAll(ClientSupport client, Injector injector, OpikConfiguration opikConfig) {
@@ -182,6 +188,7 @@ class TopicsReadResourceTest {
         this.template = injector.getInstance(TransactionTemplate.class);
         this.traceTopicsDAO = injector.getInstance(TraceTopicsDAO.class);
         this.vectorsDAO = injector.getInstance(TopicVectorsDAO.class);
+        this.connectionFactory = injector.getInstance(ConnectionFactory.class);
         this.opikConfig = opikConfig;
     }
 
@@ -231,11 +238,11 @@ class TopicsReadResourceTest {
         rows.addAll(night(caller.workspaceId(), projectId, retired.id(), today.minusDays(1), 2, saved));
         rows.addAll(night(caller.workspaceId(), projectId, TraceTopic.OTHER, today, 1, saved));
         rows.addAll(night(caller.workspaceId(), projectId, first.id(), today.minusDays(30), 5, saved));
-        traceTopicsDAO.insert(rows).block();
+        insertShown(rows);
         // Written after the saved rows, so they are the latest: a failed run's relabel and a trace only it labelled.
-        traceTopicsDAO.insert(List.of(
+        insertShown(List.of(
                 firstToday.getFirst().toBuilder().topicId(newborn.id()).runId(failed.toString()).build(),
-                night(caller.workspaceId(), projectId, newborn.id(), today, 1, failed).getFirst())).block();
+                night(caller.workspaceId(), projectId, newborn.id(), today, 1, failed).getFirst()));
 
         var body = get(caller, projectId);
 
@@ -473,7 +480,8 @@ class TopicsReadResourceTest {
         private static final String OTHER = TraceTopic.OTHER.toString();
 
         /** The project's traces by the case each one stands for, and the topics they are labelled with. */
-        private record Seed(Caller caller, UUID projectId, Topic labelled, Topic arrived, Map<String, UUID> traces) {
+        private record Seed(Caller caller, UUID projectId, Topic labelled, Topic arrived, UUID saved,
+                Map<String, UUID> traces) {
 
             Set<UUID> traces(String... cases) {
                 return Arrays.stream(cases).map(traces::get).collect(Collectors.toSet());
@@ -502,10 +510,12 @@ class TopicsReadResourceTest {
         }
 
         @Test
-        @DisplayName("over the read API's window by created_at, the list's count per topic and for Other is the "
-                + "API's count")
+        @DisplayName("as Logs lists a topic (the read API's window by created_at, source sdk, visibility default), "
+                + "the list's count per topic and for Other is the API's count; experiment, playground, optimization, "
+                + "evaluator and hidden traces have topic rows but are in neither")
         void reconcilesWithReadApi() {
             var seed = seed();
+            var notInLogs = notInLogs(seed);
             var today = LocalDate.now(ZoneOffset.UTC);
 
             var body = get(seed.caller(), seed.projectId());
@@ -516,17 +526,30 @@ class TopicsReadResourceTest {
                             body.windowFrom().atStartOfDay(ZoneOffset.UTC).toInstant().toString()),
                     filter(TraceField.CREATED_AT, Operator.LESS_THAN,
                             body.windowUntil().plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant().toString()));
+            // What the frontend adds on the Logs page: generateLogsSourceFilter and generateVisibilityFilters.
+            var logs = Stream.concat(window.stream(), Stream.of(
+                    filter(TraceField.SOURCE, Operator.EQUAL, Source.SDK.getValue()),
+                    filter(TraceField.VISIBILITY_MODE, Operator.EQUAL, VisibilityMode.DEFAULT.getValue()))).toList();
             var fromApi = new HashMap<UUID, Long>();
             body.topics().forEach(topic -> fromApi.put(topic.id(), topic.count()));
             fromApi.put(TraceTopic.OTHER, body.other().count());
             assertThat(fromApi).containsExactlyInAnyOrderEntriesOf(Map.of(
                     seed.labelled().id(), 3L, seed.arrived().id(), 1L, TraceTopic.OTHER, 2L));
-            var fromList = new HashMap<UUID, Long>();
-            fromApi.keySet().forEach(topicId -> fromList.put(topicId, list(seed.caller(), seed.projectId(),
-                    Stream.concat(window.stream(), Stream.of(
-                            filter(TraceField.TOPIC_ID, Operator.EQUAL, topicId.toString()))).toList())
-                    .total()));
-            assertThat(fromList).isEqualTo(fromApi);
+            assertThat(body.totalTraces()).isEqualTo(6L);
+            var fromLogs = new HashMap<UUID, Long>();
+            var withoutLogsFilters = new HashMap<UUID, Long>();
+            fromApi.keySet().forEach(topicId -> {
+                var topic = filter(TraceField.TOPIC_ID, Operator.EQUAL, topicId.toString());
+                fromLogs.put(topicId, list(seed.caller(), seed.projectId(),
+                        Stream.concat(logs.stream(), Stream.of(topic)).toList()).total());
+                withoutLogsFilters.put(topicId, list(seed.caller(), seed.projectId(),
+                        Stream.concat(window.stream(), Stream.of(topic)).toList()).total());
+            });
+            assertThat(fromLogs).isEqualTo(fromApi);
+            // The topic filter alone keeps them: the counts leave them out, not the topic rows.
+            assertThat(withoutLogsFilters).containsExactlyInAnyOrderEntriesOf(Map.of(
+                    seed.labelled().id(), 3L + notInLogs.get(seed.labelled().id()), seed.arrived().id(), 1L,
+                    TraceTopic.OTHER, 2L + notInLogs.get(TraceTopic.OTHER)));
         }
 
         @Test
@@ -589,7 +612,43 @@ class TopicsReadResourceTest {
                     row(caller, projectId, traces.get("only a failed run's row"), arrived.id(), failed))).block();
             var ids = new HashMap<String, UUID>();
             traces.forEach((name, trace) -> ids.put(name, trace.id()));
-            return new Seed(caller, projectId, labelled, arrived, ids);
+            return new Seed(caller, projectId, labelled, arrived, saved, ids);
+        }
+
+        /**
+         * Traces the Logs page does not list, each labelled by the saved run: experiment, playground and optimization
+         * traces, an evaluator's and an experiment's hidden trace, and a hidden SDK trace. Written straight into the
+         * table: the API never takes a visibility, and online scoring and experiments write their traces themselves.
+         * Returns how many each topic got.
+         */
+        private Map<UUID, Long> notInLogs(Seed seed) {
+            var createdAt = Instant.now().minus(Duration.ofMinutes(5)).truncatedTo(ChronoUnit.MICROS);
+            var kinds = List.of(
+                    Map.entry(Source.EXPERIMENT, VisibilityMode.DEFAULT),
+                    Map.entry(Source.PLAYGROUND, VisibilityMode.DEFAULT),
+                    Map.entry(Source.OPTIMIZATION, VisibilityMode.DEFAULT),
+                    Map.entry(Source.EVALUATOR, VisibilityMode.HIDDEN),
+                    Map.entry(Source.EXPERIMENT, VisibilityMode.HIDDEN),
+                    Map.entry(Source.SDK, VisibilityMode.HIDDEN));
+            var traces = new ArrayList<TraceRow>();
+            var rows = new ArrayList<TraceTopic>();
+            for (int i = 0; i < kinds.size(); i++) {
+                var id = ID_GENERATOR.generateId();
+                traces.add(new TraceRow(seed.caller().workspaceId(), seed.projectId(), id, createdAt,
+                        kinds.get(i).getKey().getValue(), kinds.get(i).getValue().getValue()));
+                rows.add(TraceTopic.builder()
+                        .workspaceId(seed.caller().workspaceId())
+                        .projectId(seed.projectId())
+                        .traceId(id)
+                        .traceCreatedAt(createdAt)
+                        .topicId(i % 2 == 0 ? seed.labelled().id() : TraceTopic.OTHER)
+                        .source(TraceTopic.Source.NIGHT)
+                        .runId(seed.saved().toString())
+                        .build());
+            }
+            TopicsTraces.insert(connectionFactory, PostCutoverTraces.SHARD, traces);
+            traceTopicsDAO.insert(rows).block();
+            return rows.stream().collect(Collectors.groupingBy(TraceTopic::topicId, Collectors.counting()));
         }
 
         /** A night row of {@code runId}, or an arrival row when it is null, at the trace's {@code created_at}. */
@@ -613,6 +672,8 @@ class TopicsReadResourceTest {
                             .id(ID_GENERATOR.generateId())
                             .projectId(null)
                             .projectName(projectName)
+                            // As the SDK logs it, so the Logs filters keep it.
+                            .source(Source.SDK)
                             .usage(null)
                             .feedbackScores(null)
                             .comments(null)
@@ -664,6 +725,15 @@ class TopicsReadResourceTest {
     private record Caller(String apiKey, String workspaceName, String workspaceId) {
     }
 
+    /** The rows, and a trace Logs shows for each of their traces: the API counts only those. */
+    private void insertShown(List<TraceTopic> rows) {
+        traceTopicsDAO.insert(rows).block();
+        TopicsTraces.insert(connectionFactory, PostCutoverTraces.SHARD, rows.stream()
+                .map(row -> TraceRow.shown(row.workspaceId(), row.projectId(), row.traceId(), row.traceCreatedAt()))
+                .distinct()
+                .toList());
+    }
+
     private Caller caller() {
         var caller = new Caller(UUID.randomUUID().toString(), "ws-" + UUID.randomUUID(),
                 UUID.randomUUID().toString());
@@ -679,8 +749,8 @@ class TopicsReadResourceTest {
     /** A saved run's counts: the topics ranked by size as a night ranks them, then Other. */
     private static List<TopicRunCount> runCounts(String workspaceId, UUID projectId, Instant savedAt, long other,
             Topic... sized) {
-        return TopicRanking.runCounts(ID_GENERATOR.generateId(), workspaceId, projectId, List.of(sized), other,
-                savedAt);
+        return TopicRanking.runCounts(ID_GENERATOR.generateId(), workspaceId, projectId, List.of(sized), Topic::size,
+                other, savedAt);
     }
 
     private static RunChange runChange(ProjectTopics body, Topic topic) {

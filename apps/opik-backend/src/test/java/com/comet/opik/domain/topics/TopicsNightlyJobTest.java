@@ -1,5 +1,7 @@
 package com.comet.opik.domain.topics;
 
+import com.comet.opik.api.Source;
+import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.api.events.ProjectsDeleted;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
@@ -10,6 +12,8 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import com.comet.opik.api.resources.utils.TestUtils;
+import com.comet.opik.api.resources.utils.TopicsTraces;
+import com.comet.opik.api.resources.utils.TopicsTraces.TraceRow;
 import com.comet.opik.api.resources.v1.events.TopicsProjectDeletedListener;
 import com.comet.opik.api.resources.v1.jobs.TopicsNightlyJob;
 import com.comet.opik.domain.IdGenerator;
@@ -24,6 +28,7 @@ import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
 import com.redis.testcontainers.RedisContainer;
 import io.dropwizard.jobs.GuiceJobManager;
+import io.r2dbc.spi.ConnectionFactory;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
@@ -60,6 +65,7 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -145,6 +151,7 @@ class TopicsNightlyJobTest {
     private TopicsNightlyService nightlyService;
     private TopicVectorsDAO vectorsDAO;
     private TraceTopicsDAO traceTopicsDAO;
+    private ConnectionFactory connectionFactory;
     private TopicsProjectDeletedListener projectDeletedListener;
     private GuiceJobManager jobManager;
     private ClientSupport client;
@@ -153,7 +160,8 @@ class TopicsNightlyJobTest {
     @BeforeAll
     void beforeAll(ClientSupport client, TransactionTemplate template, GuiceJobManager jobManager,
             @Jit TopicsNightlyService nightlyService, @Jit TopicVectorsDAO vectorsDAO,
-            @Jit TraceTopicsDAO traceTopicsDAO, @Jit TopicsProjectDeletedListener projectDeletedListener) {
+            @Jit TraceTopicsDAO traceTopicsDAO, @Jit TopicsProjectDeletedListener projectDeletedListener,
+            ConnectionFactory connectionFactory) {
         this.client = client;
         this.baseUrl = TestUtils.getBaseUrl(client);
         this.template = template;
@@ -161,6 +169,7 @@ class TopicsNightlyJobTest {
         this.nightlyService = nightlyService;
         this.vectorsDAO = vectorsDAO;
         this.traceTopicsDAO = traceTopicsDAO;
+        this.connectionFactory = connectionFactory;
         this.projectDeletedListener = projectDeletedListener;
     }
 
@@ -205,7 +214,10 @@ class TopicsNightlyJobTest {
         var small = UUID.randomUUID();
         var disabled = UUID.randomUUID();
         var deleted = UUID.randomUUID();
-        seed(workspaceId, built, 0, BUILT);
+        // Spread over the window: an experiment's, an evaluator's hidden and a hidden SDK trace, twice.
+        var notInLogs = java.util.stream.IntStream.range(0, 6).mapToObj(i -> FIXTURE.traceIds.get(i * 20))
+                .collect(Collectors.toSet());
+        seed(workspaceId, built, 0, BUILT, notInLogs);
         seed(workspaceId, small, BUILT, SMALL);
         seed(UUID.randomUUID().toString(), disabled, 0, BUILT);
         seed(workspaceId, deleted, 0, BUILT);
@@ -285,8 +297,10 @@ class TopicsNightlyJobTest {
         topics.forEach(topic -> assertThat(traceTopics.stream().filter(row -> row.topicId().equals(topic.id())))
                 .hasSize(topic.size()));
 
-        // The run's counts: each topic's labels and size, ranked 1..n by size, then Other; they add up to the window.
-        var labelled = traceTopics.stream().collect(Collectors.groupingBy(TraceTopic::topicId, Collectors.counting()));
+        // The run's counts: each topic's labelled traces that Logs lists, ranked 1..n by those, then Other; they add
+        // up to the window's traces Logs lists. The traces it does not list still have their rows above.
+        var labelled = traceTopics.stream().filter(row -> !notInLogs.contains(row.traceId()))
+                .collect(Collectors.groupingBy(TraceTopic::topicId, Collectors.counting()));
         var counts = counts(built);
         assertThat(counts).hasSize(topics.size() + 1).allSatisfy(count -> {
             assertThat(count.runId()).isEqualTo(runId);
@@ -294,15 +308,18 @@ class TopicsNightlyJobTest {
             assertThat(count.savedAt()).isEqualTo(run.getFirst().finishedAt());
             assertThat(count.traces()).isEqualTo(labelled.getOrDefault(count.topicId(), 0L));
         });
-        assertThat(counts.stream().mapToLong(TopicRunCount::traces).sum()).isEqualTo(BUILT);
+        assertThat(counts.stream().mapToLong(TopicRunCount::traces).sum()).isEqualTo(BUILT - notInLogs.size());
         var ranks = new ArrayList<Integer>(java.util.stream.IntStream.rangeClosed(1, topics.size()).boxed().toList());
         ranks.add(null);
         assertThat(counts).extracting(TopicRunCount::rank).containsExactlyElementsOf(ranks);
         assertThat(counts.getLast().topicId()).isEqualTo(TraceTopic.OTHER);
         assertThat(counts.subList(0, topics.size())).extracting(TopicRunCount::traces)
                 .isSortedAccordingTo(Comparator.reverseOrder());
+        // A topic's size counts every trace of the window.
         topics.forEach(topic -> assertThat(counts).filteredOn(count -> count.topicId().equals(topic.id()))
-                .singleElement().satisfies(count -> assertThat(count.traces()).isEqualTo(topic.size())));
+                .singleElement().satisfies(count -> assertThat(count.traces()).isEqualTo(topic.size()
+                        - traceTopics.stream().filter(row -> row.topicId().equals(topic.id())
+                                && notInLogs.contains(row.traceId())).count())));
 
         assertThat(state(built)).satisfies(state -> {
             assertThat(state.rebuilds()).isEqualTo(1);
@@ -1019,6 +1036,7 @@ class TopicsNightlyJobTest {
         }
         assertThat(rows).hasSize(count);
         vectorsDAO.insert(rows).block();
+        traces(rows, Set.of());
     }
 
     /** The unit mean of the first {@value #PLANTED} tire vectors of the nightly fixture. */
@@ -1174,17 +1192,27 @@ class TopicsNightlyJobTest {
                 .post(Entity.json(""));
     }
 
-    /** The fixture's traces {@code [from, from + count)} as the project's vectors. */
+    /** The fixture's traces {@code [from, from + count)} as the project's vectors, each a trace Logs lists. */
     private void seed(String workspaceId, UUID projectId, int from, int count) {
-        seed(workspaceId, projectId, from, count, FIXTURE.night, FIXTURE.night);
+        seed(workspaceId, projectId, from, count, Set.of());
+    }
+
+    /** As {@link #seed(String, UUID, int, int)}, with the traces {@code notInLogs} ones Logs does not list. */
+    private void seed(String workspaceId, UUID projectId, int from, int count, Set<UUID> notInLogs) {
+        seed(workspaceId, projectId, from, count, FIXTURE.night, FIXTURE.night, notInLogs);
+    }
+
+    private void seed(String workspaceId, UUID projectId, int from, int count, Instant fixtureNight,
+            Instant night) {
+        seed(workspaceId, projectId, from, count, fixtureNight, night, Set.of());
     }
 
     /**
-     * As {@link #seed(String, UUID, int, int)}, with each trace's time moved from the fixture's night to
+     * As {@link #seed(String, UUID, int, int, Set)}, with each trace's time moved from the fixture's night to
      * {@code night}, so the window keeps the same traces.
      */
     private void seed(String workspaceId, UUID projectId, int from, int count, Instant fixtureNight,
-            Instant night) {
+            Instant night, Set<UUID> notInLogs) {
         var shift = Duration.between(fixtureNight, night);
         template.inTransaction(WRITE, handle -> handle.execute(
                 "INSERT INTO projects (id, name, workspace_id) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE id = id",
@@ -1208,6 +1236,31 @@ class TopicsNightlyJobTest {
                     .build());
         }
         vectorsDAO.insert(rows).block();
+        traces(rows, notInLogs);
+    }
+
+    /**
+     * A trace for each vector: one Logs lists, or for {@code notInLogs} in turn an experiment's, an evaluator's hidden
+     * and a hidden SDK trace. A saved run's counts count only the traces Logs lists.
+     */
+    private void traces(List<TopicVector> vectors, Set<UUID> notInLogs) {
+        var kinds = List.of(
+                Map.entry(Source.EXPERIMENT, VisibilityMode.DEFAULT),
+                Map.entry(Source.EVALUATOR, VisibilityMode.HIDDEN),
+                Map.entry(Source.SDK, VisibilityMode.HIDDEN));
+        var rows = new ArrayList<TraceRow>(vectors.size());
+        int hidden = 0;
+        for (var vector : vectors) {
+            var row = TraceRow.shown(vector.workspaceId(), vector.projectId(), vector.traceId(),
+                    vector.traceCreatedAt());
+            if (notInLogs.contains(vector.traceId())) {
+                var kind = kinds.get(hidden++ % kinds.size());
+                row = row.toBuilder().source(kind.getKey().getValue()).visibilityMode(kind.getValue().getValue())
+                        .build();
+            }
+            rows.add(row);
+        }
+        TopicsTraces.insert(connectionFactory, PostCutoverTraces.SHARD, rows);
     }
 
     private void stubAnswer(JsonNode output) {

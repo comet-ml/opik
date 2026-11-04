@@ -88,6 +88,9 @@ class TopicsRebuildServiceTest {
         when(runDAO.markSaved(any(), any(), any())).thenReturn(1);
         when(traceTopicsDAO.insert(any())).thenReturn(Mono.just((long) TRACES));
         when(traceTopicsDAO.deleteByRunId(anyString(), any(), any())).thenReturn(Mono.just(0L));
+        // Every trace of the window is one Logs lists.
+        when(traceTopicsDAO.findLogsTraceIds(eq(WORKSPACE_ID), eq(projectId), any(), any(), anyLong()))
+                .thenReturn(Mono.just(window().stream().map(TopicWindowRow::traceId).collect(Collectors.toSet())));
         var idGenerator = mock(IdGenerator.class);
         when(idGenerator.generateId()).thenAnswer(invocation -> UUID.randomUUID());
         names = new TopicsWorkspaceNames(workspaceId -> WORKSPACE_NAME, Clock.systemUTC());

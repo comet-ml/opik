@@ -883,6 +883,11 @@ Every body has `today`, `window_from` and `window_until` (UTC dates, both ends i
 - **Window.** The 30 UTC days that end today: `[today - 29 days, today + 1 day)`. The day of a trace is
   `toDate(trace_created_at, 'UTC')`, the column the night uses. Near midnight UTC it can differ from the day the traces
   list shows. This is the window of tomorrow's night; tonight's window starts and ends one day earlier.
+- **Traces.** Only the traces the Logs page lists count. In `traces`, that is `source` `sdk` (or `unknown`, rows from
+  before sources) and `visibility_mode` `default`, the filters the Logs page adds by itself. A trace counts when any
+  of its rows matches, as in the traces list. Topics are built from every labelled trace. So experiment, playground,
+  optimization and evaluator traces and hidden traces have topic rows, but no count includes them. A topic's `count`
+  is then the number of traces Logs lists for it.
 - **Rows.** Only arrival rows and rows of saved runs (`topic_runs.status = 'saved'`) count. When a failed run's rows
   were not deleted, they are skipped, and the trace counts by its earlier row.
 - **Latest row.** Each trace counts once, by its latest row (the greatest `(updated_at, run_id)`), after the row
@@ -896,7 +901,7 @@ Every body has `today`, `window_from` and `window_until` (UTC dates, both ends i
 - **Known gap.** When a ClickHouse merge runs between a failed run's insert and its delete, some traces have no row
   left. They are missing from `total_traces` until a later saved night labels them. A trace that no later night's
   window covers stays missing.
-- **Numbers.** `count`: the topic's traces in the window. `total_traces`: all counted traces, Other included. `share`:
+- **Numbers.** `count`: the topic's counted traces in the window. `total_traces`: all counted traces, Other included. `share`:
   `count / total_traces`, 0 with no trace. `series`: 30 `{day, count}` entries, oldest first, today last. `rank`:
   active topics first, then inactive ones (`inactive_since` set), each by `count` descending, then `born`, then `id`.
   `is_new`: born after the first build's date and in the last 7 days. `run_change`: the change between the last two
@@ -954,6 +959,16 @@ FROM (
       AND trace_created_at >= toDateTime64(toDate(now(), 'UTC') - 29, 6, 'UTC')
       AND trace_created_at < toDateTime64(toDate(now(), 'UTC') + 1, 6, 'UTC')
       AND (source = 'arrival' OR run_id IN (<saved_run_ids>))
+      AND trace_id IN (
+          SELECT id
+          FROM traces
+          WHERE workspace_id = '<workspace_id>'
+            AND project_id = '<project_id>'
+            AND created_at >= toDateTime64(toDate(now(), 'UTC') - 29, 6, 'UTC')
+            AND created_at < toDateTime64(toDate(now(), 'UTC') + 1, 6, 'UTC')
+            AND source IN ('sdk', 'unknown')
+            AND visibility_mode = 'default'
+      )
     GROUP BY trace_id
 )
 GROUP BY topic, day
@@ -969,7 +984,8 @@ after the API call, on the same UTC date, and outside the night's hours (from `T
 
 `run_change`, on each topic and on `other`, compares the project's last two saved nightly runs. Each saved run writes
 its counts to the MySQL table `topic_run_counts`, in its save transaction: one row per live topic with `traces` (its
-count in the run's window) and `rank`, and one row for Other (the all-zeros `topic_id`, no rank). ClickHouse cannot
+traces in the run's window that Logs lists, as in [How it counts](#how-it-counts)) and `rank` by those, and one row for
+Other (the all-zeros `topic_id`, no rank). The topic's `size` in `topics` counts every trace of the window. ClickHouse cannot
 give these numbers back: after merges, `trace_topics` keeps only the latest row per trace, so an older run's labels
 are gone.
 
@@ -1032,8 +1048,11 @@ topics off, a workspace not opted in, or a project with no live topic, the filte
 To match a topic's `count`, the list needs the API's window. Add two `created_at` filters: `>=` the start of
 `window_from` and `<` the start of the day after `window_until`, both in UTC (`2026-10-06T00:00:00Z`). Do not use
 `from_time` and `to_time`. They select by the time in the trace id, which the client sets, and the API counts by the
-trace's `created_at`. With the window, the list's `total` equals the topic's `count`. With the Other filter, it
-equals Other's `count`. A night that saves between the two requests can change both.
+trace's `created_at`. The list also needs the Logs page's filters, `source = sdk` and `visibility_mode = default`,
+which the page adds by itself. With the window and those filters, the list's `total` equals the topic's `count`. With
+the Other filter, it equals Other's `count`. Without the Logs filters, the list also returns the topic's experiment,
+playground, optimization, evaluator and hidden traces, which the API does not count. A night that saves between the
+two requests can change both.
 
 The backend reads the live topics and the saved run ids from MySQL first, as this endpoint does. Then each trace
 query gets `AND id IN (<subquery>)`, as score filters do. The subquery reads the project's `trace_topics` rows, keeps
@@ -1047,7 +1066,7 @@ of the list's queries (`find_traces_by_project_id`, `count_traces_by_project`).
 |---|---|
 | 501 | `TOPICS_ENABLED=false`. No body. Checked before the project. |
 | 404 | The project is not in the workspace. |
-| 503, `Retry-After: 5` | A ClickHouse read stopped at a guard (code 158 or 396: rows to read; 159: time; 241: memory), or the backend waited 11 s for it. The backend logs a WARN `Topics read hit a ClickHouse limit` with the workspace and the project. The counts query has `max_execution_time` 10 s, and `max_rows_to_read` and `max_memory_usage` from `TOPICS_VECTORS_FIND_MAX_ROWS_TO_READ` and `TOPICS_VECTORS_FIND_MAX_MEMORY_USAGE`. |
+| 503, `Retry-After: 5` | A ClickHouse read stopped at a guard (code 158 or 396: rows to read; 159: time; 241: memory), or the backend waited 11 s for it. The backend logs a WARN `Topics read hit a ClickHouse limit` with the workspace and the project. The counts query has `max_execution_time` 10 s, and `max_rows_to_read` and `max_memory_usage` from `TOPICS_VECTORS_FIND_MAX_ROWS_TO_READ` and `TOPICS_VECTORS_FIND_MAX_MEMORY_USAGE`. Its rows to read include the window's `traces` rows, for the Logs filters. |
 | 429 | More than `RATE_LIMIT_GET_PROJECT_TOPICS_PER_WORKSPACE_LIMIT` requests from one workspace in 60 s. |
 | 500 | Any other error. |
 

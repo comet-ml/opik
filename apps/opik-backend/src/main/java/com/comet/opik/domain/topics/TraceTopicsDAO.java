@@ -1,5 +1,7 @@
 package com.comet.opik.domain.topics;
 
+import com.comet.opik.api.Source;
+import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.domain.TraceSearchCriteria;
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
@@ -30,6 +32,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.infrastructure.FilterUtils.ANALYTICS_DELETE_BATCH_SIZE;
 import static com.comet.opik.infrastructure.FilterUtils.getLogComment;
@@ -83,10 +86,28 @@ public class TraceTopicsDAO {
             """;
 
     /**
-     * Traces per topic and UTC day among the project's traces created in the window, each by its latest row. Rows of
-     * runs that did not save are skipped before the dedupe, so their trace counts by its earlier row. The latest row is
-     * the greatest (updated_at, run_id), as ORDER BY ... LIMIT 1 BY picks it; argMax ran 4 times faster on unmerged
-     * parts, in a sixth of the memory.
+     * The ids of the project's traces created in the window that the Logs page lists: its default filters,
+     * {@code source = sdk} (with the {@code unknown} rows from before sources, {@link Source#legacyFallbackDbValue})
+     * and {@code visibility_mode = default}. Topics are built from every labelled trace, but the read API and a saved
+     * run's counts count only these, so a topic's count is the number of traces Logs lists for it. Any version of a
+     * trace that matches keeps it, as in the traces list.
+     */
+    private static final String LOGS_TRACE_IDS = """
+            SELECT id
+            FROM traces
+            WHERE workspace_id = :workspace_id
+            AND project_id = :project_id
+            AND created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
+            AND created_at \\< fromUnixTimestamp64Micro(:to_micros, 'UTC')
+            AND source IN ('%s', '%s')
+            AND visibility_mode = '%s'
+            """.formatted(Source.SDK.getValue(), Source.UNKNOWN_VALUE, VisibilityMode.DEFAULT.getValue());
+
+    /**
+     * Traces per topic and UTC day among the project's traces created in the window that Logs lists
+     * ({@link #LOGS_TRACE_IDS}), each by its latest row. Rows of runs that did not save are skipped before the dedupe,
+     * so their trace counts by its earlier row. The latest row is the greatest (updated_at, run_id), as ORDER BY ...
+     * LIMIT 1 BY picks it; argMax ran 4 times faster on unmerged parts, in a sixth of the memory.
      */
     private static final String COUNT_BY_TOPIC_AND_DAY = """
             SELECT latest_topic AS topic_id, toDate(created_at, 'UTC') AS day, count() AS traces
@@ -98,9 +119,17 @@ public class TraceTopicsDAO {
                 AND trace_created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
                 AND trace_created_at \\< fromUnixTimestamp64Micro(:to_micros, 'UTC')
                 AND (source = 'arrival' <if(saved_run_ids)> OR run_id IN :saved_run_ids <endif>)
+                AND trace_id IN (""" + LOGS_TRACE_IDS + """
+                )
                 GROUP BY trace_id
             )
             GROUP BY topic_id, day
+            SETTINGS max_threads = 2, max_execution_time = <max_execution_time>, max_memory_usage = <max_memory_usage>,
+                max_rows_to_read = <max_rows_to_read>, log_comment = '<log_comment>'
+            """;
+
+    /** {@link #LOGS_TRACE_IDS}, read for a night's counts. */
+    private static final String FIND_LOGS_TRACE_IDS = LOGS_TRACE_IDS + """
             SETTINGS max_threads = 2, max_execution_time = <max_execution_time>, max_memory_usage = <max_memory_usage>,
                 max_rows_to_read = <max_rows_to_read>, log_comment = '<log_comment>'
             """;
@@ -309,6 +338,26 @@ public class TraceTopicsDAO {
                         .day(row.get("day", LocalDate.class))
                         .traces(((Number) row.get("traces", Object.class)).longValue())
                         .build()));
+    }
+
+    /**
+     * The project's traces created in {@code [from, to)} that the Logs page lists ({@link #LOGS_TRACE_IDS}), for a
+     * saved run's counts. Under the window read's guards.
+     */
+    public Mono<Set<UUID>> findLogsTraceIds(@NonNull String workspaceId, @NonNull UUID projectId,
+            @NonNull Instant from, @NonNull Instant to, long maxExecutionSeconds) {
+        var template = TopicsQueryGuards.windowRead(getSTWithLogComment(FIND_LOGS_TRACE_IDS,
+                "topics:find_logs_trace_ids", workspaceId, null,
+                "project_id=%s, from=%s, to=%s".formatted(projectId, from, to)), config, maxExecutionSeconds);
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> connection.createStatement(template.render())
+                        .bind("workspace_id", workspaceId)
+                        .bind("project_id", projectId.toString())
+                        .bind("from_micros", toEpochMicros(from))
+                        .bind("to_micros", toEpochMicros(to))
+                        .execute())
+                .flatMap(result -> result.map((row, metadata) -> UUID.fromString(row.get("id", String.class))))
+                .collect(Collectors.toSet());
     }
 
     /**

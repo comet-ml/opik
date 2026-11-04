@@ -27,12 +27,13 @@ public class TopicRanking {
     }
 
     /**
-     * A saved run's {@code topic_run_counts} rows: one per live topic, with its {@code size} as traces and its rank by
-     * {@link #order} on the sizes, then the Other row with {@code other} traces and no rank.
+     * A saved run's {@code topic_run_counts} rows: one per live topic, with {@code traces} of it as traces and its rank
+     * by {@link #order} on those, then the Other row with {@code other} traces and no rank.
      */
     public static List<TopicRunCount> runCounts(@NonNull UUID runId, @NonNull String workspaceId,
-            @NonNull UUID projectId, @NonNull List<Topic> live, long other, @NonNull Instant savedAt) {
-        var ranked = live.stream().sorted(order(Topic::size)).toList();
+            @NonNull UUID projectId, @NonNull List<Topic> live, @NonNull ToLongFunction<Topic> traces, long other,
+            @NonNull Instant savedAt) {
+        var ranked = live.stream().sorted(order(traces)).toList();
         var rows = new ArrayList<TopicRunCount>(ranked.size() + 1);
         for (int i = 0; i < ranked.size(); i++) {
             rows.add(TopicRunCount.builder()
@@ -40,7 +41,7 @@ public class TopicRanking {
                     .workspaceId(workspaceId)
                     .projectId(projectId)
                     .topicId(ranked.get(i).id())
-                    .traces(ranked.get(i).size())
+                    .traces(traces.applyAsLong(ranked.get(i)))
                     .rank(i + 1)
                     .savedAt(savedAt)
                     .build());

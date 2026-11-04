@@ -2,7 +2,9 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.ProjectTopics;
 import com.comet.opik.api.ProjectTopics.TopicStats;
+import com.comet.opik.api.Source;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.TraceField;
 import com.comet.opik.api.filter.TraceFilter;
@@ -229,11 +231,12 @@ class TopicsReadLoadTest {
             """;
 
     private static final String QUERY_LOG = """
-            SELECT count() AS n,
-                quantileExact(0.5)(query_duration_ms) AS p50, quantileExact(0.95)(query_duration_ms) AS p95,
-                max(query_duration_ms) AS max_ms, max(read_rows) AS read_rows, max(read_bytes) AS read_bytes,
-                max(memory_usage) AS memory, max(ProfileEvents['SelectedParts']) AS parts,
-                max(ProfileEvents['SelectedMarks']) AS marks
+            SELECT countIf(is_initial_query) AS n,
+                quantileExactIf(0.5)(query_duration_ms, is_initial_query) AS p50,
+                quantileExactIf(0.95)(query_duration_ms, is_initial_query) AS p95,
+                maxIf(query_duration_ms, is_initial_query) AS max_ms, max(read_rows) AS read_rows,
+                max(read_bytes) AS read_bytes, max(memory_usage) AS memory,
+                max(ProfileEvents['SelectedParts']) AS parts, max(ProfileEvents['SelectedMarks']) AS marks
             FROM system.query_log
             WHERE type = 'QueryFinish' AND startsWith(log_comment, :comment)
             AND event_time_microseconds >= fromUnixTimestamp64Micro(:since_micros)
@@ -385,6 +388,9 @@ class TopicsReadLoadTest {
             report.append(("Seed: %,d traces x %d saved nights + %,d arrival rows in %d inserts, %d live topics + "
                     + "1 retired.\n\n").formatted(TRACES, NIGHTS, ARRIVALS, ARRIVALS / ARRIVAL_BATCH,
                             LIVE_TOPICS))
+                    .append("From `system.query_log`: `queries` and the times are the initial queries, one per "
+                            + "call; read rows and bytes, memory, parts and marks are the largest of those and the "
+                            + "shard queries they start, which have the same `log_comment`.\n\n")
                     .append("## A. Unmerged: merges stopped, %,d rows, %d active parts\n\n".formatted(rows,
                             activeParts()));
             measure(report, apiKey, workspaceName, projectId, today, expectedTotal, window);
@@ -415,6 +421,7 @@ class TopicsReadLoadTest {
                     "to_micros", micros(today.plusDays(1)),
                     "topic_id", live.get(1).id().toString(),
                     "run_id", lastRun.runId().toString()));
+            execute(INSERT_LIST_TRACES, Map.of("workspace_id", workspaceId));
             var api = get(apiKey, workspaceName, projectId);
             assumeTrue(today.equals(api.today()), "the UTC day changed during the test");
             report.append("## Runbook queries against the API\n\n").append(runbookCheck(api, workspaceId,
@@ -475,19 +482,16 @@ class TopicsReadLoadTest {
      */
     private void measureList(StringBuilder report, String apiKey, String workspaceName, UUID projectId,
             ProjectTopics body) {
-        var window = List.of(
-                filter(TraceField.CREATED_AT, Operator.GREATER_THAN_EQUAL,
-                        body.windowFrom().atStartOfDay(ZoneOffset.UTC).toInstant().toString()),
-                filter(TraceField.CREATED_AT, Operator.LESS_THAN,
-                        body.windowUntil().plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant().toString()));
+        var window = logs(body.windowFrom(), body.windowUntil().plusDays(1));
         var largest = body.topics().getFirst();
         var cases = new LinkedHashMap<String, Map.Entry<List<TraceFilter>, Long>>();
         cases.put("no topic filter", Map.entry(window, body.totalTraces()));
         cases.put("topic_id = the largest topic", Map.entry(withTopic(window, largest.id().toString()),
                 largest.count()));
         cases.put("topic_id = Other", Map.entry(withTopic(window, OTHER), body.other().count()));
-        report.append(("The trace list over the API's window by created_at, page size 100, %d calls in a row per "
-                + "case. Each total equals the API's count.\n\n").formatted(LIST_CALLS));
+        report.append(("The trace list as Logs asks for it (the API's window by created_at, source sdk, visibility "
+                + "default), page size 100, %d calls in a row per case. Each total equals the API's count.\n\n")
+                .formatted(LIST_CALLS));
         cases.forEach((name, filtersAndCount) -> {
             var start = Instant.now();
             var millis = new double[LIST_CALLS];
@@ -507,6 +511,17 @@ class TopicsReadLoadTest {
                     .append("Count query (`count_traces_by_project`):\n\n")
                     .append(queryLog("count_traces_by_project:", start));
         });
+    }
+
+    /** The Logs page's filters over the days {@code [from, until)} by created_at, in UTC. */
+    private static List<TraceFilter> logs(LocalDate from, LocalDate until) {
+        return List.of(
+                filter(TraceField.CREATED_AT, Operator.GREATER_THAN_EQUAL,
+                        from.atStartOfDay(ZoneOffset.UTC).toInstant().toString()),
+                filter(TraceField.CREATED_AT, Operator.LESS_THAN,
+                        until.atStartOfDay(ZoneOffset.UTC).toInstant().toString()),
+                filter(TraceField.SOURCE, Operator.EQUAL, Source.SDK.getValue()),
+                filter(TraceField.VISIBILITY_MODE, Operator.EQUAL, VisibilityMode.DEFAULT.getValue()));
     }
 
     private static List<TraceFilter> withTopic(List<TraceFilter> window, String topicId) {
