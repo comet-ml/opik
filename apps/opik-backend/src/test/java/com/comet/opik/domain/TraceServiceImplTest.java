@@ -38,15 +38,18 @@ import uk.co.jemos.podam.api.PodamFactory;
 import uk.co.jemos.podam.api.PodamFactoryImpl;
 
 import java.time.Instant;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static com.comet.opik.domain.ProjectService.DEFAULT_USER;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -55,8 +58,10 @@ import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -348,6 +353,151 @@ class TraceServiceImplTest {
             // The unbounded fallback is narrowed to the miss set, never re-queried over the whole id set.
             verify(traceDao).getAllProjectIdsByTraceIds(Set.of(missedId));
             verify(traceDao).delete(expectedPairs, connection);
+        }
+
+        @Test
+        void deleteByProjectIds__whenTracesSpanSeveralPages__thenReadsEachPageAfterTheLastIdAndDeletesInBatches() {
+            var projectId = ID_GENERATOR.generateId();
+            var workspaceId = UUID.randomUUID().toString();
+            var connection = mockDeleteFlow();
+            var batchSize = TraceServiceImpl.DELETE_BY_PROJECT_IDS_BATCH_SIZE;
+            var firstPage = Stream.generate(ID_GENERATOR::generateId).limit(batchSize).toList();
+            var secondPage = List.of(ID_GENERATOR.generateId());
+
+            when(traceDao.getTraceIdsByProjectId(projectId, null, batchSize, connection))
+                    .thenReturn(Flux.fromIterable(firstPage));
+            when(traceDao.getTraceIdsByProjectId(projectId, firstPage.getLast(), batchSize, connection))
+                    .thenReturn(Flux.fromIterable(secondPage));
+            when(traceDao.delete(pairs(projectId, Set.copyOf(firstPage)), connection)).thenReturn(Mono.empty());
+            when(traceDao.delete(pairs(projectId, Set.copyOf(secondPage)), connection)).thenReturn(Mono.empty());
+
+            assertDoesNotThrow(() -> traceService
+                    .deleteByProjectIds(Set.of(projectId))
+                    .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, DEFAULT_USER)
+                            .put(RequestContext.WORKSPACE_ID, workspaceId))
+                    .block());
+
+            var inOrder = inOrder(traceDao);
+            inOrder.verify(traceDao).getTraceIdsByProjectId(projectId, null, batchSize, connection);
+            inOrder.verify(traceDao).getTraceIdsByProjectId(projectId, firstPage.getLast(), batchSize, connection);
+            verify(traceDao).delete(pairs(projectId, Set.copyOf(firstPage)), connection);
+            verify(traceDao).delete(pairs(projectId, Set.copyOf(secondPage)), connection);
+            // The second page is short, so it is the last one read.
+            verifyNoMoreInteractions(traceDao);
+        }
+
+        @Test
+        void deleteByProjectIds__whenProjectsHaveFewTraces__thenDeletesThemTogetherInOneBatch() {
+            var smallProjectId = ID_GENERATOR.generateId();
+            var projectId = ID_GENERATOR.generateId();
+            var workspaceId = UUID.randomUUID().toString();
+            var connection = mockDeleteFlow();
+            var batchSize = TraceServiceImpl.DELETE_BY_PROJECT_IDS_BATCH_SIZE;
+            var smallProjectTraceIds = Set.of(ID_GENERATOR.generateId());
+            var traceIds = Stream.generate(ID_GENERATOR::generateId).limit(batchSize - 1)
+                    .collect(Collectors.toUnmodifiableSet());
+            var batch = Stream.concat(pairs(smallProjectId, smallProjectTraceIds).stream(),
+                    pairs(projectId, traceIds).stream()).collect(Collectors.toUnmodifiableSet());
+
+            when(traceDao.getTraceIdsByProjectId(smallProjectId, null, batchSize, connection))
+                    .thenReturn(Flux.fromIterable(smallProjectTraceIds));
+            when(traceDao.getTraceIdsByProjectId(projectId, null, batchSize, connection))
+                    .thenReturn(Flux.fromIterable(traceIds));
+            when(traceDao.delete(batch, connection)).thenReturn(Mono.empty());
+
+            assertDoesNotThrow(() -> traceService
+                    .deleteByProjectIds(new LinkedHashSet<>(List.of(smallProjectId, projectId)))
+                    .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, DEFAULT_USER)
+                            .put(RequestContext.WORKSPACE_ID, workspaceId))
+                    .block());
+
+            // 1 + 999 traces across two projects make one full batch, not a delete per project.
+            verify(traceDao).delete(batch, connection);
+            var eventCaptor = ArgumentCaptor.forClass(TracesDeleted.class);
+            verify(eventBus, times(2)).post(eventCaptor.capture());
+            assertThat(eventCaptor.getAllValues())
+                    .extracting(TracesDeleted::projectId, TracesDeleted::traceIds)
+                    .containsExactlyInAnyOrder(
+                            tuple(smallProjectId, smallProjectTraceIds),
+                            tuple(projectId, traceIds));
+        }
+
+        @Test
+        void deleteByProjectIds__whenProjectHasNoTraces__thenDeletesNothing() {
+            var projectId = ID_GENERATOR.generateId();
+            var workspaceId = UUID.randomUUID().toString();
+            var connection = mockDeleteFlow();
+            var pageSize = TraceServiceImpl.DELETE_BY_PROJECT_IDS_BATCH_SIZE;
+            when(traceDao.getTraceIdsByProjectId(projectId, null, pageSize, connection)).thenReturn(Flux.empty());
+
+            assertDoesNotThrow(() -> traceService
+                    .deleteByProjectIds(Set.of(projectId))
+                    .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, DEFAULT_USER)
+                            .put(RequestContext.WORKSPACE_ID, workspaceId))
+                    .block());
+
+            verify(traceDao).getTraceIdsByProjectId(projectId, null, pageSize, connection);
+            verifyNoMoreInteractions(traceDao);
+            verifyNoInteractions(eventBus);
+        }
+
+        @Test
+        void deleteByProjectIds__whenReadingOneProjectFails__thenStillDeletesTheOthers() {
+            var failingProjectId = ID_GENERATOR.generateId();
+            var projectId = ID_GENERATOR.generateId();
+            var workspaceId = UUID.randomUUID().toString();
+            var connection = mockDeleteFlow();
+            var pageSize = TraceServiceImpl.DELETE_BY_PROJECT_IDS_BATCH_SIZE;
+            var traceIds = Set.of(ID_GENERATOR.generateId());
+
+            when(traceDao.getTraceIdsByProjectId(failingProjectId, null, pageSize, connection))
+                    .thenReturn(Flux.error(new RuntimeException("Error reading trace ids")));
+            when(traceDao.getTraceIdsByProjectId(projectId, null, pageSize, connection))
+                    .thenReturn(Flux.fromIterable(traceIds));
+            when(traceDao.delete(pairs(projectId, traceIds), connection)).thenReturn(Mono.empty());
+
+            // Ordered so the failing project goes first: a failure that stopped the rest would skip the other one.
+            var projectIds = new LinkedHashSet<>(List.of(failingProjectId, projectId));
+            assertDoesNotThrow(() -> traceService
+                    .deleteByProjectIds(projectIds)
+                    .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, DEFAULT_USER)
+                            .put(RequestContext.WORKSPACE_ID, workspaceId))
+                    .block());
+
+            verify(traceDao).delete(pairs(projectId, traceIds), connection);
+            verifyTracesDeletedPosted(traceIds, projectId, workspaceId);
+        }
+
+        @Test
+        void deleteByProjectIds__whenDeletingOneBatchFails__thenStillDeletesTheOthers() {
+            var failingProjectId = ID_GENERATOR.generateId();
+            var projectId = ID_GENERATOR.generateId();
+            var workspaceId = UUID.randomUUID().toString();
+            var connection = mockDeleteFlow();
+            var batchSize = TraceServiceImpl.DELETE_BY_PROJECT_IDS_BATCH_SIZE;
+            // A full batch on its own, so the other project's traces land in the next one.
+            var failingTraceIds = Stream.generate(ID_GENERATOR::generateId).limit(batchSize).toList();
+            var traceIds = Set.of(ID_GENERATOR.generateId());
+
+            when(traceDao.getTraceIdsByProjectId(failingProjectId, null, batchSize, connection))
+                    .thenReturn(Flux.fromIterable(failingTraceIds));
+            when(traceDao.getTraceIdsByProjectId(failingProjectId, failingTraceIds.getLast(), batchSize, connection))
+                    .thenReturn(Flux.empty());
+            when(traceDao.getTraceIdsByProjectId(projectId, null, batchSize, connection))
+                    .thenReturn(Flux.fromIterable(traceIds));
+            when(traceDao.delete(pairs(failingProjectId, Set.copyOf(failingTraceIds)), connection))
+                    .thenReturn(Mono.error(new RuntimeException("Error deleting traces")));
+            when(traceDao.delete(pairs(projectId, traceIds), connection)).thenReturn(Mono.empty());
+
+            assertDoesNotThrow(() -> traceService
+                    .deleteByProjectIds(new LinkedHashSet<>(List.of(failingProjectId, projectId)))
+                    .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, DEFAULT_USER)
+                            .put(RequestContext.WORKSPACE_ID, workspaceId))
+                    .block());
+
+            verify(traceDao).delete(pairs(projectId, traceIds), connection);
+            // The failed batch posts no cascade, so the only one is the other project's.
+            verifyTracesDeletedPosted(traceIds, projectId, workspaceId);
         }
 
         /**

@@ -18,6 +18,31 @@ class AgentInsightsJob(UniversalBaseModel):
     last_failure_reason: typing.Optional[str] = None
     last_failure_detail: typing.Optional[str] = None
     last_failed_at: typing.Optional[dt.datetime] = None
+    guidance: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    Project guidance sent to every run; null when none
+    """
+
+    guidance_updated_by: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    Who last saved the guidance
+    """
+
+    guidance_updated_at: typing.Optional[dt.datetime] = pydantic.Field(default=None)
+    """
+    When the guidance was last saved
+    """
+
+    guidance_version: typing.Optional[int] = pydantic.Field(default=None)
+    """
+    Bumped each time the guidance text changes; 0 = never saved
+    """
+
+    results_guidance_version: typing.Optional[int] = pydantic.Field(default=None)
+    """
+    Guidance version the current results were produced with; null = no run since guidance existed
+    """
+
     created_at: typing.Optional[dt.datetime] = None
     created_by: typing.Optional[str] = None
     last_updated_at: typing.Optional[dt.datetime] = None

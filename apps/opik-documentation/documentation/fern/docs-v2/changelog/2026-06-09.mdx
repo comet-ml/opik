@@ -4,7 +4,7 @@ Long-running evaluation jobs that get cut short — by Ctrl-C, an OOM error, a f
 
 A trial counts as complete only when `trace.output` is set, which happens after the task, scoring, and score-logging all succeed. Any failure mode that prevents reaching that point — a metric raising an exception, a `KeyboardInterrupt` between task and scoring — leaves the trial replayable.
 
-```python
+```python wordWrap
 import opik
 
 # Continue a partially-completed experiment — only missing trials are replayed

@@ -15,6 +15,7 @@ import com.comet.opik.infrastructure.UuidValidationConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TestUuidV7TimestampValidatorFactory;
 import com.comet.opik.infrastructure.lock.LockService;
+import com.comet.opik.podam.PodamFactoryUtils;
 import com.google.common.eventbus.EventBus;
 import io.dropwizard.util.Duration;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -28,6 +29,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
+import uk.co.jemos.podam.api.PodamFactory;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -50,6 +52,8 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class SpanServiceImplTest {
+
+    private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
 
     private static final LockService DUMMY_LOCK_SERVICE = new DummyLockService();
     private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
@@ -83,6 +87,9 @@ class SpanServiceImplTest {
     @Mock
     private DeletionEventDAO deletionEventDAO;
 
+    @Mock
+    private SpanWeeksDAO spanWeeksDAO;
+
     private final IdGenerator idGenerator = TestIdGeneratorFactory.create();
 
     private SpanService newSpanService(DatabaseAnalyticsDataModelConfig databaseAnalyticsDataModelConfig) {
@@ -105,6 +112,7 @@ class SpanServiceImplTest {
                 attachmentReinjectorService,
                 eventBus,
                 deletionEventDAO,
+                spanWeeksDAO,
                 opikConfiguration);
     }
 
@@ -484,6 +492,20 @@ class SpanServiceImplTest {
 
         private long randomCount() {
             return RandomUtils.secure().randomLong(1, 1_000);
+        }
+    }
+
+    @Nested
+    class GetWeeksByTraceIds {
+
+        @Test
+        void getWeeksByTraceIds__whenNoTraceIds__thenReturnsEmptyWithoutQuerying() {
+            StepVerifier.create(newSpanService(DatabaseAnalyticsDataModelConfig.builder().build())
+                    .getWeeksByTraceIds(Set.of()))
+                    .expectNext(List.of())
+                    .verifyComplete();
+
+            verifyNoInteractions(spanWeeksDAO);
         }
     }
 }

@@ -52,7 +52,13 @@ def _span(fake_backend, name_prefix):
 
 
 def _error_records(caplog):
-    return [record for record in caplog.records if record.levelno >= logging.ERROR]
+    # Only Opik's own errors count: `caplog` also sees third-party noise, such as
+    # asyncio reporting the cleanup of async clients leaked by other tests.
+    return [
+        record
+        for record in caplog.records
+        if record.levelno >= logging.ERROR and record.name.startswith("opik")
+    ]
 
 
 def test_openai_chat_stream__responses_stream_created_before_it_is_read__chat_output_logged(
@@ -107,6 +113,7 @@ async def test_openai_async_chat_stream__responses_stream_created_before_it_is_r
         async for _ in chat_stream:
             pass
     await other_stream.close()
+    await client.close()
 
     opik.flush_tracker()
 
@@ -128,6 +135,7 @@ async def test_openai_async_responses_stream__chat_stream_created_before_it_is_r
         async for _ in responses_stream:
             pass
     await other_stream.close()
+    await client.close()
 
     opik.flush_tracker()
 

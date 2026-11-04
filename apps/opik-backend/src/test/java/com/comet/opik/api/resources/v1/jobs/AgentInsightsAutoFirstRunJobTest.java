@@ -21,6 +21,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -100,6 +101,25 @@ class AgentInsightsAutoFirstRunJobTest {
         job().runSweep(PERIOD_END, 2).block();
 
         verify(agentInsightsJobService, times(2)).autoFirstRun(any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("Runs candidates in the order given, so the ones left for a later sweep are the newest")
+    void runSweep__runsCandidatesInOrder() {
+        String workspaceId = UUID.randomUUID().toString();
+        var oldest = enrolled(workspaceId);
+        var middle = enrolled(workspaceId);
+        var newest = enrolled(workspaceId);
+        when(agentInsightsJobService.findAwaitingFirstRun()).thenReturn(List.of(oldest, middle, newest));
+        when(traceService.getProjectsWithMinTracesInRange(any(), any(), any(), anyInt()))
+                .thenReturn(Mono.just(Set.of(newest.projectId(), middle.projectId(), oldest.projectId())));
+
+        job().runSweep(PERIOD_END, 2).block();
+
+        var inOrder = inOrder(agentInsightsJobService);
+        inOrder.verify(agentInsightsJobService).autoFirstRun(any(), eq(oldest.projectId()), any(), any());
+        inOrder.verify(agentInsightsJobService).autoFirstRun(any(), eq(middle.projectId()), any(), any());
+        verify(agentInsightsJobService, never()).autoFirstRun(any(), eq(newest.projectId()), any(), any());
     }
 
     @Test

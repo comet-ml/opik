@@ -1,0 +1,55 @@
+:root {
+  color-scheme: light;
+  --kit-bg: hsl(0 0% 100%);
+  --kit-surface: hsl(240 20% 99%);
+  --kit-fill: hsl(210 40% 96.1%);
+  --kit-border: hsl(214 32% 92%);
+  --kit-text: hsl(224 17% 26%);
+  --kit-text-strong: hsl(224 71% 4%);
+  --kit-muted: hsl(215 16% 47%);
+  --kit-subtle: hsl(215 20% 65%);
+  --kit-off: hsl(213 27% 84%);
+  --kit-primary: hsl(239 89% 64%);
+  --kit-primary-soft: hsl(235 85% 97%);
+  --kit-on-primary: hsl(210 40% 98%);
+  --kit-success: hsl(142 64% 32%);
+  --kit-danger: hsl(348 86% 61%);
+  --kit-warning: hsl(32 85% 32%);
+  --kit-warning-soft: hsl(45 93% 89%);
+  --kit-amber: #f59e0b;
+  --kit-blue: #5899da;
+  --kit-green: #19a979;
+  --kit-red: #ef6868;
+  --kit-yellow: #f4b400;
+  --kit-purple: #945fcf;
+  --kit-orange: #fb9341;
+  --kit-teal: #12a4b4;
+  --kit-pink: #ed4a7b;
+  --kit-font: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --kit-mono: "Ubuntu Mono", ui-monospace, SFMono-Regular, Menlo, Monaco,
+    Consolas, "Liberation Mono", monospace;
+  --kit-radius: 6px;
+  --kit-radius-sm: 4px;
+  --kit-gap: 12px;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --kit-bg: hsl(0 0% 7%);
+  --kit-surface: hsl(0 0% 7%);
+  --kit-fill: hsl(0 0% 11%);
+  --kit-border: hsl(0 0% 16%);
+  --kit-text: hsl(214 32% 91%);
+  --kit-text-strong: hsl(214 32% 91%);
+  --kit-muted: hsl(0 0% 64%);
+  --kit-subtle: hsl(0 0% 64%);
+  --kit-off: hsl(0 0% 30%);
+  --kit-primary: hsl(223 91% 60%);
+  --kit-primary-soft: hsl(222 25% 14%);
+  --kit-on-primary: hsl(0 0% 11%);
+  --kit-success: hsl(142 64% 40%);
+  --kit-danger: hsl(348 86% 61%);
+  --kit-warning: hsl(48 96% 64%);
+  --kit-warning-soft: hsl(32 85% 22%);
+}

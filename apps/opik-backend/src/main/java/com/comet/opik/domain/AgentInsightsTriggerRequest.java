@@ -10,7 +10,8 @@ import java.util.UUID;
 
 /**
  * Payload for the Platform BE Ollie trigger endpoint ({@code POST /opik/ollie/generate-agent-insights}).
- * Mirrors the platform's {@code AgentInsightsGenerateRequest} contract (snake_case); all fields required.
+ * Mirrors the platform's {@code AgentInsightsGenerateRequest} contract (snake_case); all fields required except
+ * {@code customPrompt}.
  */
 @Builder(toBuilder = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
@@ -22,5 +23,8 @@ record AgentInsightsTriggerRequest(
         @NonNull Instant periodStart,
         @NonNull Instant periodEnd,
         // "manual" (Run diagnostics) or "scheduled" (daily sweep) — forwarded so Ollie can tag its BI events.
-        @NonNull String triggerSource) {
+        @NonNull String triggerSource,
+        // The project guidance. custom_prompt is the platform field reserved for it (opik and Ollie); null when the
+        // project has none or the guidance toggle is off.
+        String customPrompt) {
 }

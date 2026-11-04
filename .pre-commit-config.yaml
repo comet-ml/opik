@@ -253,6 +253,23 @@ repos:
         require_serial: true
 
   # ---------------------------------------------------------------------------
+  # Backend (Java) — OpenAPI spec resolution. The backend test jobs skip
+  # swagger:resolve, and the image build that still runs it is skipped for fork
+  # PRs, so this is where every PR gets it before merge. It needs a full compile,
+  # too slow for a commit hook: manual stage keeps it CI-only (Code Quality runs
+  # legs with --hook-stage manual). Test sources don't feed the spec.
+  # ---------------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: swagger-resolve
+        name: ☕ swagger resolve — java backend openapi
+        entry: mvn -B -ntp -q -f apps/opik-backend/pom.xml compile -Dspotless.skip=true
+        language: system
+        files: ^apps/opik-backend/(src/main/|pom\.xml$)
+        pass_filenames: false
+        stages: [manual]
+
+  # ---------------------------------------------------------------------------
   # Self-check: smoke-test the pre-commit wrapper scripts when any of them change,
   # so a broken wrapper (regex/routing/flags) is caught before it ships.
   # ---------------------------------------------------------------------------
@@ -294,6 +311,19 @@ repos:
         entry: apps/opik-backend/test_rebaseline_db_changelog.sh
         language: system
         files: ^apps/opik-backend/(rebaseline_db_changelog|test_rebaseline_db_changelog)\.sh$
+        pass_filenames: false
+
+  # ---------------------------------------------------------------------------
+  # Self-check: run_db_migrations.sh is the backend-migrations init container, so
+  # its exit code decides whether the backend starts. Stubbed java, no JVM.
+  # ---------------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: run-db-migrations-script-tests
+        name: 🧪 run_db_migrations script tests
+        entry: apps/opik-backend/test_run_db_migrations.sh
+        language: system
+        files: ^apps/opik-backend/(run_db_migrations|test_run_db_migrations)\.sh$
         pass_filenames: false
 
   # ---------------------------------------------------------------------------
@@ -410,4 +440,32 @@ repos:
         # a fixture, not accepting user input.
         files: ^apps/opik-backend/src/main/java/.*\.java$
         args: ['--config', '.semgrep', '--error', '--severity', 'ERROR', '--disable-version-check', '--quiet', '--skip-unknown-extensions']
+
+  # ---------------------------------------------------------------------------
+  # Whole repo — betterleaks secret scanning (successor to gitleaks, same
+  # maintainers). language: golang, so pre-commit builds the pinned version from
+  # source and contributors need no local install. Offline: no secret is ever
+  # sent anywhere, and findings are printed redacted.
+  #
+  # `entry` is overridden on purpose: the upstream hook scans `git diff --cached`,
+  # which is empty in CI (Code Quality runs `pre-commit run <id> --files ...` on a
+  # clean checkout), and `--all-files` would find nothing to scan either. Scanning
+  # the passed files works the same locally and in CI; on commit it is still
+  # staged-only, since pre-commit passes just the staged files and stashes any
+  # unstaged edits first. The trade-off is that a touched file is scanned whole,
+  # not just its changed lines (the tree is kept clean, so that only ever
+  # surfaces a new finding). `--config` is explicit because config discovery is
+  # relative to the scan target, which is a file path here. False-positive
+  # handling lives in .betterleaks.toml.
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/betterleaks/betterleaks
+    rev: v1.9.0
+    hooks:
+      - id: betterleaks
+        name: 🛡️ betterleaks — secret scanning
+        entry: betterleaks dir --no-banner --redact --verbose --config .betterleaks.toml
+        pass_filenames: true
+        # Every file. Explicit (rather than omitted) so the CI matrix builder in
+        # scripts/precommit-detect-hooks.py routes any changed path to this leg.
+        files: .*
 ...

@@ -2,6 +2,7 @@ package com.comet.opik.infrastructure.llm.gemini;
 
 import com.comet.opik.api.ChunkedResponseHandler;
 import com.comet.opik.domain.llm.LlmProviderService;
+import com.comet.opik.infrastructure.llm.GeminiMaxOutputTokens;
 import com.comet.opik.infrastructure.llm.GeminiThinkingParams;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderLangChainMapper;
@@ -30,7 +31,7 @@ public class LlmProviderGemini implements LlmProviderService {
 
     @Override
     public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
-        var mappedMessages = GeminiLangChainMapper.INSTANCE.mapMessagesForGemini(request);
+        var mappedMessages = llmProviderClientGenerator.mapMessages(request);
         var response = llmProviderClientGenerator.generate(config, request).chat(mappedMessages);
         return LlmProviderLangChainMapper.INSTANCE.toChatCompletionResponse(request, response);
     }
@@ -47,7 +48,7 @@ public class LlmProviderGemini implements LlmProviderService {
                                 config.apiKey(),
                                 request);
 
-                        var mappedMessages = GeminiLangChainMapper.INSTANCE.mapMessagesForGemini(request);
+                        var mappedMessages = llmProviderClientGenerator.mapMessages(request);
 
                         // Create a simple summary of the request for logging
                         String requestSummary = String.format("model=%s, messages=%d",
@@ -85,22 +86,19 @@ public class LlmProviderGemini implements LlmProviderService {
     // MAX_TOKENS. Asking for thought summaries keeps that chunk, but it delays every answer and models that cannot
     // think reject it, so the empty stream is read as the limit running out instead.
     static ChatResponse withCutOffWhileThinking(ChatCompletionRequest request, ChatResponse response) {
+        var outputLimit = GeminiMaxOutputTokens.firstPositive(request);
         if (response.finishReason() != null
                 || response.tokenUsage() != null
                 || StringUtils.isNotEmpty(response.aiMessage().text())
-                || !hasOutputLimit(request)
+                || outputLimit.isEmpty()
                 || isThinkingTurnedOff(request)) {
             return response;
         }
         log.info("Gemini stream for model '{}' ended empty with max output tokens '{}', reporting finish reason '{}'",
-                request.model(), request.maxCompletionTokens(), FinishReason.LENGTH);
+                request.model(), outputLimit.get(), FinishReason.LENGTH);
         return response.toBuilder()
                 .metadata(response.metadata().toBuilder().finishReason(FinishReason.LENGTH).build())
                 .build();
-    }
-
-    private static boolean hasOutputLimit(ChatCompletionRequest request) {
-        return request.maxCompletionTokens() != null && request.maxCompletionTokens() > 0;
     }
 
     private static boolean isThinkingTurnedOff(ChatCompletionRequest request) {

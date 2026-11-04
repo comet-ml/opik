@@ -38,7 +38,7 @@ The most common type of anonymizer uses pattern-matching rules to identify and r
 
 Use regular expressions to match specific patterns:
 
-```python
+```python wordWrap
 import opik
 from opik.anonymizer import create_anonymizer
 
@@ -59,7 +59,7 @@ opik.hooks.add_anonymizer(anonymizer)
 
 Use custom Python functions for more complex anonymization logic:
 
-```python
+```python wordWrap
 import opik
 from opik.anonymizer import create_anonymizer
 
@@ -92,7 +92,7 @@ opik.hooks.add_anonymizer(anonymizer)
 
 Combine different rule types for comprehensive anonymization:
 
-```python
+```python wordWrap
 import opik
 import opik.hooks
 from opik.anonymizer import create_anonymizer
@@ -116,7 +116,7 @@ For advanced use cases, create custom anonymizers by extending the `Anonymizer` 
 
 When implementing custom anonymizers, you need to implement the `anonymize()` method with the following signature:
 
-```python
+```python wordWrap
 def anonymize(self, data, **kwargs):
     # Your anonymization logic here
     return anonymized_data
@@ -135,7 +135,7 @@ These kwargs are automatically passed by Opik's internal data processors when an
 
 **Example: Field-specific anonymization**
 
-```python
+```python wordWrap
 from opik.anonymizer import Anonymizer
 import opik.hooks
 
@@ -172,7 +172,7 @@ Also, you can extend the `RecursiveAnonymizer` base class to work with nested da
 This allows you to apply the same anonymization logic to all nested fields. In this case you
 need to implement the `anonymize_text()` method instead of `anonymize()`.
 
-```python
+```python wordWrap
 from typing import Any, Optional
 
 from opik.anonymizer import RecursiveAnonymizer
@@ -189,7 +189,7 @@ class SSNAnonymizer(RecursiveAnonymizer):
 
 ### Advanced Custom Anonymizer Example
 
-```python
+```python wordWrap
 import opik
 import opik.hooks
 from opik.anonymizer import Anonymizer
@@ -235,7 +235,7 @@ opik.hooks.add_anonymizer(AdvancedPIIAnonymizer())
 
 Here's a complete example showing how to set up anonymization for a simple LLM application:
 
-```python
+```python wordWrap
 import opik
 import opik.hooks
 from opik.anonymizer import create_anonymizer
@@ -271,7 +271,7 @@ result = process_customer_data("John Doe, email: john@example.com, phone: 555-12
 
 For more sophisticated anonymization scenarios:
 
-```python
+```python wordWrap
 import opik
 import opik.hooks
 from opik.anonymizer import create_anonymizer, Anonymizer
@@ -344,12 +344,12 @@ You typically integrate third-party tools in one of two ways:
 ---
 ### Example: Microsoft Presidio (open source, runs locally)
 First, install Presidio in your environment:
-```bash
+```bash wordWrap
 pip install presidio-analyzer presidio-anonymizer
 ```
 Then create an Anonymizer that delegates to Presidio:
 
-```python
+```python wordWrap
 from typing import Any
 
 import opik.hooks
@@ -407,7 +407,7 @@ Anonymizers work seamlessly with all Opik integrations:
 
 ### OpenAI Integration
 
-```python
+```python wordWrap
 import opik
 import opik.hooks
 from opik.anonymizer import create_anonymizer
@@ -436,7 +436,7 @@ response = client.chat.completions.create(
 
 ### LangChain Integration
 
-```python
+```python wordWrap
 import opik
 import opik.hooks
 from opik.anonymizer import create_anonymizer
@@ -477,7 +477,7 @@ result = llm.invoke(messages)
 
 Control how deeply nested data structures are processed:
 
-```python
+```python wordWrap
 from opik.anonymizer import create_anonymizer
 
 rules = [{"regex": r"\b\d{3}-\d{3}-\d{4}\b", "replace": "[PHONE]"}]
@@ -490,7 +490,7 @@ anonymizer = create_anonymizer(rules, max_depth=5)
 
 Register multiple anonymizers that will be applied in sequence:
 
-```python
+```python wordWrap
 import opik
 import opik.hooks
 from opik.anonymizer import create_anonymizer
@@ -518,7 +518,7 @@ if opik.hooks.has_anonymizers():
 
 Rules are applied in the order they're defined. More specific patterns should come before general ones:
 
-```python
+```python wordWrap
 rules = [
     # Specific: Credit cards (more specific pattern first)
     {"regex": r"\b4\d{3}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b", "replace": "[VISA_CARD]"},
@@ -535,7 +535,7 @@ rules = [
 - Keep the number of rules reasonable to avoid performance impacts
 - Consider using more specific patterns to reduce false positives
 
-```python
+```python wordWrap
 import re
 from opik.anonymizer import create_anonymizer
 
@@ -552,7 +552,7 @@ anonymizer = create_anonymizer(efficient_email_anonymizer)
 
 Always test your anonymization rules to ensure they work correctly:
 
-```python
+```python wordWrap
 from opik.anonymizer import create_anonymizer
 
 # Define your rules

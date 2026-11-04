@@ -13,7 +13,7 @@ title: Evaluate Function
 
 The `evaluate` function allows you to run comprehensive evaluations of LLM tasks against datasets using customizable metrics.
 
-```typescript
+```typescript wordWrap
 async function evaluate(options: EvaluateOptions): Promise<EvaluationResult>;
 ```
 
@@ -43,7 +43,7 @@ The function returns a Promise that resolves to an `EvaluationResult` object con
 
 ## Example Usage
 
-```typescript
+```typescript wordWrap
 import {
   evaluate,
   EvaluationTask,
@@ -106,7 +106,7 @@ async function runEvaluation() {
 
 For reproducible evaluations, use a `DatasetVersion` instead of `Dataset`:
 
-```typescript
+```typescript wordWrap
 // Get a specific version for reproducible evaluation
 const dataset = await opik.getOrCreateDataset<DatasetItem>("example-dataset", "Evaluation dataset", "my-project");
 const v2 = await dataset.getVersionView("v2");

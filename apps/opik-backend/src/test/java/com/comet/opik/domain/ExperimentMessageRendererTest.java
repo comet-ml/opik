@@ -8,6 +8,7 @@ import com.comet.opik.domain.llm.langchain4j.OpikUserMessage;
 import com.comet.opik.domain.template.MustacheParser;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.openai.internal.chat.SystemMessage;
@@ -16,13 +17,17 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mockito;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -138,6 +143,143 @@ class ExperimentMessageRendererTest {
         }
 
         @Test
+        @DisplayName("should substitute a variable in an image URL")
+        void renderMessagesWhenImageUrlHasVariableSubstitutesIt() {
+            var context = renderer.buildTemplateContext(datasetItem(Map.of(
+                    "image", new TextNode("https://example.com/cat.png"),
+                    "name", new TextNode("dog"))));
+
+            var rendered = renderer.renderMessages(
+                    List.of(userMessage(imagePart("{{image}}"), imagePart("https://cdn.example.com/{{name}}.png"))),
+                    context);
+
+            assertThat(imageUrls(rendered.getFirst().content()))
+                    .containsExactly("https://example.com/cat.png", "https://cdn.example.com/dog.png");
+        }
+
+        static Stream<Arguments> listSources() {
+            var urls = List.of("https://example.com/1.png", "data:image/png;base64,AAAA",
+                    "https://example.com/3.png");
+            var jsonArray = JsonUtils.valueToTree(urls);
+            var csvText = new TextNode(jsonArray.toString());
+            return Stream.of(
+                    Arguments.of("JSON list", jsonArray, "{{images}}", urls),
+                    Arguments.of("CSV text list", csvText, "{{images}}", urls),
+                    Arguments.of("spaced tag", jsonArray, "{{ images }}", urls),
+                    Arguments.of("triple braces", jsonArray, "{{{images}}}", urls),
+                    Arguments.of("ampersand tag", jsonArray, "{{& images}}", urls),
+                    Arguments.of("non-string items", JsonUtils.valueToTree(List.of(Map.of("url", "u"), 7)),
+                            "{{images}}", List.of("{\"url\":\"u\"}", "7")));
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("listSources")
+        @DisplayName("should send one image per list item, in order, keeping the parts around it")
+        void renderMessagesWhenVariableHoldsListExpandsOnePartPerItem(
+                String caseName, JsonNode value, String template, List<String> expectedUrls) {
+            var context = renderer.buildTemplateContext(datasetItem(Map.of("images", value)));
+            var image = imagePart(template);
+            ((ObjectNode) image.get("image_url")).put("detail", "low");
+
+            var rendered = renderer.renderMessages(
+                    List.of(userMessage(textPart("Classify these"), image, textPart("Answer as JSON"))), context);
+
+            var content = rendered.getFirst().content();
+            assertThat(content).hasSize(expectedUrls.size() + 2);
+            assertThat(content.get(0).get("text").asText()).isEqualTo("Classify these");
+            assertThat(content.get(content.size() - 1).get("text").asText()).isEqualTo("Answer as JSON");
+            assertThat(imageUrls(content)).containsExactlyElementsOf(expectedUrls);
+            assertThat(content.findValuesAsText("detail")).hasSize(expectedUrls.size()).containsOnly("low");
+        }
+
+        @Test
+        @DisplayName("should drop the image part when the list is empty")
+        void renderMessagesWhenListIsEmptyDropsThePart() {
+            var context = renderer.buildTemplateContext(
+                    datasetItem(Map.of("images", JsonUtils.getMapper().createArrayNode())));
+
+            var rendered = renderer.renderMessages(
+                    List.of(userMessage(textPart("Nothing to classify"), imagePart("{{images}}"))), context);
+
+            var content = rendered.getFirst().content();
+            assertThat(content).hasSize(1);
+            assertThat(content.get(0).get("text").asText()).isEqualTo("Nothing to classify");
+        }
+
+        static Stream<Arguments> nonListValues() {
+            return Stream.of(
+                    Arguments.of("single URL", "{{image}}", new TextNode("https://example.com/1.png"),
+                            "https://example.com/1.png"),
+                    Arguments.of("text that only looks like a list", "{{image}}", new TextNode("[oops"), "[oops"),
+                    Arguments.of("JSON object", "{{image}}", JsonUtils.valueToTree(Map.of("a", 1)), "{\"a\":1}"),
+                    Arguments.of("list inside a longer URL", "https://cdn/{{image}}",
+                            JsonUtils.valueToTree(List.of("a", "b")), "https://cdn/[\"a\",\"b\"]"),
+                    Arguments.of("section", "{{#image}}x{{/image}}", new TextNode("[\"a\",\"b\"]"), "x"),
+                    Arguments.of("missing variable", "{{other}}", new TextNode("unused"), ""));
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("nonListValues")
+        @DisplayName("should keep one image part when the template is not a single list variable")
+        void renderMessagesWhenNotSingleListVariableKeepsOnePart(
+                String caseName, String template, JsonNode value, String expectedUrl) {
+            var context = renderer.buildTemplateContext(datasetItem(Map.of("image", value)));
+
+            var rendered = renderer.renderMessages(List.of(userMessage(imagePart(template))), context);
+
+            assertThat(imageUrls(rendered.getFirst().content())).containsExactly(expectedUrl);
+        }
+
+        @Test
+        @DisplayName("should expand video and audio lists the same way")
+        void renderMessagesWhenVideoAndAudioHoldListsExpandsThem() {
+            var context = renderer.buildTemplateContext(datasetItem(Map.of(
+                    "videos", JsonUtils.valueToTree(List.of("https://example.com/1.mp4", "https://example.com/2.mp4")),
+                    "audios", JsonUtils.valueToTree(List.of("https://example.com/1.wav")))));
+
+            var rendered = renderer.renderMessages(
+                    List.of(userMessage(mediaPart("video_url", "{{videos}}"), mediaPart("audio_url", "{{audios}}"))),
+                    context);
+
+            assertThat(rendered.getFirst().content().findValuesAsText("url")).containsExactly(
+                    "https://example.com/1.mp4", "https://example.com/2.mp4", "https://example.com/1.wav");
+        }
+
+        @Test
+        @DisplayName("should put every list image into the provider request")
+        void renderMessagesWhenListThenBuildsRequestWithEveryImage() {
+            var context = renderer.buildTemplateContext(datasetItem(Map.of(
+                    "images",
+                    JsonUtils.valueToTree(List.of("https://example.com/1.png", "https://example.com/2.png")))));
+            var rendered = renderer.renderMessages(
+                    List.of(userMessage(textPart("Classify these"), imagePart("{{images}}"))), context);
+            var prompt = new ExperimentExecutionRequest.PromptVariant("gpt-4o", rendered, null, null, null);
+
+            var request = JsonUtils.valueToTree(renderer.buildChatCompletionRequest(prompt, rendered));
+
+            var sentContent = request.get("messages").get(0).get("content");
+            assertThat(sentContent.findValuesAsText("text")).containsExactly("Classify these");
+            assertThat(sentContent.findValuesAsText("url"))
+                    .containsExactly("https://example.com/1.png", "https://example.com/2.png");
+        }
+
+        @Test
+        void buildChatCompletionRequestSendsVideoAndAudioAsMediaParts() {
+            var rendered = renderer.renderMessages(List.of(userMessage(textPart("Describe these"),
+                    mediaPart("video_url", "https://example.com/clip.mp4"),
+                    mediaPart("audio_url", "https://example.com/voice.wav"))), Map.of());
+            var prompt = new ExperimentExecutionRequest.PromptVariant("gemini-3.8-flash", rendered, null, null, null);
+
+            var request = JsonUtils.valueToTree(renderer.buildChatCompletionRequest(prompt, rendered));
+
+            var sentContent = request.get("messages").get(0).get("content");
+            assertThat(sentContent.findValuesAsText("type")).containsExactly("text", "video_url", "audio_url");
+            assertThat(sentContent.findValuesAsText("text")).containsExactly("Describe these");
+            assertThat(sentContent.findValuesAsText("url"))
+                    .containsExactly("https://example.com/clip.mp4", "https://example.com/voice.wav");
+        }
+
+        @Test
         @DisplayName("should return message unchanged when content is neither text nor array")
         void returnUnchangedForOtherContentTypes() {
             var objectContent = JsonUtils.createObjectNode();
@@ -152,6 +294,42 @@ class ExperimentMessageRendererTest {
 
             assertThat(rendered).hasSize(1);
             assertThat(rendered.getFirst()).isSameAs(message);
+        }
+
+        private DatasetItem datasetItem(Map<String, JsonNode> data) {
+            return DatasetItem.builder().id(UUID.randomUUID()).data(data).build();
+        }
+
+        private ExperimentExecutionRequest.PromptVariant.Message userMessage(JsonNode... parts) {
+            var content = JsonUtils.getMapper().createArrayNode();
+            for (JsonNode part : parts) {
+                content.add(part);
+            }
+            return ExperimentExecutionRequest.PromptVariant.Message.builder().role("user").content(content).build();
+        }
+
+        private ObjectNode textPart(String text) {
+            return JsonUtils.createObjectNode().put("type", "text").put("text", text);
+        }
+
+        private ObjectNode imagePart(String url) {
+            return mediaPart("image_url", url);
+        }
+
+        private ObjectNode mediaPart(String type, String url) {
+            var part = JsonUtils.createObjectNode().put("type", type);
+            part.set(type, JsonUtils.createObjectNode().put("url", url));
+            return part;
+        }
+
+        private List<String> imageUrls(JsonNode content) {
+            var urls = new ArrayList<String>();
+            content.forEach(part -> {
+                if (part.has("image_url")) {
+                    urls.add(part.get("image_url").get("url").asText());
+                }
+            });
+            return urls;
         }
     }
 
@@ -182,6 +360,37 @@ class ExperimentMessageRendererTest {
             assertThat(request.messages().getFirst()).isInstanceOf(SystemMessage.class);
             assertThat(request.messages().getLast()).isInstanceOf(OpikUserMessage.class);
             assertThat(request.stream()).isFalse();
+        }
+
+        @Test
+        @DisplayName("should carry image, video and audio parts as media, not as text")
+        void buildRequestWithMediaParts() {
+            var mapper = JsonUtils.getMapper();
+            var content = mapper.createArrayNode();
+            content.add(mapper.createObjectNode().put("type", "text").put("text", "Describe these"));
+            for (var type : List.of("image_url", "video_url", "audio_url")) {
+                var part = mapper.createObjectNode().put("type", type);
+                part.set(type, mapper.createObjectNode().put("url", "https://example.com/media"));
+                content.add(part);
+            }
+
+            var messages = List.of(
+                    ExperimentExecutionRequest.PromptVariant.Message.builder()
+                            .role("user")
+                            .content(content)
+                            .build());
+            var prompt = new ExperimentExecutionRequest.PromptVariant("gpt-4o", messages, null, null, null);
+
+            var request = renderer.buildChatCompletionRequest(prompt, messages);
+
+            var parts = (List<?>) ((OpikUserMessage) request.messages().getFirst()).content();
+            var types = parts.stream().map(part -> JsonUtils.getMapper().valueToTree(part))
+                    .map(node -> ((JsonNode) node).path("type").asText())
+                    .toList();
+
+            // A url arriving as text is the failure this guards: the model then answers from the
+            // file name instead of the media, which reads like a real answer.
+            assertThat(types).containsExactly("text", "image_url", "video_url", "audio_url");
         }
 
         @Test

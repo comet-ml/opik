@@ -21,6 +21,7 @@ import SelectBox from "@/shared/SelectBox/SelectBox";
 import { Label } from "@/ui/label";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import {
+  getThinkingLevelDescription,
   getThinkingLevelOptions,
   resolveSamplingParams,
   resolveThinkingLevel,
@@ -110,7 +111,9 @@ const VertexAIModelConfigs = ({
             <Label htmlFor="thinkingLevel" className="text-sm font-medium">
               Thinking level
             </Label>
-            <ExplainerIcon description="Controls the depth of reasoning the model performs before responding. Higher thinking level may result in more thorough but slower responses." />
+            <ExplainerIcon
+              description={getThinkingLevelDescription(model ?? "")}
+            />
           </div>
           <SelectBox
             id="thinkingLevel"

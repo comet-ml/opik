@@ -28,6 +28,7 @@ export type { GetDatasetExportJobRequest } from "./GetDatasetExportJobRequest.js
 export type { GetDatasetItemByIdRequest } from "./GetDatasetItemByIdRequest.js";
 export type { GetDatasetItemsOutputColumnsRequest } from "./GetDatasetItemsOutputColumnsRequest.js";
 export type { GetDatasetItemsRequest } from "./GetDatasetItemsRequest.js";
+export type { GetDatasetVersionByHashRequest } from "./GetDatasetVersionByHashRequest.js";
 export type { ListDatasetVersionsRequest } from "./ListDatasetVersionsRequest.js";
 export type { MarkDatasetExportJobViewedRequest } from "./MarkDatasetExportJobViewedRequest.js";
 export type { PatchDatasetItemRequest } from "./PatchDatasetItemRequest.js";

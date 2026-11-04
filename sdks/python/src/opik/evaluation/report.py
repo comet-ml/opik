@@ -161,6 +161,7 @@ def display_evaluation_scores_statistics(
     stats_table.add_column("Min", justify="right", style="yellow")
     stats_table.add_column("Max", justify="right", style="yellow")
     stats_table.add_column("Std", justify="right", style="magenta")
+    stats_table.add_column("Failed", justify="right", style="red")
 
     # Add rows for each metric
     for name, stats in aggregated_view.aggregated_scores.items():
@@ -171,6 +172,7 @@ def display_evaluation_scores_statistics(
             f"{stats.min:.4f}",
             f"{stats.max:.4f}",
             std_value,
+            str(stats.failed_count),
         )
 
     # Create a panel with the table inside

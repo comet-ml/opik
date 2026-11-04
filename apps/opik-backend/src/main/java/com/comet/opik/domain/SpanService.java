@@ -14,6 +14,7 @@ import com.comet.opik.api.UsageByWorkspaceProjectUserResponse.WorkspaceProjectUs
 import com.comet.opik.api.attachment.AttachmentInfo;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
+import com.comet.opik.api.events.PartialSpanCreated;
 import com.comet.opik.api.events.SpansCreated;
 import com.comet.opik.api.events.SpansDeleted;
 import com.comet.opik.api.events.SpansUpdated;
@@ -82,6 +83,7 @@ public class SpanService {
     private final @NonNull AttachmentReinjectorService attachmentReinjectorService;
     private final @NonNull EventBus eventBus;
     private final @NonNull DeletionEventDAO deletionEventDAO;
+    private final @NonNull SpanWeeksDAO spanWeeksDAO;
     private final @NonNull @Config OpikConfiguration config;
 
     @WithSpan
@@ -293,8 +295,17 @@ public class SpanService {
             // Strip attachments OUTSIDE the database transaction
             return attachmentStripperService.stripAttachments(
                     spanUpdate, id, workspaceId, userName, projectName)
-                    .flatMap(processedUpdate -> spanDAO.partialInsert(id, project.id(), processedUpdate));
+                    .flatMap(processedUpdate -> spanDAO.partialInsert(id, project.id(), processedUpdate))
+                    .doOnSuccess(__ -> eventBus.post(
+                            new PartialSpanCreated(id, spanUpdate.traceId(), project.id(), workspaceId, userName)));
         });
+    }
+
+    public Mono<List<SpanWeek>> getWeeksByTraceIds(Set<UUID> traceIds) {
+        if (CollectionUtils.isEmpty(traceIds)) {
+            return Mono.just(List.of());
+        }
+        return spanWeeksDAO.findByTraceIds(traceIds).collectList();
     }
 
     private Mono<Project> getProjectById(SpanUpdate spanUpdate) {

@@ -36,7 +36,7 @@ short, the optimizer will:
 
 ## Quickstart
 
-```python
+```python wordWrap
 """
 Optimize a simple system prompt on the tiny_test dataset.
 Requires: pip install gepa, and a valid OPENAI_API_KEY for LiteLLM-backed models.
@@ -116,14 +116,19 @@ The `optimize_prompt` method has the following parameters:
 <ParamField path="prompt" type="ChatPrompt">The prompt to optimize</ParamField>
 <ParamField path="dataset" type="Dataset">Opik Dataset to optimize on</ParamField>
 <ParamField path="metric" type="Callable">Metric function to evaluate on</ParamField>
+<ParamField path="agent" type="OptimizableAgent | None" optional={true}>Agent instance used to run the prompts. Pass an instance, not a class. If None, the default LiteLLM-based agent is used.</ParamField>
 <ParamField path="experiment_config" type="dict | None" optional={true}>Optional configuration for the experiment</ParamField>
 <ParamField path="n_samples" type="int | float | str | None" optional={true}>Number of dataset items to use per evaluation. Use counts (e.g., `50`), fractions (e.g., `0.1`), percentages (e.g., "10%"), or "all"/"full"/None for the full dataset.</ParamField>
 <ParamField path="n_samples_minibatch" type="int | None" optional={true}>Optional number of samples for inner-loop minibatches (defaults to n_samples).</ParamField>
 <ParamField path="n_samples_strategy" type="str | None" optional={true}>Sampling strategy for subsampling (default: "random_sorted").</ParamField>
 <ParamField path="auto_continue" type="bool" optional={true} default="False">Whether to auto-continue optimization</ParamField>
-<ParamField path="agent_class" type="type[opik_optimizer.optimizable_agent.OptimizableAgent] | None" optional={true}>Optional agent class to use</ParamField>
-<ParamField path="project_name" type="str" optional={true} default="Optimization" />
+<ParamField path="project_name" type="str | None" optional={true}>Opik project for the optimization run. Falls back to the `OPIK_PROJECT_NAME` environment variable, then "Optimization". Trial traces are logged to the dataset's project.</ParamField>
+<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID to use when creating the Opik optimization run.</ParamField>
+<ParamField path="validation_dataset" type="Dataset | None" optional={true}>Optional validation dataset used to rank candidates.</ParamField>
 <ParamField path="max_trials" type="int" optional={true} default="10">Maximum number of different prompts to test (default: 10)</ParamField>
+<ParamField path="allow_tool_use" type="bool" optional={true} default="True">Whether tools may be executed during evaluation.</ParamField>
+<ParamField path="optimize_prompts" type="bool | str | list[str] | None" optional={true} default="system">Which prompt roles the optimizer may change, for example `"system"`, `"user"`, or a list of roles.</ParamField>
+<ParamField path="optimize_tools" type="bool | dict[str, bool] | None" optional={true}>Not supported by this optimizer. A warning is logged and the value is ignored.</ParamField>
 <ParamField path="reflection_minibatch_size" type="int" optional={true} default="3">Size of reflection minibatches (default: 3)</ParamField>
 <ParamField path="max_reflection_calls" type="int" optional={true} default="0">Cap on reflection-LLM calls — the calls GEPA makes to propose new candidates, which are not metric calls and are billed on top of them. Defaults to `0`, meaning no cap: GEPA reflects as often as its search requires. Set a positive value to bound reflection spend; the run then stops once the cap is reached and reports `finish_reason="reflection_budget"` (a run that spent its full metric budget at the same time reports `max_trials`, since the trials are the reason it ended). Reflection calls scale with engine iterations rather than trials, so pick this from the run's reported `reflection_call_count`, not from `max_trials`.</ParamField>
 <ParamField path="candidate_selection_strategy" type="str" optional={true} default="pareto">Strategy for candidate selection (choose from "pareto", "current_best", or "epsilon_greedy"; default: "pareto")</ParamField>
@@ -146,7 +151,7 @@ GEPA coordinates two model contexts:
 
 Set `model` to any LiteLLM-supported provider (e.g., `"gpt-4o"`, `"azure/gpt-4"`, `"anthropic/claude-opus-4-7"`, `"gemini/gemini-1.5-pro"`) and pass extra parameters via `model_parameters` when you need to tune temperature, max tokens, or other limits:
 
-```python
+```python wordWrap
 optimizer = GepaOptimizer(
     model="anthropic/claude-sonnet-4-6",
     model_parameters={

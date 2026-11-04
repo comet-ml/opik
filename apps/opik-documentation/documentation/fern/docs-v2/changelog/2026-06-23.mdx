@@ -10,7 +10,7 @@ The `opik export` and `opik import` CLI commands now require a project argument,
 
 **New command shape:**
 
-```bash
+```bash wordWrap
 opik export WORKSPACE PROJECT ITEM [NAME] [OPTIONS]
 ```
 
@@ -28,7 +28,7 @@ Import gains a `--to-project` option that redirects items into a different proje
 
 - **`track_openai`: custom `provider` argument** — An optional `provider` parameter (`str` or `opik.LLMProvider`) can now be passed to `track_openai` to override the auto-detected provider on every span. Useful for OpenAI-compatible APIs where the hostname-derived default is not descriptive.
 
-  ```python
+  ```python wordWrap
   client = track_openai(openai.OpenAI(base_url="..."), provider="my-provider")
   ```
 

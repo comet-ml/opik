@@ -37,10 +37,30 @@ setup(
     ).read(),
     long_description_content_type="text/markdown",
     install_requires=[
+        # Cooldown caps: each library's requirements are followed by a `name<=X`
+        # line, its cooldown cap, so a hijacked release has time to be caught and
+        # yanked before installs pick it up. Renovate moves every cap to the
+        # newest release that is at least 3 days old (.github/renovate.json) and
+        # leaves the other lines alone.
+        # - Adding a library: add its cap right after it, at its newest release
+        #   that is at least 3 days old, with the same marker if the library is
+        #   required only on some platforms.
+        # - Removing a library: remove its cap too. A cap on its own still
+        #   installs the library.
+        # - Compatibility caps (litellm's `<1.106`) go inside the requirement,
+        #   never as a separate `name<=X` line: Renovate would move it.
+        # - To ship a release that is less than 3 days old (e.g. a security fix),
+        #   set the cap to it by hand. Renovate does this itself for a release
+        #   that fixes a published advisory.
+        # - A library without a cap always gets its newest release.
         "boto3-stubs[bedrock-runtime]>=1.34.110",
+        "boto3-stubs<=1.43.123",
         "click",
+        "click<=8.5.0",
         "httpx",  # some older version of openai/litellm are broken with httpx>=0.28.0
+        "httpx<=0.28.1",
         "rapidfuzz>=3.0.0,<4.0.0",
+        "rapidfuzz<=3.14.6",
         # LiteLLM dependency comments:
         # Please keep this list in sync with the one in sdks/opik_optimizer/pyproject.toml
         # - Exclude 1.82.7, 1.82.8: compromised in supply chain attack (TeamPCP)
@@ -51,6 +71,9 @@ setup(
         # - Exclude 1.92.*: core completion() eagerly imports litellm.proxy modules that require
         #   fastapi/orjson (proxy-only extras), so any completion crashes without litellm[proxy].
         #   Reverted in 1.93. See litellm/main.py -> responses.mcp.litellm_proxy_mcp_handler.
+        # - Cap at <1.106: completion() with tools imports litellm.proxy MCP modules that need the
+        #   `mcp` package (a proxy-only extra), so any tool call fails with "No module named 'mcp'".
+        #   Still broken in 1.107.0rc1. Lift once https://github.com/BerriAI/litellm/issues/46045 is fixed.
         # - Cap Python 3.10 at <1.97: litellm declares requires-python >=3.10 but ships 3.11+
         #   typing, and every recent break has been 3.10-only with a distinct root cause:
         #     1.97.*     Message model unconstructible -- the nested forward reference
@@ -61,19 +84,29 @@ setup(
         #                typing.NotRequired does not exist on 3.10 (added in 3.11);
         #                litellm should import it from typing_extensions.
         #   Both are still unfixed on litellm main, so 1.99+ is expected to break on 3.10 too.
-        #   The cap is the standing guard; 3.11+ deliberately stays uncapped. Lift it once
+        #   The cap is the standing guard; 3.11+ deliberately doesn't get it. Lift it once
         #   upstream actually tests 3.10 (or once we drop 3.10 -- see OPIK_7955).
         "litellm>=1.79.2,!=1.81.*,!=1.82.*,!=1.83.0,!=1.83.1,!=1.83.2,!=1.83.3,!=1.83.4,!=1.83.5,!=1.83.6,!=1.92.*,<1.97; python_version < '3.11'",
-        "litellm>=1.79.2,!=1.81.*,!=1.82.*,!=1.83.0,!=1.83.1,!=1.83.2,!=1.83.3,!=1.83.4,!=1.83.5,!=1.83.6,!=1.92.*; python_version >= '3.11'",
+        "litellm>=1.79.2,!=1.81.*,!=1.82.*,!=1.83.0,!=1.83.1,!=1.83.2,!=1.83.3,!=1.83.4,!=1.83.5,!=1.83.6,!=1.92.*,<1.106; python_version >= '3.11'",
+        "litellm<=1.106.6",
         "openai",
+        "openai<=3.42.0",
         "pydantic-settings>=2.0.0,<3.0.0,!=2.9.0",
+        "pydantic-settings<=2.16.2",
         "pydantic>=2.0.0,<3.0.0",
+        "pydantic<=2.14.2",
         "pytest",
+        "pytest<=9.2.0",
         "rich",
+        "rich<=15.0.0",
         "sentry_sdk>=2.0.0",
+        "sentry_sdk<=2.73.0",
         "tenacity",
+        "tenacity<=9.2.1",
         "tqdm",
+        "tqdm<=4.70.1",
         "uuid6",
+        "uuid6<=2025.0.1",
         # Optional accelerator for JSON encoding; see opik/json_helpers.py. Guarded
         # twice -- this marker keeps pip from attempting a source build where no
         # wheel exists, and the import there is optional, so a missing orjson costs
@@ -90,8 +123,11 @@ setup(
             " or platform_machine != 'ARM64'"
             " or python_version >= '3.11')"
         ),
+        "orjson<=3.13.0; platform_python_implementation == 'CPython' and platform_machine in 'x86_64 AMD64 aarch64 arm64 ARM64 i686 x86' and (sys_platform != 'win32' or platform_machine != 'ARM64' or python_version >= '3.11')",
         "jinja2",
+        "jinja2<=3.1.6",
         "watchfiles>=1.0.0,<2.0.0",
+        "watchfiles<=1.3.0",
         # tree-sitter is used for JS/TS syntax checking in bridge handlers.
         # Pre-built wheels are missing for musllinux_aarch64 (Alpine on ARM64),
         # and PEP 508 has no marker to distinguish musl from glibc, so we
@@ -104,16 +140,19 @@ setup(
             " platform_machine != 'aarch64'"
             " or sys_platform != 'linux'"
         ),
+        "tree-sitter<=0.26.0; platform_machine != 'aarch64' or sys_platform != 'linux'",
         (
             "tree-sitter-javascript>=0.23,<1.0;"
             " platform_machine != 'aarch64'"
             " or sys_platform != 'linux'"
         ),
+        "tree-sitter-javascript<=0.25.0; platform_machine != 'aarch64' or sys_platform != 'linux'",
         (
             "tree-sitter-typescript>=0.23,<1.0;"
             " platform_machine != 'aarch64'"
             " or sys_platform != 'linux'"
         ),
+        "tree-sitter-typescript<=0.23.2; platform_machine != 'aarch64' or sys_platform != 'linux'",
     ],
     extras_require={
         "proxy": [

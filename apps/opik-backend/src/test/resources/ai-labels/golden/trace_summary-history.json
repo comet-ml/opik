@@ -1,0 +1,9 @@
+[
+  {
+    "input": "{\"question\":\"Où est mon remboursement pour la commande 42 ?\"}",
+    "output": "{\"answer\":\"Refund issued — Friday\"}"
+  },
+  {
+    "input": "{\"question\":\"Merci !\"}"
+  }
+]

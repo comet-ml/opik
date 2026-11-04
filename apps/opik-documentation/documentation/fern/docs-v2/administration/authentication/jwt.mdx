@@ -113,7 +113,7 @@ JWKS (JSON Web Key Set) is the recommended approach as it:
 
 **Example JWKS response:**
 
-```json
+```json wordWrap
 {
   "keys": [
     {
@@ -183,7 +183,7 @@ Use `EMAIL` mapping when your JWT tokens contain email addresses in the subject 
 
 By default, Opik reads the `sub` (subject) claim. If your tokens use a different claim:
 
-```json
+```json wordWrap
 {
   "sub": "12345",
   "email": "user@company.com",
@@ -271,7 +271,7 @@ When using JWKS with multiple keys:
 
 Include the JWT in the `Authorization` header:
 
-```bash
+```bash wordWrap
 curl -X GET "https://api.opik.com/v1/projects" \
   -H "Authorization: Bearer <your-jwt-token>"
 ```
@@ -283,7 +283,7 @@ Configure the Opik SDK to use JWT authentication:
 <Tabs>
 <Tab value="python" title="Python">
 
-```python
+```python wordWrap
 import opik
 
 # Configure with JWT token
@@ -296,7 +296,7 @@ client = opik.Opik(
 </Tab>
 <Tab value="typescript" title="TypeScript">
 
-```typescript
+```typescript wordWrap
 import { Opik } from 'opik';
 
 const client = new Opik({
@@ -344,7 +344,7 @@ On-premises deployments can configure caching behavior:
 
 Decode and inspect your JWT token (do not use for production tokens containing secrets):
 
-```bash
+```bash wordWrap
 # Decode JWT header and payload (without verification)
 echo "<your-jwt>" | cut -d'.' -f1 | base64 -d 2>/dev/null | jq .
 echo "<your-jwt>" | cut -d'.' -f2 | base64 -d 2>/dev/null | jq .
@@ -356,7 +356,7 @@ Or use [jwt.io](https://jwt.io) to inspect token contents.
 
 Test that your JWKS endpoint is accessible and returns valid JSON:
 
-```bash
+```bash wordWrap
 curl -s "https://auth.company.com/.well-known/jwks.json" | jq .
 ```
 

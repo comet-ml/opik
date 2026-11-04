@@ -24,14 +24,14 @@ This guide explains how to integrate Opik with xAI Grok via LiteLLM. By using th
 
 To get started, you need to configure Opik to send traces to your Comet project. You can do this by setting the `OPIK_PROJECT_NAME` environment variable:
 
-```bash
+```bash wordWrap
 export OPIK_PROJECT_NAME="your-project-name"
 export OPIK_WORKSPACE="your-workspace-name"
 ```
 
 You can also call the `opik.configure` method:
 
-```python
+```python wordWrap
 import opik
 
 opik.configure(
@@ -44,13 +44,13 @@ opik.configure(
 
 Install the required packages:
 
-```bash
+```bash wordWrap
 pip install opik litellm
 ```
 
 Create a LiteLLM configuration file (e.g., `litellm_config.yaml`):
 
-```yaml
+```yaml wordWrap
 model_list:
   - model_name: grok-beta
     litellm_params:
@@ -69,7 +69,7 @@ litellm_settings:
 
 Set your xAI API key as an environment variable:
 
-```bash
+```bash wordWrap
 export XAI_API_KEY="your-xai-api-key"
 ```
 
@@ -81,13 +81,13 @@ You can obtain an xAI API key from the [xAI Console](https://console.x.ai/).
 
 Start the LiteLLM proxy server:
 
-```bash
+```bash wordWrap
 litellm --config litellm_config.yaml
 ```
 
 Use the proxy server to make requests:
 
-```python
+```python wordWrap
 import openai
 
 client = openai.OpenAI(
@@ -109,7 +109,7 @@ print(response.choices[0].message.content)
 
 You can also use LiteLLM directly in your Python code:
 
-```python
+```python wordWrap
 import os
 from litellm import completion
 
@@ -149,7 +149,7 @@ For the most up-to-date list of available models, visit the [xAI API documentati
 
 One of Grok's key features is its ability to access real-time information. This makes it particularly useful for questions about current events:
 
-```python
+```python wordWrap
 response = completion(
     model="xai/grok-beta",
     messages=[
@@ -164,7 +164,7 @@ print(response.choices[0].message.content)
 
 Grok Vision Beta can process both text and images:
 
-```python
+```python wordWrap
 from litellm import completion
 
 response = completion(
@@ -187,7 +187,7 @@ print(response.choices[0].message.content)
 
 Grok models support function calling for enhanced capabilities:
 
-```python
+```python wordWrap
 tools = [
     {
         "type": "function",
@@ -221,7 +221,7 @@ response = completion(
 
 Control the creativity of Grok's responses:
 
-```python
+```python wordWrap
 # More creative responses
 response = completion(
     model="xai/grok-beta",
@@ -243,7 +243,7 @@ response = completion(
 
 Use system messages to guide Grok's behavior:
 
-```python
+```python wordWrap
 response = completion(
     model="xai/grok-beta",
     messages=[
@@ -257,7 +257,7 @@ response = completion(
 
 Once your xAI calls are logged with Opik, you can evaluate your LLM application using Opik's evaluation framework:
 
-```python
+```python wordWrap
 from opik.evaluation import evaluate
 from opik.evaluation.metrics import Hallucination
 
@@ -286,7 +286,7 @@ evaluation_results = evaluate(
 
 Make sure to set the following environment variables:
 
-```bash
+```bash wordWrap
 # xAI Configuration
 export XAI_API_KEY="your-xai-api-key"
 

@@ -17,7 +17,7 @@ Opik to trace and evaluate Qianfan calls.
 
 First, ensure you have both `opik` and `openai` packages installed:
 
-```bash
+```bash wordWrap
 pip install opik openai
 ```
 
@@ -31,7 +31,7 @@ for the latest setup steps and model list.
 
 ## Tracking Qianfan API calls
 
-```python
+```python wordWrap
 from opik.integrations.openai import track_openai
 from openai import OpenAI
 
@@ -62,7 +62,7 @@ print(response.choices[0].message.content)
 You can combine the tracked client with Opik's `@track` decorator for
 end-to-end tracing:
 
-```python
+```python wordWrap
 from opik import track
 from opik.integrations.openai import track_openai
 from openai import OpenAI

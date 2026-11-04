@@ -14,16 +14,19 @@ import java.io.UncheckedIOException;
 public class ChunkedOutputHandlers {
     private final @NonNull ChunkedOutput<String> chunkedOutput;
 
+    /**
+     * @throws ClientDisconnectedException when the output is closed or can't be written to, so the producer of the
+     *                                     stream can stop
+     */
     public void handleMessage(@NonNull Object item) {
         if (chunkedOutput.isClosed()) {
-            log.warn("Output stream is already closed");
-            return;
+            throw new ClientDisconnectedException(new IOException("the output stream is already closed"));
         }
         try {
             // Add "data: " prefix for SSE format compatibility with OpenAI SDK and LiteLLM
-            chunkedOutput.write("data: " + JsonUtils.writeValueAsString(item));
+            chunkedOutput.write("data: %s".formatted(JsonUtils.writeValueAsString(item)));
         } catch (IOException ioException) {
-            throw new UncheckedIOException(ioException);
+            throw new ClientDisconnectedException(ioException);
         }
     }
 

@@ -9,9 +9,15 @@ interface MetricTagProps {
   metricName: string;
   color: string;
   score?: ScoreData;
+  notRun?: boolean;
 }
 
-const MetricTag: React.FC<MetricTagProps> = ({ metricName, color, score }) => {
+const MetricTag: React.FC<MetricTagProps> = ({
+  metricName,
+  color,
+  score,
+  notRun = false,
+}) => {
   if (score) {
     return (
       <FeedbackScoreTag
@@ -32,7 +38,11 @@ const MetricTag: React.FC<MetricTagProps> = ({ metricName, color, score }) => {
       <span className="comet-body-s-accented truncate text-muted-slate">
         {metricName}
       </span>
-      <Loader2 className="size-3 animate-spin text-muted-slate" />
+      {notRun ? (
+        <span className="comet-body-s text-muted-slate">&mdash;</span>
+      ) : (
+        <Loader2 className="size-3 animate-spin text-muted-slate" />
+      )}
     </div>
   );
 };

@@ -34,7 +34,7 @@ First, you'll need to create a dataset containing your test cases. This dataset 
 your experiments.
 
 <CodeBlocks>
-  ```typescript title="TypeScript" language="typescript" maxLines=1000
+  ```typescript title="TypeScript" language="typescript" maxLines=1000 wordWrap
   import { Opik } from "opik";
 
   const client = new Opik({
@@ -61,7 +61,7 @@ your experiments.
   ]);
   ```
 
-  ```python title="Python" language="python" maxLines=1000
+  ```python title="Python" language="python" maxLines=1000 wordWrap
   from opik import Opik
   import opik
 
@@ -92,7 +92,7 @@ your experiments.
   dataset.insert(dataset_items)
   ```
 
-  ```bash title="REST API" maxLines=1000
+  ```bash title="REST API" maxLines=1000 wordWrap
   # First, create the dataset
   curl -X POST 'https://www.comet.com/opik/api/v1/private/datasets' \
     -H 'Content-Type: application/json' \
@@ -142,7 +142,7 @@ Structure your evaluation results with the necessary fields. Each experiment ite
 - `feedback_scores`: Array of evaluation metrics (optional)
 
 <CodeBlocks>
-  ```typescript title="TypeScript" language="typescript" maxLines=1000
+  ```typescript title="TypeScript" language="typescript" maxLines=1000 wordWrap
   const datasetItems = await dataset.getItems();
 
   const mockResponses = {
@@ -163,7 +163,7 @@ Structure your evaluation results with the necessary fields. Each experiment ite
   });
   ```
 
-```python title="Python" language="python" maxLines=1000
+```python title="Python" language="python" maxLines=1000 wordWrap
 # Get dataset items from the dataset object
 dataset_items = list(dataset.get_items())
 
@@ -208,7 +208,7 @@ for item in dataset_items[:3]:  # Process first 3 items for this example
 print(f"Prepared {len(evaluation_items)} evaluation items")
 ```
 
-```bash title="REST API"
+```bash title="REST API" wordWrap
   {
     "experiment_name": "geography-bot-v1",
     "dataset_name": "geography-questions",
@@ -271,7 +271,7 @@ Use the bulk endpoint to efficiently log multiple evaluation results at once.
 </Note>
 
 <CodeBlocks>
-```typescript title="TypeScript" language="typescript" maxLines=1000
+```typescript title="TypeScript" language="typescript" maxLines=1000 wordWrap
 import { Opik } from "opik";
 
 const projectName = "your-project-name";
@@ -295,7 +295,7 @@ const items = [
 await client.api.experiments.experimentItemsBulk({ experimentName, datasetName, projectName, items });
 ```
 
-```python title="Python" language="python" maxLines=1000
+```python title="Python" language="python" maxLines=1000 wordWrap
 experiment_name = "Bulk experiment upload"
 # Log experiment results using the bulk method
 client.rest_client.experiments.experiment_items_bulk(
@@ -316,7 +316,7 @@ client.rest_client.experiments.experiment_items_bulk(
 )
 ```
 
-```bash title="REST API" maxLines=1000
+```bash title="REST API" maxLines=1000 wordWrap
 curl -X PUT 'https://www.comet.com/opik/api/v1/private/experiments/items/bulk' \
     -H 'Content-Type: application/json' \
     -H 'Comet-Workspace: <your-workspace-name>' \
@@ -370,7 +370,7 @@ Below is an example of splitting the `evaluation_items` into two batches which w
 to the same experiment:
 
 <CodeBlocks>
-  ```typescript title="TypeScript" language="typescript" maxLines=1000
+  ```typescript title="TypeScript" language="typescript" maxLines=1000 wordWrap
   import { generateId } from "opik";
 
   const experimentId = generateId();
@@ -401,7 +401,7 @@ to the same experiment:
   }
   ```
 
-  ```python title="Python" language="python" maxLines=1000
+  ```python title="Python" language="python" maxLines=1000 wordWrap
   experiment_id = str(uuid6.uuid7())
   experiment_name = "Bulk experiment upload"
   # Split evaluation_items into two batches
@@ -443,7 +443,7 @@ compare different experiments to one another.
 Here's a complete example that puts all the steps together:
 
 <CodeBlocks>
-  ```typescript title="TypeScript" language="typescript"
+  ```typescript title="TypeScript" language="typescript" wordWrap
   import { Opik } from "opik";
 
 const projectName = "your-project-name";
@@ -516,7 +516,7 @@ await client.api.experiments.experimentItemsBulk({
 console.log(`Experiment '${experimentName}' created successfully!`);
 ```
 
-```python title="Python" language="python"
+```python title="Python" language="python" wordWrap
 from opik import Opik
 import opik
 import uuid
@@ -592,7 +592,7 @@ rest_client.experiments.experiment_items_bulk(
 print(f"Experiment '{experiment_name}' created successfully!")
 ```
 
-```bash title="REST API"
+```bash title="REST API" wordWrap
 # Set environment variables
 export OPIK_API_KEY="your_api_key"
 export OPIK_WORKSPACE="your_workspace_name"
@@ -676,7 +676,7 @@ curl -X PUT "https://www.comet.com/opik/api/v1/private/experiments/items/bulk" \
 You can include full execution traces with your experiment items for complete observability, to do
 achieve this, add a `trace` and `spans` field to your experiment items:
 
-```json
+```json wordWrap
 [
   {
     "dataset_item_id": "your-dataset-item-id",
@@ -709,7 +709,7 @@ achieve this, add a `trace` and `spans` field to your experiment items:
 
 For Java developers, here's how to integrate with Opik using Jackson and HttpClient:
 
-```java
+```java wordWrap
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
@@ -812,7 +812,7 @@ public class OpikExperimentLogger {
 
 If you are using the REST API with a local deployment, you can all the endpoints using:
 
-```bash
+```bash wordWrap
 # No authentication headers required for local deployments
 curl -X PUT 'http://localhost:5173/api/v1/private/experiments/items/bulk' \
   -H 'Content-Type: application/json' \

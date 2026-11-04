@@ -17,7 +17,11 @@ import java.time.Instant;
 import java.util.UUID;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
+import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
+import static com.github.tomakehurst.wiremock.client.WireMock.notMatching;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
+import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.assertj.core.api.Assertions.assertThatNoException;
@@ -61,8 +65,19 @@ class PlatformAgentInsightsReportClientTest {
     }
 
     private void trigger() {
-        client.triggerAgentInsights(UUID.randomUUID().toString(), UUID.randomUUID(), "workspace-id",
-                Instant.now().minusSeconds(86_400), Instant.now(), "manual");
+        trigger(UUID.randomUUID().toString(), null);
+    }
+
+    private void trigger(String reportId, String guidance) {
+        client.triggerAgentInsights(AgentInsightsReportClient.Trigger.builder()
+                .reportId(reportId)
+                .projectId(UUID.randomUUID())
+                .workspaceId("workspace-id")
+                .periodStart(Instant.now().minusSeconds(86_400))
+                .periodEnd(Instant.now())
+                .triggerSource("manual")
+                .guidance(guidance)
+                .build());
     }
 
     @Test
@@ -120,5 +135,31 @@ class PlatformAgentInsightsReportClientTest {
         stubTriggerStatus(202);
 
         assertThatNoException().isThrownBy(this::trigger);
+    }
+
+    @Test
+    @DisplayName("The project guidance is sent as custom_prompt, the platform field reserved for it")
+    void triggerAgentInsights__withGuidance__sendsItAsCustomPrompt() {
+        stubTriggerStatus(202);
+        var reportId = UUID.randomUUID().toString();
+
+        trigger(reportId, "Only report billing failures");
+
+        wireMock.server().verify(postRequestedFor(urlPathEqualTo(TRIGGER_PATH))
+                .withRequestBody(matchingJsonPath("$.report_id", equalTo(reportId)))
+                .withRequestBody(matchingJsonPath("$.custom_prompt", equalTo("Only report billing failures"))));
+    }
+
+    @Test
+    @DisplayName("Without guidance no custom_prompt is sent")
+    void triggerAgentInsights__withoutGuidance__sendsNoCustomPrompt() {
+        stubTriggerStatus(202);
+        var reportId = UUID.randomUUID().toString();
+
+        trigger(reportId, null);
+
+        wireMock.server().verify(postRequestedFor(urlPathEqualTo(TRIGGER_PATH))
+                .withRequestBody(matchingJsonPath("$.report_id", equalTo(reportId)))
+                .withRequestBody(notMatching(".*custom_prompt.*")));
     }
 }

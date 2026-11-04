@@ -1,0 +1,155 @@
+import React, { useCallback, useState } from "react";
+import { Copy, MoreHorizontal, Pencil, RefreshCw, Trash } from "lucide-react";
+
+import { Button } from "@/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/ui/dropdown-menu";
+import {
+  useDashboardStore,
+  selectDeleteWidget,
+  selectDuplicateWidget,
+  selectOnAddEditWidgetCallback,
+  selectRuntimeConfig,
+} from "@/store/DashboardStore";
+import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
+import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
+
+type OllieChartActionsMenuProps = {
+  sectionId: string;
+  widgetId: string;
+  widgetTitle: string;
+  // Edit in Ollie; without it (Ollie off, or a console without chart editing) the item opens the widget editor.
+  onEditInOllie?: () => void;
+  // "Duplicate in Ollie": a copy refined in chat, added as a new widget. Offered beside the plain duplicate.
+  onDuplicateInOllie?: () => void;
+  // Absent until the widget's query can run.
+  onRefresh?: () => void;
+  onOpenChange?: (open: boolean) => void;
+};
+
+const OllieChartActionsMenu: React.FunctionComponent<
+  OllieChartActionsMenuProps
+> = ({
+  sectionId,
+  widgetId,
+  widgetTitle,
+  onEditInOllie,
+  onDuplicateInOllie,
+  onRefresh,
+  onOpenChange,
+}) => {
+  const [open, setOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const duplicateWidget = useDashboardStore(selectDuplicateWidget);
+  const deleteWidget = useDashboardStore(selectDeleteWidget);
+  const onAddEditWidgetCallback = useDashboardStore(
+    selectOnAddEditWidgetCallback,
+  );
+  const runtimeConfig = useDashboardStore(selectRuntimeConfig);
+
+  const handleRemove = () => {
+    trackEvent(OpikEvent.DASHBOARD_OLLIE_WIDGET_REMOVED, {
+      dashboard_id: runtimeConfig.dashboardId,
+      dashboard_scope: runtimeConfig.dashboardScope,
+      widget_id: widgetId,
+    });
+    deleteWidget(sectionId, widgetId);
+  };
+
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next);
+    onOpenChange?.(next);
+  };
+
+  const handleDeleteDialogOpenChange = useCallback(
+    (isOpen: boolean) => {
+      setDeleteDialogOpen(isOpen);
+      onOpenChange?.(open || isOpen);
+    },
+    [open, onOpenChange],
+  );
+
+  // Read on every render, so opening the menu sees whether the console has announced chart editing yet.
+  const canEditChart = window.opikBridge?.canEditChart?.();
+  const editInOllie = canEditChart ? onEditInOllie : undefined;
+  const duplicateInOllie = window.opikBridge?.canDuplicateChart?.()
+    ? onDuplicateInOllie
+    : undefined;
+
+  const run = (action: () => void) => (e: React.MouseEvent) => {
+    e.stopPropagation();
+    action();
+  };
+
+  return (
+    <>
+      <DropdownMenu open={open} onOpenChange={handleOpenChange}>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="minimal"
+            size="icon-3xs"
+            onClick={(e) => e.stopPropagation()}
+            className="text-light-slate hover:text-foreground"
+          >
+            <MoreHorizontal className="size-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-52">
+          <DropdownMenuItem
+            onClick={run(() =>
+              editInOllie
+                ? editInOllie()
+                : onAddEditWidgetCallback?.({ sectionId, widgetId }),
+            )}
+          >
+            <Pencil className="mr-2 size-4" />
+            {editInOllie ? "Edit in Ollie" : "Edit"}
+          </DropdownMenuItem>
+          {onRefresh && (
+            <DropdownMenuItem onClick={run(onRefresh)}>
+              <RefreshCw className="mr-2 size-4" />
+              Refresh
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuItem
+            onClick={run(() => duplicateWidget(sectionId, widgetId))}
+          >
+            <Copy className="mr-2 size-4" />
+            Duplicate
+          </DropdownMenuItem>
+          {duplicateInOllie && (
+            <DropdownMenuItem onClick={run(duplicateInOllie)}>
+              <Copy className="mr-2 size-4" />
+              Duplicate in Ollie
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            variant="destructive"
+            onClick={run(() => setDeleteDialogOpen(true))}
+          >
+            <Trash className="mr-2 size-4" />
+            Remove
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        setOpen={handleDeleteDialogOpenChange}
+        onConfirm={handleRemove}
+        title="Remove widget?"
+        description="Are you sure you want to remove this widget? This action cannot be undone."
+        confirmText={`Remove ${widgetTitle}`}
+        confirmButtonVariant="destructive"
+      />
+    </>
+  );
+};
+
+export default OllieChartActionsMenu;

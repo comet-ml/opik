@@ -23,7 +23,7 @@ title: Observability for IBM watsonx with Opik
 
 To start tracking your watsonx LLM calls, you can use our [LiteLLM integration](/integrations/litellm). You'll need to have both the `opik` and `litellm` packages installed. You can install them using pip:
 
-```bash
+```bash wordWrap
 pip install opik litellm
 ```
 
@@ -53,7 +53,7 @@ In order to configure watsonx, you will need to have:
 
 Once you have these, you can set them as environment variables:
 
-```python
+```python wordWrap
 import os
 
 os.environ["WATSONX_URL"] = ""  # (required) Base URL of your WatsonX instance
@@ -69,7 +69,7 @@ os.environ["WATSONX_TOKEN"] = ""  # IAM auth token
 
 In order to log the LLM calls to Opik, you will need to create the OpikLogger callback. Once the OpikLogger callback is created and added to LiteLLM, you can make calls to LiteLLM as you normally would:
 
-```python
+```python wordWrap
 from litellm.integrations.opik.opik import OpikLogger
 import litellm
 import os
@@ -101,7 +101,7 @@ print(response.choices[0].message.content)
 
 If you have multiple steps in your LLM pipeline, you can use the `@track` decorator to log the traces for each step. If WatsonX is called within one of these steps, the LLM call will be associated with that corresponding step:
 
-```python
+```python wordWrap
 from opik import track
 from opik.opik_context import get_current_span_data
 import litellm

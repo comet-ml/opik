@@ -1,0 +1,18 @@
+{
+  "name": "support-agent",
+  "input": {
+    "question": "Et pour la deuxième commande ?"
+  },
+  "output": {
+    "answer": "Refund issued — Monday"
+  },
+  "spans": [
+    {
+      "name": "lookup",
+      "input": {
+        "order": 43
+      },
+      "output": "found"
+    }
+  ]
+}

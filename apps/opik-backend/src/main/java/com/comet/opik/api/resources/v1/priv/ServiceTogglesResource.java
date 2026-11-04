@@ -32,8 +32,9 @@ public class ServiceTogglesResource {
     @Operation(operationId = "getServiceToggles", summary = "Get Service Toggles", description = "Get Service Toggles", responses = {
             @ApiResponse(responseCode = "200", description = "Service Toggles", content = @Content(schema = @Schema(implementation = ServiceTogglesConfig.class)))})
     public Response getToggles() {
+        ServiceTogglesConfig toggles = config.getServiceToggles();
         return Response.ok()
-                .entity(config.getServiceToggles())
+                .entity(toggles.withCustomChartsEnabledForWorkspace(config.getCustomCharts().isEnabled(toggles)))
                 .build();
     }
 }

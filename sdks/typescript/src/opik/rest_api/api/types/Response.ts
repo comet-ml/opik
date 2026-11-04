@@ -7,4 +7,6 @@ export interface Response {
     unknownProjectIds?: string[];
     /** Ids whose automatic run already happened, so enrolling has no effect */
     alreadyRunProjectIds?: string[];
+    /** Ids whose automatic run never finished, so clearing forgot it and enrolling them again gives it one more free run */
+    resetProjectIds?: string[];
 }

@@ -26,7 +26,6 @@ export enum EXPLAINER_ID {
   what_are_experiment_items = "what_are_experiment_items",
   whats_the_experiment_configuration = "whats_the_experiment_configuration",
   what_does_it_mean_to_compare_my_experiments = "what_does_it_mean_to_compare_my_experiments",
-  whats_the_test_suite_item = "whats_the_test_suite_item",
   whats_a_test_suite = "whats_a_test_suite",
   why_do_i_need_multiple_test_suites = "why_do_i_need_multiple_test_suites",
   what_format_is_this_to_add_my_test_suite_item = "what_format_is_this_to_add_my_test_suite_item",
@@ -251,13 +250,7 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
   [EXPLAINER_ID.what_does_it_mean_to_compare_my_experiments]: {
     id: EXPLAINER_ID.what_does_it_mean_to_compare_my_experiments,
     description:
-      "Compare experiments to understand how changes to prompts, models, or rules impact performance. Select at least two experiments from the same test suite to get started.",
-    type: "help",
-  },
-  [EXPLAINER_ID.whats_the_test_suite_item]: {
-    id: EXPLAINER_ID.whats_the_test_suite_item,
-    description:
-      "Test suite items are individual input samples in an experiment, each representing a test case your LLM app processes and evaluates.",
+      "Compare experiments to understand how changes to prompts, models, or rules impact performance. Select at least two experiments from the same item source to get started.",
     type: "help",
   },
   [EXPLAINER_ID.whats_a_test_suite]: {
@@ -318,9 +311,8 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
   },
   [EXPLAINER_ID.whats_these_configuration_things]: {
     id: EXPLAINER_ID.whats_these_configuration_things,
-    title: "Model parameters",
     description:
-      "The model configuration parameters allow you to control output behavior. Tuning these lets you balance between deterministic answers and more diverse, exploratory outputs.",
+      "Settings sent to the model on every run. They shape the answer, for example how long or how varied it is.",
   },
   [EXPLAINER_ID.why_do_i_need_an_ai_provider]: {
     id: EXPLAINER_ID.why_do_i_need_an_ai_provider,

@@ -146,6 +146,8 @@ class PartitionRangeTest {
                 .bytes(left.bytes() + right.bytes())
                 .maxPartBytes(Math.max(left.maxPartBytes(), right.maxPartBytes()))
                 .lastActivityEpochSeconds(Math.max(left.lastActivityEpochSeconds(), right.lastActivityEpochSeconds()))
+                .coldBytes(left.coldBytes() + right.coldBytes())
+                .ttlMoveDueParts(left.ttlMoveDueParts() + right.ttlMoveDueParts())
                 .build();
     }
 
@@ -158,6 +160,8 @@ class PartitionRangeTest {
                 .bytes(randomLong())
                 .maxPartBytes(randomLong())
                 .lastActivityEpochSeconds(randomLong())
+                .coldBytes(randomLong())
+                .ttlMoveDueParts(randomLong())
                 .build();
     }
 

@@ -35,7 +35,7 @@ For a complete list of TypeScript/JavaScript integrations and other language int
 
 The fastest way to get started is using the [Opik TS](/reference/typescript-sdk/opik-ts), an interactive CLI tool that sets up Opik automatically in your project:
 
-```bash
+```bash wordWrap
 npx opik-ts configure
 ```
 
@@ -50,7 +50,7 @@ The CLI will:
 
 You can also install the `opik` package manually using your favorite package manager:
 
-```bash
+```bash wordWrap
 npm install opik
 ```
 
@@ -58,7 +58,7 @@ npm install opik
 
 You can configure the Opik client using environment variables.
 
-```bash
+```bash wordWrap
 export OPIK_API_KEY="your-api-key"
 
 # If running on Opik Cloud
@@ -73,7 +73,7 @@ export OPIK_WORKSPACE="your-workspace-name"
 
 Or you can pass the configuration to the Opik client constructor.
 
-```typescript
+```typescript wordWrap
 import { Opik } from "opik";
 
 const client = new Opik({
@@ -91,7 +91,7 @@ const client = new Opik({
   [here](https://www.jsdocs.io/package/opik).
 </Tip>
 
-```typescript
+```typescript wordWrap
 import { Opik } from "opik";
 
 // Create a new Opik client with your configuration

@@ -10,14 +10,19 @@ import {
 } from "@/types/providers";
 import useOpenAICompatibleModels from "@/hooks/useOpenAICompatibleModels";
 import useLlmModels, { LlmModelsByProvider } from "@/api/llm/useLlmModels";
+import useLlmModelProfiles from "@/api/llm/useLlmModelProfiles";
+import { ModelParams } from "@/types/modelParams";
 import { parseComposedProviderType } from "@/lib/provider";
 import { PROVIDERS } from "@/constants/providers";
 import {
   getLatestProviderModelsSnapshot,
   KNOWN_PROVIDER_TYPES,
   ModelFlags,
+  ModelParamsIndex,
   setLatestModelFlags,
+  setLatestModelParams,
   setLatestProviderModelsSnapshot,
+  setLatestProviderProfiles,
 } from "@/lib/modelRegistryStore";
 import { getRoutableProviderModelValue } from "@/lib/modelUtils";
 import { DECISION_MODELS } from "@/constants/decisionModels";
@@ -32,6 +37,11 @@ export type ModelResolver = (
   setupProviders: COMPOSED_PROVIDER_TYPE[],
   preferredProvider?: COMPOSED_PROVIDER_TYPE | "",
 ) => PROVIDER_MODEL_TYPE | "";
+
+export type DropdownModelCheck = (
+  modelName: PROVIDER_MODEL_TYPE | "",
+  provider: COMPOSED_PROVIDER_TYPE | "",
+) => boolean;
 
 // Re-exported for backwards compatibility with callers that still import
 // PROVIDER_MODELS from this module. Actual location is
@@ -102,7 +112,7 @@ const withDecisionModels = (models: ProviderModelsMap): ProviderModelsMap => {
     : models;
 };
 
-const buildFlagsIndex = (
+export const buildFlagsIndex = (
   fetched: LlmModelsByProvider,
 ): Map<string, ModelFlags> => {
   const index = new Map<string, ModelFlags>();
@@ -114,6 +124,8 @@ const buildFlagsIndex = (
       const flags: ModelFlags = {
         reasoning: m.reasoning,
         structuredOutput: m.structured_output,
+        supportedParameters: m.supported_parameters,
+        reasoningEfforts: m.reasoning_efforts,
       };
       index.set(
         getRoutableProviderModelValue(
@@ -133,6 +145,35 @@ const buildFlagsIndex = (
   return index;
 };
 
+export const buildParamsIndex = (
+  fetched: LlmModelsByProvider,
+): ModelParamsIndex => {
+  const index: ModelParamsIndex = new Map();
+  for (const [provider, models] of Object.entries(fetched)) {
+    if (!KNOWN_PROVIDER_TYPES.has(provider)) {
+      continue;
+    }
+    const byModel = new Map<string, ModelParams>();
+    for (const m of models) {
+      if (!m.params) {
+        continue;
+      }
+      byModel.set(
+        getRoutableProviderModelValue(
+          provider as COMPOSED_PROVIDER_TYPE,
+          m.qualified_name || m.id,
+        ),
+        m.params,
+      );
+      if (!byModel.has(m.id)) {
+        byModel.set(m.id, m.params);
+      }
+    }
+    index.set(provider, byModel);
+  }
+  return index;
+};
+
 const useLLMProviderModelsData = () => {
   const {
     data: fetched,
@@ -141,6 +182,7 @@ const useLLMProviderModelsData = () => {
     isError,
     error,
   } = useLlmModels();
+  const { data: profiles } = useLlmModelProfiles();
   const openAICompatibleModels = useOpenAICompatibleModels();
 
   // Dropdown-facing map: only entries that are flagged as visible (i.e.
@@ -210,8 +252,15 @@ const useLLMProviderModelsData = () => {
     );
     if (fetched) {
       setLatestModelFlags(buildFlagsIndex(fetched));
+      setLatestModelParams(buildParamsIndex(fetched));
     }
   }, [fetched, openAICompatibleModels]);
+
+  useEffect(() => {
+    if (profiles) {
+      setLatestProviderProfiles(profiles);
+    }
+  }, [profiles]);
 
   const calculateModelProvider: ProviderResolver = useCallback(
     (modelName, preferredProvider) => {
@@ -287,6 +336,17 @@ const useLLMProviderModelsData = () => {
     [fullProviderModels],
   );
 
+  const isDropdownModel: DropdownModelCheck = useCallback(
+    (modelName, provider) => {
+      if (!modelName || !provider) return false;
+      const routableModel = getRoutableProviderModelValue(provider, modelName);
+      return (providerModels[provider] ?? []).some(
+        (pm) => pm.value === routableModel,
+      );
+    },
+    [providerModels],
+  );
+
   const calculateDefaultModel: ModelResolver = useCallback(
     (lastPickedModel, setupProviders, preferredProvider?) => {
       const lastPickedModelProvider = calculateModelProvider(
@@ -324,6 +384,7 @@ const useLLMProviderModelsData = () => {
     getProviderModels,
     calculateModelProvider,
     calculateDefaultModel,
+    isDropdownModel,
     isPending,
     isFetched,
     isError,

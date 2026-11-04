@@ -41,6 +41,7 @@ import useAppStore from "@/store/AppStore";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import NoData from "@/shared/NoData/NoData";
+import ExpandableSearchInput from "@/shared/ExpandableSearchInput/ExpandableSearchInput";
 import { Skeleton } from "@/ui/skeleton";
 import FeedbackScoreHoverCard from "@/shared/FeedbackScoreTag/FeedbackScoreHoverCard";
 import ResizableSidePanel from "@/shared/ResizableSidePanel/ResizableSidePanel";
@@ -53,6 +54,11 @@ import useThreadById from "@/api/traces/useThreadById";
 import useTracesList from "@/api/traces/useTracesList";
 import useThreadBatchDeleteMutation from "@/api/traces/useThreadBatchDeleteMutation";
 import TraceMessages from "@/v2/pages-shared/traces/TraceMessages/TraceMessages";
+import InternalTracesToggle from "@/v2/pages-shared/traces/InternalTracesToggle";
+import {
+  ONLY_INTERNAL_CALLS_MESSAGE,
+  useVisibleTraces,
+} from "@/v2/pages-shared/traces/hiddenSpans";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
 import {
   ButtonLayoutSize,
@@ -80,6 +86,7 @@ import ThreadAnnotatePanel from "./ThreadAnnotatePanel";
 import useThreadFeedbackScoreDeleteMutation from "@/api/traces/useThreadFeedbackScoreDeleteMutation";
 import ThreadFeedbackScoresInfo from "./ThreadFeedbackScoresInfo";
 import ThreadDetailsTags from "./ThreadDetailsTags";
+import { traceMatchesSearch, useThreadSearch } from "./useThreadSearch";
 import AddToDropdown from "@/v2/pages-shared/traces/AddToDropdown/AddToDropdown";
 import ConfigurableFeedbackScoreTable from "../TraceDetailsPanel/TraceDataViewer/FeedbackScoreTable/ConfigurableFeedbackScoreTable";
 import AttachmentsList from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/AttachmentsList";
@@ -106,6 +113,9 @@ export type ThreadDetailsPanelProps = {
 };
 
 const DEFAULT_TAB = "messages";
+// The backend counts two messages (input + output) per trace in `number_of_messages`.
+const MESSAGES_PER_TRACE = 2;
+const NO_SEARCH_MATCHES_MESSAGE = "No messages match your search";
 
 const ThreadHeaderSkeleton: React.FC = () => (
   <div className="flex flex-col gap-2">
@@ -198,6 +208,14 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
     },
   );
 
+  const [search = undefined, setSearch] = useQueryParam(
+    "thread_panel_search",
+    StringParam,
+    {
+      updateType: "replaceIn",
+    },
+  );
+
   const [, setTracePanelFilters] = useQueryParam(
     `trace_panel_filters`,
     JsonParam,
@@ -253,7 +271,41 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
     [tracesData],
   );
 
-  const { media } = useThreadMedia(traces);
+  // Internal traces (e.g. an integration's title-generation call) are not conversation
+  // turns, so Messages hides them by default, the same way the trace tree hides spans.
+  // The selected trace stays visible even when internal, so the panel can scroll to it.
+  const visibleTraces = useVisibleTraces(traces, traceId);
+  const hiddenTracesCount = traces.length - visibleTraces.length;
+
+  // A whitespace-only search is no search, so the thread is not narrowed to turns that
+  // have nothing to highlight.
+  const searchTerm = search?.trim();
+
+  // Like the trace tree search: the thread narrows to the turns that match.
+  const searchedTraces = useMemo(
+    () =>
+      searchTerm
+        ? visibleTraces.filter((trace) => traceMatchesSearch(trace, searchTerm))
+        : visibleTraces,
+    [visibleTraces, searchTerm],
+  );
+
+  const [messagesNode, setMessagesNode] = useState<HTMLDivElement | null>(null);
+  const { findNext, findPrev } = useThreadSearch({
+    container: messagesNode,
+    search: searchTerm,
+    traces: searchedTraces,
+  });
+
+  const handleSearchChange = useCallback(
+    (value: string) => {
+      setSearch(value);
+      if (value) setActiveTab("messages");
+    },
+    [setSearch, setActiveTab],
+  );
+
+  const { media } = useThreadMedia(visibleTraces);
 
   const handleOpenTrace = useCallback(
     (id: string, shouldFilterToolCalls: boolean) => {
@@ -422,11 +474,21 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
               {thread?.start_time ? formatDate(thread?.start_time) : "NA"}
             </div>
           </TooltipWrapper>
-          <TooltipWrapper content="Number of messages in the thread">
+          <TooltipWrapper
+            content={
+              hiddenTracesCount && thread?.number_of_messages
+                ? `${thread.number_of_messages} messages in the thread, hidden ones included`
+                : "Number of messages in the thread"
+            }
+          >
             <div className="flex items-center gap-1">
               <Hash className="size-3.5 shrink-0 text-muted-slate" />
               {thread?.number_of_messages
-                ? `${thread.number_of_messages} messages`
+                ? `${Math.max(
+                    thread.number_of_messages -
+                      hiddenTracesCount * MESSAGES_PER_TRACE,
+                    0,
+                  )} messages`
                 : "NA"}
             </div>
           </TooltipWrapper>
@@ -476,7 +538,10 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
         value={currentActiveTab}
         onValueChange={setActiveTab}
       >
-        <div className="mx-4" data-panel-tabs="true">
+        <div
+          className="mx-4 flex items-center justify-between gap-2"
+          data-panel-tabs="true"
+        >
           <TabsList variant="segmented-primary">
             <TabsTrigger variant="segmented-primary" size="sm" value="messages">
               Messages
@@ -489,25 +554,38 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
               Feedback scores
             </TabsTrigger>
           </TabsList>
+          {currentActiveTab === "messages" && (
+            <InternalTracesToggle traces={traces} keepTraceId={traceId} />
+          )}
         </div>
         <TabsContent value="messages">
           {isTracesPending ? (
             <ThreadMessagesSkeleton />
           ) : (
             <MediaProvider media={media}>
-              {media.length > 0 && (
-                <div className="mb-4 px-4">
-                  <Accordion type="multiple" defaultValue={["attachments"]}>
-                    <AttachmentsList media={media} />
-                  </Accordion>
-                </div>
-              )}
-              <div style={bodyStyle}>
-                <TraceMessages
-                  traces={traces}
-                  handleOpenTrace={handleOpenTrace}
-                  traceId={traceId}
-                />
+              <div style={bodyStyle} ref={setMessagesNode}>
+                {traces.length > 0 && !visibleTraces.length ? (
+                  <NoData message={ONLY_INTERNAL_CALLS_MESSAGE} icon={null} />
+                ) : searchTerm && !searchedTraces.length ? (
+                  <NoData message={NO_SEARCH_MATCHES_MESSAGE} icon={null} />
+                ) : (
+                  <TraceMessages
+                    traces={searchedTraces}
+                    handleOpenTrace={handleOpenTrace}
+                    traceId={traceId}
+                    content={
+                      media.length > 0 && (
+                        <Accordion
+                          type="multiple"
+                          defaultValue={["attachments"]}
+                          className="mb-2"
+                        >
+                          <AttachmentsList media={media} />
+                        </Accordion>
+                      )
+                    }
+                  />
+                )}
               </div>
             </MediaProvider>
           )}
@@ -551,10 +629,23 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
           <ResizablePanel id="thread-viewer" defaultSize={70} minSize={50}>
             <div className="flex size-full flex-col">
               <div className="flex h-10 shrink-0 items-center gap-2 border-b bg-muted/50 px-4">
-                <span className="comet-body-xs-accented whitespace-nowrap text-foreground">
-                  Inspect
-                </span>
-                <div className="flex-auto" />
+                <div className="relative flex flex-1 items-center">
+                  <span className="comet-body-xs-accented whitespace-nowrap text-foreground">
+                    Inspect
+                  </span>
+                  <div className="flex-auto" />
+                  <ExpandableSearchInput
+                    value={search ?? undefined}
+                    placeholder="Search messages"
+                    onChange={handleSearchChange}
+                    onPrev={findPrev}
+                    onNext={findNext}
+                    disabled={isTracesPending}
+                    buttonVariant="ghost"
+                    tooltip="Search messages"
+                    overlayExpand
+                  />
+                </div>
                 {!hideAnnotateActions && (
                   <AddToDropdown
                     getDataForExport={async () => rows}

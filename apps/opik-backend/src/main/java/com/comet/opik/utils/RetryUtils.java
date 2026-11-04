@@ -1,7 +1,11 @@
 package com.comet.opik.utils;
 
+import com.clickhouse.client.api.ClickHouseException;
+import com.google.common.base.Preconditions;
+import com.google.common.base.Throwables;
 import jakarta.ws.rs.ProcessingException;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.hc.core5.http.NoHttpResponseException;
@@ -12,6 +16,7 @@ import java.io.InterruptedIOException;
 import java.net.SocketException;
 import java.time.Duration;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Predicate;
 
 @Slf4j
 @UtilityClass
@@ -68,14 +73,53 @@ public class RetryUtils {
      * @return Configured RetryBackoffSpec instance.
      */
     public static RetryBackoffSpec handleHttpErrors(int maxAttempts, Duration minBackoff, Duration maxBackoff) {
+        return exponentialBackoff(maxAttempts, minBackoff, maxBackoff, throwable -> {
+            log.debug("Filtering for retry", throwable);
+            return isRetriableException(throwable);
+        }).doBeforeRetry(retrySignal -> log.warn("Retrying due to", retrySignal.failure()));
+    }
+
+    /**
+     * Retry specification for ClickHouse operations. A retry reruns the whole operation, so for a write it may repeat
+     * one that already landed: use it for writes only where a repeat collapses (e.g. a ReplacingMergeTree key).
+     * <p>
+     * Retried, when found anywhere in the cause chain: the transient errors {@link #handleHttpErrors} retries
+     * ({@code SocketException}, {@code TimeoutException}, {@code InterruptedIOException},
+     * {@code NoHttpResponseException}) and a {@code ClickHouseException} the v2 client flags
+     * {@code isRetryable()}. Anything else, server errors the client does not flag included, fails at once. Walking
+     * the chain is deliberate: the client wraps transport failures, so the top-level type alone would miss them.
+     * Widening the set retries permanent failures through every backoff before they surface.
+     *
+     * @param maxAttempts Maximum number of retry attempts.
+     * @param minBackoff  Minimum backoff duration between retries.
+     * @param maxBackoff  Maximum backoff duration between retries.
+     * @return Configured RetryBackoffSpec instance.
+     */
+    public static RetryBackoffSpec handleClickHouseErrors(int maxAttempts, @NonNull Duration minBackoff,
+            @NonNull Duration maxBackoff) {
+        Preconditions.checkArgument(maxAttempts >= 0, "Argument 'maxAttempts' must not be negative");
+        Preconditions.checkArgument(!minBackoff.isNegative(), "Argument 'minBackoff' must not be negative");
+        Preconditions.checkArgument(maxBackoff.compareTo(minBackoff) >= 0,
+                "Argument 'maxBackoff' must not be less than 'minBackoff'");
+        return exponentialBackoff(maxAttempts, minBackoff, maxBackoff, RetryUtils::isTransientClickHouseError)
+                .doBeforeRetry(retrySignal -> log.warn("Retrying ClickHouse operation, attempt '{}'",
+                        retrySignal.totalRetries() + 1, retrySignal.failure()));
+    }
+
+    /** The skeleton the specs share: exponential backoff from {@code minBackoff} capped at {@code maxBackoff}. */
+    private static RetryBackoffSpec exponentialBackoff(int maxAttempts, Duration minBackoff, Duration maxBackoff,
+            Predicate<Throwable> retryable) {
         return Retry.backoff(maxAttempts, minBackoff)
                 .maxBackoff(maxBackoff)
-                .doBeforeRetry(retrySignal -> log.warn("Retrying due to: {}", retrySignal.failure().getMessage()))
                 .onRetryExhaustedThrow((retryBackoffSpec, retrySignal) -> retrySignal.failure())
-                .filter(throwable -> {
-                    log.debug("Filtering for retry: {}", throwable.getMessage());
-                    return isRetriableException(throwable);
-                });
+                .filter(retryable);
+    }
+
+    /** Walks the cause chain with {@code Throwables.getCausalChain}, which fails fast on a cause loop. */
+    private static boolean isTransientClickHouseError(Throwable throwable) {
+        return Throwables.getCausalChain(throwable).stream()
+                .anyMatch(cause -> (cause instanceof ClickHouseException clickHouseError
+                        && clickHouseError.isRetryable()) || isRetriableException(cause));
     }
 
     private static boolean isDatabaseDeadlock(Throwable throwable) {

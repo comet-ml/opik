@@ -25,6 +25,7 @@ from opik_backend.executor import (
     SATURATED_ERROR,
     SHUTDOWN_ERROR,
 )
+from opik_backend.score_validation import rejection_reason
 
 logger = logging.getLogger(__name__)
 
@@ -414,7 +415,24 @@ class DockerExecutor(CodeExecutorBase):
             "payload_type": payload_type or "unknown"
         })
 
-    def run_scoring(self, code: str, data: dict, payload_type: Optional[str] = None) -> dict:
+    @staticmethod
+    def _summarize_result_code(result_code: object) -> object:
+        """Bound a response-controlled result code for span status and attributes."""
+        if result_code is None:
+            return None
+        if isinstance(result_code, (int, float)) and not isinstance(result_code, bool):
+            return result_code
+        if isinstance(result_code, str):
+            return result_code[:64]
+        return type(result_code).__name__
+
+    def run_scoring(
+        self,
+        code: str,
+        data: dict,
+        payload_type: Optional[str] = None,
+        apply_rejection_policy: bool = True,
+    ) -> dict:
         if self.stop_event.is_set():
             return {"code": 503, "error": SHUTDOWN_ERROR}
 
@@ -474,21 +492,44 @@ class DockerExecutor(CodeExecutorBase):
                 # Parse result and track outcome
                 parsed_result = self.parse_execution_result(exec_result)
 
-                # Determine outcome status from the parsed result, not from the exit code alone: a
-                # metric can exit 0 and still fail to produce a usable result line, which
-                # parse_execution_result reports as a 4xx. Keying telemetry on the exit code
-                # counted those as successes while the caller was handed an error.
+                # Key telemetry on the response the caller receives, not on the exit code:
+                # a metric can exit 0 and still fail to produce a usable result line, which
+                # parse_execution_result reports as a 4xx. A non-zero exit comes first so a
+                # crashing metric is not reported as if it had printed its own error payload.
+                # The optimization studio accepts an empty or unusable score list as a
+                # normal result, so it opts out of the rejection policy only. The policy
+                # still runs, and only the reasons studio tolerates are dropped: malformed
+                # payloads, error payloads and non-zero exits stay `invalid_code`. Keeping
+                # the predicate means studio's counter cannot silently mark a broken metric
+                # as a real zero while a crash stays visible.
+                if exec_result.exit_code != 0:
+                    reason = "nonzero_exit"
+                else:
+                    reason = rejection_reason(parsed_result)
+                    if not apply_rejection_policy and reason in ("no_scores", "no_usable_score"):
+                        scores = parsed_result.get("scores")
+                        # Studio treats a missing, null, empty or all-unusable list as
+                        # "no score" and returns 0.0; a non-list value is not tolerated.
+                        if scores is None or isinstance(scores, list):
+                            reason = None
                 result_code = parsed_result.get("code") if isinstance(parsed_result, dict) else None
-                if exec_result.exit_code == 0 and result_code is None:
+                # `code` is response-controlled: keep the value bounded. Numbers pass
+                # through, strings are truncated, anything else is shown by type.
+                result_code_summary = self._summarize_result_code(result_code)
+                if reason is None:
                     outcome_status = "success"
                 else:
                     outcome_status = "invalid_code"
-                    span.set_status(Status(StatusCode.ERROR,
-                            f"Execution failed with exit_code={exec_result.exit_code}, result_code={result_code}"))
+                    status_message = (
+                        f"Execution failed with exit_code={exec_result.exit_code}, "
+                        f"result_code={result_code_summary}, reason={reason}"
+                    )
+                    span.set_status(Status(StatusCode.ERROR, status_message))
                     span.set_attribute("error.type", "invalid_code")
+                    span.set_attribute("error.reason", reason)
                     span.set_attribute("error.exit_code", exec_result.exit_code)
-                    if result_code is not None:
-                        span.set_attribute("error.result_code", result_code)
+                    if result_code_summary is not None:
+                        span.set_attribute("error.result_code", result_code_summary)
 
                 self._record_execution_outcome(outcome_status, payload_type)
                 return parsed_result

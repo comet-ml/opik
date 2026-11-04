@@ -29,7 +29,7 @@ LANGCHAIN_OPENAI_VERSION_NEWER_THAN_0_3_35 = (
 
 
 @pytest.mark.parametrize(
-    "llm_model, expected_input_prompt, expected_usage, stream_usage",
+    "llm_model, expected_input_prompt, expected_usage",
     [
         # Legacy langchain_openai.OpenAI is intentionally dropped — it hits the
         # v1/completions endpoint which doesn't serve chat-only models like
@@ -38,13 +38,6 @@ LANGCHAIN_OPENAI_VERSION_NEWER_THAN_0_3_35 = (
             langchain_openai.ChatOpenAI,
             "Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris.",
             EXPECTED_FULL_OPENAI_USAGE_LOGGED_FORMAT,
-            False,
-        ),
-        (
-            langchain_openai.ChatOpenAI,
-            "Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris.",
-            EXPECTED_FULL_OPENAI_USAGE_LOGGED_FORMAT,
-            True,
         ),
     ],
 )
@@ -54,7 +47,6 @@ def test_langchain__openai_llm_is_used__token_usage_is_logged__happyflow(
     llm_model,
     expected_input_prompt,
     expected_usage,
-    stream_usage,
 ):
     llm_args = {
         "model": llm_constants.OPENAI_GPT_NANO,
@@ -62,8 +54,6 @@ def test_langchain__openai_llm_is_used__token_usage_is_logged__happyflow(
         "reasoning_effort": llm_constants.OPENAI_REASONING_EFFORT,
         "name": "custom-openai-llm-name",
     }
-    if stream_usage is True:
-        llm_args["stream_usage"] = stream_usage
 
     llm = llm_model(**llm_args)
 

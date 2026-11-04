@@ -76,6 +76,17 @@ describe("the body an OpenRouter playground run sends", () => {
     expect(body).toHaveProperty("temperature", 0);
   });
 
+  it("sends a new prompt's default max_tokens of 4000", async () => {
+    const body = await sentBody(
+      getDefaultConfigByProvider(
+        PROVIDER_TYPE.OPEN_ROUTER as COMPOSED_PROVIDER_TYPE,
+        PROVIDER_MODEL_TYPE.OPENAI_GPT_4O,
+      ) as LLMOpenRouterConfigsType,
+    );
+
+    expect(body).toHaveProperty("max_tokens", 4000);
+  });
+
   it("sends no max_tokens for 0", async () => {
     expect(await sentBody({ maxTokens: 0, topK: 40 })).not.toHaveProperty(
       "max_tokens",

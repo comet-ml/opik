@@ -98,7 +98,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python_version: ${{ fromJSON(vars.PYTHON_VERSIONS) }}
+        # Lowest and highest supported Python only: these suites make paid
+        # LLM calls and the intermediate versions add cost without coverage.
+        python_version: ["3.10", "3.14"]
 
     steps:
       - name: Checkout
@@ -121,7 +123,7 @@ jobs:
           docker tag "ghcr.io/comet-ml/opik/opik-python-backend:$TAG" ghcr.io/comet-ml/opik/opik-python-backend:latest
 
       - name: Install uv and set the Python version ${{ matrix.python_version }}
-        uses: astral-sh/setup-uv@v10.2.0
+        uses: astral-sh/setup-uv@v10.3.3
         with:
           python-version: ${{ matrix.python_version }}
 

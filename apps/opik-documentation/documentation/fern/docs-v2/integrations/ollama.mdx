@@ -23,7 +23,7 @@ Wrap your Ollama client with `track_ollama` and every chat call is logged to Opi
 
 ### Installation
 
-```bash
+```bash wordWrap
 pip install -U "opik>=2.2.93" ollama
 ```
 
@@ -35,7 +35,7 @@ Run `opik configure` and follow the prompts. See the [Python SDK Configuration g
 
 [Install Ollama](https://ollama.com/download), which starts the Ollama server, and download a model:
 
-```bash
+```bash wordWrap
 ollama pull llama3.1
 ```
 
@@ -45,7 +45,7 @@ If your Ollama server isn't on `localhost`, set the `OLLAMA_HOST` environment va
 
 Create an Ollama client, wrap it with `track_ollama`, and use it as usual:
 
-```python
+```python wordWrap
 import os
 
 import ollama
@@ -79,7 +79,7 @@ The snippets below reuse the `client` from [Logging LLM calls](#logging-llm-call
 
 Decorate the functions of your application with [`@track`](/tracing/advanced/log_traces#using-function-decorators) to group several LLM calls into one trace:
 
-```python
+```python wordWrap
 from opik import track
 
 
@@ -115,7 +115,7 @@ Opik shows one `generate_opik_story` trace with both LLM calls nested inside it.
 
 Streamed responses are logged as one span with the full text and token usage:
 
-```python
+```python wordWrap
 stream = client.chat(
     model="llama3.1",
     messages=[{"role": "user", "content": "Count from 1 to 5."}],
@@ -130,7 +130,7 @@ for chunk in stream:
 
 `track_ollama` works with `ollama.AsyncClient` too, including streaming:
 
-```python
+```python wordWrap
 import asyncio
 
 import ollama
@@ -154,7 +154,7 @@ asyncio.run(main())
 
 The tools you pass and the tool calls the model makes are both logged:
 
-```python
+```python wordWrap
 def get_weather(city: str) -> str:
     """Get the current weather for a city.
 
@@ -177,7 +177,7 @@ print(response.message.tool_calls)
 
 With a thinking model such as Qwen 3 or DeepSeek-R1, pass `think=True`. Opik logs the model's reasoning next to its final answer:
 
-```python
+```python wordWrap
 response = client.chat(
     model="qwen3:0.6b",
     messages=[{"role": "user", "content": "Is 7 a prime number? Answer in one word."}],
@@ -202,7 +202,7 @@ If your code calls Ollama through the OpenAI library or LangChain, keep that cod
 
 With the OpenAI library pointed at Ollama's [OpenAI-compatible API](https://docs.ollama.com/api/openai-compatibility), use the [OpenAI integration](/integrations/openai):
 
-```python
+```python wordWrap
 from openai import OpenAI
 from opik.integrations.openai import track_openai
 
@@ -223,7 +223,7 @@ print(completion.choices[0].message.content)
 
 With LangChain's `ChatOllama` (`pip install -U langchain-ollama`), use the [LangChain integration](/integrations/langchain):
 
-```python
+```python wordWrap
 from langchain_ollama import ChatOllama
 from opik.integrations.langchain import OpikTracer
 

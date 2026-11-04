@@ -104,4 +104,14 @@ describe("V1CompatRedirect", () => {
       replace: true,
     });
   });
+
+  it("redirects to the given project instead of the active one", () => {
+    mockSplat = "dataset-123/compare";
+    render(<V1CompatRedirect toPath="/experiments" projectId="proj-other" />);
+    expect(mockNavigate).toHaveBeenCalledWith({
+      to: "/default/projects/proj-other/experiments/dataset-123/compare",
+      search: {},
+      replace: true,
+    });
+  });
 });

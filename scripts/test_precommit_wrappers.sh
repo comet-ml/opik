@@ -70,14 +70,17 @@ check "python change emits a python leg" '"id": "ruff"'        "$out"
 check "python leg carries the file"      'sdks/python/src/opik/foo.py' "$out"
 # leg_ids <stdin-json> → space-joined ids of the running legs (ignores skipped).
 leg_ids() { python3 -c 'import json,sys; print(" ".join(l["id"] for l in json.load(sys.stdin)["legs"]))'; }
+# scoped_leg_ids: leg_ids minus betterleaks, which gates every file by design.
+scoped_leg_ids() { leg_ids | tr ' ' '\n' | grep -vx 'betterleaks' | tr '\n' ' ' | sed 's/ *$//'; }
 check_empty "respects exclude (rest_api → no legs)" \
-	"$(printf 'sdks/python/src/opik/rest_api/x.py\n' | python3 scripts/precommit-detect-hooks.py .pre-commit-config.yaml | leg_ids)"
+	"$(printf 'sdks/python/src/opik/rest_api/x.py\n' | python3 scripts/precommit-detect-hooks.py .pre-commit-config.yaml | scoped_leg_ids)"
 out=$(printf 'apps/opik-frontend/src/components/Foo.tsx\n' | python3 scripts/precommit-detect-hooks.py .pre-commit-config.yaml)
 check "fe change emits fe-eslint"        '"id": "fe-eslint"'   "$out"
 check_empty "fe non-plugin change omits no-private-fe-plugins" \
 	"$(printf '%s' "$out" | leg_ids | grep -o 'no-private-fe-plugins' || true)"
-check_empty "unrelated file → no legs" \
-	"$(printf 'README.md\n' | python3 scripts/precommit-detect-hooks.py .pre-commit-config.yaml | leg_ids)"
+out=$(printf 'README.md\n' | python3 scripts/precommit-detect-hooks.py .pre-commit-config.yaml)
+check_empty "unrelated file → no legs" "$(printf '%s' "$out" | scoped_leg_ids)"
+check "any file emits the repo-wide betterleaks leg" '"id": "betterleaks"' "$out"
 # types: gate — a non-.py file under sdks/opik_optimizer must NOT emit the
 # python-only hooks (ruff/mypy/pyupgrade), or they'd spawn jobs that Skip at
 # runtime and drop from the timing table.
@@ -88,6 +91,13 @@ check_empty "non-.py optimizer file omits ruff (types: gate)" \
 out=$(printf 'sdks/python/src/opik/foo.py\n' | python3 scripts/precommit-detect-hooks.py .pre-commit-config.yaml)
 check "emits a skipped array"          '"skipped"'   "$out"
 check "java is skipped on a py change" 'spotless'    "$(printf '%s' "$out" | python3 -c 'import json,sys; print(" ".join(s["id"] for s in json.load(sys.stdin)["skipped"]))')"
+# swagger-resolve gates on spec inputs only (main sources/resources + pom), and
+# needs the java toolchain to compile.
+out=$(printf 'apps/opik-backend/src/main/resources/openapi_template.yml\n' | python3 scripts/precommit-detect-hooks.py .pre-commit-config.yaml)
+check "spec input emits swagger-resolve"  '"id": "swagger-resolve"'  "$out"
+check "swagger-resolve provisions java"   '"toolchain": "java"'      "$out"
+check_empty "test-only java omits swagger-resolve" \
+	"$(printf 'apps/opik-backend/src/test/java/com/comet/opik/FooTest.java\n' | python3 scripts/precommit-detect-hooks.py .pre-commit-config.yaml | leg_ids | grep -o 'swagger-resolve' || true)"
 
 echo "precommit-hook-desc.py:"
 # Single shared resolver both tables use. Substring match, TSV order honoured
