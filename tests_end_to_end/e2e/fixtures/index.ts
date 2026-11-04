@@ -1,4 +1,4 @@
-export { test, expect } from './thread-search-turns.fixture';
+export { test, expect } from './mixed-case-model-cost-spans.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -663,3 +663,8 @@ export type {
   ThreadSearchTurnsRef,
   ThreadSearchTurnsFixtures,
 } from './thread-search-turns.fixture';
+export type {
+  MixedCaseModelCostSeed,
+  MixedCaseModelCostSpansRef,
+  MixedCaseModelCostSpansFixtures,
+} from './mixed-case-model-cost-spans.fixture';

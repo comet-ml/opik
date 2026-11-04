@@ -1047,6 +1047,26 @@ export class LogsPage {
   }
 
   /**
+   * The Estimated cost cell of a SPAN row, in the Spans view.
+   *
+   * The same `data-cell-id` contract and the same `total_estimated_cost` column
+   * id — `TracesSpansTab` declares the column once and lists it in
+   * `DEFAULT_SPANS_COLUMNS` as well as `DEFAULT_TRACES_COLUMNS` — so this
+   * delegates rather than repeating either. Named separately all the same,
+   * because the two are different claims: the traces view's cell renders a
+   * trace's ROLL-UP across its spans, and this one renders one span's own
+   * resolved amount. A spec that means the second must not read as if it meant
+   * the first.
+   *
+   * Row identity, not position: `spanRow` and this cell both key off the ids
+   * the shared `DataTable` stamps, so a user-reordered column list cannot move
+   * the assertion onto another cell.
+   */
+  spanEstimatedCostCell(spanId: string): Locator {
+    return this.explainCell(spanId, 'cost');
+  }
+
+  /**
    * Hover a trace's Errors/Duration/Estimated cost cell and click its Ollie
    * "Explain" owl trigger, opening the popover. The trigger only renders once
    * the Ollie assistant bridge handshake (mounted via the page's assistant

@@ -5042,6 +5042,47 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * `GET /v1/private/spans/{id}` with its STATUS returned rather than thrown
+     * on — `{ status, message, span }`.
+     *
+     * The sibling of `getSpanPayload`, and it exists because for one question
+     * the status IS the claim: a span id written under more than one project
+     * makes the by-ids query fan out to a row per project, and before
+     * opik#9311 the single-item reducer behind `SpanDAO.getById` answered that
+     * with `IndexOutOfBoundsException` — a hard 500 on a span detail read.
+     * `getSpanPayload` throws for any non-200/404, which turns "the endpoint
+     * answered 500" into an exception indistinguishable from a transport
+     * failure and gives a spec no way to say which it saw. Same choice
+     * `postOtelExport` makes, for the same reason.
+     *
+     * `span` is the parsed payload on a 200 and `null` on anything else, so a
+     * caller asserts the status first and only then reads the body — never the
+     * other way round, where an absent payload would read as an absent field.
+     */
+    async readSpanById(
+      spanId: string,
+    ): Promise<{ status: number; message: string; span: SpanPayload | null }> {
+      const { status, message, json } = await rawFetch('GET', `/v1/private/spans/${spanId}`);
+      if (status !== 200) return { status, message, span: null };
+      const s = (json ?? {}) as Record<string, unknown>;
+      return {
+        status,
+        message,
+        span: {
+          id: String(s.id ?? ''),
+          name: typeof s.name === 'string' ? s.name : '',
+          type: typeof s.type === 'string' ? s.type : null,
+          traceId: typeof s.trace_id === 'string' ? s.trace_id : null,
+          projectId: typeof s.project_id === 'string' ? s.project_id : null,
+          input: (s.input ?? null) as Record<string, unknown> | null,
+          output: (s.output ?? null) as Record<string, unknown> | null,
+          metadata: (s.metadata ?? null) as Record<string, unknown> | null,
+          tags: Array.isArray(s.tags) ? s.tags.map(String) : null,
+        },
+      };
+    },
+
+    /**
      * `POST /v1/private/spans/batch` — many spans in one request.
      *
      * The only way to seed a span population large enough to page. Writing them
@@ -7008,6 +7049,26 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       /** Export-wide attributes, on `resource.attributes`. */
       resourceAttributes?: Record<string, string | number>;
       spans: OtelExportSpanSeed[];
+      /**
+       * The millisecond every span of this export starts at. Absent means
+       * `Date.now()`, which is what a real exporter sends.
+       *
+       * Stated only when the Opik trace id this export derives has to collide
+       * with ANOTHER export's. `OpenTelemetryService` maps an OTLP trace id to
+       * an Opik one through Redis under a key that includes the PROJECT
+       * (`otelTraceId:<workspace>:<project>:<id>`), so a second export into the
+       * same project reuses the mapping whatever its timestamps are — but a
+       * second export into a DIFFERENT project finds no mapping and derives the
+       * id afresh, from `convertOtelIdToUUIDv7(otelTraceId, minStartMs)`. The
+       * derived UUID therefore collides only when the two exports agree on the
+       * millisecond as well as on the OTLP id, which is the precondition for
+       * the cross-project refusal being a shape rather than a coin toss. See
+       * `otel-batch-onto-existing-trace.spec.ts`.
+       *
+       * Spans are still staggered by one nanosecond each, as below, so this
+       * pins the derived millisecond without making every span identical.
+       */
+      startTimeMs?: number;
     }): Promise<{ status: number; message: string }> {
       if (args.spans.length === 0) {
         throw new Error(
@@ -7016,7 +7077,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       }
       // The export's shared id, used by every span that did not state its own.
       const sharedOtelTraceId = randomOtelId(16);
-      const startNanos = BigInt(Date.now()) * 1_000_000n;
+      const startNanos = BigInt(args.startTimeMs ?? Date.now()) * 1_000_000n;
 
       return rawFetchWithHeaders(
         'POST',
