@@ -26,11 +26,11 @@ from opik_backend.executor import (
     SATURATED_ERROR,
     SHUTDOWN_ERROR,
 )
+from opik_backend.docker_daemon_config import hardening_enabled
 from opik_backend.score_validation import rejection_reason
 
 logger = logging.getLogger(__name__)
 
-HARDENING_ENV_VAR = "PYTHON_CODE_EXECUTOR_DOCKER_HARDENING"
 PIDS_LIMIT_ENV_VAR = "PYTHON_CODE_EXECUTOR_DOCKER_PIDS_LIMIT"
 TMPFS_SIZE_ENV_VAR = "PYTHON_CODE_EXECUTOR_DOCKER_TMPFS_SIZE"
 
@@ -39,14 +39,10 @@ def sandbox_hardening_options() -> dict:
     """Extra run options for executor containers: no capabilities, read-only root with a small /tmp, capped processes.
 
     Opt-in, so metrics that write outside /tmp or start many processes keep working unless an operator turns it on.
-    The same setting hardens the in-container Docker daemon in entrypoint.sh. Any value other than true/false (any case) or empty raises, so a typo fails startup instead of leaving
-    containers unhardened.
+    The same setting hardens the in-container Docker daemon (docker_daemon_config). A bad value fails startup.
     """
-    value = os.getenv(HARDENING_ENV_VAR, "").lower()
-    if value in ("", "false"):
+    if not hardening_enabled():
         return {}
-    if value != "true":
-        raise ValueError(f"{HARDENING_ENV_VAR} must be true or false, not {value[:32]!r}")
     pids_limit = os.getenv(PIDS_LIMIT_ENV_VAR) or "64"
     if not pids_limit.isdecimal() or int(pids_limit) == 0:
         raise ValueError(f"{PIDS_LIMIT_ENV_VAR} must be a positive integer, not {pids_limit[:32]!r}")
@@ -166,7 +162,7 @@ class DockerExecutor(CodeExecutorBase):
         logger.debug(f"Docker executor configuration: cpu_shares={self.cpu_shares}, mem_limit={self.mem_limit}, "
                     f"nano_cpus={self.nano_cpus}, exec_timeout={self.exec_timeout}s, "
                     f"max_parallel={self.max_parallel}, network_disabled={self.network_disabled}, "
-                    f"sandbox_hardening={bool(self.hardening_options)}")
+                    f"sandbox_hardening={self.hardening_options or 'off'}")
 
         # Pre-warm the container pool
         self._pre_warm_container_pool()

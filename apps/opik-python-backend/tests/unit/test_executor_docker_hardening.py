@@ -1,20 +1,38 @@
+import json
 import random
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from opik_backend.executor_docker import (
+from opik_backend.docker_daemon_config import (
+    ALLOW_NETWORK_ENV_VAR,
     HARDENING_ENV_VAR,
+    write_hardened_config,
+)
+from opik_backend.executor_docker import (
     PIDS_LIMIT_ENV_VAR,
     TMPFS_SIZE_ENV_VAR,
+    DockerExecutor,
     sandbox_hardening_options,
 )
+
+HARDENED_DEFAULTS = {
+    "cap_drop": ["ALL"],
+    "read_only": True,
+    "tmpfs": {"/tmp": "rw,noexec,nosuid,size=16m"},
+    "pids_limit": 64,
+}
+
+
+@pytest.fixture(autouse=True)
+def clean_env(monkeypatch):
+    for name in (HARDENING_ENV_VAR, PIDS_LIMIT_ENV_VAR, TMPFS_SIZE_ENV_VAR, ALLOW_NETWORK_ENV_VAR):
+        monkeypatch.delenv(name, raising=False)
 
 
 @pytest.mark.parametrize("hardening", [None, "", "false", "False"])
 def test_containers_are_not_hardened_without_setting(monkeypatch, hardening):
-    if hardening is None:
-        monkeypatch.delenv(HARDENING_ENV_VAR, raising=False)
-    else:
+    if hardening is not None:
         monkeypatch.setenv(HARDENING_ENV_VAR, hardening)
 
     assert sandbox_hardening_options() == {}
@@ -23,17 +41,8 @@ def test_containers_are_not_hardened_without_setting(monkeypatch, hardening):
 @pytest.mark.parametrize("hardening", ["true", "True"])
 def test_containers_are_hardened_with_defaults(monkeypatch, hardening):
     monkeypatch.setenv(HARDENING_ENV_VAR, hardening)
-    monkeypatch.delenv(PIDS_LIMIT_ENV_VAR, raising=False)
-    monkeypatch.delenv(TMPFS_SIZE_ENV_VAR, raising=False)
 
-    expected = {
-        "cap_drop": ["ALL"],
-        "read_only": True,
-        "tmpfs": {"/tmp": "rw,noexec,nosuid,size=16m"},
-        "pids_limit": 64,
-    }
-
-    assert sandbox_hardening_options() == expected
+    assert sandbox_hardening_options() == HARDENED_DEFAULTS
 
 
 def test_containers_are_hardened_with_configured_limits(monkeypatch):
@@ -77,3 +86,64 @@ def test_invalid_tmpfs_size_fails_startup(monkeypatch, tmpfs_size):
 
     with pytest.raises(ValueError, match=f"^{TMPFS_SIZE_ENV_VAR} must be a size such as 16m, not "):
         sandbox_hardening_options()
+
+
+@pytest.mark.parametrize("hardening, expected_options", [("false", {}), ("true", HARDENED_DEFAULTS)])
+def test_executor_containers_are_created_with_hardening_options(monkeypatch, hardening, expected_options):
+    monkeypatch.setenv(HARDENING_ENV_VAR, hardening)
+    client = MagicMock()
+    with (
+        patch("opik_backend.executor_docker.docker.from_env", return_value=client),
+        patch.object(DockerExecutor, "_pre_warm_container_pool"),
+        patch.object(DockerExecutor, "_start_pool_monitor"),
+    ):
+        executor = DockerExecutor()
+        try:
+            executor.create_container()
+        finally:
+            executor.stop_event.set()
+
+    actual_options = {
+        key: value for key, value in client.containers.run.call_args.kwargs.items() if key in HARDENED_DEFAULTS
+    }
+    assert actual_options == expected_options
+
+
+@pytest.mark.parametrize(
+    "allow_network, expected_network_config",
+    [("false", {"bridge": "none", "iptables": False, "ip6tables": False}), ("true", {})],
+)
+def test_daemon_config_keeps_mounted_settings(tmp_path, monkeypatch, allow_network, expected_network_config):
+    monkeypatch.setenv(ALLOW_NETWORK_ENV_VAR, allow_network)
+    mounted_config = {
+        "log-level": random.choice(["warn", "info", "debug"]),
+        "max-concurrent-downloads": random.randint(1, 9),
+    }
+    operator_config_path = tmp_path / "etc" / "daemon.json"
+    operator_config_path.parent.mkdir()
+    operator_config_path.write_text(json.dumps(mounted_config))
+    operator_config_path.chmod(0o444)
+    hardened_config_path = tmp_path / "run" / "daemon.json"
+
+    write_hardened_config(str(operator_config_path), str(hardened_config_path))
+
+    expected = {**mounted_config, "userns-remap": "default", **expected_network_config}
+    assert json.loads(hardened_config_path.read_text()) == expected
+    assert json.loads(operator_config_path.read_text()) == mounted_config
+
+
+def test_daemon_config_without_mounted_file(tmp_path):
+    hardened_config_path = tmp_path / "daemon.json"
+
+    write_hardened_config(str(tmp_path / "missing.json"), str(hardened_config_path))
+
+    expected = {"userns-remap": "default", "bridge": "none", "iptables": False, "ip6tables": False}
+    assert json.loads(hardened_config_path.read_text()) == expected
+
+
+def test_malformed_mounted_daemon_config_fails(tmp_path):
+    operator_config_path = tmp_path / "daemon.json"
+    operator_config_path.write_text("{not json")
+
+    with pytest.raises(ValueError):
+        write_hardened_config(str(operator_config_path), str(tmp_path / "out" / "daemon.json"))
