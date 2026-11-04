@@ -7,7 +7,8 @@ import javax.annotation.Nullable;
 
 import java.math.BigDecimal;
 
-// A null price inherits the built-in rate, while 0 makes it free.
+// A null price inherits the built-in rate, while 0 makes it free. Not for the cache rates: built-in rows store a
+// missing cache price as 0, so the calculator bills cached tokens at the input rate when a cache rate isn't above 0.
 @Builder(toBuilder = true)
 public record CustomModelPrice(
         @NonNull String modelName,

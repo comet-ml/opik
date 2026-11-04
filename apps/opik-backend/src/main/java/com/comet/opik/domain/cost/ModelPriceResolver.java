@@ -100,6 +100,11 @@ class ModelPriceResolver {
             return builtIn;
         }
         CustomMatch fixed = custom.get();
+        // A row that sets no rate, over no built-in price, prices nothing: billing it would charge 0 as the
+        // organization's price, and an alias to it would skip the span's own built-in row.
+        if (builtIn.isEmpty() && !setsAnyRate(fixed.row())) {
+            return Optional.empty();
+        }
         ModelPrice base = builtIn.map(PriceMatch::price).orElseGet(ModelPrice::empty);
         return Optional.of(PriceMatch.builder()
                 .price(ModelPriceMerger.merge(base, fixed.row()))
@@ -114,6 +119,11 @@ class ModelPriceResolver {
     private Optional<PriceMatch> findExact(String name, String provider) {
         return Optional.ofNullable(ModelPriceTable.get(name, provider))
                 .map(price -> PriceMatch.builder().price(price).provider(provider).nameForm(NameForm.EXACT).build());
+    }
+
+    private boolean setsAnyRate(CustomModelPrice row) {
+        return row.inputPerMillion() != null || row.outputPerMillion() != null || row.cacheReadPerMillion() != null
+                || row.cacheWritePerMillion() != null;
     }
 
     private Optional<PriceMatch> findBuiltIn(String modelName, Optional<String> resolvedProvider,
