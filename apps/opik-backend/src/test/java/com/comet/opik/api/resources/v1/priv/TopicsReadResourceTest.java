@@ -5,6 +5,11 @@ import com.comet.opik.api.ProjectTopics.DayCount;
 import com.comet.opik.api.ProjectTopics.OtherRunChange;
 import com.comet.opik.api.ProjectTopics.RunChange;
 import com.comet.opik.api.ProjectTopics.TopicStats;
+import com.comet.opik.api.Trace;
+import com.comet.opik.api.TraceSearchStreamRequest;
+import com.comet.opik.api.filter.Operator;
+import com.comet.opik.api.filter.TraceField;
+import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
@@ -17,9 +22,11 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.Custom
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
+import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.domain.ailabels.AiLabelWorkspaceDAO;
+import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.domain.topics.Topic;
 import com.comet.opik.domain.topics.TopicDAO;
 import com.comet.opik.domain.topics.TopicProjectState;
@@ -47,6 +54,7 @@ import jakarta.ws.rs.core.Response;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -57,6 +65,7 @@ import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
+import uk.co.jemos.podam.api.PodamFactory;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -69,12 +78,17 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.infrastructure.RateLimitConfig.LimitConfig;
@@ -149,6 +163,8 @@ class TopicsReadResourceTest {
     private String baseUrl;
     private ClientSupport client;
     private ProjectResourceClient projectClient;
+    private TraceResourceClient traceClient;
+    private PodamFactory podamFactory;
     private TransactionTemplate template;
     private TraceTopicsDAO traceTopicsDAO;
     private TopicVectorsDAO vectorsDAO;
@@ -158,7 +174,9 @@ class TopicsReadResourceTest {
     void setUpAll(ClientSupport client, Injector injector, OpikConfiguration opikConfig) {
         this.client = client;
         this.baseUrl = TestUtils.getBaseUrl(client);
-        this.projectClient = new ProjectResourceClient(client, baseUrl, PodamFactoryUtils.newPodamFactory());
+        this.podamFactory = PodamFactoryUtils.newPodamFactory();
+        this.projectClient = new ProjectResourceClient(client, baseUrl, podamFactory);
+        this.traceClient = new TraceResourceClient(client, baseUrl);
         this.template = injector.getInstance(TransactionTemplate.class);
         this.traceTopicsDAO = injector.getInstance(TraceTopicsDAO.class);
         this.vectorsDAO = injector.getInstance(TopicVectorsDAO.class);
@@ -423,6 +441,201 @@ class TopicsReadResourceTest {
         }
         try (var response = request(caller, projectId).get()) {
             assertThat(response.getStatus()).isEqualTo(429);
+        }
+    }
+
+    @Nested
+    @DisplayName("traces filter by topic")
+    class TracesFilterByTopic {
+
+        private static final String OTHER = TraceTopic.OTHER.toString();
+
+        /** The project's traces by the case each one stands for, and the topics they are labelled with. */
+        private record Seed(Caller caller, UUID projectId, Topic labelled, Topic arrived, Map<String, UUID> traces) {
+
+            Set<UUID> traces(String... cases) {
+                return Arrays.stream(cases).map(traces::get).collect(Collectors.toSet());
+            }
+        }
+
+        @Test
+        @DisplayName("=, !=, in and not_in by the read API's rules, the same in the list, its count, stats and the "
+                + "stream: a retired topic's trace is in Other, an arrival row wins over a night row, a failed run's "
+                + "rows do not count, a trace with no row fails every operator")
+        void operators() {
+            var seed = seed();
+            var labelled = seed.labelled().id().toString();
+            var arrived = seed.arrived().id().toString();
+
+            assertFilter(seed, Operator.EQUAL, labelled,
+                    seed.traces("labelled", "labelled again", "relabelled by a failed run"));
+            assertFilter(seed, Operator.EQUAL, arrived, seed.traces("arrival over night"));
+            assertFilter(seed, Operator.EQUAL, OTHER, seed.traces("retired topic", "other"));
+            assertFilter(seed, Operator.NOT_EQUAL, labelled,
+                    seed.traces("arrival over night", "retired topic", "other"));
+            assertFilter(seed, Operator.IN, labelled + "," + OTHER,
+                    seed.traces("labelled", "labelled again", "relabelled by a failed run", "retired topic", "other"));
+            assertFilter(seed, Operator.NOT_IN, arrived + "," + OTHER,
+                    seed.traces("labelled", "labelled again", "relabelled by a failed run"));
+        }
+
+        @Test
+        @DisplayName("over the read API's window by created_at, the list's count per topic and for Other is the "
+                + "API's count")
+        void reconcilesWithReadApi() {
+            var seed = seed();
+            var today = LocalDate.now(ZoneOffset.UTC);
+
+            var body = get(seed.caller(), seed.projectId());
+
+            assumeTrue(today.equals(body.today()), "the UTC day changed between the seed and the request");
+            var window = List.of(
+                    filter(TraceField.CREATED_AT, Operator.GREATER_THAN_EQUAL,
+                            body.windowFrom().atStartOfDay(ZoneOffset.UTC).toInstant().toString()),
+                    filter(TraceField.CREATED_AT, Operator.LESS_THAN,
+                            body.windowUntil().plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant().toString()));
+            var fromApi = new HashMap<UUID, Long>();
+            body.topics().forEach(topic -> fromApi.put(topic.id(), topic.count()));
+            fromApi.put(TraceTopic.OTHER, body.other().count());
+            assertThat(fromApi).containsExactlyInAnyOrderEntriesOf(Map.of(
+                    seed.labelled().id(), 3L, seed.arrived().id(), 1L, TraceTopic.OTHER, 2L));
+            var fromList = new HashMap<UUID, Long>();
+            fromApi.keySet().forEach(topicId -> fromList.put(topicId, list(seed.caller(), seed.projectId(),
+                    Stream.concat(window.stream(), Stream.of(
+                            filter(TraceField.TOPIC_ID, Operator.EQUAL, topicId.toString()))).toList())
+                    .total()));
+            assertThat(fromList).isEqualTo(fromApi);
+        }
+
+        @Test
+        @DisplayName("a workspace without Topics: every operator gives no trace, with no error")
+        void workspaceWithoutTopics() {
+            var caller = caller();
+            var projectId = project(caller);
+            createTraces(caller, projectId, 2);
+            var topicId = UUID.randomUUID().toString();
+
+            for (var operator : List.of(Operator.EQUAL, Operator.NOT_EQUAL, Operator.IN, Operator.NOT_IN)) {
+                assertFilter(caller, projectId, operator, topicId, Set.of());
+            }
+        }
+
+        @Test
+        @DisplayName("topics off: a project with topics gives no trace, with no error")
+        void topicsOffFilter() {
+            var seed = seed();
+            opikConfig.getTopics().setEnabled(false);
+
+            assertFilter(seed, Operator.EQUAL, seed.labelled().id().toString(), Set.of());
+        }
+
+        /**
+         * Eight traces, one per case. The night rows come first; the arrival row and the failed run's rows are
+         * written after them, so they are the latest rows of their traces.
+         */
+        private Seed seed() {
+            var caller = caller();
+            var projectId = project(caller);
+            optIn(caller.workspaceId());
+            var today = LocalDate.now(ZoneOffset.UTC);
+            var labelled = topic(caller.workspaceId(), projectId, today.minusDays(10), null, null);
+            var arrived = topic(caller.workspaceId(), projectId, today.minusDays(10), null, null);
+            var retired = topic(caller.workspaceId(), projectId, today.minusDays(10), null, today.minusDays(1));
+            template.inTransaction(WRITE, handle -> {
+                handle.attach(TopicDAO.class).insertTopics(List.of(labelled, arrived, retired));
+                return null;
+            });
+            var saved = run(caller.workspaceId(), projectId, TopicRun.Status.SAVED);
+            var failed = run(caller.workspaceId(), projectId, TopicRun.Status.FAILED);
+            var cases = List.of("labelled", "labelled again", "arrival over night", "relabelled by a failed run",
+                    "retired topic", "other", "no row", "only a failed run's row");
+            var created = createTraces(caller, projectId, cases.size());
+            var traces = new HashMap<String, Trace>();
+            for (int i = 0; i < cases.size(); i++) {
+                traces.put(cases.get(i), created.get(i));
+            }
+            traceTopicsDAO.insert(List.of(
+                    row(caller, projectId, traces.get("labelled"), labelled.id(), saved),
+                    row(caller, projectId, traces.get("labelled again"), labelled.id(), saved),
+                    row(caller, projectId, traces.get("arrival over night"), labelled.id(), saved),
+                    row(caller, projectId, traces.get("relabelled by a failed run"), labelled.id(), saved),
+                    row(caller, projectId, traces.get("retired topic"), retired.id(), saved),
+                    row(caller, projectId, traces.get("other"), TraceTopic.OTHER, saved))).block();
+            traceTopicsDAO.insert(List.of(
+                    row(caller, projectId, traces.get("arrival over night"), arrived.id(), null),
+                    row(caller, projectId, traces.get("relabelled by a failed run"), arrived.id(), failed),
+                    row(caller, projectId, traces.get("only a failed run's row"), arrived.id(), failed))).block();
+            var ids = new HashMap<String, UUID>();
+            traces.forEach((name, trace) -> ids.put(name, trace.id()));
+            return new Seed(caller, projectId, labelled, arrived, ids);
+        }
+
+        /** A night row of {@code runId}, or an arrival row when it is null, at the trace's {@code created_at}. */
+        private static TraceTopic row(Caller caller, UUID projectId, Trace trace, UUID topicId, UUID runId) {
+            return TraceTopic.builder()
+                    .workspaceId(caller.workspaceId())
+                    .projectId(projectId)
+                    .traceId(trace.id())
+                    .traceCreatedAt(trace.createdAt())
+                    .topicId(topicId)
+                    .source(runId == null ? TraceTopic.Source.ARRIVAL : TraceTopic.Source.NIGHT)
+                    .runId(runId == null ? "" : runId.toString())
+                    .build();
+        }
+
+        /** {@code count} traces in the project, read back for their {@code created_at}, in creation order. */
+        private List<Trace> createTraces(Caller caller, UUID projectId, int count) {
+            var projectName = projectClient.getProject(projectId, caller.apiKey(), caller.workspaceName()).name();
+            var traces = IntStream.range(0, count)
+                    .mapToObj(i -> podamFactory.manufacturePojo(Trace.class).toBuilder()
+                            .id(ID_GENERATOR.generateId())
+                            .projectId(null)
+                            .projectName(projectName)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .comments(null)
+                            .build())
+                    .toList();
+            traceClient.batchCreateTraces(traces, caller.apiKey(), caller.workspaceName());
+            var byId = list(caller, projectId, List.of()).content().stream()
+                    .collect(Collectors.toMap(Trace::id, trace -> trace));
+            return traces.stream().map(trace -> byId.get(trace.id())).toList();
+        }
+
+        private void assertFilter(Seed seed, Operator operator, String value, Set<UUID> expected) {
+            assertFilter(seed.caller(), seed.projectId(), operator, value, expected);
+        }
+
+        /** The list, its count, the stats' trace count and the stream give the same traces. */
+        private void assertFilter(Caller caller, UUID projectId, Operator operator, String value,
+                Set<UUID> expected) {
+            var filters = List.of(filter(TraceField.TOPIC_ID, operator, value));
+
+            var page = list(caller, projectId, filters);
+            var stats = traceClient.getTraceStats(null, projectId, caller.apiKey(), caller.workspaceName(), filters,
+                    Map.of());
+            var streamed = traceClient.getStreamAndAssertContent(caller.apiKey(), caller.workspaceName(),
+                    TraceSearchStreamRequest.builder().projectId(projectId).filters(filters).build());
+
+            var description = "%s %s".formatted(operator.getQueryParamOperator(), value);
+            assertThat(page.content()).as(description).extracting(Trace::id)
+                    .containsExactlyInAnyOrderElementsOf(expected);
+            assertThat(page.total()).as(description).isEqualTo(expected.size());
+            assertThat(stats.stats().stream()
+                    .filter(stat -> StatsMapper.TRACE_COUNT.equals(stat.getName()))
+                    .map(stat -> ((Number) stat.getValue()).longValue())
+                    .findFirst()
+                    .orElse(0L)).as(description).isEqualTo(expected.size());
+            assertThat(streamed).as(description).extracting(Trace::id).containsExactlyInAnyOrderElementsOf(expected);
+        }
+
+        private Trace.TracePage list(Caller caller, UUID projectId, List<TraceFilter> filters) {
+            return traceClient.getTraces(null, projectId, caller.apiKey(), caller.workspaceName(), filters,
+                    List.of(), 100, Map.of());
+        }
+
+        private static TraceFilter filter(TraceField field, Operator operator, String value) {
+            return TraceFilter.builder().field(field).operator(operator).value(value).build();
         }
     }
 

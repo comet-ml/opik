@@ -100,32 +100,33 @@ public class TopicReadService {
         }
     }
 
+    /**
+     * The scope of the traces filter by topic: empty unless the read API would answer {@code ready} for the project,
+     * so a filter by topic matches no trace where the API shows no topic.
+     */
+    public Optional<TopicReadScope> readyScope(@NonNull String workspaceId, @NonNull UUID projectId) {
+        if (!config.isEnabled()) {
+            return Optional.empty();
+        }
+        return template.inTransaction(READ_ONLY, handle -> TopicReadScope.read(handle, workspaceId, projectId))
+                .filter(scope -> !scope.live().isEmpty());
+    }
+
     private ProjectTopics read(String workspaceId, UUID projectId) {
         var today = LocalDate.ofInstant(clock.instant(), ZoneOffset.UTC);
-        var snapshot = template.inTransaction(READ_ONLY, handle -> {
-            if (!handle.attach(TopicWorkspaceDAO.class).isEligible(workspaceId)) {
-                return Optional.<ProjectSnapshot>empty();
-            }
-            var topicDAO = handle.attach(TopicDAO.class);
-            var live = topicDAO.findLive(workspaceId, projectId);
-            var state = topicDAO.findState(workspaceId, projectId).orElse(null);
-            if (live.isEmpty()) {
-                return Optional.of(ProjectSnapshot.builder().live(live).state(state).savedRunIds(List.of())
-                        .runCounts(List.of()).build());
-            }
-            var runDAO = handle.attach(TopicRunDAO.class);
-            return Optional.of(ProjectSnapshot.builder()
-                    .live(live)
-                    .state(state)
-                    .savedRunIds(runDAO.findSavedRunIds(workspaceId, projectId))
-                    .runCounts(runDAO.findLastTwoRunCounts(workspaceId, projectId))
-                    .build());
-        });
+        var snapshot = template.inTransaction(READ_ONLY, handle -> TopicReadScope.read(handle, workspaceId, projectId)
+                .map(scope -> ProjectSnapshot.builder()
+                        .scope(scope)
+                        .state(handle.attach(TopicDAO.class).findState(workspaceId, projectId).orElse(null))
+                        .runCounts(scope.live().isEmpty()
+                                ? List.of()
+                                : handle.attach(TopicRunDAO.class).findLastTwoRunCounts(workspaceId, projectId))
+                        .build()));
         if (snapshot.isEmpty()) {
             return TopicsCounts.window(today).status(ProjectTopics.Status.DISABLED).build();
         }
 
-        var live = snapshot.get().live();
+        var live = snapshot.get().scope().live();
         var state = snapshot.get().state();
         var from = startOf(TopicsCounts.windowFrom(today));
         var to = startOf(today.plusDays(1));
@@ -142,7 +143,7 @@ public class TopicReadService {
                     .build();
         }
         var rows = blockOrUnavailable(workspaceId, projectId, traceTopicsDAO
-                .countByTopicAndDay(workspaceId, projectId, from, to, snapshot.get().savedRunIds(),
+                .countByTopicAndDay(workspaceId, projectId, from, to, snapshot.get().scope().savedRunIds(),
                         MAX_EXECUTION_SECONDS)
                 .collectList());
         return TopicsCounts.ready(today, live, state, rows, snapshot.get().runCounts());
@@ -176,7 +177,6 @@ public class TopicReadService {
 
     /** The MySQL reads of one request, taken in one transaction. */
     @Builder(toBuilder = true)
-    private record ProjectSnapshot(List<Topic> live, TopicProjectState state, List<UUID> savedRunIds,
-            List<TopicRunCount> runCounts) {
+    private record ProjectSnapshot(TopicReadScope scope, TopicProjectState state, List<TopicRunCount> runCounts) {
     }
 }

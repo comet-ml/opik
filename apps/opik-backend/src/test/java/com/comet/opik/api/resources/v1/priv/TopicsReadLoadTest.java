@@ -2,6 +2,10 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.ProjectTopics;
 import com.comet.opik.api.ProjectTopics.TopicStats;
+import com.comet.opik.api.Trace;
+import com.comet.opik.api.filter.Operator;
+import com.comet.opik.api.filter.TraceField;
+import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
@@ -14,6 +18,7 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.Custom
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
+import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.domain.ailabels.AiLabelWorkspaceDAO;
@@ -99,6 +104,7 @@ class TopicsReadLoadTest {
     private static final int LIVE_TOPICS = 10;
     private static final int CALLS = 100;
     private static final int FAILED_TRACES = 1_000;
+    private static final int LIST_CALLS = 30;
     private static final String COMMENT = "topics:count_by_topic_and_day:";
     private static final String OTHER = TraceTopic.OTHER.toString();
     private static final Path REPORT = Path.of("target", "topics-read-load-test.md");
@@ -174,6 +180,19 @@ class TopicsReadLoadTest {
                 :topic_id, 'night', :run_id
             FROM numbers(3)
             """;
+
+    /**
+     * The traces table row of each trace with a topics row and none yet, created when that row says: the trace list
+     * reads these. Into the shard, as {@link PostCutoverTraces} says.
+     */
+    private static final String INSERT_LIST_TRACES = """
+            INSERT INTO %1$s (id, workspace_id, project_id, name, start_time, created_at)
+            SELECT trace_id, workspace_id, project_id, 'load', any(trace_created_at), any(trace_created_at)
+            FROM trace_topics
+            WHERE workspace_id = :workspace_id
+            AND trace_id NOT IN (SELECT id FROM %1$s WHERE workspace_id = :workspace_id)
+            GROUP BY workspace_id, project_id, trace_id
+            """.formatted(PostCutoverTraces.SHARD);
 
     private static final String LIMIT_BY = """
             SELECT topic_id, toDate(trace_created_at, 'UTC') AS day, count() AS traces
@@ -268,6 +287,7 @@ class TopicsReadLoadTest {
     private String baseUrl;
     private ClientSupport client;
     private ProjectResourceClient projectClient;
+    private TraceResourceClient traceClient;
     private TransactionTemplate template;
     private ConnectionFactory connectionFactory;
 
@@ -276,6 +296,7 @@ class TopicsReadLoadTest {
         this.client = client;
         this.baseUrl = TestUtils.getBaseUrl(client);
         this.projectClient = new ProjectResourceClient(client, baseUrl, PodamFactoryUtils.newPodamFactory());
+        this.traceClient = new TraceResourceClient(client, baseUrl);
         this.template = injector.getInstance(TransactionTemplate.class);
         this.connectionFactory = injector.getInstance(ConnectionFactory.class);
     }
@@ -358,6 +379,7 @@ class TopicsReadLoadTest {
                         "labels", labelArray,
                         "rows", ARRIVAL_BATCH));
             }
+            execute(INSERT_LIST_TRACES, Map.of("workspace_id", workspaceId));
             var rows = projectRows(workspaceId);
             assertThat(rows).isEqualTo((long) TRACES * NIGHTS + ARRIVALS);
             report.append(("Seed: %,d traces x %d saved nights + %,d arrival rows in %d inserts, %d live topics + "
@@ -443,6 +465,58 @@ class TopicsReadLoadTest {
                 .append(queryLog("topics:load:limit_by", handStart))
                 .append("argMax (the API's query):\n\n")
                 .append(queryLog("topics:load:arg_max", handStart));
+
+        measureList(report, apiKey, workspaceName, projectId, body);
+    }
+
+    /**
+     * The trace list over the API's window by created_at, as "View all N logs" opens it: with no topic filter, then
+     * filtered by the largest topic and by Other. Each total must be the API's count.
+     */
+    private void measureList(StringBuilder report, String apiKey, String workspaceName, UUID projectId,
+            ProjectTopics body) {
+        var window = List.of(
+                filter(TraceField.CREATED_AT, Operator.GREATER_THAN_EQUAL,
+                        body.windowFrom().atStartOfDay(ZoneOffset.UTC).toInstant().toString()),
+                filter(TraceField.CREATED_AT, Operator.LESS_THAN,
+                        body.windowUntil().plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant().toString()));
+        var largest = body.topics().getFirst();
+        var cases = new LinkedHashMap<String, Map.Entry<List<TraceFilter>, Long>>();
+        cases.put("no topic filter", Map.entry(window, body.totalTraces()));
+        cases.put("topic_id = the largest topic", Map.entry(withTopic(window, largest.id().toString()),
+                largest.count()));
+        cases.put("topic_id = Other", Map.entry(withTopic(window, OTHER), body.other().count()));
+        report.append(("The trace list over the API's window by created_at, page size 100, %d calls in a row per "
+                + "case. Each total equals the API's count.\n\n").formatted(LIST_CALLS));
+        cases.forEach((name, filtersAndCount) -> {
+            var start = Instant.now();
+            var millis = new double[LIST_CALLS];
+            Trace.TracePage page = null;
+            for (int i = 0; i < LIST_CALLS; i++) {
+                var callStart = System.nanoTime();
+                page = traceClient.getTraces(null, projectId, apiKey, workspaceName, filtersAndCount.getKey(),
+                        List.of(), 100, Map.of());
+                millis[i] = (System.nanoTime() - callStart) / 1e6;
+            }
+            assertThat(page.total()).as(name).isEqualTo(filtersAndCount.getValue());
+            execute(FLUSH_LOGS, Map.of());
+            report.append("%s, %,d traces (client wall time, ms): p50 %.1f, p95 %.1f, max %.1f.\n\n".formatted(name,
+                    page.total(), percentile(millis, 0.50), percentile(millis, 0.95), percentile(millis, 1.0)))
+                    .append("Page query (`find_traces_by_project_id`):\n\n")
+                    .append(queryLog("find_traces_by_project_id:", start))
+                    .append("Count query (`count_traces_by_project`):\n\n")
+                    .append(queryLog("count_traces_by_project:", start));
+        });
+    }
+
+    private static List<TraceFilter> withTopic(List<TraceFilter> window, String topicId) {
+        var filters = new ArrayList<>(window);
+        filters.add(filter(TraceField.TOPIC_ID, Operator.EQUAL, topicId));
+        return filters;
+    }
+
+    private static TraceFilter filter(TraceField field, Operator operator, String value) {
+        return TraceFilter.builder().field(field).operator(operator).value(value).build();
     }
 
     /** Waits until no merge of trace_topics runs and its active parts stay the same for three polls. */

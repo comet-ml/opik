@@ -22,11 +22,14 @@ import com.comet.opik.api.events.TraceCostIntelligenceChanged;
 import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.api.events.TracesDeleted;
 import com.comet.opik.api.events.TracesUpdated;
+import com.comet.opik.api.filter.TraceField;
 import com.comet.opik.api.sorting.TraceSortingFactory;
 import com.comet.opik.domain.attachment.AttachmentReinjectorService;
 import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.domain.attachment.AttachmentStripperService;
 import com.comet.opik.domain.attachment.AttachmentUtils;
+import com.comet.opik.domain.filter.FilterQueryBuilder;
+import com.comet.opik.domain.topics.TopicReadService;
 import com.comet.opik.domain.utils.DemoDataExclusionUtils;
 import com.comet.opik.domain.utils.DemoDataExclusionUtils.WorkspaceProjectCount;
 import com.comet.opik.infrastructure.OpikConfiguration;
@@ -156,6 +159,7 @@ class TraceServiceImpl implements TraceService {
     private final @NonNull AttachmentService attachmentService;
     private final @NonNull AttachmentReinjectorService attachmentReinjectorService;
     private final @NonNull @Config OpikConfiguration config;
+    private final @NonNull TopicReadService topicReadService;
 
     @Override
     @WithSpan
@@ -473,7 +477,25 @@ class TraceServiceImpl implements TraceService {
         return projectService.resolveProjectIdAndVerifyVisibility(criteria.projectId(), criteria.projectName())
                 .map(projectId -> criteria.toBuilder()
                         .projectId(projectId)
-                        .build());
+                        .build())
+                .flatMap(this::withTopicScope);
+    }
+
+    /**
+     * A filter by topic needs the project's topic scope, read from MySQL. Where the topics read API shows no topic
+     * (topics off, a workspace not opted in, a project with no live topic), the filter matches no trace, so the
+     * search is empty and ClickHouse is not called.
+     */
+    private Mono<TraceSearchCriteria> withTopicScope(TraceSearchCriteria criteria) {
+        if (criteria.filters() == null
+                || FilterQueryBuilder.hasField(criteria.filters(), TraceField.TOPIC_ID).isEmpty()) {
+            return Mono.just(criteria);
+        }
+        return Mono.deferContextual(ctx -> Mono.fromCallable(() -> topicReadService
+                .readyScope(ctx.get(RequestContext.WORKSPACE_ID), criteria.projectId())
+                .map(scope -> criteria.toBuilder().topicScope(scope).build())
+                .orElse(null))
+                .subscribeOn(Schedulers.boundedElastic()));
     }
 
     private <T> Mono<T> failWithConflict(String error) {

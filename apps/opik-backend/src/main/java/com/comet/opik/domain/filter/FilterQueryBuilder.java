@@ -147,6 +147,8 @@ public class FilterQueryBuilder {
     public static final String ANNOTATION_QUEUE_IDS_ANALYTICS_DB = "taqi.annotation_queue_ids";
     public static final String THREAD_ANNOTATION_QUEUE_IDS_ANALYTICS_DB = "ttaqi.annotation_queue_ids";
     private static final String EXPERIMENT_ID_DB = "experiment_id";
+    // A trace's topic in TraceTopicsDAO.TRACE_IDS_BY_TOPIC, the subquery the TOPICS strategy filters
+    private static final String TOPIC_ANALYTICS_DB = "topic";
     private static final String WEBHOOK_URL_DB = "webhook_url";
     private static final String ALERT_TYPE_DB = "alert_type";
     private static final String ENABLED_DB = "enabled";
@@ -230,6 +232,7 @@ public class FilterQueryBuilder {
                     .put(Operator.EQUAL, new EnumMap<>(Map.ofEntries(
                             Map.entry(FieldType.STRING, "lower(%1$s) = lower(:filter%2$d)"),
                             Map.entry(FieldType.STRING_EXACT, "%1$s = :filter%2$d"),
+                            Map.entry(FieldType.TOPIC_ID, "%1$s = :filter%2$d"),
                             Map.entry(FieldType.STRING_STATE_DB, "lower(%1$s) = lower(:filter%2$d)"),
                             Map.entry(FieldType.DATE_TIME, "%1$s = parseDateTime64BestEffort(:filter%2$d, 9)"),
                             Map.entry(FieldType.DATE_TIME_STATE_DB, "%1$s = :filter%2$d"),
@@ -251,6 +254,7 @@ public class FilterQueryBuilder {
                     .put(Operator.NOT_EQUAL, new EnumMap<>(Map.ofEntries(
                             Map.entry(FieldType.STRING, "lower(%1$s) != lower(:filter%2$d)"),
                             Map.entry(FieldType.STRING_EXACT, "%1$s != :filter%2$d"),
+                            Map.entry(FieldType.TOPIC_ID, "%1$s != :filter%2$d"),
                             Map.entry(FieldType.STRING_STATE_DB, "lower(%1$s) != lower(:filter%2$d)"),
                             Map.entry(FieldType.DATE_TIME, "%1$s != parseDateTime64BestEffort(:filter%2$d, 9)"),
                             Map.entry(FieldType.DATE_TIME_STATE_DB, "%1$s != :filter%2$d"),
@@ -341,10 +345,12 @@ public class FilterQueryBuilder {
                             "notEmpty(%1$s)")))
                     .put(Operator.IN, new EnumMap<>(Map.of(
                             FieldType.ENUM, "%1$s IN :filter%2$d",
-                            FieldType.STRING_LIST, "%1$s IN :filter%2$d")))
+                            FieldType.STRING_LIST, "%1$s IN :filter%2$d",
+                            FieldType.TOPIC_ID, "%1$s IN :filter%2$d")))
                     .put(Operator.NOT_IN, new EnumMap<>(Map.of(
                             FieldType.ENUM, "%1$s NOT IN :filter%2$d",
-                            FieldType.STRING_LIST, "%1$s NOT IN :filter%2$d")))
+                            FieldType.STRING_LIST, "%1$s NOT IN :filter%2$d",
+                            FieldType.TOPIC_ID, "%1$s NOT IN :filter%2$d")))
                     .build());
 
     private static final Map<TraceField, String> TRACE_FIELDS_MAP = new EnumMap<>(
@@ -380,6 +386,7 @@ public class FilterQueryBuilder {
                     .put(TraceField.LAST_UPDATED_AT, LAST_UPDATED_AT_DB)
                     .put(TraceField.SOURCE, SOURCE_DB)
                     .put(TraceField.ENVIRONMENT, ENVIRONMENT_DB)
+                    .put(TraceField.TOPIC_ID, TOPIC_ANALYTICS_DB)
                     .build());
 
     private static final Map<TraceThreadField, String> TRACE_THREAD_FIELDS_MAP = new EnumMap<>(
@@ -630,6 +637,8 @@ public class FilterQueryBuilder {
         map.put(FilterStrategy.ANNOTATION_AGGREGATION, Set.of(
                 TraceField.ANNOTATION_QUEUE_IDS,
                 TraceThreadField.ANNOTATION_QUEUE_IDS));
+
+        map.put(FilterStrategy.TOPICS, Set.of(TraceField.TOPIC_ID));
 
         map.put(FilterStrategy.SPAN, Set.of(
                 SpanField.ID,

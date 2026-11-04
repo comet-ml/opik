@@ -984,6 +984,34 @@ are gone.
 The topic's own `count`, `share` and `rank` are the live window's, from ClickHouse at request time. `run_change` uses
 only the saved runs, so it changes once a night.
 
+### Traces filtered by topic
+
+The traces list takes a `topic_id` filter. "View all N logs" on a topic opens the list with it. The value is a topic's
+`id` from this endpoint, or Other's all-zeros id. The operators are `=`, `!=`, `in` and `not_in`. `in` and `not_in`
+take ids separated by commas. Any other operator, or a value that is not a UUID, gets a 400. The filter applies to the
+list and its `total`, to `GET /v1/private/traces/stats`, and to the search stream (`POST /v1/private/traces/search`).
+
+```json
+[{"field": "topic_id", "operator": "=", "value": "<topic_id>"}]
+```
+
+The filter uses the rules of [How it counts](#how-it-counts). Only arrival rows and rows of saved runs count, each
+trace goes by its latest row, and a topic that is not live is Other. So the Other filter also returns stale traces. A
+trace with no counted row fails every operator, `!=` and `not_in` included, so `!=` is not the opposite of `=`. With
+topics off, a workspace not opted in, or a project with no live topic, the filter returns no trace and no error.
+
+To match a topic's `count`, the list needs the API's window. Add two `created_at` filters: `>=` the start of
+`window_from` and `<` the start of the day after `window_until`, both in UTC (`2026-10-06T00:00:00Z`). Do not use
+`from_time` and `to_time`. They select by the time in the trace id, which the client sets, and the API counts by the
+trace's `created_at`. With the window, the list's `total` equals the topic's `count`. With the Other filter, it
+equals Other's `count`. A night that saves between the two requests can change both.
+
+The backend reads the live topics and the saved run ids from MySQL first, as this endpoint does. Then each trace
+query gets `AND id IN (<subquery>)`, as score filters do. The subquery reads the project's `trace_topics` rows, keeps
+the latest counted row of each trace, and returns the ids that pass the filter. It reads only the trace id range when
+the list has `from_time`, `to_time` or a cursor. It has no `log_comment` of its own: in `system.query_log` it is part
+of the list's queries (`find_traces_by_project_id`, `count_traces_by_project`).
+
 ```sql
 -- MySQL: run_change per topic, as the API computes it. Other is the all-zeros topic_id. A live topic missing from the
 -- result has no run_change.

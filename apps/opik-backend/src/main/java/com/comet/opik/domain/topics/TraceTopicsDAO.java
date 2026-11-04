@@ -1,13 +1,16 @@
 package com.comet.opik.domain.topics;
 
+import com.comet.opik.domain.TraceSearchCriteria;
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.WeeklyPartitions;
+import com.comet.opik.utils.template.TemplateUtils;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.Row;
+import io.r2dbc.spi.Statement;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.Builder;
@@ -24,6 +27,7 @@ import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -99,6 +103,36 @@ public class TraceTopicsDAO {
             GROUP BY topic_id, day
             SETTINGS max_threads = 2, max_execution_time = <max_execution_time>, max_memory_usage = <max_memory_usage>,
                 max_rows_to_read = <max_rows_to_read>, log_comment = '<log_comment>'
+            """;
+
+    /**
+     * The ids of the project's traces whose topic matches {@code <topic_filters>}, the TOPICS filter strategy on
+     * {@code topic}: the traces filter by topic. A trace's topic is its latest arrival row or row of a saved run, as in
+     * {@link #COUNT_BY_TOPIC_AND_DAY}, and a topic that is no longer live is Other. A trace with no such row has no
+     * topic, so no operator keeps it, {@code !=} and {@code not_in} included. The search's time window and cursor bound
+     * the read to the trace ids the search can return; they never split a trace's rows, which all share its id.
+     */
+    private static final String TRACE_IDS_BY_TOPIC = """
+            SELECT trace_id
+            FROM (
+                SELECT trace_id, argMax(topic_id, (updated_at, run_id)) AS latest_topic,
+                    if(latest_topic IN :topic_live_ids, latest_topic, '00000000-0000-0000-0000-000000000000') AS topic
+                FROM trace_topics
+                WHERE workspace_id = :workspace_id
+                AND project_id = :topic_project_id
+                <if(uuid_from_time)> AND trace_id >= :uuid_from_time
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
+                <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
+                <if(last_received_id)> AND trace_id \\< :last_received_id
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        \\<= (toDate32(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC'), 1))) <endif>
+                AND (source = 'arrival' <if(saved_run_ids)> OR run_id IN :topic_saved_run_ids <endif>)
+                GROUP BY trace_id
+            )
+            WHERE <topic_filters>
             """;
 
     /** The latest topic of each of the project's traces created in the window. */
@@ -275,6 +309,41 @@ public class TraceTopicsDAO {
                         .day(row.get("day", LocalDate.class))
                         .traces(((Number) row.get("traces", Object.class)).longValue())
                         .build()));
+    }
+
+    /**
+     * {@link #TRACE_IDS_BY_TOPIC} for a trace search with a filter by topic, to bind with {@link #bindTraceIdsByTopic}.
+     * The search's {@code topicScope} must be set: the trace service reads it from MySQL before the search.
+     */
+    public static String traceIdsByTopic(@NonNull String topicFilters, @NonNull TraceSearchCriteria criteria) {
+        var scope = scopeOf(criteria);
+        var template = TemplateUtils.newST(TRACE_IDS_BY_TOPIC).add("topic_filters", topicFilters);
+        if (!scope.savedRunIds().isEmpty()) {
+            template.add("saved_run_ids", true);
+        }
+        Optional.ofNullable(criteria.uuidFromTime()).ifPresent(id -> template.add("uuid_from_time", true));
+        Optional.ofNullable(criteria.uuidToTime()).ifPresent(id -> template.add("uuid_to_time", true));
+        Optional.ofNullable(criteria.lastReceivedId()).ifPresent(id -> template.add("last_received_id", true));
+        return template.render();
+    }
+
+    /**
+     * Binds the values {@link #traceIdsByTopic} adds. The workspace, the time window and the cursor are bound by the
+     * search itself.
+     */
+    public static void bindTraceIdsByTopic(@NonNull Statement statement, @NonNull TraceSearchCriteria criteria) {
+        var scope = scopeOf(criteria);
+        statement.bind("topic_project_id", criteria.projectId().toString())
+                .bind("topic_live_ids", scope.liveIds().toArray(String[]::new));
+        if (!scope.savedRunIds().isEmpty()) {
+            statement.bind("topic_saved_run_ids", scope.savedRunIdStrings().toArray(String[]::new));
+        }
+    }
+
+    private static TopicReadScope scopeOf(TraceSearchCriteria criteria) {
+        Preconditions.checkState(criteria.projectId() != null && criteria.topicScope() != null,
+                "A trace search filtered by topic needs its project and the project's topic scope");
+        return criteria.topicScope();
     }
 
     /**

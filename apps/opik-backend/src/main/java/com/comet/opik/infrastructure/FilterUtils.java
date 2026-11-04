@@ -11,6 +11,7 @@ import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.TraceSearchCriteria;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
+import com.comet.opik.domain.topics.TraceTopicsDAO;
 import com.comet.opik.utils.template.TemplateUtils;
 import io.dropwizard.db.DataSourceFactory;
 import io.r2dbc.spi.Statement;
@@ -166,6 +167,9 @@ public class FilterUtils {
                     FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.EXPERIMENT_AGGREGATION)
                             .ifPresent(traceExperimentFilters -> template.add("experiment_filters",
                                     traceExperimentFilters));
+                    FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TOPICS)
+                            .ifPresent(topicFilters -> template.add("topic_trace_ids",
+                                    TraceTopicsDAO.traceIdsByTopic(topicFilters, traceSearchCriteria)));
                     FilterQueryBuilder.toAnalyticsDbFilters(
                             filters, FilterStrategy.TRACE_THREAD, traceColumnsNonNullable)
                             .ifPresent(threadFilters -> template.add("trace_thread_filters", threadFilters));
@@ -216,6 +220,10 @@ public class FilterUtils {
                     FilterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE_SPAN_FEEDBACK_SCORES);
                     FilterQueryBuilder.bind(statement, filters, FilterStrategy.ANNOTATION_AGGREGATION);
                     FilterQueryBuilder.bind(statement, filters, FilterStrategy.EXPERIMENT_AGGREGATION);
+                    if (FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TOPICS).isPresent()) {
+                        FilterQueryBuilder.bind(statement, filters, FilterStrategy.TOPICS);
+                        TraceTopicsDAO.bindTraceIdsByTopic(statement, traceSearchCriteria);
+                    }
                     FilterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE_THREAD);
                     FilterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
                     FilterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE_SPAN_FEEDBACK_SCORES_IS_EMPTY);

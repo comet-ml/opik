@@ -13,6 +13,7 @@ public enum FieldType {
     STRING("string"),
     STRING_EXACT("string_exact"),
     STRING_LIST("string_list"),
+    TOPIC_ID("topic_id"), // A topic id or Other's all-zeros id; in and not_in take a comma-separated list
     STRING_STATE_DB("string_state_db"),
     DATE_TIME("date_time"),
     DATE_TIME_STATE_DB("date_time_state_db"),
