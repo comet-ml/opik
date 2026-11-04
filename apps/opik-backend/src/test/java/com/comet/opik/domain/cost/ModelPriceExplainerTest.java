@@ -140,7 +140,9 @@ class ModelPriceExplainerTest {
                 layers(fixed("gpt-5-mini", "openai", "1.00", "10.00")));
 
         assertThat(resolution.cost()).isEqualTo("0");
-        assertThat(resolution.costSource()).isEqualTo("organization");
+        assertThat(resolution.costSource()).isEqualTo("none");
+        assertThat(resolution.match().row().model()).isEqualTo("gpt-5-mini");
         assertThat(line(resolution, "input").ratePerMillion()).isEqualTo("1");
+        assertThat(line(resolution, "input").source()).isEqualTo("organization");
     }
 }
