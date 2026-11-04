@@ -167,6 +167,9 @@ export interface OllieChartWidgetType {
     description?: string;
     // Bumped by Ollie on every "Save changes".
     version?: number;
+    // A table chart's sort and column widths, set by the user on the dashboard.
+    sorting?: Sorting;
+    columnsWidth?: Record<string, number>;
   } & Record<string, unknown>;
 }
 

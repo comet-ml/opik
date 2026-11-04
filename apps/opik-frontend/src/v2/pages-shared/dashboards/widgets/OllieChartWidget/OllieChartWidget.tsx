@@ -19,6 +19,7 @@ import {
   selectRuntimeConfig,
   selectReadOnly,
   selectSavedWidgetIds,
+  selectUpdateWidget,
 } from "@/store/DashboardStore";
 import {
   DASHBOARD_SCOPE,
@@ -32,6 +33,7 @@ import useDashboardWidgetQuery from "@/api/dashboards/useDashboardWidgetQuery";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
+import { Sorting } from "@/types/sorting";
 
 const MINUTE = 60_000;
 
@@ -91,6 +93,7 @@ const OllieChartWidget: React.FunctionComponent<
   DashboardWidgetComponentProps
 > = ({ sectionId, widgetId, preview = false }) => {
   const readOnly = useDashboardStore(selectReadOnly);
+  const updateWidget = useDashboardStore(selectUpdateWidget);
   const ollieEnabled = useIsFeatureEnabled(FeatureToggleKeys.OLLIE_ENABLED);
   const dateRange = useDashboardStore(
     (state) => selectRuntimeConfig(state)?.dateRange ?? DEFAULT_DATE_PRESET,
@@ -255,6 +258,19 @@ const OllieChartWidget: React.FunctionComponent<
         }
       : undefined;
 
+  // Saved with the widget only where the dashboard can be edited; elsewhere the table still sorts and resizes.
+  const saveConfig = (patch: Partial<OllieChartWidgetType["config"]>) => {
+    if (preview || readOnly || !sectionId || !widgetId) return;
+    updateWidget(sectionId, widgetId, { config: { ...config, ...patch } });
+  };
+  const tableState = {
+    sorting: config.sorting,
+    columnsWidth: config.columnsWidth,
+    onSortingChange: (sorting: Sorting) => saveConfig({ sorting }),
+    onColumnsWidthChange: (columnsWidth: Record<string, number>) =>
+      saveConfig({ columnsWidth }),
+  };
+
   const renderContent = () => {
     if (!spec) {
       return (
@@ -296,7 +312,7 @@ const OllieChartWidget: React.FunctionComponent<
 
     return (
       <div className="size-full p-2">
-        <VegaChart spec={spec} rows={chartRows} />
+        <VegaChart spec={spec} rows={chartRows} tableState={tableState} />
       </div>
     );
   };
