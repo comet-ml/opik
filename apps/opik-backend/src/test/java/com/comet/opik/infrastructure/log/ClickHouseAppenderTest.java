@@ -8,6 +8,7 @@ import ch.qos.logback.classic.spi.LoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.infrastructure.ClickHouseLogAppenderConfig;
+import com.comet.opik.infrastructure.log.tables.UserLogTableFactory;
 import com.google.common.util.concurrent.Uninterruptibles;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,6 +24,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -55,12 +57,7 @@ class ClickHouseAppenderTest {
         var batchSizes = new CopyOnWriteArrayList<Integer>();
 
         var appender = new ClickHouseAppender(
-                userLog -> events -> Mono.defer(() -> {
-                    batchSizes.add(events.size());
-                    maxInFlight.accumulateAndGet(inFlight.incrementAndGet(), Math::max);
-                    return Mono.fromFuture(insertDone);
-                }).doFinally(signal -> inFlight.decrementAndGet()),
-                config(10, 2), pausedScheduler());
+                trackedInserts(insertDone, inFlight, maxInFlight, batchSizes), config(10, 2), pausedScheduler());
         appender.setContext(new LoggerContext());
         appender.start();
 
@@ -79,6 +76,33 @@ class ClickHouseAppenderTest {
         assertThat(batchSizes).containsExactly(10, 10, 10);
         assertThat(maxInFlight).hasValue(1);
         assertThat(warnings()).containsExactly("Log queue is full, dropped '5' user-facing logs");
+    }
+
+    @Test
+    void stopWaitsForTheInFlightInsertBeforeDraining() throws Exception {
+        var insertDone = new CompletableFuture<Void>();
+        var inFlight = new AtomicInteger();
+        var maxInFlight = new AtomicInteger();
+        var batchSizes = new CopyOnWriteArrayList<Integer>();
+
+        var appender = new ClickHouseAppender(
+                trackedInserts(insertDone, inFlight, maxInFlight, batchSizes), config(10, 2), pausedScheduler());
+        appender.setContext(new LoggerContext());
+        appender.start();
+
+        append(appender, 21); // forces one insert of 10, which stays in flight; 11 stay queued
+        resumeScheduler.countDown();
+
+        var stopped = CompletableFuture.runAsync(appender::stop);
+        Thread.sleep(200);
+        assertThat(stopped).isNotDone();
+        assertThat(batchSizes).containsExactly(10);
+
+        insertDone.complete(null);
+        stopped.get(5, TimeUnit.SECONDS);
+
+        assertThat(batchSizes).containsExactly(10, 10, 1);
+        assertThat(maxInFlight).hasValue(1);
     }
 
     @Test
@@ -126,6 +150,17 @@ class ClickHouseAppenderTest {
 
         assertThat(alertInsertAttempted).isTrue();
         assertThat(saved).hasValue(5);
+    }
+
+    // Inserts complete when insertDone does. The count drops before the completion reaches the appender, which
+    // may start the next insert right away.
+    private static UserLogTableFactory trackedInserts(CompletableFuture<Void> insertDone, AtomicInteger inFlight,
+            AtomicInteger maxInFlight, List<Integer> batchSizes) {
+        return userLog -> events -> Mono.defer(() -> {
+            batchSizes.add(events.size());
+            maxInFlight.accumulateAndGet(inFlight.incrementAndGet(), Math::max);
+            return Mono.fromFuture(insertDone);
+        }).doOnTerminate(inFlight::decrementAndGet);
     }
 
     // Holds back every scheduled flush until resumeScheduler opens, leaving only the inline ones.

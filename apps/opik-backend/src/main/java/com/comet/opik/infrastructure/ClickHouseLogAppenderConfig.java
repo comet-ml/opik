@@ -6,6 +6,7 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
+import org.hibernate.validator.constraints.time.DurationMin;
 
 import java.time.Duration;
 
@@ -23,5 +24,6 @@ public class ClickHouseLogAppenderConfig {
     @NotNull private Duration flushIntervalDuration;
 
     @JsonProperty
-    @NotNull private Duration shutdownTimeout;
+    @NotNull @DurationMin(millis = 1)
+    private Duration shutdownTimeout;
 }

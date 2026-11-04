@@ -15,11 +15,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -65,7 +68,8 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
 
     private final BlockingQueue<ILoggingEvent> logQueue;
     // Set while an insert is in flight, so there is at most one at a time.
-    private final AtomicBoolean flushPending = new AtomicBoolean();
+    private final AtomicBoolean insertInFlight = new AtomicBoolean();
+    private volatile CompletableFuture<Void> lastInsert = CompletableFuture.completedFuture(null);
     // Set while a threshold-triggered flush is queued, so appends don't queue one each.
     private final AtomicBoolean flushScheduled = new AtomicBoolean();
     private final AtomicLong dropped = new AtomicLong();
@@ -104,27 +108,27 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
     }
 
     private void flushLogs() {
-        if (!flushPending.compareAndSet(false, true)) {
-            return; // an insert is already in flight
+        if (!insertInFlight.compareAndSet(false, true)) {
+            return;
         }
 
         List<ILoggingEvent> batch = new ArrayList<>(batchSize);
         logQueue.drainTo(batch, batchSize);
 
         if (batch.isEmpty()) {
-            flushPending.set(false);
+            insertInFlight.set(false);
             return;
         }
 
         // The flag clears when the insert completes, not before: a slow ClickHouse backs up into the bounded queue.
-        insert(batch)
+        lastInsert = insert(batch)
                 .doFinally(signal -> {
-                    flushPending.set(false);
+                    insertInFlight.set(false);
                     if (running && logQueue.size() >= batchSize) {
                         submit(this::flushLogs);
                     }
                 })
-                .subscribe();
+                .toFuture();
     }
 
     private Mono<Void> insert(List<ILoggingEvent> batch) {
@@ -191,23 +195,32 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
         drainOnStop();
         reportDropped();
         logQueue.clear();
-        flushPending.set(false);
+        insertInFlight.set(false);
         flushScheduled.set(false);
         scheduler.set(Executors.newSingleThreadScheduledExecutor());
     }
 
-    // The flush thread is gone, so insert what is left from here, a batch at a time, within the shutdown timeout.
+    // The flush thread is gone: wait for its last insert, then insert what is left from here, a batch at a time.
+    // Both share one deadline, so there is still one insert at a time and stop() stays within shutdownTimeout.
     private void drainOnStop() {
         long deadline = System.nanoTime() + shutdownTimeout.toNanos();
         try {
+            lastInsert.get(remainingNanos(deadline), TimeUnit.NANOSECONDS);
             while (!logQueue.isEmpty()) {
                 List<ILoggingEvent> batch = new ArrayList<>(batchSize);
                 logQueue.drainTo(batch, batchSize);
-                insert(batch).block(Duration.ofNanos(Math.max(0, deadline - System.nanoTime())));
+                insert(batch).block(Duration.ofNanos(remainingNanos(deadline)));
             }
-        } catch (RuntimeException e) {
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("Interrupted flushing user-facing logs on shutdown, dropping '{}'", logQueue.size());
+        } catch (ExecutionException | TimeoutException | RuntimeException e) {
             log.warn("Failed to flush user-facing logs on shutdown, dropping '{}'", logQueue.size(), e);
         }
+    }
+
+    private static long remainingNanos(long deadline) {
+        return Math.max(0, deadline - System.nanoTime());
     }
 
     private void awaitTermination() {
