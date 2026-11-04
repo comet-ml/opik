@@ -82,6 +82,14 @@ public class AuthenticationConfig {
     @MaxDuration(value = 30, unit = TimeUnit.SECONDS)
     private Duration requestRetryMaxBackoff;
 
+    @Valid @NotNull @JsonProperty
+    @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+    private Duration organizationCacheTTL = Duration.minutes(10);
+
+    @Valid @NotNull @JsonProperty
+    @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+    private Duration organizationCacheStaleTTL = Duration.hours(24);
+
     /**
      * Cross-field constraint: a backoff whose minimum exceeds its maximum is contradictory, and
      * Reactor's {@code Retry.backoff} would clamp it silently rather than fail. Validate it at

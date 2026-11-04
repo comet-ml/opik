@@ -93,7 +93,8 @@ class AuthFilterCoverageTest {
 
     static {
         var authFilter = new AuthFilter(AUTH_SERVICE, mock(McpOAuthService.class),
-                mock(CipxTokenValidationService.class), new OpikConfiguration(), RequestContext::new);
+                mock(CipxTokenValidationService.class), new OpikConfiguration(), RequestContext::new,
+                new DefaultOrganizationResolver());
         var builder = ResourceExtension.builder()
                 .addProvider(new AuthDynamicFeature(authFilter))
                 .addProvider(new AbortAfterMatching())

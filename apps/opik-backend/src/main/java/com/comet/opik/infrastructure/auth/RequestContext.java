@@ -8,6 +8,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 
 import java.util.List;
 import java.util.Set;
@@ -45,6 +46,7 @@ public class RequestContext {
     private String userName;
     private String workspaceId;
     private String workspaceName;
+    private String organizationId;
     private String apiKey;
     private MultivaluedMap<String, String> headers;
     private List<Quota> quotas;
@@ -52,6 +54,9 @@ public class RequestContext {
     private String workspaceFallbackMessage;
 
     private String cipxDeviceId;
+
+    @ToString.Exclude
+    private CometCredentials cometCredentials;
 
     /**
      * Whether this caller's response content must be redacted. Resolved once, after authentication, because

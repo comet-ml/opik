@@ -6,7 +6,9 @@ import com.comet.opik.domain.WorkspacePermissionsService;
 import com.comet.opik.infrastructure.AuthenticationConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.RetriableHttpClient;
+import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.redaction.RedactionService;
+import com.comet.opik.utils.RetryUtils;
 import com.google.common.base.Preconditions;
 import com.google.inject.Provides;
 import jakarta.inject.Provider;
@@ -19,6 +21,7 @@ import org.redisson.api.RedissonReactiveClient;
 import ru.vyarus.dropwizard.guice.module.support.DropwizardAwareModule;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.time.Clock;
 import java.util.Objects;
 
 @Slf4j
@@ -102,13 +105,26 @@ public class AuthModule extends DropwizardAwareModule<OpikConfiguration> {
 
     @Provides
     @Singleton
-    public OrganizationResolver organizationResolver(@Config("authentication") AuthenticationConfig config) {
+    public OrganizationResolver organizationResolver(
+            @Config("authentication") AuthenticationConfig config,
+            @Config("serviceToggles") ServiceTogglesConfig serviceToggles,
+            @NonNull Provider<RequestContext> requestContext,
+            @NonNull RetriableHttpClient retriableHttpClient,
+            @NonNull RedissonReactiveClient redissonClient) {
 
         if (!config.isEnabled()) {
             return new DefaultOrganizationResolver();
         }
 
-        return new RemoteOrganizationResolver();
+        var client = new WorkspaceOrganizationClient(retriableHttpClient, config.getReactService(),
+                RetryUtils.handleHttpErrors(config.getRequestMaxRetries(),
+                        config.getRequestRetryMinBackoff().toJavaDuration(),
+                        config.getRequestRetryMaxBackoff().toJavaDuration()),
+                config.getRequestTimeout().toJavaDuration());
+        var cache = new WorkspaceOrganizationCache(redissonClient, config.getOrganizationCacheTTL().toJavaDuration(),
+                config.getOrganizationCacheStaleTTL().toJavaDuration(), Clock.systemUTC());
+        return new RemoteOrganizationResolver(requestContext, client, cache,
+                serviceToggles.isModelPricesEnabled());
     }
 
 }

@@ -454,6 +454,10 @@ authentication:
   requestRetryMinBackoff: 250ms
   # Upper bound on the backoff between auth request attempts.
   requestRetryMaxBackoff: 1s
+  # How long a workspace's organization is reused before Comet is asked again.
+  organizationCacheTTL: 10m
+  # How long the last known organization is kept for when Comet can't be reached.
+  organizationCacheStaleTTL: 24h
 sharedHttpClientHealthCheck:
   timeout: 1s
 
@@ -1102,6 +1106,9 @@ serviceToggles:
   # Default: false
   # Description: Whether or not the Cost Intelligence (AI Spend) feature is enabled
   costIntelligenceEnabled: "false"
+  # Default: false
+  # Description: Whether or not organization admins can set custom model prices through /v1/private/model-prices
+  modelPricesEnabled: "false"
   # Default: true
   # Description: Whether or not OpenAI provider is enabled
   openaiProviderEnabled: "true"

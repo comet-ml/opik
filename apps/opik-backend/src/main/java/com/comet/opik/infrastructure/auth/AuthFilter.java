@@ -37,6 +37,7 @@ public class AuthFilter implements ContainerRequestFilter {
     private final CipxTokenValidationService cipxTokenValidationService;
     private final OpikConfiguration opikConfig;
     private final Provider<RequestContext> requestContext;
+    private final OrganizationResolver organizationResolver;
 
     @Override
     public void filter(ContainerRequestContext context) throws IOException {
@@ -68,6 +69,7 @@ public class AuthFilter implements ContainerRequestFilter {
             } else {
                 authService.authenticate(headers, sessionToken, contextInfo);
             }
+            organizationResolver.resolveRequestOrganization();
         } else if (templatePath.filter(path -> SESSION_PATH_PATTERN.matcher(path).matches()).isPresent()) {
             authService.authenticateSession(sessionToken);
         }

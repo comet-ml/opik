@@ -7,4 +7,7 @@ public interface OrganizationResolver {
     Mono<String> organizationId();
 
     Mono<String> requireOrganizationAdmin();
+
+    default void resolveRequestOrganization() {
+    }
 }
