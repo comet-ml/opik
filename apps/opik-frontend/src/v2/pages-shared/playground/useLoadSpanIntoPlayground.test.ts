@@ -55,6 +55,8 @@ vi.mock("@/api/llm/useLlmModels", () => ({
       [PROVIDER_TYPE.OPEN_AI]: [
         { id: "gpt-4o", label: "GPT-4o" },
         { id: "gpt-4o-mini", label: "GPT-4o mini" },
+        // In the catalog, but not offered in the model dropdown.
+        { id: "gpt-4o-2024-08-06" },
       ],
       [PROVIDER_TYPE.ANTHROPIC]: [
         { id: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
@@ -66,7 +68,7 @@ vi.mock("@/api/llm/useLlmModels", () => ({
       [PROVIDER_TYPE.VERTEX_AI]: [
         {
           id: "gemini-2.5-pro",
-          qualifiedName: "vertex_ai/gemini-2.5-pro",
+          qualified_name: "vertex_ai/gemini-2.5-pro",
           label: "Gemini 2.5 Pro",
         },
       ],
@@ -144,6 +146,7 @@ describe("useLoadSpanIntoPlayground", () => {
   it.each([
     ["its provider isn't configured", "claude-sonnet-4-6"],
     ["the model is unknown", "my-fine-tune"],
+    ["the dropdown doesn't offer the model", "gpt-4o-2024-08-06"],
     ["the span has no model", undefined],
   ])("falls back to the last picked model when %s", (_, model) => {
     const prompt = loadSpan(createSpan({ model }));
@@ -161,6 +164,42 @@ describe("useLoadSpanIntoPlayground", () => {
 
     expect(prompt.model).toBe("vertex_ai/gemini-2.5-pro");
     expect(prompt.provider).toBe(PROVIDER_TYPE.VERTEX_AI);
+  });
+
+  it.each([
+    ["google_vertexai", "vertex_ai/gemini-2.5-pro", PROVIDER_TYPE.VERTEX_AI],
+    ["vertex-ai", "vertex_ai/gemini-2.5-pro", PROVIDER_TYPE.VERTEX_AI],
+    ["google_ai", "gemini-2.5-pro", PROVIDER_TYPE.GEMINI],
+    ["gemini", "gemini-2.5-pro", PROVIDER_TYPE.GEMINI],
+  ])(
+    "uses the span's provider for a shared model id: %s",
+    (provider, expectedModel, expectedProvider) => {
+      for (const providerKeys of [
+        [PROVIDER_TYPE.GEMINI, PROVIDER_TYPE.VERTEX_AI],
+        [PROVIDER_TYPE.VERTEX_AI, PROVIDER_TYPE.GEMINI],
+      ]) {
+        setPromptMap.mockClear();
+        mocks.providerKeys = providerKeys;
+
+        const prompt = loadSpan(
+          createSpan({ model: "gemini-2.5-pro", provider }),
+        );
+
+        expect(prompt.model).toBe(expectedModel);
+        expect(prompt.provider).toBe(expectedProvider);
+      }
+    },
+  );
+
+  it("falls back to another provider that offers the model", () => {
+    mocks.providerKeys = [PROVIDER_TYPE.GEMINI];
+
+    const prompt = loadSpan(
+      createSpan({ model: "gemini-2.5-pro", provider: "google_vertexai" }),
+    );
+
+    expect(prompt.model).toBe("gemini-2.5-pro");
+    expect(prompt.provider).toBe(PROVIDER_TYPE.GEMINI);
   });
 
   it("is pending until the model catalog has loaded", () => {

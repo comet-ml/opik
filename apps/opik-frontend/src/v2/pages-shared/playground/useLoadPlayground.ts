@@ -1,5 +1,6 @@
 import { useCallback, useMemo } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import sortBy from "lodash/sortBy";
 import useLocalStorageState from "use-local-storage-state";
 
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
@@ -28,7 +29,7 @@ import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import useProviderKeys from "@/api/provider-keys/useProviderKeys";
 import { MessageContent } from "@/types/llm";
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
-import { PROVIDER_MODEL_TYPE } from "@/types/providers";
+import { COMPOSED_PROVIDER_TYPE, PROVIDER_MODEL_TYPE } from "@/types/providers";
 import { formatDatasetVersionKey } from "@/utils/datasetVersionStorage";
 import useResetPlaygroundSession from "@/v2/pages-shared/playground/useResetPlaygroundSession";
 
@@ -47,9 +48,11 @@ interface LoadPlaygroundOptions {
   datasetType?: DATASET_TYPE | null;
   templateStructure?: PROMPT_TEMPLATE_STRUCTURE;
   namedPrompts?: NamedPromptContent[];
-  // Used instead of the last picked model when a configured provider serves it,
-  // e.g. the model a logged LLM span ran on.
+  // Used instead of the last picked model when a configured provider offers it
+  // in the model dropdown, e.g. the model a logged LLM span ran on.
   preferredModel?: PROVIDER_MODEL_TYPE;
+  // Checked first for preferredModel, which more than one provider can offer.
+  preferredProvider?: COMPOSED_PROVIDER_TYPE;
 }
 
 function useLoadPlayground() {
@@ -101,6 +104,7 @@ function useLoadPlayground() {
         templateStructure?: PROMPT_TEMPLATE_STRUCTURE;
         initPrompt?: Partial<ReturnType<typeof generateDefaultPrompt>>;
         preferredModel?: PROVIDER_MODEL_TYPE;
+        preferredProvider?: COMPOSED_PROVIDER_TYPE;
       } = {},
     ) => {
       const {
@@ -110,14 +114,16 @@ function useLoadPlayground() {
         templateStructure,
         initPrompt,
         preferredModel,
+        preferredProvider,
       } = options;
 
       // A bare model id can be listed under more than one provider (Gemini and
-      // Vertex AI), so look for a configured provider that serves it and
-      // resolve the model against that provider.
+      // Vertex AI), so resolve the model against the configured provider that
+      // offers it. A model outside the dropdown wouldn't survive
+      // generateDefaultPrompt, so it leaves the last picked model in place.
       const preferredModelProvider = preferredModel
-        ? providerKeys.find(
-            (key) => calculateModelProvider(preferredModel, key) === key,
+        ? sortBy(providerKeys, (key) => key !== preferredProvider).find((key) =>
+            isDropdownModel(preferredModel, key),
           )
         : undefined;
 
@@ -212,6 +218,7 @@ function useLoadPlayground() {
         templateStructure,
         namedPrompts,
         preferredModel,
+        preferredProvider,
       } = options;
 
       let promptIds: string[];
@@ -233,6 +240,7 @@ function useLoadPlayground() {
           autoImprove,
           templateStructure,
           preferredModel,
+          preferredProvider,
         });
         promptIds = [newPrompt.id];
         promptMap = { [newPrompt.id]: newPrompt };
