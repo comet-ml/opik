@@ -8,7 +8,7 @@ export const testSuiteItemFormSchema = z
     assertions: z.array(z.object({ value: z.string() })),
     runsPerItem: z.number().min(1).max(MAX_RUNS_PER_ITEM),
     passThreshold: z.number().min(1),
-    useGlobalPolicy: z.boolean().default(false),
+    useGlobalPolicy: z.boolean(),
   })
   .refine((data) => data.passThreshold <= data.runsPerItem, {
     message: "Pass threshold cannot exceed runs per item",
