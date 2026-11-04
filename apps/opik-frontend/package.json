@@ -62,7 +62,7 @@
     "@tanstack/react-router": "^1.36.3",
     "@tanstack/react-table": "^8.17.3",
     "@tanstack/react-virtual": "^3.13.4",
-    "@types/diff": "^5.2.2",
+    "@types/diff": "^8.0.0",
     "@types/md5": "^2.3.5",
     "@types/react-grid-layout": "^1.3.6",
     "@types/segment-analytics": "^0.0.38",
