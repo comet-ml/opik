@@ -175,7 +175,7 @@ def test_entrypoint_contract_prints_nothing_when_off(monkeypatch, capsys, config
 
     docker_daemon_config.main()
 
-    assert capsys.readouterr().out == ""
+    assert capsys.readouterr() == ("", "")
     assert not config_paths[1].exists()
 
 
@@ -184,8 +184,11 @@ def test_entrypoint_contract_prints_config_path_when_on(monkeypatch, capsys, con
 
     docker_daemon_config.main()
 
-    assert capsys.readouterr().out == f"{config_paths[1]}\n"
-    assert json.loads(config_paths[1].read_text())["userns-remap"] == "default"
+    expected_config = {"userns-remap": "default", "bridge": "none", "iptables": False, "ip6tables": False}
+    output = capsys.readouterr()
+    assert output.out == f"{config_paths[1]}\n"
+    assert output.err == f"Docker daemon hardening enabled, config: {config_paths[1]}\n"
+    assert json.loads(config_paths[1].read_text()) == expected_config
 
 
 @pytest.mark.parametrize(
